@@ -44,7 +44,12 @@ description: Measure whether each futures setup has an edge - win rate, average 
    time.
 6. Compare live stats with the backtest numbers recorded in the strategy. Live
    far worse than backtest usually means execution drift or regime change.
-7. Record the decision as a `lesson` tagged with the setup and regime.
+7. **Does the judgment add anything?** Over the same days, compare the live
+   results of the signals taken with what the passed ones would have done
+   (`node <root>/scripts/reconcile.js --day <day>` per day lists both; the
+   backtest of the same days trades every signal). If passing signals doesn't
+   improve E, the filter costs trades without adding edge: say so.
+8. Record the decision as a `lesson` tagged with the setup and regime.
 
 ## Examples
 

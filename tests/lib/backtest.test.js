@@ -153,6 +153,15 @@ test('a backtest run on the parity data writes a report; trades match the live e
   for (const f of ['report.md', 'report.json', 'trades.csv']) assert.ok(fs.existsSync(path.join(runDir, f)));
   // Every trade's R is consistent with its prices.
   for (const t of report.trades) assert.ok(Math.abs(t.r - (t.direction === 'long' ? 1 : -1) * (t.exit - t.entry) / t.risk) < 1e-3);
+
+  // Where it came from: strategy hashes, the data file's hash and size, and the data audit.
+  const pv = report.meta.provenance;
+  assert.deepStrictEqual(Object.keys(pv.strategies).sort(), ['bos', 'supertrend']);
+  assert.match(pv.strategies.bos, /^[0-9a-f]{16}$/);
+  assert.match(pv.data.MNQ.sha256, /^[0-9a-f]{16}$/);
+  assert.ok(pv.data.MNQ.bytes > 0);
+  assert.ok(report.meta.dataAudit.MNQ.bars > 1000);
+  assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), /- Provenance: harness /);
 });
 
 test('engine: a trade closed by the trail is not followed by an entry on the same bar', () => {

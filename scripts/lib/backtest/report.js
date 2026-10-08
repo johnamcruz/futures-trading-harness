@@ -138,6 +138,7 @@ function toMarkdown(report) {
     `- Edge: ${s.edge}; mean R 95% interval ${s.meanRCI95 ? `${s.meanRCI95[0]} to ${s.meanRCI95[1]}` : '-'} (sd ${v(s.sdR)}R)`,
     `- Risk: MAE mean ${v(s.meanMaeR)}R, worst ${v(s.worstMaeR)}R; longest losing streak ${s.longestLosingStreak}; ${v(s.avgBarsHeld)} bars held on average`,
     `- Fills: ${m.fill === 'close' ? 'at the signal bar\'s close' : 'at the next bar\'s open (live latency)'}, ${m.slippageTicks ?? 0} tick(s) of slippage per market fill${m.expired ? `; ${m.expired} setup(s) expired before their fill (gap through the stop or target, or the day ended)` : ''}`,
+    ...(m.provenance ? [`- Provenance: harness ${m.provenance.commit || 'unknown commit'}; strategies ${Object.entries(m.provenance.strategies).map(([k, h]) => `${k}@${h || '?'}`).join(', ')}; data ${Object.entries(m.provenance.data).map(([k, d]) => `${k} ${d.sha256 || '?'} (${d.bytes ?? '?'} bytes)`).join(', ')}`] : []),
     ...Object.entries(m.dataAudit || {}).map(([sym, x]) => `- Data ${sym}: ${x && x.warnings && x.warnings.length ? x.warnings.join('; ') : `${x ? x.bars : '?'} bars, no gaps, jumps, or bad bars found`}`),
     ...(Object.keys(m.skipped || {}).length ? [`- Not backtested: ${Object.entries(m.skipped).map(([k, why]) => `${k} (${why})`).join('; ')}`] : []),
     '',

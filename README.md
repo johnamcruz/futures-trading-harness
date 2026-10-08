@@ -394,9 +394,27 @@ node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-0
 node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.example.json
 ```
 
-Results are in R (as algoTraderBot reports them) and in dollars after fees,
-broken down by strategy, exit, and month. See
+Entries fill at the next bar's open with a tick of slippage (live, the
+order goes in after the cycle that read the bar; `--fill close` for
+algoTraderBot's mechanics). Results are in R (as algoTraderBot reports them)
+and in dollars after fees, broken down by strategy, exit, month, entry hour,
+and weekday, with a 95% interval on mean R, an edge verdict, Sharpe, MAE, a
+data audit, and provenance. `--walk-forward --grid <param>=a,b,c` tunes a
+rules strategy in sample and reports only its out-of-sample trades. See
 [docs/BACKTESTING.md](docs/BACKTESTING.md).
+
+### Operating it
+
+- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: 2000 closed
+  bars to `/tmp/fth/MNQ-3m.json` (credentials from your `.env`, never
+  printed) and the multi-timeframe read recorded for the gate. Interactive
+  sessions use it in place of pasting `get_bars` replies.
+- `node scripts/autotrader.js --status`: a watchdog for cron or launchd;
+  exits 1 when the runner is silent or the kill switch is on. Runner errors
+  also go to `alertWebhook` / `alertCommand` (config) and
+  `logs/alerts-<day>.jsonl`.
+- `node scripts/reconcile.js --day 2026-10-07`: the day's entries against
+  the signals the runner saw (taken, passed and why, off-scan entries).
 
 ### Passing prop challenges
 

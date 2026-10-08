@@ -29,9 +29,14 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    records it with `node <root>/scripts/combine.js record-day --account <name>
    --day YYYY-MM-DD --balance <dollars>` (the balance after the session's
    last fill); tell them the exact command. Agents don't run it.
-6. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
+6. Autonomous days: `node <root>/scripts/reconcile.js --day <trading day>
+   --timeframe <minutes>` compares the day's entries with the signals the
+   runner saw: how many were taken, passed (with the note that says why), and
+   entries with no signal behind them. Quote its first line.
+7. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
    total, rule breaks, blocked orders (journal `order_blocked` and
-   `<FTH_HOME>/logs/gate-log.jsonl`), lessons, and tomorrow's focus.
+   `<FTH_HOME>/logs/gate-log.jsonl`), signals taken vs passed, lessons, and
+   tomorrow's focus.
 
 ## Examples
 

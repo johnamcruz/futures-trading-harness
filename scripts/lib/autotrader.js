@@ -51,7 +51,7 @@ const DEFAULTS = {
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
-const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js'];
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 

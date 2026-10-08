@@ -177,6 +177,36 @@ function pickStrategies(all, cfg) {
   return all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual');
 }
 
+/**
+ * Where a result came from, so it can be reproduced or questioned later: the
+ * harness commit, each strategy file's hash, and each data file's size and
+ * hash.
+ */
+function provenance(root, strategies, markets) {
+  const crypto = require('crypto');
+  const hash = file => {
+    try {
+      const h = crypto.createHash('sha256');
+      h.update(fs.readFileSync(file));
+      return h.digest('hex').slice(0, 16);
+    } catch (_err) {
+      return null;
+    }
+  };
+  let commit = null;
+  try {
+    commit = require('child_process').execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  } catch (_err) {
+    // not a git checkout (a plugin install): the file hashes still pin it
+  }
+  return {
+    commit,
+    node: process.version,
+    strategies: Object.fromEntries(strategies.map(st => [st.name, st.file ? hash(st.file) : null])),
+    data: Object.fromEntries(markets.map(m => [m.symbol, { file: m.file, bytes: (() => { try { return fs.statSync(m.file).size; } catch (_err) { return null; } })(), sha256: hash(m.file) }])),
+  };
+}
+
 /** A walk-forward test of one strategy (walk-forward.js). Returns { report, runDir }. */
 function runWalk(cfg, strategy, markets, { baseDir, outRoot, env, runId, log }) {
   const w = cfg.walkForward;
@@ -260,6 +290,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     size: cfg.riskPerTrade ? `risk $${cfg.riskPerTrade} (max ${cfg.maxContracts})` : cfg.size,
     slippageTicks: cfg.slippageTicks, fill: cfg.fill, expired, skipped,
     dataAudit: Object.fromEntries(markets.map(m => [m.symbol, m.audit])),
+    provenance: provenance(root, strategies, markets),
   });
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });
