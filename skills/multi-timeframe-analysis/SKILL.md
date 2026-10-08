@@ -158,7 +158,7 @@ copy (e.g. `strategies/ema_cross_mtf/`) and compare the two with
 ## Examples
 
 ```text
-$ node scripts/mtf.js ~/.futures-trading-harness/bars/MNQ-3m.json --daily=/tmp/fth/MNQ-1d.json
+$ node <root>/scripts/mtf.js ~/.futures-trading-harness/bars/MNQ-3m.json --daily=/tmp/fth/MNQ-1d.json
 daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/HL), ADX 24.1, ...
 4h: UP (close 21652.25 vs EMA20 21590.75, EMA20 vs EMA50 21470.5, structure HH/HL), ADX 21.3, ...
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
@@ -170,10 +170,10 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal 
    Shorts are counter: a 3m keltner short is refused (scan and gate); only a
    crt_1h raid of the 1h high could short, at half size.
 
-$ node scripts/mtf.js tests/fixtures/parity/NQ-3m.csv
+$ node <root>/scripts/mtf.js <root>/tests/fixtures/parity/NQ-3m.csv
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
 1h: RANGE (... structure mixed), ADX 14.14, ...
-15m: DOWN (... structure LH/LL), ADX 22.49, ...
+15m: DOWN (... structure LH/LL), ADX 22.59, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
 Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
 

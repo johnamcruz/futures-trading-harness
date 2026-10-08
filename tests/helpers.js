@@ -26,7 +26,7 @@ function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedA
   fs.writeFileSync(path.join(home, 'mtf', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, biases }));
   // And the signal record (signal-state.js): which rules strategies fired on that bar.
   fs.mkdirSync(path.join(home, 'signals'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'signals', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, candidates: fired }));
+  fs.writeFileSync(path.join(home, 'signals', `${symbol}-3m.json`), JSON.stringify({ symbol, timeframe: '3m', asOf: closedAt, closedAt, candidates: fired }));
   return home;
 }
 

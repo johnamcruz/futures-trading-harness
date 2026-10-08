@@ -251,3 +251,29 @@ test('micros and minis: a policy strategy run sizes in micros, trades minis by i
   assert.ok(micro.trades.every(t => t.reason !== 'policy'));
   assert.ok(seen.length && seen.every(o => o.length === OBS_DIM + 1 && o[OBS_DIM] === 1));
 });
+
+test('observation: market context is causal and identical live and in training (full series at bar i == bars 0..i)', () => {
+  const fsx = require('fs');
+  const pathx = require('path');
+  const { marketFeatures, buildObservation, OBS_FIELDS, RECENT_BARS } = require('../../scripts/lib/rl/observation');
+  const { liveBook } = require('../../scripts/lib/rl/live');
+  const { normalizeBars } = require('../../scripts/lib/trading/indicators');
+  const csv = fsx.readFileSync(pathx.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), 'utf8').trim().split('\n').slice(1);
+  const bars = normalizeBars(csv.map(l => { const [t, o, h, lo, c, v] = l.split(','); return { t: new Date(t.replace(' ', 'T')).toISOString(), o: +o, h: +h, l: +lo, c: +c, v: +v }; }));
+  const full = { bars, tickSize: 0.25, tickValue: 0.5, feats: marketFeatures(bars) };
+  const setup = { sign: -1, stopTicks: 20, size: 1, riskUsd: 10, mini: false, strategy: 'a', confluence: { with: 1, against: 1 } };
+  for (const i of [300, 700, 1100, bars.length - 1]) {
+    const closeAt = new Date(Date.parse(bars[i].t) + 180000);
+    const train = buildObservation({ book: full, i, closeAt, components: ['a', 'b', 'c'], setup });
+    const live = buildObservation({ book: liveBook(bars.slice(0, i + 1), { tickSize: 0.25, tickValue: 0.5 }), i, closeAt, components: ['a', 'b', 'c'], setup });
+    assert.deepStrictEqual(live, train, `bar ${i}: the live observation must equal training's (no look-ahead)`);
+  }
+  // The context fields are there and signed by the side.
+  const at = name => OBS_FIELDS.indexOf(name);
+  const i = 1100;
+  const o = buildObservation({ book: full, i, closeAt: new Date(Date.parse(bars[i].t) + 180000), components: ['a', 'b', 'c'], setup });
+  assert.strictEqual(o[at('confluence_with')], 1 / 3);
+  const body1 = (bars[i].c - bars[i].o) / full.feats.atr20[i] * -1 / 2;
+  assert.ok(Math.abs(o[at('bar1_body')] - Math.max(-1.5, Math.min(1.5, body1))) < 1e-12);
+  assert.ok(OBS_FIELDS.includes(`bar${RECENT_BARS}_range`) && OBS_FIELDS.includes('mtf_4h') && OBS_FIELDS.includes('vwap_dist'));
+});

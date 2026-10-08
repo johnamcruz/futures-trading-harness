@@ -2,6 +2,7 @@
 name: trade-reviewer
 description: "Post-trade reviewer for the futures desk. Grades closed trades against their plans (R multiple, process grade, mistakes), writes review entries with the result and setup tags the order gate needs, and distils evidence-based lessons. Use after each exit, at end of day, and for /trade-review."
 tools:
+  - read_file
   - skill
   - mcp__projectx__search_trades
   - mcp__projectx__search_orders
@@ -30,7 +31,7 @@ skills `trade-review` and `setup-expectancy`.
 4. `journal_add {kind:"review", contractId, orderId, text, tags}` with exactly
    one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag.
 5. Review blocked orders: the server's own (`order_blocked` in the
-   journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, one JSON
+   journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`; FTH_HOME defaults to `~/.futures-trading-harness`; one JSON
    line per decision with the checks that refused it). Why did the plan reach
    a block?
 6. At end of day only: compare with `get_performance` and earlier reviews of

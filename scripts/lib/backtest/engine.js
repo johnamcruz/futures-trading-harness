@@ -51,7 +51,7 @@ const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
-const { buildObservation } = require('../rl/observation');
+const { buildObservation, marketFeatures, confluence } = require('../rl/observation');
 
 const { normalizeBars } = ind;
 
@@ -141,7 +141,8 @@ function prepare(markets, strategies, opts = {}) {
       }
       return memo.get(i);
     };
-    const feats = { atr20: ind.atr(bars, 20), atr100: ind.atr(bars, 100), adx: ind.adx(bars, 14) };
+    // The policy's market features (rl/observation.js), the same function live uses.
+    const feats = marketFeatures(bars);
     return { ...m, bars, ev, usable, setupAt, feats };
   });
   return { books, skipped };
@@ -401,7 +402,9 @@ function runEngine(markets, strategies, opts = {}) {
       if (!cp) continue;
       if (o.policy) {
         const mini = Boolean(fam && cp.root === fam.mini);
-        const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name } });
+        // Confluence: the policy strategy's other strategies on this bar, as the live scan sees them.
+        const others = book.usable.filter(s => s !== pick.s).map(s => ({ name: s.name, ...(r => ({ candidate: r.candidate, direction: r.direction }))(book.ev.at(s, i, { describe: false })) }));
+        const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name, confluence: confluence(others, pick.s.name, sign) } });
         if (action === 'skip') continue;
         if (action === 'half') cp = sizeFor(0.5);
         if (!cp) continue;

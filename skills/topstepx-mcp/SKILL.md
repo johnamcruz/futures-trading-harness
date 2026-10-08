@@ -22,7 +22,7 @@ The server must be registered under the name `projectx`, so tools are
 3. `journal_read {kind:"lesson"}` plus recent `review` entries.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
 5. `search_contracts {searchText:"MNQ"}`: take `activeContract=true`; note `tickSize`, `tickValue`.
-6. `get_bars` (+ `get_quote`) on several timeframes, then market-snapshot.
+6. Bars to a file: the runner's bars file, or `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --record` (+ `get_quote`), then market-snapshot, `mtf.js`, and `strategies.js scan --record`.
 7. `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`.
 8. `place_order` only when the plan's trigger has happened.
 9. Manage with `get_account_snapshot` / `get_quote` / `list_open_orders`.

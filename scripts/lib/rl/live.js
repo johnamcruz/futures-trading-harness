@@ -8,7 +8,7 @@
 
 const combine = require('../trading/combine');
 const ind = require('../trading/indicators');
-const { buildObservation } = require('./observation');
+const { buildObservation, marketFeatures, confluence } = require('./observation');
 const { timeframeMs } = require('../trading/evaluator');
 const { roundHalfEven } = require('../backtest/engine');
 const state = require('../trading/prop-state');
@@ -16,7 +16,7 @@ const state = require('../trading/prop-state');
 /** The bars as the env sees them: normalized, with the policy's market features. */
 function liveBook(rawBars, spec) {
   const bars = ind.normalizeBars(rawBars);
-  return { bars, tickSize: spec.tickSize, tickValue: spec.tickValue, feats: { atr20: ind.atr(bars, 20), atr100: ind.atr(bars, 100), adx: ind.adx(bars, 14) } };
+  return { bars, tickSize: spec.tickSize, tickValue: spec.tickValue, feats: marketFeatures(bars) };
 }
 
 /**
@@ -26,7 +26,7 @@ function liveBook(rawBars, spec) {
  * stopDistance); component: that strategy's name. bundle: the trained policy,
  * or null to take every setup as sized. The order gate checks the verdict.
  */
-function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, now = new Date() }) {
+function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date() }) {
   const book = liveBook(rawBars, spec);
   const i = book.bars.length - 1;
   const tf = timeframeMs(strategy.timeframe) || 60000;
@@ -47,7 +47,8 @@ function decideSetup({ bundle, account, cs, strategy, component, symbol, contrac
   const sign = scan.direction === 'long' ? 1 : -1;
   const obs = buildObservation({
     cs, account, book, i, closeAt, components: strategy.strategies,
-    setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: component },
+    // Confluence from the same bar's scan of the policy strategy's other strategies (as the engine counts it).
+    setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: component, confluence: confluence(results.filter(r => strategy.strategies.includes(r.name)), component, sign) },
   });
   const action = bundle ? bundle.decide('setup', obs) : 'full';
   if (action === 'half') cp = plan(0.5);

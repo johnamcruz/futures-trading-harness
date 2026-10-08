@@ -35,7 +35,7 @@ description: Review closed futures trades against their plan - R multiple, plan 
    one rule, the evidence count, and the condition. Don't write a lesson from a
    single trade unless it's a rule break.
 6. Also review blocked orders: the server's (`order_blocked` journal
-   entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, with the
+   entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, FTH_HOME defaulting to `~/.futures-trading-harness`, with the
    checks that refused each). A block means the plan or sizing was wrong
    before a guardrail had to say so.
 

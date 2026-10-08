@@ -33,7 +33,8 @@ the last bar closed); never paste a long `get_bars` reply into a file.
    Get `get_quote` for the live bid/ask/last.
 3. VWAP (snapshot `vwap`): which applies (`rth` 09:30-16:00 ET, else
    `session`), the distance in ATR(14), and the crosses in the last 30 bars
-   (`rthCrossesLast30`: many = rotation, few = trend).
+   (`rthCrossesLast30`, or `sessionCrossesLast30` when `applies` is
+   `session`: many = rotation, few = trend).
 4. Participation (snapshot `participation`): relative volume of the last bar
    and the last 3 vs the opening-range average, vs the 20 bars before, and vs
    the same time the previous day. Flag climax bars (relative volume 3+ with a
