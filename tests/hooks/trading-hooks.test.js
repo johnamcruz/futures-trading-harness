@@ -359,6 +359,31 @@ test('MCP gateway: no request may reuse the id of an order call whose reply is o
   assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
 });
 
+test('order gate: at the profit target a prop entry is refused only once today\'s close would pass', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {}); // $3,000 target, 50% consistency
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const run = days => {
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
+    prop.startAttempt(env.FTH_HOME, account, new Date('2026-10-02T14:00:00Z'));
+    for (const [day, close] of days) prop.recordEndOfDay(env.FTH_HOME, account, close, day);
+    prop.snapshot(env.FTH_HOME, account, 53100, new Date(Date.parse(TEST_NOW) - 60000));
+    prop.appendVerdict(env.FTH_HOME, {
+      strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+      policy: null, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    return gate(orderPayload(order), env);
+  };
+  // $2,500 yesterday is over 50% of the $3,100 profit: the attempt keeps trading.
+  const lopsided = run([['2026-10-06', 52500]]);
+  assert.strictEqual(lopsided.code, 0, lopsided.stderr);
+  // $1,000, $1,000, +$1,100 today: today's close passes, so no new entries.
+  const spread = run([['2026-10-05', 51000], ['2026-10-06', 52000]]);
+  assert.strictEqual(spread.code, 2);
+  assert.match(spread.stderr, /\[combine\] topstep_50k: at the profit target: no new entries/);
+});
+
 test('order gate: a strategy that trades an account is gated on the attempt and its size budget, even with the checks skipped', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');

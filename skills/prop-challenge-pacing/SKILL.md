@@ -65,7 +65,9 @@ Rules of thumb (the PropEvolve objective: pass without blowing the account):
    day at +1.5× the daily pace; protecting a green day is worth more than
    stretching it.
 3. **Consistency.** If one day would exceed the firm's best-day share,
-   stop for the day.
+   stop for the day. Past the target, the gate stops entries once today's
+   close would pass; while the best day is still too large a share, the
+   attempt keeps trading (at normal size) until it isn't.
 4. **After a red day,** the next day's budget is half until a green day.
 5. **Near the target,** cut size: the last 10% isn't worth risking the account.
 6. **Funded accounts,** scale only per the firm's scaling plan and the

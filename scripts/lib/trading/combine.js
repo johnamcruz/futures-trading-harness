@@ -110,7 +110,10 @@ function entryBlock(s) {
   if (s.status !== 'active') return `the attempt is over (${s.status})`;
   if (s.dayStopped) return `the daily loss limit ($${s.dailyLimit}) was hit: no trading until the next session`;
   if (s.dailySoft > 0 && s.dayPnl <= -s.dailySoft) return `down $${-s.dayPnl} today, at the soft daily limit ($${s.dailySoft}): no new entries until the next session`;
-  if (profit(s) >= s.target) return 'at the profit target: no new entries (the pass is checked at end of day)';
+  // At the target, stop once today's close would pass. When the best day is
+  // still too large a share of the profit (consistency), the attempt has to
+  // keep trading to pass at all: blocking it there would only run out the clock.
+  if (profit(s) >= s.target && passes({ ...s, days: [...s.days, s.dayPnl] })) return 'at the profit target: no new entries (the pass is checked at end of day)';
   return null;
 }
 

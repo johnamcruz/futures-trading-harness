@@ -72,7 +72,9 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
   harness's: no new entries for the day once reached).
 - `max_contracts` per symbol.
 - `consistency_pct`: the best day may be at most this share of the total
-  profit for a pass (0 = no rule).
+  profit for a pass (0 = no rule). At the target, new entries stop once
+  today's close would pass; while consistency isn't met, trading goes on,
+  or the attempt could only time out.
 - `sessions`: attempt length for training and evaluation.
 
 ## The env

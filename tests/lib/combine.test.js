@@ -57,13 +57,30 @@ test('pass at end of day: target and consistency; timeout after the sessions', (
   s = c.endDay(c.applyClose(s, 4000));
   s = c.endDay(c.applyClose(s, 2100)); // profit 6100, best day 4000 > 50%
   assert.strictEqual(s.status, 'active', 'consistency not met yet');
-  assert.match(c.entryBlock(s), /profit target/);
+  assert.strictEqual(c.entryBlock(s), null, 'over the target but short of consistency: keep trading, or the attempt can only time out');
   s = c.endDay(c.applyClose(s, 2000)); // profit 8100, best 4000 <= 4050
   assert.strictEqual(s.status, 'passed');
   assert.match(c.entryBlock(s), /passed/);
   let t = c.start(acct({ sessions: 2 }));
   t = c.endDay(c.endDay(t));
   assert.strictEqual(t.status, 'timeout');
+});
+
+test('at the profit target, entries stop only once today\'s close would pass', () => {
+  // One big day: $6,100 today is all the profit, over 50%, so the attempt must keep going.
+  const big = c.applyClose(c.start(acct()), 6100);
+  assert.strictEqual(c.entryBlock(big), null);
+  assert.ok(c.budget(big) > 0, 'and it still has a size budget');
+  // Spread out: $2,000, $2,000, then $2,100 today; best day $2,100 <= 50% of $6,100.
+  let s = c.start(acct());
+  s = c.endDay(c.applyClose(s, 2000));
+  s = c.endDay(c.applyClose(s, 2000));
+  s = c.applyClose(s, 2100);
+  assert.match(c.entryBlock(s), /profit target/);
+  assert.strictEqual(c.budget(s), 0);
+  assert.strictEqual(c.endDay(s).status, 'passed');
+  // Without a consistency rule the target alone stops entries.
+  assert.match(c.entryBlock(c.applyClose(c.start(acct({ consistency_pct: 0 })), 6100)), /profit target/);
 });
 
 test('daily limits: the soft one stops entries, the firm one stops the day; both reset at end of day', () => {
