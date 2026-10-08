@@ -46,6 +46,13 @@ inside one run.
 
 ### 2. Parallel read
 
+**Every cycle, first:** the multi-timeframe read on the bars file
+(`node <root>/scripts/mtf.js <bars file>`, the `multi-timeframe-analysis`
+skill). A candidate whose side is `counter` is skipped unless it is a
+reversal setup at a higher-timeframe level; `pullback` waits for the trigger
+timeframe to turn back; `mixed` trades at half size. Put the verdict in the
+plan entry.
+
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): skip the parallel analysts. Run market-snapshot and
 `strategies.js scan` on the bars file yourself, manage any open position, and

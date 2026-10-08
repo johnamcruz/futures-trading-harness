@@ -26,7 +26,10 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
    remove a window, so blackouts only ever restrict trading):
    `node <root>/scripts/blackouts.js add --start <ISO> --end <ISO> --reason "<event>"`.
 4. Game plan (you, as head trader):
-   - Bias per timeframe and where analysts disagree.
+   - Bias per timeframe from the multi-timeframe read
+     (`node <root>/scripts/mtf.js <bars> --daily=<daily bars>`, see the
+     `multi-timeframe-analysis` skill): one line per timeframe, the alignment
+     for longs and shorts, and where analysts disagree.
    - Key levels table (price, what, source).
    - Strategies in play: from `strategies.js list`, the active ones for this
      symbol whose sessions are today, with the exact trigger each needs.
