@@ -314,7 +314,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false }) {
   const clockRef = { t: et(10, 0) + 2000 };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [] };
@@ -322,6 +322,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   let failsLeft = modifyFails;
   let flat = false;
   let killed = false;
+  const cycles = [];
   const runner = createRunner({
     cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
     client: {
@@ -352,14 +353,14 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async workingOrders() { return 1; },
     },
     clock: { now: () => new Date(clockRef.t) },
-    runCycle: async () => { clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
+    runCycle: async (action) => { cycles.push(action); clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
-    writeBars: (sym, bars) => { calls.written.push(bars); return '/b.json'; }, scanFor: () => [], flow,
+    writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => [], flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
   while (clockRef.t < until) clockRef.t += await runner.step();
-  return { ...calls, runner };
+  return { ...calls, runner, cycles };
 }
 
 test('trailing: prices from before a mid-bar fill do not count toward the peak', async () => {
@@ -422,6 +423,19 @@ test('with order flow on, the bars written and scanned carry real buy/sell volum
   const flow = { annotate: (id, bars, minutes) => bars.map(b => ({ ...b, bv: minutes, sv: 1 })) };
   const r = await trailSim({ tape: {}, flow, until: et(10, 4) });
   assert.ok(r.written.length > 0 && r.written.every(bars => bars.every(b => b.bv === 3 && b.sv === 1)));
+});
+
+test('a bars file that cannot be written still lets housekeeping protect the position', async () => {
+  const r = await trailSim({ tape: { 3: [21501, 21485, 21488] }, noStop: true, writeFails: true, until: et(10, 9) });
+  assert.strictEqual(r.closed.length, 1, 'the bar through the planned stop still closes the trade');
+  assert.ok(!r.cycles.includes('trade'), 'no cycle without a bars file');
+});
+
+test('end of day: a position the end-of-day run left open is closed directly', async () => {
+  const r = await trailSim({ tape: {}, until: et(15, 52) });
+  assert.ok(r.cycles.includes('eod'));
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.cancelled.sort(), [10, 9]);
 });
 
 test('after the session, with trades today, the runner keeps housekeeping until end of day', () => {

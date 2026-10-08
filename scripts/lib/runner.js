@@ -114,8 +114,16 @@ function createRunner(deps) {
           log(`${sym.symbol}: order flow unavailable this bar (${err.message})`, 'error');
         }
       }
-      const file = writeBars(sym, bars);
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      let file = null;
+      try {
+        file = writeBars(sym, bars);
+      } catch (err) {
+        // No bars file means no cycle, but housekeeping (stops, flattening)
+        // must still see this bar. Counted toward the kill switch.
+        log(`${sym.symbol}: could not write the bars file (${err.message}); housekeeping only`, 'error');
+        record(false, false, now);
+      }
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -331,6 +339,25 @@ function createRunner(deps) {
     }
   }
 
+  /** After end of day: close every position left in the traded roots and cancel their orders. */
+  async function eodBackstop() {
+    if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return true;
+    try {
+      const { positions, orders } = await client.accountState(cfg.account);
+      const roots = new Set(cfg.symbols);
+      const open = positions.filter(p => roots.has(contractRoot(p.contractId)) && Number(p.size || 0) > 0);
+      for (const p of open) {
+        await client.closePosition(cfg.account, p.contractId);
+        log(`end of day: ${p.contractId} still open after the end-of-day run; closed at market`, 'error');
+      }
+      for (const o of orders.filter(x => roots.has(contractRoot(x.contractId)))) await client.cancelOrder(cfg.account, o.id);
+      return true;
+    } catch (err) {
+      log(`end of day: could not check the account (${err.message}); retrying`, 'error');
+      return false;
+    }
+  }
+
   async function stepOnce() {
     const now = clock.now();
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
@@ -344,6 +371,9 @@ function createRunner(deps) {
         const r = await runCycle(d.action, prompt);
         ok = ok && r.ok;
       }
+      // A run can exit 0 without flattening (turn limit, a refused tool):
+      // check the account, and flatten what is left directly.
+      if (d.action === 'eod' && ok) ok = await eodBackstop();
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
       record(ok, false, now);

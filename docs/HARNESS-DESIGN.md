@@ -111,6 +111,10 @@ Further safeguards:
   any month of the root, whose stops don't add up to its size (none, too
   few, or enough to flip it), then cancels the orders left behind. It keeps
   trailing protected positions.
+- **End-of-day backstop.** After the end-of-day run, the runner reads the
+  account and closes any position still open in its symbols, cancelling
+  their orders, so a run that exits cleanly without flattening can't leave
+  a position overnight.
 - **Workspace guard.** When a run changes the workspace's instructions or
   settings, the runner appends the change to the kill-switch file, even if
   the file is already there for another reason.

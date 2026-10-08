@@ -121,7 +121,11 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   if (!workspaceBaseline) return true;
   const current = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
   const changed = changedFiles(workspaceBaseline, current);
-  if (!changed.length) return true; // as at start (or restored)
+  if (!changed.length) {
+    // Back to the baseline: an acknowledgement covers only the change it was for.
+    workspaceAcknowledged = null;
+    return true;
+  }
   if (workspaceAcknowledged && !changedFiles(workspaceAcknowledged, current).length) return true; // already reported
   const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review the change (git diff workspace/; node scripts/sync-harness.js restores generated files), then remove this file to resume.`;
   process.stderr.write(`[autotrader] ${reason}\n`);
