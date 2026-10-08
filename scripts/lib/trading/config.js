@@ -6,8 +6,8 @@
  * These sit on top of the projectx-mcp server guardrails; they never loosen them.
  */
 
-const os = require('os');
 const path = require('path');
+const { harnessHome } = require('../paths');
 
 const DEFAULT_NO_ENTRY_WINDOWS = [
   '09:30-09:35@America/New_York', // opening print: first 5 minutes of RTH
@@ -57,9 +57,9 @@ function loadConfig(env = process.env) {
       ? String(env.FTH_NO_ENTRY_WINDOWS)
       : DEFAULT_NO_ENTRY_WINDOWS,
     blackoutsFile: String(env.FTH_BLACKOUTS_FILE || '').trim()
-      || path.join(os.homedir(), '.futures-trading-harness', 'blackouts.json'),
+      || path.join(harnessHome(env), 'blackouts.json'),
     killSwitchFile: String(env.FTH_KILL_SWITCH_FILE || '').trim()
-      || path.join(os.homedir(), '.futures-trading-harness', 'STOP'),
+      || path.join(harnessHome(env), 'STOP'),
     // Set by the autonomous runner for the harness it launches. In autonomous
     // runs nothing may switch gate checks off from inside the session.
     autonomous: env.FTH_AUTONOMOUS === '1',

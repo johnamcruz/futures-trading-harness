@@ -9,8 +9,8 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { harnessHome } = require('../paths');
 const { loadConfig } = require('./config');
 const { resolveJournalPath, readJournalWindow } = require('./journal');
 const { evaluateOrder, evaluateModify, formatBlock } = require('./order-gate');
@@ -61,7 +61,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
 
 function gateLogPath(env = process.env) {
   return String(env.FTH_GATE_LOG || '').trim()
-    || path.join(os.homedir(), '.futures-trading-harness', 'gate-log.jsonl');
+    || path.join(harnessHome(env), 'gate-log.jsonl');
 }
 
 /** Append a decision to the gate log (best effort; never throws). */

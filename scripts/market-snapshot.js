@@ -12,6 +12,8 @@
 
 'use strict';
 
+require('./lib/sim-clock').installSimClock(process.env);
+
 const fs = require('fs');
 const { PARAMS, snapshot } = require('./lib/trading/market-snapshot');
 

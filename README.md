@@ -252,6 +252,19 @@ sessions; bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
 `dataDir` is set. With several `symbols`, one cycle covers every symbol whose
 bar closed, so none is starved.
 
+### Backtesting
+
+`scripts/backtest.js` replays historical 1-minute bars through the same loop.
+It uses the same runner, agents, gate, gateway, and projectx-mcp, against a
+simulated ProjectX broker on loopback with a simulated clock. The harness
+can't tell the difference, so a backtest measures the system you run live. See
+[docs/BACKTESTING.md](docs/BACKTESTING.md).
+
+```bash
+node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.json
+node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.example.json
+```
+
 ### Order gate settings
 
 | Variable | Default | Meaning |

@@ -10,6 +10,7 @@
 
 const os = require('os');
 const path = require('path');
+const { harnessHome } = require('./paths');
 const { parseWindows, inWindow, minutesOfDay, zonedParts } = require('./trading/clock');
 
 const DEFAULTS = {
@@ -45,8 +46,8 @@ const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
 /** Where the runner writes closed bars (runner-owned; agents read it). */
-function resolveDataDir(cfg, home = os.homedir()) {
-  return cfg.dataDir ? cfg.dataDir.replace(/^~(?=\/)/, home) : path.join(home, '.futures-trading-harness', 'bars');
+function resolveDataDir(cfg, home = os.homedir(), env = process.env) {
+  return cfg.dataDir ? cfg.dataDir.replace(/^~(?=\/)/, home) : path.join(harnessHome(env, home), 'bars');
 }
 
 /** Claude rule for an absolute path ("//abs/path"). */
@@ -70,9 +71,11 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
-function claudeDenied(root, { home = os.homedir() } = {}) {
+function claudeDenied(root, { home = os.homedir(), stateDir = null } = {}) {
   const h = p => abs(path.join(home, p));
+  const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
+    ...state,
     'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
     `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
     `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
@@ -180,14 +183,14 @@ function childEnv(cfg, root, base = process.env) {
 }
 
 /** argv for one headless run. */
-function buildCommand(cfg, prompt, root) {
+function buildCommand(cfg, prompt, root, env = process.env) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
   switch (cfg.harness) {
     case 'claude':
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg) }).join(','),
-        '--disallowedTools', claudeDenied(root).join(','),
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env) }).join(','),
+        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"', ...(model ? ['-m', model] : []), ...extra, prompt];

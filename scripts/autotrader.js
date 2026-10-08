@@ -16,7 +16,8 @@
  * Needs PROJECTX_USERNAME and PROJECTX_API_KEY (read-only use: contracts, bars,
  * positions, working orders) in its environment, like projectx-mcp.
  *
- * Safety: the kill switch file (~/.futures-trading-harness/STOP) stops new
+ * Safety: the kill switch file (<FTH_HOME>/STOP, default
+ * ~/.futures-trading-harness/STOP) stops new
  * cycles (end of day still runs); after maxConsecutiveErrors failed runs the
  * runner creates the kill switch itself. Orders always pass the order gate and
  * the projectx-mcp guardrails.
@@ -24,41 +25,25 @@
 
 'use strict';
 
-const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
+const { readJson, writeJsonAtomic, runHarness } = require('./lib/harness-run');
+const { harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
-const HOME_DIR = path.join(os.homedir(), '.futures-trading-harness');
+const HOME_DIR = harnessHome();
 const STATE_FILE = path.join(HOME_DIR, 'autotrader-state.json');
 const LOCK_FILE = path.join(HOME_DIR, 'autotrader.lock');
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
   return i === -1 ? undefined : argv[i + 1];
-}
-
-function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (_err) {
-    return fallback;
-  }
-}
-
-/** Atomic write via an unpredictable, exclusively created temp file (no symlink tricks). */
-function writeJsonAtomic(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = `${file}.${crypto.randomBytes(8).toString('hex')}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { flag: 'wx', mode: 0o600 });
-  fs.renameSync(tmp, file);
 }
 
 function processCommand(pid) {
@@ -117,43 +102,7 @@ function appendLog(now, text) {
 }
 
 function runOnce(cfg, argv, timeoutMs) {
-  return new Promise(resolve => {
-    const [cmd, ...args] = argv;
-    const child = spawn(cmd, args, {
-      cwd: path.resolve(ROOT, cfg.workdir),
-      env: childEnv(cfg, ROOT),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true, // own process group, so a timeout kills the harness and everything it started
-    });
-    activeChild = child;
-    let output = '';
-    let timedOut = false;
-    const killGroup = sig => {
-      try {
-        process.kill(-child.pid, sig);
-      } catch (_err) {
-        child.kill(sig);
-      }
-    };
-    child.stdout.on('data', c => { output += c; });
-    child.stderr.on('data', c => { output += c; });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      output += `\n[autotrader] timeout after ${timeoutMs / 60000} min; killing run\n`;
-      killGroup('SIGTERM');
-      setTimeout(() => killGroup('SIGKILL'), 10000).unref();
-    }, timeoutMs);
-    child.on('error', err => {
-      clearTimeout(timer);
-      activeChild = null;
-      resolve({ ok: false, timedOut, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
-    });
-    child.on('close', code => {
-      clearTimeout(timer);
-      activeChild = null;
-      resolve({ ok: code === 0 && !timedOut, timedOut, code, output });
-    });
-  });
+  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env: childEnv(cfg, ROOT), timeoutMs, onChild: c => { activeChild = c; } });
 }
 
 async function runCycle(cfg, action, prompt, opts) {

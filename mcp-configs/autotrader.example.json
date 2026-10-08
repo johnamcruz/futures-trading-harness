@@ -10,7 +10,6 @@
   "timeframe": 3,
   "trigger": "bar",
   "bars": 300,
-  "dataDir": "/tmp/fth",
   "barDelaySeconds": 2,
   "barPollSeconds": 2,
   "barTimeoutSeconds": 60,

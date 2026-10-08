@@ -91,6 +91,24 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
       return (res.bars || []).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
     },
 
+    /**
+     * Historical 1-minute bars between two times, oldest first, fetched in
+     * chunks the API accepts (for `backtest.js fetch`).
+     */
+    async history(contractId, { start, end, live = false }) {
+      const chunkMs = 10000 * 60000;
+      const out = new Map();
+      for (let from = start.getTime(); from < end.getTime(); from += chunkMs) {
+        const to = Math.min(end.getTime(), from + chunkMs);
+        const res = await post('/api/History/retrieveBars', {
+          contractId, live, startTime: new Date(from).toISOString(), endTime: new Date(to).toISOString(),
+          unit: BAR_UNIT_MINUTE, unitNumber: 1, limit: 20000, includePartialBar: false,
+        });
+        for (const bar of res.bars || []) out.set(Date.parse(bar.t), bar);
+      }
+      return [...out.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    },
+
     /** Number of working orders in a contract. */
     async workingOrders(accountId, contractId) {
       const res = await post('/api/Order/searchOpen', { accountId: Number(accountId) });
