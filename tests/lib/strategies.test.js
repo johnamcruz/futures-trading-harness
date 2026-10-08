@@ -7,7 +7,6 @@ const path = require('path');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
-const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { run } = require('../../scripts/strategies');
 const { tmpDir } = require('../helpers');
 
@@ -24,13 +23,12 @@ const VALID = [
   'status: paper', 'instruments: [MES]', 'timeframe: 5m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1.5',
 ].join('\n');
 
-test('bundled strategies are all valid Markdown rules, one per snapshot signal', () => {
+test('bundled strategies are all valid Markdown rules, the algoTraderBot ports included', () => {
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
   for (const s of strategies) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
-  const signals = Object.keys(snapshot(Array.from({ length: 5 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 14, i)).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 }))).signals);
-  for (const sig of [...signals, 'cisd_ote']) assert.ok(strategies.some(s => s.name === sig), `no strategy for ${sig}`);
+  for (const port of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
   const old = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'orb', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
   assert.ok(old.some(e => /no longer a code detector/.test(e)));
 });

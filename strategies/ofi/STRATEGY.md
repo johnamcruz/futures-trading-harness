@@ -2,7 +2,7 @@
 name: ofi
 description: Order-flow imbalance continuation on 1-minute futures bars - enter when buying (or selling) dominates over 1, 3 and 5 minutes and price actually moves with it (real flow, not absorption).
 version: 1
-status: paper
+status: disabled
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
@@ -39,6 +39,13 @@ is signed by where it closed in its range: a close at the high counts all
 of its volume as buying, a close at the low all as selling. `ofi(n)` is
 that signed volume over the last n bars divided by their volume, from -1
 (all selling) to +1 (all buying).
+
+**On hold (`status: disabled`).** Real order flow (aggressor buy and sell
+volume from TopstepX trade prints) has to come through projectx-mcp, which
+doesn't serve it yet. Until it does, `ofi(n)` and `delta(n)` estimate the
+flow from each bar's shape and volume (below), and this strategy stays off.
+When projectx-mcp's bars carry buy and sell volume, the same rules use it
+with no change to this file.
 
 **Real flow vs absorption.** Aggressive buying that is real moves price.
 Buying that runs into a passive seller is absorbed: heavy volume, little

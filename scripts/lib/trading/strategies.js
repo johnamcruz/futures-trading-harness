@@ -62,7 +62,6 @@ const PARAM_RULES = {
   emaFast: 'int', emaSlow: 'int', adxPeriod: 'int', adxSlopeBars: 'int', stPeriod: 'int', kcLen: 'int', kcAtr: 'int',
   swingK: 'int', orbMinutes: 'int', atrStop: 'int',
   stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
-  adxGate: 'nonneg', kcAdx: 'nonneg', orbAdx: 'nonneg', orbCloseMin: 'minute',
 };
 
 function editDistance(a, b) {

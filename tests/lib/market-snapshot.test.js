@@ -26,17 +26,7 @@ test('snapshot reports trend, levels, and the reference stop', () => {
   assert.deepStrictEqual(s.levels.overnight, { high: 100.5, low: 99.5 });
   assert.ok(s.levels.vwapRth > 99 && s.levels.vwapRth < 103);
   assert.ok(s.referenceStop.distance > 0);
-  assert.ok(Object.keys(s.signals).length === 5);
-});
-
-test('orb signal fires on the bar that closes through the range (ADX gate off)', () => {
-  const bars = session();
-  const idx = bars.findIndex((b, i) => i > 0 && b.c > 101 && bars[i - 1].c <= 101 && Date.parse(b.t) >= Date.UTC(2026, 9, 7, 13, 45));
-  assert.ok(idx > 0);
-  const s = snapshot({ bars: bars.slice(0, idx + 1) }, { orbAdx: 0 });
-  assert.strictEqual(s.signals.orb, 'long');
-  const before = snapshot({ bars: bars.slice(0, idx) }, { orbAdx: 0 });
-  assert.strictEqual(before.signals.orb, null);
+  assert.strictEqual(s.signals, undefined, 'triggers come from the strategies\' rules, not the snapshot');
 });
 
 test('snapshot rejects too few bars', () => {
@@ -47,9 +37,9 @@ test('CLI reads a file and validates parameters', () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'fth-')), 'bars.json');
   fs.writeFileSync(file, JSON.stringify({ bars: session() }));
   const cli = path.resolve(__dirname, '..', '..', 'scripts', 'market-snapshot.js');
-  const ok = spawnSync(process.execPath, [cli, file, '--orbAdx=0'], { encoding: 'utf8' });
+  const ok = spawnSync(process.execPath, [cli, file, '--orbMinutes=30'], { encoding: 'utf8' });
   assert.strictEqual(ok.status, 0, ok.stderr);
-  assert.strictEqual(JSON.parse(ok.stdout).params.orbAdx, 0);
+  assert.strictEqual(JSON.parse(ok.stdout).params.orbMinutes, 30);
   const bad = spawnSync(process.execPath, [cli, file, '--nope=1'], { encoding: 'utf8' });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr, /unknown parameter/);

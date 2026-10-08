@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: Compute indicators, key levels, and strategy trigger signals from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, swings, opening range, prior-day or overnight levels.
+description: Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, swings, opening range, prior-day or overnight levels.
 ---
 
 # Market Snapshot
@@ -29,7 +29,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    node <root>/scripts/market-snapshot.js /tmp/fth/MNQ-3m.json
    ```
 
-   Override parameters with flags, e.g. `--orbMinutes=30 --adxGate=20`.
+   Override parameters with flags, e.g. `--orbMinutes=30 --emaSlow=50`.
 4. Read the JSON:
    - `trend`: emaFast(9), emaSlow(20), ema50, ema200, adx(14) and its 5-bar slope,
      supertrend(10,3) direction and line, keltner(20, 1.5×ATR20).
@@ -38,8 +38,6 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    - `levels`: priorRth high/low/close, overnight high/low, openingRange
      (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET
      anchor), vwapRth (09:30 ET anchor).
-   - `signals`: `long`/`short`/`null` per strategy trigger on the last bar:
-     `ema_cross`, `keltner`, `supertrend`, `bos`, `orb` (with their ADX gates).
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, VWAP crosses in 30 bars, ATR vs its average).
@@ -49,8 +47,8 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 ## Examples
 
 ```text
-signals: { orb: "long", ema_cross: null, ... }, adx 24.1, adxSlope +3.2
-→ ORB long trigger fired with a rising trend gate; check the orb strategy skip rules.
+adx 24.1, adxSlope +3.2, regime trend-up
+→ trending; strategy triggers come from `strategies.js scan` (each STRATEGY.md's rules).
 
 referenceStop.long = 21481.37 → round down to tick 0.25 → 21481.25
 ```

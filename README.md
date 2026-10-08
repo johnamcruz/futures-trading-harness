@@ -82,8 +82,8 @@ strategies/
   bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
   vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
-  ofi/STRATEGY.md            1m order-flow imbalance, paper
-  ofi_absorption/STRATEGY.md 1m absorption reversal, paper
+  ofi/STRATEGY.md            1m order-flow imbalance, on hold
+  ofi_absorption/STRATEGY.md 1m absorption reversal, on hold
   _template/STRATEGY.md      copy this to add a strategy
 ```
 

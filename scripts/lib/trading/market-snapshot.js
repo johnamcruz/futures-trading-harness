@@ -11,11 +11,11 @@ const { classifyRegime } = require('./regime');
 const { zonedParts } = require('./clock');
 
 const PARAMS = {
-  emaFast: 9, emaSlow: 20, adxPeriod: 14, adxGate: 18, adxSlopeBars: 5,
+  emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
   stPeriod: 10, stMult: 3,
-  kcLen: 20, kcMult: 1.5, kcAtr: 20, kcAdx: 20,
+  kcLen: 20, kcMult: 1.5, kcAtr: 20,
   swingK: 2,
-  orbMinutes: 15, orbAdx: 18, orbCloseMin: 16 * 60,
+  orbMinutes: 15,
   atrStop: 20, stopAtrMult: 0.5,
 };
 
@@ -31,8 +31,6 @@ function etDayMinute(t) {
   return { day: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`, minute: p.hour * 60 + p.minute };
 }
 
-function crossUp(a0, a1, b0, b1) { return a0 !== null && b0 !== null && a1 !== null && b1 !== null && a0 <= b0 && a1 > b1; }
-function crossDown(a0, a1, b0, b1) { return a0 !== null && b0 !== null && a1 !== null && b1 !== null && a0 >= b0 && a1 < b1; }
 
 function levels(bars) {
   const last = bars[bars.length - 1];
@@ -60,10 +58,11 @@ function levels(bars) {
 }
 
 /**
- * Indicators for a whole bar series, computed once, and the mechanical entry
- * signals of every built-in detector at any bar. Every value at bar i uses
+ * Indicators for a whole bar series, computed once. Every value at bar i uses
  * bars 0..i only, so a backtest can walk the series bar by bar (no look-ahead)
- * and live trading evaluates the last bar the same way.
+ * and live trading evaluates the last bar the same way. Entry triggers are
+ * not here: every strategy's trigger is its STRATEGY.md rules
+ * (strategies.js scan).
  */
 function signalSeries(bars, overrides = {}) {
   const p = { ...PARAMS, ...overrides };
@@ -79,32 +78,6 @@ function signalSeries(bars, overrides = {}) {
     kc: ind.keltner(bars, p.kcLen, p.kcMult, p.kcAtr),
     sw: ind.swings(bars, p.swingK),
     or: ind.openingRange(bars, p.orbMinutes),
-  };
-  const minuteEt = new Array(bars.length);
-  /** { ema_cross, keltner, supertrend, bos, orb } -> 'long' | 'short' | null at bar i. */
-  s.signalsAt = i => {
-    if (i < 1) return { ema_cross: null, keltner: null, supertrend: null, bos: null, orb: null };
-    const { emaFast, emaSlow, adx, st, kc, sw, or } = s;
-    const adxNow = at(adx, i);
-    const c0 = closes[i - 1]; const c1 = closes[i];
-    if (minuteEt[i] === undefined) minuteEt[i] = etDayMinute(bars[i].t).minute;
-    const dirOf = (up, down) => (up ? 'long' : down ? 'short' : null);
-    return {
-      ema_cross: adxNow !== null && adxNow >= p.adxGate
-        ? dirOf(crossUp(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)),
-          crossDown(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)))
-        : null,
-      keltner: adxNow !== null && adxNow >= p.kcAdx
-        ? dirOf(crossUp(c0, c1, at(kc.upper, i - 1), at(kc.upper, i)), crossDown(c0, c1, at(kc.lower, i - 1), at(kc.lower, i)))
-        : null,
-      supertrend: at(st.direction, i - 1) !== null && at(st.direction, i) !== st.direction[i - 1]
-        ? (st.direction[i] === 1 ? 'long' : 'short')
-        : null,
-      bos: dirOf(crossUp(c0, c1, at(sw.high, i - 1), at(sw.high, i)), crossDown(c0, c1, at(sw.low, i - 1), at(sw.low, i))),
-      orb: adxNow !== null && adxNow >= p.orbAdx && minuteEt[i] < p.orbCloseMin
-        ? dirOf(crossUp(c0, c1, at(or.high, i - 1), at(or.high, i)), crossDown(c0, c1, at(or.low, i - 1), at(or.low, i)))
-        : null,
-    };
   };
   return s;
 }
@@ -124,7 +97,6 @@ function snapshot(input, overrides = {}) {
   const adxNow = at(adx, i);
   const adxSlope = adxNow !== null && at(adx, i - p.adxSlopeBars) !== null ? adxNow - adx[i - p.adxSlopeBars] : null;
   const stopDistance = at(atrStop, i) === null ? null : p.stopAtrMult * atrStop[i];
-  const signals = series.signalsAt(i);
 
   const last = bars[i];
   return {
@@ -149,7 +121,6 @@ function snapshot(input, overrides = {}) {
       vwapSession: round(at(vwapSession, i)),
       vwapRth: round(at(vwapRth, i)),
     },
-    signals,
     regime: classifyRegime(bars),
     referenceStop: stopDistance === null ? null : {
       distance: round(stopDistance),

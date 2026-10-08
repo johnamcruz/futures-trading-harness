@@ -2,7 +2,7 @@
 /**
  * Indicator and level snapshot for the analyst agents.
  *
- *   node scripts/market-snapshot.js bars.json [--orbMinutes=30 --adxGate=20 ...]
+ *   node scripts/market-snapshot.js bars.json [--orbMinutes=30 --emaSlow=50 ...]
  *   cat bars.json | node scripts/market-snapshot.js -
  *
  * Input: the JSON returned by projectx-mcp get_bars ({ bars: [{t,o,h,l,c,v}] })
