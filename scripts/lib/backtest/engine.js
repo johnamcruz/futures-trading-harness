@@ -32,9 +32,17 @@
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
 const { trailStep } = require('../trading/trail');
-const { parseWindows, inWindow, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf } = require('../trading/clock');
+const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const { normalizeBars } = require('../trading/indicators');
+
+/** Round half to even, as Python's round() (algoTraderBot's tick math). */
+function roundHalfEven(x) {
+  const f = Math.floor(x);
+  const d = x - f;
+  if (Math.abs(d - 0.5) < 1e-9) return f % 2 === 0 ? f : f + 1;
+  return Math.round(x);
+}
 
 const DEFAULTS = {
   size: 1,
@@ -46,6 +54,9 @@ const DEFAULTS = {
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
   sessions: ['18:00-15:50@America/New_York'],
   eodAt: '15:50@America/New_York',
+  earlyCloseDates: [], // trading days (YYYY-MM-DD they end on) closing at 13:00 ET: end of day at earlyCloseEodAt
+  earlyCloseEodAt: '12:50@America/New_York',
+  closedDates: [], // holidays: no trading at all
   window: 500,
 };
 
@@ -70,7 +81,10 @@ function runEngine(markets, strategies, opts = {}) {
   const sessions = parseWindows((o.sessions || []).join(',')).windows;
   const noEntry = parseWindows(gateCfg.noEntryWindows).windows;
   const entryHours = parseWindows(gateCfg.entryHours || '').windows;
-  const eod = parseAt(o.eodAt);
+  const eodNormal = parseAt(o.eodAt);
+  const eodEarly = parseAt(o.earlyCloseEodAt);
+  const earlyDays = new Set(o.earlyCloseDates || []);
+  const closedDays = new Set(o.closedDates || []);
   const trades = [];
   const skipped = new Map(); // strategy -> reason, for strategies that can't be traded mechanically
 
@@ -163,7 +177,13 @@ function runEngine(markets, strategies, opts = {}) {
     // 2. Manage an open trade at the bar's close. Like algoTraderBot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    const afterEod = (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt)) || !inMarketHours(closeAt);
+    // The exchange calendar, as live: holidays have no session; early closes
+    // end at 13:00 ET with end of day at earlyCloseEodAt.
+    const tday = tradingDayKey(closeAt);
+    const early = earlyDays.has(tday);
+    const eod = early && eodEarly ? eodEarly : eodNormal;
+    const afterEod = closedDays.has(tday) || (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt))
+      || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
     let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
@@ -206,7 +226,7 @@ function runEngine(markets, strategies, opts = {}) {
     if (!pick) continue;
     const sign = pick.r.direction === 'long' ? 1 : -1;
     const entry = onTick(bar.c + sign * o.slippageTicks * book.tickSize, book.tickSize);
-    const stopTicks = Math.max(1, Math.round(pick.r.stopDistance / book.tickSize));
+    const stopTicks = Math.max(1, roundHalfEven(pick.r.stopDistance / book.tickSize));
     const risk = onTick(stopTicks * book.tickSize, book.tickSize);
     const plan = exitPlan(pick.s);
     const size = o.riskPerTrade
@@ -216,7 +236,7 @@ function runEngine(markets, strategies, opts = {}) {
       strategy: pick.s.name, sign, entry, risk, size, plan,
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
       // As algoTraderBot: target ticks from the unrounded stop distance.
-      target: plan.targetR ? onTick(entry + sign * Math.max(1, Math.round((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
+      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, barsHeld: 0,
     };
     entriesToday += 1;
@@ -232,4 +252,4 @@ function runEngine(markets, strategies, opts = {}) {
   return { trades, equity: curve, skipped: Object.fromEntries(skipped) };
 }
 
-module.exports = { DEFAULTS, runEngine };
+module.exports = { roundHalfEven, DEFAULTS, runEngine };

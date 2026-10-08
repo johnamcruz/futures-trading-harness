@@ -248,3 +248,21 @@ test('a stop expression with no positive distance makes no candidate', () => {
   assert.strictEqual(r.candidate, false);
   assert.match(r.filtersFailed.join(' '), /no positive distance/);
 });
+
+test('ticks round half to even, as algoTraderBot (Python round)', () => {
+  const { roundHalfEven } = require('../../scripts/lib/backtest/engine');
+  assert.deepStrictEqual([32.5, 33.5, 32.4999, 32.6, 8.125 / 0.25].map(roundHalfEven), [32, 34, 32, 33, 32]);
+});
+
+test('backtests follow the exchange calendar: no trading on holidays, early close at 13:00 ET', () => {
+  // 2025-03-10 is a Monday trading day; mark it closed, then early.
+  const s = strategy();
+  const path = [[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1]];
+  const closed = run(path, s, { closedDates: ['2025-03-10'] });
+  assert.deepStrictEqual(closed, [], 'holiday: no entry');
+  const t0 = Date.parse('2025-03-10T17:00:00Z'); // 13:00 ET
+  const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
+  const rows = [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
+  const early = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, earlyCloseDates: ['2025-03-10'] }).trades;
+  assert.deepStrictEqual(early, [], 'early close: no entry after 13:00 ET');
+});

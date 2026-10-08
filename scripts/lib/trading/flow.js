@@ -145,9 +145,11 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
       const last = Math.min(e === null ? now : e, now) - MINUTE;
       const first = Math.max(Math.ceil(s / MINUTE) * MINUTE, Math.floor((now - keepMinutes * MINUTE) / MINUTE) * MINUTE);
       let lastPrinted = null;
-      for (let m = first - STALE_MINUTES * MINUTE; m < first; m += MINUTE) if (b.minutes.has(m)) lastPrinted = m;
+      // A minute "printed" when it traded: recorded zero minutes don't count.
+      const printed = m => { const c = b.minutes.get(m); return Boolean(c && c.bv + c.sv + c.uv > 0); };
+      for (let m = first - STALE_MINUTES * MINUTE; m < first; m += MINUTE) if (printed(m)) lastPrinted = m;
       for (let m = first; m <= last; m += MINUTE) {
-        if (b.minutes.has(m)) { lastPrinted = m; continue; }
+        if (b.minutes.has(m)) { if (printed(m)) lastPrinted = m; continue; }
         if (lastPrinted !== null && m - lastPrinted <= STALE_MINUTES * MINUTE) map.set(m, { bv: 0, sv: 0 });
       }
     }

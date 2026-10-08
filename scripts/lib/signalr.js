@@ -97,9 +97,15 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
           }
         };
         sock.onerror = () => {};
+        let closedOnce = false;
         sock.onclose = () => {
+          if (closedOnce) return;
+          closedOnce = true;
           clearTimeout(hsTimer);
-          if (ws === sock) ws = null;
+          // A socket already given up on (failed handshake, declared dead)
+          // must not touch the connection that replaced it.
+          if (ws !== sock) { reject(new Error('hub connection closed')); return; }
+          ws = null;
           clearTimers();
           failPending(new Error('hub connection closed'));
           if (!handshaken) { reject(new Error('hub connection closed before the handshake')); return; }
@@ -118,7 +124,13 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
     timers.push(setInterval(() => {
       send({ type: 6 });
       // No message (not even a ping) for a while: the socket is dead.
-      if (now() - lastSeen > SERVER_TIMEOUT_MS && ws) ws.close();
+      // A half-open link never completes the close handshake, so don't wait
+      // for onclose: tear down now, then close.
+      if (now() - lastSeen > SERVER_TIMEOUT_MS && ws) {
+        const dead = ws;
+        if (typeof dead.onclose === 'function') dead.onclose();
+        dead.close();
+      }
     }, PING_MS));
     for (const t of timers) if (t.unref) t.unref();
     await onConnected(api);

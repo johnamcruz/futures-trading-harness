@@ -73,6 +73,10 @@ function validateBacktestConfig(raw, baseDir) {
   if (!cfg.eodAt || !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" no later than the 16:00 ET close (e.g. "15:50@America/New_York")');
   else if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (typeof cfg.gate !== 'boolean') errors.push('gate: true or false');
+  for (const k of ['earlyCloseDates', 'closedDates']) {
+    if (!Array.isArray(cfg[k]) || !cfg[k].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push(`${k}: ["YYYY-MM-DD", ...] (trading days, by the date they end on)`);
+  }
+  if (cfg.earlyCloseEodAt && !validAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone", no later than 13:00 ET');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');

@@ -187,3 +187,11 @@ test('signalr: a failed handshake still schedules a reconnect; coverage ends at 
   assert.strictEqual(sockets.length, 2);
   hub.close();
 });
+
+test('recorded zero minutes reloaded after a restart do not count as prints', () => {
+  const b = createFlowBook();
+  b.load(C, [{ t: T0, bv: 3, sv: 1 }, ...[1, 2, 3, 4, 5].map(k => ({ t: T0 + k * M, bv: 0, sv: 0 }))]);
+  b.connected(C, T0 + 6 * M);
+  const known = b.finished(C, { now: T0 + 15 * M, graceMs: 0 }).map(r => (r.t - T0) / M);
+  assert.ok(!known.includes(6), 'silent since minute 0: minute 6 is past the stale window, unknown');
+});
