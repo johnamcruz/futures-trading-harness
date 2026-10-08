@@ -38,6 +38,7 @@ const DEFAULTS = {
   earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close sessions (YYYY-MM-DD, New York date)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
+  orderFlow: 'auto', // record real order flow from the TopstepX market hub: true, false, or 'auto' (when a strategy on this timeframe uses ofi/delta)
   paper: false,
   model: '',
   extraArgs: [],
@@ -132,6 +133,12 @@ function sessionPastEod(cfg) {
   return false;
 }
 
+/** Does any strategy on this timeframe use the order-flow series? */
+function usesOrderFlow(strategies, timeframe) {
+  return strategies.some(s => s.valid && s.status !== 'disabled' && s.timeframe === `${timeframe}m`
+    && /\b(ofi|delta)\(/.test(JSON.stringify([s.rules || {}, s.risk || {}])));
+}
+
 /** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
 function historyBars(timeframe) {
   return Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe));
@@ -162,6 +169,7 @@ function validateConfig(raw) {
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
+  if (![true, false, 'auto'].includes(cfg.orderFlow)) errors.push('orderFlow: true, false, or "auto"');
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {
     errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until midnight. End sessions before eodAt.');
   }
@@ -311,6 +319,7 @@ function cycleResult(output) {
 
 module.exports = {
   historyBars,
+  usesOrderFlow,
   DEFAULTS,
   HARNESSES,
   claudeTools,

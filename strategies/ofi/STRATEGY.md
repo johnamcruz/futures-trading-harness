@@ -34,11 +34,12 @@ source: harness original (order flow from 1-minute bars); thresholds are startin
 
 # Strategy: Order-Flow Imbalance (`setup:ofi`)
 
-Order flow read from 1-minute bars, no tick feed needed. Each bar's volume
-is signed by where it closed in its range: a close at the high counts all
-of its volume as buying, a close at the low all as selling. `ofi(n)` is
-that signed volume over the last n bars divided by their volume, from -1
-(all selling) to +1 (all buying).
+Real order flow from TopstepX. The runner subscribes to the ProjectX market
+hub's trade prints and quotes, classifies every print as buyer- or
+seller-initiated (at the ask = buy, at the bid = sell), and sums them into
+1-minute buy and sell volume. `ofi(n)` is buy minus sell volume over the
+last n bars divided by their volume, from -1 (all selling) to +1 (all
+buying).
 
 **Real flow vs absorption.** Aggressive buying that is real moves price.
 Buying that runs into a passive seller is absorbed: heavy volume, little
@@ -89,12 +90,20 @@ Long, on a 1-minute close (short is the mirror):
   `ofi_absorption` fired the other way in the last 5 bars.
 - Within 5 minutes of high-impact news.
 
-### Limits of bar-based order flow
+### Data
 
-Bars carry total volume, not the bid/ask split, so the signed volume is an
-estimate from the bar's shape. It tracks real delta well on liquid index
-futures at 1 minute, less so in thin trading. Keep this in `paper` until the
-scorecard and a 1-minute backtest support it.
+- **Live:** the runner records flow while it runs (`orderFlow: auto` turns
+  it on for this 1-minute strategy). `node scripts/orderflow.js record
+  --symbols MNQ` collects it without the runner.
+- **History:** the market hub has none, so flow exists from when recording
+  started. `node scripts/orderflow.js export` writes 1-minute bars with the
+  recorded buy and sell volume for backtests.
+- **Gaps:** a bar without recorded flow (before recording started, or a
+  minute the hub was disconnected) falls back to an estimate from the bar's
+  shape: volume signed by where it closed in its range.
+
+Keep this in `paper` until the scorecard and a backtest on recorded flow
+support it.
 
 ## Examples
 

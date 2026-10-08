@@ -132,8 +132,13 @@ bar files through the same strategy evaluator the live scan uses.
   the backtest. A level or VWAP for a session the bars start in the middle
   of is missing rather than wrong. A manual scan on fewer bars (e.g. a
   500-bar `get_bars`) can show those as missing.
-- Order flow (`ofi`, `delta`) is estimated from each bar's shape and
-  volume, not from a bid/ask split.
+- Order flow (`ofi`, `delta`) is real only where it was recorded from the
+  TopstepX market hub (the runner with `orderFlow`, or
+  `scripts/orderflow.js record`). The hub keeps no history, and minutes
+  while it was disconnected have none; those bars use an estimate from the
+  bar's shape and volume. Each print's side is judged against the quote
+  (at the ask = buy), since the hub's own trade-type field has been
+  documented both ways.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.
 - projectx-mcp itself: a position flip skips its daily-loss check, resting stop

@@ -28,9 +28,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, usesOrderFlow } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
+const { createRecorder } = require('./lib/orderflow-recorder');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
@@ -255,10 +256,15 @@ async function main(argv) {
   process.on('exit', releaseLock);
 
   const log = (msg, level) => (level === 'error' ? process.stderr : process.stdout).write(`[autotrader] ${new Date().toISOString()} ${msg}\n`);
+  const client = createClient();
+  const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
+  const flow = wantFlow && !opts.dryRun ? createRecorder({ home: HOME_DIR, getToken: client.getToken, log }) : null;
+  if (wantFlow && !flow) log('order flow: off in a dry run');
   const runner = createRunner({
     cfg,
     root: ROOT,
-    client: createClient(),
+    client,
+    flow,
     clock: { now: () => new Date() },
     runCycle: (action, prompt) => runCycle(cfg, action, prompt, opts),
     isKillSwitchOn: () => fs.existsSync(killSwitchFile),
