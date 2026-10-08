@@ -1,0 +1,140 @@
+'use strict';
+
+/**
+ * Summarise bars into the numbers the analyst agents and playbooks use:
+ * trend/momentum values, key levels, and which mechanical playbook triggers
+ * fired on the last closed bar. Parameters follow algoTraderBot/config.py.
+ */
+
+const ind = require('./indicators');
+const { zonedParts } = require('./clock');
+
+const PARAMS = {
+  emaFast: 9, emaSlow: 20, adxPeriod: 14, adxGate: 18, adxSlopeBars: 5,
+  stPeriod: 10, stMult: 3,
+  kcLen: 20, kcMult: 1.5, kcAtr: 20, kcAdx: 20,
+  swingK: 2,
+  orbMinutes: 15, orbAdx: 18, orbCloseMin: 16 * 60,
+  atrStop: 20, stopAtrMult: 0.5,
+};
+
+const RTH_OPEN = 9 * 60 + 30;
+const RTH_CLOSE = 16 * 60;
+const GLOBEX_OPEN = 18 * 60;
+
+const at = (arr, i) => (i >= 0 && i < arr.length && Number.isFinite(arr[i]) ? arr[i] : null);
+const round = (x, d = 4) => (x === null ? null : Math.round(x * 10 ** d) / 10 ** d);
+
+function etDayMinute(t) {
+  const p = zonedParts(new Date(t), 'America/New_York');
+  return { day: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`, minute: p.hour * 60 + p.minute };
+}
+
+function crossUp(a0, a1, b0, b1) { return a0 !== null && b0 !== null && a1 !== null && b1 !== null && a0 <= b0 && a1 > b1; }
+function crossDown(a0, a1, b0, b1) { return a0 !== null && b0 !== null && a1 !== null && b1 !== null && a0 >= b0 && a1 < b1; }
+
+function levels(bars) {
+  const last = bars[bars.length - 1];
+  const lastEt = etDayMinute(last.t);
+  const session = ind.sessionKey(last.t, GLOBEX_OPEN);
+  const rthDays = new Map();
+  let onHigh = null; let onLow = null;
+  for (const b of bars) {
+    const { day, minute } = etDayMinute(b.t);
+    if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
+      const d = rthDays.get(day) || { high: -Infinity, low: Infinity, close: null };
+      d.high = Math.max(d.high, b.h); d.low = Math.min(d.low, b.l); d.close = b.c;
+      rthDays.set(day, d);
+    } else if (ind.sessionKey(b.t, GLOBEX_OPEN) === session && !(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
+      onHigh = onHigh === null ? b.h : Math.max(onHigh, b.h);
+      onLow = onLow === null ? b.l : Math.min(onLow, b.l);
+    }
+  }
+  const priorDays = [...rthDays.keys()].filter(d => d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE)).sort();
+  const prior = priorDays.length ? rthDays.get(priorDays[priorDays.length - 1]) : null;
+  return {
+    priorRth: prior ? { day: priorDays[priorDays.length - 1], high: prior.high, low: prior.low, close: prior.close } : null,
+    overnight: onHigh === null ? null : { high: onHigh, low: onLow },
+  };
+}
+
+function snapshot(input, overrides = {}) {
+  const p = { ...PARAMS, ...overrides };
+  const bars = ind.normalizeBars(input);
+  if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
+  const i = bars.length - 1;
+  const closes = bars.map(b => b.c);
+
+  const emaFast = ind.ema(closes, p.emaFast);
+  const emaSlow = ind.ema(closes, p.emaSlow);
+  const ema50 = ind.ema(closes, 50);
+  const ema200 = ind.ema(closes, 200);
+  const adx = ind.adx(bars, p.adxPeriod);
+  const atr14 = ind.atr(bars, 14);
+  const atrStop = ind.atr(bars, p.atrStop);
+  const st = ind.supertrend(bars, p.stPeriod, p.stMult);
+  const kc = ind.keltner(bars, p.kcLen, p.kcMult, p.kcAtr);
+  const sw = ind.swings(bars, p.swingK);
+  const or = ind.openingRange(bars, p.orbMinutes);
+  const vwapSession = ind.anchoredVwap(bars, GLOBEX_OPEN);
+  const vwapRth = ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE);
+
+  const adxNow = at(adx, i);
+  const adxSlope = adxNow !== null && at(adx, i - p.adxSlopeBars) !== null ? adxNow - adx[i - p.adxSlopeBars] : null;
+  const c0 = closes[i - 1]; const c1 = closes[i];
+  const minuteEt = etDayMinute(bars[i].t).minute;
+  const stopDistance = at(atrStop, i) === null ? null : p.stopAtrMult * atrStop[i];
+
+  const dirOf = (up, down) => (up ? 'long' : down ? 'short' : null);
+  const signals = {
+    ema_cross: adxNow !== null && adxNow >= p.adxGate
+      ? dirOf(crossUp(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)),
+        crossDown(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)))
+      : null,
+    keltner: adxNow !== null && adxNow >= p.kcAdx
+      ? dirOf(crossUp(c0, c1, at(kc.upper, i - 1), at(kc.upper, i)), crossDown(c0, c1, at(kc.lower, i - 1), at(kc.lower, i)))
+      : null,
+    supertrend: at(st.direction, i - 1) !== null && at(st.direction, i) !== st.direction[i - 1]
+      ? (st.direction[i] === 1 ? 'long' : 'short')
+      : null,
+    bos: dirOf(crossUp(c0, c1, at(sw.high, i - 1), at(sw.high, i)), crossDown(c0, c1, at(sw.low, i - 1), at(sw.low, i))),
+    orb: adxNow !== null && adxNow >= p.orbAdx && minuteEt < p.orbCloseMin
+      ? dirOf(crossUp(c0, c1, at(or.high, i - 1), at(or.high, i)), crossDown(c0, c1, at(or.low, i - 1), at(or.low, i)))
+      : null,
+  };
+
+  const last = bars[i];
+  return {
+    bars: bars.length,
+    from: bars[0].t,
+    last: { t: last.t, o: last.o, h: last.h, l: last.l, c: last.c, v: last.v },
+    trend: {
+      emaFast: round(at(emaFast, i)), emaSlow: round(at(emaSlow, i)), ema50: round(at(ema50, i)),
+      ema200: bars.length >= 200 ? round(at(ema200, i)) : null,
+      adx: round(adxNow, 2), adxSlope: round(adxSlope, 2),
+      supertrend: { direction: at(st.direction, i) === 1 ? 'up' : at(st.direction, i) === -1 ? 'down' : null, line: round(at(st.line, i)) },
+      keltner: { upper: round(at(kc.upper, i)), mid: round(at(kc.mid, i)), lower: round(at(kc.lower, i)) },
+    },
+    volatility: { atr14: round(at(atr14, i)), atr20: round(at(atrStop, i)) },
+    structure: {
+      lastSwingHigh: at(sw.high, i), lastSwingHighAt: sw.highIdx[i] >= 0 ? bars[sw.highIdx[i]].t : null,
+      lastSwingLow: at(sw.low, i), lastSwingLowAt: sw.lowIdx[i] >= 0 ? bars[sw.lowIdx[i]].t : null,
+    },
+    levels: {
+      ...levels(bars),
+      openingRange: at(or.high, i) === null ? null : { high: or.high[i], low: or.low[i], minutes: p.orbMinutes },
+      vwapSession: round(at(vwapSession, i)),
+      vwapRth: round(at(vwapRth, i)),
+    },
+    signals,
+    referenceStop: stopDistance === null ? null : {
+      distance: round(stopDistance),
+      long: round(last.c - stopDistance),
+      short: round(last.c + stopDistance),
+      note: `${p.stopAtrMult} x ATR(${p.atrStop}) as trained in algoTraderBot; round to tickSize and widen to structure if the playbook says so`,
+    },
+    params: p,
+  };
+}
+
+module.exports = { PARAMS, snapshot };

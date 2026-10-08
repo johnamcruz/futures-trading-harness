@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "projectx": {
+      "command": "node",
+      "args": ["/absolute/path/to/projectx-mcp/dist/index.js"],
+      "env": {
+        "PROJECTX_USERNAME": "your-topstepx-username",
+        "PROJECTX_API_KEY": "your-api-key",
+        "PROJECTX_TRADING_ENABLED": "false",
+        "PROJECTX_ALLOWED_ACCOUNT_IDS": "",
+        "PROJECTX_ALLOWED_SYMBOLS": "MNQ,MES",
+        "PROJECTX_MAX_ORDER_SIZE": "1",
+        "PROJECTX_MAX_POSITION_SIZE": "1",
+        "PROJECTX_MAX_DAILY_LOSS": "300"
+      }
+    }
+  }
+}

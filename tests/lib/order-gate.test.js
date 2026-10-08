@@ -1,0 +1,124 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
+const { loadConfig } = require('../../scripts/lib/trading/config');
+const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder } = require('../helpers');
+
+const config = loadConfig({});
+const checks = r => r.violations.map(v => v.check).sort();
+const evaluate = (input, entries, opts = {}) =>
+  evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
+
+test('a planned, tagged, stopped entry passes', () => {
+  const r = evaluate(entryOrder(), [plan()]);
+  assert.strictEqual(r.intent, 'entry');
+  assert.deepStrictEqual(r.violations, []);
+});
+
+test('[exit] and [protect] orders are never gated', () => {
+  assert.strictEqual(isRiskReducing('  [EXIT] target hit'), true);
+  assert.strictEqual(isRiskReducing('exit soon [exit]'), false);
+  const r = evaluate(entryOrder({ rationale: '[protect] stop for filled ORB long at 21480', stopLossBracket: undefined }), []);
+  assert.strictEqual(r.intent, 'risk-reducing');
+  assert.deepStrictEqual(r.violations, []);
+});
+
+test('entry needs a setup tag, a stop, and a fresh plan', () => {
+  const r = evaluate(entryOrder({ rationale: 'looks strong, going long here', stopLossBracket: undefined }), []);
+  assert.deepStrictEqual(checks(r), ['plan-required', 'setup-tag', 'stop-defined']);
+});
+
+test('stop stated in the rationale satisfies stop-defined', () => {
+  const r = evaluate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:bos long, stop at 21480.25, target 21540' }), [plan()]);
+  assert.deepStrictEqual(r.violations, []);
+});
+
+test('stale, other-symbol, and previous-day plans do not count', () => {
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(121)])), ['plan-required']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(5, { contractId: 'CON.F.US.MES.Z26' })])), ['plan-required']);
+  // NOW is 09:00 CT; 17 hours ago is before the 17:00 CT trading-day start
+  const big = { ...config, planMaxAgeMin: 24 * 60 };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(17 * 60)], { config: big })), ['plan-required']);
+});
+
+test('plan without contractId matches on the symbol in its text', () => {
+  const p = { ts: minutesAgo(5), kind: 'plan', text: 'MNQ: ORB long above 21500' };
+  assert.deepStrictEqual(evaluate(entryOrder(), [p]).violations, []);
+  const q = { ts: minutesAgo(5), kind: 'plan', text: 'MNQZ ideas' };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [q])), ['plan-required']);
+});
+
+test('no new entries in the opening 5 minutes or after 15:00 CT', () => {
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T13:31:00Z' })], { now: new Date('2026-10-07T13:32:00Z') })), ['time-window']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T20:04:00Z' })], { now: new Date('2026-10-07T20:05:00Z') })), ['time-window']);
+});
+
+test('invalid window config blocks (fail closed)', () => {
+  const bad = { ...config, noEntryWindows: 'whenever' };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bad })), ['time-window']);
+  const none = { ...config, noEntryWindows: '' };
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: none }).violations, []);
+});
+
+test('news blackouts block entries; broken blackout file blocks too', () => {
+  const items = [{ start: minutesAgo(5), end: minutesAgo(-10), reason: 'CPI' }];
+  const r = evaluate(entryOrder(), [plan()], { blackouts: { items } });
+  assert.deepStrictEqual(checks(r), ['blackout']);
+  assert.match(r.violations[0].message, /CPI/);
+  const past = [{ start: minutesAgo(30), end: minutesAgo(20) }];
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { blackouts: { items: past } }).violations, []);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { blackouts: { items: [], error: 'invalid JSON' } })), ['blackout']);
+});
+
+test('two losses in a row start a cooldown; a win resets the streak', () => {
+  const journal = [plan(100), placed(90), review(80, 'loss'), placed(70), review(20, 'loss'), plan(5)];
+  const r = evaluate(entryOrder(), journal);
+  assert.deepStrictEqual(checks(r), ['loss-streak']);
+  assert.match(r.violations[0].message, /10 min more/);
+  const cooled = [plan(100), placed(90), review(80, 'loss'), placed(70), review(31, 'loss'), plan(5)];
+  assert.deepStrictEqual(evaluate(entryOrder(), cooled).violations, []);
+  const reset = [plan(100), placed(90), review(80, 'loss'), placed(70), review(60, 'win'), placed(50), review(20, 'loss'), plan(5)];
+  assert.deepStrictEqual(evaluate(entryOrder(), reset).violations, []);
+});
+
+test('three losing trades end the trading day', () => {
+  const journal = [placed(200), review(190, 'loss'), placed(180), review(170, 'win'), placed(160), review(150, 'loss'),
+    placed(140), review(130, 'win'), placed(120), review(100, 'loss'), plan(5)];
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), journal)), ['daily-loss-count']);
+});
+
+test('an unreviewed entry blocks the next entry; failed and exit orders do not count', () => {
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), plan(5)])), ['review-before-next-entry']);
+  assert.deepStrictEqual(evaluate(entryOrder(), [placed(30, 'setup:orb x stop 1', false), plan(5)]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder(), [placed(30, '[exit] flatten'), plan(5)]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder(), [placed(30), review(10, 'nofill'), plan(5)]).violations, []);
+});
+
+test('paper reviews do not count as live reviews or losses', () => {
+  const paperLoss = (m) => ({ ...review(m, 'loss'), tags: ['result:loss', 'setup:orb', 'paper'] });
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), paperLoss(10), plan(5)])), ['review-before-next-entry']);
+  assert.deepStrictEqual(evaluate(entryOrder(), [paperLoss(25), paperLoss(10), plan(5)]).violations, []);
+});
+
+test('max entries per trading day', () => {
+  const journal = [];
+  for (let i = 0; i < 6; i += 1) journal.push(placed(300 - i * 40), review(290 - i * 40, i % 2 ? 'win' : 'scratch'));
+  journal.push(plan(5));
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), journal)), ['max-entries']);
+  assert.deepStrictEqual(evaluate(entryOrder(), journal, { config: { ...config, maxEntriesPerDay: 0 } }).violations, []);
+});
+
+test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
+  const skipping = loadConfig({ FTH_ORDER_GATE_SKIP: 'plan-required, setup-tag' });
+  const r = evaluate(entryOrder({ rationale: 'long, stop 21480 because reasons' }), [], { config: skipping });
+  assert.deepStrictEqual(r.violations, []);
+});
+
+test('formatBlock lists every violation', () => {
+  const text = formatBlock([{ check: 'a', message: 'one' }, { check: 'b', message: 'two' }]);
+  assert.match(text, /^Blocked by trading harness/);
+  assert.match(text, /- \[a\] one\n- \[b\] two/);
+  assert.ok(CONTRACT);
+});

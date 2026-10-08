@@ -1,47 +1,14 @@
 {
-  "name": "ecc",
+  "name": "futures-trading-harness",
   "owner": {
-    "name": "Affaan Mustafa",
-    "email": "me@affaanmustafa.com"
-  },
-  "metadata": {
-    "description": "Harness-native ECC skills, hooks, rules, MCP conventions, and operator workflows"
+    "name": "John Cruz",
+    "url": "https://github.com/johnamcruz"
   },
   "plugins": [
     {
-      "name": "ecc",
+      "name": "futures-trading-harness",
       "source": "./",
-      "description": "Harness-native ECC operator layer - 68 agents, 293 skills, 94 legacy command shims, reusable hooks, rules, selective install profiles, and production-ready workflows for Claude Code, Codex, OpenCode, Cursor, and related agent harnesses",
-      "version": "2.2.3",
-      "author": {
-        "name": "Affaan Mustafa",
-        "email": "me@affaanmustafa.com"
-      },
-      "homepage": "https://ecc.tools",
-      "repository": "https://github.com/affaan-m/ECC",
-      "license": "MIT",
-      "keywords": [
-        "agents",
-        "skills",
-        "hooks",
-        "commands",
-        "tdd",
-        "code-review",
-        "security",
-        "best-practices"
-      ],
-      "category": "workflow",
-      "tags": [
-        "agents",
-        "skills",
-        "hooks",
-        "commands",
-        "tdd",
-        "code-review",
-        "security",
-        "best-practices"
-      ],
-      "strict": false
+      "description": "Futures trading harness for Claude Code on TopstepX via projectx-mcp."
     }
   ]
 }
