@@ -73,6 +73,9 @@ function stateFrom(account, record, balance) {
   let cs = combine.start(account);
   for (const d of record.days) {
     cs = combine.endDay({ ...cs, balance: d.balance, dayPnl: d.pnl });
+    // `sessions` bounds training and evaluation attempts, not the firm's: a
+    // live attempt runs on (with its trailing floor) until it passes or blows.
+    if (cs.status === 'timeout') cs = { ...cs, status: 'active' };
     if (cs.status !== 'active') return cs;
   }
   const lastEod = record.days.length ? record.days[record.days.length - 1].balance : account.starting_balance;
@@ -91,7 +94,7 @@ function stateFrom(account, record, balance) {
  * snapshot's day has no recorded close marks that close as missed: the
  * trailing floor can't be known until it is recorded, so entries stop.
  */
-function snapshot(home, account, balance, now = new Date(), { open = 0 } = {}) {
+function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [] } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
   const day = tradingDayKey(now);
@@ -101,7 +104,7 @@ function snapshot(home, account, balance, now = new Date(), { open = 0 } = {}) {
   const cs = stateFrom(account, record, balance);
   writeJson(combineFile(home, account.name), {
     ...record, missedClose, peak: cs.peak,
-    snapshot: { at: now.toISOString(), day, balance, open, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
   });
   return cs;
 }
@@ -148,7 +151,13 @@ function combineBlock(home, accountName, now = new Date()) {
   }
   const s = r.snapshot;
   if (!s || !(now.getTime() - Date.parse(s.at) <= SNAPSHOT_MAX_AGE_MS)) return `the ${accountName} account snapshot is missing or older than ${SNAPSHOT_MAX_AGE_MS / 60000} minutes (the runner updates it each bar)`;
-  if (s.open > 0) return `a position is open on the account; a prop attempt trades one position at a time (as the backtester and the policy do)`;
+  if (s.open > 0) {
+    const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
+    return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
+  }
+  if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
+    return `${s.block}; end it with node scripts/combine.js stop --account ${accountName}, and start a new one when you choose`;
+  }
   return s.block || null;
 }
 

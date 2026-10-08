@@ -42,7 +42,7 @@ function decideSetup({ bundle, account, cs, strategy, component, symbol, contrac
     bar: book.bars[i].t, direction: scan.direction, stopTicks, account: account.name, combine: combine.summary(cs), policy: bundle ? bundle.meta.name : null,
   };
   let cp = plan(1);
-  if (!cp) return { ...base, action: 'skip', maxSize: 0, contract: null, reason: combine.entryBlock(cs) || 'the size budget is below one contract' };
+  if (!cp) return { ...base, action: 'skip', maxSize: 0, contract: null, reason: combine.entryBlock(cs) || `the size budget ($${combine.budget(cs, z)}) is below one contract at this stop; with a cushion of $${Math.round(combine.cushion(cs))} the attempt can only trade setups with tighter stops` };
   const mini = Boolean(legs.mini && cp.root === legs.mini.root);
   const sign = scan.direction === 'long' ? 1 : -1;
   const obs = buildObservation({

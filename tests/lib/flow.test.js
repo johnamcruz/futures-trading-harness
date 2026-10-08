@@ -111,6 +111,25 @@ function fakeSockets() {
   return { FakeWS, sockets };
 }
 
+test('signalr: an invocation the hub never answers is rejected after its timeout, not left waiting', async () => {
+  const { FakeWS } = fakeSockets();
+  class Silent extends FakeWS {
+    send(text) {
+      if (text.includes('"type":1')) { this.sent.push(text); return; } // never answered
+      super.send(text);
+    }
+  }
+  const hub = createHub({ url: 'https://h.example.com/hubs/market', getToken: async () => 't', WebSocketImpl: Silent, invokeTimeoutMs: 50 });
+  const keepAlive = setTimeout(() => {}, 5000); // the hub's timers are unref'd: hold the test open
+  try {
+    await hub.start();
+    await assert.rejects(() => hub.invoke('SubscribeContractQuotes', C), /SubscribeContractQuotes: no answer within 0.05 s/);
+  } finally {
+    clearTimeout(keepAlive);
+    hub.close();
+  }
+});
+
 test('signalr: handshake, invoke, server events, and resubscribe after a reconnect', async () => {
   const { FakeWS, sockets } = fakeSockets();
   const seen = [];

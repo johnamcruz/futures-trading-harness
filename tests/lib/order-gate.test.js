@@ -296,6 +296,16 @@ test('combine: at the profit target the gate stops entries only once today\'s cl
   assert.match(record(entryOrder()).violations[0].message, /today the best day \(\$2100\).*entries resume next session/);
 });
 
+test('combine: a live attempt never times out on its sessions, and a finished one says how to end it', () => {
+  // `sessions` (2 here) bounds training attempts, not the firm's: day 3 still trades.
+  const short = { ...MINI, sessions: 2 };
+  const days = [['2026-10-04', 50100], ['2026-10-05', 50200], ['2026-10-06', 50300]];
+  assert.deepStrictEqual(propSetup({ account: short, days, balance: 50300 })(entryOrder()).violations, []);
+  // Passed ($3,100 profit, no consistency rule): refused, with the command that ends the attempt.
+  const passed = propSetup({ days: [['2026-10-06', 53100]], balance: 53100 });
+  assert.match(passed(entryOrder()).violations[0].message, /the challenge is passed.*node scripts\/combine.js stop --account mini/);
+});
+
 test('policy: an entry needs a fresh verdict for this contract and side, at no more than its size', () => {
   const none = propSetup({ policy: true });
   assert.match(none(entryOrder()).violations.find(v => v.check === 'policy').message, /no verdict for MNQ/);

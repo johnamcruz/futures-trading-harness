@@ -66,16 +66,17 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     if (!list.length || !accountId) return;
     if (list.length > 1) warnOnce('many', `strategies trade ${list.length} account profiles (${list.map(a => a.name).join(', ')}) on one live account; each sees the same balance`);
     const { positions } = await client.accountState(accountId);
-    const open = positions.filter(p => Number(p.size || 0) > 0).length;
+    const openIds = positions.filter(p => Number(p.size || 0) > 0).map(p => String(p.contractId));
+    const open = openIds.length;
     // A closing balance is read only once the account is flat (the closing fills are in it).
-    if (flat && open) throw new Error(`${open} position(s) still open; the closing balance is read once flat`);
+    if (flat && open) throw new Error(`${open} position(s) still open (${openIds.join(', ')}); the closing balance is read once flat`);
     const balance = await client.accountBalance(accountId);
     for (const a of list) {
       if (!live.readAttempt(home, a.name)) {
         warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
         continue;
       }
-      fn(a, balance, now, open);
+      fn(a, balance, now, open, openIds);
     }
   }
 
@@ -109,9 +110,14 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       return out;
     },
     /** Every bar: the balance and open positions now. */
-    snapshot: now => balances(now, (a, b, t, open) => live.snapshot(home, a, b, t, { open })),
+    snapshot: now => balances(now, (a, b, t, open, openIds) => live.snapshot(home, a, b, t, { open, openIds })),
     /** After the end-of-day flatten: the closing balance of trading day `day` (YYYY-MM-DD). */
-    endOfDay: (now, day) => balances(now, (a, b) => live.recordEndOfDay(home, a, b, day), { flat: true }),
+    endOfDay: (now, day) => balances(now, (a, b) => {
+      // A day before the attempt started has nothing to record (a catch-up end of day for it is not an error).
+      const r = live.readAttempt(home, a.name);
+      if (r && r.startDay && day < r.startDay) return;
+      live.recordEndOfDay(home, a, b, day);
+    }, { flat: true }),
 
     /**
      * Scan results with every policy strategy applied. A policy strategy owns

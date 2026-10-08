@@ -77,7 +77,8 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
   (or the attempt could only time out), except on a day that is already
   the best one, where more profit can't help. Clock sizing sizes for the
   profit consistency needs, not only the target.
-- `sessions`: attempt length for training and evaluation.
+- `sessions`: attempt length for training and evaluation. A live attempt
+  is not ended by it: it runs until it passes or blows, or you stop it.
 
 ## The env
 
@@ -170,8 +171,9 @@ Rules:
 - `node scripts/combine.js start --account <name>` starts an attempt (the
   user's call). The runner snapshots the account balance and open positions
   every bar and records each day's closing balance after the end-of-day
-  flatten, once flat. A missed close stops entries until it is recorded
-  (`combine.js record-day`).
+  flatten, once flat. A close that can't be recorded is retried on its own
+  (five times, a minute apart); end of day itself is never held open by it.
+  A missed close stops entries until it is recorded (`combine.js record-day`).
 - At each setup of a policy strategy's strategies, while flat, the runner
   records a verdict: the strategy that fired, the side, `skip` / `half` /
   `full` (the trained policy's, or `full` without a bundle), the contract

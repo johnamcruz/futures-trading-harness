@@ -107,6 +107,28 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.match(none.logs.join('\n'), /combine\.js start --account topstep_50k/);
 });
 
+test('no end-of-day or position deadlock: a day before the attempt is not an error, and open positions are named', async () => {
+  const { hooks, home, account, client } = setup();
+  await hooks.endOfDay(new Date('2026-10-02T20:00:00Z'), '2026-10-02'); // before the attempt started (2026-10-05)
+  assert.deepStrictEqual(prop.readAttempt(home, account.name).days, []);
+  client.open = [{ contractId: 'CON.F.US.GCE.Z26', size: 1, type: 1 }];
+  await assert.rejects(() => hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07'), /still open \(CON.F.US.GCE.Z26\)/);
+  const now = new Date('2026-10-07T14:30:00Z');
+  await hooks.snapshot(now);
+  assert.match(prop.combineBlock(home, account.name, now), /a position is open on the account \(CON.F.US.GCE.Z26\).*close it to trade the attempt/);
+});
+
+test('a setup whose stop is too wide for the cushion is skipped with the reason, not silently', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const { hooks, home } = setup({ policy: null });
+  await hooks.snapshot(now);
+  // A 1,000-point stop risks $2,000 a micro, far over the $450 budget.
+  hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 1000 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
+  assert.strictEqual(v.action, 'skip');
+  assert.match(v.reason, /size budget \(\$450\) is below one contract at this stop; with a cushion of \$2250 the attempt can only trade setups with tighter stops/);
+});
+
 test('a policy strategy screens its strategies\' setups: the first that fired, sized in micros or minis; the verdict is recorded', async () => {
   const now = new Date('2026-10-07T23:00:00Z');
   const scan = [

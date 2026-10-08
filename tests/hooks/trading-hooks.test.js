@@ -384,6 +384,26 @@ test('order gate: at the profit target a prop entry is refused only once today\'
   assert.match(spread.stderr, /\[combine\] topstep_50k: at the profit target: no new entries/);
 });
 
+test('order gate: a live attempt past its sessions still trades (sessions bound training, not the firm)', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {}); // sessions: 30
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
+  prop.startAttempt(env.FTH_HOME, account, new Date('2026-08-01T14:00:00Z'));
+  for (let d = 0; d < 32; d += 1) {
+    const day = new Date(Date.UTC(2026, 7, 3) + d * 86400000).toISOString().slice(0, 10);
+    prop.recordEndOfDay(env.FTH_HOME, account, 50000 + 10 * (d + 1), day);
+  }
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date(Date.parse(TEST_NOW) - 60000));
+  prop.appendVerdict(env.FTH_HOME, {
+    strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+    policy: null, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+  });
+  const r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+});
+
 test('order gate: a strategy that trades an account is gated on the attempt and its size budget, even with the checks skipped', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');

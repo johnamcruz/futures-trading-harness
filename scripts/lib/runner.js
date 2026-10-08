@@ -49,6 +49,9 @@ const MAX_RETRY_MS = 60000;
 const FILL_GRACE_MS = 30000;
 // The account read for a run's prompt never holds a run up longer than this.
 const ACCOUNT_READ_MS = 5000;
+// A closing balance that couldn't be recorded is retried this often, this many times.
+const CLOSE_RETRY_MS = 60000;
+const CLOSE_TRIES = 5;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 
 function createRunner(deps) {
@@ -63,6 +66,7 @@ function createRunner(deps) {
   let state = loadState();
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
+  let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
   const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
   const minutes = cfg.timeframe;
   const delayMs = cfg.barDelaySeconds * 1000;
@@ -489,10 +493,34 @@ function createRunner(deps) {
     return Math.max(0, Math.min(base, until));
   }
 
+  /**
+   * Record the closing balance of the day end of day just closed. Retried at
+   * most CLOSE_TRIES times, a minute apart; an error a retry can't fix (the
+   * day already recorded with another balance) stops at once. Either way the
+   * gate's missed-close check keeps prop entries refused until it is recorded.
+   */
+  async function recordClose(now) {
+    if (!pendingClose || now.getTime() - pendingClose.lastTry < CLOSE_RETRY_MS) return;
+    const { day } = pendingClose;
+    pendingClose.tries += 1;
+    pendingClose.lastTry = now.getTime();
+    try {
+      await prop.endOfDay(now, day);
+      if (pendingClose.tries > 1) log(`end of day: the close of ${day} is recorded`);
+      pendingClose = null;
+    } catch (err) {
+      const final = /already recorded/.test(err.message) || pendingClose.tries >= CLOSE_TRIES;
+      log(`end of day: could not record the close of ${day} (${err.message}); `
+        + (final ? `giving up: prop entries stay refused until it is recorded (node scripts/combine.js record-day --account <name> --day ${day} --balance <dollars>)` : 'retrying in a minute'), 'error');
+      if (final) pendingClose = null;
+    }
+  }
+
   async function stepOnce() {
     const now = clock.now();
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
     state = d.state;
+    if (pendingClose && d.action !== 'eod') await recordClose(now);
 
     if (d.action === 'premarket' || d.action === 'eod') {
       const p = prompts(cfg, now, root);
@@ -518,14 +546,13 @@ function createRunner(deps) {
       // Then check again: flatten whatever the run left open.
       if (d.action === 'eod') ok = (await eodBackstop()) && ok;
       // The day's closing balance, once flat (the trailing floor moves on it).
+      // A failed record never holds end of day open (the flatten is what can't
+      // wait): it is retried on its own, and until it is recorded the gate
+      // refuses prop entries (a missed close).
       if (d.action === 'eod' && ok && prop && !cfg.paper) {
-        try {
-          // The trading day being closed: a catch-up end of day runs on a later day.
-          await prop.endOfDay(now, d.state.day);
-        } catch (err) {
-          log(`end of day: could not record the account balance (${err.message})`, 'error');
-          ok = false;
-        }
+        // The trading day being closed: a catch-up end of day runs on a later day.
+        pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
+        await recordClose(now);
       }
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);

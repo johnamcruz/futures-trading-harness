@@ -380,7 +380,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
-    isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
@@ -490,12 +490,16 @@ test('after the session, with trades today, the runner keeps housekeeping until 
 });
 
 /** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
-function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false } = {}) {
+function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503' } = {}) {
   const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
   return {
     calls,
     async snapshot(now) { calls.snapshots.push(now.getTime()); },
-    async endOfDay(now, day) { calls.eod.push(now.getTime()); calls.eodDays.push(day); },
+    async endOfDay(now, day) {
+      calls.eod.push(now.getTime());
+      calls.eodDays.push(day);
+      if (calls.eod.length <= eodFails) throw new Error(eodError);
+    },
     summaries(now, balance) {
       calls.summaries += 1;
       calls.summaryBalances = [...(calls.summaryBalances || []), balance];
@@ -515,6 +519,28 @@ test('prop challenge: the balance is snapshotted every bar and recorded once at 
   const { tradingDayKey } = require('../../scripts/lib/trading/clock');
   assert.deepStrictEqual(prop.calls.eodDays, [tradingDayKey(new Date(et(15, 30)))], 'the trading day being closed');
   assert.ok(r.closed.length && r.closed[0] <= prop.calls.eod[0], 'flat before the closing balance is read');
+});
+
+test('end of day never deadlocks on the closing balance: a failed record is retried on its own, never by rerunning end of day', async () => {
+  // Fails once (the broker), then records on the retry a minute later.
+  const once = fakeProp({ eodFails: 1 });
+  const a = await trailSim({ tape: {}, startAt: et(15, 30) + 2000, until: et(16, 5), prop: once });
+  assert.deepStrictEqual(a.cycles.filter(c => c === 'eod'), ['eod'], 'one end-of-day run');
+  assert.strictEqual(once.calls.eod.length, 2);
+  assert.ok(once.calls.eod[1] - once.calls.eod[0] >= 60000, 'a minute apart');
+  assert.strictEqual(a.kills || 0, 0, 'no kill switch');
+  // Never recordable (a position the runner doesn't trade stays open): five tries, then it stops;
+  // end of day is still done once, and the gate's missed-close check keeps prop entries refused.
+  const never = fakeProp({ eodFails: Infinity, eodError: '1 position(s) still open (CON.F.US.GCE.Z26)' });
+  const b = await trailSim({ tape: {}, startAt: et(15, 30) + 2000, until: et(17, 0), prop: never });
+  assert.deepStrictEqual(b.cycles.filter(c => c === 'eod'), ['eod']);
+  assert.strictEqual(never.calls.eod.length, 5);
+  assert.strictEqual(b.kills || 0, 0);
+  // A conflict a retry can't fix (already recorded by hand at another balance): one try.
+  const conflict = fakeProp({ eodFails: Infinity, eodError: 'mini: the close of 2026-10-07 is already recorded at $50300, not $50100' });
+  const c = await trailSim({ tape: {}, startAt: et(15, 30) + 2000, until: et(17, 0), prop: conflict });
+  assert.strictEqual(conflict.calls.eod.length, 1);
+  assert.deepStrictEqual(c.cycles.filter(x => x === 'eod'), ['eod']);
 });
 
 test('prop challenge: past the ratchet the policy is asked every bar and may close the trade', async () => {
