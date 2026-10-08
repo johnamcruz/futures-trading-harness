@@ -24,7 +24,11 @@ inside one run.
   cycle**: confirm the protective stop is working (`list_open_orders`), apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
-  is open.
+  is open. Protective stops move toward the market only.
+- **Flat with working orders**: cancel leftovers from a closed trade (its stop
+  or target) right away; they could fill into an unplanned position. Keep only
+  a pending entry from your own plan. New entries wait until no order is
+  working in the contract. The runner also cancels leftovers before each bar.
 - Daily stop or loss-streak cooldown in the briefing or journal → report and end.
 
 ### 2. Parallel read

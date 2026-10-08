@@ -234,3 +234,34 @@ test('a session that runs past end of day is rejected', () => {
   assert.throws(() => validateConfig({ sessions: ['18:00-16:00@America/New_York'], eodAt: '15:50@America/New_York' }), /past eodAt/);
   assert.ok(validateConfig({ sessions: ['09:35-15:00@America/New_York'] }));
 });
+
+test('leftover orders on a flat contract are cancelled before the cycle; pending entries are kept', async () => {
+  const market = fakeMarket({ minutes: 3 });
+  const clockRef = { t: et(9, 55) };
+  const cancelled = [];
+  let positions = [];
+  const orders = [
+    { id: 1, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1 }, // leftover stop
+    { id: 2, contractId: 'CON.F.US.MNQ.Z26', type: 1, side: 0, size: 1 }, // pending entry
+    { id: 3, contractId: 'CON.F.US.MES.Z26', type: 4, side: 1, size: 1 }, // another root
+  ];
+  const runner = createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+    client: {
+      ...market.client(clockRef),
+      async accountState() { return { positions, orders: orders.filter(o => !cancelled.includes(o.id)) }; },
+      async cancelOrder(acct, id) { cancelled.push(id); },
+    },
+    clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+    writeBars: () => '/b.json', scanFor: () => [], entryOrderIds: () => new Set([2]),
+  });
+  while (clockRef.t < et(10, 2)) clockRef.t += await runner.step();
+  assert.deepStrictEqual(cancelled, [1]);
+  // With a position open nothing is cancelled.
+  positions = [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }];
+  cancelled.length = 0;
+  orders.push({ id: 4, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1 });
+  while (clockRef.t < et(10, 8)) clockRef.t += await runner.step();
+  assert.deepStrictEqual(cancelled, []);
+});

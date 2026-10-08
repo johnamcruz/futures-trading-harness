@@ -75,4 +75,10 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
   });
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness };
+/** Entry order ids the MCP gateway recorded in <stateDir>/entry-orders.json. */
+function entryOrderIds(stateDir) {
+  const list = readJson(path.join(stateDir, 'entry-orders.json'), []);
+  return new Set((Array.isArray(list) ? list : []).map(e => Number(e && e.orderId)).filter(Number.isFinite));
+}
+
+module.exports = { readJson, writeJsonAtomic, runHarness, entryOrderIds };

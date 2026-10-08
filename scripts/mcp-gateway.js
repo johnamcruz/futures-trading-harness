@@ -26,7 +26,9 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, netPosition, evaluateAccount, evaluateCancel, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { parseToolJson, netPosition, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { isRiskReducing } = require('./lib/trading/order-gate');
+const { writeJsonAtomic, readJson } = require('./lib/harness-run');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
@@ -34,8 +36,33 @@ const { formatBlock } = require('./lib/trading/order-gate');
 const { backtestMode, harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
-const LANE_TIMEOUT_MS = 30000;
+const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
+const ENTRY_ORDERS_KEPT = 200;
+
+/**
+ * Remember entry order ids (setup:<name>) the gateway let through, so the
+ * runner's flat-account cleanup can tell a pending entry from a leftover
+ * stop or target (see runner.js). Best effort.
+ */
+function recordEntryOrder(env, orderId, contractId) {
+  try {
+    const file = path.join(harnessHome(env), 'entry-orders.json');
+    const list = readJson(file, []);
+    const next = [...(Array.isArray(list) ? list : []), { orderId, contractId, at: new Date().toISOString() }].slice(-ENTRY_ORDERS_KEPT);
+    writeJsonAtomic(file, next);
+  } catch (err) {
+    process.stderr.write(`[mcp-gateway] could not record entry order ${orderId}: ${err.message}\n`);
+  }
+}
+
+function resultJson(response) {
+  try {
+    return JSON.parse(response.result.content[0].text);
+  } catch (_err) {
+    return null;
+  }
+}
 
 async function accountFacts(args, caller, withTrades = true) {
   const accountId = args.accountId;
@@ -105,13 +132,24 @@ function main(argv) {
   let ledger = [];
   const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
 
+  // Order calls whose reply never came within LANE_TIMEOUT_MS: their effect is unknown.
+  const unanswered = new Set();
+  const blocked = violations => ({ allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' });
+
   const check = async (args, tool, id) => {
     const now = new Date();
+    if (unanswered.size) {
+      return blocked([{ check: 'order-pending', message: `An earlier order call (request ${[...unanswered].join(', ')}) has had no reply for over ${LANE_TIMEOUT_MS / 1000} s, so the account state is unknown. Wait for it, then check positions and orders.` }]);
+    }
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     if (tool === 'cancel_order') {
       const { positions, orders } = await accountFacts(args, caller, false);
-      const violations = evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env) });
-      return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
+      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env) }));
+    }
+    if (tool === 'modify_order') {
+      if (base.violations.length) return base;
+      const { positions, orders } = await accountFacts(args, caller, false);
+      return blocked(evaluateModifyAccount({ input: args, positions, orders, config: loadConfig(process.env) }));
     }
     if (tool !== 'place_order') return base;
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
@@ -123,19 +161,28 @@ function main(argv) {
 
   // Responses the order lane is waiting for, by client request id.
   const waiting = new Map();
+  // After the timeout the lane is released but order calls stay refused
+  // (order-pending) until the late reply arrives and is recorded.
   const awaitResponse = id => new Promise(resolve => {
-    const timer = setTimeout(() => { waiting.delete(id); resolve(null); }, LANE_TIMEOUT_MS);
-    waiting.set(id, msg => { clearTimeout(timer); resolve(msg); });
+    const timer = setTimeout(() => { unanswered.add(id); resolve(null); }, LANE_TIMEOUT_MS);
+    waiting.set(id, msg => {
+      clearTimeout(timer);
+      if (unanswered.delete(id)) recordSent(id, msg);
+      else resolve(msg);
+    });
   });
+  // Client request ids forwarded to the server and not yet answered.
+  const inFlight = new Set();
   const noteResponse = line => {
-    if (waiting.size === 0) return;
     let msg;
     try {
       msg = JSON.parse(line);
     } catch (_err) {
       return;
     }
-    const done = msg && waiting.get(msg.id);
+    if (!msg || msg.method !== undefined || msg.id === undefined) return;
+    inFlight.delete(msg.id);
+    const done = waiting.get(msg.id);
     if (done) {
       waiting.delete(msg.id);
       done(msg);
@@ -146,6 +193,10 @@ function main(argv) {
     sentNet.delete(id);
     if (!sent || !response || response.error || (response.result && response.result.isError)) return;
     const { args, observedNet } = sent;
+    const placed = resultJson(response);
+    if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
+      recordEntryOrder(process.env, placed.orderId, args.contractId);
+    }
     if (String(args.type).toLowerCase() !== 'market' || observedNet === null) return; // resting orders show up in list_open_orders
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
     ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, at: Date.now() });
@@ -165,6 +216,19 @@ function main(argv) {
   let queue = Promise.resolve();
   const fromClient = lineSplitter(line => {
     queue = queue.then(async () => {
+      let incoming;
+      try {
+        incoming = JSON.parse(line);
+      } catch (_err) {
+        incoming = null;
+      }
+      // An order call reusing the id of a request still in flight would let
+      // the other request's reply release the order lane early.
+      const dup = [].concat(incoming || []).find(m => m && isLaneCall(m) && m.id !== undefined && inFlight.has(m.id));
+      if (dup) {
+        write(JSON.stringify({ jsonrpc: '2.0', id: dup.id, error: { code: -32600, message: `Blocked by trading harness: request id ${JSON.stringify(dup.id)} is already in use by a request in flight. Use a new id.` } }));
+        return;
+      }
       const { forward, respond } = await handleClientLine(line, check, log);
       for (const r of respond) write(JSON.stringify(r));
       if (forward === null) return;
@@ -174,8 +238,9 @@ function main(argv) {
       } catch (_err) {
         parsed = null;
       }
+      for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
       const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
-      const replies = lane.map(m => awaitResponse(m.id).then(r => recordSent(m.id, r)));
+      const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
       toChild(forward);
       // Hold the lane until the server has answered every order-changing call.
       await Promise.all(replies);

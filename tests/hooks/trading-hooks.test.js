@@ -211,3 +211,58 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
     assert.match(byId[id].result.content[0].text, /\[exposure\]/);
   }
 });
+
+async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const env = {
+    PATH: process.env.PATH, HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', ...extraEnv,
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  for (const m of messages) {
+    gw.stdin.write(`${JSON.stringify(m)}\n`);
+    if (gapMs) await new Promise(r => setTimeout(r, gapMs));
+  }
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const all = out.trim().split('\n').map(l => JSON.parse(l));
+  return { byId: Object.fromEntries(all.map(r => [r.id, r])), all, dir };
+}
+
+const call = (id, name, args) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+const LONG1 = JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]);
+
+test('MCP gateway: an order call reusing an in-flight request id is refused', async () => {
+  const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [
+    call(7, 'get_bars', {}),
+    call(7, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }),
+  ]);
+  const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
+  assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
+  assert.ok(texts.includes('forwarded:tools/call:get_bars'));
+  assert.ok(!texts.includes('forwarded:tools/call:place_order'), 'the order never reached the server');
+  const { byId: control } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [call(8, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' })]);
+  assert.strictEqual(control[8].result.content[0].text, 'forwarded:tools/call:place_order');
+});
+
+test('MCP gateway: no order calls while an earlier one has gone unanswered', async () => {
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
+    call(1, 'place_order', { ...ORDER, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+    call(2, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }),
+  ]);
+  assert.strictEqual(byId[1].result.content[0].text, 'forwarded:tools/call:place_order');
+  assert.match(byId[2].result.content[0].text, /\[order-pending\]/);
+});
+
+test('MCP gateway: a protective stop can be tightened but not widened', async () => {
+  const stop = JSON.stringify([{ id: 9, contractId: 'CON.F.US.MNQ.Z26', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [
+    call(1, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21400 }),
+    call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21490 }),
+  ]);
+  assert.match(byId[1].result.content[0].text, /\[modify-protection\]/);
+  assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:modify_order');
+});

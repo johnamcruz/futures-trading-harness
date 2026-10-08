@@ -9,7 +9,8 @@
  *   opposite side, size within the position, and resting protective orders
  *   (stops, limits) never stacking beyond it.
  * - Entries are refused while a position in the contract is open (no adds,
- *   no flips disguised as entries).
+ *   no flips disguised as entries), or while orders are working in it.
+ * - A protective stop may only be moved closer to the market, never away.
  * - Loss streak and daily loss count come from real closing fills
  *   (profitAndLoss), not from journal tags.
  */
@@ -52,16 +53,26 @@ function netPosition(positions, contractId) {
 }
 
 /**
- * Orders the gateway let through recently that the account may not show yet
- * (a market order acknowledged but not yet reflected in positions). Each is
- * { contractId, sign, size, netBefore, at }; it counts as pending while the
- * observed net is still what it was when the order was sent, for up to ttlMs.
+ * Market orders the gateway let through recently that the account may not
+ * show yet. Each ledger entry is { contractId, sign, size, netBefore, at } and
+ * lives for ttlMs. Together, the live entries for a root project the net the
+ * account will show once all of them fill: the oldest entry's net before it
+ * was sent plus every entry's change. Returns { projected, pending }, where
+ * pending is true while the observed net hasn't reached the projection.
  */
-function pendingNet(ledger, contractId, net, now, ttlMs = 30000) {
+function pendingState(ledger, contractId, observed, now, ttlMs = 30000) {
   const root = contractRoot(contractId);
-  return (ledger || [])
-    .filter(e => contractRoot(e.contractId) === root && now.getTime() - e.at < ttlMs && e.netBefore === net)
-    .reduce((n, e) => n + e.sign * e.size, 0);
+  const live = (ledger || [])
+    .filter(e => contractRoot(e.contractId) === root && now.getTime() - e.at < ttlMs)
+    .sort((a, b) => a.at - b.at);
+  if (live.length === 0) return { projected: observed, pending: false };
+  const projected = live[0].netBefore + live.reduce((n, e) => n + e.sign * e.size, 0);
+  return { projected, pending: projected !== observed };
+}
+
+/** Net change still expected from recent market orders (projected minus observed). */
+function pendingNet(ledger, contractId, observed, now, ttlMs = 30000) {
+  return pendingState(ledger, contractId, observed, now, ttlMs).projected - observed;
 }
 
 /** Closing fills of the trading day in time order: [{ pnl, ts }]. */
@@ -115,29 +126,41 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   const sideSign = SIDE_SIGN[String(input.side || '').toLowerCase()];
   const size = Number(input.size);
   const observed = netPosition(positions, input.contractId);
-  // Count orders sent moments ago that the account doesn't show yet.
-  const net = observed + pendingNet(ledger, input.contractId, observed, now);
+  // Orders sent moments ago that the account doesn't show yet.
+  const { projected } = pendingState(ledger, input.contractId, observed, now);
   const root = contractRoot(input.contractId);
 
   if (isRiskReducing(input.rationale)) {
-    if (net === 0) {
-      add('exposure', `[exit]/[protect] order but there is no open ${root} position; it would open one. Label entries setup:<name>.`);
-    } else if (sideSign !== -Math.sign(net)) {
-      add('exposure', `[exit]/[protect] order is on the same side as the open ${root} position (net ${net}); it would add exposure.`);
-    } else if (!(size > 0) || size > Math.abs(net)) {
-      add('exposure', `[exit]/[protect] size ${input.size} exceeds the open ${root} position (${Math.abs(net)}).`);
-    } else {
-      const typeId = ORDER_TYPE_IDS[String(input.type || '').toLowerCase()];
-      const group = STOP_TYPES.has(typeId) ? STOP_TYPES : LIMIT_TYPES.has(typeId) ? LIMIT_TYPES : null;
-      if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
-        add('exposure', `Resting ${group === STOP_TYPES ? 'stop' : 'limit'} orders plus this one would exceed the open ${root} position (${Math.abs(net)}); they could fill into a new position.`);
+    // Must reduce both the position the account shows and the one it will
+    // show once recent orders fill, whichever way the fills land.
+    for (const net of observed === projected ? [observed] : [observed, projected]) {
+      const before = violations.length;
+      if (net === 0) {
+        add('exposure', `[exit]/[protect] order but there is no open ${root} position${net === observed ? '' : ' once recent orders fill'}; it would open one. Label entries setup:<name>.`);
+      } else if (sideSign !== -Math.sign(net)) {
+        add('exposure', `[exit]/[protect] order is on the same side as the open ${root} position (net ${net}); it would add exposure.`);
+      } else if (!(size > 0) || size > Math.abs(net)) {
+        add('exposure', `[exit]/[protect] size ${input.size} exceeds the open ${root} position (${Math.abs(net)}).`);
+      } else {
+        const typeId = ORDER_TYPE_IDS[String(input.type || '').toLowerCase()];
+        const group = STOP_TYPES.has(typeId) ? STOP_TYPES : LIMIT_TYPES.has(typeId) ? LIMIT_TYPES : null;
+        if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
+          add('exposure', `Resting ${group === STOP_TYPES ? 'stop' : 'limit'} orders plus this one would exceed the open ${root} position (${Math.abs(net)}); they could fill into a new position.`);
+        }
       }
+      if (violations.length > before) break;
     }
     return violations;
   }
 
+  const net = observed !== 0 ? observed : projected;
   add('position-open', net !== 0
-    ? `A ${root} position is open (net ${net}). Manage it; new entries wait until it is flat. To reduce, use an [exit] order.`
+    ? `A ${root} position is open${observed === 0 ? ' or about to be (a recent order has not shown up yet)' : ''} (net ${net}). Manage it; new entries wait until it is flat. To reduce, use an [exit] order.`
+    : null);
+  const working = net === 0 ? orders.filter(o => contractRoot(o.contractId) === root) : [];
+  add('working-orders', working.length
+    ? `${working.length} ${root} order${working.length === 1 ? ' is' : 's are'} working while flat (${working.map(o => o.id).join(', ')}). `
+      + 'Cancel leftovers (stops or targets of a closed trade) or let a pending entry work; one entry at a time.'
     : null);
 
   const { streak, losses, lastLossTs } = fillLossState(trades);
@@ -173,6 +196,36 @@ function evaluateCancel({ input = {}, positions, orders, config }) {
   return [{ check: 'cancel-protection', message: `Order ${order.id} is the protective stop for the open ${contractRoot(order.contractId)} position (net ${net}). Move it with modify_order, or close the position first ([exit]).` }];
 }
 
+/**
+ * modify_order may move a protective stop (a stop on the opposite side of an
+ * open position) only toward the market: tightening risk, never widening it
+ * or parking it where it can't trigger.
+ */
+function evaluateModifyAccount({ input = {}, positions, orders, config }) {
+  for (const [name, v] of Object.entries({ positions, orders })) {
+    if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
+  }
+  const skip = (config && config.skipChecks) || new Set();
+  if (skip.has('modify-protection')) return [];
+  const order = orders.find(o => Number(o.id) === Number(input.orderId));
+  if (!order || !STOP_TYPES.has(Number(order.type))) return [];
+  const net = netPosition(positions, order.contractId);
+  const orderSign = Number(order.side) === 0 ? 1 : -1;
+  if (net === 0 || orderSign !== -Math.sign(net)) return [];
+  const raw = input.stopPrice ?? input.trailPrice;
+  if (raw === undefined || raw === null) return [];
+  const level = Number(raw);
+  const old = order.stopPrice === null || order.stopPrice === undefined ? NaN : Number(order.stopPrice);
+  const root = contractRoot(order.contractId);
+  if (!Number.isFinite(level) || !Number.isFinite(old)) {
+    return [{ check: 'modify-protection', message: `Can't tell where the protective stop ${order.id} for the open ${root} position is; it can't be moved. Close the position ([exit]) instead.` }];
+  }
+  const widens = net > 0 ? level < old : level > old;
+  return widens
+    ? [{ check: 'modify-protection', message: `Order ${order.id} protects the open ${root} position (net ${net}); move it toward the market only (now ${old}, asked ${level}). To take more risk, don't; to get out, use an [exit] order.` }]
+    : [];
+}
+
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
 
 /** get_bars arguments for a strategy timeframe such as 3m, 1h, 1d. */
@@ -204,4 +257,7 @@ function regimeViolation(strategy, bars, config) {
   return [{ check: 'regime', message: `setup:${strategy.name} trades only in ${strategy.regimes.join(', ')}; the ${strategy.timeframe} regime is ${now}.` }];
 }
 
-module.exports = { parseToolJson, netPosition, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel, barsRequest, regimeGatedStrategy, regimeViolation };
+module.exports = {
+  parseToolJson, netPosition, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
+  evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
+};

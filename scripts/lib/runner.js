@@ -14,10 +14,15 @@
  *      a time; bars that close during a run are skipped, never queued).
  *   4. Re-resolve each symbol's active contract at the start of every trading
  *      day and after repeated resyncs with no bar (contract roll).
+ *   5. Before each bar's cycle, with an account configured: on a flat
+ *      contract, cancel working orders that aren't pending entries (stops and
+ *      targets left behind by a closed trade could otherwise fill into a new,
+ *      unchecked position). Entry order ids come from the MCP gateway.
  */
 
 const { decide, recordRun, prompts, signalDecision, dayKey } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
+const { contractRoot } = require('./trading/journal');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -28,7 +33,7 @@ const MAX_RETRY_MS = 60000;
 function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
-    loadState, saveState, writeBars, scanFor, log = () => {},
+    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrderIds = () => new Set(),
   } = deps;
   let state = loadState();
   let errors = 0;
@@ -95,6 +100,26 @@ function createRunner(deps) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
       return null;
+    }
+  }
+
+  /** Cancel leftover orders on a flat contract root (never pending entries). */
+  async function cleanupFlat(item) {
+    if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
+    try {
+      const { positions, orders } = await client.accountState(cfg.account);
+      const root = contractRoot(item.contractId);
+      const net = positions
+        .filter(p => contractRoot(p.contractId) === root)
+        .reduce((n, p) => n + (p.type === 1 ? 1 : p.type === 2 ? -1 : 0) * Number(p.size || 0), 0);
+      if (net !== 0) return;
+      const entries = entryOrderIds();
+      for (const o of orders.filter(x => contractRoot(x.contractId) === root && !entries.has(Number(x.id)))) {
+        await client.cancelOrder(cfg.account, o.id);
+        log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+      }
+    } catch (err) {
+      log(`${item.symbol}: leftover-order check failed (${err.message})`, 'error');
     }
   }
 
@@ -169,6 +194,7 @@ function createRunner(deps) {
       if (again.action === 'trade' || again.action === 'manage') {
         const manageOnly = again.action === 'manage';
         const run = [];
+        for (const item of ready) await cleanupFlat(item);
         for (const item of ready) {
           const w = await wanted(item, manageOnly);
           if (w.run) run.push(item);

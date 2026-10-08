@@ -95,3 +95,35 @@ test('cancel_order may not remove the last protective stop of an open position',
   assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: [], orders: [stop], config }), []);
   assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, { ...stop, id: 13 }], config }), []);
 });
+
+test('ledger: exits must hold against the position once every recent order fills', () => {
+  const now = new Date();
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const a = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 2, at: now.getTime() - 2000 };
+  const b = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 2, at: now.getTime() - 1000 };
+  const exit = order({ side: 'sell', rationale: '[exit] x' });
+  // A filled (account shows 1), B hasn't: a third exit would flip to short.
+  assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, ledger: [a, b], now, config })), ['exposure']);
+  // Only A sent and filled: the next exit of 1 is fine.
+  assert.deepStrictEqual(evaluateAccount({ input: exit, positions: long1, ledger: [a], now, config }), []);
+  // Nothing filled yet: the projection still caps the exit.
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order({ side: 'sell', size: 2, rationale: '[exit] x' }), positions: long2, ledger: [a], now, config })), ['exposure']);
+});
+
+test('entries wait while orders are working in a flat contract', () => {
+  const leftover = [{ id: 5, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21400 }];
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), orders: leftover, config })), ['working-orders']);
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), orders: [{ ...leftover[0], contractId: 'CON.F.US.MES.Z26' }], config })), []);
+});
+
+test('a protective stop may move toward the market only', () => {
+  const { evaluateModifyAccount } = require('../../scripts/lib/trading/account-gate');
+  const sellStop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 };
+  const run = (input, positions = long1, orders = [sellStop]) => checks(evaluateModifyAccount({ input, positions, orders, config }));
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 0.25 }), ['modify-protection']);
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21490 }), []);
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21400 }, []), [], 'no position: not protective');
+  const buyStop = { ...sellStop, side: 0, stopPrice: 21520 };
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21560 }, [{ contractId: CONTRACT, type: 2, size: 1 }], [buyStop]), ['modify-protection']);
+  assert.deepStrictEqual(run({ orderId: 9, trailPrice: 21470 }, long1, [{ ...sellStop, type: 5, stopPrice: null }]), ['modify-protection'], 'unknown level: refuse');
+});

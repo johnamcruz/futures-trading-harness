@@ -26,7 +26,7 @@ const { createRunner } = require('../runner');
 const { createClient } = require('../projectx-rest');
 const { loadStrategies, scan } = require('../trading/strategies');
 const { readJournal } = require('../trading/journal');
-const { writeJsonAtomic, runHarness } = require('../harness-run');
+const { writeJsonAtomic, runHarness, entryOrderIds } = require('../harness-run');
 const { SimBroker } = require('./broker');
 const { createSimServer } = require('./api');
 const { loadBars, MINUTE } = require('./data');
@@ -184,6 +184,7 @@ async function runBacktest(rawConfig, { root, baseDir = process.cwd(), log = () 
     },
     scanFor: (symbol, bars) => scan(strategies, { bars }, { symbol, now: new Date(broker.now) }),
     log: msg => log(`${new Date(broker.now).toISOString()} ${msg}`),
+    entryOrderIds: () => entryOrderIds(home),
   });
 
   let stopped = null;

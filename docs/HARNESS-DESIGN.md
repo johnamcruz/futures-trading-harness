@@ -50,7 +50,7 @@ is the authoritative layer. A blocked call never reaches the server.
 |---|---|---|---|
 | `paper-mode` | `FTH_PAPER=1` refuses entries | yes | yes |
 | `journal-window` | The journal tail must reach back to the trading-day start | yes | yes |
-| `kill-switch` | No `~/.futures-trading-harness/STOP` | yes | yes |
+| `kill-switch` | No `<FTH_HOME>/STOP` (default `~/.futures-trading-harness/STOP`) | yes | yes |
 | `setup-tag` | Rationale starts with `setup:<strategy>` | yes | yes |
 | `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
@@ -60,8 +60,12 @@ is the authoritative layer. A blocked call never reaches the server.
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
 | `max-entries` | Under `FTH_MAX_ENTRIES_PER_DAY` | yes | yes |
 | `exposure` | `[exit]`/`[protect]` must be opposite the open position, within its size, without stacking resting stops or limits beyond it | no | yes |
-| `position-open` | No new entry while the contract has a position | no | yes |
+| `position-open` | No new entry while the contract has a position, or one about to show (a recent market order) | no | yes |
+| `working-orders` | No new entry while orders are working in the contract and it is flat (leftovers, a pending entry) | no | yes |
+| `cancel-protection` | `cancel_order` may not remove the last protective stop of an open position | no | yes |
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
+| `modify-protection` | A protective stop may only move toward the market | no | yes |
+| `order-pending` | No order call while an earlier one's result is unknown (no reply within 30 s) | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 
 Malformed or oversized input, unreadable state, invalid config, a failed

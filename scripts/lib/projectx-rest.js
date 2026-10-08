@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Minimal read-only ProjectX Gateway REST client for the autonomous runner's
- * bar clock (the agents themselves trade through projectx-mcp). Uses the same
+ * Minimal ProjectX Gateway REST client for the autonomous runner: the bar
+ * clock and account reads, plus one write, cancelling leftover orders on a
+ * flat contract (the agents themselves trade through projectx-mcp). Uses the same
  * environment as projectx-mcp: PROJECTX_USERNAME, PROJECTX_API_KEY, and
  * optionally PROJECTX_API_URL. Never logs credentials or tokens.
  */
@@ -113,6 +114,21 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
     async workingOrders(accountId, contractId) {
       const res = await post('/api/Order/searchOpen', { accountId: Number(accountId) });
       return (res.orders || []).filter(o => o.contractId === contractId).length;
+    },
+
+    /** Open positions and working orders of an account (raw API objects). */
+    async accountState(accountId) {
+      const [p, o] = await Promise.all([
+        post('/api/Position/searchOpen', { accountId: Number(accountId) }),
+        post('/api/Order/searchOpen', { accountId: Number(accountId) }),
+      ]);
+      if (!Array.isArray(p.positions) || !Array.isArray(o.orders)) throw new ProjectXRestError('account state is not a list');
+      return { positions: p.positions, orders: o.orders };
+    },
+
+    /** Cancel a working order. */
+    async cancelOrder(accountId, orderId) {
+      return post('/api/Order/cancel', { accountId: Number(accountId), orderId: Number(orderId) });
     },
 
     /** Net position in a contract (positive long, negative short). */

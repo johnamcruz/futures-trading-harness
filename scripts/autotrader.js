@@ -33,7 +33,7 @@ const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
-const { readJson, writeJsonAtomic, runHarness } = require('./lib/harness-run');
+const { readJson, writeJsonAtomic, runHarness, entryOrderIds } = require('./lib/harness-run');
 const { harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -225,6 +225,7 @@ async function main(argv) {
       return scan(sameTf, { bars }, { symbol, now: new Date() });
     },
     log,
+    entryOrderIds: () => entryOrderIds(HOME_DIR),
   });
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   for (;;) {
