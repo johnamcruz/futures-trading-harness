@@ -146,6 +146,10 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   });
   log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
   for (const m of markets) {
+    const flowUsers = strategies.filter(s => (s.connectors || []).includes('order_flow') && s.instruments.includes(m.symbol));
+    if (flowUsers.length && !m.bars.some(b => Number.isFinite(b.bv))) {
+      log(`warning: ${flowUsers.map(s => s.name).join(', ')} declare the order_flow connector but ${m.file} has no buy/sell volume columns; ofi/delta fall back to the bar-shape estimate (record flow and export it: scripts/orderflow.js)`);
+    }
     if (!strategies.some(s => s.instruments.includes(m.symbol))) {
       log(`warning: no selected strategy lists ${m.symbol} in its instruments, so it can't trade (micros: MNQ, MES, MYM, M2K; use the micro symbol with full-size data)`);
     }

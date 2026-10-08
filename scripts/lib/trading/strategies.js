@@ -51,7 +51,14 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
-  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'source'];
+  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'source'];
+/**
+ * Data connectors a strategy can declare, like a skill declares its tools.
+ * The runner turns on every connector an active strategy needs.
+ *   order_flow: aggressor buy/sell volume per bar from the TopstepX market
+ *               hub (series ofi, delta)
+ */
+const CONNECTORS = { order_flow: /\b(ofi|delta)\(/ };
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
 const EXIT_KEYS = ['target_r', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
 const MAX_FILE_BYTES = 256 * 1024;
@@ -101,6 +108,15 @@ function validateStrategy(data, body, folderName) {
     errors.push(...compileRules(data.rules).errors);
   } else if (data.rules !== undefined) {
     errors.push('rules: only used with signal: rules');
+  }
+  const connectors = data.connectors === undefined ? [] : data.connectors;
+  if (!Array.isArray(connectors) || !connectors.every(c => Object.keys(CONNECTORS).includes(c))) {
+    errors.push(`connectors: a list of ${Object.keys(CONNECTORS).join(', ')}`);
+  } else {
+    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || ''] );
+    for (const [name, uses] of Object.entries(CONNECTORS)) {
+      if (uses.test(text) && !connectors.includes(name)) errors.push(`connectors: the rules use ${name} data; declare connectors: [${name}]`);
+    }
   }
 
   if (data.sessions !== undefined && data.sessions !== null) {
@@ -269,6 +285,7 @@ module.exports = {
   exitPlan,
   STATUSES,
   SIGNALS,
+  CONNECTORS,
   FILTERS,
   strategyDirs,
   validateStrategy,

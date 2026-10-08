@@ -84,3 +84,12 @@ test('orderFlow auto: on when a strategy on the timeframe uses ofi or delta', ()
   assert.strictEqual(usesOrderFlow(all, 3), false);
   assert.throws(() => validateConfig({ harness: 'qwen', premarketAt: '', orderFlow: 'yes' }), /orderFlow/);
 });
+
+test('a strategy declares the connectors its rules need, like a skill declares tools', () => {
+  const { validateStrategy } = require('../../scripts/lib/trading/strategies');
+  const base = { name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '1m', signal: 'rules', rules: { long: ['ofi(3) >= 0.3'] }, risk: { stop: 'atr:1', min_rr: 2 } };
+  const body = '## When to Use\n## How It Works\n## Examples';
+  assert.ok(validateStrategy(base, body, 'x').some(e => /declare connectors: \[order_flow\]/.test(e)));
+  assert.deepStrictEqual(validateStrategy({ ...base, connectors: ['order_flow'] }, body, 'x'), []);
+  assert.ok(validateStrategy({ ...base, connectors: ['level2'] }, body, 'x').some(e => /^connectors:/.test(e)));
+});

@@ -2,10 +2,11 @@
 name: ofi_absorption
 description: Absorption reversal on 1-minute futures bars - heavy selling (buying) over 5 minutes that fails to move price, then a 1-minute bar turns; trade against the absorbed side.
 version: 1
-status: disabled
+status: paper
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
+connectors: [order_flow]
 rules:
   long:
     - ofi(5) <= -0.25
@@ -29,9 +30,6 @@ source: harness original (order flow from 1-minute bars); thresholds are startin
 ---
 
 # Strategy: Absorption Reversal (`setup:ofi_absorption`)
-
-**On hold (`status: disabled`)** until projectx-mcp serves real order flow;
-see `ofi`.
 
 The counterpart of `ofi`. There, aggressive flow moves price (real flow).
 Here it doesn't: sellers hit the market hard for 5 minutes on heavy volume,

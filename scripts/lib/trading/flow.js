@@ -6,13 +6,10 @@
  * and sell volume, which the rules' ofi(n) and delta(n) use instead of the
  * bar-shape estimate.
  *
- * Classification (Lee-Ready, against the quote stream): a print at or above
- * the best ask is a buy, at or below the best bid a sell, otherwise the side
- * of the mid it is on, and at the mid the tick rule (up from the last print
- * = buy). The hub's own trade `type` is used only when no quote is known
- * and only once it has agreed with the quote rule on at least 50 prints at
- * a 90% rate, in either polarity (the published enum has been documented
- * both ways).
+ * Classification: the hub's trade `type` is the aggressor side (0 buy-,
+ * 1 sell-initiated), as algoTraderAI uses it. A print without a type falls
+ * back to the quote (Lee-Ready: at or above the ask a buy, at or below the
+ * bid a sell, else the side of the mid), then the tick rule.
  *
  * A minute counts only when the hub was connected for all of it; a minute
  * with a gap has no flow (the rules then fall back to the estimate for that
@@ -23,8 +20,6 @@
  */
 
 const MINUTE = 60000;
-const CALIBRATE_MIN = 50;
-const CALIBRATE_RATE = 0.9;
 
 function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
   const books = new Map(); // contractId -> state
@@ -33,7 +28,7 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
     if (!books.has(id)) {
       // runs: connected intervals [start, end] (end null while connected);
       // loaded: minutes recorded earlier, trusted as complete.
-      books.set(id, { quote: {}, last: null, minutes: new Map(), runs: [], loaded: new Set(), agree: { zeroIsBuy: 0, zeroIsSell: 0 } });
+      books.set(id, { quote: {}, last: null, minutes: new Map(), runs: [], loaded: new Set() });
     }
     return books.get(id);
   };
@@ -62,29 +57,20 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
   }
 
   function sideOf(b, price, type) {
+    // The hub's GatewayTrade type is the aggressor side: 0 buy, 1 sell (as
+    // algoTraderAI trades on it).
+    const t = type === null || type === undefined || type === '' ? NaN : Number(type);
+    if (t === 0) return 1;
+    if (t === 1) return -1;
     const { bestBid: bid, bestAsk: ask } = b.quote;
-    let side = 0;
     if (bid > 0 && ask > 0 && ask >= bid) {
-      if (price >= ask) side = 1;
-      else if (price <= bid) side = -1;
-      else if (price > (bid + ask) / 2) side = 1;
-      else if (price < (bid + ask) / 2) side = -1;
+      if (price >= ask) return 1;
+      if (price <= bid) return -1;
+      if (price > (bid + ask) / 2) return 1;
+      if (price < (bid + ask) / 2) return -1;
     }
-    const t = Number(type);
-    if (side !== 0 && (t === 0 || t === 1)) {
-      // Learn which polarity the hub's type field uses.
-      if ((t === 0) === (side === 1)) b.agree.zeroIsBuy += 1;
-      else b.agree.zeroIsSell += 1;
-    }
-    if (side === 0 && (t === 0 || t === 1)) {
-      const n = b.agree.zeroIsBuy + b.agree.zeroIsSell;
-      if (n >= CALIBRATE_MIN) {
-        if (b.agree.zeroIsBuy / n >= CALIBRATE_RATE) side = t === 0 ? 1 : -1;
-        else if (b.agree.zeroIsSell / n >= CALIBRATE_RATE) side = t === 0 ? -1 : 1;
-      }
-    }
-    if (side === 0 && b.last !== null && price !== b.last) side = price > b.last ? 1 : -1;
-    return side;
+    if (b.last !== null && price !== b.last) return price > b.last ? 1 : -1;
+    return 0;
   }
 
   /** Trade prints for a contract: { price, volume, type, timestamp }. */

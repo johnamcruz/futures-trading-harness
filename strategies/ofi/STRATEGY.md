@@ -2,10 +2,11 @@
 name: ofi
 description: Order-flow imbalance continuation on 1-minute futures bars - enter when buying (or selling) dominates over 1, 3 and 5 minutes and price actually moves with it (real flow, not absorption).
 version: 1
-status: disabled
+status: paper
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
+connectors: [order_flow]
 rules:
   long:
     - ofi(1) >= 0.3
@@ -36,17 +37,14 @@ source: harness original (order flow from 1-minute bars); thresholds are startin
 
 Real order flow from TopstepX. The runner subscribes to the ProjectX market
 hub's trade prints and quotes, classifies every print as buyer- or
-seller-initiated (at the ask = buy, at the bid = sell), and sums them into
+seller-initiated (the hub's trade type), and sums them into
 1-minute buy and sell volume. `ofi(n)` is buy minus sell volume over the
 last n bars divided by their volume, from -1 (all selling) to +1 (all
 buying).
 
-**On hold (`status: disabled`).** Real order flow (aggressor buy and sell
-volume from TopstepX trade prints) has to come through projectx-mcp, which
-doesn't serve it yet. Until it does, `ofi(n)` and `delta(n)` estimate the
-flow from each bar's shape and volume (below), and this strategy stays off.
-When projectx-mcp's bars carry buy and sell volume, the same rules use it
-with no change to this file.
+**Data.** `connectors: [order_flow]` tells the runner this strategy needs
+real order flow: it connects to the TopstepX market hub and adds each
+bar's aggressor buy and sell volume, which `ofi(n)` and `delta(n)` use.
 
 **Real flow vs absorption.** Aggressive buying that is real moves price.
 Buying that runs into a passive seller is absorbed: heavy volume, little

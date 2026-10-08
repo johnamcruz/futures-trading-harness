@@ -9,6 +9,7 @@ sessions: ["09:45-11:30@America/New_York"]   # optional; entries only inside the
 regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol
 regime_gate: false            # true = the MCP gateway refuses entries when the live regime doesn't fit
 signal: rules                 # rules (conditions below) | manual (agents judge the body)
+# connectors: [order_flow]   # data the strategy needs beyond bars (order_flow: TopstepX aggressor buy/sell volume for ofi/delta)
 rules:                        # with signal: rules - every condition in a side must hold on the closed bar
   long:
     - close crosses_above highest(20)[1]

@@ -25,6 +25,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `timeframe` | Trigger timeframe, e.g. `3m` |
    | `sessions` | Optional `"HH:MM-HH:MM@Zone"` windows; entries only inside |
    | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped strategy, the algoTraderBot ports included, is `rules` |
+   | `connectors` | Optional data the strategy needs beyond bars, like a skill's tools: `order_flow` (aggressor buy/sell volume from the TopstepX market hub, for `ofi`/`delta`). Required when the rules use that data; the runner turns on every connector an active strategy declares |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
    | `regime_gate` | Optional `true`: the MCP gateway also refuses entries when the live regime (from that strategy's timeframe bars) doesn't fit |
    | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |

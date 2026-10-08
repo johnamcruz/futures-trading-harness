@@ -16,7 +16,7 @@ const T0 = Date.UTC(2026, 9, 8, 14, 0);
 const C = 'CON.F.US.MNQ.Z26';
 const at = (min, sec = 0) => new Date(T0 + min * M + sec * 1000).toISOString();
 
-test('prints are classified against the quote: at/above the ask buys, at/below the bid sells, else by the mid, then the tick rule', () => {
+test('prints without a type are classified against the quote: at/above the ask buys, at/below the bid sells, else by the mid, then the tick rule', () => {
   const b = createFlowBook();
   b.connected(C, T0 - M);
   b.quote(C, { bestBid: 100, bestAsk: 100.25 });
@@ -31,17 +31,12 @@ test('prints are classified against the quote: at/above the ask buys, at/below t
   assert.deepStrictEqual(m, { t: T0, bv: 4, sv: 6 });
 });
 
-test('the hub\'s trade type is trusted only once it agrees with the quote rule, in either polarity', () => {
+test('the hub\'s trade type is the aggressor side (0 buy, 1 sell) and wins over the quote', () => {
   const b = createFlowBook();
   b.connected(C, T0 - M);
   b.quote(C, { bestBid: 100, bestAsk: 100.25 });
-  // 60 prints where type 1 is a buy at the ask: the hub's polarity is 1 = buy.
-  b.trades(C, Array.from({ length: 60 }, (_, k) => ({ price: 100.25, volume: 1, type: 1, timestamp: at(0, k % 59) })), T0 + 1000);
-  b.disconnected(T0 + 2 * M); // quotes are dropped on a disconnect
-  b.connected(C, T0 + 2 * M);
-  b.trades(C, [{ price: 100, volume: 5, type: 1, timestamp: at(3, 1) }], T0 + 3 * M + 2000); // no quote, no prior print: use the type
-  const m3 = b.finished(C, { now: T0 + 4 * M }).find(r => r.t === T0 + 3 * M);
-  assert.deepStrictEqual(m3, { t: T0 + 3 * M, bv: 5, sv: 0 });
+  b.trades(C, [{ price: 100, volume: 5, type: 0, timestamp: at(0, 1) }, { price: 100.25, volume: 2, type: 1, timestamp: at(0, 2) }], T0 + 3000);
+  assert.deepStrictEqual(b.finished(C, { now: T0 + M }).find(r => r.t === T0), { t: T0, bv: 5, sv: 2 });
 });
 
 test('a minute counts only when the hub was connected for all of it; quiet covered minutes are zero', () => {

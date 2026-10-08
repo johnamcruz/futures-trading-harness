@@ -82,8 +82,8 @@ strategies/
   bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
   vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
-  ofi/STRATEGY.md            1m order-flow imbalance, on hold
-  ofi_absorption/STRATEGY.md 1m absorption reversal, on hold
+  ofi/STRATEGY.md            1m order-flow imbalance, paper
+  ofi_absorption/STRATEGY.md 1m absorption reversal, paper
   _template/STRATEGY.md      copy this to add a strategy
 ```
 
@@ -289,12 +289,14 @@ broken down by strategy, exit, and month. See
 
 ### Order flow from TopstepX
 
-The `ofi` and `ofi_absorption` strategies trade real order flow. The runner
-subscribes to the ProjectX market hub's trade prints and quotes (SignalR
-over the built-in WebSocket, Node 22+), classifies each print as a buy or a
-sell against the quote, and sums 1-minute buy and sell volume into the bars
-it scans. `orderFlow: "auto"` (the default) turns this on when a strategy
-on the runner's timeframe uses `ofi` or `delta`. Recorded minutes go to
+The `ofi` and `ofi_absorption` strategies are plain STRATEGY.md rules that
+declare the data they need: `connectors: [order_flow]`. For them the runner
+subscribes to the ProjectX market hub's trade prints (SignalR over the
+built-in WebSocket, Node 22+), takes each print's aggressor side (the hub's
+trade `type`: 0 buy, 1 sell), and sums 1-minute buy and sell volume into
+the bars it scans, where `ofi(n)` and `delta(n)` read it. `orderFlow:
+"auto"` (the default) turns the connector on when a strategy on the
+runner's timeframe declares it. Recorded minutes go to
 `<FTH_HOME>/flow/`, and `scripts/orderflow.js` records without the runner
 and exports bars with flow for backtests. The hub keeps no history: flow
 exists from when recording started.
