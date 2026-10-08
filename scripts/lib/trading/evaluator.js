@@ -6,21 +6,18 @@
  * bar (strategies.scan); the backtester walks every bar of a long series with
  * the same evaluator, so live and backtest can't disagree about entries.
  *
- * Built-in detectors (orb, ema_cross, keltner, supertrend, bos) use indicators
- * computed once over the series (causal, so bar i only sees bars 0..i); they
- * match algoTraderBot's per-window detectors bar for bar once the indicators
- * have warmed up (tests/lib/parity.test.js). cisd_ote and supertrend are
- * evaluated on the trailing `window` bars, exactly as algoTraderBot does,
- * because their state (zones; the SuperTrend direction, which starts long)
- * depends on where the window starts. Rules use the rules engine.
+ * Every mechanical strategy is Markdown rules (`signal: rules`), evaluated by
+ * the rules engine over series computed once (causal: bar i only sees bars
+ * 0..i). The cisd_ote series runs algoTraderBot's detector on the trailing
+ * `window` bars, as the source does. The shipped ports reproduce
+ * algoTraderBot's signals bar for bar (tests/lib/parity.test.js).
  */
 
 const { PARAMS, signalSeries } = require('./market-snapshot');
-const { evaluateRules, seriesSource } = require('./rules');
+const { evaluateRules, seriesSource, valueAt } = require('./rules');
 const { classifyRegime, regimeFits } = require('./regime');
 const { parseWindows, inWindow } = require('./clock');
 const ind = require('./indicators');
-const cisd = require('./cisd-ote');
 
 const DEFAULT_WINDOW = 500; // bars per evaluation, as algoTraderBot's BARS_WINDOW
 const RTH_OPEN = 9 * 60 + 30;
@@ -59,7 +56,6 @@ function inSessions(strategy, now) {
  */
 function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   const ms = bars.map(b => Date.parse(b.t));
-  const withMs = bars.map((b, i) => ({ ...b, ms: ms[i] }));
   const seriesCache = new Map();
   const rulesCache = new Map();
   const regimeCache = new Map();
@@ -73,7 +69,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   };
   const rulesSource = s => {
     const key = JSON.stringify(s.params || {});
-    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s)));
+    if (!rulesCache.has(key)) rulesCache.set(key, seriesSource(bars, paramsOf(s), { window }));
     return rulesCache.get(key);
   };
   const windowStart = i => Math.max(0, i - window + 1);
@@ -143,26 +139,13 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       const r = evaluateRules(s.compiledRules, bars, paramsOf(s), { index: i, get: rulesSource(s) });
       direction = r.direction;
       ruleDetail = { long: r.long, short: r.short };
-    } else if (s.signal === 'supertrend') {
-      const p = paramsOf(s);
-      const dir = ind.supertrend(bars.slice(windowStart(i), i + 1), p.stPeriod, p.stMult).direction;
-      const k = dir.length - 1;
-      direction = k >= 1 && dir[k] !== dir[k - 1] ? (dir[k] === 1 ? 'long' : 'short') : null;
-    } else if (s.signal === 'cisd_ote') {
-      const from = windowStart(i);
-      const win = withMs.slice(from, i + 1);
-      const sig = cisd.detect(win, ser.atrStop.slice(from, i + 1));
-      if (sig) {
-        direction = sig.direction;
-        stopDistance = sig.risk; // the zone's pivot, measured from the source's entry (the bar's open)
-      }
-    } else {
-      direction = ser.signalsAt(i)[s.signal];
     }
-    // algoTraderBot's detect() drops a signal while ATR(20) is undefined (its stop needs it).
-    if (direction && s.signal !== 'rules' && s.signal !== 'cisd_ote' && atr20 === null) direction = null;
     const atrMult = /^atr:(.+)$/.exec(s.risk.stop);
     if (atrMult && atr20 !== null) stopDistance = Number(atrMult[1]) * atr20;
+    if (s.compiledStop) {
+      const d = valueAt(s.compiledStop, rulesSource(s), i);
+      stopDistance = d !== null && d > 0 ? d : null;
+    }
     const fails = filterFailures(s, ser, i);
     const base = direction || describe ? withRegime(head) : { ...head, regime: null, regimes: s.regimes || null, inRegime: null };
     return {

@@ -1,14 +1,26 @@
 ---
 name: orb
 description: Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from algoTraderBot. Use when price closes beyond the opening range or when planning the morning session.
-version: 2
+version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-signal: orb
+signal: rules
+rules:
+  long:
+    - close crosses_above or_high
+    - adx(14) >= 18
+    - minute_et >= 588
+    - minute_et < 960
+    - atr(20) > 0
+  short:
+    - close crosses_below or_low
+    - adx(14) >= 18
+    - minute_et >= 588
+    - minute_et < 960
+    - atr(20) > 0
 params:
   orbMinutes: 15
-  orbAdx: 18
 exit:
   trail_activate_r: 2
   trail_giveback_r: 0.5
@@ -28,19 +40,21 @@ no breakouts after 16:00 ET, stop 0.5 × ATR(20), fixed-RR fallback 2R).
 - After the 15-minute range from 09:30 ET has closed, until 16:00 ET (the
   source's cutoff), on MNQ/MES/MYM/M2K. The runner's sessions and
   `FTH_ENTRY_HOURS` decide the hours you actually trade.
-- market-snapshot shows `signals.orb` = `long` or `short`.
+- `scan` reports `orb` with `candidate: true` and a direction (the `rules` block above).
 
 ## How It Works
 
 ### Context filter (harness judgment)
 
-- ADX(14) on 3-minute ≥ 18 (built into the signal), ideally rising.
+- ADX(14) on 3-minute ≥ 18 (in the rules), ideally rising.
 - Range size between 0.5 and 2.0 × ATR(14) on 15-minute. Tiny ranges fake
   out; huge ranges leave no room to target.
 - Higher timeframe (1h) not strongly against the breakout direction.
 
 **Trigger:** a 3-minute bar *closes* beyond the opening range high (long) or low
-(short) after the previous close was inside. Wicks don't count.
+(short) after the previous close was inside. Wicks don't count. As in the
+source, the first bar after the range (09:45 ET) is not judged: the earliest
+trigger is the 09:48 bar (`minute_et >= 588`).
 
 **Entry:** market on the trigger bar's close, as the source does.
 

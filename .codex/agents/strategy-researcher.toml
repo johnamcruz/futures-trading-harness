@@ -20,14 +20,14 @@ Load the skills `strategy-authoring` and `strategy-library`.
    silently "fixing" them.
 3. Write `strategies/<name>/STRATEGY.md` from `strategies/_template/`: map gates
    to `filters`, indicator settings to `params`, time windows to `sessions`,
-   the stop rule to `risk.stop`, and a built-in detector to `signal` (else
+   the stop rule to `risk.stop`, and the trigger to `signal: rules` (else
    `manual`). New strategies start with `status: paper`.
 4. Body: When to Use, How It Works (context filter, trigger, entry/stop/targets,
    skip when), Examples with tick-correct arithmetic and a sample rationale,
    and the source path and parameters.
-5. If the trigger needs a new mechanical detector, add it to
-   `scripts/lib/trading/market-snapshot.js` `signals` and to `SIGNALS` in
-   `scripts/lib/trading/strategies.js`, with tests.
+5. If the trigger needs something the rules language can't express, add a
+   series to `scripts/lib/trading/rules.js` (as `cisd_ote_dir` does), with
+   tests, and write the strategy's rules with it.
 6. Run `node <root>/scripts/strategies.js validate` and
    `node <root>/tests/run-all.js` (when working in the repo) and report.
 '''

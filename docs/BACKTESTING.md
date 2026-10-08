@@ -69,7 +69,7 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
 | Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (with harness rules). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or cisd_ote's pivot) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). |
+| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). |
 
 **Harness rules** (`gate: true`, the default) apply what the live harness
 enforces:
@@ -134,13 +134,15 @@ Each run writes these files to the run directory:
 
 ### Strategy correctness
 
-`tests/lib/parity.test.js` runs the harness's detectors over algoTraderBot's
+`tests/lib/parity.test.js` runs the shipped strategies' rules over algoTraderBot's
 own NQ and RTY 3-minute data. It checks each of the six strategies against
 the signals algoTraderBot's Python detectors produced on the same bars: same
 bar, same direction, same stop.
 
 We also ran the same check over 17,500 bars on NQ, ES, RTY, YM, and GC. All
-3,623 signals matched.
+3,623 signals matched. When the ports moved from code detectors to rules,
+the rules reproduced the detectors on another 20,000 bars: 4,158 signals,
+same bar, direction, and stop.
 
 ## Examples
 

@@ -1,6 +1,7 @@
 'use strict';
 
-// Strategy parity with algoTraderBot: the expected signals in
+// Strategy parity with algoTraderBot: the shipped STRATEGY.md rules must
+// reproduce algoTraderBot's signals. The expected signals in
 // tests/fixtures/parity/*.expected.json were produced by algoTraderBot's own
 // Python detectors (strategies/*.py detect() on 500-bar windows) on its 3m
 // bar data. The harness must fire the same direction on the same bar with
@@ -12,8 +13,16 @@ const { loadBars } = require('../../scripts/lib/backtest/data');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 
 const DIR = path.join(__dirname, '..', 'fixtures', 'parity');
+const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+
 const NAMES = { supertrend: 'supertrend', ema_cross: 'ema', keltner: 'keltner', bos: 'bos', orb: 'orb', cisd_ote: 'cisd_ote' };
-const strategy = signal => ({ name: signal, signal, status: 'active', timeframe: '3m', instruments: ['NQ'], risk: { stop: signal === 'cisd_ote' ? 'structure' : 'atr:0.5' } });
+// The shipped STRATEGY.md files, as written: Markdown rules, no strategy code.
+const SHIPPED = loadStrategies(path.join(__dirname, '..', '..'), {}).strategies;
+const strategy = name => {
+  const s = SHIPPED.find(x => x.name === name);
+  assert.ok(s && s.valid && s.signal === 'rules', `${name} is a valid rules strategy`);
+  return s;
+};
 
 for (const sym of ['NQ', 'RTY']) {
   test(`${sym} 3m: every strategy fires exactly where algoTraderBot does, with the same stop`, () => {

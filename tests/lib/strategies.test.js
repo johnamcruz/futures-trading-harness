@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, BUILT_IN_SIGNALS } = require('../../scripts/lib/trading/strategies');
+const { compileRules } = require('../../scripts/lib/trading/rules');
+const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { run } = require('../../scripts/strategies');
@@ -23,13 +24,15 @@ const VALID = [
   'status: paper', 'instruments: [MES]', 'timeframe: 5m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1.5',
 ].join('\n');
 
-test('bundled strategies are all valid and cover every snapshot signal', () => {
+test('bundled strategies are all valid Markdown rules, one per snapshot signal', () => {
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
+  for (const s of strategies) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
   const signals = Object.keys(snapshot(Array.from({ length: 5 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 14, i)).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 }))).signals);
-  assert.deepStrictEqual([...BUILT_IN_SIGNALS].sort(), [...signals, 'cisd_ote'].sort());
-  for (const sig of BUILT_IN_SIGNALS) assert.ok(strategies.some(s => s.signal === sig), `no strategy uses signal ${sig}`);
+  for (const sig of [...signals, 'cisd_ote']) assert.ok(strategies.some(s => s.name === sig), `no strategy for ${sig}`);
+  const old = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'orb', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
+  assert.ok(old.some(e => /no longer a code detector/.test(e)));
 });
 
 test('the template parses and only fails on its placeholder name', () => {
@@ -73,14 +76,17 @@ test('scan reports mechanical candidates with filters and sessions, and lists ma
   push(100, 101.2, 99.9, 100.8);
   push(100.8, 102, 100.7, 101.9); // closes above the 101 OR high at 09:48 ET
   const { strategies } = loadStrategies(ROOT, {});
-  const loose = strategies.map(s => (s.name === 'orb' ? { ...s, filters: {}, params: { orbAdx: 0 }, regimes: undefined } : s));
+  // Without its ADX rule (flat data has no trend).
+  const noAdx = r => r.filter(x => !/^adx/.test(x));
+  const looseRules = s => compileRules({ long: noAdx(s.rules.long), short: noAdx(s.rules.short) }).compiled;
+  const loose = strategies.map(s => (s.name === 'orb' ? { ...s, filters: {}, compiledRules: looseRules(s), regimes: undefined } : s));
   const results = scan(loose, { bars }, { symbol: 'MNQ' });
   const orb = results.find(r => r.name === 'orb');
   assert.strictEqual(orb.direction, 'long');
   assert.strictEqual(orb.inSession, true);
   assert.strictEqual(orb.candidate, true);
   assert.ok(orb.stopDistance > 0);
-  assert.strictEqual(results.find(r => r.name === 'cisd_ote').signal, 'cisd_ote');
+  assert.strictEqual(results.find(r => r.name === 'cisd_ote').signal, 'rules');
   assert.strictEqual(results.find(r => r.name === 'cisd_ote').direction, null);
   assert.deepStrictEqual(scan(loose, { bars }, { symbol: 'MCL' }), []);
   const strict = scan(strategies, { bars }, { symbol: 'MNQ' }).find(r => r.name === 'orb');

@@ -1,11 +1,20 @@
 ---
 name: keltner
 description: Keltner channel volatility-expansion breakout strategy (EMA20 +/- 1.5 x ATR20, ADX >= 20) on 3-minute futures bars, ported from algoTraderBot. Use when a bar closes outside the Keltner channel in a trending regime.
-version: 2
+version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-signal: keltner
+signal: rules
+rules:
+  long:
+    - close crosses_above keltner_upper
+    - adx(14) >= 20
+    - atr(20) > 0
+  short:
+    - close crosses_below keltner_lower
+    - adx(14) >= 20
+    - atr(20) > 0
 exit:
   trail_activate_r: 2
   trail_giveback_r: 0.5
@@ -22,14 +31,14 @@ KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 
 ## When to Use
 
-- market-snapshot `signals.keltner` is `long` or `short`.
+- `scan` reports `keltner` with `candidate: true` and a direction (the `rules` block above).
 - A volatility expansion out of a quiet period.
 
 ## How It Works
 
 ### Context filter (harness judgment)
 
-- ADX(14) ≥ 20 (built into the signal).
+- ADX(14) ≥ 20 (in the rules).
 - Keltner mid (EMA 20) sloping in the trade direction over 5 bars.
 - Better after a squeeze: the channel width over the prior 20 bars was below
   its average.

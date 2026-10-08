@@ -1,16 +1,21 @@
 ---
 name: cisd_ote
 description: ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from algoTraderBot. Use after a liquidity sweep and displacement.
-version: 2
+version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-signal: cisd_ote
+signal: rules
+rules:
+  long:
+    - cisd_ote_dir > 0
+  short:
+    - cisd_ote_dir < 0
 exit:
   trail_activate_r: 2
   trail_giveback_r: 0.5
 risk:
-  stop: structure
+  stop: cisd_ote_risk
   min_rr: 2
 source: algoTraderBot/strategies/cisd_ote.py, cisd_ote_detect.py
 ---
@@ -20,12 +25,13 @@ source: algoTraderBot/strategies/cisd_ote.py, cisd_ote_detect.py
 Source: `algoTraderBot/strategies/cisd_ote.py` and `cisd_ote_detect.py`
 (cisd_tf=12 min, swing_period=3, tolerance=0.5, expiry_bars=9,
 liquidity_lookback=5, fib 0.5–0.705, displacement body ratio ≥ 0.3 and close
-strength ≥ 0.4, pivot stop). The detector is code
-(`scripts/lib/trading/cisd-ote.js`, a line-for-line port checked against the
-source's own output): `strategies.js scan` reports `cisd_ote` long/short on the
-closed 3-minute bar where the source would enter, with its stop distance. Read
-the rest of this file to judge the setup; the steps below are what the code
-does.
+strength ≥ 0.4, pivot stop). Zone tracking across bars is more than the
+rules language can say, so the detector is a rules series: `cisd_ote_dir`
+(1 long, -1 short, 0 none) and `cisd_ote_risk` (the stop distance to the
+zone pivot), from `scripts/lib/trading/cisd-ote.js`, a line-for-line port
+checked against the source's own output. The `rules` block above trades it,
+and `risk.stop` uses its distance. Read the rest of this file to judge the
+setup; the steps below are what the series computes.
 
 ## When to Use
 

@@ -18,14 +18,13 @@ const { parseFrontmatter } = require('../frontmatter');
 const { PARAMS } = require('./market-snapshot');
 const { parseWindows } = require('./clock');
 const { normalizeBars } = require('./indicators');
-const { compileRules } = require('./rules');
+const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
 const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
-const SIGNALS = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote', 'rules', 'manual'];
-const BUILT_IN_SIGNALS = SIGNALS.filter(s => s !== 'rules' && s !== 'manual');
+const SIGNALS = ['rules', 'manual'];
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,
   adx_max: v => typeof v === 'number' && v >= 0,
@@ -95,7 +94,10 @@ function validateStrategy(data, body, folderName) {
   req(Array.isArray(data.instruments) && data.instruments.length > 0
     && data.instruments.every(s => typeof s === 'string' && /^[A-Z0-9]+$/.test(s)), 'instruments: list of contract roots, e.g. [MNQ, MES]');
   req(typeof data.timeframe === 'string' && TIMEFRAME.test(data.timeframe), 'timeframe: e.g. 3m, 15m, 1h');
-  req(SIGNALS.includes(data.signal), `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body)`);
+  const legacy = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote'].includes(data.signal);
+  req(SIGNALS.includes(data.signal), legacy
+    ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (copy the rules block from strategies/${data.signal}/STRATEGY.md)`
+    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body)`);
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
   } else if (data.rules !== undefined) {
@@ -145,7 +147,12 @@ function validateStrategy(data, body, folderName) {
     errors.push('risk: a map with stop and min_rr');
   } else {
     for (const k of Object.keys(risk)) if (!RISK_KEYS.includes(k)) errors.push(`risk.${k}: unknown key${suggest(k, RISK_KEYS)}`);
-    req(typeof risk.stop === 'string' && STOP.test(risk.stop) && !/^atr:0+(\.0+)?$/.test(risk.stop), 'risk.stop: atr:<multiple above 0> | structure | swing | manual');
+    if (typeof risk.stop === 'string' && !STOP.test(risk.stop)) {
+      // A stop distance written as a rules expression, e.g. "0.5 * atr(20)".
+      try { compileExpression(risk.stop); } catch (err) { errors.push(`risk.stop: atr:<multiple above 0> | structure | swing | manual | a distance expression (${err.message})`); }
+    } else {
+      req(typeof risk.stop === 'string' && !/^atr:0+(\.0+)?$/.test(risk.stop), 'risk.stop: atr:<multiple above 0> | structure | swing | manual | a distance expression, e.g. 0.5 * atr(20)');
+    }
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
   }
@@ -184,8 +191,11 @@ function loadStrategyFile(file) {
     return { name: folderName, file, valid: false, errors: [err.message] };
   }
   const errors = validateStrategy(parsed.data, parsed.body, folderName);
-  const compiledRules = parsed.data.signal === 'rules' && errors.length === 0 ? compileRules(parsed.data.rules).compiled : null;
-  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, valid: errors.length === 0, errors };
+  const ok = errors.length === 0;
+  const compiledRules = parsed.data.signal === 'rules' && ok ? compileRules(parsed.data.rules).compiled : null;
+  const stop = ok ? parsed.data.risk.stop : null;
+  const compiledStop = ok && !STOP.test(stop) ? compileExpression(stop) : null;
+  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, valid: ok, errors };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */
@@ -260,7 +270,6 @@ module.exports = {
   exitPlan,
   STATUSES,
   SIGNALS,
-  BUILT_IN_SIGNALS,
   FILTERS,
   strategyDirs,
   validateStrategy,

@@ -13,8 +13,8 @@ How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX 
    account is deterministic and fails closed: the order gate runs as a hook
    where the harness supports hooks, and as an MCP gateway everywhere.
 3. **Strategies are documents.** A `STRATEGY.md` is read by the agents (body)
-   and by code (frontmatter). New strategies need no code unless they need a
-   new mechanical detector.
+   and by code (frontmatter). Every mechanical trigger is written as rules;
+   code only adds series the rules can use.
 4. **Workflows are skills.** Every harness supports SKILL.md; commands are thin
    shims.
 5. **Regime-aware strategy selection.** A deterministic regime label on every

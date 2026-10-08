@@ -1,11 +1,18 @@
 ---
 name: supertrend
 description: SuperTrend(10, 3) direction-flip strategy on 1- or 3-minute futures bars, ported from algoTraderBot. Use when SuperTrend flips and higher-timeframe structure supports the new direction.
-version: 2
+version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-signal: supertrend
+signal: rules
+rules:
+  long:
+    - supertrend_dir crosses_above 0
+    - atr(20) > 0
+  short:
+    - supertrend_dir crosses_below 0
+    - atr(20) > 0
 exit:
   trail_activate_r: 2
   trail_giveback_r: 0.5
@@ -22,7 +29,7 @@ stop 0.5 × ATR(20)); the only algoTraderBot strategy with a 1-minute model.
 
 ## When to Use
 
-- market-snapshot `signals.supertrend` is `long` or `short`.
+- `scan` reports `supertrend` with `candidate: true` and a direction (the `rules` block above).
 
 ## How It Works
 

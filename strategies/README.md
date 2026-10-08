@@ -40,11 +40,11 @@ No strategy needs code. A mechanical trigger is written as `signal: rules`
 with `long:`/`short:` condition lists in the frontmatter (see
 `vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
-`signal: manual` and is judged by the agents from the body. The six built-in
-detectors exist only because those strategies were ported verbatim from
-algoTraderBot.
+`signal: manual` and is judged by the agents from the body. Every shipped
+strategy is rules, including the six algoTraderBot ports. Zone logic the
+rules can't spell out (cisd_ote) is a series the rules use (`cisd_ote_dir`).
 
-The ports trade exactly as algoTraderBot's detectors do:
+The ports' rules trade exactly as algoTraderBot's detectors do:
 `tests/lib/parity.test.js` checks every signal and stop against algoTraderBot's
 own output on its data. Their frontmatter adds no extra gates: no
 `sessions`, `regimes`, or `filters`. The runner's sessions and end of day

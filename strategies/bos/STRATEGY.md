@@ -1,11 +1,18 @@
 ---
 name: bos
 description: Break of structure continuation strategy - a close beyond the last confirmed fractal swing (k=2) on 3-minute futures bars, ported from algoTraderBot. Use when price closes through the latest swing high/low in the direction of the higher-timeframe trend.
-version: 2
+version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-signal: bos
+signal: rules
+rules:
+  long:
+    - close crosses_above swing_high
+    - atr(20) > 0
+  short:
+    - close crosses_below swing_low
+    - atr(20) > 0
 exit:
   trail_activate_r: 2
   trail_giveback_r: 0.5
@@ -22,7 +29,7 @@ Source: `algoTraderBot/strategies/bos.py` (SWING_K=2 confirmed fractals, stop
 
 ## When to Use
 
-- market-snapshot `signals.bos` is `long` or `short`.
+- `scan` reports `bos` with `candidate: true` and a direction (the `rules` block above).
 - Trend continuation after a pullback.
 
 ## How It Works

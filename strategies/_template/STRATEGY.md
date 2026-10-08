@@ -8,7 +8,7 @@ timeframe: 3m                 # trigger timeframe: 1m, 3m, 5m, 15m, 1h ...
 sessions: ["09:45-11:30@America/New_York"]   # optional; entries only inside these windows
 regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol
 regime_gate: false            # true = the MCP gateway refuses entries when the live regime doesn't fit
-signal: rules                 # rules (conditions below) | manual (agents judge the body) | orb | ema_cross | keltner | supertrend | bos | cisd_ote
+signal: rules                 # rules (conditions below) | manual (agents judge the body)
 rules:                        # with signal: rules - every condition in a side must hold on the closed bar
   long:
     - close crosses_above highest(20)[1]
@@ -25,7 +25,7 @@ exit:                         # optional; without it the target is risk.min_rr (
   trail_giveback_r: 0.5       # ... then trail 0.5R behind the best price
   # target_r: 3               # optional fixed target in R (above trail_activate_r)
 risk:
-  stop: atr:0.5               # atr:<multiple of ATR(20)> | structure | swing | manual
+  stop: atr:0.5               # atr:<multiple of ATR(20)> | a distance expression (0.5 * atr(20)) | structure | swing | manual
   min_rr: 2                   # minimum planned reward:risk (the agents plan to it; not checked at order time)
   max_risk_usd: 50            # optional per-trade cap the risk-manager applies (not checked at order time)
 source: where the rules came from (code path, backtest, book, idea)

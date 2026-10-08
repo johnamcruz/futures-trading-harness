@@ -37,6 +37,9 @@
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
+ *   cisd_ote_dir  1 / -1 on a bar where a CISD + OTE zone entry fires (algoTraderBot's
+ *                 cisd_ote detector on the trailing window), else 0
+ *   cisd_ote_risk that entry's stop distance (to the zone pivot), for risk.stop
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
@@ -45,6 +48,7 @@
  */
 
 const ind = require('./indicators');
+const cisd = require('./cisd-ote');
 const { zonedParts } = require('./clock');
 
 const RTH_OPEN = 9 * 60 + 30;
@@ -58,6 +62,7 @@ const NAMES = new Set([
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
   'prior_close', 'overnight_high', 'overnight_low', 'minute_et',
+  'cisd_ote_dir', 'cisd_ote_risk',
 ]);
 const MAX_RULES_PER_SIDE = 12;
 
@@ -127,6 +132,18 @@ function parseExpr(tokens) {
   }
   if (terms.length === 0) throw new Error('empty expression');
   return terms;
+}
+
+/** Compile an expression (e.g. a stop distance: "0.5 * atr(20)"). Throws with a readable message. */
+function compileExpression(text) {
+  if (typeof text !== 'string' || !text.trim()) throw new Error('an expression must be a non-empty string');
+  try {
+    const tokens = tokenize(text);
+    if (tokens.some(t => t.type === 'op')) throw new Error('an expression has no comparison');
+    return parseExpr(tokens);
+  } catch (err) {
+    throw new Error(`"${text}": ${err.message}`, { cause: err });
+  }
 }
 
 /** Compile one condition string into { left, op, right, text }. Throws with a readable message. */
@@ -213,8 +230,22 @@ function causalLevels(bars) {
 }
 
 /** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
-function seriesSource(bars, params) {
+function seriesSource(bars, params, { window = 500 } = {}) {
   const cache = new Map();
+  // algoTraderBot's cisd_ote detector, run on the trailing window at every bar.
+  const cisdSeries = () => {
+    const atr = ind.atr(bars, params.atrStop || 20);
+    const withMs = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));
+    const dir = new Array(n).fill(0);
+    const risk = new Array(n).fill(NaN);
+    for (let i = 0; i < n; i += 1) {
+      const from = Math.max(0, i - window + 1);
+      const sig = cisd.detect(withMs.slice(from, i + 1), atr.slice(from, i + 1));
+      if (sig) { dir[i] = sig.direction === 'long' ? 1 : -1; risk[i] = sig.risk; }
+    }
+    cache.set('cisd_ote_dir', dir);
+    cache.set('cisd_ote_risk', risk);
+  };
   const n = bars.length;
   let lv = null;
   const level = k => { lv = lv || causalLevels(bars); return lv[k]; };
@@ -256,6 +287,7 @@ function seriesSource(bars, params) {
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
       case 'overnight_high': case 'overnight_low': return level(key);
+      case 'cisd_ote_dir': case 'cisd_ote_risk': cisdSeries(); return cache.get(key);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;
@@ -355,4 +387,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

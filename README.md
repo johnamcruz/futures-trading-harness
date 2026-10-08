@@ -75,15 +75,21 @@ strategy loses, add one where it works.
 
 ```text
 strategies/
-  orb/STRATEGY.md          opening range breakout       (signal: orb)
-  ema_cross/STRATEGY.md    EMA 9/20 cross               (signal: ema_cross)
-  keltner/STRATEGY.md      Keltner breakout             (signal: keltner)
-  supertrend/STRATEGY.md   SuperTrend flip              (signal: supertrend)
-  bos/STRATEGY.md          break of structure           (signal: bos)
-  cisd_ote/STRATEGY.md     CISD + fib zone              (signal: manual)
-  vwap_reclaim/STRATEGY.md VWAP reclaim, paper          (signal: rules, written in Markdown)
-  _template/STRATEGY.md    copy this to add a strategy
+  orb/STRATEGY.md            opening range breakout
+  ema_cross/STRATEGY.md      EMA 9/20 cross
+  keltner/STRATEGY.md        Keltner breakout
+  supertrend/STRATEGY.md     SuperTrend flip
+  bos/STRATEGY.md            break of structure
+  cisd_ote/STRATEGY.md       CISD + fib zone
+  vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
+  ofi/STRATEGY.md            1m order-flow imbalance, paper
+  ofi_absorption/STRATEGY.md 1m absorption reversal, paper
+  _template/STRATEGY.md      copy this to add a strategy
 ```
+
+Every strategy's trigger is written as rules in its frontmatter (`signal:
+rules`); none is code. The six algoTraderBot ports reproduce its signals bar
+for bar (`tests/lib/parity.test.js`).
 
 Each file has code-checked frontmatter and a body the agents follow:
 
@@ -96,8 +102,15 @@ regimes: [trend, transition, high-vol]   # regimes the strategy fits
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:45-11:30@America/New_York"]
-signal: orb                        # rules (conditions below), manual, or a built-in detector
-params:                           # optional market-snapshot overrides
+signal: rules                      # rules (conditions below) or manual (agents judge the body)
+rules:
+  long:
+    - close crosses_above or_high
+    - adx(14) >= 18
+  short:
+    - close crosses_below or_low
+    - adx(14) >= 18
+params:                            # optional series settings
   orbMinutes: 15
 filters:
   adx_min: 18
@@ -259,8 +272,8 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 
 1. settles the open trade against the bar;
 2. trails its stop;
-3. checks every strategy for an entry, using the same detectors the live
-   scan uses.
+3. checks every strategy for an entry, with the same rules evaluation the
+   live scan uses.
 
 By default it applies the harness's own rules (sessions, end of day,
 order-gate limits). `--no-gate` trades the way algoTraderBot does.
