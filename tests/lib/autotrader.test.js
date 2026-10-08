@@ -76,7 +76,7 @@ test('kill switch stops new cycles but not end of day; weekends and caps are res
   assert.strictEqual(decide(cfg, s, et(15, 55), { killSwitch: true }).action, 'eod');
   assert.strictEqual(decide(cfg, null, et(10, 0, 10)).action, null); // Saturday
   const capped = { ...s, cycles: cfg.maxCyclesPerDay };
-  assert.strictEqual(decide(cfg, capped, et(10, 0)).action, null);
+  assert.strictEqual(decide(cfg, capped, et(10, 0)).action, 'manage'); // past the cap: manage positions only
   const yesterday = { ...capped, day: '2026-10-06', eodDone: true };
   assert.strictEqual(decide(cfg, yesterday, et(9, 1)).action, 'premarket'); // new day resets state
 });
@@ -100,9 +100,13 @@ test('child env locks the gate and paper mode disables trading', () => {
 });
 
 test('trade prompt carries the closed bar and its data file', () => {
-  const p = prompts(validateConfig({ timeframe: 1 }), et(10, 1), '/r').trade('MNQ', { t: '2026-10-07T14:00:00Z', c: 21503.25, file: '/tmp/fth/MNQ-1m.json', contractId: 'CON.F.US.MNQ.Z26' });
-  assert.match(p, /A 1-minute MNQ bar just closed \(open 2026-10-07T14:00:00Z, close 21503.25\)/);
-  assert.match(p, /\/tmp\/fth\/MNQ-1m\.json .*contractId CON\.F\.US\.MNQ\.Z26/);
+  const bar = sym => ({ t: '2026-10-07T14:00:00Z', c: 21503.25, file: `/b/${sym}-1m.json`, contractId: `CON.F.US.${sym}.Z26` });
+  const p = prompts(validateConfig({ timeframe: 1 }), et(10, 1), '/r').trade([{ symbol: 'MNQ', bar: bar('MNQ') }, { symbol: 'MES', bar: bar('MES') }], { recovered: true });
+  assert.match(p, /MNQ: a 1-minute bar just closed \(open 2026-10-07T14:00:00Z, close 21503.25\)/);
+  assert.match(p, /\/b\/MES-1m\.json .*contractId CON\.F\.US\.MES\.Z26/);
+  assert.match(p, /trade-session skill for MNQ, MES \(one symbol at a time, open positions first\)/);
+  assert.match(p, /previous cycle was stopped before it finished/);
+  assert.match(prompts(validateConfig({ cycle: 'lean' }), et(10, 1), '/r').trade('MNQ', { manageOnly: true }), /lean cycle.*manage-only/);
 });
 
 test('signal trigger runs on an open position or a mechanical candidate only', () => {

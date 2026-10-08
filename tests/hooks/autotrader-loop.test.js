@@ -69,7 +69,7 @@ test('runner starts a cycle on a fresh closed bar and hands the agent the bar fi
     await new Promise(r => runner.on('close', r));
     server.close();
   }
-  assert.match(out, /MNQ -> CON\.F\.US\.MNQ\.Z26/);
+  assert.match(out, /MNQ: active contract CON\.F\.US\.MNQ\.Z26/);
   assert.match(out, /CYCLE RESULT: no-trade - fake harness/);
   const file = path.join(dataDir, 'MNQ-1m.json');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -77,7 +77,7 @@ test('runner starts a cycle on a fresh closed bar and hands the agent the bar fi
   assert.strictEqual(data.bars.length, 3);
   const logs = fs.readdirSync(path.join(home, '.futures-trading-harness', 'logs'));
   const log = fs.readFileSync(path.join(home, '.futures-trading-harness', 'logs', logs[0]), 'utf8');
-  assert.match(log, /A 1-minute MNQ bar just closed/);
+  assert.match(log, /MNQ: a 1-minute bar just closed/);
   assert.ok(log.includes(file));
   assert.ok(calls.includes('/api/History/retrieveBars'));
   assert.ok(!fs.existsSync(path.join(home, '.futures-trading-harness', 'autotrader.lock')), 'lock released on exit');

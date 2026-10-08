@@ -91,6 +91,12 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
       return (res.bars || []).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
     },
 
+    /** Number of working orders in a contract. */
+    async workingOrders(accountId, contractId) {
+      const res = await post('/api/Order/searchOpen', { accountId: Number(accountId) });
+      return (res.orders || []).filter(o => o.contractId === contractId).length;
+    },
+
     /** Net position in a contract (positive long, negative short). */
     async netPosition(accountId, contractId) {
       const res = await post('/api/Position/searchOpen', { accountId: Number(accountId) });

@@ -19,7 +19,7 @@ const DEFAULTS = {
   timeframe: 3, // minutes per bar; a cycle runs after each closed bar
   trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
   bars: 300, // closed bars written to dataDir for the agents
-  dataDir: '/tmp/fth',
+  dataDir: null, // default ~/.futures-trading-harness/bars (runner-owned; agents can read it but not write it)
   barDelaySeconds: 2, // wait after the scheduled close before polling
   barPollSeconds: 2, // between polls while waiting for the closed bar
   barTimeoutSeconds: 60, // give up on a bar (daily break, halt) and resync
@@ -27,8 +27,11 @@ const DEFAULTS = {
   premarketAt: '09:00@America/New_York',
   eodAt: '15:50@America/New_York',
   weekdaysOnly: true,
-  maxCyclesPerDay: 150,
-  cycleTimeoutMinutes: 8,
+  maxCyclesPerDay: 400, // after this, cycles only manage open positions and working orders
+  cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
+  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': snapshot + scan, analysts only to confirm a candidate (use for 1m)
+  earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close sessions (YYYY-MM-DD, New York date)
+  earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
   paper: false,
   model: '',
@@ -72,6 +75,10 @@ function validateConfig(raw) {
   if (!Array.isArray(cfg.symbols) || cfg.symbols.length === 0 || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
   if (parseWindows((cfg.sessions || []).join(',')).errors.length || !Array.isArray(cfg.sessions)) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...]');
   for (const k of ['premarketAt', 'eodAt']) if (cfg[k] && !parseAt(cfg[k])) errors.push(`${k}: "HH:MM@Zone" or empty`);
+  if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
+  if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
+  if (!Array.isArray(cfg.earlyCloseDates) || !cfg.earlyCloseDates.every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push('earlyCloseDates: ["YYYY-MM-DD", ...]');
+  if (cfg.earlyCloseEodAt && !parseAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone"');
   for (const k of ['timeframe', 'bars', 'maxCyclesPerDay', 'cycleTimeoutMinutes', 'maxConsecutiveErrors', 'barPollSeconds', 'barTimeoutSeconds']) {
     if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive integer`);
   }
@@ -79,7 +86,7 @@ function validateConfig(raw) {
   if (!(Number.isInteger(cfg.barDelaySeconds) && cfg.barDelaySeconds >= 0)) errors.push('barDelaySeconds: 0 or more');
   if (!['bar', 'signal'].includes(cfg.trigger)) errors.push('trigger: "bar" or "signal"');
   if (cfg.trigger === 'signal' && !cfg.account) errors.push('account: required with trigger "signal" (to see open positions)');
-  if (!(typeof cfg.dataDir === 'string' && cfg.dataDir.startsWith('/'))) errors.push('dataDir: an absolute path');
+  if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (errors.length) throw new Error(`invalid autotrader config:\n- ${errors.join('\n- ')}`);
@@ -92,11 +99,22 @@ function prompts(cfg, now, root = '') {
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}.`,
-    trade: (symbol, bar) => {
-      const barInfo = bar
-        ? ` A ${cfg.timeframe}-minute ${symbol} bar just closed (open ${bar.t}, close ${bar.c}). Closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}): use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
-        : '';
-      return `${head}${barInfo} Run the trade-session skill for ${symbol}${acct}${cfg.paper ? ' in paper mode (plan only, no orders)' : ''}.`;
+    /**
+     * One cycle for every symbol whose bar just closed. `items` is a symbol
+     * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
+     */
+    trade: (items, { manageOnly = false, recovered = false } = {}) => {
+      const list = (Array.isArray(items) ? items : [{ symbol: items }]);
+      const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
+        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
+      const symbols = list.map(x => x.symbol).join(', ');
+      const mode = [
+        cfg.paper ? 'paper mode (plan only, no orders)' : '',
+        cfg.cycle === 'lean' ? 'lean cycle (see the trade-session skill)' : '',
+        manageOnly ? 'manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries)' : '',
+      ].filter(Boolean).join('; ');
+      const recover = recovered ? ' The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.' : '';
+      return `${head}${recover}${bars.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
@@ -161,7 +179,7 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   const s = state && state.day === key ? { ...state } : freshDay(key);
   if (cfg.weekdaysOnly && isWeekend(now)) return { action: null, state: s };
 
-  const eod = parseAt(cfg.eodAt);
+  const eod = parseAt(cfg.earlyCloseDates.includes(key) && cfg.earlyCloseEodAt ? cfg.earlyCloseEodAt : cfg.eodAt);
   const afterEod = eod && minutesOfDay(now, eod.timeZone) >= eod.minute;
   if (afterEod) return { action: s.eodDone ? null : 'eod', state: s };
   if (killSwitch) return { action: null, state: s };
@@ -171,8 +189,8 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
 
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   if (!windows.some(w => inWindow(now, w))) return { action: null, state: s };
-  if (s.cycles >= cfg.maxCyclesPerDay) return { action: null, state: s };
-  return { action: 'trade', state: s };
+  // Past the cap, keep managing positions and working orders; just no new entries.
+  return { action: s.cycles >= cfg.maxCyclesPerDay ? 'manage' : 'trade', state: s };
 }
 
 /** Record a finished action in the day state. */
@@ -180,7 +198,7 @@ function recordRun(state, action, now) {
   const s = { ...state };
   if (action === 'premarket') s.premarketDone = true;
   if (action === 'eod') s.eodDone = true;
-  if (action === 'trade') {
+  if (action === 'trade' || action === 'manage') {
     s.cycles += 1;
     s.lastCycleAt = now.toISOString();
   }
@@ -192,8 +210,9 @@ function recordRun(state, action, now) {
  * managing or a mechanical strategy is a candidate (from strategies.js scan).
  * Manual strategies need the LLM, so they only run in trigger "bar" mode.
  */
-function signalDecision(scanResults, netPosition) {
+function signalDecision(scanResults, netPosition, workingOrders = 0) {
   if (netPosition !== 0) return { run: true, reason: `position open (net ${netPosition})` };
+  if (workingOrders > 0) return { run: true, reason: `${workingOrders} working order(s)` };
   const fired = (scanResults || []).filter(r => r.candidate && r.signal !== 'manual').map(r => `${r.name} ${r.direction}`);
   return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
