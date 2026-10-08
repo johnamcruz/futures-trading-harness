@@ -196,7 +196,15 @@ function validateStrategy(data, body, folderName) {
     errors.push('risk: a map with stop and min_rr');
   } else {
     for (const k of Object.keys(risk)) if (!RISK_KEYS.includes(k)) errors.push(`risk.${k}: unknown key${suggest(k, RISK_KEYS)}`);
-    if (typeof risk.stop === 'string' && !STOP.test(risk.stop)) {
+    if (risk.stop && typeof risk.stop === 'object' && !Array.isArray(risk.stop)) {
+      // A distance per side: { long: <expr>, short: <expr> } (a sweep strategy's stop sits beyond the swept extreme).
+      const keys = Object.keys(risk.stop);
+      if (keys.length !== 2 || !keys.includes('long') || !keys.includes('short')) errors.push('risk.stop: a map has exactly long and short, each a distance expression');
+      for (const side of ['long', 'short']) {
+        if (typeof risk.stop[side] !== 'string') { if (side in risk.stop) errors.push(`risk.stop.${side}: a distance expression`); continue; }
+        try { compileExpression(risk.stop[side]); } catch (err) { errors.push(`risk.stop.${side}: a distance expression (${err.message})`); }
+      }
+    } else if (typeof risk.stop === 'string' && !STOP.test(risk.stop)) {
       // A stop distance written as a rules expression, e.g. "0.5 * atr(20)".
       try { compileExpression(risk.stop); } catch (err) { errors.push(`risk.stop: atr:<multiple above 0> | structure | swing | manual | a distance expression (${err.message})`); }
     } else {
@@ -243,7 +251,10 @@ function loadStrategyFile(file) {
   const ok = errors.length === 0;
   const compiledRules = parsed.data.signal === 'rules' && ok ? compileRules(parsed.data.rules).compiled : null;
   const stop = ok ? parsed.data.risk.stop : null;
-  const compiledStop = ok && !STOP.test(stop) ? compileExpression(stop) : null;
+  const perSide = stop && typeof stop === 'object';
+  const compiledStop = !ok ? null
+    : perSide ? { long: compileExpression(stop.long), short: compileExpression(stop.short) }
+      : !STOP.test(stop) ? compileExpression(stop) : null;
   return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, valid: ok, errors };
 }
 

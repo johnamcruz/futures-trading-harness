@@ -40,6 +40,13 @@
  *   cisd_ote_dir  1 / -1 on a bar where a CISD + OTE zone entry fires (algoTraderBot's
  *                 cisd_ote detector on the trailing window), else 0
  *   cisd_ote_risk that entry's stop distance (to the zone pivot), for risk.stop
+ *   htf_open(m) htf_high(m) htf_low(m) htf_close(m)
+ *               the previous m-minute candle (m divides a day: 60 = 1 hour,
+ *               240 = 4 hours), candles aligned to the 18:00 ET open (4 hours:
+ *               18, 22, 02, 06, 10, 14 ET); it changes when a new candle opens
+ *   htfc_open(m) htfc_high(m) htfc_low(m)
+ *               the m-minute candle in progress, up to and including this bar
+ *               (htfc_low(60) < htf_low(60): this hour swept the last hour's low)
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
@@ -56,7 +63,8 @@ const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
-const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma']);
+const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low']);
+const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
@@ -100,6 +108,7 @@ function parseFactor(tok) {
     if (!(tok.arg >= 1 && tok.arg <= 500)) throw new Error(`${tok.name}(${tok.arg}): length must be 1-500`);
     // ADX needs 2n bars; the live scan sees 500.
     if (tok.name === 'adx' && tok.arg > 250) throw new Error(`adx(${tok.arg}): length must be 1-250 (ADX needs 2n bars; the live scan has 500)`);
+    if (HTF.has(tok.name) && 1440 % tok.arg !== 0) throw new Error(`${tok.name}(${tok.arg}): minutes must divide a day (e.g. 60, 120, 240)`);
     return { kind: 'series', key: `${tok.name}(${tok.arg})`, shift: tok.shift };
   }
   throw new Error(`unexpected "${tok.value}"`);
@@ -250,6 +259,8 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   let lv = null;
   const level = k => { lv = lv || causalLevels(bars); return lv[k]; };
   const field = f => bars.map(b => b[f]);
+  const htfs = new Map();
+  const htf = m => { if (!htfs.has(m)) htfs.set(m, ind.htfCandles(bars, m)); return htfs.get(m); };
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
     const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
@@ -266,6 +277,13 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'delta': return rolling(ind.barDelta(bars), len, w => w.reduce((a, b) => a + b, 0));
         // No volume at all (a file without a volume column) is unknown, not 0.
         case 'vol_sma': return rolling(field('v'), len, w => { const t = w.reduce((a, b) => a + (Number(b) || 0), 0); return t > 0 ? t / len : NaN; });
+        case 'htf_open': return htf(len).prevO;
+        case 'htf_high': return htf(len).prevH;
+        case 'htf_low': return htf(len).prevL;
+        case 'htf_close': return htf(len).prevC;
+        case 'htfc_open': return htf(len).curO;
+        case 'htfc_high': return htf(len).curH;
+        case 'htfc_low': return htf(len).curL;
         default: break;
       }
     }
@@ -321,6 +339,9 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   get.resets = (key, i) => {
     if (i < 1) return false;
     if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    // A higher-timeframe candle level starts over when a new candle opens.
+    const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
+    if (h && HTF.has(h[1])) { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
     if (LEVELS.has(key)) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];

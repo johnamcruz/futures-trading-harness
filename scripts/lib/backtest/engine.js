@@ -108,7 +108,7 @@ function prepare(markets, strategies, opts = {}) {
       if (!s.valid || s.status === 'disabled') return false;
       if (!s.instruments.includes(m.symbol)) return false;
       if (s.signal === 'manual') { skipped.set(s.name, 'manual strategies need the LLM'); return false; }
-      if (!/^atr:/.test(s.risk.stop) && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
+      if (!/^atr:/.test(typeof s.risk.stop === 'string' ? s.risk.stop : '') && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
       return true;
     });
     const ev = createEvaluator(bars, { window: o.window });

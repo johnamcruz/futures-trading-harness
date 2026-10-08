@@ -278,7 +278,46 @@ function ofi(bars, n) {
   });
 }
 
+/**
+ * Higher-timeframe candles of `minutes` (dividing a day) built from the bars,
+ * aligned to the 18:00 ET Globex open: 60 opens on the hour; 240 opens at
+ * 18:00, 22:00, 02:00, 06:00, 10:00, 14:00 ET. For each bar:
+ *   key                  the candle the bar is in
+ *   prevO prevH prevL prevC  the previous candle (the one before this bar's),
+ *                        NaN while it is unknown or was cut off by the data's start
+ *   curO curH curL       this bar's candle so far, up to and including the bar
+ * Causal: a bar only sees candles that closed before it and its own candle so far.
+ */
+function htfCandles(bars, minutes) {
+  const n = bars.length;
+  const out = {
+    key: new Array(n), prevO: new Array(n).fill(NaN), prevH: new Array(n).fill(NaN), prevL: new Array(n).fill(NaN), prevC: new Array(n).fill(NaN),
+    curO: new Array(n).fill(NaN), curH: new Array(n).fill(NaN), curL: new Array(n).fill(NaN),
+  };
+  let cur = null;
+  let prev = null;
+  for (let i = 0; i < n; i += 1) {
+    const b = bars[i];
+    const sinceOpen = (etInfo(b.t).minute - 18 * 60 + 1440) % 1440;
+    const key = `${sessionKey(b.t, 18 * 60)}#${Math.floor(sinceOpen / minutes)}`;
+    if (!cur || cur.key !== key) {
+      prev = cur && cur.complete ? cur : null;
+      // The candle the data starts in is complete only if the data starts on its open.
+      cur = { key, o: b.o, h: b.h, l: b.l, c: b.c, complete: i > 0 || (sinceOpen % minutes === 0 && Date.parse(b.t) % 60000 === 0) };
+    } else {
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.c = b.c;
+    }
+    out.key[i] = key;
+    out.curO[i] = cur.o; out.curH[i] = cur.h; out.curL[i] = cur.l;
+    if (prev) { out.prevO[i] = prev.o; out.prevH[i] = prev.h; out.prevL[i] = prev.l; out.prevC[i] = prev.c; }
+  }
+  return out;
+}
+
 module.exports = {
+  htfCandles,
   barDelta,
   ofi,
   normalizeBars,

@@ -140,10 +140,12 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       direction = r.direction;
       ruleDetail = { long: r.long, short: r.short };
     }
-    const atrMult = /^atr:(.+)$/.exec(s.risk.stop);
+    const atrMult = typeof s.risk.stop === 'string' ? /^atr:(.+)$/.exec(s.risk.stop) : null;
     if (atrMult && atr20 !== null) stopDistance = Number(atrMult[1]) * atr20;
     if (s.compiledStop) {
-      const d = valueAt(s.compiledStop, rulesSource(s), i);
+      // A per-side stop ({ long, short }) has a distance only once the side is known.
+      const terms = Array.isArray(s.compiledStop) ? s.compiledStop : direction ? s.compiledStop[direction] : null;
+      const d = terms ? valueAt(terms, rulesSource(s), i) : null;
       stopDistance = d !== null && d > 0 ? d : null;
     }
     const fails = filterFailures(s, ser, i);

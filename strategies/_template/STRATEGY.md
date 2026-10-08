@@ -26,7 +26,7 @@ exit:                         # optional; without it the target is risk.min_rr (
   trail_giveback_r: 0.5       # ... then trail 0.5R behind the best price
   # target_r: 3               # optional fixed target in R (above trail_activate_r)
 risk:
-  stop: atr:0.5               # atr:<multiple of ATR(20)> | a distance expression (0.5 * atr(20)) | structure | swing | manual
+  stop: atr:0.5               # atr:<multiple of ATR(20)> | a distance expression (0.5 * atr(20)) | { long: <expr>, short: <expr> } | structure | swing | manual
   min_rr: 2                   # minimum planned reward:risk (the agents plan to it; not checked at order time)
   max_risk_usd: 50            # optional per-trade cap the risk-manager applies (not checked at order time)
 # To trade a prop account (account, sizing, contracts, policy), list this strategy
