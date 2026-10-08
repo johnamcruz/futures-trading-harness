@@ -99,3 +99,25 @@ test('overnight and prior levels are causal: each bar only sees earlier bars', (
   const r = evaluateRules(compileRules({ long: ['high > overnight_high'] }).compiled, b.slice(0, 5), { ...PARAMS });
   assert.strictEqual(r.direction, 'long');
 });
+
+test('a break on the first bar after the opening range is a cross', () => {
+  const mk = (iso, o, h, l, c) => ({ t: iso, o, h, l, c, v: 1 });
+  // 2026-10-07, ET = UTC-4. 15-minute range 09:30-09:45 on 3m bars.
+  const b = normalizeBars([
+    mk('2026-10-07T13:30:00Z', 21495, 21500, 21490, 21495), mk('2026-10-07T13:33:00Z', 21495, 21499, 21492, 21494),
+    mk('2026-10-07T13:36:00Z', 21494, 21498, 21491, 21495), mk('2026-10-07T13:39:00Z', 21495, 21497, 21493, 21494),
+    mk('2026-10-07T13:42:00Z', 21494, 21498, 21492, 21495), mk('2026-10-07T13:45:00Z', 21495, 21510, 21494, 21508.25),
+  ]);
+  const r = evaluateRules(compileRules({ long: ['close crosses_above or_high'] }).compiled, b, { ...PARAMS });
+  assert.strictEqual(r.direction, 'long');
+});
+
+test('a level that starts over is not a cross', () => {
+  const mk = (iso, c) => ({ t: iso, o: c, h: c + 0.25, l: c - 0.25, c, v: 100 });
+  // Session VWAP restarts at 18:00 ET (22:00Z): price is below the old VWAP and the new one starts at its typical price.
+  const b = normalizeBars([mk('2026-10-07T21:50:00Z', 21540), mk('2026-10-07T21:55:00Z', 21480), { t: '2026-10-07T22:00:00Z', o: 21479, h: 21479, l: 21477, c: 21479, v: 100 }]);
+  const get = seriesSource(b, { ...PARAMS });
+  assert.ok(get('close')[1] < get('vwap_session')[1] && get('close')[2] > get('vwap_session')[2], 'the scenario would otherwise read as a cross');
+  const r = evaluateRules(compileRules({ long: ['close crosses_above vwap_session'] }).compiled, b, { ...PARAMS });
+  assert.strictEqual(r.direction, null);
+});

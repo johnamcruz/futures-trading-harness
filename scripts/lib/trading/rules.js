@@ -206,6 +206,7 @@ function causalLevels(bars) {
 /** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
 function seriesSource(bars, params) {
   const cache = new Map();
+  const n = bars.length;
   let lv = null;
   const level = k => { lv = lv || causalLevels(bars); return lv[k]; };
   const field = f => bars.map(b => b[f]);
@@ -237,8 +238,8 @@ function seriesSource(bars, params) {
       case 'keltner_lower': return ind.keltner(bars, params.kcLen, params.kcMult, params.kcAtr).lower;
       case 'vwap_session': return ind.anchoredVwap(bars, 18 * 60);
       case 'vwap_rth': return ind.anchoredVwap(bars, 9 * 60 + 30, 16 * 60);
-      case 'or_high': return ind.openingRange(bars, params.orbMinutes).high;
-      case 'or_low': return ind.openingRange(bars, params.orbMinutes).low;
+      case 'or_high': return completeRange(ind.openingRange(bars, params.orbMinutes).high);
+      case 'or_low': return completeRange(ind.openingRange(bars, params.orbMinutes).low);
       case 'swing_high': return ind.swings(bars, params.swingK).high;
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
@@ -250,11 +251,41 @@ function seriesSource(bars, params) {
       default: throw new Error(`unknown series "${key}"`);
     }
   };
-  return key => {
+  // The range is known when its last bar closes: give that bar the value too,
+  // so a break on the very next bar is a cross (causal: same bar's close).
+  const completeRange = s => {
+    const out = s.slice();
+    for (let i = 1; i < n; i += 1) {
+      if (Number.isFinite(s[i]) && Number.isNaN(s[i - 1]) && etDay(i) === etDay(i - 1)) out[i - 1] = s[i];
+    }
+    return out;
+  };
+  const days = new Array(n);
+  const etDay = i => {
+    if (days[i] === undefined) {
+      const p = zonedParts(new Date(bars[i].t), 'America/New_York');
+      days[i] = `${p.year}-${p.month}-${p.day}`;
+    }
+    return days[i];
+  };
+  const get = key => {
     if (!cache.has(key)) cache.set(key, make(key));
     return cache.get(key);
   };
+  /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
+  get.resets = (key, i) => {
+    if (i < 1) return false;
+    if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    if (LEVELS.has(key)) {
+      const s = get(key);
+      return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];
+    }
+    return false;
+  };
+  return get;
 }
+
+const LEVELS = new Set(['prior_high', 'prior_low', 'prior_close', 'or_high', 'or_low']);
 
 function valueAt(terms, get, i) {
   let total = 0;
@@ -280,6 +311,10 @@ function holds(cond, get, i) {
     case '<=': return l1 <= r1;
     default: {
       if (i < 1) return false;
+      // A level that starts over (session VWAP at 18:00 ET, a new prior day or
+      // opening range) jumps past price; that is not a cross.
+      const series = [...cond.left, ...cond.right].flatMap(t => t.factors).filter(f => f.kind === 'series');
+      if (get.resets && series.some(f => get.resets(f.key, i - (f.shift || 0)))) return false;
       const l0 = valueAt(cond.left, get, i - 1);
       const r0 = valueAt(cond.right, get, i - 1);
       if (l0 === null || r0 === null) return false;

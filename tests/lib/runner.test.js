@@ -158,3 +158,79 @@ test('after a timed-out cycle the next cycle is told to check protective stops f
   assert.ok(i >= 0 && cycles[i + 1]);
   assert.match(cycles[i + 1].prompt, /previous cycle was stopped before it finished/);
 });
+
+function bareRunner({ cfg, clockRef, client, runCycle = async () => ({ ok: true, timedOut: false }), saveState = () => {}, logs = [] }) {
+  return createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', ...cfg }),
+    root: '/r', client, clock: { now: () => new Date(clockRef.t) }, runCycle,
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState,
+    writeBars: () => '/b.json', scanFor: () => [], log: m => logs.push(m),
+  });
+}
+
+test('a symbol whose first poll returns no bars still resyncs and re-checks its contract', async () => {
+  const clockRef = { t: et(10, 0) };
+  let lookups = 0;
+  const runner = bareRunner({
+    cfg: { timeframe: 3 }, clockRef,
+    client: { async activeContract() { lookups += 1; return { id: 'CON.F.US.MNQ.Z26' }; }, async closedBars() { return []; } },
+  });
+  while (clockRef.t < et(10, 30)) clockRef.t += await runner.step();
+  assert.ok(lookups >= 2, `contract re-checked after repeated resyncs (lookups ${lookups})`);
+});
+
+test('a failing end of day is retried with a growing pause, not in a tight loop', async () => {
+  const clockRef = { t: et(15, 55) };
+  let runs = 0;
+  const runner = bareRunner({ cfg: { timeframe: 3 }, clockRef, client: {}, runCycle: async () => { runs += 1; return { ok: false, timedOut: false }; } });
+  const start = clockRef.t;
+  while (clockRef.t < start + 3600000) clockRef.t += Math.max(await runner.step(), 1);
+  assert.ok(runs < 100, `${runs} end-of-day runs in an hour`);
+});
+
+test('a failed contract lookup keeps the known contract trading and retries slowly', async () => {
+  const market = fakeMarket({ minutes: 3 });
+  const clockRef = { t: et(9, 30) };
+  const base = market.client(clockRef);
+  let lookups = 0;
+  let failing = false;
+  const cycles = [];
+  const runner = bareRunner({
+    cfg: { timeframe: 3 }, clockRef,
+    client: { ...base, async activeContract(s) { lookups += 1; if (failing) throw new Error('HTTP 500'); return base.activeContract(s); } },
+    runCycle: async () => { cycles.push(clockRef.t); return { ok: true, timedOut: false }; },
+  });
+  while (clockRef.t < et(9, 45)) clockRef.t += await runner.step();
+  // The next trading day starts with the lookup failing for 10 minutes.
+  clockRef.t = et(9, 35) + 864e5;
+  failing = true;
+  lookups = 0;
+  const before = cycles.length;
+  while (clockRef.t < et(9, 45) + 864e5) clockRef.t += await runner.step();
+  assert.ok(lookups <= 25, `${lookups} lookups in 10 minutes`);
+  assert.ok(cycles.length - before >= 2, 'bars on the known contract still start cycles');
+});
+
+test('an exception inside a pass is logged and the loop carries on', async () => {
+  const market = fakeMarket({ minutes: 3 });
+  const clockRef = { t: et(9, 50) };
+  let saves = 0;
+  const logs = [];
+  const runner = bareRunner({
+    cfg: { timeframe: 3 }, clockRef, client: market.client(clockRef), logs,
+    saveState: () => { saves += 1; if (saves === 1) throw new Error('ENOSPC'); },
+  });
+  let cycles = 0;
+  while (clockRef.t < et(10, 10)) {
+    const ms = await runner.step();
+    clockRef.t += ms;
+    cycles = runner.state ? runner.state.cycles : cycles;
+  }
+  assert.ok(logs.some(l => /ENOSPC/.test(l)));
+  assert.ok(saves > 2, 'later passes still run');
+});
+
+test('a session that runs past end of day is rejected', () => {
+  assert.throws(() => validateConfig({ sessions: ['18:00-16:00@America/New_York'], eodAt: '15:50@America/New_York' }), /past eodAt/);
+  assert.ok(validateConfig({ sessions: ['09:35-15:00@America/New_York'] }));
+});

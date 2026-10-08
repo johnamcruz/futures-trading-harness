@@ -69,3 +69,13 @@ test('anchored vwap resets at the anchor and rth vwap ignores overnight bars', (
   const globex = ind.anchoredVwap([bar(t(21, 55), 0, 10, 10, 10, 1), bar(t(22, 0), 0, 20, 20, 20, 1)], 18 * 60);
   close(globex[0], 10); close(globex[1], 20); // 18:00 ET starts a new session
 });
+
+test('ADX starts from flat bars instead of staying undefined', () => {
+  const { adx } = require('../../scripts/lib/trading/indicators');
+  const bars = [
+    ...Array.from({ length: 20 }, () => ({ o: 100, h: 100, l: 100, c: 100 })),
+    ...Array.from({ length: 60 }, (_, i) => ({ o: 100 + i, h: 101 + i, l: 99.5 + i, c: 100.5 + i })),
+  ];
+  const a = adx(bars, 14);
+  assert.ok(Number.isFinite(a[a.length - 1]) && a[a.length - 1] > 50);
+});

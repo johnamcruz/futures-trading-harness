@@ -22,6 +22,8 @@ const { barStep, sleepMs } = require('./bar-clock');
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
 const MAX_POLL_MS = 10000;
+const LOOKUP_RETRY_MS = 30000;
+const MAX_RETRY_MS = 60000;
 
 function createRunner(deps) {
   const {
@@ -48,13 +50,20 @@ function createRunner(deps) {
   async function ensureContract(sym, now) {
     const day = dayKey(now);
     if (sym.contractId && sym.contractDay === day && sym.resyncs < RESYNCS_BEFORE_REROLL) return sym;
-    if (now.getTime() - sym.lastPollAt < MAX_POLL_MS && !sym.contractId) return sym; // back off after a failed lookup
-    const c = await client.activeContract(sym.symbol);
+    // After a failed lookup, retry at most every 30 s; meanwhile keep polling the known contract.
+    if (sym.lookupFailedAt && now.getTime() - sym.lookupFailedAt < LOOKUP_RETRY_MS) return sym;
+    let c;
+    try {
+      c = await client.activeContract(sym.symbol);
+    } catch (err) {
+      log(`${sym.symbol}: contract lookup failed (${err.message})${sym.contractId ? `; staying on ${sym.contractId}` : ''}`, 'error');
+      return { ...sym, lookupFailedAt: now.getTime() };
+    }
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
-      return { ...sym, contractId: c.id, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 };
+      return { ...sym, contractId: c.id, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
     }
-    return { ...sym, contractDay: day, resyncs: 0 };
+    return { ...sym, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
   }
 
   async function pollSymbol(i, now) {
@@ -107,7 +116,26 @@ function createRunner(deps) {
     }
   }
 
+  /**
+   * One pass. Never throws: an unexpected error (a full disk, a broken
+   * harness) is logged, counted toward the kill switch, and retried after a
+   * pause, so the loop survives to run end of day.
+   */
   async function step() {
+    try {
+      return await stepOnce();
+    } catch (err) {
+      log(`runner error: ${err.message}`, 'error');
+      try {
+        record(false, false, clock.now());
+      } catch (_err) {
+        // the kill switch could not be written either; keep going
+      }
+      return Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors, 4));
+    }
+  }
+
+  async function stepOnce() {
     const now = clock.now();
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
     state = d.state;
@@ -122,9 +150,10 @@ function createRunner(deps) {
       }
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
-      saveState(state);
       record(ok, false, now);
-      return 0;
+      saveState(state);
+      // A failed end of day is retried, with a growing pause (5 s .. 60 s).
+      return ok ? 0 : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
     }
     if (d.action !== 'trade' && d.action !== 'manage') return IDLE_MS;
 

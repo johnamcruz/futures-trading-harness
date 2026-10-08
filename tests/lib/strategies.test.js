@@ -183,3 +183,12 @@ test('a rules strategy with no short rules cannot be used to sell into an entry'
   assert.match(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'sell'), /no short rules/);
   assert.strictEqual(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'buy'), null);
 });
+
+test('timeframes, empty sessions, and zero ATR stops are rejected', () => {
+  const bad = VALID.replace('timeframe: 5m', 'timeframe: 0m').replace('  stop: manual', '  stop: atr:0') + '\nsessions: ["09:45-09:45@America/New_York"]';
+  const { data, body } = parseFrontmatter(`---\n${bad}\n---\n${BODY}`);
+  const errors = validateStrategy(data, body, 'extra');
+  assert.ok(errors.some(e => /^timeframe/.test(e)), errors.join('; '));
+  assert.ok(errors.some(e => /^sessions/.test(e)), errors.join('; '));
+  assert.ok(errors.some(e => /^risk\.stop/.test(e)), errors.join('; '));
+});

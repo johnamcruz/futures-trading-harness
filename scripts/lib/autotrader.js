@@ -117,6 +117,19 @@ function parseAt(spec) {
   return { minute: Number(m[1]) * 60 + Number(m[2]), timeZone: m[3] };
 }
 
+/** True if any session minute falls at or after eodAt (checked on a winter and a summer day). */
+function sessionPastEod(cfg) {
+  const eod = parseAt(cfg.eodAt);
+  const windows = parseWindows(cfg.sessions.join(',')).windows;
+  for (const day of [Date.UTC(2026, 0, 7), Date.UTC(2026, 6, 7)]) {
+    for (let m = 0; m < 1440; m += 5) {
+      const t = new Date(day + m * 60000);
+      if (minutesOfDay(t, eod.timeZone) >= eod.minute && windows.some(w => inWindow(t, w))) return true;
+    }
+  }
+  return false;
+}
+
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
@@ -141,6 +154,9 @@ function validateConfig(raw) {
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
+  if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {
+    errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until midnight. End sessions before eodAt.');
+  }
   if (errors.length) throw new Error(`invalid autotrader config:\n- ${errors.join('\n- ')}`);
   return cfg;
 }

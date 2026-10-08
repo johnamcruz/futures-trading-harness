@@ -79,7 +79,8 @@ function adx(bars, period = 14) {
   const mdm = wilder(minusDm, period, 1);
   const dx = new Array(n).fill(NaN);
   for (let i = 0; i < n; i += 1) {
-    if (!(tr[i] > 0)) continue;
+    if (Number.isNaN(tr[i])) continue;
+    if (tr[i] === 0) { dx[i] = 0; continue; } // flat bars: no directional movement (as the source does)
     const pdi = (100 * pdm[i]) / tr[i];
     const mdi = (100 * mdm[i]) / tr[i];
     dx[i] = pdi + mdi > 0 ? (100 * Math.abs(pdi - mdi)) / (pdi + mdi) : 0;

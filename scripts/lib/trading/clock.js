@@ -75,7 +75,7 @@ function parseHhMm(text) {
   if (!m) return null;
   const h = Number(m[1]);
   const min = Number(m[2]);
-  if (h > 24 || min > 59) return null;
+  if (h > 24 || min > 59 || (h === 24 && min !== 0)) return null;
   return h * 60 + min;
 }
 
@@ -90,7 +90,7 @@ function parseWindows(spec) {
     const m = /^([^-]+)-([^@]+)@(.+)$/.exec(raw);
     const start = m && parseHhMm(m[1]);
     const end = m && parseHhMm(m[2]);
-    if (!m || start === null || end === null) {
+    if (!m || start === null || end === null || start === end) {
       errors.push(raw);
       continue;
     }

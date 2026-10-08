@@ -97,8 +97,12 @@ let activeChild = null;
 
 function appendLog(now, text) {
   const dir = path.join(HOME_DIR, 'logs');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.appendFileSync(path.join(dir, `autotrader-${dayKey(now)}.log`), text);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, `autotrader-${dayKey(now)}.log`), text);
+  } catch (err) {
+    process.stderr.write(`[autotrader] could not write the log: ${err.message}\n`); // best effort: never stop the loop
+  }
 }
 
 function runOnce(cfg, argv, timeoutMs) {

@@ -97,8 +97,9 @@ async function barStep(sym, now, opts, fetchBars) {
   const r = onBars(sym.clock, bars, now, minutes);
   if (!r.bar) {
     if (action === 'resync') {
-      const next = bars.length && !sym.clock.lastBarT ? stateFromBars(bars, minutes) : sym.clock;
-      const fresh = next.expectedCloseAt !== null && next.expectedCloseAt > now.getTime() ? next : rearm(next, now, minutes);
+      // First run (no clock yet) or no bar seen yet: learn alignment from the data if there is any.
+      const next = bars.length && !(sym.clock && sym.clock.lastBarT) ? stateFromBars(bars, minutes) : sym.clock;
+      const fresh = next && next.expectedCloseAt !== null && next.expectedCloseAt > now.getTime() ? next : rearm(next, now, minutes);
       return { sym: { ...polled, clock: fresh }, event: 'resync', bar: null, bars };
     }
     return { sym: polled, event: 'no-bar', bar: null, bars };

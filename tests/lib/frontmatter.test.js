@@ -57,3 +57,8 @@ test('compact lists, a leading BOM, and reserved keys', () => {
   assert.throws(() => parseYaml('__proto__:\n  polluted: 1'), /line 1: "__proto__" is not allowed/);
   assert.throws(() => parseYaml('a: 1\nb: "open'), /line 2:/);
 });
+
+test('an apostrophe inside an unquoted value is just a character', () => {
+  assert.deepStrictEqual(parseYaml("a: [it's, MES]\nb: Don't fade # comment"), { a: ["it's", 'MES'], b: "Don't fade" });
+  assert.throws(() => parseYaml("a: 'unterminated"), /unterminated/);
+});

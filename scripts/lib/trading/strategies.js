@@ -33,7 +33,7 @@ const FILTERS = {
 };
 const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
-const TIMEFRAME = /^\d+(m|h|d)$/;
+const TIMEFRAME = /^[1-9]\d*(m|h|d)$/;
 const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual)$/;
 
 function expandHome(p) {
@@ -143,7 +143,7 @@ function validateStrategy(data, body, folderName) {
     errors.push('risk: a map with stop and min_rr');
   } else {
     for (const k of Object.keys(risk)) if (!RISK_KEYS.includes(k)) errors.push(`risk.${k}: unknown key${suggest(k, RISK_KEYS)}`);
-    req(typeof risk.stop === 'string' && STOP.test(risk.stop), 'risk.stop: atr:<multiple> | structure | swing | manual');
+    req(typeof risk.stop === 'string' && STOP.test(risk.stop) && !/^atr:0+(\.0+)?$/.test(risk.stop), 'risk.stop: atr:<multiple above 0> | structure | swing | manual');
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
   }

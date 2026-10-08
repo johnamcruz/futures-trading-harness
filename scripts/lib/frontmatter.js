@@ -11,13 +11,19 @@
  * Block scalars (`|`, `>`), anchors, and tags are rejected with an error.
  */
 
+/** A quote only opens a quoted scalar at the start of a value: after "key:", "- ", "[", or ",". */
+function opensQuote(text, i) {
+  const before = text.slice(0, i).trimEnd();
+  return before === '' || /[:[,]$/.test(before) || /(^|\s)-$/.test(before);
+}
+
 function stripComment(text) {
   let quote = null;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     if (quote) {
       if (ch === quote && text[i - 1] !== '\\') quote = null;
-    } else if (ch === '"' || ch === "'") {
+    } else if ((ch === '"' || ch === "'") && opensQuote(text, i)) {
       quote = ch;
     } else if (ch === '#' && (i === 0 || /\s/.test(text[i - 1]))) {
       return text.slice(0, i).trimEnd();
@@ -34,7 +40,7 @@ function splitInline(body) {
     if (quote) {
       if (ch === quote) quote = null;
       current += ch;
-    } else if (ch === '"' || ch === "'") {
+    } else if ((ch === '"' || ch === "'") && current.trim() === '') {
       quote = ch;
       current += ch;
     } else if (ch === ',') {
@@ -67,7 +73,8 @@ function parseScalar(raw, lineNo) {
       throw new Error(`line ${lineNo}: invalid quoted value ${text.slice(0, 40)}`, { cause: err });
     }
   }
-  if (text.startsWith("'") && text.endsWith("'") && text.length >= 2) {
+  if (text.startsWith("'")) {
+    if (!(text.endsWith("'") && text.length >= 2)) throw new Error(`line ${lineNo}: unterminated or trailing text after a quoted value`);
     return text.slice(1, -1).replace(/''/g, "'");
   }
   if (text === 'true') return true;
