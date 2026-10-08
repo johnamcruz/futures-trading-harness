@@ -178,11 +178,13 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
 function evaluateModify({ input = {}, config }) {
   const skip = (config && config.skipChecks) || new Set();
   const violations = [];
-  if (input.size !== undefined && input.size !== null && !skip.has('modify-size')) {
+  // A size change labelled [exit]/[protect] (cutting a protective order after
+  // a partial exit) goes to the MCP gateway, which checks it is a decrease.
+  if (input.size !== undefined && input.size !== null && !skip.has('modify-size') && !isRiskReducing(input.reason)) {
     violations.push({
       check: 'modify-size',
-      message: 'modify_order may change prices only. To change size, cancel the order and place a new one '
-        + '(which goes through the order gate), or use partial_close_position to reduce.',
+      message: 'modify_order may change prices only, unless the reason starts with [exit] or [protect] (cutting a '
+        + 'protective order after a partial exit; the gateway checks it is a decrease). To add size, place a new order.',
     });
   }
   return { intent: 'modify', violations };

@@ -22,7 +22,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, netPosition, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing } = require('./lib/trading/order-gate');
 const { writeJsonAtomic, readJson } = require('./lib/harness-run');
 const { contractRoot } = require('./lib/trading/journal');
@@ -91,7 +91,11 @@ async function accountViolations(args, caller, now, ledger) {
     const result = parseToolJson(await caller.call('get_bars', req), 'get_bars');
     violations.push(...regimeViolation(gated, result.bars || result, config));
   }
-  return { violations, observedNet: Array.isArray(positions) ? netPosition(positions, args.contractId) : null };
+  return {
+    violations,
+    observedNet: Array.isArray(positions) ? contractNet(positions, args.contractId) : null,
+    observedRootNet: Array.isArray(positions) ? netPosition(positions, args.contractId) : null,
+  };
 }
 
 function main(argv) {
@@ -139,7 +143,7 @@ function main(argv) {
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     const extra = await accountViolations(args, caller, now, ledger);
     const violations = [...base.violations, ...extra.violations];
-    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet });
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };
 
@@ -176,14 +180,21 @@ function main(argv) {
     const sent = sentNet.get(id);
     sentNet.delete(id);
     if (!sent || !response || response.error || (response.result && response.result.isError)) return;
-    const { args, observedNet } = sent;
+    const { args, observedNet, observedRootNet, closeTool } = sent;
+    if (closeTool) {
+      // A close is a market order the account may not show yet, like one sent through place_order.
+      if (!observedNet) return;
+      const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
+      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now() });
+      return;
+    }
     const placed = resultJson(response);
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
       recordEntryOrder(process.env, placed.orderId, args);
     }
     if (String(args.type).toLowerCase() !== 'market' || observedNet === null) return; // resting orders show up in list_open_orders
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, at: Date.now() });
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now() });
   };
   const log = e => logDecision(e, process.env);
 
@@ -206,9 +217,11 @@ function main(argv) {
       } catch (_err) {
         incoming = null;
       }
-      // An order call reusing the id of a request still in flight would let
-      // the other request's reply release the order lane early.
-      const dup = [].concat(incoming || []).find(m => m && isLaneCall(m) && m.id !== undefined && inFlight.has(m.id));
+      // A request reusing the id of one still in flight (or of an order call
+      // whose reply is overdue) would let one reply answer the other: an
+      // order lane released early, or an order-pending lock cleared by the
+      // wrong reply.
+      const dup = [].concat(incoming || []).find(m => m && m.method !== undefined && m.id !== undefined && (inFlight.has(m.id) || waiting.has(m.id)));
       if (dup) {
         write(JSON.stringify({ jsonrpc: '2.0', id: dup.id, error: { code: -32600, message: `Blocked by trading harness: request id ${JSON.stringify(dup.id)} is already in use by a request in flight. Use a new id.` } }));
         return;
@@ -224,6 +237,19 @@ function main(argv) {
       }
       for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
       const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
+      // Closes aren't gated, but they change the position: note the position
+      // before them so the ledger can count them until the account shows it.
+      for (const m of lane) {
+        const close = /(?:^|__)(close_position|partial_close_position)$/.exec(String(m.params.name || ''));
+        const args = m.params.arguments || {};
+        if (!close || !args.contractId) continue;
+        try {
+          const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
+          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId) });
+        } catch (err) {
+          process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
+        }
+      }
       const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
       toChild(forward);
       // Hold the lane until the server has answered every order-changing call.

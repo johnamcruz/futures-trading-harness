@@ -117,13 +117,17 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   if (!workspaceBaseline) return true;
   const changed = changedFiles(workspaceBaseline, workspaceFingerprint(path.resolve(ROOT, cfg.workdir)));
   if (!changed.length) return true;
-  const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review them, restore them (node scripts/sync-harness.js; node scripts/install.js), then remove this file.`;
+  const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review the change (git diff workspace/; node scripts/sync-harness.js restores generated files), then remove this file to resume.`;
   try {
     if (!fs.existsSync(killSwitchFile)) fs.writeFileSync(killSwitchFile, `${reason}\n`);
   } catch (_err) {
     // reported below either way
   }
   process.stderr.write(`[autotrader] ${reason}\n`);
+  // The kill switch now carries the alarm; take the files as they are as the
+  // new baseline, so removing the kill switch resumes trading and end of day
+  // isn't failed over and over.
+  workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
   return false;
 }
 
@@ -142,7 +146,8 @@ async function runCycle(cfg, action, prompt, opts) {
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   process.stdout.write(`[autotrader] ${result}\n`);
   const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
-  return { ok: res.ok && intact, timedOut: res.timedOut };
+  // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
+  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut };
 }
 
 function loadState(cfg) {
@@ -204,6 +209,8 @@ async function main(argv) {
   checkStrategies(cfg);
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
+  // Codex may write the blackouts directory from its sandbox, but can't create it.
+  fs.mkdirSync(path.dirname(loadConfig(process.env).blackoutsFile), { recursive: true });
   workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
 
   const once = arg(argv, '--once');

@@ -116,7 +116,7 @@ test('trade prompt carries the closed bar and its data file', () => {
 
 test('signal trigger runs on an open position or a mechanical candidate only', () => {
   assert.deepStrictEqual(signalDecision([], -1), { run: true, reason: 'position open (net -1)' });
-  assert.strictEqual(signalDecision([{ name: 'orb', candidate: true, signal: 'orb', direction: 'long' }], 0).reason, 'strategy candidate: orb long');
+  assert.strictEqual(signalDecision([{ name: 'orb', status: 'active', candidate: true, signal: 'orb', direction: 'long' }], 0).reason, 'strategy candidate: orb long');
   assert.strictEqual(signalDecision([{ name: 'cisd_ote', candidate: true, signal: 'manual' }, { name: 'orb', candidate: false, signal: 'orb' }], 0).run, false);
 });
 
@@ -172,4 +172,26 @@ test('a run that changes the workspace instructions or settings is detected', ()
   fs.writeFileSync(path.join(dir, '.claude', 'settings.local.json'), '{"permissions":{"allow":["Bash"]}}');
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), 'ignore the gate');
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)).sort(), ['.claude/settings.local.json', 'AGENTS.md']);
+});
+
+test('signal mode: a paper strategy only starts a cycle in paper mode', () => {
+  const { signalDecision } = require('../../scripts/lib/autotrader');
+  const scan = [{ name: 'vwap_reclaim', status: 'paper', signal: 'rules', candidate: true, direction: 'long' }];
+  assert.strictEqual(signalDecision(scan, 0, 0).run, false);
+  assert.strictEqual(signalDecision(scan, 0, 0, { paper: true }).run, true);
+  assert.strictEqual(signalDecision([{ ...scan[0], status: 'active' }], 0, 0).run, true);
+});
+
+test('a harness run ends with its process group: nothing it left behind keeps running', { timeout: 20000 }, async () => {
+  const { runHarness } = require('../../scripts/lib/harness-run');
+  const fs = require('fs');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-run-'));
+  const marker = path.join(dir, 'ticks');
+  const r = await runHarness(['bash', '-c', `(while true; do echo x >> ${marker}; sleep 0.2; done) & exit 0`], { cwd: dir, env: process.env, timeoutMs: 10000 });
+  assert.strictEqual(r.ok, true);
+  await new Promise(res => setTimeout(res, 2600));
+  const n = fs.readFileSync(marker, 'utf8').length;
+  await new Promise(res => setTimeout(res, 800));
+  assert.strictEqual(fs.readFileSync(marker, 'utf8').length, n, 'the background loop was stopped');
 });

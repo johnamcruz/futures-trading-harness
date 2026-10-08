@@ -31,7 +31,8 @@ function writeJsonAtomic(file, value) {
  * Run argv in its own process group (so a timeout kills the harness and
  * everything it started). Resolves { ok, timedOut, code, output } once the
  * harness process exits: a detached grandchild still holding its output
- * pipes can't hold up the loop.
+ * pipes can't hold up the loop, and whatever it left in its process group is
+ * stopped.
  * `onChild(child|null)` tracks the running child for signal handling.
  */
 function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
@@ -64,6 +65,10 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       onChild(null);
+      // Anything the harness left running in its group (a background shell, a
+      // sub-agent) must not keep acting after the cycle: end the group too.
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), 2000).unref();
       // Give the pipes a moment to drain, then stop waiting on them.
       setTimeout(() => {
         child.stdout.destroy();

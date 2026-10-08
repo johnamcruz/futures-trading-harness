@@ -266,3 +266,31 @@ test('MCP gateway: a protective stop can be tightened but not widened', async ()
   assert.match(byId[1].result.content[0].text, /\[modify-protection\]/);
   assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:modify_order');
 });
+
+test('MCP gateway: an [exit] right after close_position cannot flip the position', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const env = {
+    PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '',
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  gw.stdin.write(`${JSON.stringify(call(1, 'close_position', { accountId: 1, contractId: 'CON.F.US.MNQ.Z26' }))}\n`);
+  gw.stdin.write(`${JSON.stringify(call(2, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }))}\n`);
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
+  assert.strictEqual(byId[1].result.isError, undefined);
+  assert.match(byId[2].result.content[0].text, /\[exposure\] .*once recent orders fill/);
+});
+
+test('MCP gateway: no request may reuse the id of an order call whose reply is overdue', async () => {
+  const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
+    call(1, 'place_order', { ...ORDER, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+    call(1, 'list_open_positions', { accountId: 1 }),
+  ]);
+  const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
+  assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
+});

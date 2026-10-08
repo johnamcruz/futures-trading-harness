@@ -52,7 +52,7 @@ native adapters generated for each harness.
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, no resizing working orders, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane: each waits for the server's answer, and market orders not yet visible in positions are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
-| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/` and `/tmp`; the shell is available) | Not through its own config |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
 Always register projectx **through the gateway** (the installer does): it is
@@ -297,7 +297,8 @@ broken down by strategy, exit, and month. See
 
 `place_order` rationales start with `setup:<strategy> ...` for entries,
 `[exit] ...` to close or reduce, and `[protect] ...` for a protective stop or
-target. Exits and protective orders are never gated, so risk can always be reduced.
+target. Exits and protective orders skip the journal checks (plan, reviews, limits), so risk can always be
+reduced; the gateway only checks that they really reduce the position.
 
 ## Development
 

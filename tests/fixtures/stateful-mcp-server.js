@@ -28,6 +28,10 @@ process.stdin.on('data', chunk => {
       const delta = (args.side === 'buy' ? 1 : -1) * Number(args.size);
       setTimeout(() => { net += delta; }, DELAY);
       text(msg.id, { orderId, success: true });
+    } else if (name === 'close_position') {
+      const before = net;
+      setTimeout(() => { net -= before; }, DELAY);
+      text(msg.id, { success: true });
     } else text(msg.id, `forwarded:${msg.method}${name ? `:${name}` : ''} net=${net}`);
   }
 });

@@ -284,10 +284,11 @@ function recordRun(state, action, now) {
  * managing or a mechanical strategy is a candidate (from strategies.js scan).
  * Manual strategies need the LLM, so they only run in trigger "bar" mode.
  */
-function signalDecision(scanResults, netPosition, workingOrders = 0) {
+function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = false } = {}) {
   if (netPosition !== 0) return { run: true, reason: `position open (net ${netPosition})` };
   if (workingOrders > 0) return { run: true, reason: `${workingOrders} working order(s)` };
-  const fired = (scanResults || []).filter(r => r.candidate && r.signal !== 'manual').map(r => `${r.name} ${r.direction}`);
+  // A paper strategy can't place live entries, so it only starts a cycle in paper mode.
+  const fired = (scanResults || []).filter(r => r.candidate && r.signal !== 'manual' && (paper || r.status === 'active')).map(r => `${r.name} ${r.direction}`);
   return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
 

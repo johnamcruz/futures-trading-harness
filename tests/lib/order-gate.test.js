@@ -171,3 +171,10 @@ test('formatBlock lists every violation', () => {
   assert.match(text, /- \[a\] one\n- \[b\] two/);
   assert.ok(CONTRACT);
 });
+
+test('modify_order size changes need an [exit]/[protect] reason (the gateway then checks it is a decrease)', () => {
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  const cfg = loadConfig({});
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1 }, config: cfg }).violations.map(v => v.check), ['modify-size']);
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1, reason: '[protect] cut the stop to 1 after scaling out' }, config: cfg }).violations, []);
+});

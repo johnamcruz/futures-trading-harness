@@ -127,3 +127,35 @@ test('a protective stop may move toward the market only', () => {
   assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21560 }, [{ contractId: CONTRACT, type: 2, size: 1 }], [buyStop]), ['modify-protection']);
   assert.deepStrictEqual(run({ orderId: 9, trailPrice: 21470 }, long1, [{ ...sellStop, type: 5, stopPrice: null }]), ['modify-protection'], 'unknown level: refuse');
 });
+
+test('contract months: an exit must be in the month that is open, and a long and a short in two months are not flat', () => {
+  const Z = CONTRACT;
+  const H = 'CON.F.US.MNQ.H27';
+  const longZ = [{ contractId: Z, type: 1, size: 1 }];
+  const exitH = order({ contractId: H, side: 'sell', rationale: '[exit] before the roll' });
+  assert.match(evaluateAccount({ input: exitH, positions: longZ, config })[0].message, /open MNQ position is in CON\.F\.US\.MNQ\.Z26/);
+  const hedged = [{ contractId: Z, type: 1, size: 1 }, { contractId: H, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: hedged, config })), ['position-open']);
+  const stopZ = { id: 50, contractId: Z, side: 1, type: 4, size: 1, stopPrice: 21400 };
+  assert.match(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config })[0].message, /protective stop/);
+});
+
+test('modify_order: sizes may only shrink; every price field must keep a protective stop tightening', () => {
+  const { evaluateModifyAccount } = require('../../scripts/lib/trading/account-gate');
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const stop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 2, stopPrice: 21480 };
+  const run = input => checks(evaluateModifyAccount({ input, positions: long2, orders: [stop], config }));
+  assert.deepStrictEqual(run({ orderId: 9, size: 1 }), [], 'cut the stop to the remaining position after a partial exit');
+  assert.deepStrictEqual(run({ orderId: 9, size: 3 }), ['modify-size']);
+  assert.deepStrictEqual(run({ orderId: 99, size: 1 }), ['modify-size'], 'unknown order: size cannot be checked');
+  const trailing = { ...stop, type: 5 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21490, trailPrice: 21000 }, positions: long2, orders: [trailing], config })), ['modify-protection']);
+});
+
+test('ledger: entries and exits anchor on the right net (root for entries, contract for exits)', () => {
+  const { pendingState } = require('../../scripts/lib/trading/account-gate');
+  const now = new Date();
+  const ledger = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime() }];
+  assert.strictEqual(pendingState(ledger, CONTRACT, 1, now, 30000, { exact: true }).projected, 0);
+  assert.strictEqual(pendingState(ledger, 'CON.F.US.MNQ.H27', 0, now, 30000, { exact: true }).projected, 0, 'another month has no pending orders');
+});

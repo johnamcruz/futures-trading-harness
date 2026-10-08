@@ -203,7 +203,7 @@ function createRunner(deps) {
       if (manageOnly) {
         return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
       }
-      return signalDecision(scanFor(item.symbol, item.bars), net, working);
+      return signalDecision(scanFor(item.symbol, item.bars), net, working, { paper: cfg.paper });
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       return { run: true, reason: `account check failed (${err.message})` };
@@ -253,6 +253,8 @@ function createRunner(deps) {
 
     const ready = [];
     for (let i = 0; i < syms.length; i += 1) {
+      // A slow API can make a pass long: if end of day came due meanwhile, run it first.
+      if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() }).action === 'eod') return 0;
       const item = await pollSymbol(i, now);
       if (item) ready.push(item);
     }

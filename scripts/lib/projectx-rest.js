@@ -13,6 +13,7 @@
 const DEFAULT_API_URL = 'https://api.topstepx.com';
 const TOKEN_TTL_MS = 20 * 60 * 60 * 1000;
 const BAR_UNIT_MINUTE = 2;
+const REQUEST_TIMEOUT_MS = 15000; // a hung API must not hold up the loop (end of day included)
 
 class ProjectXRestError extends Error {}
 
@@ -29,7 +30,13 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
   async function raw(path, body, bearer) {
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     if (bearer) headers.Authorization = `Bearer ${bearer}`;
-    const res = await fetchFn(apiUrl + path, { method: 'POST', headers, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await fetchFn(apiUrl + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (err) {
+      const e = new ProjectXRestError(`${path}: ${err.name === 'TimeoutError' ? `no answer in ${REQUEST_TIMEOUT_MS / 1000} s` : err.message}`, { cause: err });
+      throw e;
+    }
     if (!res.ok) {
       const err = new ProjectXRestError(`HTTP ${res.status} from ${path}`);
       err.status = res.status;

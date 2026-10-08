@@ -42,7 +42,7 @@ description: Review closed futures trades against their plan - R multiple, plan 
 ```text
 review: "ORB long MNQ. Plan: break of 21500 OR high, stop 21490, target 21520,
 1 contract, $20 risk. Filled 21500.75 (3 ticks slip). Stopped at 21490 after a
-sweep of the OR high and close back inside. R = -1.05. Process B: trigger valid,
+sweep of the OR high and close back inside: 43 ticks = $21.50, R = -1.08. Process B: trigger valid,
 but relative volume was 0.9x, which the strategy says to skip."
 tags: ["result:loss", "setup:orb", "MNQ", "mistake:rule-break"]
 

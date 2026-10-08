@@ -47,7 +47,7 @@ executing. Everything else in this skill still applies.
 **Full cycle** (default):
 
 If the prompt names a bars file (the autonomous runner writes the bars that
-just closed, e.g. `/tmp/fth/MNQ-3m.json`), pass its path to every analyst:
+just closed, e.g. `~/.futures-trading-harness/bars/MNQ-3m.json`), pass its path to every analyst:
 they run market-snapshot and `strategies.js scan` on it instead of fetching
 that timeframe again. Other timeframes are still fetched with `get_bars`.
 

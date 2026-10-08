@@ -55,3 +55,18 @@ test('re-logs in on 401 and surfaces failed envelopes', async () => {
   assert.deepStrictEqual(await client.closedBars('C', { minutes: 1, limit: 1 }), []);
   await assert.rejects(client.activeContract('MNQ'), /errorCode 1/);
 });
+
+test('a request the API never answers fails after the timeout instead of hanging', { timeout: 30000 }, async () => {
+  const { createClient } = require('../../scripts/lib/projectx-rest');
+  const fetchFn = (url, opts) => new Promise((resolve, reject) => {
+    if (url.endsWith('/api/Auth/loginKey')) return resolve({ ok: true, json: async () => ({ success: true, token: 't' }) });
+    opts.signal.addEventListener('abort', () => reject(opts.signal.reason));
+    return undefined;
+  });
+  const client = createClient({ env: { PROJECTX_USERNAME: 'u', PROJECTX_API_KEY: 'k' }, fetchFn });
+  const t = Date.now();
+  const keepAlive = setInterval(() => {}, 1000); // the timeout timer is unref'd; a real socket keeps the loop alive
+  await assert.rejects(client.activeContract('MNQ'), /no answer in 15 s/);
+  clearInterval(keepAlive);
+  assert.ok(Date.now() - t < 20000);
+});
