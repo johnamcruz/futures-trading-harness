@@ -314,10 +314,10 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null }) {
   const clockRef = { t: et(10, 0) + 2000 };
   const step = 180000;
-  const calls = { modified: [], closed: [], cancelled: [] };
+  const calls = { modified: [], closed: [], cancelled: [], closedIds: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
   let flat = false;
@@ -338,12 +338,15 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       },
       async accountState() {
         return {
-          positions: flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }],
+          positions: [
+            ...(flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
+            ...(otherMonth && !calls.closedIds.includes(otherMonth) ? [{ id: 78, contractId: otherMonth, type: 1, size: 1, averagePrice: 21600, creationTimestamp: new Date(fillAt).toISOString() }] : []),
+          ],
           orders: calls.cancelled.length ? [] : [...(noStop ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'CON.F.US.MNQ.Z26', type: 1, side: 1, size: 1, limitPrice: 21600 }],
         };
       },
       async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
-      async closePosition() { calls.closed.push(clockRef.t); flat = true; },
+      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'CON.F.US.MNQ.Z26') flat = true; },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return 1; },
@@ -392,9 +395,22 @@ test('trailing: a stop bigger than the position is not moved toward the market',
   assert.deepStrictEqual(r.modified, []);
 });
 
-test('kill switch on after the day traded: a position with no stop is closed, other orders cancelled', async () => {
+test('kill switch on after the day traded: a position with no stop is closed and its target cancelled at once', async () => {
   const r = await trailSim({ tape: {}, noStop: true, killAfterCycle: true, until: et(10, 9) });
   assert.strictEqual(r.closed.length, 1);
+  assert.deepStrictEqual(r.cancelled, [10]);
+});
+
+test('kill switch on: a stop bigger than the position (it would flip it) counts as unprotected', async () => {
+  const r = await trailSim({ tape: {}, stopSize: 2, killAfterCycle: true, until: et(10, 9) });
+  assert.strictEqual(r.closed.length, 1);
+  assert.deepStrictEqual(r.cancelled.sort(), [10, 9]);
+});
+
+test('kill switch on: an unprotected position in another month of the root is closed too', async () => {
+  const r = await trailSim({ tape: {}, otherMonth: 'CON.F.US.MNQ.H27', killAfterCycle: true, until: et(10, 9) });
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.H27']);
+  assert.deepStrictEqual(r.cancelled, [], 'the protected Z26 position keeps its orders');
 });
 
 test('kill switch on after the day traded: a protected position is left to its stop', async () => {

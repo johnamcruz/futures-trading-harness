@@ -107,8 +107,10 @@ Further safeguards:
 - **No cycles.** With the kill switch on or outside the sessions, after the
   day has traded, the runner keeps housekeeping until end of day. It cancels
   every working order on a flat contract, including pending entries, because
-  no cycle would manage their fill. It closes at market any position that
-  has no protective stop, and it keeps trailing protected positions.
+  no cycle would manage their fill. It closes at market any position, in
+  any month of the root, whose stops don't add up to its size (none, too
+  few, or enough to flip it), then cancels the orders left behind. It keeps
+  trailing protected positions.
 - **Workspace guard.** When a run changes the workspace's instructions or
   settings, the runner appends the change to the kill-switch file, even if
   the file is already there for another reason.

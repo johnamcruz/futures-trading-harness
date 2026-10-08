@@ -238,22 +238,47 @@ function createRunner(deps) {
   }
 
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
+  /**
+   * Close every position of this root (any month) whose opposite-side stops
+   * don't add up to its size, then cancel the root's orders once nothing of
+   * it is left open. Returns true when it closed anything.
+   */
+  async function flattenUncovered(item, { positions, orders }) {
+    const root = contractRoot(item.contractId);
+    const open = positions.filter(p => contractRoot(p.contractId) === root && Number(p.size || 0) > 0);
+    const closed = [];
+    for (const p of open) {
+      const sign = p.type === 1 ? 1 : -1;
+      const covered = orders
+        .filter(o => o.contractId === p.contractId && STOP_ORDER_TYPES.has(Number(o.type)) && (Number(o.side) === 0 ? 1 : -1) === -sign)
+        .reduce((a, o) => a + Number(o.size || 0), 0);
+      if (covered === Number(p.size)) continue;
+      await client.closePosition(cfg.account, p.contractId);
+      closed.push(p.contractId);
+      log(`${item.symbol}: ${p.contractId} ${sign > 0 ? 'long' : 'short'} ${p.size} has stops for ${covered} while no cycle can run (kill switch or outside sessions); closed at market`, 'error');
+    }
+    if (!closed.length) return false;
+    // A target or stop left working on a flat contract could open a new,
+    // unmanaged position: cancel them now, not on the next bar.
+    const stillOpen = new Set(open.filter(p => !closed.includes(p.contractId)).map(p => p.contractId));
+    for (const o of orders.filter(x => contractRoot(x.contractId) === root && (closed.includes(x.contractId) || !stillOpen.size))) {
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+      } catch (err) {
+        log(`${item.symbol}: could not cancel ${o.id} after the close (${err.message}); the next bar retries`, 'error');
+      }
+    }
+    return true;
+  }
+
   async function housekeeping(item, { noCycles = false } = {}) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
       const account = await client.accountState(cfg.account);
       await cleanupFlat(item, account, { noCycles });
-      // No cycle will come to protect a position with no stop: flatten it.
-      const p = account.positions.find(x => x.contractId === item.contractId && Number(x.size || 0) > 0);
-      if (noCycles && p) {
-        const sign = p.type === 1 ? 1 : -1;
-        const stops = account.orders.filter(o => o.contractId === item.contractId && STOP_ORDER_TYPES.has(Number(o.type)) && (Number(o.side) === 0 ? 1 : -1) === -sign);
-        if (!stops.length) {
-          await client.closePosition(cfg.account, item.contractId);
-          log(`${item.symbol}: open position with no protective stop while no cycle can run (kill switch or outside sessions); closed at market`, 'error');
-          return;
-        }
-      }
+      // No cycle will come to protect a position whose stops don't cover it
+      // exactly (none, too small, or big enough to flip it): flatten it.
+      if (noCycles && await flattenUncovered(item, account)) return;
       await trailPosition(item, account);
     } catch (err) {
       log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');
