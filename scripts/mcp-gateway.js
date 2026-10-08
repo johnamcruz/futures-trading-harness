@@ -23,7 +23,7 @@ const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
-const { isRiskReducing } = require('./lib/trading/order-gate');
+const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { writeJsonAtomic, readJson } = require('./lib/harness-run');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -151,6 +151,10 @@ function main(argv) {
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     const extra = await accountViolations(args, caller, now, ledger);
     const violations = [...base.violations, ...extra.violations];
+    // The account reads take time: an entry checked just before the close
+    // must still be inside the session when it is sent.
+    const late = isRiskReducing(args.rationale) ? null : marketClosed(gateNow(), loadConfig(process.env));
+    if (late && !violations.some(v => v.check === 'market-hours')) violations.push({ check: 'market-hours', message: late });
     if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };

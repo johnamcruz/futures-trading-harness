@@ -10,8 +10,11 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 - **Maximum loss limit (trailing drawdown):** the floor trails the account's
   high-water mark (end-of-day on Topstep combines). Know the cushion
   (balance − floor) before every session; size so one bad day can't breach it.
-- **Flat by 15:10 CT:** Topstep flattens open positions. The harness blocks new
-  entries from 15:00 CT. Close positions and cancel resting orders before then.
+- **Flat by 16:00 ET:** Topstep flattens open positions at 15:10 CT (16:10
+  ET); the harness is stricter. Its session is 18:00 ET to 16:00 ET, no new
+  entries from 15:45 ET, and end of day (15:50 ET) closes positions and
+  cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
+  the weekend.
 - **Consistency:** on funded/combine accounts no single day should carry the
   whole profit target. Prefer steady days over one big one.
 - **Locked accounts:** `canTrade=false` or errorCode 4 `AccountViolation` means

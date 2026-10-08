@@ -16,11 +16,17 @@
   "sessions": [
     "18:00-15:50@America/New_York"
   ],
-  "premarketAt": "09:00@America/New_York",
+  "premarketAt": "18:05@America/New_York",
   "eodAt": "15:50@America/New_York",
-  "weekdaysOnly": true,
-  "maxCyclesPerDay": 150,
-  "cycleTimeoutMinutes": 8,
+  "cycleTimeoutMinutes": 5,
   "maxConsecutiveErrors": 3,
-  "extraArgs": []
+  "extraArgs": [],
+  "earlyCloseDates": [
+    "2026-11-27",
+    "2026-12-24"
+  ],
+  "closedDates": [
+    "2026-11-26",
+    "2026-12-25"
+  ]
 }

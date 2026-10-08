@@ -145,6 +145,18 @@ const SESSION_ALIASES = {
   ny: '09:30-16:00@America/New_York',
 };
 
+/**
+ * The trading day `now` belongs to, named by the New York date it ends on:
+ * the session from Sunday 18:00 ET to Monday 16:00 ET is Monday's.
+ */
+function tradingDayKey(now) {
+  const p = zonedParts(new Date(tradingDayStart(now).getTime() + 12 * 3600000), MARKET_TZ);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+/** CME equity index early close: 13:00 ET (12:00 CT). */
+const EARLY_CLOSE_MIN = 13 * 60;
+
 /** Minutes since the start of `now`'s trading day (18:00 ET = 0). */
 function sessionMinute(now) {
   return Math.floor((now.getTime() - tradingDayStart(now).getTime()) / 60000);
@@ -183,6 +195,8 @@ module.exports = {
   inMarketHours,
   sessionMinute,
   sessionMinuteOf,
+  tradingDayKey,
+  EARLY_CLOSE_MIN,
   TRADING_DAY_TZ,
   zonedParts,
   zonedTimeToUtc,

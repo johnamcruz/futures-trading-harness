@@ -93,8 +93,11 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 - **Maximum loss limit (trailing drawdown):** the floor trails the account's
   high-water mark (end-of-day on Topstep combines). Know the cushion
   (balance − floor) before every session; size so one bad day can't breach it.
-- **Flat by 15:10 CT:** Topstep flattens open positions. The harness blocks new
-  entries from 15:00 CT. Close positions and cancel resting orders before then.
+- **Flat by 16:00 ET:** Topstep flattens open positions at 15:10 CT (16:10
+  ET); the harness is stricter. Its session is 18:00 ET to 16:00 ET, no new
+  entries from 15:45 ET, and end of day (15:50 ET) closes positions and
+  cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
+  the weekend.
 - **Consistency:** on funded/combine accounts no single day should carry the
   whole profit target. Prefer steady days over one big one.
 - **Locked accounts:** `canTrade=false` or errorCode 4 `AccountViolation` means
@@ -124,7 +127,7 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 ## Skills
 
 - `autonomous-trading` (skills/autonomous-trading/SKILL.md): Rules for running the trading harness unattended (headless, scheduled by scripts/autotrader.js on Claude Code, Codex, Qwen Code, or another harness) - one bounded cycle per run, no user questions, stand aside when unsure, and never touch guardrails. Use whenever a prompt says it is an autonomous or scheduled cycle.
-- `end-of-day` (skills/end-of-day/SKILL.md): End-of-day routine - flatten before Topstep's 15:10 CT cut-off, cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
+- `end-of-day` (skills/end-of-day/SKILL.md): End-of-day routine - flatten before the 16:00 ET close (the harness's hard rule; Topstep itself flattens at 15:10 CT), cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
 - `liquidity-concepts` (skills/liquidity-concepts/SKILL.md): Identify futures liquidity - prior day/overnight highs and lows, equal highs/lows, stop runs and sweeps, fair value gaps, and round numbers - and decide whether a level is a target, a reaction point, or a trap. Use when picking targets, judging breakouts, or explaining a sharp reversal.
 - `market-snapshot` (skills/market-snapshot/SKILL.md): Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, swings, opening range, prior-day or overnight levels.
 - `market-structure` (skills/market-structure/SKILL.md): Read futures market structure - swing highs/lows, trend vs range, break of structure (BOS), change of character (CHoCH), premium/discount, and where a trade idea is invalidated. Use for any directional bias, entry location, or stop placement decision.

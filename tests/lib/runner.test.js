@@ -232,7 +232,8 @@ test('an exception inside a pass is logged and the loop carries on', async () =>
 
 test('hard market hours: sessions in the 16:00-18:00 ET break, a missing end of day, or one after the 16:00 ET close are rejected', () => {
   assert.throws(() => validateConfig({ sessions: ['16:30-17:30@America/New_York'] }), /market session/);
-  assert.throws(() => validateConfig({ sessions: ['00:00-24:00@UTC'] }), /market session/);
+  assert.throws(() => validateConfig({ sessions: ['00:00-24:00@UTC'] }), /America\/New_York or America\/Chicago/);
+  assert.throws(() => validateConfig({ sessions: ['23:00-20:50@Europe/London'], eodAt: '20:50@Europe/London' }), /America\/New_York or America\/Chicago/, 'zones whose clocks change on other dates');
   assert.ok(validateConfig({ sessions: ['18:00-15:50@America/New_York'] }), 'the full Topstep session');
   assert.ok(validateConfig({ sessions: ['asia', 'london', 'ny'], eodAt: '16:00@America/New_York' }), 'named sessions');
   assert.throws(() => validateConfig({ eodAt: '' }), /eodAt: required/);
@@ -333,10 +334,10 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000 }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false }) {
   const clockRef = { t: startAt };
   const step = 180000;
-  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [] };
+  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
   let flat = false;
@@ -372,7 +373,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async workingOrders() { return 1; },
     },
     clock: { now: () => new Date(clockRef.t) },
-    runCycle: async (action) => { cycles.push(action); clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
+    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => [], flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
@@ -455,6 +456,22 @@ test('end of day: a position the end-of-day run left open is closed directly', a
   assert.ok(r.cycles.includes('eod'));
   assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
   assert.deepStrictEqual(r.cancelled.sort(), [10, 9]);
+});
+
+test('end of day flattens first, even when the agents\' end-of-day run fails', async () => {
+  const r = await trailSim({ tape: {}, eodFails: true, until: et(15, 52) });
+  assert.ok(r.cycles.includes('eod'));
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.ok(r.closed[0] <= et(15, 50) + 5000, 'closed at end of day, not after the run');
+});
+
+test('no run may outlast end of day: each gets at most the time left until eodAt', async () => {
+  const r = await trailSim({ tape: {}, startAt: et(15, 39) + 2000, until: et(15, 52) });
+  const trade = r.limits.filter(([a]) => a === 'trade' || a === 'manage');
+  assert.ok(trade.length > 0);
+  for (const [, at, ms] of trade) assert.ok(at + ms <= et(15, 50), `a cycle at ${new Date(at).toISOString()} may run ${ms} ms, past end of day`);
+  const eod = r.limits.find(([a]) => a === 'eod');
+  assert.ok(eod[1] + eod[2] <= et(16, 0), 'the end-of-day run ends by the close');
 });
 
 test('after the session, with trades today, the runner keeps housekeeping until end of day', () => {

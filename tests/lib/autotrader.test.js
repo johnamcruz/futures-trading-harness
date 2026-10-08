@@ -9,7 +9,7 @@ const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, p
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const cfg = validateConfig({ harness: 'qwen', sessions: ['09:35-15:00@America/New_York'] });
+const cfg = validateConfig({ harness: 'qwen', sessions: ['09:35-15:00@America/New_York'], premarketAt: '09:00@America/New_York' });
 const et = (h, m, day = 7) => new Date(Date.UTC(2026, 9, day, h + 4, m)); // October: ET = UTC-4; 7th is a Wednesday
 
 test('config defaults validate and bad configs list every problem', () => {
@@ -213,4 +213,14 @@ test('full market session: trading runs through the night; the 16:00-18:00 ET br
   const { dayKey } = require('../../scripts/lib/autotrader');
   assert.strictEqual(dayKey(new Date('2026-10-11T22:30:00Z')), '2026-10-12');
   assert.strictEqual(dayKey(new Date('2026-10-12T19:00:00Z')), '2026-10-12');
+});
+
+test('the default cycle cap covers the whole 22-hour session; the runner passes the exchange calendar to the gate', () => {
+  assert.strictEqual(validateConfig({ harness: 'qwen', timeframe: 1 }).maxCyclesPerDay, 1330);
+  assert.strictEqual(validateConfig({ harness: 'qwen', timeframe: 3 }).maxCyclesPerDay, 450);
+  const { childEnv } = require('../../scripts/lib/autotrader');
+  const env = childEnv(validateConfig({ harness: 'qwen', closedDates: ['2026-12-25'], earlyCloseDates: ['2026-11-27'] }), '/r', {});
+  assert.deepStrictEqual([env.FTH_CLOSED_DATES, env.FTH_EARLY_CLOSE_DATES], ['2026-12-25', '2026-11-27']);
+  const closed = validateConfig({ harness: 'qwen', premarketAt: '', closedDates: ['2026-12-25'] });
+  assert.strictEqual(decide(closed, null, new Date('2026-12-25T15:00:00Z')).action, null, 'no cycles on a holiday');
 });

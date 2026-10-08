@@ -54,12 +54,13 @@ function listEnv(env, name) {
 const STARTED_AT = Date.now();
 
 /**
- * The gate's clock. Tests may shift it with FTH_TEST_NOW (an ISO time the
- * process starts at); never in autonomous runs, where the gate is locked.
+ * The gate's clock. The test suite (NODE_ENV=test) may shift it with
+ * FTH_TEST_NOW (an ISO time the process starts at); never otherwise, and
+ * never in autonomous runs, where the gate is locked.
  */
 function gateNow(env = process.env) {
   const t = Date.parse(String(env.FTH_TEST_NOW || ''));
-  if (env.FTH_AUTONOMOUS === '1' || !Number.isFinite(t)) return new Date();
+  if (env.NODE_ENV !== 'test' || env.FTH_AUTONOMOUS === '1' || !Number.isFinite(t)) return new Date();
   return new Date(Date.now() + (t - STARTED_AT));
 }
 
@@ -89,6 +90,10 @@ function loadConfig(env = process.env) {
     // Paper mode: every new entry is refused (plans, reviews, and exits still work).
     paper: env.FTH_PAPER === '1',
     skipChecks: env.FTH_AUTONOMOUS === '1' ? new Set() : listEnv(env, 'FTH_ORDER_GATE_SKIP'),
+    // Exchange calendar (trading days, YYYY-MM-DD of the day they end on):
+    // holidays with no session, and early closes at 13:00 ET.
+    closedDates: new Set(String(env.FTH_CLOSED_DATES || '').split(',').map(s => s.trim()).filter(Boolean)),
+    earlyCloseDates: new Set(String(env.FTH_EARLY_CLOSE_DATES || '').split(',').map(s => s.trim()).filter(Boolean)),
   };
 }
 

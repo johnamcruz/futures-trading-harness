@@ -55,7 +55,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
-| `market-hours` | Entries only in the market session, 18:00-16:00 ET, Sunday evening to Friday (closed 16:00-18:00 ET). A hard rule: no setting widens it and it can't be skipped | yes | yes |
+| `market-hours` | Entries only in the market session, 18:00-16:00 ET, Sunday evening to Friday (closed 16:00-18:00 ET), not on `FTH_CLOSED_DATES` holidays, and before 13:00 ET on `FTH_EARLY_CLOSE_DATES` (the runner passes both from its config). A hard rule: no setting widens it and it can't be skipped; the gateway checks it again after reading the account | yes | yes |
 | `time-window`, `blackout` | Inside `FTH_ENTRY_HOURS` (default: the whole session), outside no-entry windows (09:30-09:35 and 15:45-16:00 ET) and news blackouts | yes | yes |
 | `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
@@ -119,10 +119,13 @@ Further safeguards:
   ET, weekends), or after the day's end of day, the runner reads the account
   once a minute and closes any position in its symbols. No position is
   carried past the close.
-- **End-of-day backstop.** After the end-of-day run, the runner reads the
-  account and closes any position still open in its symbols, cancelling
-  their orders, so a run that exits cleanly without flattening can't leave
-  a position overnight.
+- **Deadlines.** No run outlasts end of day: each gets at most the time left
+  until `eodAt` (end of day itself, until the 16:00 ET close), and a premarket
+  run never delays end of day.
+- **End-of-day backstop.** Before and after the end-of-day run, the runner
+  reads the account and closes any position still open in its symbols,
+  cancelling their orders, so neither a failed run nor one that exits
+  cleanly without flattening can leave a position past the close.
 - **Workspace guard.** When a run changes the workspace's instructions or
   settings, the runner appends the change to the kill-switch file, even if
   the file is already there for another reason.

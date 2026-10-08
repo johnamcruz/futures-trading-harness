@@ -238,8 +238,9 @@ touch ~/.futures-trading-harness/STOP                              # kill switch
 ```
 
 The runner trades the session from the 18:00 ET open to end of day (15:50
-ET), runs a premarket briefing at 09:00 ET and end of day on the clock, and
-idles through the 16:00-18:00 ET break and the weekend. In session, **a
+ET), runs a premarket briefing at 18:05 ET (the start of the trading day,
+ahead of the next morning's 08:30 ET data) and end of day on the clock, and
+idles through the 16:00-18:00 ET break, weekends, and holidays. In session, **a
 trade cycle starts after every closed bar** of the configured `timeframe`
 (1 or 3 minutes, or any value up to 60):
 
@@ -291,7 +292,14 @@ More runner settings:
   early-close days.
 - `"cycle": "lean"` skips the parallel analysts unless a strategy fires (use
   it for 1-minute bars so a cycle fits in one bar).
-- `maxCyclesPerDay` (400) switches to manage-only cycles once reached.
+- `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
+  switches to manage-only cycles once reached.
+- `closedDates` (CME holidays) and `earlyCloseDates` (13:00 ET closes, end
+  of day at `earlyCloseEodAt`) are passed to the order gate too: no entries
+  on a closed day or after an early close.
+- No run outlasts end of day: each gets at most the time left until
+  `eodAt`, and end of day closes positions directly before the agents'
+  review run.
 - `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe); a cycle stopped by
   the timeout makes the next one start by checking protective stops.
 - Bars go to `~/.futures-trading-harness/bars` (runner-owned) unless

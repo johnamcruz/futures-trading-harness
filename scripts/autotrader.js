@@ -143,7 +143,7 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   return false;
 }
 
-async function runCycle(cfg, action, prompt, opts) {
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000 } = {}) {
   const now = new Date();
   const argv = buildCommand(cfg, prompt, ROOT);
   if (opts.dryRun) {
@@ -153,7 +153,7 @@ async function runCycle(cfg, action, prompt, opts) {
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
-  const res = await runOnce(cfg, argv, cfg.cycleTimeoutMinutes * 60000);
+  const res = await runOnce(cfg, argv, timeoutMs);
   const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   process.stdout.write(`[autotrader] ${result}\n`);
@@ -270,7 +270,7 @@ async function main(argv) {
     client,
     flow,
     clock: { now: () => new Date() },
-    runCycle: (action, prompt) => runCycle(cfg, action, prompt, opts),
+    runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     isKillSwitchOn: () => fs.existsSync(killSwitchFile),
     createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
     loadState: () => loadState(cfg),

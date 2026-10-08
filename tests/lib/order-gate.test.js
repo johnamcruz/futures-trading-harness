@@ -213,3 +213,21 @@ test('FTH_ENTRY_HOURS narrows entries (default: the whole session; named session
   const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 50.5, reason: '[protect] x' }, config: loadConfig({}) }).violations.map(v => v.check), ['modify-size']);
 });
+
+test('exchange calendar: holidays have no session, early closes end entries at 13:00 ET', () => {
+  const cal = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2026-12-25', FTH_EARLY_CLOSE_DATES: '2026-11-27' });
+  const at = iso => checks(evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso), config: cal }));
+  assert.ok(at('2026-12-25T15:00:00Z').includes('market-hours'), 'Christmas Day 10:00 ET');
+  assert.ok(at('2026-12-25T02:00:00Z').includes('market-hours'), 'Christmas Eve 21:00 ET belongs to the closed day');
+  assert.ok(!at('2026-11-27T17:59:00Z').includes('market-hours'), 'early close: 12:59 ET');
+  assert.ok(at('2026-11-27T18:00:00Z').includes('market-hours'), 'early close: 13:00 ET');
+});
+
+test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {
+  const { gateNow } = require('../../scripts/lib/trading/config');
+  const far = '2020-01-01T00:00:00Z';
+  const near = t => Math.abs(t.getTime() - Date.now()) < 60000;
+  assert.ok(near(gateNow({ FTH_TEST_NOW: far })), 'ignored without NODE_ENV=test');
+  assert.ok(near(gateNow({ FTH_TEST_NOW: far, NODE_ENV: 'test', FTH_AUTONOMOUS: '1' })), 'ignored in autonomous runs');
+  assert.ok(!near(gateNow({ FTH_TEST_NOW: far, NODE_ENV: 'test' })));
+});

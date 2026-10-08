@@ -1,13 +1,15 @@
 ---
 name: end-of-day
-description: End-of-day routine - flatten before Topstep's 15:10 CT cut-off, cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
+description: End-of-day routine - flatten before the 16:00 ET close (the harness's hard rule; Topstep itself flattens at 15:10 CT), cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
 ---
 
 # End of Day
 
 ## When to Use
 
-- Before 15:10 CT every trading day, or on request.
+- At end of day (`eodAt`, by 16:00 ET) every trading day, or on request. The
+  autonomous runner closes positions itself first; this routine confirms it,
+  cancels leftovers, and does the reviews.
 
 ## How It Works
 

@@ -6,7 +6,7 @@
     "FTH_LOSS_COOLDOWN_MIN": "30",
     "FTH_MAX_DAILY_LOSSES": "3",
     "FTH_MAX_ENTRIES_PER_DAY": "6",
-    "FTH_NO_ENTRY_WINDOWS": "09:30-09:35@America/New_York,15:00-18:00@America/Chicago"
+    "FTH_NO_ENTRY_WINDOWS": "09:30-09:35@America/New_York,15:45-16:00@America/New_York"
   },
   "permissions": {
     "ask": [

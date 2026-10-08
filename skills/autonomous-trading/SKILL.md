@@ -13,7 +13,8 @@ description: Rules for running the trading harness unattended (headless, schedul
 ## How It Works
 
 1. **One cycle per closed bar, then exit.** The runner starts a cycle right
-   after each 1- or 3-minute bar closes and hands you the closed bars in a
+   after each bar closes (the configured timeframe: 1, 3, ... minutes),
+   through the whole 18:00-16:00 ET session, and hands you the closed bars in a
    file. Run exactly one trade-session (or premarket / end-of-day when the
    prompt says so). Don't wait, sleep, or poll inside a run; a bar that closes
    while you are still running is skipped, so finish within one bar.

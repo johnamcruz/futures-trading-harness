@@ -11,7 +11,7 @@
  * The MCP server still enforces its own size and loss limits on all of them.
  */
 
-const { tradingDayStart, parseWindows, inWindow, inMarketHours, MARKET_HOURS_LABEL } = require('./clock');
+const { tradingDayStart, parseWindows, inWindow, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
@@ -61,6 +61,17 @@ function checkPlan(input, dayEntries, now, config) {
   return plan ? null
     : `No journal plan for ${root} in the last ${config.planMaxAgeMin} min. `
       + 'Write one with journal_add {kind:"plan", contractId, ...} (thesis, trigger, stop, target, size, $ risk) first.';
+}
+
+/** Why the market is closed for entries at `now`, or null: the session, holidays, early closes. */
+function marketClosed(now, config = {}) {
+  const day = tradingDayKey(now);
+  if (config.closedDates && config.closedDates.has(day)) return `The exchange is closed for the trading day ${day} (FTH_CLOSED_DATES); no entries.`;
+  const until = config.earlyCloseDates && config.earlyCloseDates.has(day) ? EARLY_CLOSE_MIN : undefined;
+  if (!inMarketHours(now, { until })) {
+    return `New entries only during market hours (${MARKET_HOURS_LABEL}${until ? '; early close at 13:00 ET today' : ''}); no position may be held outside them.`;
+  }
+  return null;
 }
 
 function checkWindows(now, config) {
@@ -148,7 +159,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
 
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
-  if (!inMarketHours(now)) violations.push({ check: 'market-hours', message: `New entries only during market hours (${MARKET_HOURS_LABEL}); no position may be held outside them.` });
+  const closed = marketClosed(now, config);
+  if (closed) violations.push({ check: 'market-hours', message: closed });
   add('time-window', checkWindows(now, config));
   add('blackout', checkBlackouts(now, blackouts));
 
@@ -209,6 +221,7 @@ function formatBlock(violations) {
 }
 
 module.exports = {
+  marketClosed,
   isRiskReducing,
   liveReviews,
   successfulEntries,

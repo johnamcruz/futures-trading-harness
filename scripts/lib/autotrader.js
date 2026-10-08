@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
 const { loadConfig: loadGateConfig } = require('./trading/config');
-const { parseWindows, inWindow, zonedParts, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
+const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -31,13 +31,14 @@ const DEFAULTS = {
   // The whole market session (18:00-16:00 ET) up to end of day; strategies
   // narrow their own hours (orb: sessions [ny]). Named sessions: asia, london, ny.
   sessions: ['18:00-15:50@America/New_York'],
-  premarketAt: '09:00@America/New_York', // New York pre-market briefing
+  premarketAt: '18:05@America/New_York', // briefing at the start of the trading day (before the 08:30 ET data)
   eodAt: '15:50@America/New_York', // flatten everything; required, no later than the 16:00 ET close
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
-  maxCyclesPerDay: 400, // after this, cycles only manage open positions and working orders
+  maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
   cycle: 'full', // 'full': parallel analysts every cycle; 'lean': snapshot + scan, analysts only to confirm a candidate (use for 1m)
-  earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close sessions (YYYY-MM-DD, New York date)
+  earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close trading days (YYYY-MM-DD, the date the day ends on)
+  closedDates: [], // e.g. ["2026-11-26", "2026-12-25"]: CME holidays with no session (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
   orderFlow: 'auto', // record real order flow from the TopstepX market hub: true, false, or 'auto' (when a strategy on this timeframe declares connectors: [order_flow])
@@ -191,9 +192,18 @@ function validateConfig(raw) {
   for (const k of ['premarketAt', 'eodAt']) if (cfg[k] && !parseAt(cfg[k])) errors.push(`${k}: "HH:MM@Zone" or empty`);
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
-  if (!Array.isArray(cfg.earlyCloseDates) || !cfg.earlyCloseDates.every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push('earlyCloseDates: ["YYYY-MM-DD", ...]');
+  for (const k of ['earlyCloseDates', 'closedDates']) {
+    if (!Array.isArray(cfg[k]) || !cfg[k].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push(`${k}: ["YYYY-MM-DD", ...]`);
+  }
   if (cfg.earlyCloseEodAt && !parseAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone"');
   if (cfg.bars === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.bars = historyBars(cfg.timeframe);
+  if (cfg.maxCyclesPerDay === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.maxCyclesPerDay = Math.ceil((22 * 60) / cfg.timeframe) + 10;
+  // US Eastern or Central time only: they change clocks with the exchange, so
+  // end of day can't drift past the close in the weeks other zones differ.
+  const zoneOk = z => ['America/New_York', 'America/Chicago'].includes(z);
+  const badZone = [...parseWindows((cfg.sessions || []).join(',')).windows.map(w => w.timeZone),
+    ...['premarketAt', 'eodAt', 'earlyCloseEodAt'].map(k => parseAt(cfg[k])).filter(Boolean).map(a => a.timeZone)].find(z => !zoneOk(z));
+  if (badZone) errors.push(`sessions and times: use America/New_York or America/Chicago (got ${badZone}); they follow the exchange's clock changes`);
   for (const k of ['timeframe', 'bars', 'maxCyclesPerDay', 'cycleTimeoutMinutes', 'maxConsecutiveErrors', 'barPollSeconds', 'barTimeoutSeconds']) {
     if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive integer`);
   }
@@ -219,7 +229,7 @@ function prompts(cfg, now, root = '') {
   const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
-    premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}.`,
+    premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
@@ -243,7 +253,8 @@ function prompts(cfg, now, root = '') {
 
 /** Environment for a harness run: root, autonomous lock-down, and paper mode. */
 function childEnv(cfg, root, base = process.env) {
-  const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1' };
+  // The gate learns the exchange calendar from the runner's config.
+  const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     env.PROJECTX_TRADING_ENABLED = 'false';
@@ -281,8 +292,12 @@ function buildCommand(cfg, prompt, root, env = process.env) {
  * the session from Sunday 18:00 ET to Monday 16:00 ET is Monday's.
  */
 function dayKey(now) {
-  const p = zonedParts(new Date(tradingDayStart(now).getTime() + 12 * 3600000), MARKET_TZ);
-  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+  return tradingDayKey(now);
+}
+
+/** Today's end of day ({ minute, timeZone }): earlyCloseEodAt on an early-close day. */
+function endOfDayAt(cfg, now) {
+  return parseAt(cfg.earlyCloseDates.includes(dayKey(now)) && cfg.earlyCloseEodAt ? cfg.earlyCloseEodAt : cfg.eodAt);
 }
 
 function freshDay(key) {
@@ -307,15 +322,16 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   // Times are placed in the trading day (18:00 ET to 18:00 ET), so a session
   // that runs through midnight is one day.
   const nowMin = sessionMinute(now);
-  const eod = parseAt(cfg.earlyCloseDates.includes(key) && cfg.earlyCloseEodAt ? cfg.earlyCloseEodAt : cfg.eodAt);
+  const eod = endOfDayAt(cfg, now);
   const eodMin = eod ? sessionMinuteOf(eod, now) : null;
   if (eodMin !== null && nowMin >= eodMin) {
     // Only a trading day with a session has an end of day (not a Saturday).
     const lastMinute = new Date(tradingDayStart(now).getTime() + (sessionMinuteOf({ minute: MARKET_CLOSE_MIN - 1, timeZone: MARKET_TZ }, now) || 0) * 60000);
-    return { action: s.eodDone || !inMarketHours(lastMinute) ? null : 'eod', state: s };
+    return { action: s.eodDone || !inMarketHours(lastMinute) || (cfg.closedDates || []).includes(key) ? null : 'eod', state: s };
   }
-  // Hard rule: nothing runs outside the market session (the daily break, weekends).
-  if (!inMarketHours(now)) return { action: null, state: s };
+  // Hard rule: nothing runs outside the market session (the daily break,
+  // weekends, holidays).
+  if (!inMarketHours(now) || (cfg.closedDates || []).includes(key)) return { action: null, state: s };
   // After the day has traded and until end of day, keep the runner's
   // housekeeping (trailing stops, leftover orders) going even when no cycle
   // may run: outside the sessions or with the kill switch on.
@@ -363,6 +379,7 @@ function cycleResult(output) {
 }
 
 module.exports = {
+  endOfDayAt,
   marketHoursErrors,
   historyBars,
   usesOrderFlow,

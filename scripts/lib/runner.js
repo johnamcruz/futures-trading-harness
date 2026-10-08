@@ -25,11 +25,11 @@
  *      Entries (ids, strategy, planned stop) come from the MCP gateway.
  */
 
-const { decide, recordRun, prompts, signalDecision, dayKey } = require('./autotrader');
+const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot } = require('./trading/journal');
 const { trailStep } = require('./trading/trail');
-const { tradingDayStart, inMarketHours } = require('./trading/clock');
+const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
 
 const IDLE_MS = 5000;
@@ -364,6 +364,23 @@ function createRunner(deps) {
   const eodBackstop = () => flattenAll('end of day');
   let lastHoursCheck = 0;
 
+  /** Milliseconds from `now` to today's end of day (Infinity if none). */
+  function msToEod(now) {
+    const eod = endOfDayAt(cfg, now);
+    if (!eod) return Infinity;
+    return (tradingDayStart(now).getTime() + sessionMinuteOf(eod, now) * 60000) - now.getTime();
+  }
+  /** Milliseconds from `now` to the 16:00 ET close of its trading day. */
+  function msToClose(now) {
+    return (tradingDayStart(now).getTime() + sessionMinuteOf({ minute: MARKET_CLOSE_MIN, timeZone: MARKET_TZ }, now) * 60000) - now.getTime();
+  }
+  /** A run's time limit: its timeout, but never past end of day (or, for end of day, the close). */
+  function limitFor(action, now) {
+    const base = cfg.cycleTimeoutMinutes * 60000;
+    const until = action === 'eod' ? msToClose(now) : msToEod(now);
+    return Math.max(0, Math.min(base, until));
+  }
+
   async function stepOnce() {
     const now = clock.now();
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
@@ -372,14 +389,21 @@ function createRunner(deps) {
     if (d.action === 'premarket' || d.action === 'eod') {
       const p = prompts(cfg, now, root);
       let ok = true;
+      // End of day flattens first, directly: the agents' run (reviews, the
+      // journal) can fail or run long, and nothing may be open past the close.
+      if (d.action === 'eod') ok = await eodBackstop();
       const jobs = d.action === 'eod' ? [p.eod()] : cfg.symbols.map(s => p.premarket(s));
       for (const prompt of jobs) {
-        const r = await runCycle(d.action, prompt);
-        ok = ok && r.ok;
+        const at = clock.now();
+        // A premarket run never delays end of day.
+        if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
+        const timeoutMs = limitFor(d.action, at);
+        if (timeoutMs < 30000) { log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`); continue; }
+        const r = await runCycle(d.action, prompt, { timeoutMs });
+        if (d.action !== 'eod') ok = ok && r.ok;
       }
-      // A run can exit 0 without flattening (turn limit, a refused tool):
-      // check the account, and flatten what is left directly.
-      if (d.action === 'eod' && ok) ok = await eodBackstop();
+      // Then check again: flatten whatever the run left open.
+      if (d.action === 'eod') ok = (await eodBackstop()) && ok;
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
       record(ok, false, now);
@@ -421,11 +445,13 @@ function createRunner(deps) {
           if (w.run) run.push(item);
           else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
         }
-        if (run.length) {
-          const cycleNow = clock.now();
+        const cycleNow = clock.now();
+        const timeoutMs = limitFor(again.action, cycleNow);
+        if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
+        else if (run.length) {
           const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar })), { manageOnly, recovered: recover });
           recover = false;
-          const r = await runCycle(again.action, prompt);
+          const r = await runCycle(again.action, prompt, { timeoutMs });
           state = recordRun(state, 'trade', cycleNow);
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
