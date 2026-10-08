@@ -402,6 +402,14 @@ test('order gate: a live attempt past its sessions still trades (sessions bound 
   });
   const r = gate(orderPayload(order), env);
   assert.strictEqual(r.code, 0, r.stderr);
+  // Two closes missed in a row: recording only the first still refuses entries.
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date('2026-10-05T19:00:00Z'));
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date('2026-10-06T19:00:00Z'));
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date(Date.parse(TEST_NOW) - 60000));
+  prop.recordEndOfDay(env.FTH_HOME, account, 50320, '2026-10-05');
+  const missed = gate(orderPayload(order), env);
+  assert.strictEqual(missed.code, 2);
+  assert.match(missed.stderr, /close of 2026-10-06 was never recorded/);
 });
 
 test('order gate: a strategy that trades an account is gated on the attempt and its size budget, even with the checks skipped', () => {

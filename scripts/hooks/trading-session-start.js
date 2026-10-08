@@ -13,6 +13,7 @@ const { tradingDayStart } = require('../lib/trading/clock');
 const { resolveJournalPath, readJournal, entriesSince } = require('../lib/trading/journal');
 const { lossState, liveReviews } = require('../lib/trading/order-gate');
 const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
+const { sessionsText } = require('../lib/trading/combine');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
 const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
@@ -31,7 +32,7 @@ function attemptLines(home, now) {
     const m = s.summary;
     const age = Math.max(0, Math.round((now.getTime() - Date.parse(s.at)) / 60000));
     return `- ${name} (${m.status}) as of ${s.at} (${age} min ago): balance ${usd(m.balance)}, floor ${usd(m.floor)}, cushion ${usd(m.cushion)}, `
-      + `profit ${signed(m.profit)} of ${usd(m.target)}, day ${signed(m.dayPnl)}, ${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left${blocked}`;
+      + `profit ${signed(m.profit)} of ${usd(m.target)}, day ${signed(m.dayPnl)}, ${sessionsText(m)}${blocked}`;
   });
 }
 

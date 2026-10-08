@@ -306,6 +306,23 @@ test('combine: a live attempt never times out on its sessions, and a finished on
   assert.match(passed(entryOrder()).violations[0].message, /the challenge is passed.*node scripts\/combine.js stop --account mini/);
 });
 
+test('combine: every missed close is flagged, not only the first, so the floor is never left stale', () => {
+  const home = tmpDir();
+  prop.startAttempt(home, MINI, new Date('2026-10-04T14:00:00Z'));
+  prop.snapshot(home, MINI, 50500, new Date('2026-10-05T19:00:00Z')); // Mon, close never recorded
+  prop.snapshot(home, MINI, 52500, new Date('2026-10-06T19:00:00Z')); // Tue, close never recorded
+  prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000)); // Wed
+  const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
+  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: record each\)/);
+  prop.recordEndOfDay(home, MINI, 50500, '2026-10-05');
+  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded/, 'recording the first one alone does not clear the block');
+  prop.recordEndOfDay(home, MINI, 52500, '2026-10-06');
+  prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000));
+  assert.ok(!ev().violations.some(v => /never recorded/.test(v.message)));
+  // The floor now trails Tue's $52,500 close: $50,500 (locked at the start: $50,000).
+  assert.strictEqual(prop.readAttempt(home, MINI.name).snapshot.state.floor, 50000);
+});
+
 test('policy: an entry needs a fresh verdict for this contract and side, at no more than its size', () => {
   const none = propSetup({ policy: true });
   assert.match(none(entryOrder()).violations.find(v => v.check === 'policy').message, /no verdict for MNQ/);

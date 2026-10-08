@@ -11,6 +11,7 @@
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 
@@ -253,7 +254,7 @@ function accountText(state) {
   const attempts = (state.attempts || []).map(a => (a.noBalance
     ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
     : ` ${a.account} attempt (${a.status}) as of ${a.asOf}: balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
-    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${a.sessionsLeft} session${a.sessionsLeft === 1 ? '' : 's'} left`
+    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}`
     + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
   return head + attempts.join('');
 }

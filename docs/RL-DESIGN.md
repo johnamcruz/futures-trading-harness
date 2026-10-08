@@ -79,6 +79,8 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
   profit consistency needs, not only the target.
 - `sessions`: attempt length for training and evaluation. A live attempt
   is not ended by it: it runs until it passes or blows, or you stop it.
+  Past it, the prompt says so, and the policy sees 0 sessions left, a state
+  it never trained in.
 
 ## The env
 
@@ -173,7 +175,8 @@ Rules:
   every bar and records each day's closing balance after the end-of-day
   flatten, once flat. A close that can't be recorded is retried on its own
   (five times, a minute apart); end of day itself is never held open by it.
-  A missed close stops entries until it is recorded (`combine.js record-day`).
+  Each missed close (every one, not only the first) stops entries until it
+  is recorded (`combine.js record-day`).
 - At each setup of a policy strategy's strategies, while flat, the runner
   records a verdict: the strategy that fired, the side, `skip` / `half` /
   `full` (the trained policy's, or `full` without a bundle), the contract

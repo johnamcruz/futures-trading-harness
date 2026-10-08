@@ -275,4 +275,7 @@ test('the account line says what it does not know, and formats every side and co
   const none = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [{ account: 'topstep_50k', status: 'unknown', noBalance: true, entryBlock: 'the topstep_50k account snapshot is missing' }] } });
   assert.match(none, /topstep_50k attempt: no balance read yet, so no floor or cushion to show; new entries blocked: the topstep_50k account snapshot is missing\./);
   assert.doesNotMatch(none, /NaN|undefined/);
+  const past = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [{ ...attempt, sessionsLeft: 0, sessionsDone: 32 }] } });
+  assert.match(past, /32 sessions done, past the training length \(the attempt runs on until it passes or blows\)\./);
+  assert.doesNotMatch(past, /0 sessions left/);
 });

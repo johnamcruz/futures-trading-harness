@@ -215,7 +215,12 @@ function summary(s) {
   };
 }
 
+/** A summary's sessions left; a live attempt past its training length (`sessions`) says so rather than "0 left". */
+const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
+  ? `${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left`
+  : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
+
 module.exports = {
   DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary,
-  profit, cushion, sessionsLeft, profitNeeded,
+  profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

@@ -551,6 +551,7 @@ function createRunner(deps) {
       // refuses prop entries (a missed close).
       if (d.action === 'eod' && ok && prop && !cfg.paper) {
         // The trading day being closed: a catch-up end of day runs on a later day.
+        if (pendingClose && pendingClose.day !== d.state.day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
         pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
         await recordClose(now);
       }
