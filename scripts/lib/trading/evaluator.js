@@ -175,6 +175,8 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       minRR: s.risk.min_rr,
       exit: exitPlan(s),
       ...(ruleDetail ? { rules: ruleDetail } : {}),
+      // Detector state on this bar (e.g. a CRT sweep's range, extreme, and why it did or didn't fire).
+      ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i)) : {}),
     };
   }
 

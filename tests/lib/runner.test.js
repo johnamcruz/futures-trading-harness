@@ -334,10 +334,10 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 } }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined }) {
   const clockRef = { t: startAt };
   const step = 180000;
-  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [] };
+  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [], scans: [], logs: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
   let flat = startFlat;
@@ -383,7 +383,9 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
-    strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit }),
+    strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
+    scanLog: rec => calls.scans.push(rec),
+    log: (msg, level) => calls.logs.push(`${level === 'error' ? 'ERROR' : 'INFO'} ${msg}`),
   });
   while (clockRef.t < until) clockRef.t += await runner.step();
   return { ...calls, runner, cycles };
@@ -399,6 +401,32 @@ test('time stop: a strategy with exit.max_bars is closed at market once it has b
   // Without max_bars (a plain target), the runner leaves the trade to its bracket.
   const plain = await trailSim({ tape: {}, exit: { target_r: 2 }, until: et(10, 20) });
   assert.deepStrictEqual(plain.closedIds, []);
+});
+
+test('time stop: max_bars counts the strategy\'s bars, scaled to the runner\'s timeframe', async () => {
+  // 1 bar of a 15-minute strategy = 5 bars of the 3-minute runner.
+  const r = await trailSim({ tape: {}, exit: { target: 'x', max_bars: 1 }, stf: '15m', until: et(10, 30) });
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.ok(r.closed[0] >= et(10, 15) && r.closed[0] < et(10, 18), `closed after the fifth 3m bar (${new Date(r.closed[0]).toISOString()})`);
+  assert.ok(r.logs.some(l => /time stop 1 15m bars = 5 3m bars/.test(l)), r.logs.join('\n'));
+  assert.ok(r.logs.some(l => /time stop: 5 3m bars in the trade \(max_bars 1\)/.test(l)));
+});
+
+test('the decision log gets one record per scanned bar, and every bar\'s cycle decision is logged with its close', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10, detail: { 'crt(60)': { reason: 'fired' } } }];
+  const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, until: et(10, 10), trigger: 'signal' });
+  assert.ok(r.scans.length >= 1);
+  const rec = r.scans[0];
+  assert.strictEqual(rec.symbol, 'MNQ');
+  assert.strictEqual(rec.contractId, 'CON.F.US.MNQ.Z26');
+  assert.ok(rec.bar && rec.bar.t && rec.bar.c === 21500);
+  assert.strictEqual(rec.results[0].detail['crt(60)'].reason, 'fired');
+  assert.ok(rec.decision && rec.decision.run === true, JSON.stringify(rec.decision));
+  assert.ok(r.logs.some(l => /^INFO MNQ bar \S+ close 21500: cycle \(/.test(l)), r.logs.join('\n'));
+  // A bar with nothing to do says so, with its close.
+  const quiet = await trailSim({ tape: {}, startFlat: true, scan: [], until: et(10, 10), trigger: 'signal' });
+  assert.ok(quiet.scans.every(x => x.decision.run === false && !x.results.some(y => y.candidate)));
+  assert.ok(quiet.logs.some(l => /MNQ bar \S+ close 21500: no cycle \(/.test(l)));
 });
 
 test('trailing: prices from before a mid-bar fill do not count toward the peak', async () => {

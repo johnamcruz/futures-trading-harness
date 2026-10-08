@@ -299,11 +299,18 @@ function htfCandles(bars, minutes) {
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
     const sinceOpen = (etInfo(b.t).minute - 18 * 60 + 1440) % 1440;
-    const key = `${sessionKey(b.t, 18 * 60)}#${Math.floor(sinceOpen / minutes)}`;
+    const session = sessionKey(b.t, 18 * 60);
+    const idx = Math.floor(sinceOpen / minutes);
+    const key = `${session}#${idx}`;
     if (!cur || cur.key !== key) {
-      prev = cur && cur.complete ? cur : null;
+      // The previous candle is the one right before this one: in the same
+      // session, the next index on (a feed gap that skipped a whole candle
+      // leaves no previous candle); across the 18:00 open, the last candle of
+      // the session before.
+      const adjacent = cur && (cur.session !== session || cur.idx === idx - 1);
+      prev = cur && cur.complete && adjacent ? cur : null;
       // The candle the data starts in is complete only if the data starts on its open.
-      cur = { key, o: b.o, h: b.h, l: b.l, c: b.c, complete: i > 0 || (sinceOpen % minutes === 0 && Date.parse(b.t) % 60000 === 0) };
+      cur = { key, session, idx, o: b.o, h: b.h, l: b.l, c: b.c, complete: i > 0 || (sinceOpen % minutes === 0 && Date.parse(b.t) % 60000 === 0) };
     } else {
       cur.h = Math.max(cur.h, b.h);
       cur.l = Math.min(cur.l, b.l);

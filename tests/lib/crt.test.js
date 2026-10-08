@@ -2,11 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
 const path = require('path');
 const { htfCandles, normalizeBars } = require('../../scripts/lib/trading/indicators');
 const { compileCondition, compileExpression, evaluateRules, seriesSource } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
+const { tmpDir } = require('../helpers');
 const { crtSeries } = require('../../scripts/lib/trading/crt');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
 const { spawnSync } = require('child_process');
@@ -208,4 +210,83 @@ test('backtest CLI: an unknown flag is an error, not a silent run of every strat
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', 'none.csv', '--symbol', 'MNQ', '--strategies', 'crt_1h'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 1);
   assert.match(r.stderr, /unknown arguments: --strategies crt_1h/);
+});
+
+test('CRT detector explains every bar: the state and why it did or didn\'t fire', () => {
+  const b = crtSweep();
+  const s = crtSeries(b, 60, ATR8(b.length), OPTS);
+  const at = t => b.findIndex(x => Date.parse(x.t) === t);
+  assert.strictEqual(s.explain(at(et(10, 30))).reason, 'no_previous_candle');
+  assert.strictEqual(s.explain(at(et(11, 0))).reason, 'no_sweep');
+  const sweep = s.explain(at(et(11, 12)));
+  assert.strictEqual(sweep.reason, 'not_reclaimed');
+  assert.deepStrictEqual([sweep.side, sweep.extreme, sweep.depth, sweep.c1Low, sweep.c1High], ['long', 21472.25, 7.75, 21480, 21540]);
+  assert.strictEqual(s.explain(at(et(11, 15))).reason, 'not_reclaimed');
+  const fired = s.explain(at(et(11, 18)));
+  assert.deepStrictEqual([fired.reason, fired.risk, fired.target, fired.shiftLevel, fired.barsSinceExtreme], ['fired', 16.25, 53.5, 21486, 2]);
+  assert.match(fired.why, /sweep, reclaim, shift/);
+  assert.strictEqual(s.explain(b.length), null);
+  // Each blocking condition names itself.
+  const reason = (opts, atr) => { const x = crtSeries(b, 60, atr || ATR8(b.length), { ...OPTS, ...opts }); return x.explain(b.length - 1).reason; };
+  assert.strictEqual(reason({ minRR: 4 }), 'no_room');
+  assert.strictEqual(reason({ sweepBars: 1 }), 'stale');
+  assert.strictEqual(reason({}, new Array(b.length).fill(25)), 'range_too_small');
+  assert.strictEqual(reason({ maxDepth: 0.1 }), 'too_deep');
+  assert.strictEqual(reason({ shiftBars: 8 }), 'no_shift', 'the 8 bars before include the 10:57 bar at 21515');
+  const after = crtSweep([[et(11, 21), 21486, 21488, 21484, 21487]]);
+  assert.strictEqual(crtSeries(after, 60, ATR8(after.length), OPTS).explain(after.length - 1).reason, 'fired_this_candle');
+});
+
+test('CRT detector: a single bar that raids and reclaims with a shift fires (a wick soup); undefined options keep the defaults', () => {
+  const rows = [...c1Rows(), ...C2.slice(0, 4), [et(11, 12), 21482, 21490, 21472.25, 21489]];
+  const b = mk(rows);
+  // Shift over the 4 bars before it (the 5th back is the 10:57 bar, high 21515).
+  assert.deepStrictEqual(fires(b, { shiftBars: 4 }).map(x => [x.at, x.dir, x.risk]), [[new Date(et(11, 12)).toISOString(), 1, 18.75]]);
+  const viaRules = seriesSource(crtSweep(), {})('crt_dir(60)');
+  assert.ok(viaRules.includes(1), 'crt_dir(60) fires with no crt* params given');
+});
+
+test('htfCandles: a feed gap that skips a whole candle leaves no previous candle', () => {
+  const rows = [...flat(et(9, 0), et(10, 0), 21500), ...flat(et(11, 0), et(11, 30), 21520)]; // the 10:00 hour is missing
+  const h = htfCandles(mk(rows), 60);
+  assert.ok(h.prevH.slice(20).every(Number.isNaN), 'the 09:00 hour is not the 11:00 hour\'s previous candle');
+  // Across the 18:00 open, the last candle of the session before is the previous one.
+  const overnight = mk([...flat(et(16, 0), et(17, 0), 21500), ...flat(et(18, 0), et(18, 30), 21520)]);
+  const o = htfCandles(overnight, 60);
+  assert.strictEqual(o.prevH[o.prevH.length - 1], 21502);
+});
+
+test('a policy strategy refuses exit.target (its trades exit by its trail)', () => {
+  const p = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'prop_portfolio_3m');
+  const body = '## When to Use\n## How It Works\n## Examples';
+  const { name, description, version, status, instruments, timeframe, signal, strategies, account, sizing, contracts, exit, risk, policy, source } = p;
+  const data = { name, description, version, status, instruments, timeframe, signal, strategies, account, sizing, contracts, exit, risk, policy, source };
+  assert.deepStrictEqual(validateStrategy(data, body, 'prop_portfolio_3m'), []);
+  assert.match(validateStrategy({ ...data, exit: { ...exit, target: 'crt_target(60)' } }, body, 'prop_portfolio_3m').join(' '), /exit.target: not for a policy strategy/);
+});
+
+test('backtest: a fill already at or past the target level is not taken', () => {
+  const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
+  const warm = [];
+  for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
+  const trades = slip => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, slippageTicks: slip }).trades;
+  assert.strictEqual(trades(1).length, 1);
+  assert.strictEqual(trades(1)[0].setup.detail['crt(60)'].reason, 'fired', 'the trade carries the detector state that took it');
+  assert.strictEqual(trades(400).length, 0, '400 ticks of slippage puts the fill past C1\'s high');
+});
+
+test('backtest --debug writes the strategy\'s verdict on every bar, and trades.jsonl the setups', () => {
+  const { runBacktest } = require('../../scripts/lib/backtest/run');
+  const dir = tmpDir();
+  const data = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
+  const { runDir } = runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: ['crt_1h'], gate: false, window: 200, debug: 'crt_1h', outDir: dir }, { root: ROOT, outRoot: dir });
+  const lines = fs.readFileSync(path.join(runDir, 'decisions-crt_1h.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.strictEqual(lines.length, 1499);
+  assert.ok(lines.every(l => l.name === 'crt_1h' && l.t && l.detail && l.detail['crt(60)'].reason));
+  assert.ok(lines.slice(0, 199).every(l => /trades from bar 199/.test(l.warmup)) && !lines[199].warmup, 'bars before the window are marked');
+  const fired = lines.filter(l => l.detail['crt(60)'].reason === 'fired');
+  assert.ok(fired.length >= 1);
+  const trades = fs.readFileSync(path.join(runDir, 'trades.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  assert.ok(trades.length >= 1 && trades.every(t => t.setup && t.setup.detail['crt(60)'].reason === 'fired' && t.target !== null));
+  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: ['crt_1h'], gate: false, debug: 'orb', outDir: dir }, { root: ROOT, outRoot: dir }), /debug: orb is not among the strategies/);
 });

@@ -40,6 +40,7 @@ const famOf = contractId => familyRoot(contractRoot(contractId));
 const { trailStep } = require('./trading/trail');
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
+const { timeframeMs } = require('./trading/evaluator');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -58,6 +59,7 @@ function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
+    scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
     accountReadMs = ACCOUNT_READ_MS,
@@ -218,15 +220,18 @@ function createRunner(deps) {
       else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
       // Managed: a trailing exit, or a time stop (max_bars), or both.
       const managed = plan && (plan.trailActivateR !== null || plan.maxBars);
+      // max_bars counts the strategy's own bars; the runner sees its own timeframe's.
+      const tfMin = ((strategy && timeframeMs(strategy.timeframe)) || cfg.timeframe * 60000) / 60000;
+      const maxRunnerBars = plan && plan.maxBars ? Math.ceil((plan.maxBars * tfMin) / cfg.timeframe) : null;
       const ok = managed && tick > 0 && risk >= 4 * tick - 1e-9;
       t = ok
-        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, since: fillAt, lastBarT: null }
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null }
         : { key, skip: true };
       save(t);
       if (ok) {
-        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.maxBars ? `time stop ${plan.maxBars} bars` : ''].filter(Boolean).join('; ');
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
         log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
-      } else if (managed) log(`${item.symbol}: ${rec.setup} position not trailed: no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
+      } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
     // Every bar that opened after the fill (a market fill seconds into a bar
@@ -270,8 +275,9 @@ function createRunner(deps) {
       return;
     }
     // The strategy's time stop (exit.max_bars), as the backtester applies it.
-    if (t.plan.maxBars && barsHeld >= t.plan.maxBars) {
-      await closeOut(`time stop: ${barsHeld} bars in the trade (max_bars ${t.plan.maxBars})`);
+    const maxBars = t.maxRunnerBars || t.plan.maxBars;
+    if (maxBars && barsHeld >= maxBars) {
+      await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
     // Past the ratchet, a strategy's policy may bank the trade (as in training).
@@ -364,6 +370,15 @@ function createRunner(deps) {
     return [net || mine.reduce((n, p) => n + Number(p.size || 0), 0), orders.filter(o => famOf(o.contractId) === fam).length];
   }
 
+  /** Record a scanned bar in the decision log; a failure to log never stops the pass. */
+  function logScan(item, results, decision) {
+    try {
+      scanLog({ at: clock.now(), symbol: item.symbol, contractId: item.contractId, bar: item.bar, results, decision });
+    } catch (err) {
+      log(`${item.symbol}: decision log failed (${err.message})`, 'error');
+    }
+  }
+
   async function wanted(item, manageOnly) {
     if (cfg.trigger === 'bar' && !manageOnly) {
       // Every bar runs a cycle; a policy still records its verdicts for the gate.
@@ -373,6 +388,7 @@ function createRunner(deps) {
           if (net === 0 && working === 0) {
             const screened = prop.screen(scanFor(item.symbol, item.bars), { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
             item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
+            logScan(item, screened, { run: true, reason: 'bar closed' });
           }
         } catch (err) {
           log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
@@ -392,7 +408,9 @@ function createRunner(deps) {
         ? prop.screen(results, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() })
         : results;
       item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
-      return signalDecision(screened, net, working, { paper: cfg.paper });
+      const decision = signalDecision(screened, net, working, { paper: cfg.paper });
+      logScan(item, screened, decision);
+      return decision;
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       return { run: true, reason: `account check failed (${err.message})` };
@@ -610,8 +628,8 @@ function createRunner(deps) {
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
-          if (w.run) run.push(item);
-          else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
+          if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
+          else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }
         let cycleNow = clock.now();
         let timeoutMs = limitFor(again.action, cycleNow);

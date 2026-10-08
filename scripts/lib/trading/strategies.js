@@ -137,6 +137,8 @@ function validateStrategy(data, body, folderName) {
     }
     req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");
     req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (past the ratchet the policy may bank the trade)');
+    // Its setups come from other strategies' scans, which carry no target distance of its own.
+    req(!(data.exit && data.exit.target !== undefined), 'exit.target: not for a policy strategy (its trades exit by its trail; the strategies it lists keep their own targets only when traded on their own)');
     req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
   } else {
     for (const k of POLICY_STRATEGY_KEYS) {
@@ -148,7 +150,7 @@ function validateStrategy(data, body, folderName) {
   if (!Array.isArray(connectors) || !connectors.every(c => Object.keys(CONNECTORS).includes(c))) {
     errors.push(`connectors: a list of ${Object.keys(CONNECTORS).join(', ')}`);
   } else {
-    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || ''] );
+    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || '', (data.exit && data.exit.target) || '']);
     for (const [name, uses] of Object.entries(CONNECTORS)) {
       if (uses.test(text) && !connectors.includes(name)) errors.push(`connectors: the rules use ${name} data; declare connectors: [${name}]`);
     }

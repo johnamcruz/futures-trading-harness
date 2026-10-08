@@ -94,7 +94,8 @@ Long, a raid of the previous hour's low (short is the mirror image):
 5. **Reclaim and shift.** The 3-minute bar closes back above C1's low and
    above the high of the 5 bars before it (`crtShiftBars`). This is the
    lower-timeframe market structure shift: sellers who pushed through the
-   low can't hold it.
+   low can't hold it. It can be the raid bar itself: one 3-minute bar that
+   wicks through the low and closes above the 5 bars before (a wick soup).
 6. **Room.** C1's high is at least 2R away (`crtMinRR`), with R measured to
    the sweep low plus the buffer.
 7. **Once per hour.** After the setup fires, that hour is done. A second
@@ -109,8 +110,7 @@ Long, a raid of the previous hour's low (short is the mirror image):
   not an R multiple). By rule 6 it is always at least 2R.
 - **Time stop:** close at market after 40 bars (2 hours) if neither the stop
   nor the target has filled (`max_bars`). CRT distribution should come in
-  C2 or C3. The backtester applies it; live, the trade-session agent closes
-  the trade at the time stop.
+  C2 or C3. The backtester and the live runner both apply it.
 - **Management:** no trailing. Optionally take a third off at C1's midpoint
   (the equilibrium) and move the stop to breakeven. That's a judgment call,
   not part of the backtested rule.
@@ -128,6 +128,25 @@ Long, a raid of the previous hour's low (short is the mirror image):
 - The account is at a daily limit or in a loss-streak cooldown (the order
   gate refuses these anyway).
 
+### Debugging a setup
+
+- **Scan:** `node scripts/strategies.js scan <bars.json> --symbol MNQ --now <bar close>`
+  shows `detail["crt(60)"]`: the previous candle's range (`c1High`,
+  `c1Low`), the raid's `side`, `extreme`, `depth` and age
+  (`barsSinceExtreme`), the `shiftLevel`, `risk`, `target`, `rr`, and the
+  `reason`: `fired`, or what blocked it (`no_previous_candle`, `no_sweep`,
+  `both_sides_swept`, `range_too_small`, `too_deep`, `stale`,
+  `not_reclaimed`, `no_shift`, `no_room`, `fired_this_candle`).
+- **Live:** every scanned bar is in `<FTH_HOME>/logs/scans-<day>.jsonl` with
+  the same detail, and the runner's decision.
+- **Backtest:** `--debug crt_1h` writes the verdict on every bar to
+  `decisions-crt_1h.jsonl`, and `trades.jsonl` has each trade's setup.
+
+### Traded through a policy strategy
+
+Listed in `prop_portfolio_3m`, a CRT setup exits by the policy strategy's own
+trail (2R / 0.5R), not by the CRT target and time stop above, as in training.
+
 ## Examples
 
 ```text
@@ -143,7 +162,7 @@ Stop: 21486.50 - 16.25 = 21470.25
 Target: C1's high 21540.00, 53.50 points = 214 ticks away (3.3R; >= 2R, so it fires)
 Risk per MNQ: 65 ticks x $0.50 = $32.50; reward 214 x $0.50 = $107.00
 (plus $0.74 fees per round turn)
-Time stop: 13:18 ET (40 bars) if neither fills.
+Time stop: at the close of the 13:18 bar (13:21 ET, 40 bars) if neither fills.
 
 place_order rationale: "setup:crt_1h long, C1 21480.00-21540.00 swept to
 21472.25, 3m shift close 21486.50, stop 21470.25, target 21540.00, risk $32.50"

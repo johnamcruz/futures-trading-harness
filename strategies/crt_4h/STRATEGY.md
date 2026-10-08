@@ -103,8 +103,8 @@ Long, a raid of the previous 4-hour candle's low (short is the mirror image):
 - **Target:** C1's high, the far side of the range (`crt_target`), at least
   2R by rule 6.
 - **Time stop:** close at market after 80 bars (4 hours, one candle) if
-  neither has filled (`max_bars`). The backtester applies it; live, the
-  trade-session agent closes the trade. End of day (15:50 ET) closes
+  neither has filled (`max_bars`). The backtester and the live runner both
+  apply it. End of day (15:50 ET) closes
   anything still open in any case.
 - **Management:** no trailing. Optionally take a third off at C1's
   equilibrium (the midpoint) and move the stop to breakeven. That's a
@@ -119,6 +119,25 @@ Long, a raid of the previous 4-hour candle's low (short is the mirror image):
 - The stop at size 1 is over the position-sizing budget. 4-hour raids can be
   deep.
 - The account is at a daily limit or in a loss-streak cooldown.
+
+### Debugging a setup
+
+- **Scan:** `node scripts/strategies.js scan <bars.json> --symbol MNQ --now <bar close>`
+  shows `detail["crt(240)"]`: the previous candle's range (`c1High`,
+  `c1Low`), the raid's `side`, `extreme`, `depth` and age
+  (`barsSinceExtreme`), the `shiftLevel`, `risk`, `target`, `rr`, and the
+  `reason`: `fired`, or what blocked it (`no_previous_candle`, `no_sweep`,
+  `both_sides_swept`, `range_too_small`, `too_deep`, `stale`,
+  `not_reclaimed`, `no_shift`, `no_room`, `fired_this_candle`).
+- **Live:** every scanned bar is in `<FTH_HOME>/logs/scans-<day>.jsonl` with
+  the same detail, and the runner's decision.
+- **Backtest:** `--debug crt_4h` writes the verdict on every bar to
+  `decisions-crt_4h.jsonl`, and `trades.jsonl` has each trade's setup.
+
+### Traded through a policy strategy
+
+Listed in `prop_portfolio_3m`, a CRT setup exits by the policy strategy's own
+trail (2R / 0.5R), not by the CRT target and time stop above, as in training.
 
 ## Examples
 
@@ -136,7 +155,7 @@ Stop: 21612.25 + 21.75 = 21634.00
 Target: C1's low 21500.00, 112.25 points = 449 ticks away (5.2R; >= 2R, so it fires)
 Risk per MNQ: 87 ticks x $0.50 = $43.50; reward 449 x $0.50 = $224.50
 (plus $0.74 fees per round turn)
-Time stop: 14:39 ET (80 bars) if neither fills.
+Time stop: at the close of the 14:39 bar (14:42 ET, 80 bars) if neither fills.
 
 place_order rationale: "setup:crt_4h short, C1 21500.00-21620.00 raided to
 21631.50, 3m shift close 21612.25, stop 21634.00, target 21500.00, risk $43.50"

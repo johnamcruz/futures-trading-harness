@@ -355,6 +355,12 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     if (!cache.has(key)) cache.set(key, make(key));
     return cache.get(key);
   };
+  /** What each detector this source has run says about bar i ({ 'crt(60)': {...} }), for logs and scan output. */
+  get.explain = i => {
+    const out = {};
+    for (const [m, c] of crts) { const x = c.explain(i); if (x) out[`crt(${m})`] = x; }
+    return out;
+  };
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
   get.resets = (key, i) => {
     if (i < 1) return false;

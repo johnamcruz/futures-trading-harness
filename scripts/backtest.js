@@ -74,11 +74,12 @@ function configFrom(argv) {
   if (arg(argv, '--prop')) cfg.prop = arg(argv, '--prop');
   if (arg(argv, '--bundle')) cfg.bundle = arg(argv, '--bundle');
   if (num('--every') !== undefined) cfg.every = num('--every');
+  if (arg(argv, '--debug')) cfg.debug = arg(argv, '--debug');
   return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };
 }
 
 // Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
-const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--out', '--prop', '--bundle', '--every'];
+const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--out', '--prop', '--bundle', '--every', '--debug'];
 const BOOL_FLAGS = ['--no-gate'];
 
 function unknownFlags(argv) {

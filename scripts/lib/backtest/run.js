@@ -22,13 +22,20 @@
  *                take and when to close; needs an account. The rules-only
  *                baseline is always reported next to it.
  *   sizing       combine sizing (combine.js DEFAULT_SIZING keys)
+ *   debug        a strategy name: write its verdict on every bar (fired or
+ *                not, the rules that failed, its detectors' state) to
+ *                decisions-<name>.jsonl in the run folder
+ *
+ * Every run writes trades.jsonl next to trades.csv: each trade with the setup
+ * behind it (stop and target distances, detector state on the signal bar).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { loadStrategies } = require('../trading/strategies');
 const { loadBars, barMinutes, aggregate } = require('./data');
-const { runEngine, DEFAULTS } = require('./engine');
+const { runEngine, prepare, DEFAULTS } = require('./engine');
+const { summarizeResult } = require('../trading/scan-log');
 const { buildReport, toMarkdown, toCsv } = require('./report');
 const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
@@ -55,6 +62,28 @@ function parseTimeArg(value, name) {
   return ms;
 }
 
+/**
+ * The debug log: strategy `s`'s verdict on every bar from `start` to `end`,
+ * one JSON line each (what fired, what failed and why). Returns the line count.
+ */
+function writeDecisions(file, markets, s, cfg) {
+  const lines = [];
+  for (const m of markets) {
+    const { books } = prepare([m], [s], cfg);
+    const b = books[0];
+    for (let i = 0; i < b.bars.length; i += 1) {
+      const ms = b.bars[i].ms;
+      if ((cfg.start !== null && ms < cfg.start) || (cfg.end !== null && ms >= cfg.end)) continue;
+      const r = b.ev.at(s, i, { describe: true });
+      // The engine trades from bar window-1 on: before it, a setup is history only.
+      const warm = i < cfg.window - 1 ? { warmup: `bar ${i}: the backtest trades from bar ${cfg.window - 1} (window)` } : {};
+      lines.push(JSON.stringify({ symbol: m.symbol, t: b.bars[i].t, close: b.bars[i].c, ...summarizeResult(r), ...warm }));
+    }
+  }
+  fs.writeFileSync(file, lines.join('\n') + (lines.length ? '\n' : ''));
+  return lines.length;
+}
+
 /** Validate a backtest config. Returns the normalized settings. */
 function validateBacktestConfig(raw, baseDir) {
   for (const k of ['account', 'policy', 'sizing']) {
@@ -62,7 +91,7 @@ function validateBacktestConfig(raw, baseDir) {
       throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy now; name it with "prop": "<policy strategy>" (signal: policy)`);
     }
   }
-  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, ...(raw || {}) };
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, debug: null, ...(raw || {}) };
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
@@ -87,6 +116,7 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio_3m"');
   if (cfg.bundle !== null && !(typeof cfg.bundle === 'string' && cfg.prop !== null)) errors.push('bundle: a policy bundle (models/<name>.json) to try in place of the policy strategy\'s own; needs prop');
   if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
+  if (cfg.debug !== null && !(typeof cfg.debug === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.debug))) errors.push('debug: a strategy name, to log its verdict on every bar');
   let start = null;
   let end = null;
   try { start = parseTimeArg(cfg.start, 'start'); } catch (err) { errors.push(err.message); }
@@ -180,6 +210,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
       log(`warning: no selected strategy lists ${m.symbol} in its instruments, so it can't trade (micros: MNQ, MES, MYM, M2K; use the micro symbol with full-size data)`);
     }
   }
+  if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
   if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log });
   const { trades, skipped } = runEngine(markets, strategies, { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
@@ -200,6 +231,12 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   writeJsonAtomic(path.join(runDir, 'report.json'), report);
   fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report));
   fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
+  fs.writeFileSync(path.join(runDir, 'trades.jsonl'), report.trades.map(t => JSON.stringify(t)).join('\n') + (report.trades.length ? '\n' : ''));
+  if (cfg.debug) {
+    const file = path.join(runDir, `decisions-${cfg.debug}.jsonl`);
+    const n = writeDecisions(file, markets, strategies.find(s => s.name === cfg.debug), cfg);
+    log(`debug: ${cfg.debug}'s verdict on ${n} bars in ${file}`);
+  }
   return { report, runDir };
 }
 

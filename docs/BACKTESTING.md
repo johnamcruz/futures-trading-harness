@@ -82,7 +82,7 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
 | Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). |
+| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
 
 **The market session** always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday) and before `eodAt`, and every
@@ -117,12 +117,20 @@ exit:
   trail_activate_r: 2     # hold the initial stop until the trade is up 2R
   trail_giveback_r: 0.5   # then trail 0.5R behind the best price
   # target_r: 3           # optional fixed target (above trail_activate_r)
-  # max_bars: 40          # optional time stop
+  # target: crt_target(60)  # or a target level: a distance from the signal close
+  # max_bars: 40          # optional time stop, in the strategy's own bars
 ```
 
 The ported strategies use the 2R / 0.5R trail. Without an `exit` block, the
 target is `risk.min_rr` (a bracket). The live runner trails stops with the
-same rule (see the autonomous-trading skill).
+same rule and closes a trade at its `max_bars` time stop, scaled from the
+strategy's bars to the runner's (see the autonomous-trading skill). A
+`target` with a trail is allowed, but the trail can close the trade before the
+target fills.
+
+A policy strategy's trades exit by the policy strategy's own `exit` (its
+trail, and `max_bars` if set), whichever rules strategy found the setup: a
+`crt_1h` setup traded through `prop_portfolio_3m` has no CRT target.
 
 ### Settings
 
@@ -151,6 +159,22 @@ Each run writes these files to the run directory:
   - **Dollar figures** after fees: net P&L, profit factor, and max drawdown.
   - **Breakdowns** by strategy, exit reason, symbol, and month.
 - **`trades.csv`:** every trade.
+- **`trades.jsonl`:** every trade with its target level and the setup behind
+  it: the stop and target distances and its detectors' state on the signal
+  bar (for a CRT trade: the previous candle's range, the sweep extreme,
+  depth, shift level, risk, and R:R).
+- **`decisions-<strategy>.jsonl`** (with `--debug <strategy>`): that
+  strategy's verdict on every bar: whether it fired, the rules that failed
+  (or had no value yet), the filters that failed, whether it was in session,
+  and its detectors' state and reason (for CRT: `no_sweep`, `too_deep`,
+  `stale`, `not_reclaimed`, `no_shift`, `no_room`, `fired`, ...). Bars
+  before the backtest's window are marked `warmup`. Use it to see why a setup
+  you expected didn't trade:
+
+  ```bash
+  node scripts/backtest.js --data NQ_3min.csv --symbol MNQ --strategy crt_1h --debug crt_1h
+  grep '"reason":"fired"' ~/.futures-trading-harness/backtests/<run>/decisions-crt_1h.jsonl
+  ```
 
 ### Prop challenges
 

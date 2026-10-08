@@ -297,7 +297,13 @@ the official candle.
 
 The runner needs `PROJECTX_USERNAME` and `PROJECTX_API_KEY` in its
 environment (read-only use: contracts, bars, positions). It logs everything to
-`~/.futures-trading-harness/logs/` and never runs two cycles at once. Each run
+`~/.futures-trading-harness/logs/` and never runs two cycles at once:
+`autotrader-<day>.log` holds every runner line (timestamped, `INFO` or
+`ERROR`: each bar's close and whether a cycle ran and why, stops trailed,
+time stops, verdicts, account reads) and each cycle's output, and
+`scans-<day>.jsonl` holds one record per scanned bar with every strategy's
+verdict and why (the rules that failed, session, its detectors' state, such
+as a CRT sweep's range and reason). Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the

@@ -34,6 +34,7 @@ const { createClient } = require('./lib/projectx-rest');
 const { createPropHooks } = require('./lib/rl/live-runner');
 const { createRecorder } = require('./lib/orderflow-recorder');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
+const { scanRecord, appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
@@ -260,7 +261,13 @@ async function main(argv) {
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('exit', releaseLock);
 
-  const log = (msg, level) => (level === 'error' ? process.stderr : process.stdout).write(`[autotrader] ${new Date().toISOString()} ${msg}\n`);
+  // Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
+  const log = (msg, level) => {
+    const now = new Date();
+    const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
+    (level === 'error' ? process.stderr : process.stdout).write(line);
+    appendLog(now, line);
+  };
   const client = createClient();
   const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
   const flow = wantFlow && !opts.dryRun ? createRecorder({ home: HOME_DIR, getToken: client.getToken, log }) : null;
@@ -292,6 +299,8 @@ async function main(argv) {
       return scan(sameTf, { bars }, { symbol, now: new Date() });
     },
     log,
+    // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
+    scanLog: rec => appendJsonl(path.join(HOME_DIR, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
     entryOrders: () => entryOrders(HOME_DIR),
     strategyNamed: name => loadStrategies(ROOT, process.env).strategies.find(s => s.name === name && s.valid) || null,
   });
