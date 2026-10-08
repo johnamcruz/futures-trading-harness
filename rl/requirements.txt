@@ -1,0 +1,7 @@
+# Training only. The harness itself (live trading, backtests, inference) needs
+# nothing but Node. CPU builds are enough: the policy is a small MLP.
+numpy>=1.26
+gymnasium>=1.0
+torch>=2.2
+stable-baselines3>=2.3
+sb3-contrib>=2.3

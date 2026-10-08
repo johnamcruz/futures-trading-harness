@@ -55,6 +55,28 @@ docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
 initial stop (0.5 × ATR(20)) until +2R, then trail 0.5R behind the best
 price (`exit:` block).
 
+## Prop challenges and policies
+
+The prop challenge is a strategy too: a **policy strategy** (`signal: policy`)
+trades the setups of the rules strategies it lists on a prop account, and a
+trained policy decides which to take, at what size (in micros or minis), and
+when to bank a trade.
+
+- `prop_portfolio_3m`: every 3-minute strategy (ema_cross, supertrend,
+  keltner, bos, cisd_ote, orb, vwap_reclaim) on `topstep_100k`.
+- `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
+  A policy trades one timeframe.
+
+While an active policy strategy has an attempt running, its rules strategies
+trade only through it; otherwise they trade as before. Each rules strategy's
+own rules, sessions, filters, and regimes still decide its setups, the same
+in training and live. Its `status` doesn't (a `paper` one can trade through
+an active policy strategy; a `disabled` one can't be listed): the policy
+strategy's status is what goes from paper to active. Train and
+ship its policy with the `policy-training` skill; a bundle decides only for
+the policy strategy, account, index, timeframe, sizing, and contract mode it
+was trained with. See docs/RL-DESIGN.md.
+
 ## Commands
 
 ```bash

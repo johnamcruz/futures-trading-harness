@@ -15,7 +15,12 @@
  *   (profitAndLoss), not from journal tags.
  */
 
-const { contractRoot } = require('./journal');
+const { contractRoot: rootOf } = require('./journal');
+const { familyRoot } = require('./contracts');
+
+// Micros and minis of one index count as one root here (MNQ and NQ): an MNQ
+// entry waits while an NQ position is open, and the other way around.
+const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
@@ -134,7 +139,7 @@ function restingSize(orders, contractId, sideSign, types) {
  * Returns violations [{check, message}] for a place_order given live facts
  * { positions, orders, trades } from projectx-mcp.
  */
-function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger = [] }) {
+function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger = [], propAttempt = null }) {
   // Missing or malformed account data must block, never read as "flat".
   for (const [name, v] of Object.entries({ positions, orders, trades })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
@@ -182,6 +187,20 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       if (violations.length > before) break;
     }
     return violations;
+  }
+
+  // A prop attempt trades one position at a time across the whole account, as
+  // it was sized and trained: each entry's size assumes no other open risk.
+  // Hard: not skippable.
+  if (propAttempt) {
+    const anyOpen = positions.filter(p => Number(p.size || 0) > 0);
+    const inFlight = (ledger || []).filter(e => now.getTime() - e.at < 30000);
+    if (anyOpen.length || inFlight.length) {
+      violations.push({
+        check: 'prop-one-position',
+        message: `A ${propAttempt} attempt trades one position at a time: ${anyOpen.length ? `${anyOpen.map(p => p.contractId).join(', ')} is open` : 'an order sent moments ago has not shown up yet'}. New entries wait until the account is flat.`,
+      });
+    }
   }
 
   // Entries: flat means no position in any month of the root, and nothing

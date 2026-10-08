@@ -15,6 +15,7 @@ const { tradingDayStart, parseWindows, inWindow, inMarketHours, tradingDayKey, E
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
+const { propViolations, runningAttempts } = require('./prop-state');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -122,9 +123,11 @@ function lossState(dayEntries) {
 /**
  * `strategies` is the registry from strategies.js (loadStrategies). When it is
  * null the strategy check is skipped (tests of other checks); the hook and the
- * MCP gateway always pass it.
+ * MCP gateway always pass it. `accounts` (accounts.js loadAccounts) are the
+ * account profiles: a strategy that trades an account gets the hard `combine`
+ * and `policy` checks (prop-state.js), which no setting can skip.
  */
-function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, journalTruncated = false }) {
+function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, accounts = [], journalTruncated = false }) {
   if (isRiskReducing(input.rationale)) return { intent: 'risk-reducing', violations: [] };
 
   const rationale = String(input.rationale || '');
@@ -150,6 +153,19 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
   if (setup && strategies) {
     add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now, input.side));
+  }
+  // Hard rules, outside the skippable checks: the prop challenge's account and policy.
+  const named = setup && strategies ? strategies.find(x => x.name === setup[1].toLowerCase()) : null;
+  if (named && named.account) {
+    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries }));
+  } else {
+    // While an attempt runs, every entry (tagged or not) must come from a
+    // policy strategy that trades it, so none skips the floor, the daily
+    // limits, or the size budget.
+    const running = runningAttempts(config.home);
+    if (running.length) {
+      violations.push({ check: 'combine', message: `A ${running.join(', ')} attempt is running: only a policy strategy that trades it (account: ${running[0]}) may enter. End it with node scripts/combine.js stop --account ${running[0]}.` });
+    }
   }
 
   const bracket = input.stopLossBracket && Number(input.stopLossBracket.ticks) > 0;

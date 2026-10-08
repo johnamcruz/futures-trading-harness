@@ -20,8 +20,14 @@ Load the skills `position-sizing`, `prop-challenge-pacing`,
    realized P&L, `remainingBeforeLimit`.
 4. `journal_read` today's `review` entries: results, loss streak, losses today.
    Recent `lesson` entries that restrict setups.
-5. Ask for (or read from the latest plan) the firm's cushion to the trailing
-   loss floor if you can't derive it.
+5. If a policy strategy (`signal: policy`) is in play, run
+   `node <root>/scripts/combine.js status` (`<root>`: the harness root, FTH_ROOT): the attempt (floor, cushion, size budget,
+   sessions left, any entry block) and the live verdicts. The gate enforces
+   these numbers; plan within them. Otherwise ask for (or read from the latest
+   plan) the firm's cushion to the trailing loss floor if you can't derive it.
+6. Approve a policy strategy's entry only as its verdict says: that contract
+   (micro or mini) and side, at most its size, with its stop ticks. Never one
+   it skipped.
 
 Output:
 

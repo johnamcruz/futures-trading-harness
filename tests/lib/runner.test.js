@@ -334,17 +334,17 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined }) {
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
-  let flat = false;
+  let flat = startFlat;
   let killed = false;
   const cycles = [];
   const runner = createRunner({
-    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}) }), root: '/r',
     client: {
       async activeContract() { return { id: 'CON.F.US.MNQ.Z26', tickSize: 0.25, tickValue: 0.5 }; },
       async closedBars() {
@@ -370,12 +370,12 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'CON.F.US.MNQ.Z26') flat = true; },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
-      async workingOrders() { return 1; },
+      async workingOrders() { return flat ? 0 : 1; },
     },
-    clock: { now: () => new Date(clockRef.t) },
+    clock: { now: () => new Date(clockRef.t) }, prop,
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
-    writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => [], flow,
+    writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
@@ -481,4 +481,59 @@ test('after the session, with trades today, the runner keeps housekeeping until 
   assert.strictEqual(decide(cfg, s, new Date(et(15, 20))).action, 'housekeep');
   assert.strictEqual(decide(cfg, { ...s, cycles: 0 }, new Date(et(15, 20))).action, null);
   assert.strictEqual(decide(cfg, s, new Date(et(15, 55))).action, 'eod');
+});
+
+/** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
+function fakeProp({ position = () => 'hold', screen = r => r } = {}) {
+  const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [] };
+  return {
+    calls,
+    async snapshot(now) { calls.snapshots.push(now.getTime()); },
+    async endOfDay(now, day) { calls.eod.push(now.getTime()); calls.eodDays.push(day); },
+    screen(results, info) { calls.screens.push({ results, info }); return screen(results); },
+    position(args) { calls.positions.push(args); return position(args); },
+  };
+}
+
+test('prop challenge: the balance is snapshotted every bar and recorded once at end of day, after the flatten', async () => {
+  const prop = fakeProp();
+  const r = await trailSim({ tape: {}, startAt: et(15, 30) + 2000, until: et(15, 52), prop });
+  assert.ok(prop.calls.snapshots.length >= 5, `${prop.calls.snapshots.length} snapshots`);
+  assert.strictEqual(prop.calls.eod.length, 1);
+  const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+  assert.deepStrictEqual(prop.calls.eodDays, [tradingDayKey(new Date(et(15, 30)))], 'the trading day being closed');
+  assert.ok(r.closed.length && r.closed[0] <= prop.calls.eod[0], 'flat before the closing balance is read');
+});
+
+test('prop challenge: past the ratchet the policy is asked every bar and may close the trade', async () => {
+  // Bar 10:03 peaks at 21525 (2.5R): past the 2R ratchet. The policy closes at once.
+  const prop = fakeProp({ position: () => 'close' });
+  const r = await trailSim({ tape: { 3: [21525, 21521, 21522] }, prop });
+  assert.ok(prop.calls.positions.length >= 1);
+  const asked = prop.calls.positions[0];
+  assert.ok(asked.pos.peakR >= 2, 'never asked before the ratchet');
+  assert.deepStrictEqual({ sign: asked.pos.sign, entry: asked.pos.entry, risk: asked.pos.risk, size: asked.pos.size }, { sign: 1, entry: 21500, risk: 10, size: 1 });
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.ok(r.cancelled.includes(9) && r.cancelled.includes(10));
+  // Hold: the trail manages it alone.
+  const holder = fakeProp({ position: () => 'hold' });
+  const h = await trailSim({ tape: { 3: [21525, 21521, 21522] }, prop: holder });
+  assert.ok(holder.calls.positions.length >= 1);
+  assert.deepStrictEqual(h.closedIds, []);
+});
+
+test('prop challenge: when flat, the policy screens setups; a skipped setup starts no cycle', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const skip = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
+  const a = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: skip, until: et(10, 10), trigger: 'signal' });
+  assert.ok(skip.calls.screens.length >= 1);
+  assert.strictEqual(skip.calls.screens[0].info.contractId, 'CON.F.US.MNQ.Z26');
+  assert.deepStrictEqual(a.cycles.filter(c => c === 'trade'), []);
+  const take = fakeProp();
+  const b = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: take, until: et(10, 10), trigger: 'signal' });
+  // trigger: bar runs every bar, and the policy still records its verdicts.
+  const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
+  const c = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: each, until: et(10, 10) });
+  assert.ok(each.calls.screens.length >= 1 && c.cycles.includes('trade'));
+  assert.ok(b.cycles.filter(c => c === 'trade').length >= 1);
 });

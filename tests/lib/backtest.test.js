@@ -266,3 +266,29 @@ test('backtests follow the exchange calendar: no trading on holidays, early clos
   const early = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, earlyCloseDates: ['2025-03-10'] }).trades;
   assert.deepStrictEqual(early, [], 'early close: no entry after 13:00 ET');
 });
+
+test('prop challenge mode: a policy strategy\'s attempts from each start, rules only and with a policy, reported by month', () => {
+  const dir = tmpDir();
+  const accounts = path.join(dir, 'accounts');
+  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
+  const src = fs.readFileSync(path.join(ROOT, 'accounts', 'topstep_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: topstep_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 ');
+  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), src);
+  const strategiesDir = path.join(dir, 'strategies');
+  fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio_3m', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio_3m', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace('account: topstep_100k', 'account: tiny'));
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_bos' };
+  const { report, runDir } = runBacktest(base, { root: ROOT, outRoot: dir, env });
+  assert.strictEqual(report.prop, 'prop_bos');
+  assert.deepStrictEqual(report.strategies, ['bos']);
+  assert.strictEqual(report.contracts, 'auto');
+  assert.ok(report.baseline.attempts > 0);
+  assert.strictEqual(report.baseline.passed + report.baseline.blown + report.baseline.timeout + report.baseline.unfinished, report.baseline.attempts);
+  assert.ok(fs.existsSync(path.join(runDir, 'combine.md')));
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, account: 'tiny' }, ROOT), /comes from a policy strategy/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: .*needs prop/);
+  assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /training needs a policy strategy|signal: rules/);
+  assert.throws(() => runBacktest({ ...base, bundle: 'missing' }, { root: ROOT, outRoot: dir, env }), /not found/);
+});

@@ -31,6 +31,7 @@ const path = require('path');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, usesOrderFlow } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
+const { createPropHooks } = require('./lib/rl/live-runner');
 const { createRecorder } = require('./lib/orderflow-recorder');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
@@ -264,8 +265,12 @@ async function main(argv) {
   const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
   const flow = wantFlow && !opts.dryRun ? createRecorder({ home: HOME_DIR, getToken: client.getToken, log }) : null;
   if (wantFlow && !flow) log('order flow: off in a dry run');
+  const strategiesNow = () => loadStrategies(ROOT, process.env).strategies;
+  const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: strategiesNow, paper: cfg.paper, log });
+  if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policies screen setups)`);
   const runner = createRunner({
     cfg,
+    prop: prop.accounts().length ? prop : null,
     root: ROOT,
     client,
     flow,

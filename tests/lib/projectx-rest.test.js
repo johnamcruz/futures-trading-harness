@@ -70,3 +70,33 @@ test('a request the API never answers fails after the timeout instead of hanging
   clearInterval(keepAlive);
   assert.ok(Date.now() - t < 20000);
 });
+
+test('accountBalance reads the balance of the configured account', async () => {
+  const client = createClient({
+    env,
+    fetchFn: fakeFetch({
+      '/api/Auth/loginKey': { success: true, token: 'tok' },
+      '/api/Account/search': { success: true, accounts: [{ id: 3, balance: 1 }, { id: 7, balance: 101234.5, canTrade: true }] },
+    }),
+  });
+  assert.strictEqual(await client.accountBalance('7'), 101234.5);
+  await assert.rejects(() => client.accountBalance(9), /account 9 not found/);
+});
+
+test('activeContract matches the id symbol exactly (NQ trades as ENQ; a search for YM also finds MYM), else the ticker', async () => {
+  const client = createClient({
+    env,
+    fetchFn: fakeFetch({
+      '/api/Auth/loginKey': { success: true, token: 'tok' },
+      '/api/Contract/search': { success: true, contracts: [
+        { id: 'CON.F.US.MNQ.Z26', name: 'MNQZ6', activeContract: true, tickSize: 0.25, tickValue: 0.5 },
+        { id: 'CON.F.US.ENQ.Z26', name: 'NQZ6', activeContract: true, tickSize: 0.25, tickValue: 5 },
+        { id: 'CON.F.US.CLE.Z26', name: 'CLZ6', activeContract: true, tickSize: 0.01, tickValue: 10 },
+      ] },
+    }),
+  });
+  assert.strictEqual((await client.activeContract('NQ')).id, 'CON.F.US.ENQ.Z26');
+  assert.strictEqual((await client.activeContract('MNQ')).id, 'CON.F.US.MNQ.Z26');
+  assert.strictEqual((await client.activeContract('CL')).id, 'CON.F.US.CLE.Z26');
+  await assert.rejects(() => client.activeContract('ES'), /no active contract/);
+});

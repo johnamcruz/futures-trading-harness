@@ -10,6 +10,7 @@
  * optionally PROJECTX_API_URL. Never logs credentials or tokens.
  */
 
+const { idSymbol } = require('./trading/contracts');
 const DEFAULT_API_URL = 'https://api.topstepx.com';
 const TOKEN_TTL_MS = 20 * 60 * 60 * 1000;
 const BAR_UNIT_MINUTE = 2;
@@ -82,7 +83,10 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
     async activeContract(symbol) {
       const res = await post('/api/Contract/search', { searchText: symbol, live: false });
       const contracts = (res.contracts || []).filter(c => c.activeContract);
-      const exact = contracts.find(c => String(c.id || '').split('.').slice(-2, -1)[0] === symbol) || contracts[0];
+      // Match the id's symbol exactly (NQ trades as ENQ; a search for YM also finds MYM).
+      // Else the one whose ticker is the root plus a month code and year digit (CLZ5 for CL, whatever its id says).
+      const exact = contracts.find(c => String(c.id || '').split('.').slice(-2, -1)[0] === idSymbol(symbol))
+        || contracts.find(c => new RegExp(`^${symbol}[FGHJKMNQUVXZ]\\d{1,2}$`).test(String(c.name || '')));
       if (!exact) throw new ProjectXRestError(`no active contract found for ${symbol}`);
       return { id: exact.id, name: exact.name, tickSize: Number(exact.tickSize), tickValue: Number(exact.tickValue) };
     },
@@ -135,6 +139,16 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
       ]);
       if (!Array.isArray(p.positions) || !Array.isArray(o.orders)) throw new ProjectXRestError('account state is not a list');
       return { positions: p.positions, orders: o.orders };
+    },
+
+    /** The account's balance (realized, as the firm's max-loss floor is checked at end of day). */
+    async accountBalance(accountId) {
+      const res = await post('/api/Account/search', { onlyActiveAccounts: false });
+      const a = (res.accounts || []).find(x => Number(x.id) === Number(accountId));
+      if (!a) throw new ProjectXRestError(`account ${accountId} not found`);
+      const balance = Number(a.balance);
+      if (!Number.isFinite(balance)) throw new ProjectXRestError(`account ${accountId} has no balance`);
+      return balance;
     },
 
     /** Cancel a working order. */

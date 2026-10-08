@@ -82,6 +82,8 @@ function loadConfig(env = process.env) {
       // Its own directory, so a sandboxed harness (Codex) can be given write
       // access to blackouts without access to the kill switch or the gate log.
       || path.join(harnessHome(env), 'blackouts', 'blackouts.json'),
+    // Prop-challenge state (combine/<account>.json, policy-verdicts.jsonl).
+    home: harnessHome(env),
     killSwitchFile: String(env.FTH_KILL_SWITCH_FILE || '').trim()
       || path.join(harnessHome(env), 'STOP'),
     // Set by the autonomous runner for the harness it launches. In autonomous
