@@ -12,21 +12,26 @@ const { loadConfig } = require('../lib/trading/config');
 const { tradingDayStart } = require('../lib/trading/clock');
 const { resolveJournalPath, readJournal, entriesSince } = require('../lib/trading/journal');
 const { lossState, liveReviews } = require('../lib/trading/order-gate');
-const { runningAttempts, readAttempt } = require('../lib/trading/prop-state');
+const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
+const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
 
-/** Each running prop attempt as of its last snapshot (local state; the runner refreshes it each bar). */
+/**
+ * Each running prop attempt as of its last snapshot (local state; the runner
+ * refreshes it each bar), with the block the order gate applies now.
+ */
 function attemptLines(home, now) {
   return runningAttempts(home).map(name => {
     const r = readAttempt(home, name);
     const s = r && r.snapshot;
-    if (!s || !s.summary) return `- ${name}: attempt started ${r ? r.startedAt : '?'}, no balance snapshot yet (node <root>/scripts/combine.js status)`;
+    const block = combineBlock(home, name, now);
+    const blocked = block ? `; entries blocked: ${block}` : '';
+    if (!s || !s.summary) return `- ${name}: attempt started ${r ? r.startedAt : '?'}, no balance snapshot yet (node <root>/scripts/combine.js status)${blocked}`;
     const m = s.summary;
     const age = Math.max(0, Math.round((now.getTime() - Date.parse(s.at)) / 60000));
     return `- ${name} (${m.status}) as of ${s.at} (${age} min ago): balance ${usd(m.balance)}, floor ${usd(m.floor)}, cushion ${usd(m.cushion)}, `
-      + `profit ${usd(m.profit)} of ${usd(m.target)}, day ${usd(m.dayPnl)}, ${m.sessionsLeft} sessions left`
-      + `${r.missedClose ? `; the close of ${r.missedClose} was never recorded` : ''}${s.block ? `; entries blocked: ${s.block}` : ''}`;
+      + `profit ${signed(m.profit)} of ${usd(m.target)}, day ${signed(m.dayPnl)}, ${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left${blocked}`;
   });
 }
 

@@ -233,7 +233,7 @@ function validateConfig(raw) {
 }
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
-const signed = x => `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`;
+const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
 
 /**
  * The account as the runner read it just before the run (accountState in
@@ -244,13 +244,17 @@ const signed = x => `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`;
 function accountText(state) {
   if (!state) return '';
   if (state.error) return ` Account ${state.id}: state unavailable (${state.error}); read get_account_snapshot before deciding anything.`;
+  const known = Array.isArray(state.positions);
   const positions = (state.positions || []).map(p => `${p.contractId} ${p.type === 1 ? 'long' : p.type === 2 ? 'short' : '?'} ${p.size} @ ${p.averagePrice}`);
-  const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; `
-    + `${positions.length ? `open: ${positions.join(', ')}` : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}.`;
-  const attempts = (state.attempts || []).map(a => ` ${a.account} attempt (${a.status}): balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
+  const book = !known ? 'positions and working orders unknown (read get_account_snapshot)'
+    : `${positions.length ? `open: ${positions.join(', ')}` : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}`;
+  const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; ${book}.`;
+  const blocked = a => (a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : '');
+  const attempts = (state.attempts || []).map(a => (a.noBalance
+    ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
+    : ` ${a.account} attempt (${a.status}) as of ${a.asOf}: balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
     + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${a.sessionsLeft} session${a.sessionsLeft === 1 ? '' : 's'} left`
-    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}`
-    + `${a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : ''}.`);
+    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
   return head + attempts.join('');
 }
 

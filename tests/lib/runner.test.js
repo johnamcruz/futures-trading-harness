@@ -334,7 +334,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined }) {
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [] };
@@ -371,9 +371,14 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return flat ? 0 : 1; },
-      async accountBalance() { if (balanceFails) throw new Error('HTTP 503'); return 50100; },
+      async accountBalance() {
+        if (balanceFails) throw new Error('HTTP 503');
+        if (balanceHangs) return new Promise(() => {});
+        clockRef.t += readMs;
+        return 50100;
+      },
     },
-    clock: { now: () => new Date(clockRef.t) }, prop,
+    clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
@@ -485,15 +490,17 @@ test('after the session, with trades today, the runner keeps housekeeping until 
 });
 
 /** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
-function fakeProp({ position = () => 'hold', screen = r => r } = {}) {
+function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false } = {}) {
   const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
   return {
     calls,
     async snapshot(now) { calls.snapshots.push(now.getTime()); },
     async endOfDay(now, day) { calls.eod.push(now.getTime()); calls.eodDays.push(day); },
-    summaries() {
+    summaries(now, balance) {
       calls.summaries += 1;
-      return [{ account: 'mini', status: 'active', balance: 50100, floor: 48000, cushion: 2100, profit: 100, target: 3000, dayPnl: 100, sessionsLeft: 29, budgets: [], entryBlock: null }];
+      calls.summaryBalances = [...(calls.summaryBalances || []), balance];
+      if (summariesFail) throw new Error('attempt file unreadable');
+      return [{ account: 'mini', status: 'active', asOf: now.toISOString(), balance, floor: 48000, cushion: balance - 48000, profit: balance - 50000, target: 3000, dayPnl: 100, sessionsLeft: 29, budgets: [], entryBlock: null }];
     },
     screen(results, info) { calls.screens.push({ results, info }); return screen(results); },
     position(args) { calls.positions.push(args); return position(args); },
@@ -540,7 +547,8 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   assert.ok(take.calls.summaries >= 1);
   const tradePrompt = b.prompts.find(x => /trade-session/.test(x));
   assert.match(tradePrompt, /Account 7 at [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100; flat; 0 working orders\./);
-  assert.match(tradePrompt, /mini attempt \(active\): balance \$50,100, floor \$48,000, cushion \$2,100/);
+  assert.match(tradePrompt, /mini attempt \(active\) as of [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100, floor \$48,000, cushion \$2,100/);
+  assert.ok(take.calls.summaryBalances.every(x => x === 50100), 'the attempt is built from the balance just read');
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
   const c = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: each, until: et(10, 10) });
@@ -555,4 +563,27 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; open: CON.F.US.MNQ.Z26 long 1 @ 21500; 2 working orders\./);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
+});
+
+test('a hung account read is cut off: the run still starts and says so', async () => {
+  const hung = await trailSim({ tape: {}, until: et(10, 8), balanceHangs: true, accountReadMs: 20 });
+  assert.ok(hung.cycles.includes('trade'), 'the run is not held up');
+  assert.match(hung.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(no answer within 0\.02 s\)/);
+});
+
+test('a slow account read near end of day: each run\'s time limit counts from after the read', async () => {
+  const slow = await trailSim({ tape: {}, startAt: et(15, 39) + 2000, until: et(15, 52), readMs: 20000 });
+  const runs = slow.limits.filter(([a]) => a !== 'eod');
+  assert.ok(runs.length > 0);
+  for (const [, at, ms] of runs) assert.ok(at + ms <= et(15, 50), `a run at ${new Date(at).toISOString()} may run ${ms} ms, past end of day`);
+  const eod = slow.limits.find(([a]) => a === 'eod');
+  assert.ok(eod[1] + eod[2] <= et(16, 0), 'the end-of-day run ends by the close');
+});
+
+test('a prop attempt state that cannot be built leaves the account line in the prompt', async () => {
+  const take = fakeProp({ summariesFail: true });
+  const r = await trailSim({ tape: {}, startFlat: true, scan: [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }], prop: take, until: et(10, 10), trigger: 'signal' });
+  const prompt = r.prompts.find(x => /trade-session/.test(x));
+  assert.match(prompt, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./);
+  assert.doesNotMatch(prompt, /attempt/);
 });

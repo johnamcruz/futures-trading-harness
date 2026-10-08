@@ -47,6 +47,8 @@ const MAX_POLL_MS = 10000;
 const LOOKUP_RETRY_MS = 30000;
 const MAX_RETRY_MS = 60000;
 const FILL_GRACE_MS = 30000;
+// The account read for a run's prompt never holds a run up longer than this.
+const ACCOUNT_READ_MS = 5000;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 
 function createRunner(deps) {
@@ -55,6 +57,7 @@ function createRunner(deps) {
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
+    accountReadMs = ACCOUNT_READ_MS,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -430,30 +433,42 @@ function createRunner(deps) {
   /**
    * The account for a run's prompt: balance, open positions, working orders,
    * and each running prop attempt's state (null without an account). A failed
-   * read is reported in the prompt, never hidden.
+   * or slow read (over accountReadMs) is reported in the prompt, never hidden,
+   * and never holds the run up.
    */
   async function accountSnapshot(now) {
-    if (!cfg.account || (typeof client.accountState !== 'function' && typeof client.accountBalance !== 'function')) return null;
+    const hasState = typeof client.accountState === 'function';
+    const hasBalance = typeof client.accountBalance === 'function';
+    if (!cfg.account || (!hasState && !hasBalance)) return null;
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no answer within ${accountReadMs / 1000} s`)), accountReadMs);
+    });
     try {
-      const [state, balance] = await Promise.all([
-        typeof client.accountState === 'function' ? client.accountState(cfg.account) : { positions: [], orders: [] },
-        typeof client.accountBalance === 'function' ? client.accountBalance(cfg.account) : NaN,
-      ]);
+      const [state, balance] = await Promise.race([Promise.all([
+        hasState ? client.accountState(cfg.account) : null,
+        hasBalance ? client.accountBalance(cfg.account) : NaN,
+      ]), deadline]);
       let attempts = [];
       if (prop && typeof prop.summaries === 'function') {
         try {
-          attempts = prop.summaries(now);
+          attempts = prop.summaries(now, balance);
         } catch (err) {
           log(`prop attempt state unavailable for the prompt (${err.message})`, 'error');
         }
       }
       return {
         id: cfg.account, at: now.toISOString(), balance,
-        positions: state.positions.filter(p => Number(p.size || 0) > 0), workingOrders: state.orders.length, attempts,
+        // Without a state read, positions and orders are unknown, not flat.
+        positions: state ? state.positions.filter(p => Number(p.size || 0) > 0) : null,
+        workingOrders: state ? state.orders.length : null,
+        attempts,
       };
     } catch (err) {
       log(`account state for the prompt unavailable (${err.message})`, 'error');
       return { id: cfg.account, error: err.message };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -486,14 +501,18 @@ function createRunner(deps) {
       // journal) can fail or run long, and nothing may be open past the close.
       if (d.action === 'eod') ok = await eodBackstop();
       // Each job is built with the account as it is when that run starts.
-      const jobs = d.action === 'eod' ? [state => p.eod({ state })] : cfg.symbols.map(s => state => p.premarket(s, { state }));
+      const jobs = d.action === 'eod' ? [acct => p.eod({ state: acct })] : cfg.symbols.map(s => acct => p.premarket(s, { state: acct }));
+      const noTime = () => log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`);
       for (const prompt of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
         if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
-        const timeoutMs = limitFor(d.action, at);
-        if (timeoutMs < 30000) { log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`); continue; }
-        const r = await runCycle(d.action, prompt(await accountSnapshot(clock.now())), { timeoutMs });
+        if (limitFor(d.action, at) < 30000) { noTime(); continue; }
+        const acct = await accountSnapshot(at);
+        // The time limit counts from after the account read.
+        const timeoutMs = limitFor(d.action, clock.now());
+        if (timeoutMs < 30000) { noTime(); continue; }
+        const r = await runCycle(d.action, prompt(acct), { timeoutMs });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
       // Then check again: flatten whatever the run left open.
@@ -557,11 +576,17 @@ function createRunner(deps) {
           if (w.run) run.push(item);
           else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
         }
-        const cycleNow = clock.now();
-        const timeoutMs = limitFor(again.action, cycleNow);
+        let cycleNow = clock.now();
+        let timeoutMs = limitFor(again.action, cycleNow);
+        let acct = null;
+        if (run.length && timeoutMs >= 30000) {
+          acct = await accountSnapshot(cycleNow);
+          // The time limit counts from after the account read.
+          cycleNow = clock.now();
+          timeoutMs = limitFor(again.action, cycleNow);
+        }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const acct = await accountSnapshot(cycleNow);
           const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
           recover = false;
           const r = await runCycle(again.action, prompt, { timeoutMs });
@@ -577,4 +602,4 @@ function createRunner(deps) {
   return { step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); } };
 }
 
-module.exports = { createRunner, IDLE_MS };
+module.exports = { createRunner, IDLE_MS, ACCOUNT_READ_MS };

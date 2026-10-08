@@ -244,17 +244,35 @@ test('the runner polls one contract per micro/mini index', () => {
 test('every cycle prompt carries the account: balance, positions, orders, and each running prop attempt', () => {
   const p = prompts(validateConfig({ account: '123' }), et(10, 0));
   const attempts = [{
-    account: 'topstep_100k', status: 'active', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
+    account: 'topstep_100k', status: 'active', asOf: '2026-10-07T14:00:01.000Z', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
     budgets: [{ strategy: 'prop_portfolio_3m', budgetUsd: 975 }], entryBlock: null,
   }];
   const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
   const text = p.trade([{ symbol: 'MNQ' }], { state });
   assert.match(text, /Account 123 at 2026-10-07T14:00:01.000Z: balance \$101,250; open: CON.F.US.ENQ.Z26 long 2 @ 21500.25; 1 working order\./);
-  assert.match(text, /topstep_100k attempt \(active\): balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
+  assert.match(text, /topstep_100k attempt \(active\) as of 2026-10-07T14:00:01.000Z: balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
   const flat = { ...state, positions: [], workingOrders: 0, attempts: [{ ...attempts[0], entryBlock: 'a position is open on the account' }] };
   assert.match(p.trade([{ symbol: 'MNQ' }], { state: flat }), /balance \$101,250; flat; 0 working orders\..*new entries blocked: a position is open on the account\./);
   assert.match(p.premarket('MNQ', { state }), /Account 123 .*balance \$101,250.*Run the premarket skill/);
   assert.match(p.eod({ state }), /Account 123 .*Run the end-of-day skill/);
   assert.match(p.trade([{ symbol: 'MNQ' }], { state: { id: '123', error: 'HTTP 503' } }), /Account 123: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
   assert.doesNotMatch(p.trade([{ symbol: 'MNQ' }]), /Account|attempt/);
+});
+
+test('the account line says what it does not know, and formats every side and count', () => {
+  const p = prompts(validateConfig({ account: '123' }), et(10, 0));
+  const base = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 50000, workingOrders: 1, attempts: [] };
+  const short = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [{ contractId: 'A', type: 2, size: 3, averagePrice: 21500 }, { contractId: 'B', type: 7, size: 1, averagePrice: 1 }] } });
+  assert.match(short, /open: A short 3 @ 21500, B \? 1 @ 1; 1 working order\./);
+  const unknown = p.trade([{ symbol: 'MNQ' }], { state: { ...base, balance: NaN, positions: null, workingOrders: null } });
+  assert.match(unknown, /balance unknown; positions and working orders unknown \(read get_account_snapshot\)\./);
+  assert.doesNotMatch(unknown, /flat|NaN|undefined/);
+  const attempt = {
+    account: 'topstep_50k', status: 'active', asOf: '2026-10-07T13:57:00.000Z', balance: 49750, floor: 48000, cushion: 1750, profit: -250, target: 3000, dayPnl: 0.3, sessionsLeft: 1, budgets: [],
+  };
+  const one = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [attempt] } });
+  assert.match(one, /topstep_50k attempt \(active\) as of 2026-10-07T13:57:00.000Z: balance \$49,750, floor \$48,000, cushion \$1,750, profit -\$250 of \$3,000, day \$0, 1 session left\./);
+  const none = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [{ account: 'topstep_50k', status: 'unknown', noBalance: true, entryBlock: 'the topstep_50k account snapshot is missing' }] } });
+  assert.match(none, /topstep_50k attempt: no balance read yet, so no floor or cushion to show; new entries blocked: the topstep_50k account snapshot is missing\./);
+  assert.doesNotMatch(none, /NaN|undefined/);
 });

@@ -82,6 +82,18 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
     { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });
   assert.deepStrictEqual(setup({ start: false }).hooks.summaries(now), [], 'no attempt, no state');
+  assert.strictEqual(sum.asOf, now.toISOString(), 'built from the snapshot taken now');
+  // A balance just read wins over the snapshot, and says so.
+  const later = new Date('2026-10-07T14:33:00Z');
+  const [fresh] = hooks.summaries(later, 50400);
+  assert.deepStrictEqual([fresh.balance, fresh.cushion, fresh.dayPnl, fresh.asOf, fresh.snapshotAt, fresh.budgets[0].budgetUsd], [50400, 2400, 400, later.toISOString(), now.toISOString(), 480]);
+  // Without a read, the snapshot's own time.
+  assert.strictEqual(hooks.summaries(later)[0].asOf, now.toISOString());
+  // Started but never snapshotted: no numbers, only the gate's block.
+  const bare = setup();
+  const [unread] = bare.hooks.summaries(now);
+  assert.deepStrictEqual({ account: unread.account, noBalance: unread.noBalance, balance: unread.balance }, { account: 'topstep_50k', noBalance: true, balance: undefined });
+  assert.match(unread.entryBlock, /snapshot is missing/);
   await hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07');
   await hooks.endOfDay(new Date('2026-10-07T19:55:00Z'), '2026-10-07');
   assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250 }]);

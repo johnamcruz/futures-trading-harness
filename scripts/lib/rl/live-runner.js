@@ -82,21 +82,29 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
   return {
     accounts,
     /**
-     * The running attempts' state for the cycle prompt, from the latest
-     * snapshot: balance, floor, cushion, progress, the day, sessions left,
-     * each policy strategy's size budget, and any entry block. The gate
-     * enforces the same numbers.
+     * The running attempts' state for the cycle prompt: balance, floor,
+     * cushion, progress, the day, sessions left, each policy strategy's size
+     * budget, and any entry block (the gate's own check). Built from
+     * `balance` (the account balance just read) when given, else from the
+     * latest snapshot; `asOf` says which. With neither, no numbers: an attempt
+     * without a balance has none to show.
      */
-    summaries(now = new Date()) {
+    summaries(now = new Date(), balance = NaN) {
       const out = [];
       for (const a of accounts()) {
         const r = live.readAttempt(home, a.name);
         if (!r) continue;
-        const cs = stateOf(a);
-        const s = combine.summary(cs);
+        const entryBlock = live.combineBlock(home, a.name, now);
+        const fresh = Number.isFinite(balance);
+        const snapshotAt = r.snapshot ? r.snapshot.at : null;
+        if (!fresh && !snapshotAt) {
+          out.push({ account: a.name, status: 'unknown', noBalance: true, snapshotAt, entryBlock });
+          continue;
+        }
+        const cs = live.stateFrom(a, r, fresh ? balance : r.snapshot.balance);
         const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
           .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
-        out.push({ ...s, snapshotAt: r.snapshot ? r.snapshot.at : null, budgets, entryBlock: live.combineBlock(home, a.name, now) });
+        out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock });
       }
       return out;
     },

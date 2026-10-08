@@ -168,7 +168,24 @@ test('session-start briefing states each running prop attempt from its last snap
   const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
   assert.strictEqual(r.code, 0);
   assert.match(r.stdout, /### Prop attempts \(the order gate enforces these\)/);
-  assert.match(r.stdout, /- topstep_100k \(active\) as of .* \(0 min ago\): balance \$101,250, floor \$97,000, cushion \$4,250, profit \$1,250 of \$6,000/);
+  assert.match(r.stdout, /- topstep_100k \(active\) as of .* \(0 min ago\): balance \$101,250, floor \$97,000, cushion \$4,250, profit \+\$1,250 of \$6,000/);
+  assert.doesNotMatch(r.stdout, /entries blocked/);
+});
+
+test('session-start briefing shows the block the gate applies now: a missing or old snapshot, a missed close', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const fresh = tmpDir();
+  const account = accountNamed(REPO, 'topstep_100k', {});
+  prop.startAttempt(fresh, account, new Date('2026-10-05T14:00:00Z'));
+  const a = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, setup([], { FTH_HOME: fresh }).env);
+  assert.strictEqual(a.code, 0);
+  assert.match(a.stdout, /- topstep_100k: attempt started .*, no balance snapshot yet .*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
+  const old = tmpDir();
+  prop.startAttempt(old, account, new Date('2026-10-05T14:00:00Z'));
+  prop.snapshot(old, account, 99000, new Date(Date.now() - 3 * 3600000));
+  const b = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, setup([], { FTH_HOME: old }).env);
+  assert.match(b.stdout, /- topstep_100k \(active\) as of .* \(180 min ago\): balance \$99,000, .*profit -\$1,000 of \$6,000.*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
 });
 
 test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {
