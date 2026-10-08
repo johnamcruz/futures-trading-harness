@@ -8,6 +8,7 @@
   "workdir": "workspace",
   "paper": true,
   "timeframe": 3,
+  "orderFlow": "auto",
   "trigger": "bar",
   "barDelaySeconds": 2,
   "barPollSeconds": 2,

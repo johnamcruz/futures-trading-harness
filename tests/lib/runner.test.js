@@ -314,10 +314,10 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null }) {
   const clockRef = { t: et(10, 0) + 2000 };
   const step = 180000;
-  const calls = { modified: [], closed: [], cancelled: [], closedIds: [] };
+  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
   let flat = false;
@@ -354,7 +354,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     clock: { now: () => new Date(clockRef.t) },
     runCycle: async () => { clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
-    writeBars: () => '/b.json', scanFor: () => [],
+    writeBars: (sym, bars) => { calls.written.push(bars); return '/b.json'; }, scanFor: () => [], flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
@@ -416,6 +416,12 @@ test('kill switch on: an unprotected position in another month of the root is cl
 test('kill switch on after the day traded: a protected position is left to its stop', async () => {
   const r = await trailSim({ tape: {}, killAfterCycle: true, until: et(10, 9) });
   assert.deepStrictEqual([r.closed, r.cancelled], [[], []]);
+});
+
+test('with order flow on, the bars written and scanned carry real buy/sell volume', async () => {
+  const flow = { annotate: (id, bars, minutes) => bars.map(b => ({ ...b, bv: minutes, sv: 1 })) };
+  const r = await trailSim({ tape: {}, flow, until: et(10, 4) });
+  assert.ok(r.written.length > 0 && r.written.every(bars => bars.every(b => b.bv === 3 && b.sv === 1)));
 });
 
 test('after the session, with trades today, the runner keeps housekeeping until end of day', () => {

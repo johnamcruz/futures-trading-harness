@@ -287,6 +287,23 @@ Results are in R (as algoTraderBot reports them) and in dollars after fees,
 broken down by strategy, exit, and month. See
 [docs/BACKTESTING.md](docs/BACKTESTING.md).
 
+### Order flow from TopstepX
+
+The `ofi` and `ofi_absorption` strategies trade real order flow. The runner
+subscribes to the ProjectX market hub's trade prints and quotes (SignalR
+over the built-in WebSocket, Node 22+), classifies each print as a buy or a
+sell against the quote, and sums 1-minute buy and sell volume into the bars
+it scans. `orderFlow: "auto"` (the default) turns this on when a strategy
+on the runner's timeframe uses `ofi` or `delta`. Recorded minutes go to
+`<FTH_HOME>/flow/`, and `scripts/orderflow.js` records without the runner
+and exports bars with flow for backtests. The hub keeps no history: flow
+exists from when recording started.
+
+```bash
+node scripts/orderflow.js record --symbols MNQ,MES
+node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
+```
+
 ### Order gate settings
 
 | Variable | Default | Meaning |

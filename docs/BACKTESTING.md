@@ -51,8 +51,21 @@ Bars come from files:
 The table needs a header with a time column (`time`, `timestamp`,
 `datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
 `high`, `low`, `close`, and optionally `volume` (needed for the order-flow
-strategies and the `ofi`, `delta`, and `vol_sma` series). Any letter case
+strategies and the `ofi`, `delta`, and `vol_sma` series). Real order flow
+comes as `buy_volume` and `sell_volume` columns (aggressive buys and sells;
+`ask_volume`/`bid_volume` and `bv`/`sv` work too), or a `delta` column. A
+bar without them falls back to the bar-shape estimate. Any letter case
 works.
+
+TopstepX keeps no trade history, so record order flow first and export it
+with the bars:
+
+```bash
+node scripts/orderflow.js record --symbols MNQ        # or let the runner record while it trades
+node scripts/orderflow.js status
+node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
+node scripts/backtest.js --data data/MNQ-1m-flow.csv --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
+```
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.

@@ -59,8 +59,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    session the bars start mid-way through has none (likewise `vwap_session`
    and `vwap_rth`). The runner scans three trading days of bars, enough
    for these and for long indicators to match a backtest. `ofi(n)` is order-flow imbalance
-   over n bars, from -1 (all selling) to +1 (all buying): each bar's volume
-   signed by where it closed in its range. `delta(n)` is that signed volume
+   over n bars, from -1 (all selling) to +1 (all buying): real buy and sell
+   volume recorded from the TopstepX market hub, or, for a bar without it,
+   volume signed by where the bar closed in its range. `delta(n)` is that signed volume
    summed, `vol_sma(n)` the average volume per bar. A value
    that doesn't exist yet (indicator warm-up, no opening range yet) makes the
    condition false and the scan marks it `missing`. At most 12 conditions per

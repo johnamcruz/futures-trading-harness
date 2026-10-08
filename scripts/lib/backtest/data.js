@@ -22,7 +22,13 @@ const { readXlsx, excelSerialToMs } = require('./xlsx');
 const MINUTE = 60000;
 const GLOBEX_OPEN_MIN = 18 * 60;
 const TIME_NAMES = ['t', 'time', 'timestamp', 'datetime', 'date', 'ts', 'date_time', '__index_level_0__'];
-const FIELD_NAMES = { o: ['o', 'open'], h: ['h', 'high'], l: ['l', 'low'], c: ['c', 'close', 'last'], v: ['v', 'volume', 'vol'] };
+const FIELD_NAMES = {
+  o: ['o', 'open'], h: ['h', 'high'], l: ['l', 'low'], c: ['c', 'close', 'last'], v: ['v', 'volume', 'vol'],
+  // Order flow (optional): aggressive buy and sell volume, or their difference.
+  bv: ['bv', 'buy_volume', 'buyvolume', 'buy_vol', 'ask_volume', 'askvolume'],
+  sv: ['sv', 'sell_volume', 'sellvolume', 'sell_vol', 'bid_volume', 'bidvolume'],
+  delta: ['delta', 'volume_delta'],
+};
 
 /** Epoch ms from a number whose unit is guessed by magnitude (s, ms, us, ns). */
 function epochMs(n) {
@@ -62,7 +68,13 @@ function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
     // An empty cell is missing, not zero: the row is dropped (a missing volume reads as 0).
     const num = x => (x === null || x === undefined || (typeof x === 'string' && x.trim() === '') ? NaN : Number(x));
     const v = idx.v === -1 ? 0 : num(get('v'));
-    return { t: new Date(t).toISOString(), o: num(get('o')), h: num(get('h')), l: num(get('l')), c: num(get('c')), v: Number.isFinite(v) ? v : 0 };
+    const bar = { t: new Date(t).toISOString(), o: num(get('o')), h: num(get('h')), l: num(get('l')), c: num(get('c')), v: Number.isFinite(v) ? v : 0 };
+    const bv = idx.bv === -1 ? NaN : num(get('bv'));
+    const sv = idx.sv === -1 ? NaN : num(get('sv'));
+    const d = idx.delta === -1 ? NaN : num(get('delta'));
+    if (Number.isFinite(bv) && Number.isFinite(sv)) Object.assign(bar, { bv, sv });
+    else if (Number.isFinite(d) && bar.v > 0) Object.assign(bar, { bv: (bar.v + d) / 2, sv: (bar.v - d) / 2 });
+    return bar;
   });
 }
 
@@ -100,7 +112,12 @@ function loadBars(file, opts = {}) {
     if (out.length && out[out.length - 1].ms === b.ms) out[out.length - 1] = b; // keep the last duplicate
     else out.push(b);
   }
-  return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, ...flowOf(b) }));
+}
+
+/** { bv, sv } when the bar carries real order flow, else nothing. */
+function flowOf(b) {
+  return Number.isFinite(b.bv) && Number.isFinite(b.sv) ? { bv: b.bv, sv: b.sv } : {};
 }
 
 /** The bar size of a series in minutes (the most common spacing). */
@@ -145,13 +162,16 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
     if (b.ms + MINUTE > nowMs) break;
     const start = bucketStart(b.ms, unit, unitNumber);
     if (!cur || cur.start !== start) {
-      cur = { start, t: new Date(start).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v };
+      cur = { start, t: new Date(start).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, bv: b.bv, sv: b.sv };
       out.push(cur);
     } else {
       cur.h = Math.max(cur.h, b.h);
       cur.l = Math.min(cur.l, b.l);
       cur.c = b.c;
       cur.v += b.v;
+      // Flow for the bar only when every minute has it (else NaN: none).
+      cur.bv += b.bv;
+      cur.sv += b.sv;
     }
   }
   const last = out[out.length - 1];
@@ -161,7 +181,7 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
       : last.start + bucketLength(unit, unitNumber) <= nowMs;
     if (!ended) out.pop();
   }
-  return out.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  return out.map(({ t, o, h, l, c, v, bv, sv }) => ({ t, o, h, l, c, v, ...flowOf({ bv, sv }) }));
 }
 
 module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, barMinutes, aggregate, bucketStart, epochMs };
