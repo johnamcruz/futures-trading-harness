@@ -54,6 +54,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `setup-tag` | Rationale starts with `setup:<strategy>` | yes | yes |
 | `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
+| `order-consistency` | The order agrees with its rationale: the side named after the tag (`long`/`short`/`buy`/`sell`) is the order side; the stop and target sit on the right sides of a limit or stop entry's price and of each other; known-contract prices are on the tick; bracket ticks are whole and match the rationale's prices within a tick (a market order: stop + target ticks within two of the stop-to-target distance) | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
 | `market-hours` | Entries only in the market session, 18:00-16:00 ET, Sunday evening to Friday (closed 16:00-18:00 ET), not on `FTH_CLOSED_DATES` holidays, and before 13:00 ET on `FTH_EARLY_CLOSE_DATES` (the runner passes both from its config). A hard rule: no setting widens it and it can't be skipped; the gateway checks it again after reading the account | yes | yes |
 | `time-window`, `blackout` | Inside `FTH_ENTRY_HOURS` (default: the whole session), outside no-entry windows (09:30-09:35 and 15:45-16:00 ET) and news blackouts | yes | yes |

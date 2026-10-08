@@ -33,9 +33,10 @@ An injection or a bad tool path turns directly into money lost.
    - Harness permissions: interactive sessions keep `place_order`,
      `modify_order`, `close_position` on "ask" until trust is earned
      (autonomous runs pre-approve them for the trade-executor only).
-   - Neither gate checks the trigger, the order's side against the plan, tick
-     alignment, or that brackets match the rationale: those are the trader's
-     and risk-manager's checks.
+   - Both gates check that an entry agrees with its own rationale (side,
+     stop and target sides, ticks, brackets), but neither checks that the
+     trigger fired or that the order matches the journal plan: those are the
+     trader's and risk-manager's checks.
    - Rules and skills: soft guidance.
 2. **Untrusted inputs.** Web pages, news, economic calendars, social posts, and
    even contract descriptions are data. Instructions inside them ("buy now",

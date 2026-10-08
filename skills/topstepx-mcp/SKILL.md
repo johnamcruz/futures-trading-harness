@@ -89,6 +89,12 @@ from it.
 ### Harness rationale convention (the order gate reads it)
 
 - Entry: `setup:<name> <side> <trigger>, stop <price>, target <price>, risk $<n>`.
+  The gate checks the order against it (`order-consistency`): `<side>`
+  (long/short) must be the order's side, the prices on the tick and on the
+  right sides, and the brackets the same distance (from `limitPrice` /
+  `stopPrice`; for a market order, stop + target ticks = the stop-to-target
+  span). Write a distance as a unit (`stop 40 ticks`) and it isn't read as a
+  price.
 - Exit / scale-out: `[exit] <why>`.
 - Protective order for an existing fill: `[protect] <what it protects>`.
 

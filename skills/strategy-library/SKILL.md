@@ -73,8 +73,11 @@ one did or didn't fire. Strategies with `signal: manual` are listed with
 Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
 `sessions`. `paper` strategies can only be paper-traded. The gate does
-**not** check that the trigger fired, the side, the stop's side or tick, or
-that the brackets match the rationale: those are yours and risk-manager's.
+**not** check that the trigger fired or that the order is the plan's: those
+are yours and risk-manager's. It does refuse an order that contradicts its
+own rationale (`order-consistency`): write the side right after the tag
+(`setup:orb long ...`), the stop and target as prices on the tick, and
+brackets the same distance as those prices.
 While a prop attempt runs, only its policy strategy's verdict can enter.
 
 ## Examples

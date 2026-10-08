@@ -453,3 +453,64 @@ test('policy: only this strategy\'s entries on this index use its verdict', () =
   assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.MES.Z26' }]), [], 'another index');
   assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.ENQ.Z26' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
 });
+
+test('order-consistency: the side named in the rationale must be the order side', () => {
+  const r = evaluate(entryOrder({ side: 'sell', rationale: 'setup:orb long break above 21500, stop 21480' }), [plan()]);
+  assert.deepStrictEqual(checks(r), ['order-consistency']);
+  assert.match(r.violations[0].message, /rationale says long but the order side is sell/);
+  // "short" right after the tag with a sell agrees; a side word later in the text is not read.
+  assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', rationale: 'setup:orb short break below 21500, stop 21520' }), [plan()]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', rationale: 'setup:orb break below; longs trapped, stop 21520' }), [plan()]).violations, []);
+});
+
+test('order-consistency: stop and target on the right sides of a known entry and of each other', () => {
+  const limit = extra => entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: { ticks: 80, type: 'stop' }, ...extra });
+  assert.deepStrictEqual(evaluate(limit({ rationale: 'setup:orb long, stop 21480, target 21540' }), [plan()]).violations, []);
+  assert.match(evaluate(limit({ stopLossBracket: undefined, rationale: 'setup:orb long, stop 21520' }), [plan()]).violations[0].message,
+    /stop 21520 is on the wrong side of the buy entry 21500/);
+  assert.match(evaluate(limit({ rationale: 'setup:orb long, stop 21480, target 21490' }), [plan()]).violations[0].message,
+    /target 21490 is on the wrong side of the buy entry 21500/);
+  // A market order: the target must be above the stop for a buy.
+  assert.match(evaluate(entryOrder({ rationale: 'setup:orb long, stop 21540, target 21480' }), [plan()]).violations[0].message,
+    /a long needs the target above the stop/);
+});
+
+test('order-consistency: prices on the tick and whole bracket ticks', () => {
+  assert.match(evaluate(entryOrder({ rationale: 'setup:orb long, stop 21480.10' }), [plan()]).violations[0].message, /stop 21480\.1 is not on the 0\.25 tick/);
+  assert.match(evaluate(entryOrder({ type: 'limit', limitPrice: 21500.3, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480' }), [plan()]).violations[0].message,
+    /limitPrice 21500\.3 is not on the 0\.25 tick/);
+  assert.match(evaluate(entryOrder({ stopLossBracket: { ticks: 7.5, type: 'stop' } }), [plan()]).violations[0].message, /whole number of ticks/);
+  // A number with a unit is not a price.
+  assert.deepStrictEqual(evaluate(entryOrder({ rationale: 'setup:orb long, stop 40 ticks, target 2R' }), [plan()]).violations, []);
+  // An unknown contract has no tick spec: only the side checks apply.
+  assert.ok(!checks(evaluate(entryOrder({ contractId: 'CON.F.US.ZZZ.Z26', rationale: 'setup:orb long, stop 1.111' }), [plan()])).includes('order-consistency'));
+});
+
+test('order-consistency: brackets must match the rationale prices', () => {
+  // Limit entry 21500, stop 21480 = 80 ticks; within one tick of rounding passes.
+  const limit = sl => entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: { ticks: sl, type: 'stop' }, rationale: 'setup:orb long, stop 21480, target 21540' });
+  assert.deepStrictEqual(evaluate(limit(81), [plan()]).violations, []);
+  assert.match(evaluate(limit(40), [plan()]).violations[0].message, /stopLossBracket\.ticks 40 doesn't match the stop: 21500\.00 to 21480\.00 is 80 ticks/);
+  const tp = entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: { ticks: 80, type: 'stop' }, takeProfitBracket: { ticks: 40, type: 'limit' }, rationale: 'setup:orb long, stop 21480, target 21540' });
+  assert.match(evaluate(tp, [plan()]).violations[0].message, /takeProfitBracket\.ticks 40 doesn't match the target/);
+  // Market: the brackets' span (stop + target ticks) must equal the stop-to-target distance.
+  const mkt = (sl, t) => entryOrder({ stopLossBracket: { ticks: sl, type: 'stop' }, takeProfitBracket: { ticks: t, type: 'limit' }, rationale: 'setup:orb long, stop 21480, target 21540' });
+  assert.deepStrictEqual(evaluate(mkt(80, 160), [plan()]).violations, []);
+  assert.deepStrictEqual(evaluate(mkt(82, 159), [plan()]).violations, []); // slippage within two ticks
+  assert.match(evaluate(mkt(40, 80), [plan()]).violations[0].message, /brackets span 120 ticks but the rationale's stop 21480 to target 21540 is 240 ticks/);
+});
+
+test('order-consistency: [exit] and [protect] orders are not checked', () => {
+  const r = evaluate(entryOrder({ side: 'sell', stopLossBracket: undefined, rationale: '[protect] stop for long, stop 21480.10' }), []);
+  assert.deepStrictEqual(r.violations, []);
+});
+
+test('order-consistency: everyday rationale wording is not misread as prices', () => {
+  const mkt = rationale => entryOrder({ stopLossBracket: { ticks: 80, type: 'stop' }, takeProfitBracket: { ticks: 160, type: 'limit' }, rationale });
+  for (const r of [
+    'setup:orb long, stop 21,480.00, target 21,540', // thousands separators
+    'setup:orb long, stop 21480, target 2:1', // a ratio
+    'setup:orb long, stop 0.5 ATR, target 3 R', // multiples
+    'setup:orb long, stop 21480 below OR low, target 21540 prior high',
+  ]) assert.deepStrictEqual(evaluate(mkt(r), [plan()]).violations, [], r);
+});

@@ -97,6 +97,16 @@ test('order gate: a setup tag that is not first is refused with where it goes', 
   assert.match(r.stderr, /\[setup-tag\] Rationale must start with the strategy as setup:<name>/);
 });
 
+test('order gate: an order that contradicts its rationale is refused with what disagrees', () => {
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(entryOrder({ side: 'sell', rationale: 'setup:orb long break above 21500, stop 21480' })), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[order-consistency\] The order doesn't agree with itself: the rationale says long but the order side is sell/);
+  const off = gate(orderPayload(entryOrder({ rationale: 'setup:orb long, stop 21480.10' })), env);
+  assert.strictEqual(off.code, 2);
+  assert.match(off.stderr, /\[order-consistency\].*not on the 0\.25 tick/);
+});
+
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);
