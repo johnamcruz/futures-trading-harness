@@ -33,7 +33,8 @@ const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
-const { readJson, writeJsonAtomic, runHarness, entryOrderIds } = require('./lib/harness-run');
+const { readJson, writeJsonAtomic, runHarness, entryOrderIds, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
+const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -109,6 +110,23 @@ function runOnce(cfg, argv, timeoutMs) {
   return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env: childEnv(cfg, ROOT), timeoutMs, onChild: c => { activeChild = c; } });
 }
 
+let workspaceBaseline = null;
+
+/** Refuse to run (and switch trading off) if a run changed the workspace's instructions or settings. */
+function guardWorkspace(cfg, killSwitchFile, when) {
+  if (!workspaceBaseline) return true;
+  const changed = changedFiles(workspaceBaseline, workspaceFingerprint(path.resolve(ROOT, cfg.workdir)));
+  if (!changed.length) return true;
+  const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review them, restore them (node scripts/sync-harness.js; node scripts/install.js), then remove this file.`;
+  try {
+    if (!fs.existsSync(killSwitchFile)) fs.writeFileSync(killSwitchFile, `${reason}\n`);
+  } catch (_err) {
+    // reported below either way
+  }
+  process.stderr.write(`[autotrader] ${reason}\n`);
+  return false;
+}
+
 async function runCycle(cfg, action, prompt, opts) {
   const now = new Date();
   const argv = buildCommand(cfg, prompt, ROOT);
@@ -116,12 +134,15 @@ async function runCycle(cfg, action, prompt, opts) {
     process.stdout.write(`${JSON.stringify(argv)}\n`);
     return { ok: true, timedOut: false };
   }
+  const killSwitchFile = loadConfig(process.env).killSwitchFile;
+  if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const res = await runOnce(cfg, argv, cfg.cycleTimeoutMinutes * 60000);
   const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   process.stdout.write(`[autotrader] ${result}\n`);
-  return { ok: res.ok, timedOut: res.timedOut };
+  const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
+  return { ok: res.ok && intact, timedOut: res.timedOut };
 }
 
 function loadState(cfg) {
@@ -158,6 +179,21 @@ function checkClaudeSettings(cfg) {
   }
 }
 
+/**
+ * Qwen runs headless in default approval mode, so its allowlist in
+ * workspace/.qwen/settings.json must match this config (bar directory, state
+ * directory). The runner writes it at start rather than trusting a stale copy.
+ */
+function writeQwenSettings(cfg, dataDir, opts) {
+  if (cfg.harness !== 'qwen' || opts.dryRun) return;
+  const file = path.join(ROOT, cfg.workdir, '.qwen', 'settings.json');
+  const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome() }), null, 2)}\n`;
+  if (readJson(file, null) !== null && fs.readFileSync(file, 'utf8') === content) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+  process.stdout.write(`[autotrader] wrote the Qwen autonomous allowlist to ${file}\n`);
+}
+
 async function main(argv) {
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run]');
@@ -167,6 +203,8 @@ async function main(argv) {
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   checkStrategies(cfg);
   checkClaudeSettings(cfg);
+  writeQwenSettings(cfg, dataDir, opts);
+  workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
 
   const once = arg(argv, '--once');
   if (once) {

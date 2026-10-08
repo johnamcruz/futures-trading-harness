@@ -96,3 +96,20 @@ test('CLI validates arguments and supports --dry-run', () => {
   assert.match(dry.stdout, /would write .*config\.toml/);
   assert.deepStrictEqual(fs.readdirSync(home), []);
 });
+
+test('Qwen settings with comments are read; a file the installer created is not later backed up as the original', () => {
+  const { stripJsonComments } = require('../../scripts/lib/install');
+  assert.deepStrictEqual(JSON.parse(stripJsonComments('{\n  // model\n  "model": "qwen", /* x */ "url": "http://a//b"\n}')), { model: 'qwen', url: 'http://a//b' });
+  const dir = tmpDir();
+  const file = path.join(dir, 'x', 'settings.json');
+  applyPlan({ writes: [{ file, content: '1' }] });
+  applyPlan({ writes: [{ file, content: '2' }] });
+  assert.strictEqual(fs.existsSync(`${file}.fth-backup`), false);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '2');
+});
+
+test('the Qwen allowlist follows the configured bar and state directories', () => {
+  const p = qwenWorkspaceSettings('/fth', '/home/u', { dataDir: '/data/bars', stateDir: '/srv/fth' }).permissions;
+  assert.ok(p.allow.includes('Read(//data/bars/**)'));
+  assert.ok(p.deny.includes('Edit(//srv/fth/**)'));
+});

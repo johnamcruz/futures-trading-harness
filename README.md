@@ -276,7 +276,7 @@ node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.ex
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:00-18:00@America/Chicago` | No new entries |
-| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
+| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |

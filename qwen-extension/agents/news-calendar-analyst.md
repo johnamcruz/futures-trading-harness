@@ -41,7 +41,7 @@ well-known economic calendars.
 ```text
 ## Events: <date> for <SYMBOL>
 - <HH:MM ET> (<HH:MM UTC>) <event> - impact <high|medium> - source <domain>
-Proposed blackouts (JSON for ~/.futures-trading-harness/blackouts.json):
+Proposed blackouts (JSON for ~/.futures-trading-harness/blackouts/blackouts.json):
 [{"start":"<ISO UTC>","end":"<ISO UTC>","reason":"<event>"}]
 Unconfirmed: <anything you could not verify>
 Suspicious content seen: <none | description>

@@ -8,8 +8,10 @@
  *         and MCP commands.
  * codex:  writes a marked block to ~/.codex/config.toml (projectx MCP behind the
  *         order gateway, agent roles) and prints the plugin commands.
- * qwen:   merges hooks and the projectx MCP server into ~/.qwen/settings.json and
- *         prints the extension command.
+ * qwen:   adds the projectx MCP server (behind the gateway) to ~/.qwen/settings.json,
+ *         removes old harness hooks there (the extension provides them), writes
+ *         workspace/.qwen/settings.json (the autonomous allowlist), and prints
+ *         the extension command.
  * Existing files are backed up to <file>.fth-backup before writing.
  */
 

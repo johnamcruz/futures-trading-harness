@@ -11,6 +11,7 @@
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, minutesOfDay, zonedParts } = require('./trading/clock');
 
 const DEFAULTS = {
@@ -209,10 +210,13 @@ function buildCommand(cfg, prompt, root, env = process.env) {
         '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
-      return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"', ...(model ? ['-m', model] : []), ...extra, prompt];
+      // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
+      return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
+        '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
+        ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
-      // Default approval mode: only tools allowed in ~/.qwen/settings.json
-      // permissions (written by scripts/install.js --target qwen) run headless.
+      // Default approval mode: only tools allowed in workspace/.qwen/settings.json
+      // permissions (written by the installer and refreshed by the runner) run headless.
       return ['qwen', '-p', prompt, '--approval-mode', 'default', '--output-format', 'json', '--max-session-turns', '80',
         ...(model ? ['--model', model] : []), ...extra];
     default:

@@ -121,10 +121,10 @@ function mergeQwenSettings(settings, root, projectxEntry) {
  * edits to the harness, its state, and harness configs, so a run can't loosen
  * its own limits.
  */
-function qwenWorkspaceSettings(root, home) {
+function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
   const h = p => abs(path.join(home, p));
-  const dataDir = path.join(home, '.futures-trading-harness', 'bars');
+  const state = stateDir === path.join(home, '.futures-trading-harness') ? [] : [`Edit(${abs(stateDir)}/**)`];
   return {
     permissions: {
       allow: [
@@ -137,6 +137,7 @@ function qwenWorkspaceSettings(root, home) {
       deny: [
         `Edit(${abs(`${root}/**`)})`,
         `Edit(${h('.futures-trading-harness')}/**)`,
+        ...state,
         `Edit(${h('.projectx-mcp')}/**)`,
         `Edit(${h('.qwen')}/**)`,
         `Read(${abs('/proc')}/**)`,
@@ -147,12 +148,38 @@ function qwenWorkspaceSettings(root, home) {
   };
 }
 
+/** Remove line and block comments outside strings (Qwen settings files allow them). */
+function stripJsonComments(text) {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      out += ch;
+      if (ch === '\\') { out += text[i + 1] || ''; i += 1; } else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+      out += ch;
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i += 1;
+      out += '\n';
+    } else if (ch === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
+      i += 1;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function planQwen({ root, home, projectxEntry }) {
   const file = path.join(home, '.qwen', 'settings.json');
   let settings = {};
   if (fs.existsSync(file)) {
     try {
-      settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+      settings = JSON.parse(stripJsonComments(fs.readFileSync(file, 'utf8')));
     } catch (err) {
       throw new Error(`${file} is not valid JSON (${err.message}); fix it before installing`, { cause: err });
     }
@@ -193,7 +220,14 @@ function applyPlan(plan) {
   for (const w of plan.writes) {
     fs.mkdirSync(path.dirname(w.file), { recursive: true });
     // Keep the first backup: it is the user's file from before any install.
-    if (fs.existsSync(w.file) && !fs.existsSync(`${w.file}.fth-backup`)) fs.copyFileSync(w.file, `${w.file}.fth-backup`);
+    // A file the installer created itself is marked instead, so a later run
+    // doesn't take our own output for the user's original.
+    const created = `${w.file}.fth-created`;
+    if (!fs.existsSync(w.file)) {
+      if (!fs.existsSync(`${w.file}.fth-backup`)) fs.writeFileSync(created, 'created by scripts/install.js; there was no original\n');
+    } else if (!fs.existsSync(`${w.file}.fth-backup`) && !fs.existsSync(created)) {
+      fs.copyFileSync(w.file, `${w.file}.fth-backup`);
+    }
     fs.writeFileSync(w.file, w.content);
   }
 }
@@ -206,6 +240,7 @@ module.exports = {
   codexConfigBlock,
   mergeQwenSettings,
   qwenWorkspaceSettings,
+  stripJsonComments,
   planClaude,
   planCodex,
   planQwen,

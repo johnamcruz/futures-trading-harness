@@ -75,10 +75,36 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
   });
 }
 
+/**
+ * Files in the run's working directory that every harness trusts: operator
+ * instructions and project settings. A run must not change them (a Codex run
+ * can write its working directory), so the runner fingerprints them before
+ * and after every run.
+ */
+const TRUSTED_WORKSPACE_FILES = [
+  'AGENTS.md', 'CLAUDE.md', 'QWEN.md', '.mcp.json',
+  '.qwen/settings.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml',
+];
+
+function workspaceFingerprint(dir) {
+  return Object.fromEntries(TRUSTED_WORKSPACE_FILES.map(f => {
+    try {
+      return [f, crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex')];
+    } catch (_err) {
+      return [f, null];
+    }
+  }));
+}
+
+/** Files whose fingerprint differs. */
+function changedFiles(before, after) {
+  return Object.keys({ ...before, ...after }).filter(f => before[f] !== after[f]);
+}
+
 /** Entry order ids the MCP gateway recorded in <stateDir>/entry-orders.json. */
 function entryOrderIds(stateDir) {
   const list = readJson(path.join(stateDir, 'entry-orders.json'), []);
   return new Set((Array.isArray(list) ? list : []).map(e => Number(e && e.orderId)).filter(Number.isFinite));
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness, entryOrderIds };
+module.exports = { readJson, writeJsonAtomic, runHarness, entryOrderIds, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles };

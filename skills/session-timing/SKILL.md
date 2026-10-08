@@ -32,7 +32,7 @@ All times America/New_York (ET) unless marked CT. Equity index futures
 Metals (MGC) and crude (MCL) have their own sessions: crude reacts to EIA
 inventory (Wednesday 10:30 ET); gold to US data and rates.
 
-**Blackouts.** The order gate reads `~/.futures-trading-harness/blackouts.json`
+**Blackouts.** The order gate reads `~/.futures-trading-harness/blackouts/blackouts.json`
 (or `FTH_BLACKOUTS_FILE`): a JSON array of `{ "start": ISO-8601, "end":
 ISO-8601, "reason": "CPI" }`. During premarket, after confirming the
 day's calendar, add the high-impact events with a 5–10 minute buffer on each

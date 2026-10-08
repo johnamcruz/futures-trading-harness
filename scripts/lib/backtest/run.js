@@ -20,13 +20,15 @@
  */
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { validateConfig, buildCommand, childEnv, cycleResult, resolveDataDir } = require('../autotrader');
 const { createRunner } = require('../runner');
 const { createClient } = require('../projectx-rest');
 const { loadStrategies, scan } = require('../trading/strategies');
 const { readJournal } = require('../trading/journal');
-const { writeJsonAtomic, runHarness, entryOrderIds } = require('../harness-run');
+const { writeJsonAtomic, runHarness, entryOrderIds, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles } = require('../harness-run');
+const { qwenWorkspaceSettings } = require('../install');
 const { SimBroker } = require('./broker');
 const { createSimServer } = require('./api');
 const { loadBars, MINUTE } = require('./data');
@@ -141,11 +143,31 @@ async function runBacktest(rawConfig, { root, baseDir = process.cwd(), log = () 
   const env = backtestEnv(process.env, { url, home, clockFile });
   cfg.account = String(broker.account.id);
   const dataDir = resolveDataDir(cfg, undefined, env);
+  // The run's own copy of the workspace: same instructions, with a Qwen
+  // allowlist for this run's bar and state directories. Live settings are
+  // never touched.
+  const workdir = path.join(runDir, 'workspace');
+  for (const f of TRUSTED_WORKSPACE_FILES) {
+    const src = path.join(path.resolve(root, cfg.workdir), f);
+    if (fs.existsSync(src)) {
+      fs.mkdirSync(path.dirname(path.join(workdir, f)), { recursive: true });
+      fs.copyFileSync(src, path.join(workdir, f));
+    }
+  }
+  fs.mkdirSync(path.join(workdir, '.qwen'), { recursive: true });
+  fs.writeFileSync(path.join(workdir, '.qwen', 'settings.json'), `${JSON.stringify(qwenWorkspaceSettings(root, os.homedir(), { dataDir, stateDir: home }), null, 2)}\n`);
+  cfg.workdir = workdir;
+  const baseline = workspaceFingerprint(workdir);
   const killSwitchFile = path.join(home, 'STOP');
   const cycles = { trade: 0, premarket: 0, eod: 0, manage: 0, failed: 0 };
   const logFile = path.join(runDir, 'cycles.log');
 
   const runCycle = async (action, prompt) => {
+    const changed = changedFiles(baseline, workspaceFingerprint(workdir));
+    if (changed.length) {
+      fs.writeFileSync(killSwitchFile, `workspace files changed during a run: ${changed.join(', ')}\n`);
+      return { ok: false, timedOut: false };
+    }
     const startedSim = broker.now;
     const startedReal = Date.now();
     const argv = buildCommand(cfg, prompt, root, env);

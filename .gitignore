@@ -10,6 +10,7 @@ secrets.json
 # Local runner config and installer backups
 /autotrader.json
 *.fth-backup
+*.fth-created
 
 # OS and editor files
 .DS_Store

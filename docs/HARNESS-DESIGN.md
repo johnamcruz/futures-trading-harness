@@ -88,6 +88,27 @@ cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,
 `FTH_AUTONOMOUS=1`, and, in paper mode, `FTH_PAPER=1` and
 `PROJECTX_TRADING_ENABLED=false`.
 
+Further safeguards:
+
+- **Workspace fingerprint.** The runner fingerprints the workspace's
+  instructions and project settings (`AGENTS.md`, `CLAUDE.md`, `QWEN.md`,
+  `.qwen/`, `.claude/`, `.codex/`) before and after every run. A change
+  creates the kill switch, because a Codex run can write its working
+  directory.
+- **Qwen allowlist.** For Qwen the runner rewrites the
+  `workspace/.qwen/settings.json` allowlist at start, so it matches the
+  configured bar and state directories.
+- **Codex blackouts.** Codex runs may also write the news-blackouts
+  directory (`<FTH_HOME>/blackouts`), and nothing else of the harness state.
+- **Leftover orders.** Before each bar's cycle, the runner cancels working
+  orders on a flat contract that are not pending entries recorded by the
+  gateway.
+- **No crash exits.** A pass that throws is logged and counted toward the
+  kill switch, and the loop carries on.
+
+Backtests (`scripts/backtest.js`, see [BACKTESTING.md](BACKTESTING.md)) drive
+the same runner against a simulated broker with a simulated clock.
+
 ## Known limits
 
 - The hook can't see positions; only the gateway checks that `[exit]` and

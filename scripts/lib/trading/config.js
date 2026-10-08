@@ -57,7 +57,9 @@ function loadConfig(env = process.env) {
       ? String(env.FTH_NO_ENTRY_WINDOWS)
       : DEFAULT_NO_ENTRY_WINDOWS,
     blackoutsFile: String(env.FTH_BLACKOUTS_FILE || '').trim()
-      || path.join(harnessHome(env), 'blackouts.json'),
+      // Its own directory, so a sandboxed harness (Codex) can be given write
+      // access to blackouts without access to the kill switch or the gate log.
+      || path.join(harnessHome(env), 'blackouts', 'blackouts.json'),
     killSwitchFile: String(env.FTH_KILL_SWITCH_FILE || '').trim()
       || path.join(harnessHome(env), 'STOP'),
     // Set by the autonomous runner for the harness it launches. In autonomous
