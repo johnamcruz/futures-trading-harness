@@ -20,8 +20,16 @@ const DATA = path.join(__dirname, '..', 'fixtures', 'data');
 test('Parquet (pyarrow, pandas, polars, fastparquet; every codec and encoding) and Excel load the same bars as CSV', () => {
   const ref = loadBars(path.join(DATA, 'bars.csv'));
   assert.strictEqual(ref.length, 300);
+  // ZSTD needs zlib.zstdDecompressSync (Node 22.15+): older Node says so instead of misreading the file.
+  const zstd = typeof require('zlib').zstdDecompressSync === 'function';
   for (const f of fs.readdirSync(DATA).filter(x => x !== 'bars.csv')) {
-    const bars = loadBars(path.join(DATA, f));
+    let bars;
+    try {
+      bars = loadBars(path.join(DATA, f));
+    } catch (err) {
+      if (!zstd && /ZSTD needs Node 22\.15\+/.test(err.message)) continue;
+      throw err;
+    }
     if (f === 'pyarrow-nulls.parquet') {
       assert.strictEqual(bars[5].v, 0, 'a missing volume reads as 0');
       assert.deepStrictEqual({ ...bars[5], v: ref[5].v }, ref[5]);
