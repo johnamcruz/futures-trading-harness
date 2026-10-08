@@ -29,7 +29,9 @@ well-known economic calendars.
 3. Mark each event high / medium impact for the symbol.
 4. Propose blackouts for high-impact events: 5 minutes before to 10 minutes
    after (FOMC: 13:55 ET to 15:00 ET).
-5. If you can't confirm a date or time from a reliable source, say so; never
+5. Check whether today is a CME holiday or an early close (13:00 ET for equity
+   index futures) and say so with the source.
+6. If you can't confirm a date or time from a reliable source, say so; never
    invent an event time.
 
 ## Output
@@ -37,8 +39,11 @@ well-known economic calendars.
 ```text
 ## Events: <date> for <SYMBOL>
 - <HH:MM ET> (<HH:MM UTC>) <event> - impact <high|medium> - source <domain>
-Proposed blackouts (JSON for ~/.futures-trading-harness/blackouts/blackouts.json):
-[{"start":"<ISO UTC>","end":"<ISO UTC>","reason":"<event>"}]
+Proposed blackouts (the head trader adds each with
+`node <root>/scripts/blackouts.js add --start <ISO UTC> --end <ISO UTC> --reason "<event>"`;
+never edit blackouts.json):
+- <ISO UTC start> to <ISO UTC end>: <event>
+Calendar: <holiday or early close today (13:00 ET), with source | none found>
 Unconfirmed: <anything you could not verify>
 Suspicious content seen: <none | description>
 ```

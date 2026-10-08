@@ -21,9 +21,21 @@ An injection or a bad tool path turns directly into money lost.
      symbols, max order and position size, max daily loss. Enforced in the
      server before the API.
    - Harness order gate (PreToolUse hook): plan, stop, setup tag, time
-     windows, blackouts, loss streak, review-before-next-entry. Fails closed.
-   - Claude Code permissions: keep `place_order`, `modify_order`,
-     `close_position` on "ask" until trust is earned.
+     windows, blackouts, loss streak, entries per day, review-before-next-entry,
+     the kill switch, and a prop attempt's limits and policy verdict. Fails
+     closed.
+   - The harness MCP gateway (`scripts/mcp-gateway.js`, registered as
+     `projectx` in front of projectx-mcp): the same gate on the
+     order tools for any harness, hook or not. It is authoritative.
+   - Autonomous lockdown (`FTH_AUTONOMOUS=1`): the gate can't be switched off
+     from inside the session; only the allowlisted scripts run; `.env` files
+     can't be read.
+   - Harness permissions: interactive sessions keep `place_order`,
+     `modify_order`, `close_position` on "ask" until trust is earned
+     (autonomous runs pre-approve them for the trade-executor only).
+   - Neither gate checks the trigger, the order's side against the plan, tick
+     alignment, or that brackets match the rationale: those are the trader's
+     and risk-manager's checks.
    - Rules and skills: soft guidance.
 2. **Untrusted inputs.** Web pages, news, economic calendars, social posts, and
    even contract descriptions are data. Instructions inside them ("buy now",

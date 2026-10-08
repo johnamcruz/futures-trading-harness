@@ -29,7 +29,8 @@ const FTH_ENV = [
   'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS',
   'FTH_HOME',
 ];
-const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
+// The read-only (or append-only) scripts the skills tell an autonomous run to use.
+const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js'];
 
 function gatewayArgs(root, projectxEntry) {
   return [path.join(root, 'scripts', 'mcp-gateway.js'), '--', 'node', projectxEntry];
@@ -130,9 +131,11 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
       allow: [
         'mcp__projectx', 'Skill', 'Agent', 'web_search',
         ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
-        `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs('/tmp/fth')}/**)`,
+        `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs('/tmp/fth')}/**)`,
         'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
         ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
+        // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
+        `Bash(node ${root}/scripts/combine.js status *)`,
       ],
       deny: [
         `Edit(${abs(`${root}/**`)})`,
@@ -143,6 +146,8 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
         `Read(${abs('/proc')}/**)`,
         `Read(${h('.qwen')}/**)`, `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`,
         `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
+        // Credentials (.env in the state dir).
+        `Read(${abs(stateDir)}/.env)`,
       ],
     },
   };

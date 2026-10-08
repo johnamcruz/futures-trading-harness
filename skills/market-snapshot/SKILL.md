@@ -16,10 +16,13 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 ## How It Works
 
 1. Fetch closed bars, oldest first:
-   `get_bars {contractId, unit:"minute", unitNumber:3, limit:500, includePartialBar:false}`.
-   Use 500 bars: algoTraderBot's window (cisd_ote and SuperTrend depend on
-   it), enough for EMA(200) and prior-day levels; 3-minute bars match the
-   strategy parameters.
+   `get_bars {contractId, unit:"minute", unitNumber:3, limit:2000, includePartialBar:false}`.
+   Use 2000 bars (the autonomous runner keeps at least as many in its bars
+   file; prefer that file): enough for EMA(200), prior-day levels, and the
+   1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,
+   the regime) read their own trailing 500 bars, as their source did.
+   3-minute bars match the strategy parameters (1-minute for the flow
+   strategies).
 2. Save the tool's JSON result verbatim to a temp file, e.g.
    `/tmp/fth/MNQ-3m.json` (create the folder first).
 3. Run the script from the harness root (`<root>`, an absolute path; see the
@@ -37,12 +40,16 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    - `structure`: last confirmed fractal swing high/low (k=2) and when.
    - `levels`: priorRth high/low/close, overnight high/low, openingRange
      (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET
-     anchor), vwapRth (09:30 ET anchor).
+     anchor), vwapRth (09:30 ET anchor; null before today's 09:30 ET open
+     and after 16:00 ET: use vwapSession then, as the strategy filters do).
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, VWAP crosses in 30 bars, ATR vs its average).
    - `referenceStop`: distance and long/short stop prices. Round to `tickSize`.
-5. Never quote a number the script did not produce or a tool did not return.
+5. Check the last bar's time (`last.t`, UTC): older than one bar of the timeframe
+   (plus a minute) at the time you read it means stale data; say so and
+   don't plan from it.
+6. Never quote a number the script did not produce or a tool did not return.
 
 ## Examples
 

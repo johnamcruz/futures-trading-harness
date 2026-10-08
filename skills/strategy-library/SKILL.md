@@ -34,7 +34,15 @@ Autonomous runs only permit these scripts by absolute path.
 node <root>/scripts/strategies.js list           # name, status, signal, instruments
 node <root>/scripts/strategies.js show orb       # the full STRATEGY.md
 node <root>/scripts/strategies.js scan /tmp/fth/MNQ-3m.json --symbol MNQ
+node <root>/scripts/strategies.js list --json    # machine-readable
 ```
+
+`scan` judges sessions at the current time; pass `--now <ISO>` to judge them
+at another time (e.g. the bar's close when replaying a file). It reads the
+signal on the file's last closed bar and doesn't know the file's timeframe:
+read results only for strategies whose timeframe is the file's (a 3m strategy
+on 1-minute bars, or the reverse, is not a signal), and only when that last
+bar is fresh (no older than one bar plus a minute).
 
 `scan` runs market-snapshot with each strategy's `params` and reports, per
 strategy: `direction` (mechanical signal on the last closed bar),
@@ -50,17 +58,24 @@ one did or didn't fire. Strategies with `signal: manual` are listed with
 2. A trade needs, in order: the trigger has fired on a closed bar (scan
    `candidate: true`, or the manual trigger described in the body), every
    context filter holds, no "Skip when" rule applies, and planned R:R ≥
-   `risk.min_rr`.
+   `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
+   `min_rr` stands in for it).
 3. Stop from `risk.stop`: `atr:<k>` or a distance expression (e.g.
    cisd_ote's `cisd_ote_risk`) → the scan's `stopDistance`;
-   `structure`/`swing` → beyond the level the body names. Round to tick size.
+   `structure`/`swing` → beyond the level the body names. Round the stop
+   away from the entry to the tick (a long's stop down, a short's up), the
+   target toward it; bracket ticks = `ceil(distance / tickSize)`.
+   `atr:<k>` means k × ATR(20) on the strategy's bars.
 4. Tag the plan and the order `setup:<name>`.
 
 ### What the code enforces (order gate and MCP gateway)
 
 Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. `paper` strategies can only be paper-traded.
+`sessions`. `paper` strategies can only be paper-traded. The gate does
+**not** check that the trigger fired, the side, the stop's side or tick, or
+that the brackets match the rationale: those are yours and risk-manager's.
+While a prop attempt runs, only its policy strategy's verdict can enter.
 
 ## Examples
 

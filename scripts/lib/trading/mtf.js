@@ -201,13 +201,14 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   }
   const al = alignment(frames.filter(f => f.read.trend !== 'unknown'));
   const lastBar = last(nb);
+  const forming = f => (f.forming ? ` | forming ${f.label} candle from ${f.forming.t}: O ${f.forming.o} H ${f.forming.h} L ${f.forming.l} C ${f.forming.c} (not in the trend)` : '');
   return {
     asOf: lastBar.t,
     price: lastBar.c,
     frames,
     alignment: al,
     lines: [
-      ...frames.map(f => line(f.minutes, f.read)),
+      ...frames.map(f => line(f.minutes, f.read) + forming(f)),
       `Alignment: long ${al.long}, short ${al.short}; bias ${al.bias} (score ${al.score} of ±${al.maxScore}).`,
     ],
   };

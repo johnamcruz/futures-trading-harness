@@ -22,14 +22,17 @@ description: Rules for running the trading harness unattended (headless, schedul
    would ask, take the conservative branch: stand aside, keep the stop, flatten
    at end of day.
 3. **Positions first.** If a position is open, only manage it this cycle.
-   Before your cycle, the runner has already done two things:
+   Before your cycle, the runner has already:
    - cancelled leftover orders on a flat contract;
-   - for strategies whose exit trails, applied the trailing stop: hold the
-     initial stop until +2R, then 0.5R behind the best price;
+   - for strategies whose exit trails, applied the trailing stop: the initial
+     stop until `trailActivateR`, then `trailGivebackR` behind the best price
+     (both in the scan's `exit`);
    - for strategies with a time stop (`exit.max_bars`), closed a trade that
      has been open that long.
    Don't loosen a stop it set. To see why a setup did or didn't fire, read
-   that bar's record in `<FTH_HOME>/logs/scans-<day>.jsonl`.
+   that bar's record in `<FTH_HOME>/logs/scans-<day>.jsonl` (the runner's own
+   log is `<FTH_HOME>/logs/autotrader-<day>.log`; both are readable, nothing
+   else in `<FTH_HOME>` needs to be).
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
    the server ends the entry attempt. Fix what the block names when it is
    yours to fix (for example, review a closed trade, cancel a leftover order),
@@ -42,7 +45,12 @@ description: Rules for running the trading harness unattended (headless, schedul
    so the next cycle and the human can see what happened, and a final line:
    `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
-   one plan, at most one entry.
+   one plan, at most one entry. A tool that fails twice ends the cycle as
+   `error` (after confirming any open position has its stop).
+8. **Allowed scripts.** Only these run, by absolute path:
+   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`, and
+   `combine.js status`. Starting, stopping, or recording a prop attempt,
+   backtests, and training are the user's.
 
 ## Examples
 

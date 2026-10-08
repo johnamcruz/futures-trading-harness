@@ -28,10 +28,15 @@ than two requests:
 | Role | Timeframe | Source |
 |---|---|---|
 | Context | daily | `get_bars` `unit:"day", unitNumber:1`, 60 bars, saved to `/tmp/fth/<SYMBOL>-1d.json` |
-| Context | 4 hours | built from the trigger bars (needs 50+ candles for its slow EMA: 2000+ 3m bars, else use `get_bars` `unit:"hour", unitNumber:4`) |
+| Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
 | Bias | 1 hour | built from the trigger bars |
 | Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file, or `get_bars` `unit:"minute"`, 2000 bars |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `get_bars` `unit:"minute"`, 2000 bars |
+
+Without `--daily` the highest timeframe is the 4-hour: the alignment is then
+judged from it, and the plan says "no daily read". Fetch the daily bars once
+a session (premarket) and reuse the file; if `get_bars` fails, go on without
+them rather than retrying.
 
 ### 2. Run the read
 
@@ -64,10 +69,13 @@ From the highest timeframe down, for each side:
 
 | Label | Means | What to do |
 |---|---|---|
-| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at full size and its full target |
+| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target |
 | `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then enter. Do not enter while it is still moving against you |
-| `mixed` | timeframes disagree without a clear pullback | Half size, or the nearest opposing level as the target; skip in a quiet session |
-| `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size and the nearest target |
+| `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)` (skip if that is 0), or the nearest opposing level as the target; skip in a quiet session |
+| `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |
+
+A policy strategy's verdict is already sized by its policy: the read goes in
+the plan, but it doesn't halve the verdict.
 
 The `bias` (long, short, or neutral) weights the higher timeframes more
 (score out of ±max): use it for the game plan's headline.

@@ -38,7 +38,15 @@ description: Size futures trades from the stop distance, tick value, and the rem
 5. **Caps:** the server's `PROJECTX_MAX_ORDER_SIZE` and
    `PROJECTX_MAX_POSITION_SIZE`; size 1 on micros until the setup has 30+
    reviewed trades with positive expectancy.
-6. Write entry, stop, size, and $ risk into the plan.
+6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
+   policy strategy, the verdict's contract (micro or mini), size, and stop
+   ticks were sized from the attempt's budget (`combine.js status`); place at
+   most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
+   checks the verdict, not these caps. Everything else (stop first, protective
+   stop always working) still applies.
+7. **Half size** (a `mixed` multi-timeframe read): `floor(size / 2)`; if
+   that is 0, skip the trade. Never round a half up.
+8. Write entry, stop, size, and $ risk into the plan.
 
 ## Examples
 

@@ -34,6 +34,29 @@ Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 | 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |
 | 16:10 ET / 15:10 CT | Topstep's own flatten | The harness is flat by 16:00 ET |
 
+**Holidays and early closes.** CME closes on some US holidays and closes
+equity index futures early (13:00 ET) on others (the days around
+Thanksgiving, Christmas, and New Year, Juneteenth, Independence Day). The
+harness does not know the calendar by itself: the user lists the days in the
+runner config (`closedDates`, `earlyCloseDates`, `earlyCloseEodAt`), which
+the runner passes to the gate as `FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES`
+(trading days, YYYY-MM-DD of the day they end on). The gate then refuses
+entries on a closed day and after 13:00 ET on an early-close day, and the
+runner flattens at `earlyCloseEodAt` (default 12:50 ET). Premarket checks the
+calendar; if today is a holiday or an early close and it isn't configured,
+tell the user and plan as if it were (no entries after 12:45 ET, flat by
+12:50 ET).
+
+**Contract roll.** Equity index futures expire quarterly (H Mar, M Jun, U
+Sep, Z Dec) on the third Friday; volume moves to the next contract about
+eight days earlier (the roll, the Thursday or Friday before). Always trade
+the contract `search_contracts {searchText:"MNQ"}` marks
+`activeContract=true`, and re-read it each session: a stale `contractId` from
+an old plan or journal entry may be the expiring month. Bars from before the
+roll come from the old contract at a different price (the spread between
+months): levels, VWAP, and swings that straddle the roll day are not
+comparable; prefer the new contract's own bars for levels on roll days.
+
 Metals (MGC) and crude (MCL) have their own sessions: crude reacts to EIA
 inventory (Wednesday 10:30 ET); gold to US data and rates.
 

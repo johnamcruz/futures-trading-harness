@@ -37,7 +37,7 @@ const DEFAULTS = {
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
-  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': snapshot + scan, analysts only to confirm a candidate (use for 1m)
+  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no analysts or news, the trader runs the snapshot, scan, and MTF read and calls risk-manager only on a candidate (use for 1m)
   earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close trading days (YYYY-MM-DD, the date the day ends on)
   closedDates: [], // e.g. ["2026-11-26", "2026-12-25"]: CME holidays with no session (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
@@ -48,7 +48,8 @@ const DEFAULTS = {
   extraArgs: [],
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
-const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
+// The read-only (or append-only) scripts the skills tell an autonomous run to use.
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
@@ -68,11 +69,12 @@ const abs = p => `/${p}`;
  * broader allow in the user's settings): reading credentials and other
  * agents' configs, and writing the harness, its state, or Claude settings.
  */
-function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home) } = {}) {
+function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   return [
     'mcp__projectx', 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
-    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, 'Read(//tmp/fth/**)',
+    // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
+    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
     'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
     // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
@@ -87,6 +89,8 @@ function claudeDenied(root, { home = os.homedir(), stateDir = null } = {}) {
     ...state,
     'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
     `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
+    // Credentials (.env in the state dir, the default ~/.futures-trading-harness, or the repo).
+    `Read(${h('.futures-trading-harness')}/.env)`, ...(stateDir ? [`Read(${abs(stateDir)}/.env)`] : []),
     `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
     `Edit(${h('.futures-trading-harness')}/**)`, `Write(${h('.futures-trading-harness')}/**)`,
     `Edit(${h('.projectx-mcp')}/**)`, `Write(${h('.projectx-mcp')}/**)`,
@@ -308,7 +312,7 @@ function buildCommand(cfg, prompt, root, env = process.env) {
   switch (cfg.harness) {
     case 'claude':
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env) }).join(','),
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
         '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':

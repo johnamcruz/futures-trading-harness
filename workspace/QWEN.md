@@ -119,7 +119,13 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
-- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise.
+- Exception: while a prop attempt runs a policy strategy (`signal: policy`),
+  its verdict sets the contract (micro or mini) and size, sized from the
+  attempt's budget; the 25% and size-1 rules above don't apply to it, and the
+  order gate enforces the verdict instead. Never exceed the verdict.
+- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise
+  (for a trailing exit with no target, the trail activation `trailActivateR`
+  stands in for it).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
 - Skip the trade when unsure. Standing aside is a position.

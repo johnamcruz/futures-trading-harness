@@ -90,6 +90,13 @@ test('order gate allows a planned entry', () => {
   assert.strictEqual(r.code, 0, r.stderr);
 });
 
+test('order gate: a setup tag that is not first is refused with where it goes', () => {
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[setup-tag\] Rationale must start with the strategy as setup:<name>/);
+});
+
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);

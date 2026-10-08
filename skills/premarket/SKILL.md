@@ -31,10 +31,16 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
      `multi-timeframe-analysis` skill): one line per timeframe, the alignment
      for longs and shorts, and where analysts disagree.
    - Key levels table (price, what, source).
-   - Strategies in play: from `strategies.js list`, the active ones for this
+   - Strategies in play: from `node <root>/scripts/strategies.js list --json`
+     (status, sessions, instruments), the active ones for this
      symbol whose sessions are today, with the exact trigger each needs.
      Strategies to avoid today, with reasons.
    - Risk budget and stand-down conditions; event windows.
+   - The calendar: a CME holiday or an early close today (from the news
+     analyst) that the runner config doesn't list → tell the user (it goes in
+     `closedDates` / `earlyCloseDates`) and plan for it (see `session-timing`).
+     A contract roll this week → the active contract from `search_contracts`,
+     and levels from before the roll read with care.
 5. `journal_add {kind:"note", contractId, tags:["premarket", "<SYMBOL>"]}` with
    the game plan, then show it.
 

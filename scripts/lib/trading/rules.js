@@ -118,8 +118,8 @@ function parseFactor(tok) {
   if (tok.type === 'func') {
     if (!FUNCS.has(tok.name)) throw new Error(`unknown function "${tok.name}(...)"`);
     if (!(tok.arg >= 1 && tok.arg <= 500)) throw new Error(`${tok.name}(${tok.arg}): length must be 1-500`);
-    // ADX needs 2n bars; the live scan sees 500.
-    if (tok.name === 'adx' && tok.arg > 250) throw new Error(`adx(${tok.arg}): length must be 1-250 (ADX needs 2n bars; the live scan has 500)`);
+    // ADX needs 2n bars; keep it inside the 500-bar look-back.
+    if (tok.name === 'adx' && tok.arg > 250) throw new Error(`adx(${tok.arg}): length must be 1-250 (ADX needs 2n bars; look-backs stop at 500)`);
     if (HTF.has(tok.name) && 1440 % tok.arg !== 0) throw new Error(`${tok.name}(${tok.arg}): minutes must divide a day (e.g. 60, 120, 240)`);
     return { kind: 'series', key: `${tok.name}(${tok.arg})`, shift: tok.shift };
   }
@@ -213,7 +213,7 @@ function compileRules(rules) {
  * Prior-RTH and overnight levels as they stood at each bar, so a rule
  * evaluated on bar i never sees later bars. Overnight excludes bar i itself.
  * A session the bars start in the middle of is partial: its levels are
- * missing (the live scan's 500 bars often start mid-session), never wrong.
+ * missing (the scan's bars often start mid-session), never wrong.
  */
 function causalLevels(bars) {
   const n = bars.length;

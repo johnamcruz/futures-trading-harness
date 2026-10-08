@@ -20,7 +20,7 @@ Get every value from market-snapshot. Never estimate.
 | EMA 9/20 | close, ewm adjust=False | 9 above 20 and both rising → short-term uptrend. Cross = momentum shift. |
 | EMA 50/200 | close | Higher-timeframe slope and location filter. |
 | ADX(14) | Wilder | < 18: no trend, crossover signals whipsaw. 18–25: emerging trend. > 25: trending. Rising slope matters more than the level. ADX is directionless. |
-| ATR(14/20) | Wilder | Volatility per bar. Stops and targets scale with it. Compare with its 20-day average for the regime. |
+| ATR(14/20) | Wilder | Volatility per bar. Stops and targets scale with it. The regime compares ATR(14) with its average over the last 100 bars. |
 | SuperTrend(10, 3) | ATR bands | Direction and trailing level. Flips late in chop; useful as a trailing stop in trends. |
 | Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 | Close outside the band with ADX ≥ 20 → expansion. Inside and flat → range. |
 
@@ -30,8 +30,11 @@ Regime map:
   stable → breakout and pullback strategies.
 - **Range:** ADX < 18, EMA 9/20 tangled, repeated VWAP crosses → no trend
   strategies; trade the range edges or stand aside.
-- **Volatility expansion:** ATR > 1.5 × its average → halve size (keep the $
-  risk constant), widen stops to structure.
+- **Volatility:** the computed regime calls it `high` when ATR(14) ≥ 1.4 ×
+  its 100-bar average and `low` at ≤ 0.7 × (`regime.volatility` in
+  market-snapshot; use that value, don't recompute). High → keep the $ risk
+  constant: the wider stop means a smaller size; widen stops to structure.
+  Low → breakouts fail more; prefer strategies that list it.
 
 ## Examples
 

@@ -50,6 +50,8 @@ test('a plan must name the contract with contractId; text mentions do not count'
 
 test('setup tag must open the rationale and the stop must be a number after "stop"', () => {
   assert.deepStrictEqual(checks(evaluate(entryOrder({ rationale: 'this is not setup:orb, stop 21480' }), [plan()])), ['setup-tag']);
+  // The message says where the tag goes, not just that it's needed.
+  assert.match(evaluate(entryOrder({ rationale: 'long setup:orb, stop 21480' }), [plan()]).violations[0].message, /must start with the strategy as setup:<name>.*the tag goes first/);
   assert.deepStrictEqual(checks(evaluate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb never stop out, 2x size' }), [plan()])), ['stop-defined']);
   assert.deepStrictEqual(evaluate(entryOrder({ stopLossBracket: undefined, rationale: '  setup:orb long, stop: 21480' }), [plan()]).violations, []);
 });

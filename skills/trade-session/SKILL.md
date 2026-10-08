@@ -14,6 +14,9 @@ inside one run.
 
 - The user asks to trade, or the autonomous runner starts a cycle.
 - Plan-only mode (`paper`, `plan only`, or trading disabled): stop after the verdict.
+  The `paper` tag on a journal entry does not stop an order; only
+  `FTH_PAPER=1` (or trading disabled on the server) makes the gate refuse live
+  entries. In plan-only mode never call an order tool.
 
 ## How It Works
 
@@ -28,13 +31,23 @@ inside one run.
   they're unavailable, read `get_account_snapshot` (and
   `node <root>/scripts/combine.js status` for an attempt). Every decision
   below (take, skip, size, manage, stand down) is made with these numbers.
-- `get_account_snapshot`. **If a position is open, manage it and end the
-  cycle**: confirm the protective stop is working (`list_open_orders`), apply
+- **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`), apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only. If the strategy's
-  exit trails (`exit` in the scan), the runner already moved the stop on this
-  bar. Don't touch it unless you are exiting.
+  exit trails (`exit` in the scan) and the autonomous runner is running, it
+  already moved the stop on this bar: don't touch it unless you are exiting.
+  In an interactive session no runner trails: move the stop yourself by the
+  same rule (from `trailActivateR` of open profit, keep the stop
+  `trailGivebackR` behind the best price, rounded to the tick, toward the
+  market only), and close at market after `maxBars` bars for a time stop.
+- **Fresh data or no decision**: the last closed bar in the bars file must be
+  no older than one bar of its timeframe (plus a minute) at the cycle's time,
+  and the file's timeframe must be the one you are trading (a scan of 1m bars
+  says nothing about a 3m strategy). Stale or mismatched bars → manage open
+  positions only, journal a note, end. On interactive use, check the contract
+  is the front month (`search_contracts` / the roll guidance in
+  `session-timing`) before planning.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
   a pending entry from your own plan. New entries wait until no order is
@@ -43,21 +56,33 @@ inside one run.
   cancelled between cycles): run trade-review (`trade-reviewer` role) first.
   The order gate refuses the next entry until every entry is reviewed.
 - Daily stop or loss-streak cooldown in the briefing or journal → report and end.
+  The gate also refuses entries after `FTH_MAX_ENTRIES_PER_DAY` (default 6)
+  entries in a day; at the cap, manage and end.
+- **A tool fails** (timeout, 429, 5xx, an empty reply): retry a read once
+  after a few seconds; never retry an order call blindly. After a failed or
+  timed-out order call, read `list_open_orders` and `get_account_snapshot`
+  first: the order may have reached the exchange. `get_bars` allows 50
+  requests per 30 s across all agents: use the bars file, don't refetch. If
+  account state can't be read, place nothing new; report and end.
 
 ### 2. Parallel read
 
 **Every cycle, first:** the multi-timeframe read on the bars file
 (`node <root>/scripts/mtf.js <bars file>`, the `multi-timeframe-analysis`
-skill). A candidate whose side is `counter` is skipped unless it is a
-reversal setup at a higher-timeframe level; `pullback` waits for the trigger
-timeframe to turn back; `mixed` trades at half size. Put the verdict in the
-plan entry.
+skill). For the candidate's side: `aligned` → the strategy's normal size;
+`pullback` → no entry until the trigger timeframe turns back; `mixed` → half
+size, `floor(size / 2)`, and skip if that is 0 (a 1-contract plan in a mixed
+read is a skip); `counter` → skip, unless it is a reversal strategy judged as
+the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
+A policy verdict (below) is already sized: don't halve it.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
-fits inside one bar): skip the parallel analysts. Run market-snapshot and
-`strategies.js scan` on the bars file yourself, manage any open position, and
-only when a strategy is a candidate run `risk-manager` (phase 1 and 2) before
-executing. Everything else in this skill still applies.
+fits inside one bar): no parallel analysts and no news fetch. Yourself, in
+order: step 1, the multi-timeframe read, market-snapshot and
+`strategies.js scan` on the bars file, and the blackouts
+(`node <root>/scripts/blackouts.js list`). No candidate → note and end. A
+candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
+with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
 
 **Full cycle** (default):
 
@@ -90,10 +115,21 @@ and the current time.
   `strategies.js scan` reports): trend-up, trend-down, range, or transition,
   plus volatility. Don't override it with a narrative; if the analysts disagree
   with it, say why in the plan.
-- Pick at most one strategy that is a `candidate` in the scan (candidates are
-  already in session and in regime), or a manual strategy whose trigger you
-  verified on closed bars and whose `regimes` fit. `show` it (strategy-library)
-  and check every context filter and skip rule against the reports.
+- **A prop attempt with a policy strategy is running** (the prompt lists
+  verdicts, or `combine.js status` names a policy strategy): the policy's
+  verdict is the only trade. Plan exactly the verdict (`setup:<policy
+  strategy>`, its contract and side, at most its size, its stop ticks) per the
+  `prop-challenge-pacing` skill, or no trade when there is none or it says
+  skip. Never plan the component strategy (e.g. `orb`) yourself; the gate
+  refuses it. The rest of this step still decides whether the market permits
+  it (events, red flags).
+- Otherwise pick at most one strategy that is a `candidate` in the scan in
+  this direction on the last closed bar (candidates are already in session and
+  in regime: the trigger fired), or a manual strategy whose trigger you
+  verified on closed bars and whose `regimes` fit; quote the trigger in the
+  plan. The order gate does not check that a trigger fired: you and
+  risk-manager do. `show` it (strategy-library) and check every context
+  filter and skip rule against the reports.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.
@@ -102,16 +138,16 @@ and the current time.
 
 `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>", "regime:<primary>"]}`:
 thesis, trigger (what happened, price, time), entry, stop, exit, size
-(position-sizing), $ risk, the account it was sized from (balance, today's
+(position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's
 P&L, and for a prop attempt the cushion and size budget), skip rules checked,
 analyst agreement. Add the
 tag `paper` in plan-only mode.
 
 The exit follows the strategy's `exit` (shown in the scan):
 
-- **Trailing:** stop only, no target order. The runner trails it from
-  `trailActivateR` with `trailGivebackR` give-back. The ported strategies use
-  2R and 0.5R.
+- **Trailing:** stop only, no target order. The runner (or you, without one)
+  trails it from `trailActivateR` with `trailGivebackR` give-back; read both
+  from the scan's `exit`, don't assume them.
 - **Target:** stop and target at `targetR` (or `risk.min_rr`) times the stop
   distance.
 - **Target level:** with `exit.target` the scan gives `targetDistance`: the
@@ -119,6 +155,10 @@ The exit follows the strategy's `exit` (shown in the scan):
   side).
 - **Time stop:** with `maxBars`, close at market after that many bars in the
   trade if neither the stop nor the target has filled.
+
+Prices are on the tick (MNQ/MES 0.25). Round a stop away from the entry and a
+target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
+numbers in the rationale and the brackets.
 
 ### 5. Verdict
 
@@ -130,6 +170,13 @@ plan-only mode, report the plan and verdict and end.
 On `APPROVE`, hand the plan and verdict line to `trade-executor`. If the order
 gate, the MCP gateway, or the server blocks it, report the block and end.
 Never retry around a block.
+
+After the fill: read `get_account_snapshot` and `list_open_orders`. Check the
+filled size (a partial fill is a smaller position: its stop covers what
+filled; cancel the rest of the entry if the plan doesn't still want it), the
+fill price, and that the protective stop is working at the planned level. A
+position without a working stop is fixed before anything else (the
+trade-executor places it, or closes the position).
 
 ### 7. Report
 

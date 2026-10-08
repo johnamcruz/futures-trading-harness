@@ -149,7 +149,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     ? `Kill switch is on (${config.killSwitchFile}). No new entries until the user removes it.`
     : null);
   add('setup-tag', setup ? null
-    : 'Rationale must name the strategy as setup:<name> (e.g. setup:orb). '
+    : 'Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
   if (setup && strategies) {
     add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now, input.side));
