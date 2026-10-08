@@ -72,6 +72,7 @@ class Window:
 
     def __init__(self):
         self.n = self.passed = self.blown = self.timeout = self.trades = self.wins = self.losses = 0
+        self.win_r = self.loss_r = self.sum_r = 0.0
         self.profit = 0.0
         self.sessions = 0
         self.reward = 0.0
@@ -85,6 +86,9 @@ class Window:
         self.trades += o.get("trades") or 0
         self.wins += o.get("wins") or 0
         self.losses += o.get("losses") or 0
+        self.win_r += o.get("winR") or 0
+        self.loss_r += o.get("lossR") or 0
+        self.sum_r += o.get("sumR") or 0
         self.profit += o.get("profit") or 0
         self.sessions += o.get("sessions") or 0
         self.reward += reward
@@ -96,6 +100,8 @@ class Window:
         return {
             "attempts": self.n, "pass": rate("passed"), "blow": rate("blown"), "timeout": rate("timeout"),
             "winRate": self.wins / decided if decided else None, "tradesPerAttempt": self.trades / n if n else None,
+            "avgWinR": self.win_r / self.wins if self.wins else None, "avgLossR": self.loss_r / self.losses if self.losses else None,
+            "expectancyR": self.sum_r / self.trades if self.trades else None,
             "avgProfit": self.profit / n if n else None, "avgSessions": self.sessions / n if n else None, "epReward": self.reward / n if n else None,
         }
 
@@ -105,7 +111,8 @@ def progress_line(seed, steps, total, sps, eta, w, ppo):
     ppo_txt = " ".join(f"{k} {v:.3g}" for k, v in ppo.items()) or "ppo -"
     return (f"seed {seed} [{steps:>9,}/{total:,} {steps / total:4.0%}] {sps:,.0f} steps/s ETA {runlog.fmt_duration(eta)} | "
             f"attempts {w['attempts']} pass {f(w['pass'], '.0%')} blow {f(w['blow'], '.0%')} timeout {f(w['timeout'], '.0%')} | "
-            f"win {f(w['winRate'], '.0%')} trades/att {f(w['tradesPerAttempt'], '.1f')} profit ${f(w['avgProfit'], ',.0f')} "
+            f"win {f(w['winRate'], '.0%')} avg winR {f(w['avgWinR'], '.2f')} lossR {f(w['avgLossR'], '.2f')} exp {f(w['expectancyR'], '+.2f')}R | "
+            f"trades/att {f(w['tradesPerAttempt'], '.1f')} profit ${f(w['avgProfit'], ',.0f')} "
             f"sessions {f(w['avgSessions'], '.1f')} ep reward {f(w['epReward'], '.2f')} | {ppo_txt}")
 
 
@@ -143,7 +150,7 @@ def progress_callback(every_steps, checkpoint=None, checkpoints=0, total=0, seed
                     r = float(self.ep_reward[k]) if k < len(self.ep_reward) else 0.0
                     self.window.add(o, r)
                     runlog.event("attempt", seed=seed, step=self.num_timesteps, reward=r,
-                                 **{x: o.get(x) for x in ("start", "status", "sessions", "profit", "balance", "trades", "wins", "losses")})
+                                 **{x: o.get(x) for x in ("start", "status", "sessions", "profit", "balance", "trades", "wins", "losses", "winR", "lossR", "sumR")})
                     if k < len(self.ep_reward):
                         self.ep_reward[k] = 0.0
             if self.num_timesteps - self.last >= every_steps:
@@ -239,9 +246,21 @@ def pct(x):
     return "-" if x is None else f"{round(x * 1000) / 10}%"
 
 
+def rfmt(x, sign=False):
+    return "-" if x is None else (f"{x:+.2f}R" if sign else f"{x:.2f}R")
+
+
+def results_line(r):
+    """An evaluation in one line: pass, blow, and win rate, average win and loss R, expectancy, profit, trades."""
+    return (f"{r.get('attempts')} attempts: pass {pct(r.get('passRate'))}, blow {pct(r.get('blowRate'))}, win {pct(r.get('winRate'))}, "
+            f"avg winR {rfmt(r.get('avgWinR'))}, avg lossR {rfmt(r.get('avgLossR'))}, expectancy {rfmt(r.get('expectancyR'), True)}, "
+            f"avg profit ${r.get('avgProfit')}, trades/attempt {r.get('tradesPerAttempt')}")
+
+
 def report_md(b):
     def row(label, r):
-        return (f"| {label} | {r['attempts']} | {pct(r['passRate'])} | {pct(r.get('winRate'))} | {pct(r['blowRate'])} | "
+        return (f"| {label} | {r['attempts']} | {pct(r['passRate'])} | {pct(r.get('winRate'))} | {rfmt(r.get('avgWinR'))} | {rfmt(r.get('avgLossR'))} | "
+                f"{rfmt(r.get('expectancyR'), True)} | {pct(r['blowRate'])} | "
                 f"{r['medianDaysToPass'] if r['medianDaysToPass'] is not None else '-'} | {r['avgProfit']} | {r['tradesPerAttempt']} |")
 
     gate = b["gate"]
@@ -258,8 +277,8 @@ def report_md(b):
         lines += ["", "Failed:", ""] + [f"- {f}" for f in b["gateFailures"]]
     lines += [
         "",
-        "| Window | Attempts | Pass | Win rate | Blow | Median days to pass | Avg profit $ | Trades/attempt |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Window | Attempts | Pass | Win rate | Avg win R | Avg loss R | Expectancy | Blow | Median days to pass | Avg profit $ | Trades/attempt |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
         row("Selection (policy)", b["selection"]),
         row("Out of sample (policy)", b["oos"]),
         row("Out of sample (rules only)", b["baseline"]),
@@ -287,11 +306,12 @@ def evaluate_oos(server, cfg, network):
     baseline = server.evaluate(oos_starts, w["oos"][1], None)
     oos = server.evaluate(oos_starts, w["oos"][1], network)
     fails = gate_failures(oos, cfg["min_pass_rate"], cfg["min_win_rate"])
-    log(f"out of sample: policy pass {pct(oos['passRate'])} win {pct(oos.get('winRate'))} blow {pct(oos['blowRate'])}; "
-        f"rules only pass {pct(baseline['passRate'])} win {pct(baseline.get('winRate'))} blow {pct(baseline['blowRate'])}; {'VALIDATED' if not fails else 'not validated: ' + '; '.join(fails)}")
+    log(f"out of sample, policy: {results_line(oos)}")
+    log(f"out of sample, rules only: {results_line(baseline)}")
+    log(f"out of sample: {'VALIDATED' if not fails else 'not validated: ' + '; '.join(fails)}")
     runlog.event("evaluation", window="oos", policy=oos, baseline=baseline, gateFailures=fails, validated=not fails)
     for m, r in oos.get("months", {}).items():
-        log(f"  oos {m}: {r['attempts']} attempts, pass {pct(r.get('passRate'))}, blow {pct(r.get('blowRate'))}")
+        log(f"  oos {m}: {results_line(r)}")
     return oos, baseline, fails
 
 
@@ -402,7 +422,7 @@ def train(cfg, out_dir):
             log(f"seed {seed}: training on {cfg['windows']['train'][0]} .. {cfg['windows']['train'][1]}")
             network = train_seed(cfg, seed, out_dir)
             sel = server.evaluate(select_starts, w["select"][1], network)
-            log(f"seed {seed} selection: pass {pct(sel['passRate'])}, win {pct(sel.get('winRate'))}, blow {pct(sel['blowRate'])}, avg profit ${sel['avgProfit']}")
+            log(f"seed {seed} selection: {results_line(sel)}")
             runlog.event("evaluation", window="select", seed=seed, result=sel)
             seeds_report.append({"seed": seed, "selection": {k: v for k, v in sel.items() if k != "months"}})
             if best is None or rank(sel) < rank(best["selection"]):

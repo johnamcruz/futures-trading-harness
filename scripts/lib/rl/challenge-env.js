@@ -89,7 +89,7 @@ const tradeReward = (env, newWins, newLosses) => env.reward.win * newWins - env.
 /** Attempts from each start, deterministic policy (or rules only). Aggregate and per-month results. */
 function evaluate(env, starts, endMs, policy = null) {
   const months = new Map();
-  const blank = () => ({ attempts: 0, passed: 0, blown: 0, timeout: 0, other: 0, passDays: [], profit: 0, trades: 0, wins: 0 });
+  const blank = () => ({ attempts: 0, passed: 0, blown: 0, timeout: 0, other: 0, passDays: [], profit: 0, trades: 0, wins: 0, losses: 0, winR: 0, lossR: 0, sumR: 0 });
   const all = blank();
   const add = (agg, o) => {
     agg.attempts += 1;
@@ -99,6 +99,13 @@ function evaluate(env, starts, endMs, policy = null) {
     agg.profit += o.profit;
     agg.trades += o.trades.length;
     agg.wins += o.trades.filter(t => t.net > 0).length;
+    agg.losses += o.trades.filter(t => t.net < 0).length;
+    for (const t of o.trades) {
+      const r = Number.isFinite(t.r) ? t.r : 0;
+      agg.sumR += r;
+      if (t.net > 0) agg.winR += r;
+      else if (t.net < 0) agg.lossR += r;
+    }
   };
   for (const s of starts) {
     const o = runAttempt(env, s, endMs, policy);
@@ -118,6 +125,11 @@ function evaluate(env, starts, endMs, policy = null) {
     wins: a.wins,
     // Winning trades (after fees) over all trades.
     winRate: a.trades ? Math.round((a.wins / a.trades) * 1000) / 1000 : null,
+    losses: a.losses,
+    // Average R of the winning trades, of the losing ones, and of every trade (expectancy).
+    avgWinR: a.wins ? Math.round((a.winR / a.wins) * 1000) / 1000 : null,
+    avgLossR: a.losses ? Math.round((a.lossR / a.losses) * 1000) / 1000 : null,
+    expectancyR: a.trades ? Math.round((a.sumR / a.trades) * 1000) / 1000 : null,
   });
   return { ...finish(all), months: Object.fromEntries([...months].map(([k, v]) => [k, finish(v)])) };
 }

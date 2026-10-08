@@ -36,7 +36,7 @@ from pathlib import Path
 from . import REPO_ROOT, runlog
 from .bridge import EnvServer
 from .config import MIN_PASS_RATE, NAME, gate_failures, load_config
-from .train import build_bundle, evaluate_oos, harness_home, log, log_oos_look, pct, promote, rank, server_info, train_seed, write_bundle
+from .train import build_bundle, evaluate_oos, harness_home, log, log_oos_look, pct, promote, rank, results_line, server_info, train_seed, write_bundle
 
 # What a sweep may search or anchor: training and reward levers only. Never
 # the account, data, windows, strategies, or the gate.
@@ -255,9 +255,18 @@ def merge(results):
     blown = sum(r["blown"] for r in results)
     trades = sum(r.get("trades") or 0 for r in results)
     wins = sum(r.get("wins") or 0 for r in results)
+    losses = sum(r.get("losses") or 0 for r in results)
+
+    def weighted(key, count):
+        # Seeds' averages back to sums, then over all seeds' counts.
+        num = sum((r.get(key) or 0) * (r.get(count) or 0) for r in results)
+        den = sum(r.get(count) or 0 for r in results if r.get(key) is not None)
+        return round(num / den, 3) if den else None
+
     return {
-        "attempts": n, "passed": passed, "blown": blown, "trades": trades, "wins": wins,
+        "attempts": n, "passed": passed, "blown": blown, "trades": trades, "wins": wins, "losses": losses,
         "passRate": round(passed / n, 3), "blowRate": round(blown / n, 3), "winRate": round(wins / trades, 3) if trades else None,
+        "avgWinR": weighted("avgWinR", "wins"), "avgLossR": weighted("avgLossR", "losses"), "expectancyR": weighted("expectancyR", "trades"),
         "avgProfit": round(sum(r["avgProfit"] * r["attempts"] for r in results) / n),
         "tradesPerAttempt": round(sum(r["tradesPerAttempt"] * r["attempts"] for r in results) / n, 1),
     }
@@ -346,7 +355,7 @@ def objective(sw):
                 value = score(sel, st["min_trades_per_attempt"], st["win_rate_weight"])
                 trial.report(value, k)
                 trial.set_user_attr("last_checkpoint", k)
-                log(f"trial {trial.number} checkpoint {k}/{st['checkpoints']}: pass {pct(sel['passRate'])} win {pct(sel.get('winRate'))} blow {pct(sel['blowRate'])} -> {value:.3f}")
+                log(f"trial {trial.number} checkpoint {k}/{st['checkpoints']}: {results_line(sel)} -> score {value:.3f}")
                 runlog.event("checkpoint", k=k, of=st["checkpoints"], value=value, selection={x: v for x, v in sel.items() if x != "months"})
                 if trial.should_prune():
                     raise optuna.TrialPruned()
@@ -362,7 +371,7 @@ def objective(sw):
         trial.set_user_attr("selection", sel)
         trial.set_user_attr("seeds", results)
         trial.set_user_attr("feasible", value >= 0)
-        log(f"trial {trial.number}: selection pass {pct(sel['passRate'])} win {pct(sel.get('winRate'))} blow {pct(sel['blowRate'])} -> {value:.3f}{'' if value >= 0 else ' (infeasible)'}")
+        log(f"trial {trial.number} selection: {results_line(sel)} -> score {value:.3f}{'' if value >= 0 else ' (infeasible)'}")
         return value, sel, results
 
     return run
@@ -491,7 +500,7 @@ def _run_retrain(rt, dry_run):
                 continue
             network = train_seed(cfg, seed, rt["out"])
             sel = server.evaluate(starts, w["select"][1], network)
-            log(f"seed {seed} selection: pass {pct(sel['passRate'])}, win {pct(sel.get('winRate'))}, blow {pct(sel['blowRate'])}, avg profit ${sel['avgProfit']}")
+            log(f"seed {seed} selection: {results_line(sel)}")
             runlog.event("evaluation", window="select", seed=seed, result=sel)
             candidates["seeds"][str(seed)] = {"network": str(rt["out"] / "seeds" / f"seed_{seed}_network.json"), "selection": sel}
             write_config(cand_file, candidates)

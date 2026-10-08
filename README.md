@@ -245,8 +245,24 @@ plugin. It prints the remaining native commands:
 Credentials (`PROJECTX_USERNAME`, `PROJECTX_API_KEY`) and guardrails
 (`PROJECTX_TRADING_ENABLED`, `PROJECTX_ALLOWED_SYMBOLS`, ...) go in the
 environment that launches the harness (Qwen's extension settings don't reach
-MCP servers). See
+MCP servers), or in a `.env` file. See
 `mcp-configs/` for examples.
+
+**`.env` files.** The autotrader, the MCP gateway, `backtest.js fetch`, and
+`orderflow.js` read, in order: `$FTH_ENV_FILE` (if set),
+`~/.futures-trading-harness/.env` (preferred: outside the repo), and a
+`.env` in the repo root. The first value found wins, a variable already set
+in the environment wins over all of them, and only key names are logged.
+Start from `.env.example`:
+
+```bash
+cp .env.example ~/.futures-trading-harness/.env && chmod 600 ~/.futures-trading-harness/.env
+```
+
+The repo's `.gitignore` ignores `.env` and `.env.*` (not `.env.example`).
+`npm run check:secrets` (also in CI) fails on any env file or credential
+value in tracked files, and `npm run hooks:install` adds a git pre-commit
+hook that checks every commit's staged files the same way.
 
 ## Running it
 

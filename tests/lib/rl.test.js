@@ -173,6 +173,14 @@ test('the env server evaluates a network with the harness inference; rules-only 
     assert.strictEqual(Object.values(r.months).reduce((a, m) => a + m.attempts, 0), 6);
   }
   assert.deepStrictEqual(rules, envlib.evaluate(e, starts, Infinity, null));
+  // Average win R, loss R, and expectancy come from the attempts' trades.
+  const trades = starts.flatMap(s => envlib.runAttempt(e, s, Infinity, null).trades);
+  const avg = xs => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 1000) / 1000 : null);
+  assert.strictEqual(rules.avgWinR, avg(trades.filter(t => t.net > 0).map(t => t.r)));
+  assert.strictEqual(rules.avgLossR, avg(trades.filter(t => t.net < 0).map(t => t.r)));
+  assert.strictEqual(rules.expectancyR, avg(trades.map(t => t.r)));
+  assert.strictEqual(rules.losses, trades.filter(t => t.net < 0).length);
+  assert.ok(trades.length > 0 && (rules.avgWinR === null || rules.avgWinR > 0) && (rules.avgLossR === null || rules.avgLossR < 0));
 });
 
 test('bundles: live trading needs zero blows in every out-of-sample month and at least a 40% pass rate; backtests may load a candidate', () => {

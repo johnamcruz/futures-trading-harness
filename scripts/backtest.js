@@ -18,6 +18,11 @@
 
 'use strict';
 
+// Credentials and settings from a .env file (<FTH_HOME>/.env, or the repo's
+// git-ignored .env); a variable already set in the environment wins. Logs key
+// names only, to stderr.
+require('./lib/env-file').loadEnvForCli('backtest');
+
 const fs = require('fs');
 const path = require('path');
 const { runBacktest } = require('./lib/backtest/run');
