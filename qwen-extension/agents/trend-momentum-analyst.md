@@ -25,7 +25,7 @@ calling `get_bars`.
 
 1. Load the skills `trend-momentum-indicators`, `market-snapshot`, and
    `strategy-library`.
-2. Fetch closed bars: 15m (160) and 3m (300). Save each to
+2. Fetch closed bars: 15m (160) and 3m (500). Save each to
    `/tmp/fth/trend-<SYMBOL>-<tf>.json` and run the market-snapshot script.
 3. Regime: report the computed `regime` from the snapshot (primary,
    volatility, metrics) on each timeframe, then add what the indicators say

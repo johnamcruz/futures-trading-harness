@@ -17,7 +17,7 @@ calling `get_bars`.
 
 1. Load the skills `vwap-volume-profile`, `liquidity-concepts`,
    `session-timing`, and `market-snapshot`.
-2. Fetch closed 3m bars (300) and 15m bars (160), save each to
+2. Fetch closed 3m bars (500) and 15m bars (160), save each to
    `/tmp/fth/volume-<SYMBOL>-<tf>.json`, and run the market-snapshot script. Get
    `get_quote` for the live bid/ask/last.
 3. VWAP: price vs session and RTH VWAP, distance in ATR(14), number of RTH

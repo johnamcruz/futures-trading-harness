@@ -25,12 +25,14 @@ no breakouts after 16:00 ET, stop 0.5 × ATR(20), fixed-RR fallback 2R).
 
 ## When to Use
 
-- 09:45–11:30 ET on MNQ/MES/MYM/M2K after the 15-minute range has closed.
+- After the 15-minute range from 09:30 ET has closed, until 16:00 ET (the
+  source's cutoff), on MNQ/MES/MYM/M2K. The runner's sessions and
+  `FTH_ENTRY_HOURS` decide the hours you actually trade.
 - market-snapshot shows `signals.orb` = `long` or `short`.
 
 ## How It Works
 
-### Context filter
+### Context filter (harness judgment)
 
 - ADX(14) on 3-minute ≥ 18 (built into the signal), ideally rising.
 - Range size between 0.5 and 2.0 × ATR(14) on 15-minute. Tiny ranges fake
@@ -40,33 +42,31 @@ no breakouts after 16:00 ET, stop 0.5 × ATR(20), fixed-RR fallback 2R).
 **Trigger:** a 3-minute bar *closes* beyond the opening range high (long) or low
 (short) after the previous close was inside. Wicks don't count.
 
-**Entry:** market on the trigger close, or a limit at the range edge on the first
-retest within 3 bars.
+**Entry:** market on the trigger bar's close, as the source does.
 
-**Stop:** `referenceStop` (0.5 × ATR(20)) from entry, or just inside the range
-edge (2 ticks beyond the OR level) if that's tighter structure. Never wider than
-the range midpoint.
+**Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
+ticks), as algoTraderBot places it.
 
-**Targets and management:** 1R partial optional; main target 2R, or the next
-liquidity (prior-day or overnight high/low), whichever comes first. Move the
-stop to breakeven at +1R. Trail with SuperTrend(10, 3) after 2R.
+**Exit:** no fixed target. Hold the stop until the trade is up 2R; from
+then on the runner trails it 0.5R behind the best price (the `exit` block),
+after every closed bar. Don't move the stop yourself; exit early only with an
+`[exit]` order when the plan's invalidation happens.
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
 - Relative volume on the trigger bar < 1.0× the opening-range average.
 - The breakout runs straight into prior-day or overnight high/low within 1R.
 - A high-impact release is due within 15 minutes.
 - The opening range has already been broken and failed in the other direction.
-- After 11:30 ET (lunch); never in the 09:30–09:35 window.
 
 ## Examples
 
 ```text
 OR 21480.00–21500.00 (20 pts, 0.9 × 15m ATR). 09:51 ET 3m close 21503.25,
 ADX 21 rising, rel-vol 1.6×. Prior-day high 21545.
-Entry 21503.25, stop 21498.00 (0.5 × ATR20 = 5.25), risk 21 ticks = $10.50/MNQ,
-target 21513.75 (2R) then 21545 runner if 1h is up.
-rationale: "setup:orb long close above OR high 21500, stop 21498.00, target 21513.75, risk $10.50"
+Entry 21503.25, stop 21498.00 (0.5 × ATR20 = 5.25), risk 21 ticks = $10.50/MNQ.
+Trail from +2R (21513.75); then the stop sits 0.5R behind the best high.
+rationale: "setup:orb long close above OR high 21500, stop 21498.00, risk $10.50"
 ```
 
 Record live stats here once 30+ reviews exist: n, win rate, expectancy.

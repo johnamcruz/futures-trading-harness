@@ -27,7 +27,7 @@ ADX_GATE=18, stop 0.5 × ATR(20)).
 
 ## How It Works
 
-### Context filter
+### Context filter (harness judgment)
 
 - ADX(14) ≥ 18 (built into the signal); skip if ADX is falling for 5+ bars.
 - The cross agrees with the 15-minute EMA 20 slope and with price vs RTH VWAP.
@@ -35,16 +35,17 @@ ADX_GATE=18, stop 0.5 × ATR(20)).
 
 **Trigger:** EMA 9 crosses EMA 20 on a closed 3-minute bar.
 
-**Entry:** market on the close, or a limit at EMA 9 on the next bar if the cross
-bar is larger than 1 ATR (don't chase extended bars).
+**Entry:** market on the trigger bar's close, as the source does.
 
-**Stop:** `referenceStop`, or beyond the most recent swing if that's within
-1 × ATR(20).
+**Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
+ticks), as algoTraderBot places it.
 
-**Targets and management:** 2R, or the next liquidity level. Exit if EMA 9 closes
-back across EMA 20 against the trade before 1R.
+**Exit:** no fixed target. Hold the stop until the trade is up 2R; from
+then on the runner trails it 0.5R behind the best price (the `exit` block),
+after every closed bar. Don't move the stop yourself; exit early only with an
+`[exit]` order when the plan's invalidation happens.
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
 - EMA 9/20 crossed 3+ times in the last 30 bars (chop).
 - Price is more than 2 × ATR(14) from RTH VWAP (stretched).
@@ -56,6 +57,6 @@ back across EMA 20 against the trade before 1R.
 ```text
 10:24 ET 3m: EMA9 21612.4 crosses above EMA20 21611.9, ADX 22.8 (+2.1/5 bars),
 15m EMA20 rising, price above RTH VWAP 21590. Entry 21614.00, stop 21608.50,
-risk 22 ticks = $11/MNQ, target 21625.00.
-rationale: "setup:ema_cross long 9/20 cross ADX 22.8, stop 21608.50, target 21625.00, risk $11"
+risk 22 ticks = $11/MNQ. Trail from +2R (21625.00); then the stop sits 0.5R behind the best high.
+rationale: "setup:ema_cross long 9/20 cross ADX 22.8, stop 21608.50, risk $11"
 ```

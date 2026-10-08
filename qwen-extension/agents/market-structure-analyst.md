@@ -30,7 +30,7 @@ calling `get_bars`.
 
 1. Load the skills `market-structure`, `multi-timeframe-analysis`,
    `liquidity-concepts`, `market-snapshot`, and `strategy-library`.
-2. Fetch closed bars: 1h (120), 15m (160), 3m (300). Stay within the rate
+2. Fetch closed bars: 1h (120), 15m (160), 3m (500). Stay within the rate
    limit: one request per timeframe. Save each result to
    `/tmp/fth/structure-<SYMBOL>-<tf>.json` and run the market-snapshot script on it.
 3. Per timeframe: last 3–4 swing highs/lows with prices and times, trend

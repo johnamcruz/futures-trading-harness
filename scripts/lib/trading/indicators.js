@@ -39,16 +39,19 @@ function ema(values, span) {
   return out;
 }
 
-/** Wilder smoothing: first value = mean of the first `period` inputs starting at `from`. */
-function wilder(values, period, from = 0) {
+/**
+ * Wilder smoothing (RMA), as futures_foundation's _rma: the first value, at
+ * index period-1, is the mean of the first `period` inputs; NaN before that.
+ */
+function rma(values, period) {
   const out = new Array(values.length).fill(NaN);
-  if (values.length < from + period) return out;
+  if (values.length < period) return out;
   let sum = 0;
-  for (let i = from; i < from + period; i += 1) sum += values[i];
+  for (let i = 0; i < period; i += 1) sum += values[i];
   let prev = sum / period;
-  out[from + period - 1] = prev;
-  for (let i = from + period; i < values.length; i += 1) {
-    prev = (prev * (period - 1) + values[i]) / period;
+  out[period - 1] = prev;
+  for (let i = period; i < values.length; i += 1) {
+    prev += (values[i] - prev) / period;
     out[i] = prev;
   }
   return out;
@@ -60,12 +63,19 @@ function trueRange(bars) {
     : Math.max(b.h - b.l, Math.abs(b.h - bars[i - 1].c), Math.abs(b.l - bars[i - 1].c))));
 }
 
+/** Wilder ATR (compute_atr): first value at index period-1, including the first bar's range. */
 function atr(bars, period = 14) {
-  return wilder(trueRange(bars), period, 1);
+  return rma(trueRange(bars), period);
 }
 
+/**
+ * Wilder ADX (compute_adx), warm-up included: NaN for fewer than 2*period
+ * bars; DX is 0 where the smoothed ranges aren't defined yet or are flat, so
+ * the first ADX value lands at index period-1.
+ */
 function adx(bars, period = 14) {
   const n = bars.length;
+  if (n < 2 * period) return new Array(n).fill(NaN);
   const plusDm = new Array(n).fill(0);
   const minusDm = new Array(n).fill(0);
   for (let i = 1; i < n; i += 1) {
@@ -74,41 +84,46 @@ function adx(bars, period = 14) {
     plusDm[i] = up > down && up > 0 ? up : 0;
     minusDm[i] = down > up && down > 0 ? down : 0;
   }
-  const tr = wilder(trueRange(bars), period, 1);
-  const pdm = wilder(plusDm, period, 1);
-  const mdm = wilder(minusDm, period, 1);
-  const dx = new Array(n).fill(NaN);
+  const tr = rma(trueRange(bars), period);
+  const pdm = rma(plusDm, period);
+  const mdm = rma(minusDm, period);
+  const dx = new Array(n);
   for (let i = 0; i < n; i += 1) {
-    if (Number.isNaN(tr[i])) continue;
-    if (tr[i] === 0) { dx[i] = 0; continue; } // flat bars: no directional movement (as the source does)
     const pdi = (100 * pdm[i]) / tr[i];
     const mdi = (100 * mdm[i]) / tr[i];
-    dx[i] = pdi + mdi > 0 ? (100 * Math.abs(pdi - mdi)) / (pdi + mdi) : 0;
+    const denom = pdi + mdi;
+    dx[i] = denom > 0 ? (100 * Math.abs(pdi - mdi)) / denom : 0; // NaN or 0/0 -> 0, as numpy.where does
   }
-  return wilder(dx, period, period);
+  return rma(dx, period);
 }
 
-/** SuperTrend: { line, direction } with direction +1 bull / -1 bear. */
+/**
+ * SuperTrend (compute_supertrend): Wilder ATR bands on hl2, final bands
+ * carried while finite, and the source's state machine: direction starts at
+ * +1, flips short when a close is below the final lower band while long, and
+ * long when a close is above the final upper band while short.
+ * Returns { line, direction } with direction +1 bull / -1 bear.
+ */
 function supertrend(bars, period = 10, mult = 3) {
   const a = atr(bars, period);
   const n = bars.length;
+  const upper = bars.map((b, i) => (b.h + b.l) / 2 + mult * a[i]);
+  const lower = bars.map((b, i) => (b.h + b.l) / 2 - mult * a[i]);
+  const fUp = upper.slice();
+  const fLo = lower.slice();
+  for (let i = 1; i < n; i += 1) {
+    if (!(Number.isFinite(fUp[i - 1]) && Number.isFinite(fLo[i - 1]))) continue;
+    if (!(upper[i] < fUp[i - 1] || bars[i - 1].c > fUp[i - 1])) fUp[i] = fUp[i - 1];
+    if (!(lower[i] > fLo[i - 1] || bars[i - 1].c < fLo[i - 1])) fLo[i] = fLo[i - 1];
+  }
+  const direction = new Array(n).fill(1);
   const line = new Array(n).fill(NaN);
-  const direction = new Array(n).fill(NaN);
-  let upper = NaN;
-  let lower = NaN;
-  let dir = 1;
-  for (let i = 0; i < n; i += 1) {
-    if (Number.isNaN(a[i])) continue;
-    const mid = (bars[i].h + bars[i].l) / 2;
-    const basicUpper = mid + mult * a[i];
-    const basicLower = mid - mult * a[i];
-    const prevClose = i > 0 ? bars[i - 1].c : bars[i].c;
-    upper = Number.isNaN(upper) || basicUpper < upper || prevClose > upper ? basicUpper : upper;
-    lower = Number.isNaN(lower) || basicLower > lower || prevClose < lower ? basicLower : lower;
-    if (bars[i].c > upper) dir = 1;
-    else if (bars[i].c < lower) dir = -1;
-    direction[i] = dir;
-    line[i] = dir === 1 ? lower : upper;
+  for (let i = 1; i < n; i += 1) {
+    const c = bars[i].c;
+    if (direction[i - 1] === 1 && c < fLo[i]) direction[i] = -1;
+    else if (direction[i - 1] === -1 && c > fUp[i]) direction[i] = 1;
+    else direction[i] = direction[i - 1];
+    line[i] = direction[i] === 1 ? fLo[i] : fUp[i];
   }
   return { line, direction };
 }
@@ -217,7 +232,7 @@ function anchoredVwap(bars, anchorMin, untilMin = null) {
 module.exports = {
   normalizeBars,
   ema,
-  wilder,
+  rma,
   trueRange,
   atr,
   adx,

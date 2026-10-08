@@ -19,17 +19,17 @@ test('ema matches pandas ewm(adjust=False)', () => {
   close(out[0], 1); close(out[1], 1.5); close(out[2], 2.25); close(out[3], 3.125);
 });
 
-test('wilder seeds with a simple average then smooths', () => {
-  const out = ind.wilder([NaN, 2, 4, 6, 8], 2, 1);
-  assert.ok(Number.isNaN(out[1]));
-  close(out[2], 3); close(out[3], 4.5); close(out[4], 6.25);
+test('rma seeds with the mean of the first period inputs, as futures_foundation does', () => {
+  const out = ind.rma([2, 4, 6, 8], 2);
+  assert.ok(Number.isNaN(out[0]));
+  assert.deepStrictEqual(out.slice(1), [3, 4.5, 6.25]);
 });
 
 test('atr of constant-range bars equals the range', () => {
   const bars = Array.from({ length: 30 }, (_, i) => bar(`2026-10-07T14:${String(i).padStart(2, '0')}:00Z`, 10, 11, 9, 10));
   const a = ind.atr(bars, 14);
-  assert.ok(Number.isNaN(a[13]));
-  close(a[14], 2); close(a[29], 2);
+  assert.ok(Number.isNaN(a[12]));
+  close(a[13], 2); close(a[29], 2); // first value at index period-1, as compute_atr
 });
 
 test('adx is high in a steady trend and supertrend points up', () => {

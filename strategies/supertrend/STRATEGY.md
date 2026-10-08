@@ -26,7 +26,7 @@ stop 0.5 × ATR(20)); the only algoTraderBot strategy with a 1-minute model.
 
 ## How It Works
 
-**Context filter** (the raw signal has no gate, so the filter does the work)
+**Context filter** (harness judgment; the source takes every flip)
 
 - ADX(14) ≥ 18, or rising for 5 bars.
 - 15-minute trend in the flip direction (EMA 20 slope or a 15m BOS).
@@ -34,16 +34,17 @@ stop 0.5 × ATR(20)); the only algoTraderBot strategy with a 1-minute model.
 
 **Trigger:** SuperTrend direction changes on a closed bar.
 
-**Entry:** market on the close, or a limit at the new SuperTrend line on the
-first pullback.
+**Entry:** market on the trigger bar's close, as the source does.
 
-**Stop:** `referenceStop`, or 2 ticks beyond the new SuperTrend line, whichever
-is wider (the line is where the flip is invalidated).
+**Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
+ticks), as algoTraderBot places it.
 
-**Targets and management:** 2R; trail on the SuperTrend line after 1R. Exit on an
-opposite flip.
+**Exit:** no fixed target. Hold the stop until the trade is up 2R; from
+then on the runner trails it 0.5R behind the best price (the `exit` block),
+after every closed bar. Don't move the stop yourself; exit early only with an
+`[exit]` order when the plan's invalidation happens.
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
 - 2+ flips in the last 20 bars (chop).
 - ADX < 15.
@@ -53,7 +54,7 @@ opposite flip.
 
 ```text
 10:42 ET 3m SuperTrend flips up, line 21598.25. ADX 19.6 rising, 15m BOS up at
-10:30. Entry 21607.00, stop 21597.75 (line − 2 ticks; wider than 0.5 × ATR),
-risk 37 ticks = $18.50/MNQ, target 21625.50 (2R).
-rationale: "setup:supertrend long flip up, stop 21597.75, target 21625.50, risk $18.50"
+10:30. Entry 21607.00, stop 21602.25 (0.5 × ATR20 = 4.75), risk 19 ticks =
+$9.50/MNQ. Trail from +2R (21616.50); then the stop sits 0.5R behind the best high.
+rationale: "setup:supertrend long flip up, stop 21602.25, risk $9.50"
 ```

@@ -9,9 +9,10 @@
  * Built-in detectors (orb, ema_cross, keltner, supertrend, bos) use indicators
  * computed once over the series (causal, so bar i only sees bars 0..i); they
  * match algoTraderBot's per-window detectors bar for bar once the indicators
- * have warmed up (tests/lib/parity.test.js). cisd_ote is evaluated on the
- * trailing `window` bars, exactly as algoTraderBot does, because its zone
- * state depends on where the window starts. Rules use the rules engine.
+ * have warmed up (tests/lib/parity.test.js). cisd_ote and supertrend are
+ * evaluated on the trailing `window` bars, exactly as algoTraderBot does,
+ * because their state (zones; the SuperTrend direction, which starts long)
+ * depends on where the window starts. Rules use the rules engine.
  */
 
 const { PARAMS, signalSeries } = require('./market-snapshot');
@@ -142,6 +143,11 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       const r = evaluateRules(s.compiledRules, bars, paramsOf(s), { index: i, get: rulesSource(s) });
       direction = r.direction;
       ruleDetail = { long: r.long, short: r.short };
+    } else if (s.signal === 'supertrend') {
+      const p = paramsOf(s);
+      const dir = ind.supertrend(bars.slice(windowStart(i), i + 1), p.stPeriod, p.stMult).direction;
+      const k = dir.length - 1;
+      direction = k >= 1 && dir[k] !== dir[k - 1] ? (dir[k] === 1 ? 'long' : 'short') : null;
     } else if (s.signal === 'cisd_ote') {
       const from = windowStart(i);
       const win = withMs.slice(from, i + 1);
@@ -153,6 +159,8 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
     } else {
       direction = ser.signalsAt(i)[s.signal];
     }
+    // algoTraderBot's detect() drops a signal while ATR(20) is undefined (its stop needs it).
+    if (direction && s.signal !== 'rules' && s.signal !== 'cisd_ote' && atr20 === null) direction = null;
     const atrMult = /^atr:(.+)$/.exec(s.risk.stop);
     if (atrMult && atr20 !== null) stopDistance = Number(atrMult[1]) * atr20;
     const fails = filterFailures(s, ser, i);

@@ -27,7 +27,7 @@ Source: `algoTraderBot/strategies/bos.py` (SWING_K=2 confirmed fractals, stop
 
 ## How It Works
 
-### Context filter
+### Context filter (harness judgment)
 
 - The break is in the direction of the 15-minute or 1-hour structure (a true
   BOS, not a CHoCH against the trend).
@@ -37,16 +37,17 @@ Source: `algoTraderBot/strategies/bos.py` (SWING_K=2 confirmed fractals, stop
 **Trigger:** a 3-minute close beyond the last confirmed swing high (long) or swing
 low (short), with the prior close on the other side.
 
-**Entry:** market on the close; or a limit at the broken level on the first
-retest (break-and-retest), cancelled after 5 bars.
+**Entry:** market on the trigger bar's close, as the source does.
 
-**Stop:** `referenceStop`, or beyond the swing that formed the pullback's
-extreme (the higher low for longs), if within 1.5 × ATR(20).
+**Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
+ticks), as algoTraderBot places it.
 
-**Targets and management:** the next opposing swing or liquidity pool; minimum
-1.5R. Breakeven at +1R.
+**Exit:** no fixed target. Hold the stop until the trade is up 2R; from
+then on the runner trails it 0.5R behind the best price (the `exit` block),
+after every closed bar. Don't move the stop yourself; exit early only with an
+`[exit]` order when the plan's invalidation happens.
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
 - The break is a single wick-heavy bar that closes barely beyond the level
   (< 2 ticks).
@@ -57,7 +58,7 @@ extreme (the higher low for longs), if within 1.5 × ATR(20).
 
 ```text
 15m uptrend. 3m HL at 21560, last swing high 21588.25 (confirmed 10:12).
-10:27 close 21591.50 → BOS long. Entry 21591.50, stop 21585.75, target 21603.00
-(1h swing high 21610 is the runner target).
-rationale: "setup:bos long close above swing high 21588.25, stop 21585.75, target 21603.00, risk $11.50"
+10:27 close 21591.50 → BOS long. Entry 21591.50, stop 21585.75, risk 23 ticks =
+$11.50/MNQ. Trail from +2R (21603.00); then the stop sits 0.5R behind the best high.
+rationale: "setup:bos long close above swing high 21588.25, stop 21585.75, risk $11.50"
 ```

@@ -27,7 +27,7 @@ KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 
 ## How It Works
 
-### Context filter
+### Context filter (harness judgment)
 
 - ADX(14) ≥ 20 (built into the signal).
 - Keltner mid (EMA 20) sloping in the trade direction over 5 bars.
@@ -37,14 +37,17 @@ KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 **Trigger:** a 3-minute close above the upper band (long) or below the lower band
 (short), with the prior close inside.
 
-**Entry:** market on the close.
+**Entry:** market on the trigger bar's close, as the source does.
 
-**Stop:** `referenceStop`; or the Keltner mid if it's closer than 1 × ATR(20).
+**Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
+ticks), as algoTraderBot places it.
 
-**Targets and management:** 2R. Exit when a bar closes back inside the channel
-at the mid line. Trail along the band that was broken after 1.5R.
+**Exit:** no fixed target. Hold the stop until the trade is up 2R; from
+then on the runner trails it 0.5R behind the best price (the `exit` block),
+after every closed bar. Don't move the stop yourself; exit early only with an
+`[exit]` order when the plan's invalidation happens.
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
 - The breakout bar is larger than 2 × ATR(14) (exhaustion risk).
 - It breaks directly into prior-day or overnight high/low.
@@ -56,6 +59,7 @@ at the mid line. Trail along the band that was broken after 1.5R.
 ```text
 10:06 ET 3m close 21655.50 > upper band 21652.10, prior close inside,
 ADX 24.3, mid slope +, channel width was 0.8× its 20-bar average.
-Entry 21655.50, stop 21650.00, target 21666.50.
-rationale: "setup:keltner long close above upper KC 21652.10, stop 21650.00, target 21666.50, risk $11"
+Entry 21655.50, stop 21650.00, risk 22 ticks = $11/MNQ.
+Trail from +2R (21666.50); then the stop sits 0.5R behind the best high.
+rationale: "setup:keltner long close above upper KC 21652.10, stop 21650.00, risk $11"
 ```

@@ -67,9 +67,8 @@ does.
 7. **Exit:** hold the stop until the trade reaches +2R, then trail it 0.5R
    behind the best price (the `exit` block).
 
-### Skip when
+### Skip when (harness judgment: the source takes every signal)
 
-- The zone is older than 9 zone-bars without a fill.
 - The 1-hour trend (EMA 9/21 on 60-minute) is strongly against the zone
   direction and there was no sweep.
 - Risk to the origin is above the position-sizing budget at size 1.

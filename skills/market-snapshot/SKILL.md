@@ -16,8 +16,9 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 ## How It Works
 
 1. Fetch closed bars, oldest first:
-   `get_bars {contractId, unit:"minute", unitNumber:3, limit:300, includePartialBar:false}`.
-   Use 300+ bars for EMA(200) and prior-day levels; 3-minute bars match the
+   `get_bars {contractId, unit:"minute", unitNumber:3, limit:500, includePartialBar:false}`.
+   Use 500 bars: algoTraderBot's window (cisd_ote and SuperTrend depend on
+   it), enough for EMA(200) and prior-day levels; 3-minute bars match the
    strategy parameters.
 2. Save the tool's JSON result verbatim to a temp file, e.g.
    `/tmp/fth/MNQ-3m.json` (create the folder first).
