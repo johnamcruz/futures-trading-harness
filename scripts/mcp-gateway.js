@@ -36,16 +36,26 @@ const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(pro
 const LEDGER_TTL_MS = 30000;
 const ENTRY_ORDERS_KEPT = 200;
 
+const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
+
 /**
- * Remember entry order ids (setup:<name>) the gateway let through, so the
- * runner's flat-account cleanup can tell a pending entry from a leftover
- * stop or target (see runner.js). Best effort.
+ * Remember the entries (setup:<name>) the gateway let through: the runner's
+ * flat-account cleanup tells a pending entry from a leftover stop or target
+ * by id, and its trailing-stop manager needs the strategy and the planned
+ * stop (bracket ticks or the "stop <price>" in the rationale). Best effort.
  */
-function recordEntryOrder(env, orderId, contractId) {
+function recordEntryOrder(env, orderId, args) {
   try {
     const file = path.join(harnessHome(env), 'entry-orders.json');
     const list = readJson(file, []);
-    const next = [...(Array.isArray(list) ? list : []), { orderId, contractId, at: new Date().toISOString() }].slice(-ENTRY_ORDERS_KEPT);
+    const setup = /^\s*setup:([a-z0-9][a-z0-9_-]*)/i.exec(String(args.rationale || ''));
+    const stop = STOP_PRICE.exec(String(args.rationale || ''));
+    const entry = {
+      orderId, contractId: args.contractId, side: String(args.side || '').toLowerCase(), setup: setup ? setup[1].toLowerCase() : null,
+      stopTicks: args.stopLossBracket && Number(args.stopLossBracket.ticks) > 0 ? Number(args.stopLossBracket.ticks) : null,
+      stopPrice: stop ? Number(stop[1]) : null, at: new Date().toISOString(),
+    };
+    const next = [...(Array.isArray(list) ? list : []), entry].slice(-ENTRY_ORDERS_KEPT);
     writeJsonAtomic(file, next);
   } catch (err) {
     process.stderr.write(`[mcp-gateway] could not record entry order ${orderId}: ${err.message}\n`);
@@ -169,7 +179,7 @@ function main(argv) {
     const { args, observedNet } = sent;
     const placed = resultJson(response);
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
-      recordEntryOrder(process.env, placed.orderId, args.contractId);
+      recordEntryOrder(process.env, placed.orderId, args);
     }
     if (String(args.type).toLowerCase() !== 'market' || observedNet === null) return; // resting orders show up in list_open_orders
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;

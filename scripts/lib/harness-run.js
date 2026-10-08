@@ -101,10 +101,10 @@ function changedFiles(before, after) {
   return Object.keys({ ...before, ...after }).filter(f => before[f] !== after[f]);
 }
 
-/** Entry order ids the MCP gateway recorded in <stateDir>/entry-orders.json. */
-function entryOrderIds(stateDir) {
+/** Entries the MCP gateway recorded in <stateDir>/entry-orders.json, oldest first. */
+function entryOrders(stateDir) {
   const list = readJson(path.join(stateDir, 'entry-orders.json'), []);
-  return new Set((Array.isArray(list) ? list : []).map(e => Number(e && e.orderId)).filter(Number.isFinite));
+  return (Array.isArray(list) ? list : []).filter(e => e && Number.isFinite(Number(e.orderId)));
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness, entryOrderIds, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles };
+module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles };

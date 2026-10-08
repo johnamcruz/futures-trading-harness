@@ -32,6 +32,21 @@ function timeframeMs(tf) {
   return Number(m[1]) * { m: 60000, h: 3600000, d: 86400000 }[m[2]];
 }
 
+/**
+ * The exit plan for a trade in strategy `s`: fixed target and/or trailing
+ * stop, in R (1R = the initial stop distance). Without an exit block the
+ * target is risk.min_rr, as a bracket.
+ */
+function exitPlan(s) {
+  const x = s.exit || {};
+  return {
+    targetR: x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
+    trailActivateR: x.trail_activate_r ?? null,
+    trailGivebackR: x.trail_giveback_r ?? null,
+    maxBars: x.max_bars ?? null,
+  };
+}
+
 function inSessions(strategy, now) {
   if (!Array.isArray(strategy.sessions) || strategy.sessions.length === 0) return true;
   return parseWindows(strategy.sessions.join(',')).windows.some(w => inWindow(now, w));
@@ -151,6 +166,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       entryRef: bars[i].c,
       stopDistance: stopDistance === null ? null : Math.round(stopDistance * 1e4) / 1e4,
       minRR: s.risk.min_rr,
+      exit: exitPlan(s),
       ...(ruleDetail ? { rules: ruleDetail } : {}),
     };
   }
@@ -158,4 +174,4 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   return { at, regimeAt, length: bars.length, bars };
 }
 
-module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs };
+module.exports = { DEFAULT_WINDOW, createEvaluator, inSessions, timeframeMs, exitPlan };

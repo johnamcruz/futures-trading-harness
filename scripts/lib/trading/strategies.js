@@ -20,7 +20,7 @@ const { parseWindows } = require('./clock');
 const { normalizeBars } = require('./indicators');
 const { compileRules } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
-const { createEvaluator, inSessions } = require('./evaluator');
+const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
@@ -170,20 +170,6 @@ function validateStrategy(data, body, folderName) {
   return errors;
 }
 
-/**
- * The exit plan for a trade in strategy `s`: fixed target and/or trailing
- * stop, in R (1R = the initial stop distance). Without an exit block the
- * target is risk.min_rr, as a bracket.
- */
-function exitPlan(s) {
-  const x = s.exit || {};
-  return {
-    targetR: x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
-    trailActivateR: x.trail_activate_r ?? null,
-    trailGivebackR: x.trail_giveback_r ?? null,
-    maxBars: x.max_bars ?? null,
-  };
-}
 
 function loadStrategyFile(file) {
   const folderName = path.basename(path.dirname(file));

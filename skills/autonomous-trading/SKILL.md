@@ -21,11 +21,18 @@ description: Rules for running the trading harness unattended (headless, schedul
    would ask, take the conservative branch: stand aside, keep the stop, flatten
    at end of day.
 3. **Positions first.** If a position is open, only manage it this cycle.
+   Before your cycle, the runner has already done two things:
+   - cancelled leftover orders on a flat contract;
+   - for strategies whose exit trails, applied the trailing stop: hold the
+     initial stop until +2R, then 0.5R behind the best price.
+   Don't loosen a stop it set.
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
-   the server ends the cycle. Never edit harness files, settings, environment,
+   the server ends the entry attempt. Fix what the block names when it is
+   yours to fix (for example, review a closed trade, cancel a leftover order),
+   otherwise end the cycle. Never edit harness files, settings, environment,
    strategy status, blackouts (except adding them in premarket), or the journal
    file to get past a limit.
-5. **Kill switch.** If `~/.futures-trading-harness/STOP` exists, place no new
+5. **Kill switch.** If `<FTH_HOME>/STOP` (default `~/.futures-trading-harness/STOP`) exists, place no new
    entries; manage or flatten open positions only.
 6. **Leave a trail.** Every cycle ends with a journal `note` (or plan, review)
    so the next cycle and the human can see what happened, and a final line:
@@ -37,6 +44,6 @@ description: Rules for running the trading harness unattended (headless, schedul
 
 ```text
 CYCLE RESULT: no-trade - orb fired but relative volume 0.8x (skip rule)
-CYCLE RESULT: managed - MNQ long +1.1R, stop moved to breakeven 21503.25
+CYCLE RESULT: managed - MNQ long from 21503.25 (1R 5.25), peak 21515.75 (+2.38R); runner trailed the stop to 21513.00 (+1.86R)
 CYCLE RESULT: blocked - [loss-streak] cooldown 18 min
 ```

@@ -24,11 +24,16 @@ inside one run.
   cycle**: confirm the protective stop is working (`list_open_orders`), apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
-  is open. Protective stops move toward the market only.
+  is open. Protective stops move toward the market only. If the strategy's
+  exit trails (`exit` in the scan), the runner already moved the stop on this
+  bar. Don't touch it unless you are exiting.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
   a pending entry from your own plan. New entries wait until no order is
   working in the contract. The runner also cancels leftovers before each bar.
+- **Flat, with an earlier entry today that has no review** (it closed or was
+  cancelled between cycles): run trade-review (`trade-reviewer` role) first.
+  The order gate refuses the next entry until every entry is reviewed.
 - Daily stop or loss-streak cooldown in the briefing or journal → report and end.
 
 ### 2. Parallel read
@@ -81,9 +86,17 @@ and the current time.
 ### 4. Plan
 
 `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>", "regime:<primary>"]}`:
-thesis, trigger (what happened, price, time), entry, stop, target, size
-(position-sizing), $ risk, R:R, skip rules checked, analyst agreement. Add the
+thesis, trigger (what happened, price, time), entry, stop, exit, size
+(position-sizing), $ risk, skip rules checked, analyst agreement. Add the
 tag `paper` in plan-only mode.
+
+The exit follows the strategy's `exit` (shown in the scan):
+
+- **Trailing:** stop only, no target order. The runner trails it from
+  `trailActivateR` with `trailGivebackR` give-back. The ported strategies use
+  2R and 0.5R.
+- **Target:** stop and target at `targetR` (or `risk.min_rr`) times the stop
+  distance.
 
 ### 5. Verdict
 
@@ -106,6 +119,7 @@ to watch next. After the position closes, run trade-review.
 ```text
 Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium, scan: orb
 candidate long), volume long (rel-vol 1.6x), no events until 14:00, risk budget
-$40/trade. orb skip rules clear. Plan: long 21503.25, stop 21498.00, target
-21513.75, 1 MNQ, $10.50, 2R. Verdict APPROVE. Executed, stop working.
+$40/trade. orb skip rules clear. Plan: long 21503.25, stop 21498.00 (1R =
+21 ticks = $10.50), 1 MNQ; exit: trail from +2R (21513.75), giving back 0.5R.
+Verdict APPROVE. Executed with a stop bracket only, stop working.
 ```

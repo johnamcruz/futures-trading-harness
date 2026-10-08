@@ -14,15 +14,22 @@
  *      a time; bars that close during a run are skipped, never queued).
  *   4. Re-resolve each symbol's active contract at the start of every trading
  *      day and after repeated resyncs with no bar (contract roll).
- *   5. Before each bar's cycle, with an account configured: on a flat
- *      contract, cancel working orders that aren't pending entries (stops and
- *      targets left behind by a closed trade could otherwise fill into a new,
- *      unchecked position). Entry order ids come from the MCP gateway.
+ *   5. Before each bar's cycle, with an account configured:
+ *      - on a flat contract, cancel working orders that aren't pending
+ *        entries (stops and targets left behind by a closed trade could
+ *        otherwise fill into a new, unchecked position);
+ *      - with a position from a strategy whose exit trails (exit block),
+ *        apply the trailing rule to the bar that just closed (trail.js, the
+ *        same rule the backtester uses): tighten the protective stop, or
+ *        close at market when the bar already went through the new stop.
+ *      Entries (ids, strategy, planned stop) come from the MCP gateway.
  */
 
 const { decide, recordRun, prompts, signalDecision, dayKey } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot } = require('./trading/journal');
+const { trailStep } = require('./trading/trail');
+const { exitPlan } = require('./trading/strategies');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -33,8 +40,9 @@ const MAX_RETRY_MS = 60000;
 function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
-    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrderIds = () => new Set(),
+    loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
   } = deps;
+  const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
@@ -66,9 +74,9 @@ function createRunner(deps) {
     }
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
-      return { ...sym, contractId: c.id, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
+      return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
     }
-    return { ...sym, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
+    return { ...sym, tickSize: c.tickSize || sym.tickSize, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
   }
 
   async function pollSymbol(i, now) {
@@ -95,7 +103,7 @@ function createRunner(deps) {
       }
       if (step.event !== 'bar' && step.event !== 'stale') return null;
       const file = writeBars(sym, step.bars);
-      return { symbol: sym.symbol, contractId: sym.contractId, bars: step.bars, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars: step.bars, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -104,22 +112,83 @@ function createRunner(deps) {
   }
 
   /** Cancel leftover orders on a flat contract root (never pending entries). */
-  async function cleanupFlat(item) {
+  async function cleanupFlat(item, { positions, orders }) {
+    const root = contractRoot(item.contractId);
+    // Flat means no position in any month of the root (not months netting to zero).
+    if (positions.some(p => contractRoot(p.contractId) === root && Number(p.size || 0) > 0)) return;
+    const entries = entryOrderIds();
+    for (const o of orders.filter(x => contractRoot(x.contractId) === root && !entries.has(Number(x.id)))) {
+      await client.cancelOrder(cfg.account, o.id);
+      log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+    }
+  }
+
+  /**
+   * Trailing exit for a position whose strategy trails (exit block). The
+   * trade's entry, initial risk, and peak live in state.trails[contractId],
+   * keyed by the position, so a restart keeps the peak.
+   */
+  async function trailPosition(item, { positions, orders }) {
+    const p = positions.find(x => x.contractId === item.contractId && Number(x.size || 0) > 0);
+    const trails = { ...(state.trails || {}) };
+    if (!p) {
+      if (trails[item.contractId]) { delete trails[item.contractId]; state = { ...state, trails }; }
+      return;
+    }
+    const sign = p.type === 1 ? 1 : p.type === 2 ? -1 : 0;
+    const key = String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`);
+    const protective = orders.filter(o => o.contractId === item.contractId && Number(o.type) === 4 && (Number(o.side) === 0 ? 1 : -1) === -sign);
+    const stopOrder = protective.length === 1 ? protective[0] : null;
+    let t = trails[item.contractId];
+    if (!t || t.key !== key) {
+      const side = sign > 0 ? 'buy' : 'sell';
+      const rec = [...entryOrders()].reverse().find(e => contractRoot(e.contractId) === contractRoot(item.contractId) && e.setup && (!e.side || e.side === side));
+      const strategy = rec && strategyNamed(rec.setup);
+      const plan = strategy ? exitPlan(strategy) : null;
+      const entry = Number(p.averagePrice);
+      const tick = Number(item.tickSize) || 0;
+      let risk = null;
+      if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;
+      else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
+      else if (stopOrder && sign * (entry - Number(stopOrder.stopPrice)) > 0) risk = sign * (entry - Number(stopOrder.stopPrice));
+      t = plan && plan.trailActivateR !== null && risk > 0 && tick > 0
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, plan }
+        : { key, skip: true };
+      trails[item.contractId] = t;
+      state = { ...state, trails };
+      if (!t.skip) log(`${item.symbol}: trailing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R)`);
+    }
+    if (t.skip) return;
+    const bar = item.bars[item.bars.length - 1];
+    const current = stopOrder ? Number(stopOrder.stopPrice) : t.stop;
+    const step = trailStep({ ...t, stop: sign > 0 ? Math.max(current, t.stop) : Math.min(current, t.stop) }, bar, t.plan, Number(item.tickSize));
+    trails[item.contractId] = { ...t, peakR: step.peakR, stop: step.stop };
+    state = { ...state, trails };
+    if (step.close) {
+      await client.closePosition(cfg.account, item.contractId);
+      log(`${item.symbol}: trail: bar ${bar.t} went through the new stop ${step.stop}; closed ${t.setup} at market (peak ${step.peakR.toFixed(2)}R)`);
+      return;
+    }
+    if (!stopOrder) {
+      if (step.active) log(`${item.symbol}: trail wants the stop at ${step.stop} but there is no single working stop order to move`, 'error');
+      return;
+    }
+    const tick = Number(item.tickSize);
+    if (sign * (step.stop - current) >= tick - 1e-9) {
+      await client.modifyStop(cfg.account, stopOrder.id, step.stop);
+      log(`${item.symbol}: trail: stop ${current} -> ${step.stop} (peak ${step.peakR.toFixed(2)}R)`);
+    }
+  }
+
+  /** Account housekeeping before a cycle: leftover orders and trailing stops. */
+  async function housekeeping(item) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
-      const { positions, orders } = await client.accountState(cfg.account);
-      const root = contractRoot(item.contractId);
-      const net = positions
-        .filter(p => contractRoot(p.contractId) === root)
-        .reduce((n, p) => n + (p.type === 1 ? 1 : p.type === 2 ? -1 : 0) * Number(p.size || 0), 0);
-      if (net !== 0) return;
-      const entries = entryOrderIds();
-      for (const o of orders.filter(x => contractRoot(x.contractId) === root && !entries.has(Number(x.id)))) {
-        await client.cancelOrder(cfg.account, o.id);
-        log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
-      }
+      const account = await client.accountState(cfg.account);
+      await cleanupFlat(item, account);
+      await trailPosition(item, account);
     } catch (err) {
-      log(`${item.symbol}: leftover-order check failed (${err.message})`, 'error');
+      log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');
     }
   }
 
@@ -194,7 +263,8 @@ function createRunner(deps) {
       if (again.action === 'trade' || again.action === 'manage') {
         const manageOnly = again.action === 'manage';
         const run = [];
-        for (const item of ready) await cleanupFlat(item);
+        for (const item of ready) await housekeeping(item);
+        if (state.trails) saveState(state);
         for (const item of ready) {
           const w = await wanted(item, manageOnly);
           if (w.run) run.push(item);

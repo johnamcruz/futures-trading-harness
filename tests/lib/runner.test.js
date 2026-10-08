@@ -254,7 +254,7 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
     },
     clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
-    writeBars: () => '/b.json', scanFor: () => [], entryOrderIds: () => new Set([2]),
+    writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => [{ orderId: 2, contractId: 'CON.F.US.MNQ.Z26', setup: 'orb', side: 'buy' }],
   });
   while (clockRef.t < et(10, 2)) clockRef.t += await runner.step();
   assert.deepStrictEqual(cancelled, [1]);
@@ -264,4 +264,48 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
   orders.push({ id: 4, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1 });
   while (clockRef.t < et(10, 8)) clockRef.t += await runner.step();
   assert.deepStrictEqual(cancelled, []);
+});
+
+test('a trailing strategy\'s stop is tightened from +2R and the trade is closed when a bar goes through the new stop', async () => {
+  const clockRef = { t: et(10, 0) + 2000 };
+  const step = 180000;
+  // Long 1 from 21500, stop 21490 (1R = 10 points = 40 ticks). Each closed bar is scripted.
+  const path = [[21505, 21510, 21502], [21522, 21525, 21521], [21533, 21535, 21531], [21536, 21540, 21534]];
+  let k = 0;
+  const modified = [];
+  const closed = [];
+  let stopPrice = 21490;
+  const runner = createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+    client: {
+      async activeContract() { return { id: 'CON.F.US.MNQ.Z26', tickSize: 0.25, tickValue: 0.5 }; },
+      async closedBars() {
+        const lastOpen = Math.floor((clockRef.t - 1000) / step) * step - step;
+        k = Math.min(path.length - 1, Math.max(0, Math.round((lastOpen - et(10, 0)) / step)));
+        const [c, h, l] = path[k];
+        return [{ t: new Date(lastOpen - step).toISOString(), o: 21500, h: 21501, l: 21499, c: 21500, v: 1 }, { t: new Date(lastOpen).toISOString(), o: c, h, l, c, v: 1 }];
+      },
+      async accountState() {
+        return {
+          positions: closed.length ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500 }],
+          orders: closed.length ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice }],
+        };
+      },
+      async modifyStop(acct, id, price) { modified.push(price); stopPrice = price; },
+      async closePosition(acct, contractId) { closed.push(contractId); },
+      async cancelOrder() {},
+      async netPosition() { return closed.length ? 0 : 1; },
+      async workingOrders() { return 1; },
+    },
+    clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+    writeBars: () => '/b.json', scanFor: () => [],
+    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40 }],
+    strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
+  });
+  while (clockRef.t < et(10, 15)) clockRef.t += await runner.step();
+  // Bar 2: peak 21525 = 2.5R -> stop 21520 (2R). Bar 3: peak 3.5R -> 21530.
+  // Bar 4: peak 4R -> 21535, but its low 21534 is already through it -> closed at market.
+  assert.deepStrictEqual(modified, [21520, 21530]);
+  assert.deepStrictEqual(closed, ['CON.F.US.MNQ.Z26']);
 });

@@ -20,9 +20,15 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 1. `get_account_snapshot`: confirm the account state matches the plan's
    assumption (e.g. flat). If not, stop and report.
 2. `get_contract`: round entry, stop, and target to `tickSize`.
-3. `place_order` with `stopLossBracket` / `takeProfitBracket` in ticks when the
-   account supports brackets. Rationale:
-   `setup:<name> <side> <trigger>, stop <price>, target <price>, risk $<x>`.
+3. Follow the strategy's exit plan (the scan's `exit`, from its `exit:` block):
+   - **Trailing** (`trailActivateR` set, `targetR` null): stop only, no
+     take-profit order. The runner trails the stop after every closed bar
+     (from +2R, giving back 0.5R for the ported strategies).
+   - **Target** (`targetR` set): stop and target at `targetR` × the stop
+     distance.
+   `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
+   target) in ticks when the account supports brackets. Rationale:
+   `setup:<name> <side> <trigger>, stop <price>[, target <price>], risk $<x>`.
 4. If brackets are rejected, place the entry without them; as soon as
    `list_open_positions` shows the fill, place the stop with rationale
    `[protect] stop for <setup> <side> filled at <price>` and the target with
@@ -33,7 +39,12 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 
 ## Management (only as the plan says)
 
-- Move the stop to breakeven or tighten it with `modify_order`. Never widen it.
+- Move the stop to breakeven or tighten it with `modify_order`. Never widen it
+  (the gateway refuses). For a trailing strategy, leave the stop to the
+  runner's trail unless the plan says to exit earlier.
+- After a partial exit, reduce the protective stop's size to the remaining
+  position with `modify_order {size}` (decreases are allowed; increases are
+  not).
 - Scale out with `partial_close_position` or flatten with `close_position`,
   and record it with `journal_add {kind:"exit", contractId, text}`. Exit orders
   sent through `place_order` start their rationale with `[exit]`.

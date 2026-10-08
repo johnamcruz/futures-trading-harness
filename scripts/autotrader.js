@@ -33,7 +33,7 @@ const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
-const { readJson, writeJsonAtomic, runHarness, entryOrderIds, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
+const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 
@@ -263,7 +263,8 @@ async function main(argv) {
       return scan(sameTf, { bars }, { symbol, now: new Date() });
     },
     log,
-    entryOrderIds: () => entryOrderIds(HOME_DIR),
+    entryOrders: () => entryOrders(HOME_DIR),
+    strategyNamed: name => loadStrategies(ROOT, process.env).strategies.find(s => s.name === name && s.valid) || null,
   });
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   for (;;) {

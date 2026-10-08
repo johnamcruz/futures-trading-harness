@@ -2,8 +2,10 @@
 
 /**
  * Minimal ProjectX Gateway REST client for the autonomous runner: the bar
- * clock and account reads, plus one write, cancelling leftover orders on a
- * flat contract (the agents themselves trade through projectx-mcp). Uses the same
+ * clock and account reads, plus the runner's risk-reducing housekeeping:
+ * cancelling leftover orders on a flat contract, tightening a trailing
+ * strategy's stop, and closing a trade the trail says is over (the agents
+ * themselves trade through projectx-mcp). Uses the same
  * environment as projectx-mcp: PROJECTX_USERNAME, PROJECTX_API_KEY, and
  * optionally PROJECTX_API_URL. Never logs credentials or tokens.
  */
@@ -73,7 +75,7 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
       const contracts = (res.contracts || []).filter(c => c.activeContract);
       const exact = contracts.find(c => String(c.id || '').split('.').slice(-2, -1)[0] === symbol) || contracts[0];
       if (!exact) throw new ProjectXRestError(`no active contract found for ${symbol}`);
-      return { id: exact.id, name: exact.name, tickSize: exact.tickSize, tickValue: exact.tickValue };
+      return { id: exact.id, name: exact.name, tickSize: Number(exact.tickSize), tickValue: Number(exact.tickValue) };
     },
 
     /** Closed minute bars, oldest first, in projectx-mcp's {t,o,h,l,c,v} shape. */
@@ -129,6 +131,16 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
     /** Cancel a working order. */
     async cancelOrder(accountId, orderId) {
       return post('/api/Order/cancel', { accountId: Number(accountId), orderId: Number(orderId) });
+    },
+
+    /** Move a working stop order's price. */
+    async modifyStop(accountId, orderId, stopPrice) {
+      return post('/api/Order/modify', { accountId: Number(accountId), orderId: Number(orderId), size: null, limitPrice: null, stopPrice, trailPrice: null });
+    },
+
+    /** Close the whole position in a contract at market. */
+    async closePosition(accountId, contractId) {
+      return post('/api/Position/closeContract', { accountId: Number(accountId), contractId });
     },
 
     /** Net position in a contract (positive long, negative short). */
