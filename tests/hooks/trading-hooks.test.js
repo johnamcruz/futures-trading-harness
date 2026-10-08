@@ -140,9 +140,9 @@ test('session-start briefing lists lessons and day state', () => {
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
 });
 
-test('market hours are a hard rule: no entry at night even with FTH_ENTRY_HOURS empty and the check skipped', () => {
-  const { env } = setup([{ ts: minutesAgo(5, new Date('2026-10-08T00:30:00Z')), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
-    { FTH_TEST_NOW: '2026-10-08T00:30:00Z', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
+test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date('2026-10-07T21:00:00Z')), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_TEST_NOW: '2026-10-07T21:00:00Z', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
   const r = gate(orderPayload(entryOrder()), env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /market-hours/);

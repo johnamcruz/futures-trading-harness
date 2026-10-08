@@ -87,13 +87,16 @@ function parseHhMm(text) {
 }
 
 /**
- * Parse "09:30-09:35@America/New_York,15:00-17:00@America/Chicago".
+ * Parse "09:30-09:35@America/New_York,15:00-17:00@America/Chicago" (or the
+ * named sessions asia, london, ny).
  * Invalid entries are skipped and reported in `errors`.
  */
 function parseWindows(spec) {
   const windows = [];
   const errors = [];
-  for (const raw of String(spec || '').split(',').map(s => s.trim()).filter(Boolean)) {
+  for (const item of String(spec || '').split(',').map(s => s.trim()).filter(Boolean)) {
+    // Named sessions (asia, london, ny) stand for their New York windows.
+    const raw = SESSION_ALIASES[item.toLowerCase()] || item;
     const m = /^([^-]+)-([^@]+)@(.+)$/.exec(raw);
     const start = m && parseHhMm(m[1]);
     const end = m && parseHhMm(m[2]);
@@ -107,7 +110,7 @@ function parseWindows(spec) {
       errors.push(raw);
       continue;
     }
-    windows.push({ label: raw, start, end, timeZone: m[3].trim() });
+    windows.push({ label: raw === item ? raw : `${item} (${raw})`, start, end, timeZone: m[3].trim() });
   }
   return { windows, errors };
 }
@@ -120,22 +123,55 @@ function inWindow(now, window) {
 }
 
 /**
- * Hard trading hours: the regular session of US index futures, 09:30-16:00
- * New York time, Monday to Friday. No entry outside them and no position held
- * outside them, whatever the configuration says.
+ * Hard trading hours: the Topstep session of CME futures, 18:00 ET to 16:00
+ * ET the next day (22 hours), Sunday evening to Friday afternoon. Closed
+ * 16:00-18:00 ET and over the weekend: no entry then, and every position is
+ * flat by 16:00 ET. Strategies narrow it with `sessions` (e.g. [ny]).
  */
 const MARKET_TZ = 'America/New_York';
-const MARKET_OPEN_MIN = 9 * 60 + 30;
+const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
-const MARKET_HOURS_LABEL = '09:30-16:00 ET, Monday to Friday';
+const MARKET_HOURS_LABEL = '18:00-16:00 ET, Sunday evening to Friday afternoon (the Topstep session; closed 16:00-18:00 ET)';
 
-/** Is `now` inside market hours (and, with `until`, before that New York minute)? */
+/**
+ * Named sessions inside the trading day, in New York time:
+ *   asia   18:00-03:00 (Globex open through Tokyo and Hong Kong)
+ *   london 03:00-09:30 (London open to the New York cash open)
+ *   ny     09:30-16:00 (New York cash session to the close)
+ */
+const SESSION_ALIASES = {
+  asia: '18:00-03:00@America/New_York',
+  london: '03:00-09:30@America/New_York',
+  ny: '09:30-16:00@America/New_York',
+};
+
+/** Minutes since the start of `now`'s trading day (18:00 ET = 0). */
+function sessionMinute(now) {
+  return Math.floor((now.getTime() - tradingDayStart(now).getTime()) / 60000);
+}
+
+/**
+ * Where a clock time ({ minute, timeZone }, e.g. 15:50 New York) falls in
+ * `now`'s trading day, in minutes since its start; null if it never does.
+ */
+function sessionMinuteOf(at, now) {
+  const start = tradingDayStart(now).getTime();
+  for (const offset of [0, 1]) {
+    const p = zonedParts(new Date(start + offset * 86400000), at.timeZone);
+    const t = zonedTimeToUtc({ year: p.year, month: p.month, day: p.day, hour: Math.floor(at.minute / 60), minute: at.minute % 60 }, at.timeZone).getTime();
+    if (t >= start && t < start + 86400000) return Math.floor((t - start) / 60000);
+  }
+  return null;
+}
+
+/** Is `now` inside the market session? `until` (a New York minute) ends the afternoon early. */
 function inMarketHours(now, { until = MARKET_CLOSE_MIN } = {}) {
   const p = zonedParts(now, MARKET_TZ);
-  const weekday = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
-  if (weekday === 0 || weekday === 6) return false;
+  const weekday = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay(); // 0 Sunday
   const m = p.hour * 60 + p.minute;
-  return m >= MARKET_OPEN_MIN && m < Math.min(until, MARKET_CLOSE_MIN);
+  if (m >= MARKET_OPEN_MIN) return weekday >= 0 && weekday <= 4; // Sunday to Thursday evening
+  if (m < Math.min(until, MARKET_CLOSE_MIN)) return weekday >= 1 && weekday <= 5; // Monday to Friday
+  return false;
 }
 
 module.exports = {
@@ -143,7 +179,10 @@ module.exports = {
   MARKET_OPEN_MIN,
   MARKET_CLOSE_MIN,
   MARKET_HOURS_LABEL,
+  SESSION_ALIASES,
   inMarketHours,
+  sessionMinute,
+  sessionMinuteOf,
   TRADING_DAY_TZ,
   zonedParts,
   zonedTimeToUtc,

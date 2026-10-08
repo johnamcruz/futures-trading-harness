@@ -147,6 +147,10 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       stopDistance = d !== null && d > 0 ? d : null;
     }
     const fails = filterFailures(s, ser, i);
+    // A mechanical stop (atr:k or an expression) that has no positive
+    // distance on this bar can't be placed: no candidate.
+    const mechanicalStop = Boolean(atrMult || s.compiledStop);
+    if (direction && mechanicalStop && !(stopDistance > 0)) fails.push('stop: no positive distance on this bar');
     const base = direction || describe ? withRegime(head) : { ...head, regime: null, regimes: s.regimes || null, inRegime: null };
     return {
       ...base,

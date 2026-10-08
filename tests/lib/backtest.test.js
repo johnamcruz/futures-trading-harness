@@ -227,5 +227,24 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   const held = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } })], { timeframe: 3, gate: false }).trades;
   assert.deepStrictEqual(held.map(t => [t.reason, t.exit]), [['eod', 101]], 'not carried into the next day');
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: null }, ROOT), /eodAt/);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market hours/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
+});
+
+test('strategies whose stop is an expression (cisd_ote) are backtested', () => {
+  const dir = tmpDir();
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['cisd_ote'], outDir: dir, gate: false };
+  const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: {} });
+  assert.deepStrictEqual(report.skipped || {}, {});
+  assert.ok(report.summary.trades > 0, 'cisd_ote trades');
+});
+
+test('a stop expression with no positive distance makes no candidate', () => {
+  const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
+  const { compileExpression } = require('../../scripts/lib/trading/rules');
+  const s = strategy({ risk: { stop: '-0.5 * atr(20)', min_rr: 2 }, compiledStop: compileExpression('-0.5 * atr(20)') });
+  const b = bars([[100, 101, 99.9, 101]]).map(x => ({ ...x }));
+  const r = createEvaluator(b).at(s, b.length - 1, { describe: false });
+  assert.strictEqual(r.direction, 'long');
+  assert.strictEqual(r.candidate, false);
+  assert.match(r.filtersFailed.join(' '), /no positive distance/);
 });

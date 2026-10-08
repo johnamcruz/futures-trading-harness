@@ -69,8 +69,8 @@ function validateBacktestConfig(raw, baseDir) {
   for (const k of ['size', 'maxContracts']) if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive whole number`);
   if (cfg.riskPerTrade !== null && !(cfg.riskPerTrade > 0)) errors.push('riskPerTrade: dollars per trade, or null for a fixed size');
   if (cfg.riskPerTrade !== null && raw && raw.size !== undefined) errors.push('size and riskPerTrade: use one (fixed contracts, or size from the stop and a dollar risk)');
-  if (!Array.isArray(cfg.sessions) || parseWindows(cfg.sessions.join(',')).errors.length) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...] (e.g. "09:35-15:00@America/New_York")');
-  if (!cfg.eodAt || !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" no later than 16:00 ET (e.g. "15:50@America/New_York"); no trade is held overnight');
+  if (!Array.isArray(cfg.sessions) || parseWindows(cfg.sessions.join(',')).errors.length) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...] (e.g. "18:00-15:50@America/New_York", or asia, london, ny)');
+  if (!cfg.eodAt || !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" no later than the 16:00 ET close (e.g. "15:50@America/New_York")');
   else if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (typeof cfg.gate !== 'boolean') errors.push('gate: true or false');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');

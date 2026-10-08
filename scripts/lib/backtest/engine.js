@@ -13,9 +13,10 @@
  *        code the live scan runs) and the first candidate, in strategy order,
  *        enters at the bar's close with its stop (and target).
  *
- * Market hours are a hard rule, always applied: entries only 09:30-16:00 ET
- * on weekdays and before end of day (`eodAt`), and every trade is closed at
- * end of day; none is held overnight. The harness's other entry rules apply
+ * Market hours are a hard rule, always applied: entries only in the market
+ * session (18:00-16:00 ET, Sunday evening to Friday) and before end of day
+ * (`eodAt`), and every trade is closed at end of day; none is carried past
+ * the 16:00 ET close. The harness's other entry rules apply
  * as they do live (`gate: true`): the runner's sessions, the order gate's
  * no-entry windows, loss streak cooldown, daily loss count, and daily entry
  * cap. `gate: false` drops those (not the market hours) when comparing with
@@ -31,7 +32,7 @@
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
 const { trailStep } = require('../trading/trail');
-const { parseWindows, inWindow, tradingDayStart, minutesOfDay, inMarketHours, zonedParts, MARKET_TZ } = require('../trading/clock');
+const { parseWindows, inWindow, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const { normalizeBars } = require('../trading/indicators');
 
@@ -43,7 +44,7 @@ const DEFAULTS = {
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
-  sessions: ['09:35-15:00@America/New_York'],
+  sessions: ['18:00-15:50@America/New_York'],
   eodAt: '15:50@America/New_York',
   window: 500,
 };
@@ -80,7 +81,7 @@ function runEngine(markets, strategies, opts = {}) {
       if (!s.valid || s.status === 'disabled') return false;
       if (!s.instruments.includes(m.symbol)) return false;
       if (s.signal === 'manual') { skipped.set(s.name, 'manual strategies need the LLM'); return false; }
-      if (!/^atr:/.test(s.risk.stop) && s.signal !== 'cisd_ote') { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
+      if (!/^atr:/.test(s.risk.stop) && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
       return true;
     });
     return { ...m, bars, ev: createEvaluator(bars, { window: o.window }), usable, pos: null };
@@ -136,10 +137,10 @@ function runEngine(markets, strategies, opts = {}) {
     }
 
     // 1. Broker: the resting stop and target against this bar.
-    // Hard rule: no trade is held overnight. If the data has no bar between
-    // end of day and this one, close at the previous bar's close.
-    const nyDay = t => { const z = zonedParts(t, MARKET_TZ); return `${z.year}-${z.month}-${z.day}`; };
-    if (book.pos && i > book.pos.entryIndex && nyDay(closeAt) !== book.pos.nyDay) {
+    // Hard rule: no trade is carried past the close into the next trading
+    // day. If the data has no bar between end of day and this one, close at
+    // the previous bar's close.
+    if (book.pos && i > book.pos.entryIndex && tradingDayStart(closeAt).getTime() !== book.pos.tradingDay) {
       const prev = book.bars[i - 1];
       closeTrade(book, prev, prev.c, 'eod');
     }
@@ -162,7 +163,7 @@ function runEngine(markets, strategies, opts = {}) {
     // 2. Manage an open trade at the bar's close. Like algoTraderBot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    const afterEod = (eod && minutesOfDay(closeAt, eod.timeZone) >= eod.minute) || !inMarketHours(closeAt);
+    const afterEod = (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt)) || !inMarketHours(closeAt);
     let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
@@ -216,7 +217,7 @@ function runEngine(markets, strategies, opts = {}) {
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
       // As algoTraderBot: target ticks from the unrounded stop distance.
       target: plan.targetR ? onTick(entry + sign * Math.max(1, Math.round((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
-      entryIndex: i, entryTime: closeAt.toISOString(), nyDay: nyDay(closeAt), peakR: 0, barsHeld: 0,
+      entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, barsHeld: 0,
     };
     entriesToday += 1;
   }

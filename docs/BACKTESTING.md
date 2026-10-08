@@ -84,11 +84,12 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 | Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
 | Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). |
 
-**Market hours** always apply, as they do live: entries only 09:30-16:00
-ET on weekdays and before `eodAt`, and every trade is closed at end of day
-(`eodAt`, required, no later than 16:00 ET). A trade is never held
-overnight, even when the data has no bar between the close and the next
-morning (it closes at the day's last bar).
+**The market session** always applies, as it does live: entries only from
+18:00 to 16:00 ET (Sunday evening to Friday) and before `eodAt`, and every
+trade is closed at end of day (`eodAt`, required, no later than the 16:00 ET
+close). A trade is never carried into the next trading day, even when the
+data has no bar between the close and the next session (it closes at the
+day's last bar).
 
 **Harness rules** (`gate: true`, the default) apply what the live harness
 enforces:
@@ -103,7 +104,7 @@ enforces:
   - the daily entry cap
 - projectx-mcp's daily dollar loss limit (`maxDailyLoss`).
 
-**`gate: false`** (`--no-gate`) drops those limits (not the market hours).
+**`gate: false`** (`--no-gate`) drops those limits (not the market session).
 Use it to compare with algoTraderBot.
 
 ### Exits
@@ -132,7 +133,7 @@ same rule (see the autonomous-trading skill).
 | `start`, `end` | all data | ISO date or time; `end` exclusive |
 | `strategies` | all mechanical ones on the timeframe | Names in priority order |
 | `gate` | true | Harness rules, as above |
-| `sessions`, `eodAt` | 09:35-15:00 ET, 15:50 ET | Runner schedule: sessions inside market hours (with `gate`); `eodAt` required, no later than 16:00 ET |
+| `sessions`, `eodAt` | 18:00-15:50 ET, 15:50 ET | Runner schedule: sessions inside the 18:00-16:00 ET session (with `gate`; `asia`, `london`, `ny` work); `eodAt` required, no later than 16:00 ET |
 | `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk |
 | `slippageTicks` | 0 | Against you on entries and stop fills |
 | `feesPerSide` | per contract (micros $0.37) | Dollars per contract per side |

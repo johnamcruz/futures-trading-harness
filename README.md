@@ -260,9 +260,13 @@ strategy fires (use it for 1-minute bars so a cycle fits in one bar);
 `maxCyclesPerDay` (400) switches to manage-only cycles once reached;
 `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe), and a cycle stopped
 by the timeout makes the next one start by checking protective stops;
-Trading hours are a hard rule: `sessions` must lie inside 09:30-16:00 ET,
-`eodAt` is required and no later than 16:00 ET, and outside market hours
-the runner closes any position it finds (checked once a minute).
+Trading hours are a hard rule: the market session is 18:00-16:00 ET (the Topstep session: about 22 hours a day, Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends).
+`sessions` (default `18:00-15:50 ET`, the whole session up to end of day)
+must lie inside it; named sessions `asia` (18:00-03:00 ET), `london`
+(03:00-09:30 ET), and `ny` (09:30-16:00 ET) work anywhere a window does.
+`eodAt` is required and no later than the 16:00 ET close: every position is
+flat by then. Outside the session the runner closes any position it finds
+(checked once a minute).
 `earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME early-close
 sessions; bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
 `dataDir` is set. With several `symbols`, one cycle covers every symbol whose
@@ -278,8 +282,8 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 3. checks every strategy for an entry, with the same rules evaluation the
    live scan uses.
 
-Market hours are always enforced: entries only 09:30-16:00 ET on weekdays,
-and every trade closed at end of day. By default it also applies the
+The market session is always enforced: entries only between 18:00 and
+16:00 ET (Sunday evening to Friday), and every trade closed at end of day. By default it also applies the
 harness's other rules (sessions, order-gate limits); `--no-gate` drops those
 to compare with algoTraderBot.
 
@@ -321,7 +325,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 | `FTH_MAX_CONSECUTIVE_LOSSES` / `FTH_LOSS_COOLDOWN_MIN` | 2 / 30 | Loss-streak cooldown |
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
-| `FTH_ENTRY_HOURS` | `09:35-15:00@America/New_York` | New entries only inside these windows (empty = any time) |
+| `FTH_ENTRY_HOURS` | empty (the whole session) | New entries only inside these windows (`ny`, `london`, `asia`, or `HH:MM-HH:MM@Zone`); the 18:00-16:00 ET session is a hard limit either way |
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:00-18:00@America/Chicago` | No new entries |
 | `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |

@@ -68,9 +68,10 @@ test('paper mode and a truncated journal window block entries; autonomous mode i
   assert.strictEqual(loadConfig({ FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'plan-required' }).skipChecks.size, 0);
 });
 
-test('no new entries in the opening 5 minutes or after 15:00 CT', () => {
+test('no new entries in the opening 5 minutes of New York, into the close, or after it', () => {
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T13:31:00Z' })], { now: new Date('2026-10-07T13:32:00Z') })), ['time-window']);
-  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T20:04:00Z' })], { now: new Date('2026-10-07T20:05:00Z') })), ['market-hours', 'time-window']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T19:49:00Z' })], { now: new Date('2026-10-07T19:50:00Z') })), ['time-window']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T20:04:00Z' })], { now: new Date('2026-10-07T20:05:00Z') })), ['market-hours']);
 });
 
 test('invalid window config blocks (fail closed)', () => {
@@ -184,23 +185,31 @@ test('modify_order size changes need an [exit]/[protect] reason (the gateway the
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1, reason: '[protect] cut the stop to 1 after scaling out' }, config: cfg }).violations, []);
 });
 
-test('market hours are a hard rule: no entry outside 09:30-16:00 ET on weekdays, whatever the config', () => {
+test('market hours are a hard rule: entries only in the 18:00-16:00 ET session, Sunday evening to Friday, whatever the config', () => {
   const open = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
   const at = iso => checks(evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso), config: open }));
-  assert.ok(at('2026-10-07T13:29:00Z').includes('market-hours'), '09:29 ET');
-  assert.ok(!at('2026-10-07T13:30:00Z').includes('market-hours'), '09:30 ET');
-  assert.ok(!at('2026-10-07T19:59:00Z').includes('market-hours'), '15:59 ET');
-  assert.ok(at('2026-10-07T20:00:00Z').includes('market-hours'), '16:00 ET');
-  assert.ok(at('2026-10-08T02:00:00Z').includes('market-hours'), '22:00 ET overnight');
-  assert.ok(at('2026-10-10T14:30:00Z').includes('market-hours'), 'Saturday');
-  const exit = evaluate(entryOrder({ side: 'sell', rationale: '[exit] flatten' }), [], { now: new Date('2026-10-08T02:00:00Z'), config: open });
+  const blocked = (iso, why) => assert.ok(at(iso).includes('market-hours'), why);
+  const allowed = (iso, why) => assert.ok(!at(iso).includes('market-hours'), why);
+  allowed('2026-10-07T13:29:00Z', 'Wed 09:29 ET (London)');
+  allowed('2026-10-07T19:59:00Z', 'Wed 15:59 ET');
+  blocked('2026-10-07T20:00:00Z', 'Wed 16:00 ET: the close');
+  blocked('2026-10-07T21:59:00Z', 'Wed 17:59 ET: the break');
+  allowed('2026-10-07T22:00:00Z', 'Wed 18:00 ET: the open');
+  allowed('2026-10-08T02:00:00Z', 'Wed 22:00 ET (Asia)');
+  blocked('2026-10-09T22:30:00Z', 'Fri 18:30 ET: weekend');
+  blocked('2026-10-10T14:30:00Z', 'Saturday');
+  blocked('2026-10-11T21:30:00Z', 'Sun 17:30 ET');
+  allowed('2026-10-11T22:30:00Z', 'Sun 18:30 ET');
+  const exit = evaluate(entryOrder({ side: 'sell', rationale: '[exit] flatten' }), [], { now: new Date('2026-10-10T14:30:00Z'), config: open });
   assert.deepStrictEqual(exit.violations, [], 'exits are always allowed');
 });
 
-test('entries only inside FTH_ENTRY_HOURS (default 09:35-15:00 ET)', () => {
-  const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
-  assert.ok(checks(at('2026-10-07T07:00:00Z')).includes('time-window'), '03:00 ET');
-  assert.ok(!checks(at('2026-10-07T14:00:00Z')).includes('time-window'), '10:00 ET');
+test('FTH_ENTRY_HOURS narrows entries (default: the whole session; named sessions work)', () => {
+  const at = (iso, env = {}) => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso), config: loadConfig(env) });
+  assert.ok(!checks(at('2026-10-07T07:00:00Z')).includes('time-window'), '03:00 ET is in the session by default');
+  assert.ok(checks(at('2026-10-07T07:00:00Z', { FTH_ENTRY_HOURS: 'ny' })).includes('time-window'), 'ny only: 03:00 ET refused');
+  assert.ok(!checks(at('2026-10-07T14:00:00Z', { FTH_ENTRY_HOURS: 'ny' })).includes('time-window'), 'ny only: 10:00 ET');
+  assert.ok(!checks(at('2026-10-07T07:00:00Z', { FTH_ENTRY_HOURS: 'london' })).includes('time-window'), 'london: 03:00 ET');
   const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 50.5, reason: '[protect] x' }, config: loadConfig({}) }).violations.map(v => v.check), ['modify-size']);
 });

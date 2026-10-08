@@ -5,6 +5,7 @@ version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
+sessions: [ny]          # New York session only (09:30-16:00 ET): the range forms at the 09:30 open
 signal: rules
 rules:
   long:

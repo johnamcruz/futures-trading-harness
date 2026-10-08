@@ -5,7 +5,7 @@ version: 1
 status: paper                 # paper | active | disabled. New strategies start as paper.
 instruments: [MNQ, MES]       # contract roots the strategy may trade
 timeframe: 3m                 # trigger timeframe: 1m, 3m, 5m, 15m, 1h ...
-sessions: ["09:45-11:30@America/New_York"]   # optional; entries only inside these windows
+sessions: [ny]                # optional; asia (18:00-03:00 ET), london (03:00-09:30 ET), ny (09:30-16:00 ET), or "HH:MM-HH:MM@Zone". Omit for the whole 18:00-16:00 ET session
 regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol
 regime_gate: false            # true = the MCP gateway refuses entries when the live regime doesn't fit
 signal: rules                 # rules (conditions below) | manual (agents judge the body)

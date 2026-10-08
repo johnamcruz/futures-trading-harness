@@ -14,7 +14,7 @@
   "barPollSeconds": 2,
   "barTimeoutSeconds": 60,
   "sessions": [
-    "09:35-15:00@America/New_York"
+    "18:00-15:50@America/New_York"
   ],
   "premarketAt": "09:00@America/New_York",
   "eodAt": "15:50@America/New_York",

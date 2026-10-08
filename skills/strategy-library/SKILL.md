@@ -51,7 +51,8 @@ one did or didn't fire. Strategies with `signal: manual` are listed with
    `candidate: true`, or the manual trigger described in the body), every
    context filter holds, no "Skip when" rule applies, and planned R:R ≥
    `risk.min_rr`.
-3. Stop from `risk.stop`: `atr:<k>` → the scan's `stopDistance` (k × ATR(20));
+3. Stop from `risk.stop`: `atr:<k>` or a distance expression (e.g.
+   cisd_ote's `cisd_ote_risk`) → the scan's `stopDistance`;
    `structure`/`swing` → beyond the level the body names. Round to tick size.
 4. Tag the plan and the order `setup:<name>`.
 
@@ -67,6 +68,6 @@ Live entries are blocked unless `setup:<name>` names a valid strategy with
 scan → orb: direction long, inSession true, filtersFailed [], candidate true, stopDistance 5.25
 show orb → skip rule "relative volume < 1.0x" → volume analyst reports 0.8x → no trade.
 
-scan → cisd_ote: signal manual, candidate true → read the body, check 12m bars
-for a sweep + displacement; none → no trade.
+scan → cisd_ote: direction short, candidate true, stopDistance 18.5 → read the
+body's skip rules (sweep before the displacement?) → none apply → plan it.
 ```

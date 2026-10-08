@@ -23,7 +23,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `status` | `paper` (new), `active` (live entries allowed), `disabled` |
    | `instruments` | Contract roots, e.g. `[MNQ, MES]` |
    | `timeframe` | Trigger timeframe, e.g. `3m` |
-   | `sessions` | Optional `"HH:MM-HH:MM@Zone"` windows; entries only inside |
+   | `sessions` | Optional windows, entries only inside: named sessions `asia` (18:00-03:00 ET), `london` (03:00-09:30 ET), `ny` (09:30-16:00 ET), or `"HH:MM-HH:MM@Zone"`. Without it the strategy trades the whole market session, 18:00-16:00 ET (closed 16:00-18:00 ET and weekends; no position is carried past 16:00 ET) |
    | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped strategy, the algoTraderBot ports included, is `rules` |
    | `connectors` | Optional data the strategy needs beyond bars, like a skill's tools: `order_flow` (aggressor buy/sell volume from the TopstepX market hub, for `ofi`/`delta`). Required when the rules use that data; the runner turns on every connector an active strategy declares |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |

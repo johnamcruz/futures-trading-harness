@@ -77,7 +77,7 @@ const barOpens = prompt => [...prompt.matchAll(/(\w+): a \d+-minute bar just clo
 
 test('3m, full session: exactly one cycle per closed bar, each started within seconds of the close', async () => {
   const market = fakeMarket({ minutes: 3 });
-  const { cycles } = await simulate({ cfg: { timeframe: 3 }, from: et(9, 30), to: et(15, 0), market });
+  const { cycles } = await simulate({ cfg: { timeframe: 3, sessions: ['09:35-15:00@America/New_York'] }, from: et(9, 30), to: et(15, 0), market });
   const trade = cycles.filter(c => c.action === 'trade');
   const seen = trade.flatMap(c => barOpens(c.prompt));
   assert.strictEqual(new Set(seen).size, seen.length, 'no bar is processed twice');
@@ -230,9 +230,11 @@ test('an exception inside a pass is logged and the loop carries on', async () =>
   assert.ok(saves > 2, 'later passes still run');
 });
 
-test('hard market hours: sessions outside 09:30-16:00 ET, a missing end of day, or one after 16:00 ET are rejected', () => {
-  assert.throws(() => validateConfig({ sessions: ['18:00-16:00@America/New_York'] }), /market hours/);
-  assert.throws(() => validateConfig({ sessions: ['09:00-11:00@America/New_York'] }), /market hours/);
+test('hard market hours: sessions in the 16:00-18:00 ET break, a missing end of day, or one after the 16:00 ET close are rejected', () => {
+  assert.throws(() => validateConfig({ sessions: ['16:30-17:30@America/New_York'] }), /market session/);
+  assert.throws(() => validateConfig({ sessions: ['00:00-24:00@UTC'] }), /market session/);
+  assert.ok(validateConfig({ sessions: ['18:00-15:50@America/New_York'] }), 'the full Topstep session');
+  assert.ok(validateConfig({ sessions: ['asia', 'london', 'ny'], eodAt: '16:00@America/New_York' }), 'named sessions');
   assert.throws(() => validateConfig({ eodAt: '' }), /eodAt: required/);
   assert.throws(() => validateConfig({ eodAt: '16:30@America/New_York' }), /no later than 16:00/);
   assert.throws(() => validateConfig({ eodAt: '15:30@America/Chicago' }), /no later than 16:00/, '15:30 CT is 16:30 ET');
@@ -243,8 +245,8 @@ test('outside market hours the runner flattens anything open, once a minute', as
   const r = await trailSim({ tape: {}, until: et(16, 5) });
   assert.ok(r.cycles.includes('eod'));
   assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26'], 'closed at end of day');
-  const night = await trailSim({ tape: {}, startAt: et(20, 0), until: et(20, 3) });
-  assert.deepStrictEqual(night.closedIds, ['CON.F.US.MNQ.Z26'], 'a position found at night is closed');
+  const brk = await trailSim({ tape: {}, startAt: et(17, 0), until: et(17, 3) });
+  assert.deepStrictEqual(brk.closedIds, ['CON.F.US.MNQ.Z26'], 'a position found in the 16:00-18:00 ET break is closed');
 });
 
 test('a session that runs past end of day is rejected', () => {
@@ -457,7 +459,7 @@ test('end of day: a position the end-of-day run left open is closed directly', a
 
 test('after the session, with trades today, the runner keeps housekeeping until end of day', () => {
   const { decide } = require('../../scripts/lib/autotrader');
-  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', account: '7' });
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', account: '7', sessions: ['09:35-15:00@America/New_York'] });
   const s = { day: '2026-10-07', premarketDone: true, eodDone: false, cycles: 5, lastCycleAt: null };
   assert.strictEqual(decide(cfg, s, new Date(et(15, 20))).action, 'housekeep');
   assert.strictEqual(decide(cfg, { ...s, cycles: 0 }, new Date(et(15, 20))).action, null);

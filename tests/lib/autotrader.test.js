@@ -9,7 +9,7 @@ const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, p
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const cfg = validateConfig({ harness: 'qwen' });
+const cfg = validateConfig({ harness: 'qwen', sessions: ['09:35-15:00@America/New_York'] });
 const et = (h, m, day = 7) => new Date(Date.UTC(2026, 9, day, h + 4, m)); // October: ET = UTC-4; 7th is a Wednesday
 
 test('config defaults validate and bad configs list every problem', () => {
@@ -194,4 +194,23 @@ test('a harness run ends with its process group: nothing it left behind keeps ru
   const n = fs.readFileSync(marker, 'utf8').length;
   await new Promise(res => setTimeout(res, 800));
   assert.strictEqual(fs.readFileSync(marker, 'utf8').length, n, 'the background loop was stopped');
+});
+
+test('full market session: trading runs through the night; the 16:00-18:00 ET break and weekends are closed', () => {
+  const full = validateConfig({ harness: 'qwen', premarketAt: '' });
+  const at = iso => decide(full, null, new Date(iso)).action;
+  assert.strictEqual(at('2026-10-07T00:30:00Z'), 'trade', '20:30 ET (Asia)');
+  assert.strictEqual(at('2026-10-07T08:00:00Z'), 'trade', '04:00 ET (London)');
+  assert.strictEqual(at('2026-10-07T14:00:00Z'), 'trade', '10:00 ET (New York)');
+  const done = { day: '2026-10-07', premarketDone: true, eodDone: true, cycles: 3, lastCycleAt: null };
+  assert.strictEqual(decide(full, done, new Date('2026-10-07T21:00:00Z')).action, null, '17:00 ET: daily break, end of day done');
+  assert.strictEqual(at('2026-10-10T20:30:00Z'), null, 'no end of day on a Saturday');
+  assert.strictEqual(at('2026-10-07T22:05:00Z'), 'trade', '18:05 ET: the next trading day');
+  assert.strictEqual(at('2026-10-10T15:00:00Z'), null, 'Saturday');
+  assert.strictEqual(at('2026-10-11T21:00:00Z'), null, 'Sunday before the 18:00 ET open');
+  assert.strictEqual(at('2026-10-11T22:30:00Z'), 'trade', 'Sunday 18:30 ET');
+  // Sunday evening and Monday are one trading day, named Monday.
+  const { dayKey } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(dayKey(new Date('2026-10-11T22:30:00Z')), '2026-10-12');
+  assert.strictEqual(dayKey(new Date('2026-10-12T19:00:00Z')), '2026-10-12');
 });

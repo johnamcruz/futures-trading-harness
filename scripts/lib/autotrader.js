@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
 const { loadConfig: loadGateConfig } = require('./trading/config');
-const { parseWindows, inWindow, minutesOfDay, zonedParts, zonedTimeToUtc, MARKET_TZ, MARKET_OPEN_MIN, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
+const { parseWindows, inWindow, zonedParts, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -28,10 +28,12 @@ const DEFAULTS = {
   barDelaySeconds: 2, // wait after the scheduled close before polling
   barPollSeconds: 2, // between polls while waiting for the closed bar
   barTimeoutSeconds: 60, // give up on a bar (daily break, halt) and resync
-  sessions: ['09:35-15:00@America/New_York'],
-  premarketAt: '09:00@America/New_York',
-  eodAt: '15:50@America/New_York',
-  weekdaysOnly: true,
+  // The whole market session (18:00-16:00 ET) up to end of day; strategies
+  // narrow their own hours (orb: sessions [ny]). Named sessions: asia, london, ny.
+  sessions: ['18:00-15:50@America/New_York'],
+  premarketAt: '09:00@America/New_York', // New York pre-market briefing
+  eodAt: '15:50@America/New_York', // flatten everything; required, no later than the 16:00 ET close
+  weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: 400, // after this, cycles only manage open positions and working orders
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
   cycle: 'full', // 'full': parallel analysts every cycle; 'lean': snapshot + scan, analysts only to confirm a candidate (use for 1m)
@@ -121,31 +123,30 @@ function parseAt(spec) {
 }
 
 /**
- * Hard trading hours (not configurable away): sessions inside 09:30-16:00
- * ET, and an end of day at or before 16:00 ET. Checked on a winter and a
- * summer weekday, so other time zones are handled across DST.
+ * Hard trading hours (not configurable away): sessions inside the market
+ * session (18:00-16:00 ET, closed 16:00-18:00 ET), and an end of day no
+ * later than the 16:00 ET close. Checked over a winter and a summer trading
+ * day, so other time zones are handled across DST.
  */
 function marketHoursErrors(cfg) {
   const errors = [];
   const windows = parseWindows((cfg.sessions || []).join(',')).windows;
-  const nyMinute = t => minutesOfDay(t, MARKET_TZ);
-  for (const day of [Date.UTC(2026, 0, 7), Date.UTC(2026, 6, 8)]) {
+  // Wednesday trading days (they start Tuesday 18:00 ET).
+  for (const start of [tradingDayStart(new Date(Date.UTC(2026, 0, 7, 15))), tradingDayStart(new Date(Date.UTC(2026, 6, 8, 15)))]) {
     for (let m = 0; m < 1440; m += 1) {
-      const t = new Date(day + m * 60000);
-      const ny = nyMinute(t);
-      if ((ny < MARKET_OPEN_MIN || ny >= MARKET_CLOSE_MIN) && windows.some(w => inWindow(t, w))) {
-        errors.push(`sessions: must lie inside market hours (${MARKET_HOURS_LABEL}); trading outside them is not allowed`);
+      const t = new Date(start.getTime() + m * 60000);
+      if (!inMarketHours(t) && windows.some(w => inWindow(t, w))) {
+        errors.push(`sessions: must lie inside the market session (${MARKET_HOURS_LABEL})`);
         return errors;
       }
     }
+    const close = sessionMinuteOf({ minute: MARKET_CLOSE_MIN, timeZone: MARKET_TZ }, start);
     for (const k of ['eodAt', 'earlyCloseEodAt']) {
       const at = parseAt(cfg[k]);
       if (!at) continue;
-      const p = zonedParts(new Date(day + 12 * 3600000), at.timeZone);
-      const instant = zonedTimeToUtc({ year: p.year, month: p.month, day: p.day, hour: Math.floor(at.minute / 60), minute: at.minute % 60 }, at.timeZone);
-      const ny = nyMinute(instant);
-      if (ny <= MARKET_OPEN_MIN || ny > MARKET_CLOSE_MIN) {
-        errors.push(`${k}: end of day must be after 09:30 and no later than 16:00 ET; no position may be held past the close`);
+      const m = sessionMinuteOf(at, start);
+      if (m === null || m === 0 || m > close) {
+        errors.push(`${k}: end of day must be inside the session and no later than 16:00 ET; no position is held past the close`);
         return errors;
       }
     }
@@ -153,14 +154,15 @@ function marketHoursErrors(cfg) {
   return errors;
 }
 
-/** True if any session minute falls at or after eodAt (checked on a winter and a summer day). */
+/** True if a session minute falls at or after eodAt in the trading day (winter and summer). */
 function sessionPastEod(cfg) {
   const eod = parseAt(cfg.eodAt);
   const windows = parseWindows(cfg.sessions.join(',')).windows;
-  for (const day of [Date.UTC(2026, 0, 7), Date.UTC(2026, 6, 7)]) {
-    for (let m = 0; m < 1440; m += 5) {
-      const t = new Date(day + m * 60000);
-      if (minutesOfDay(t, eod.timeZone) >= eod.minute && windows.some(w => inWindow(t, w))) return true;
+  for (const start of [tradingDayStart(new Date(Date.UTC(2026, 0, 7, 15))), tradingDayStart(new Date(Date.UTC(2026, 6, 8, 15)))]) {
+    const eodMin = sessionMinuteOf(eod, start);
+    for (let m = eodMin; m < 1440; m += 5) {
+      const t = new Date(start.getTime() + m * 60000);
+      if (inMarketHours(t) && windows.some(w => inWindow(t, w))) return true;
     }
   }
   return false;
@@ -206,7 +208,7 @@ function validateConfig(raw) {
   if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
   if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {
-    errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until midnight. End sessions before eodAt.');
+    errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until the 18:00 ET open. End sessions before eodAt.');
   }
   if (errors.length) throw new Error(`invalid autotrader config:\n- ${errors.join('\n- ')}`);
   return cfg;
@@ -274,13 +276,13 @@ function buildCommand(cfg, prompt, root, env = process.env) {
   }
 }
 
-function dayKey(now, timeZone = 'America/New_York') {
-  const p = zonedParts(now, timeZone);
+/**
+ * The trading day `now` belongs to, named by the New York date it ends on:
+ * the session from Sunday 18:00 ET to Monday 16:00 ET is Monday's.
+ */
+function dayKey(now) {
+  const p = zonedParts(new Date(tradingDayStart(now).getTime() + 12 * 3600000), MARKET_TZ);
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
-}
-
-function isWeekend(now) {
-  return ['Sat', 'Sun'].includes(zonedParts(now, 'America/New_York').weekday);
 }
 
 function freshDay(key) {
@@ -301,11 +303,19 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
     return { action: 'eod', state: { ...state } };
   }
   const s = state && state.day === key ? { ...state } : freshDay(key);
-  if (cfg.weekdaysOnly && isWeekend(now)) return { action: null, state: s };
 
+  // Times are placed in the trading day (18:00 ET to 18:00 ET), so a session
+  // that runs through midnight is one day.
+  const nowMin = sessionMinute(now);
   const eod = parseAt(cfg.earlyCloseDates.includes(key) && cfg.earlyCloseEodAt ? cfg.earlyCloseEodAt : cfg.eodAt);
-  const afterEod = eod && minutesOfDay(now, eod.timeZone) >= eod.minute;
-  if (afterEod) return { action: s.eodDone ? null : 'eod', state: s };
+  const eodMin = eod ? sessionMinuteOf(eod, now) : null;
+  if (eodMin !== null && nowMin >= eodMin) {
+    // Only a trading day with a session has an end of day (not a Saturday).
+    const lastMinute = new Date(tradingDayStart(now).getTime() + (sessionMinuteOf({ minute: MARKET_CLOSE_MIN - 1, timeZone: MARKET_TZ }, now) || 0) * 60000);
+    return { action: s.eodDone || !inMarketHours(lastMinute) ? null : 'eod', state: s };
+  }
+  // Hard rule: nothing runs outside the market session (the daily break, weekends).
+  if (!inMarketHours(now)) return { action: null, state: s };
   // After the day has traded and until end of day, keep the runner's
   // housekeeping (trailing stops, leftover orders) going even when no cycle
   // may run: outside the sessions or with the kill switch on.
@@ -313,7 +323,7 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   if (killSwitch) return idle;
 
   const pre = parseAt(cfg.premarketAt);
-  if (pre && !s.premarketDone && minutesOfDay(now, pre.timeZone) >= pre.minute) return { action: 'premarket', state: s };
+  if (pre && !s.premarketDone && nowMin >= sessionMinuteOf(pre, now)) return { action: 'premarket', state: s };
 
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   if (!windows.some(w => inWindow(now, w))) return idle;

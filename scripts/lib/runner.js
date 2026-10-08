@@ -342,7 +342,7 @@ function createRunner(deps) {
   /**
    * Close every position in the traded roots and cancel their orders: after
    * the end-of-day run, and whenever one turns up outside market hours (hard
-   * rule: no position is held outside 09:30-16:00 ET).
+   * rule: no position is held outside the 18:00-16:00 ET session).
    */
   async function flattenAll(why) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return true;

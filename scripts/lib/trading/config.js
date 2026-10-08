@@ -9,10 +9,12 @@
 const path = require('path');
 const { harnessHome } = require('../paths');
 
-const DEFAULT_ENTRY_HOURS = '09:35-15:00@America/New_York';
+// Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
+// Strategies narrow their own hours with `sessions` (e.g. [ny]).
+const DEFAULT_ENTRY_HOURS = '';
 const DEFAULT_NO_ENTRY_WINDOWS = [
-  '09:30-09:35@America/New_York', // opening print: first 5 minutes of RTH
-  '15:00-18:00@America/Chicago', // into Topstep's 15:10 CT flatten, through the daily break
+  '09:30-09:35@America/New_York', // opening print: first 5 minutes of the New York cash session
+  '15:45-16:00@America/New_York', // into end of day and the 16:00 ET close
 ].join(',');
 
 const GATE_CHECKS = [

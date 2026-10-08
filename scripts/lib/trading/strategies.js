@@ -23,7 +23,7 @@ const { TAGS: REGIME_TAGS } = require('./regime');
 const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
 
 const STATUSES = ['active', 'paper', 'disabled'];
-// Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
+// `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
 const SIGNALS = ['rules', 'manual'];
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,

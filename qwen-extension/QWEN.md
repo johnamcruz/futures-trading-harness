@@ -37,12 +37,14 @@ harness (Claude Code, Codex, Qwen Code, or any agent that reads AGENTS.md).
 
 ## Execution
 
-- **Hard rule: trade only during market hours, 09:30-16:00 ET, Monday to
-  Friday, and never hold a position outside them.** Every position is flat
-  by end of day (`eodAt`, no later than 16:00 ET). The order gate refuses
-  entries outside market hours whatever the configuration says, and the
-  runner closes any position it finds outside them. Exits are always
-  allowed.
+- **Hard rule: trade only in the market session, 18:00 ET to 16:00 ET
+  (Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends),
+  and never carry a position past the 16:00 ET close.** Every position is
+  flat by end of day (`eodAt`, no later than 16:00 ET). The order gate
+  refuses entries outside the session whatever the configuration says, and
+  the runner closes any position it finds outside it. Exits are always
+  allowed. A strategy's `sessions` narrows its own hours (`asia`,
+  `london`, `ny`).
 - Re-read state with `get_account_snapshot` before every order. Never assume
   the position, price, or working orders.
 - Prices are multiples of `tickSize` (MNQ/MES 0.25). Round before sending.

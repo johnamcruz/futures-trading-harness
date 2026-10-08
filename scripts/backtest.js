@@ -3,7 +3,7 @@
  * Backtest STRATEGY.md strategies on historical bars (Parquet, Excel, CSV, or
  * JSON), the way algoTraderBot backtests: after every closed bar, settle the
  * open trade, trail its stop, and check every strategy for an entry, with the
- * same detectors the live scan uses. See docs/BACKTESTING.md.
+ * same rules evaluation the live scan uses. See docs/BACKTESTING.md.
  *
  *   node scripts/backtest.js --config backtest.json
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
