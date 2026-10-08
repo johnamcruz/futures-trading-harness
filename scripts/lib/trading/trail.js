@@ -21,7 +21,7 @@
 function snapStop(price, sign, tick) {
   const n = price / tick;
   const eps = 1e-9;
-  return (sign > 0 ? Math.floor(n + eps) : Math.ceil(n - eps)) * tick;
+  return Math.round((sign > 0 ? Math.floor(n + eps) : Math.ceil(n - eps)) * tick * 1e9) / 1e9;
 }
 
 /**

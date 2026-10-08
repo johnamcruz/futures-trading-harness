@@ -145,3 +145,50 @@ test('a backtest run on the parity data writes a report; trades match the live e
   // Every trade's R is consistent with its prices.
   for (const t of report.trades) assert.ok(Math.abs(t.r - (t.direction === 'long' ? 1 : -1) * (t.exit - t.entry) / t.risk) < 1e-3);
 });
+
+test('engine: a trade closed by the trail is not followed by an entry on the same bar', () => {
+  // The rule would fire again on the bar that the trail closes the trade on.
+  const s = strategy({ rules: undefined, compiledRules: compileRules({ long: ['close > open'] }).compiled, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } });
+  const trades = run([[100, 101, 99.9, 101], [101, 103.2, 102.8, 103], [103, 105, 103.8, 104]], s);
+  const closeBar = trades.find(t => t.reason === 'trail');
+  assert.ok(closeBar);
+  assert.ok(!trades.some(t => t.entryTime === closeBar.exitTime), JSON.stringify(trades.map(t => [t.entryTime, t.exitTime, t.reason])));
+});
+
+test('engine: stops and targets on a 0.1 tick are exact (no float misses)', () => {
+  const t0 = Date.parse('2025-03-10T13:00:00Z');
+  const flat = Array.from({ length: 520 }, () => [2045, 2045.2, 2044.8, 2045]);
+  const path = [[2045, 2045.2, 2044.9, 2045.1], [2045.1, 2045.2, 2044.9, 2045.0]];
+  const bars = [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
+  const s = strategy({ compiledRules: compileRules({ long: ['close crosses_above 2045.05'] }).compiled, risk: { stop: 'atr:0.5', min_rr: 2 } });
+  const trades = runEngine([{ symbol: 'MNQ', bars, tickSize: 0.1, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false }).trades;
+  assert.strictEqual(trades[0].initialStop, 2044.9);
+  assert.strictEqual(trades[0].reason, 'stop', 'the low touches 2044.9 exactly');
+});
+
+test('config: bad sessions or eodAt are refused, not ignored; sizing is one or the other', () => {
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['9:35-15:00'] }, ROOT), /sessions:/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: '3:50pm ET' }, ROOT), /eodAt:/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, size: 2, riskPerTrade: 100 }, ROOT), /use one/);
+  const fees = validateBacktestConfig({ symbols: ['ES'], data: { ES: { file: 'a.csv', feesPerSide: 2.5 } }, feesPerSide: 0.37 }, ROOT);
+  assert.strictEqual(fees.markets[0].feesPerSide, 2.5, 'the symbol\'s own fee wins');
+});
+
+test('data: empty price cells drop the row instead of reading as 0; epoch numbers in Excel-style columns', () => {
+  const bars = parseCsv('time,open,high,low,close,volume\n2025-03-10T13:30:00Z,1,2,0.5,1.5,10\n2025-03-10T13:31:00Z,1,2,,,\n');
+  const { normalizeBars } = require('../../scripts/lib/trading/indicators');
+  assert.strictEqual(normalizeBars(bars).length, 1);
+  const { tableToBars } = require('../../scripts/lib/backtest/data');
+  assert.strictEqual(tableToBars(['time', 'open', 'high', 'low', 'close'], [[1741613400, 1, 2, 0, 1]], { excel: true })[0].t, '2025-03-10T13:30:00.000Z');
+});
+
+test('the gate limits come from the environment, as live', () => {
+  const dir = tmpDir();
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['bos'], outDir: dir, sessions: ['00:00-23:59@America/New_York'], eodAt: null };
+  const loose = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' } }).report.summary.trades;
+  const capped = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_MAX_ENTRIES_PER_DAY: '1' } }).report.trades;
+  const perDay = new Map();
+  for (const t of capped) perDay.set(t.entryTime.slice(0, 10), (perDay.get(t.entryTime.slice(0, 10)) || 0) + 1);
+  assert.ok(loose > capped.length);
+  assert.ok([...perDay.values()].every(n => n <= 2), 'at most one entry per trading day (a calendar day spans two)');
+});

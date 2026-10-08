@@ -66,15 +66,16 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 | Step | What happens |
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
-| Manage | **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (with harness rules). |
+| Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (with harness rules). |
 | Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or cisd_ote's pivot) rounded to whole ticks. The target is set when the exit plan has one. |
 
 **Harness rules** (`gate: true`, the default) apply what the live harness
 enforces:
 
 - The runner's `sessions` and `eodAt`.
-- From the order gate:
-  - no-entry windows
+- From the order gate, with the same `FTH_*` settings as live (read from
+  the environment):
+  - entry hours (`FTH_ENTRY_HOURS`) and no-entry windows
   - the loss-streak cooldown
   - the daily losing-trade count
   - the daily entry cap

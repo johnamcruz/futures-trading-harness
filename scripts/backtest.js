@@ -58,15 +58,16 @@ function configFrom(argv) {
   const symbol = arg(argv, '--symbol');
   const data = arg(argv, '--data');
   if (symbol) cfg.symbols = [symbol];
-  if (data) cfg.data = { ...(cfg.data || {}), [(cfg.symbols || ['MNQ'])[0]]: data };
+  if (data) cfg.data = { ...(cfg.data || {}), [(cfg.symbols || ['MNQ'])[0]]: path.resolve(data) }; // relative to where you run it
   const num = name => (arg(argv, name) === undefined ? undefined : Number(arg(argv, name)));
   if (num('--timeframe') !== undefined) cfg.timeframe = num('--timeframe');
   if (arg(argv, '--start')) cfg.start = arg(argv, '--start');
   if (arg(argv, '--end')) cfg.end = arg(argv, '--end');
   if (arg(argv, '--strategy')) cfg.strategies = arg(argv, '--strategy').split(',').map(s => s.trim()).filter(Boolean);
   if (argv.includes('--no-gate')) cfg.gate = false;
-  if (num('--size') !== undefined) cfg.size = num('--size');
-  if (num('--risk') !== undefined) cfg.riskPerTrade = num('--risk');
+  if (num('--size') !== undefined && num('--risk') !== undefined) throw new Error('use either --size or --risk, not both');
+  if (num('--size') !== undefined) { cfg.size = num('--size'); cfg.riskPerTrade = null; }
+  if (num('--risk') !== undefined) { cfg.riskPerTrade = num('--risk'); delete cfg.size; }
   if (num('--slippage') !== undefined) cfg.slippageTicks = num('--slippage');
   if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
   return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };

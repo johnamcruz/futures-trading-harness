@@ -35,9 +35,12 @@ function epochMs(n) {
 
 function parseTime(raw, { excel = false, date1904 = false } = {}) {
   if (raw === null || raw === undefined || raw === '') return NaN;
-  if (typeof raw === 'number') return excel ? excelSerialToMs(raw, date1904) : epochMs(raw);
+  // Excel serial dates are day counts (under 1e6); bigger numbers are epoch times.
+  const fromNumber = n => (excel && Math.abs(n) < 1e6 ? excelSerialToMs(n, date1904) : epochMs(n));
+  const inRange = ms => (Math.abs(ms) <= 8.64e15 ? ms : NaN);
+  if (typeof raw === 'number') return inRange(fromNumber(raw));
   const s = String(raw).trim();
-  if (/^-?\d+(\.\d+)?$/.test(s)) return excel ? excelSerialToMs(Number(s), date1904) : epochMs(Number(s));
+  if (/^-?\d+(\.\d+)?$/.test(s)) return inRange(fromNumber(Number(s)));
   // "2025-03-10 14:30:00" has no zone: treat it as UTC, like ProjectX.
   const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s.replace(' ', 'T');
   return Date.parse(iso);
@@ -56,7 +59,10 @@ function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
     const get = k => (Array.isArray(r) ? r[idx[k]] : r[header[idx[k]]]);
     const t = parseTime(get('t'), { excel, date1904 });
     if (!Number.isFinite(t)) throw new Error(`row ${i + 2}: unreadable time "${get('t')}"`);
-    return { t: new Date(t).toISOString(), o: get('o'), h: get('h'), l: get('l'), c: get('c'), v: idx.v === -1 ? 0 : get('v') };
+    // An empty cell is missing, not zero: the row is dropped (a missing volume reads as 0).
+    const num = x => (x === null || x === undefined || (typeof x === 'string' && x.trim() === '') ? NaN : Number(x));
+    const v = idx.v === -1 ? 0 : num(get('v'));
+    return { t: new Date(t).toISOString(), o: num(get('o')), h: num(get('h')), l: num(get('l')), c: num(get('c')), v: Number.isFinite(v) ? v : 0 };
   });
 }
 

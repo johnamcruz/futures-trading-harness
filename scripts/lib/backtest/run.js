@@ -24,6 +24,8 @@ const { loadBars, barMinutes, aggregate } = require('./data');
 const { runEngine, DEFAULTS } = require('./engine');
 const { buildReport, toMarkdown, toCsv } = require('./report');
 const { writeJsonAtomic } = require('../harness-run');
+const { loadConfig } = require('../trading/config');
+const { parseWindows } = require('../trading/clock');
 
 const WARMUP_BARS = 2000;
 
@@ -40,6 +42,13 @@ const CONTRACT_SPECS = {
   RTY: { tickSize: 0.1, tickValue: 5, feesPerSide: 1.4 },
   GC: { tickSize: 0.1, tickValue: 10, feesPerSide: 1.4 },
 };
+
+/** "HH:MM@Zone" with a real time and time zone. */
+function validAt(spec) {
+  const m = /^(\d{1,2}):(\d{2})@(.+)$/.exec(String(spec).trim());
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return false;
+  return parseWindows(`00:00-00:01@${m[3]}`).errors.length === 0;
+}
 
 function parseTimeArg(value, name) {
   if (value === undefined || value === null || value === '') return null;
@@ -58,6 +67,9 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.strategies !== null && !(Array.isArray(cfg.strategies) && cfg.strategies.every(s => typeof s === 'string'))) errors.push('strategies: a list of strategy names');
   for (const k of ['size', 'maxContracts']) if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive whole number`);
   if (cfg.riskPerTrade !== null && !(cfg.riskPerTrade > 0)) errors.push('riskPerTrade: dollars per trade, or null for a fixed size');
+  if (cfg.riskPerTrade !== null && raw && raw.size !== undefined) errors.push('size and riskPerTrade: use one (fixed contracts, or size from the stop and a dollar risk)');
+  if (!Array.isArray(cfg.sessions) || parseWindows(cfg.sessions.join(',')).errors.length) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...] (e.g. "09:35-15:00@America/New_York")');
+  if (cfg.eodAt !== null && cfg.eodAt !== '' && !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" (e.g. "15:50@America/New_York"), or null for no end-of-day flatten');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
@@ -77,7 +89,8 @@ function validateBacktestConfig(raw, baseDir) {
     if (!(spec.tickSize > 0 && spec.tickValue > 0)) { errors.push(`data.${symbol}: tickSize and tickValue (not a known contract)`); continue; }
     markets.push({
       symbol, file: path.resolve(baseDir, file), sheet: spec.sheet || null, tickSize: spec.tickSize, tickValue: spec.tickValue,
-      feesPerSide: cfg.feesPerSide ?? spec.feesPerSide ?? 0.37,
+      // The symbol's own fee wins over the run-wide one.
+      feesPerSide: (typeof d === 'object' && d && d.feesPerSide !== undefined ? d.feesPerSide : null) ?? cfg.feesPerSide ?? spec.feesPerSide ?? 0.37,
     });
   }
   if (errors.length) throw new Error(`invalid backtest config:\n- ${errors.join('\n- ')}`);
@@ -121,14 +134,24 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   const markets = cfg.markets.map(m => {
     log(`loading ${m.symbol} from ${m.file}`);
     let bars = barsAt(m.file, cfg.timeframe, m.sheet);
-    const from = cfg.start === null ? 0 : Math.max(0, bars.findIndex(b => b.ms >= cfg.start) - cfg.window - WARMUP_BARS);
-    const to = cfg.end === null ? bars.length : bars.findIndex(b => b.ms >= cfg.end);
+    const ms = b => Date.parse(b.t);
+    const first = cfg.start === null ? 0 : bars.findIndex(b => ms(b) >= cfg.start);
+    const from = cfg.start === null ? 0 : Math.max(0, (first === -1 ? bars.length : first) - cfg.window - WARMUP_BARS);
+    const to = cfg.end === null ? bars.length : bars.findIndex(b => ms(b) >= cfg.end);
     bars = bars.slice(from, to === -1 ? bars.length : to);
     if (bars.length < cfg.window) throw new Error(`${m.file}: only ${bars.length} bars in range; need at least ${cfg.window} (window) before the first trade`);
     return { ...m, bars };
   });
   log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
-  const { trades, skipped } = runEngine(markets, strategies, cfg);
+  for (const m of markets) {
+    if (!strategies.some(s => s.instruments.includes(m.symbol))) {
+      log(`warning: no selected strategy lists ${m.symbol} in its instruments, so it can't trade (micros: MNQ, MES, MYM, M2K; use the micro symbol with full-size data)`);
+    }
+  }
+  const { trades, skipped } = runEngine(markets, strategies, { ...cfg, gateConfig: loadConfig(env) });
+  for (const m of markets) {
+    if (!strategies.some(s => s.instruments.includes(m.symbol))) skipped[m.symbol] = 'no selected strategy trades this symbol';
+  }
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
   const first = markets.map(m => m.bars[0].t).sort()[0];
   const last = markets.map(m => m.bars[m.bars.length - 1].t).sort().pop();

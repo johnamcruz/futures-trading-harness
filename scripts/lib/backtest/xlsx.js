@@ -108,6 +108,7 @@ function readXlsx(file, { sheet = null } = {}) {
       else if (type === 'inlineStr') value = textOf(inner);
       else if (type === 'str') value = v === undefined ? null : unescapeXml(v);
       else if (type === 'b') value = v === '1';
+      else if (type === 'd') value = v === undefined ? null : unescapeXml(v); // ISO 8601 date cell
       else if (type === 'e') value = null;
       else value = v === undefined || v === '' ? null : Number(v);
       row[col] = value;

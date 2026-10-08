@@ -52,6 +52,8 @@ function parseAt(spec) {
 }
 
 const round2 = x => Math.round(x * 100) / 100;
+/** A price on the tick grid, free of float noise (2045.1 - 0.2 is 2044.9, not 2044.8999999999999). */
+const onTick = (x, tick) => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
 
 /**
  * @param markets [{ symbol, bars (normalized, timeframe bars), tickSize, tickValue, feesPerSide }]
@@ -138,7 +140,7 @@ function runEngine(markets, strategies, opts = {}) {
       p.peakR = Math.max(p.peakR, (p.sign * ((p.sign > 0 ? bar.h : bar.l) - p.entry)) / p.risk);
       if (stopHit) {
         const base = p.sign > 0 ? Math.min(bar.o, p.stop) : Math.max(bar.o, p.stop);
-        closeTrade(book, bar, base - p.sign * slip, p.stop === p.initialStop ? 'stop' : 'trail');
+        closeTrade(book, bar, onTick(base - p.sign * slip, book.tickSize), p.stop === p.initialStop ? 'stop' : 'trail');
       } else if (targetHit) {
         closeTrade(book, bar, p.sign > 0 ? Math.max(bar.o, p.target) : Math.min(bar.o, p.target), 'target');
       } else {
@@ -146,22 +148,27 @@ function runEngine(markets, strategies, opts = {}) {
       }
     }
 
-    // 2. Manage an open trade at the bar's close.
+    // 2. Manage an open trade at the bar's close. Like algoTraderBot's
+    // handle_bar, a bar that started with a trade open only manages it: a
+    // trade closed here (trail, max bars, end of day) leaves no entry this bar.
     const afterEod = eod && o.gate && minutesOfDay(closeAt, eod.timeZone) >= eod.minute;
+    let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
+      managed = true;
       const step = trailStep(q, bar, q.plan, book.tickSize);
-      q.stop = step.stop;
+      q.stop = onTick(step.stop, book.tickSize);
       q.peakR = step.peakR;
       if (step.close) closeTrade(book, bar, step.close.price, 'trail');
       else if (q.plan.maxBars && q.barsHeld >= q.plan.maxBars) closeTrade(book, bar, bar.c, 'max_bars');
       else if (afterEod) closeTrade(book, bar, bar.c, 'eod');
     } else if (book.pos && afterEod) {
+      managed = true;
       closeTrade(book, bar, bar.c, 'eod');
     }
 
     // 3. Flat: look for an entry, as the live loop does after each closed bar.
-    if (book.pos || !book.usable.length) continue;
+    if (managed || book.pos || !book.usable.length) continue;
     if (o.gate) {
       if (afterEod) continue;
       if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) continue;
@@ -182,17 +189,17 @@ function runEngine(markets, strategies, opts = {}) {
     }
     if (!pick) continue;
     const sign = pick.r.direction === 'long' ? 1 : -1;
-    const entry = bar.c + sign * o.slippageTicks * book.tickSize;
+    const entry = onTick(bar.c + sign * o.slippageTicks * book.tickSize, book.tickSize);
     const stopTicks = Math.max(1, Math.round(pick.r.stopDistance / book.tickSize));
-    const risk = stopTicks * book.tickSize;
+    const risk = onTick(stopTicks * book.tickSize, book.tickSize);
     const plan = exitPlan(pick.s);
     const size = o.riskPerTrade
       ? Math.min(o.maxContracts, Math.max(1, Math.floor(o.riskPerTrade / (stopTicks * book.tickValue))))
       : Math.min(o.maxContracts, o.size);
     book.pos = {
       strategy: pick.s.name, sign, entry, risk, size, plan,
-      stop: entry - sign * risk, initialStop: entry - sign * risk,
-      target: plan.targetR ? snapStop(entry + sign * plan.targetR * risk, -sign, book.tickSize) : null,
+      stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
+      target: plan.targetR ? onTick(snapStop(entry + sign * plan.targetR * risk, -sign, book.tickSize), book.tickSize) : null,
       entryIndex: i, entryTime: closeAt.toISOString(), peakR: 0, barsHeld: 0,
     };
     entriesToday += 1;
