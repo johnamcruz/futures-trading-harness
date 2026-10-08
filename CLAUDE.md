@@ -24,8 +24,9 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 - `hooks/hooks.json`: every hook runs through `scripts/hooks/run-with-flags.js`.
 - `scripts/lib/`: pure logic (frontmatter, harness-sync, install, autotrader,
   trading/*). CLIs and hooks stay thin.
-- Generated, never edit by hand: `workspace/*.md`, `.codex/agents/*.toml`,
-  `qwen/agents/*`, `qwen/commands/*`. Run `node scripts/sync-harness.js`.
+- Generated, never edit by hand: `workspace/*.md`, `.codex/agents/*.toml`, and
+  `qwen-extension/` (manifest, `QWEN.md`, agents, commands, symlinks). Run
+  `node scripts/sync-harness.js`.
 - `tests/`: `node:test` files named `*.test.js`.
 
 ## Commands
@@ -42,7 +43,9 @@ node scripts/strategies.js validate
 - CommonJS, Node 18+, no runtime dependencies (plugin installs don't run npm install).
 - Hooks and the gateway read only local state; no network. Hook scripts stay under 200 lines.
 - The order gate fails closed in both the hook (`FAIL_CLOSED_HOOKS` in
-  `run-with-flags.js`) and the gateway. Keep it that way.
+  `run-with-flags.js`) and the gateway, and can't be disabled when
+  `FTH_AUTONOMOUS=1`. The gateway (with `account-gate.js`) is authoritative.
+  Keep it that way.
 - Never weaken a gate default without the user asking. Gate changes need tests in
   `tests/lib/order-gate.test.js` and wiring tests in `tests/hooks/trading-hooks.test.js`.
 - New `scripts/lib/` modules need tests in `tests/lib/`.

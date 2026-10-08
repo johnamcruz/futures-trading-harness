@@ -103,9 +103,12 @@ test('order gate fails closed on oversized input', () => {
   assert.strictEqual(r.code, 2);
 });
 
-test('order gate honours an explicit disable', () => {
+test('order gate honours an explicit disable, but not in autonomous runs, and never dry-runs', () => {
   const { env } = setup([]);
   assert.strictEqual(gate(orderPayload(), { ...env, FTH_DISABLED_HOOKS: 'pre:trading:order-gate' }).code, 0);
+  assert.strictEqual(gate(orderPayload(), { ...env, FTH_DISABLED_HOOKS: 'pre:trading:order-gate', FTH_AUTONOMOUS: '1' }).code, 2);
+  assert.strictEqual(gate(orderPayload(), { ...env, FTH_HOOKS_ENABLED: 'false', FTH_AUTONOMOUS: '1' }).code, 2);
+  assert.strictEqual(gate(orderPayload(), { ...env, FTH_DRY_RUN: '1' }).code, 2);
 });
 
 test('order gate reads the blackout file', () => {
@@ -150,6 +153,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   const env = {
     PATH: process.env.PATH,
     HOME: dir,
+    FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]),
     PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
     FTH_NO_ENTRY_WINDOWS: '',
@@ -162,6 +166,11 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
   send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_bars', arguments: {} } });
   send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } });
+  // Labelled [exit] but on the same side as the open long: would add exposure.
+  send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, rationale: '[exit] take profit' } } });
+  // A real exit: sell 1 against the long 1.
+  send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, side: 'sell', rationale: '[exit] take profit' } } });
+  send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'modify_order', arguments: { orderId: 9, size: 3 } } });
   gw.stdin.end();
   const code = await new Promise(resolve => gw.on('close', resolve));
   assert.strictEqual(code, 0);
@@ -171,6 +180,11 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:get_bars');
   assert.strictEqual(byId[3].result.isError, true);
   assert.match(byId[3].result.content[0].text, /\[plan-required\]/);
+  assert.match(byId[3].result.content[0].text, /\[position-open\]/);
+  assert.match(byId[4].result.content[0].text, /\[exposure\] .*same side/);
+  assert.strictEqual(byId[5].result.content[0].text, 'forwarded:tools/call:place_order');
+  assert.match(byId[6].result.content[0].text, /\[modify-size\]/);
+  assert.ok(!out.includes('fth-gw-'), 'gateway-internal responses must not reach the client');
   const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.strictEqual(log[0].decision, 'blocked');
 });

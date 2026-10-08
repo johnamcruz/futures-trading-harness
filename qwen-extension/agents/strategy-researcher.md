@@ -36,5 +36,5 @@ Load the skills `strategy-authoring` and `strategy-library`.
 5. If the trigger needs a new mechanical detector, add it to
    `scripts/lib/trading/market-snapshot.js` `signals` and to `SIGNALS` in
    `scripts/lib/trading/strategies.js`, with tests.
-6. Run `node "$FTH_ROOT/scripts/strategies.js" validate` and
-   `node "$FTH_ROOT/tests/run-all.js"` (when working in the repo) and report.
+6. Run `node <root>/scripts/strategies.js validate` and
+   `node <root>/tests/run-all.js` (when working in the repo) and report.

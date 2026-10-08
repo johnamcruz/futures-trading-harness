@@ -44,3 +44,6 @@ temp/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+
+# Generated per machine by scripts/install.js
+/workspace/.qwen/

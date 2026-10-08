@@ -97,10 +97,22 @@ test('hooks.json points at existing scripts through run-with-flags', () => {
   assert.ok(new RegExp(gate.matcher).test('mcp__projectx__place_order'));
 });
 
-test('plugin manifests agree on name and version', () => {
-  const plugin = JSON.parse(read('.claude-plugin/plugin.json'));
-  assert.strictEqual(plugin.name, 'futures-trading-harness');
-  assert.match(plugin.version, /^\d+\.\d+\.\d+$/);
-  assert.strictEqual(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].name, plugin.name);
-  assert.strictEqual(JSON.parse(read('package.json')).version, plugin.version);
+test('every harness manifest agrees on name and version, and its paths exist', () => {
+  const version = JSON.parse(read('package.json')).version;
+  const claude = JSON.parse(read('.claude-plugin/plugin.json'));
+  const claudeMarket = JSON.parse(read('.claude-plugin/marketplace.json'));
+  const codex = JSON.parse(read('.codex-plugin/plugin.json'));
+  const codexMarket = JSON.parse(read('.agents/plugins/marketplace.json'));
+  const qwen = JSON.parse(read('qwen-extension/qwen-extension.json'));
+  for (const [file, m] of Object.entries({ claude, codex, qwen })) {
+    assert.strictEqual(m.name, 'futures-trading-harness', `${file} name`);
+    assert.strictEqual(m.version, version, `${file} version`);
+  }
+  assert.strictEqual(claudeMarket.plugins[0].name, claude.name);
+  assert.strictEqual(claudeMarket.plugins[0].version, version);
+  assert.strictEqual(codexMarket.plugins[0].name, codex.name);
+  assert.strictEqual(codexMarket.plugins[0].version, version);
+  assert.ok(fs.existsSync(path.join(ROOT, codex.skills)), 'codex skills path');
+  assert.ok(fs.existsSync(path.join(ROOT, codex.hooks)), 'codex hooks path');
+  for (const d of ['agents', 'commands', 'skills', 'hooks']) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', d)), `qwen-extension/${d}`);
 });

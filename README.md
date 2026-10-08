@@ -50,12 +50,13 @@ native adapters generated for each harness.
 |---|---|---|---|
 | Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT flatten | No |
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
-| Order gate | `scripts/lib/trading/order-gate.js`, run by the hook **and** the MCP gateway | Kill switch, strategy (exists, `active`, instrument, session), setup tag, stop, plan first, no-entry windows, news blackouts, loss streak, daily losses, review before next entry, max entries | No (deterministic, fails closed) |
-| Runner | `scripts/autotrader.js` | Schedule, cycle caps, timeouts, auto kill switch after repeated errors | No |
+| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position, no entries while a position is open, loss streak and daily losses from real fills, no resizing working orders | No (deterministic, fails closed) |
+| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), tool allowlists with no general shell or file writes, kill switch, caps, timeouts, end-of-day catch-up | No |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
-The gateway exists because hooks differ between harnesses. Run as the
-`projectx` MCP server, it applies the same gate to any MCP client.
+Always register projectx **through the gateway** (the installer does): it is
+the one layer that works the same on every harness and sees the real account.
 
 ## Strategies are Markdown
 
@@ -113,11 +114,12 @@ strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTra
 | `strategies/` | Strategy documents and the template |
 | `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy` |
 | `rules/trading/` | Always-on rules |
-| `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins; Qwen via installer) |
-| `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy and snapshot CLIs, installer, harness sync |
+| `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
+| `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
 | `workspace/` | Generated `AGENTS.md` / `CLAUDE.md` / `QWEN.md`: the operator instructions every harness reads |
-| `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/`, `qwen-extension.json` | Native manifests |
-| `.codex/agents/`, `qwen/` | Generated Codex roles and Qwen agents and commands |
+| `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/` | Claude Code and Codex plugin manifests |
+| `qwen-extension/` | Qwen Code extension: generated manifest, `QWEN.md`, Qwen-format agents and commands, symlinks to the shared skills, scripts, strategies, hooks |
+| `.codex/agents/` | Generated Codex agent roles |
 
 Generated files come from the canonical sources: `node scripts/sync-harness.js`
 (CI runs `--check`).
@@ -138,13 +140,14 @@ plugin. It prints the remaining native commands:
 
 | Harness | Installer writes | You run |
 |---|---|---|
-| Qwen Code | hooks + `projectx` MCP (via gateway) in `~/.qwen/settings.json` | `qwen extensions install <repo>` |
-| Codex | marked block in `~/.codex/config.toml`: `projectx` MCP (via gateway) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
+| Qwen Code | `projectx` MCP (via gateway) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
+| Codex | marked block in `~/.codex/config.toml`: `projectx` MCP (via gateway, tools pre-approved so `codex exec` can use them) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
 | Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the printed `claude mcp add` command |
 
 Credentials (`PROJECTX_USERNAME`, `PROJECTX_API_KEY`) and guardrails
 (`PROJECTX_TRADING_ENABLED`, `PROJECTX_ALLOWED_SYMBOLS`, ...) go in the
-environment that launches the harness, or in Qwen's extension settings. See
+environment that launches the harness (Qwen's extension settings don't reach
+MCP servers). See
 `mcp-configs/` for examples.
 
 ## Running it
@@ -153,7 +156,7 @@ Interactive, from `workspace/` so every harness reads the operator instructions:
 
 ```bash
 cd workspace
-qwen      # or: codex, claude
+qwen      # or: codex, claude --plugin-dir ..
 > /premarket MNQ
 > /trade-session MNQ paper
 ```
@@ -171,9 +174,13 @@ The runner starts one headless run per cycle (premarket at 09:00 ET, a trade
 cycle every 3 minutes in session, end of day at 15:50 ET), logs everything to
 `~/.futures-trading-harness/logs/`, and never runs two cycles at once. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
-questions, stand aside when unsure. Run it in a container or under a dedicated
-user: headless harnesses auto-approve tool calls, so the order gate and server
-guardrails are what protect the account.
+questions, stand aside when unsure. Runs are locked down per harness: Claude
+Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the
+harness scripts by absolute path), Qwen Code runs in default approval mode
+with the allowlist in `workspace/.qwen/settings.json`, and Codex runs in its
+`workspace-write` sandbox. Start with `"paper": true` and tight server limits
+(`PROJECTX_MAX_POSITION_SIZE=1`, a small `PROJECTX_MAX_DAILY_LOSS`, a practice
+account in `PROJECTX_ALLOWED_ACCOUNT_IDS`).
 
 ### Order gate settings
 
@@ -186,7 +193,9 @@ guardrails are what protect the account.
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:00-18:00@America/Chicago` | No new entries |
-| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts.json` | News blackouts (written by premarket) |
+| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
+| `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
+| `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
 | `FTH_GATE_LOG` | `~/.futures-trading-harness/gate-log.jsonl` | Gate decisions |
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |

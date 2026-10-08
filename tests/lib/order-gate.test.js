@@ -43,11 +43,29 @@ test('stale, other-symbol, and previous-day plans do not count', () => {
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(17 * 60)], { config: big })), ['plan-required']);
 });
 
-test('plan without contractId matches on the symbol in its text', () => {
+test('a plan must name the contract with contractId; text mentions do not count', () => {
   const p = { ts: minutesAgo(5), kind: 'plan', text: 'MNQ: ORB long above 21500' };
-  assert.deepStrictEqual(evaluate(entryOrder(), [p]).violations, []);
-  const q = { ts: minutesAgo(5), kind: 'plan', text: 'MNQZ ideas' };
-  assert.deepStrictEqual(checks(evaluate(entryOrder(), [q])), ['plan-required']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [p])), ['plan-required']);
+});
+
+test('setup tag must open the rationale and the stop must be a number after "stop"', () => {
+  assert.deepStrictEqual(checks(evaluate(entryOrder({ rationale: 'this is not setup:orb, stop 21480' }), [plan()])), ['setup-tag']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb never stop out, 2x size' }), [plan()])), ['stop-defined']);
+  assert.deepStrictEqual(evaluate(entryOrder({ stopLossBracket: undefined, rationale: '  setup:orb long, stop: 21480' }), [plan()]).violations, []);
+});
+
+test('reviews without a result tag or for another contract do not clear the review gate', () => {
+  const untagged = { ts: minutesAgo(10), kind: 'review', text: 'done', tags: ['setup:orb'] };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), untagged, plan(5)])), ['review-before-next-entry']);
+  const otherContract = { ...review(10, 'win'), contractId: 'CON.F.US.MES.Z26' };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), otherContract, plan(5)])), ['review-before-next-entry']);
+});
+
+test('paper mode and a truncated journal window block entries; autonomous mode ignores skip lists', () => {
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...config, paper: true } })), ['paper-mode']);
+  const r = evaluateOrder({ input: entryOrder(), entries: [plan(5)], now: NOW, config, journalTruncated: true });
+  assert.deepStrictEqual(r.violations.map(v => v.check), ['journal-window']);
+  assert.strictEqual(loadConfig({ FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'plan-required' }).skipChecks.size, 0);
 });
 
 test('no new entries in the opening 5 minutes or after 15:00 CT', () => {

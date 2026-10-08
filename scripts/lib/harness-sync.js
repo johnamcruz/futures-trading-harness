@@ -8,8 +8,11 @@
  *
  *   workspace/AGENTS.md, CLAUDE.md, QWEN.md   operator instructions for any harness
  *   .codex/agents/<role>.toml                 Codex agent roles
- *   qwen/agents/<role>.md                     Qwen subagents (Qwen tool ids)
- *   qwen/commands/<name>.md                   Qwen commands ({{args}})
+ *   qwen-extension/                           Qwen Code extension (install with
+ *     qwen-extension.json, QWEN.md            `qwen extensions link`): generated
+ *     agents/<role>.md, commands/<name>.md    Qwen-format agents and commands, plus
+ *     skills, scripts, strategies, hooks,     symlinks to the shared sources so
+ *     rules -> ../<dir>                       there is a single harness root
  */
 
 const fs = require('fs');
@@ -148,6 +151,24 @@ function workspaceAgentsMd(root) {
   ].join('\n');
 }
 
+function qwenExtensionJson(root) {
+  const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  return `${JSON.stringify({
+    name: 'futures-trading-harness',
+    version,
+    contextFileName: 'QWEN.md',
+    mcpServers: {
+      // The gateway starts projectx-mcp from PROJECTX_MCP_ENTRY (export it, with the
+      // PROJECTX_* credentials, in the shell that launches qwen). A settings.json
+      // entry named "projectx" (written by scripts/install.js) takes precedence.
+      projectx: { command: 'node', args: ['${extensionPath}${/}scripts${/}mcp-gateway.js'], cwd: '${extensionPath}', timeout: 60000 },
+    },
+  }, null, 2)}\n`;
+}
+
+/** Shared directories the Qwen extension links to instead of copying. */
+const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'rules'];
+
 /** Map of relative path -> expected file content. */
 function expectedFiles(root) {
   const files = {};
@@ -155,18 +176,39 @@ function expectedFiles(root) {
   files['workspace/AGENTS.md'] = agentsMd;
   files['workspace/CLAUDE.md'] = `${GENERATED}\n\n@AGENTS.md\n`;
   files['workspace/QWEN.md'] = agentsMd;
+  files['qwen-extension/QWEN.md'] = agentsMd;
+  files['qwen-extension/qwen-extension.json'] = qwenExtensionJson(root);
   for (const a of loadAgents(root)) {
     files[`.codex/agents/${a.name}.toml`] = codexAgentToml(a);
-    files[`qwen/agents/${a.name}.md`] = qwenAgentMd(a);
+    files[`qwen-extension/agents/${a.name}.md`] = qwenAgentMd(a);
   }
   for (const f of readSorted(path.join(root, 'commands'), '.md')) {
-    files[`qwen/commands/${f}`] = qwenCommandMd(fs.readFileSync(path.join(root, 'commands', f), 'utf8'));
+    files[`qwen-extension/commands/${f}`] = qwenCommandMd(fs.readFileSync(path.join(root, 'commands', f), 'utf8'));
   }
   return files;
 }
 
 /** Generated directories whose stale files should be removed. */
-const OWNED_DIRS = ['.codex/agents', 'qwen/agents', 'qwen/commands'];
+const OWNED_DIRS = ['.codex/agents', 'qwen-extension/agents', 'qwen-extension/commands'];
+
+function syncLinks(root, check, stale) {
+  for (const name of QWEN_LINKS) {
+    const link = path.join(root, 'qwen-extension', name);
+    const target = `../${name}`;
+    let current;
+    try {
+      current = fs.lstatSync(link).isSymbolicLink() ? fs.readlinkSync(link) : 'not-a-link';
+    } catch (_err) {
+      current = null;
+    }
+    if (current === target) continue;
+    stale.push(`qwen-extension/${name} -> ${target}`);
+    if (check) continue;
+    if (current !== null) fs.rmSync(link, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(target, link, 'dir');
+  }
+}
 
 function syncHarness(root, { check = false } = {}) {
   const expected = expectedFiles(root);
@@ -181,6 +223,7 @@ function syncHarness(root, { check = false } = {}) {
       fs.writeFileSync(file, content);
     }
   }
+  syncLinks(root, check, stale);
   for (const dir of OWNED_DIRS) {
     const abs = path.join(root, dir);
     if (!fs.existsSync(abs)) continue;
@@ -204,5 +247,7 @@ module.exports = {
   qwenCommandMd,
   workspaceAgentsMd,
   expectedFiles,
+  QWEN_LINKS,
+  qwenExtensionJson,
   syncHarness,
 };

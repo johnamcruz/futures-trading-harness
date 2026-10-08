@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, planCodex, planQwen, planClaude, applyPlan } = require('../../scripts/lib/install');
+const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, applyPlan } = require('../../scripts/lib/install');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -28,6 +28,8 @@ test('codex block wires the gateway and every agent role', () => {
   assert.ok(block.includes(JSON.stringify(path.join(ROOT, 'scripts', 'mcp-gateway.js'))));
   assert.ok(block.includes(`"--", "node", "${ENTRY}"`));
   assert.match(block, /\[agents\.trade_executor\]/);
+  assert.match(block, /^default_tools_approval_mode = "approve"$/m);
+  assert.match(block, /"FTH_KILL_SWITCH_FILE"/);
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 
@@ -38,30 +40,41 @@ test('codex refuses to clobber a user-defined projectx server', () => {
   assert.throws(() => planCodex({ root: ROOT, home, projectxEntry: ENTRY }), /already defines/);
 });
 
-test('qwen settings merge is idempotent and keeps user hooks and servers', () => {
+test('qwen settings merge is idempotent, keeps user entries, and removes old harness hooks', () => {
+  const oldHarnessHook = { matcher: 'mcp__.*projectx.*__place_order', hooks: [{ type: 'command', command: 'node "/x/scripts/hooks/run-with-flags.js" pre:trading:order-gate scripts/hooks/trading-order-gate.js minimal' }] };
   const user = {
-    hooks: { PreToolUse: [{ matcher: 'write_file', hooks: [{ type: 'command', command: 'echo user' }] }] },
+    hooks: { PreToolUse: [{ matcher: 'write_file', hooks: [{ type: 'command', command: 'echo user' }] }, oldHarnessHook] },
     mcpServers: { other: { command: 'x' } },
   };
   const once = mergeQwenSettings(user, ROOT, ENTRY);
   const twice = mergeQwenSettings(once, ROOT, ENTRY);
   assert.deepStrictEqual(twice, once);
-  assert.strictEqual(once.hooks.PreToolUse.length, 2);
-  assert.strictEqual(once.hooks.PreToolUse[0].hooks[0].command, 'echo user');
-  assert.match(once.hooks.PreToolUse[1].hooks[0].command, /run-with-flags\.js" pre:trading:order-gate scripts\/hooks\/trading-order-gate\.js/);
+  assert.deepStrictEqual(once.hooks.PreToolUse.map(g => g.hooks[0].command), ['echo user']);
   assert.deepStrictEqual(once.mcpServers.other, { command: 'x' });
   assert.ok(once.mcpServers.projectx.args[0].endsWith('mcp-gateway.js'));
   assert.throws(() => mergeQwenSettings({ mcpServers: { projectx: { command: 'node', args: ['/x/index.js'] } } }, ROOT, ENTRY), /does not use the harness gateway/);
+});
+
+test('qwen workspace permissions allow harness scripts and deny edits to the harness and its state', () => {
+  const p = qwenWorkspaceSettings('/fth', '/home/u').permissions;
+  assert.ok(p.allow.includes('mcp__projectx'));
+  assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
+  assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
+  assert.ok(!p.allow.some(r => r === 'Bash' || r === 'Edit'));
+  assert.deepStrictEqual(p.deny, ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/**)', 'Edit(//home/u/.qwen/**)']);
 });
 
 test('plans write to the right files and backups are made', () => {
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.qwen'));
   fs.writeFileSync(path.join(home, '.qwen', 'settings.json'), '{"theme":"dark"}');
-  applyPlan(planQwen({ root: ROOT, home, projectxEntry: ENTRY }));
+  const qwenPlan = planQwen({ root: ROOT, home, projectxEntry: ENTRY });
+  qwenPlan.writes = qwenPlan.writes.filter(w => w.file.startsWith(home)); // don't write into the repo
+  applyPlan(qwenPlan);
+  applyPlan(qwenPlan);
   const settings = JSON.parse(fs.readFileSync(path.join(home, '.qwen', 'settings.json'), 'utf8'));
   assert.strictEqual(settings.theme, 'dark');
-  assert.ok(fs.existsSync(path.join(home, '.qwen', 'settings.json.fth-backup')));
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.qwen', 'settings.json.fth-backup'), 'utf8')), { theme: 'dark' }, 'first backup is kept');
   applyPlan(planClaude({ root: ROOT, home, projectxEntry: ENTRY }));
   assert.ok(fs.existsSync(path.join(home, '.claude', 'rules', 'trading', 'risk-management.md')));
   applyPlan(planCodex({ root: ROOT, home, projectxEntry: ENTRY }));

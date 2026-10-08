@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { syncHarness, expectedFiles, qwenCommandMd, QWEN_TOOLS } = require('../../scripts/lib/harness-sync');
+const { syncHarness, expectedFiles, qwenCommandMd, QWEN_TOOLS, QWEN_LINKS } = require('../../scripts/lib/harness-sync');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { tmpDir } = require('../helpers');
 
@@ -17,10 +17,10 @@ test('generated Codex, Qwen, and workspace files are up to date', () => {
 test('generated files parse in their harness formats', () => {
   const files = expectedFiles(ROOT);
   for (const [rel, content] of Object.entries(files)) {
-    if (rel.startsWith('qwen/')) {
+    if (rel.startsWith('qwen-extension/') && rel.endsWith('.md') && !rel.endsWith('QWEN.md')) {
       const { data } = parseFrontmatter(content);
       assert.ok(data.description, `${rel}: description`);
-      if (rel.startsWith('qwen/agents/')) {
+      if (rel.startsWith('qwen-extension/agents/')) {
         assert.ok(Array.isArray(data.tools) && data.tools.length > 0, `${rel}: tools`);
         for (const t of data.tools) assert.ok(!Object.keys(QWEN_TOOLS).includes(t), `${rel}: untranslated tool ${t}`);
       }
@@ -28,6 +28,10 @@ test('generated files parse in their harness formats', () => {
     if (rel.endsWith('.toml')) assert.match(content, /^sandbox_mode = "(read-only|workspace-write)"$/m);
   }
   assert.match(files['workspace/AGENTS.md'], /## Risk Management/);
+  const ext = JSON.parse(files['qwen-extension/qwen-extension.json']);
+  assert.strictEqual(ext.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version);
+  assert.match(ext.mcpServers.projectx.args[0], /^\$\{extensionPath\}/);
+  for (const l of QWEN_LINKS) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', l, '.')), `qwen-extension/${l} resolves`);
 });
 
 test('qwen commands use {{args}}', () => {
@@ -37,10 +41,13 @@ test('qwen commands use {{args}}', () => {
 test('sync writes missing files and removes orphans', () => {
   const root = tmpDir();
   for (const d of ['agents', 'commands', 'rules', 'skills']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
-  fs.mkdirSync(path.join(root, 'qwen', 'agents'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'qwen', 'agents', 'old-role.md'), 'x');
+  fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
+  fs.mkdirSync(path.join(root, 'qwen-extension', 'agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'qwen-extension', 'agents', 'old-role.md'), 'x');
   const changed = syncHarness(root);
-  assert.ok(changed.includes('qwen/agents/old-role.md (orphan)'));
-  assert.ok(!fs.existsSync(path.join(root, 'qwen', 'agents', 'old-role.md')));
+  assert.ok(changed.includes('qwen-extension/agents/old-role.md (orphan)'));
+  assert.ok(changed.includes('qwen-extension/skills -> ../skills'));
+  assert.ok(!fs.existsSync(path.join(root, 'qwen-extension', 'agents', 'old-role.md')));
+  assert.strictEqual(fs.readlinkSync(path.join(root, 'qwen-extension', 'skills')), '../skills');
   assert.deepStrictEqual(syncHarness(root, { check: true }), []);
 });

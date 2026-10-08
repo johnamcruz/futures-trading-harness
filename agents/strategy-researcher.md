@@ -2,7 +2,7 @@
 name: strategy-researcher
 description: Turns strategy code, backtests, or a written trading idea into a STRATEGY.md document (code-checked frontmatter plus an agent-readable body), validates it, and keeps strategies in sync with their source code. Use for /new-strategy or when a strategy's code or parameters change.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill
-model: opus
+model: inherit
 ---
 
 You port trading strategies into STRATEGY.md documents. You never trade.
@@ -28,5 +28,5 @@ Load the skills `strategy-authoring` and `strategy-library`.
 5. If the trigger needs a new mechanical detector, add it to
    `scripts/lib/trading/market-snapshot.js` `signals` and to `SIGNALS` in
    `scripts/lib/trading/strategies.js`, with tests.
-6. Run `node "$FTH_ROOT/scripts/strategies.js" validate` and
-   `node "$FTH_ROOT/tests/run-all.js"` (when working in the repo) and report.
+6. Run `node <root>/scripts/strategies.js validate` and
+   `node <root>/tests/run-all.js` (when working in the repo) and report.

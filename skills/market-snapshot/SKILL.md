@@ -21,11 +21,11 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    strategy parameters.
 2. Save the tool's JSON result verbatim to a temp file, e.g.
    `/tmp/fth/MNQ-3m.json` (create the folder first).
-3. Run the script from the harness root (`$FTH_ROOT`; see the
+3. Run the script from the harness root (`<root>`, an absolute path; see the
    `strategy-library` skill for how to find it):
 
    ```bash
-   node "$FTH_ROOT/scripts/market-snapshot.js" /tmp/fth/MNQ-3m.json
+   node <root>/scripts/market-snapshot.js /tmp/fth/MNQ-3m.json
    ```
 
    Override parameters with flags, e.g. `--orbMinutes=30 --adxGate=20`.

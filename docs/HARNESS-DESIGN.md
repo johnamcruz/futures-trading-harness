@@ -24,61 +24,70 @@ How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX 
 
 | Capability | Claude Code | Codex | Qwen Code | Other MCP clients |
 |---|---|---|---|---|
-| Package | `.claude-plugin/` | `.codex-plugin/` + `.agents/plugins/marketplace.json` | `qwen-extension.json` | n/a |
+| Package | `.claude-plugin/` | `.codex-plugin/` + `.agents/plugins/marketplace.json` | `qwen-extension/` (linked) | n/a |
 | Skills | plugin `skills/` | plugin `skills/` | extension `skills/` | read `skills/*/SKILL.md` |
-| Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen/agents/*.md` (tool ids translated) | play roles from `agents/*.md` |
-| Commands | `commands/` | (use skills) | `qwen/commands/` (`{{args}}`) | n/a |
-| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md` | `workspace/AGENTS.md` |
-| Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (CLAUDE_PLUGIN_ROOT and exit 2 are compatible) | `~/.qwen/settings.json` (installer) | none |
+| Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen-extension/agents/*.md` (tool ids translated) | play roles from `agents/*.md` |
+| Commands | `commands/` | (use skills) | `qwen-extension/commands/` (`{{args}}`) | n/a |
+| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md`, extension `QWEN.md` | `workspace/AGENTS.md` |
+| Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (Codex sets CLAUDE_PLUGIN_ROOT; exit 2 blocks) | extension `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}` substituted) | none |
 | Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
-| Headless | `claude -p --plugin-dir` | `codex exec` | `qwen -p` | custom argv |
+| Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, projectx tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
 
 ## Order gate
 
 `scripts/lib/trading/order-gate.js` (pure) is called through
 `scripts/lib/trading/check-order.js` by both the PreToolUse hook and the MCP
-gateway (`scripts/mcp-gateway.js`, a newline-delimited JSON-RPC proxy in front of
-projectx-mcp). A blocked `place_order` never reaches the server.
+gateway. The gateway (`scripts/mcp-gateway.js`, a newline-delimited JSON-RPC
+proxy in front of projectx-mcp) also calls the server itself for positions,
+working orders, and today's fills (`scripts/lib/trading/account-gate.js`), so it
+is the authoritative layer. A blocked call never reaches the server.
 
-Orders are classified by `rationale`: `[exit]` and `[protect]` pass (the MCP
-still applies its limits). Entries must pass:
+| Check | Rule | Hook | Gateway |
+|---|---|---|---|
+| `paper-mode` | `FTH_PAPER=1` refuses entries | yes | yes |
+| `journal-window` | The journal tail must reach back to the trading-day start | yes | yes |
+| `kill-switch` | No `~/.futures-trading-harness/STOP` | yes | yes |
+| `setup-tag` | Rationale starts with `setup:<strategy>` | yes | yes |
+| `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
+| `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
+| `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
+| `time-window`, `blackout` | Outside no-entry windows and news blackouts | yes | yes |
+| `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
+| `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
+| `max-entries` | Under `FTH_MAX_ENTRIES_PER_DAY` | yes | yes |
+| `exposure` | `[exit]`/`[protect]` must be opposite the open position, within its size, without stacking resting stops or limits beyond it | no | yes |
+| `position-open` | No new entry while the contract has a position | no | yes |
+| `modify-size` | `modify_order` may change prices, not size | yes | yes |
 
-| Check | Rule |
-|---|---|
-| `kill-switch` | No `~/.futures-trading-harness/STOP` |
-| `setup-tag` | Rationale names `setup:<strategy>` |
-| `strategy` | The strategy exists, is valid, `status: active`, trades this contract, and it is inside its `sessions` |
-| `stop-defined` | `stopLossBracket`, or a stop price in the rationale |
-| `plan-required` | A journal `plan` for the contract within `FTH_PLAN_MAX_AGE_MIN`, this trading day |
-| `time-window` | Outside `FTH_NO_ENTRY_WINDOWS` |
-| `blackout` | Outside news blackouts |
-| `loss-streak` | Cooldown after consecutive losing reviews |
-| `daily-loss-count` | Fewer than `FTH_MAX_DAILY_LOSSES` losses this trading day |
-| `review-before-next-entry` | Every earlier entry today has a review |
-| `max-entries` | Fewer than `FTH_MAX_ENTRIES_PER_DAY` entries |
-
-Malformed or oversized input, unreadable state, invalid config, or a crash
-blocks the order. Decisions go to `~/.futures-trading-harness/gate-log.jsonl`.
+Malformed or oversized input, unreadable state, invalid config, a failed
+account query, or a crash blocks the order. In autonomous runs
+(`FTH_AUTONOMOUS=1`) the gate can't be skipped, dry-run, or disabled.
+Decisions go to `~/.futures-trading-harness/gate-log.jsonl`.
 
 ## Autonomous runner
 
-`scripts/autotrader.js` keeps a per-day state (premarket done, cycles, end of
-day done) and starts one headless run at a time: premarket at `premarketAt`,
-a trade cycle every `cycleMinutes` inside `sessions`, end of day at `eodAt`
-(retried until it succeeds). The kill switch stops new cycles but not end of
-day. After `maxConsecutiveErrors` failed runs the runner creates the kill
-switch itself. Runs execute in `workspace/` with `FTH_ROOT` set, so every
-harness picks up the operator instructions.
+`scripts/autotrader.js` holds an exclusive lock, keeps a per-day state
+(written atomically), and starts one headless run at a time in its own
+process group: premarket at `premarketAt`, a trade cycle every
+`cycleMinutes` inside `sessions`, end of day at `eodAt` (retried until it
+succeeds, and run first thing if a previous day never finished). The kill
+switch stops new cycles but not end of day; after `maxConsecutiveErrors`
+failed runs the runner creates it. An unreadable state file turns trade
+cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,
+`FTH_AUTONOMOUS=1`, and, in paper mode, `FTH_PAPER=1` and
+`PROJECTX_TRADING_ENABLED=false`.
 
 ## Known limits
 
-- Hooks and the gateway can't see live prices or positions. Price-side checks
-  (a stop on the correct side, an `[exit]` that actually reduces exposure) stay
-  in projectx-mcp and the risk-manager role. Upstreaming an exposure check for
-  `[exit]`/`[protect]` to projectx-mcp would close the self-labelling gap.
+- The hook can't see positions; only the gateway checks that `[exit]` and
+  `[protect]` orders really reduce exposure. Use the gateway on every harness.
+- projectx-mcp itself: a position flip skips its daily-loss check, resting stop
+  orders aren't counted toward its position limit, and `modify_order` only
+  checks order size. The gateway covers these for harness traffic; fixing them
+  in projectx-mcp would protect direct callers too.
+- Journal reviews are self-graded. The gateway counts losses from real fills;
+  the journal-based checks remain a second, softer layer.
 - Codex agent roles can't be restricted to specific MCP tools in config; the
-  executor-only rule is an instruction there. The order gate still applies.
-- Headless harnesses auto-approve tool calls. Run the autonomous runner in a
-  container or as a user that can't modify the harness files.
+  executor-only rule is an instruction there. The gateway still applies.
 - The cisd_ote strategy mirrors algoTraderBot's zone math (shorts enter at the
   29.5% retracement), which differs from textbook OTE. Confirm it's intended.

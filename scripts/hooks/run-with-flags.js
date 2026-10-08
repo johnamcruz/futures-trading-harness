@@ -63,8 +63,11 @@ async function main() {
   const failsClosed = FAIL_CLOSED_HOOKS.has(hookId);
 
   if (!hookId || !relScriptPath) return exitWith('', 0);
-  if (!isHookEnabled(hookId, { profiles: profilesCsv })) return exitWith('', 0);
-  if (isDryRun()) {
+  // Order-gating hooks can't be dry-run, and in autonomous runs (FTH_AUTONOMOUS=1,
+  // set by the runner for the harness it launches) they can't be disabled either.
+  const locked = failsClosed && process.env.FTH_AUTONOMOUS === '1';
+  if (!locked && !isHookEnabled(hookId, { profiles: profilesCsv })) return exitWith('', 0);
+  if (isDryRun() && !failsClosed) {
     writeStderr(`[DryRun] Hook "${hookId}" would execute: ${relScriptPath}`);
     return exitWith('', 0);
   }

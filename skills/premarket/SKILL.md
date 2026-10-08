@@ -15,10 +15,9 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
    tickSize, tickValue).
 2. Run in parallel (as in trade-session step 2): the three market analysts,
    `news-calendar-analyst` for today's date, and `risk-manager` phase 1.
-3. Blackouts: merge the news analyst's proposed JSON into
-   `~/.futures-trading-harness/blackouts.json` (create the folder). Keep future
-   entries, drop ones that ended over a day ago, and only ever add
-   restrictions.
+3. Blackouts: add each proposed window with the append-only script (it can't
+   remove a window, so blackouts only ever restrict trading):
+   `node <root>/scripts/blackouts.js" add --start <ISO> --end <ISO> --reason "<event>"`.
 4. Game plan (you, as head trader):
    - Bias per timeframe and where analysts disagree.
    - Key levels table (price, what, source).

@@ -20,12 +20,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { validateConfig, prompts, buildCommand, decide, recordRun, cycleResult, dayKey } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, recordRun, cycleResult, dayKey } = require('./lib/autotrader');
 const { loadConfig } = require('./lib/trading/config');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = path.join(os.homedir(), '.futures-trading-harness');
 const STATE_FILE = path.join(HOME_DIR, 'autotrader-state.json');
+const LOCK_FILE = path.join(HOME_DIR, 'autotrader.lock');
 const TICK_MS = 20000;
 
 function arg(argv, name) {
@@ -41,6 +42,48 @@ function readJson(file, fallback) {
   }
 }
 
+function writeJsonAtomic(file, value) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+/** One runner per machine: an exclusive lock file holding our pid. */
+function acquireLock() {
+  fs.mkdirSync(HOME_DIR, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: 'wx' });
+      return;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      const pid = Number(fs.readFileSync(LOCK_FILE, 'utf8'));
+      if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) throw new Error(`another autotrader is running (pid ${pid}, ${LOCK_FILE})`, { cause: err });
+      fs.unlinkSync(LOCK_FILE); // stale lock from a dead runner
+    }
+  }
+  throw new Error(`could not acquire ${LOCK_FILE}`);
+}
+
+function releaseLock() {
+  try {
+    if (Number(fs.readFileSync(LOCK_FILE, 'utf8')) === process.pid) fs.unlinkSync(LOCK_FILE);
+  } catch (_err) {
+    // already gone
+  }
+}
+
+let activeChild = null;
+
 function appendLog(now, text) {
   const dir = path.join(HOME_DIR, 'logs');
   fs.mkdirSync(dir, { recursive: true });
@@ -52,23 +95,34 @@ function runOnce(cfg, argv, timeoutMs) {
     const [cmd, ...args] = argv;
     const child = spawn(cmd, args, {
       cwd: path.resolve(ROOT, cfg.workdir),
-      env: { ...process.env, FTH_ROOT: ROOT },
+      env: childEnv(cfg, ROOT),
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true, // own process group, so a timeout kills the harness and everything it started
     });
+    activeChild = child;
+    const killGroup = sig => {
+      try {
+        process.kill(-child.pid, sig);
+      } catch (_err) {
+        child.kill(sig);
+      }
+    };
     let output = '';
     child.stdout.on('data', c => { output += c; });
     child.stderr.on('data', c => { output += c; });
     const timer = setTimeout(() => {
       output += `\n[autotrader] timeout after ${timeoutMs / 60000} min; killing run\n`;
-      child.kill('SIGTERM');
-      setTimeout(() => child.kill('SIGKILL'), 10000).unref();
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), 10000).unref();
     }, timeoutMs);
     child.on('error', err => {
       clearTimeout(timer);
+      activeChild = null;
       resolve({ ok: false, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
     });
     child.on('close', code => {
       clearTimeout(timer);
+      activeChild = null;
       resolve({ ok: code === 0, code, output });
     });
   });
@@ -76,7 +130,7 @@ function runOnce(cfg, argv, timeoutMs) {
 
 async function execute(cfg, action, symbols, opts) {
   const now = new Date();
-  const p = prompts(cfg, now);
+  const p = prompts(cfg, now, ROOT);
   const jobs = action === 'eod' ? [p.eod()] : symbols.map(sym => p[action](sym));
   let ok = true;
   for (const prompt of jobs) {
@@ -111,13 +165,32 @@ async function main(argv) {
   }
 
   let state = readJson(STATE_FILE, null);
+  if (state === null && fs.existsSync(STATE_FILE)) {
+    // Unreadable state: don't guess. No new trade cycles today; end of day still runs.
+    process.stderr.write(`[autotrader] ${STATE_FILE} is unreadable; trade cycles are off until tomorrow, end of day still runs\n`);
+    state = { day: dayKey(new Date()), premarketDone: true, eodDone: false, cycles: cfg.maxCyclesPerDay, lastCycleAt: null };
+  }
   if (opts.dryRun) {
     const { action } = decide(cfg, state, new Date(), { killSwitch: fs.existsSync(killSwitchFile) });
     process.stdout.write(`next action now: ${action || 'none'}\n`);
     if (action) await execute(cfg, action, cfg.symbols, opts);
     return 0;
   }
-  fs.mkdirSync(HOME_DIR, { recursive: true });
+  acquireLock();
+  const stop = sig => {
+    if (activeChild) {
+      try {
+        process.kill(-activeChild.pid, sig);
+      } catch (_err) {
+        // already exited
+      }
+    }
+    releaseLock();
+    process.exit(130);
+  };
+  process.on('SIGINT', () => stop('SIGINT'));
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('exit', releaseLock);
   let errors = 0;
   process.stdout.write(`[autotrader] ${cfg.harness} on ${cfg.symbols.join(',')}; kill switch: ${killSwitchFile}\n`);
   for (;;) {
@@ -128,7 +201,7 @@ async function main(argv) {
       const ok = await execute(cfg, action, cfg.symbols, opts);
       // A failed end of day is retried on the next tick: flattening matters most.
       if (ok || action !== 'eod') state = recordRun(state, action, now);
-      fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+      writeJsonAtomic(STATE_FILE, state);
       errors = ok ? 0 : errors + 1;
       if (errors >= cfg.maxConsecutiveErrors && !fs.existsSync(killSwitchFile)) {
         fs.writeFileSync(killSwitchFile, `created by autotrader after ${errors} failed runs at ${now.toISOString()}\n`);

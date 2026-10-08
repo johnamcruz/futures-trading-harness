@@ -15,6 +15,8 @@ const DEFAULT_NO_ENTRY_WINDOWS = [
 ].join(',');
 
 const GATE_CHECKS = [
+  'paper-mode',
+  'journal-window',
   'kill-switch',
   'setup-tag',
   'strategy',
@@ -58,7 +60,12 @@ function loadConfig(env = process.env) {
       || path.join(os.homedir(), '.futures-trading-harness', 'blackouts.json'),
     killSwitchFile: String(env.FTH_KILL_SWITCH_FILE || '').trim()
       || path.join(os.homedir(), '.futures-trading-harness', 'STOP'),
-    skipChecks: listEnv(env, 'FTH_ORDER_GATE_SKIP'),
+    // Set by the autonomous runner for the harness it launches. In autonomous
+    // runs nothing may switch gate checks off from inside the session.
+    autonomous: env.FTH_AUTONOMOUS === '1',
+    // Paper mode: every new entry is refused (plans, reviews, and exits still work).
+    paper: env.FTH_PAPER === '1',
+    skipChecks: env.FTH_AUTONOMOUS === '1' ? new Set() : listEnv(env, 'FTH_ORDER_GATE_SKIP'),
   };
 }
 

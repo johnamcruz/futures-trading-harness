@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt } = require('../../scripts/lib/autotrader');
+const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -26,11 +26,16 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   const claude = buildCommand(validateConfig({ harness: 'claude', model: 'sonnet' }), p, '/fth');
   assert.deepStrictEqual(claude.slice(0, 5), ['claude', '-p', 'PROMPT', '--plugin-dir', '/fth']);
   assert.ok(claude.includes('dontAsk') && claude.includes('--model'));
-  assert.match(claude[claude.indexOf('--allowedTools') + 1], /mcp__projectx/);
+  const tools = claude[claude.indexOf('--allowedTools') + 1].split(',');
+  assert.ok(tools.includes('mcp__projectx'));
+  assert.ok(tools.includes('Bash(node /fth/scripts/strategies.js:*)'));
+  assert.ok(!tools.some(t => t === 'Write' || t === 'Bash' || /^Bash\(node:/.test(t)), 'no general write or shell access');
+  assert.deepStrictEqual(claudeTools('/r').filter(t => t.startsWith('Write')), ['Write(//tmp/fth/**)']);
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);
   const qwen = buildCommand(cfg, p, '/fth');
   assert.deepStrictEqual(qwen.slice(0, 3), ['qwen', '-p', 'PROMPT']);
+  assert.strictEqual(qwen[qwen.indexOf('--approval-mode') + 1], 'default');
   const custom = buildCommand(validateConfig({ harness: 'custom', command: ['my-agent', '--task', '{prompt}'] }), p, '/fth');
   assert.deepStrictEqual(custom, ['my-agent', '--task', 'PROMPT']);
 });
@@ -69,8 +74,26 @@ test('kill switch stops new cycles but not end of day; weekends and caps are res
   assert.strictEqual(decide(cfg, null, et(10, 0, 10)).action, null); // Saturday
   const capped = { ...s, cycles: cfg.maxCyclesPerDay };
   assert.strictEqual(decide(cfg, capped, et(10, 0)).action, null);
-  const yesterday = { ...capped, day: '2026-10-06' };
+  const yesterday = { ...capped, day: '2026-10-06', eodDone: true };
   assert.strictEqual(decide(cfg, yesterday, et(9, 1)).action, 'premarket'); // new day resets state
+});
+
+test('a previous day that never finished end of day is flattened first', () => {
+  const thursday = { day: '2026-10-08', premarketDone: true, eodDone: false, cycles: 12, lastCycleAt: null };
+  const sat = new Date(Date.UTC(2026, 9, 10, 4, 30)); // 00:30 ET Saturday
+  const { action, state } = decide(cfg, thursday, sat);
+  assert.strictEqual(action, 'eod');
+  const done = recordRun(state, 'eod', sat);
+  assert.strictEqual(decide(cfg, done, sat).action, null);
+  assert.strictEqual(decide(cfg, { ...thursday, cycles: 0, premarketDone: false }, sat).action, null); // didn't trade
+});
+
+test('child env locks the gate and paper mode disables trading', () => {
+  const live = childEnv(validateConfig({}), '/r', { PATH: '/bin' });
+  assert.deepStrictEqual([live.FTH_ROOT, live.FTH_AUTONOMOUS, live.FTH_PAPER], ['/r', '1', undefined]);
+  const paper = childEnv(validateConfig({ paper: true }), '/r', {});
+  assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
+  assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; run its scripts as `node \/r\/scripts/);
 });
 
 test('cycleResult finds the last reported result', () => {
@@ -91,6 +114,7 @@ test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run 
   const log = fs.readdirSync(path.join(dir, '.futures-trading-harness', 'logs'))[0];
   const text = fs.readFileSync(path.join(dir, '.futures-trading-harness', 'logs', log), 'utf8');
   assert.ok(text.includes(`cwd=${path.join(ROOT, 'workspace')} FTH_ROOT=${ROOT}`));
+  assert.match(text, /prompt=.*FTH_ROOT/);
   assert.match(text, /trade-session skill for MES/);
   fs.writeFileSync(path.join(dir, 'STOP'), '');
   const blocked = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade'], { encoding: 'utf8', env });

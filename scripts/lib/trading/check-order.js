@@ -12,8 +12,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { loadConfig } = require('./config');
-const { resolveJournalPath, readJournal } = require('./journal');
-const { evaluateOrder, formatBlock } = require('./order-gate');
+const { resolveJournalPath, readJournalWindow } = require('./journal');
+const { evaluateOrder, evaluateModify, formatBlock } = require('./order-gate');
 const { loadStrategies } = require('./strategies');
 
 function readBlackouts(file) {
@@ -32,12 +32,22 @@ function readBlackouts(file) {
   }
 }
 
-/** Returns { allowed, intent, violations, message }. */
-function checkOrder(input, { env = process.env, pluginRoot, now = new Date() } = {}) {
+/**
+ * Returns { allowed, intent, violations, message }. `tool` is the projectx tool
+ * being called: place_order (default) or modify_order.
+ */
+function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order' } = {}) {
   const config = loadConfig(env);
+  if (tool === 'modify_order') {
+    const r = evaluateModify({ input: input || {}, config });
+    const ok = r.violations.length === 0;
+    return { allowed: ok, intent: r.intent, violations: r.violations, message: ok ? '' : formatBlock(r.violations) };
+  }
+  const journal = readJournalWindow(resolveJournalPath(env));
   const result = evaluateOrder({
     input: input || {},
-    entries: readJournal(resolveJournalPath(env)),
+    entries: journal.entries,
+    journalTruncated: journal.truncated,
     now,
     config,
     blackouts: readBlackouts(config.blackoutsFile),

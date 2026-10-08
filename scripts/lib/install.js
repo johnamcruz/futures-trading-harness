@@ -3,10 +3,11 @@
 /**
  * Install helpers per harness target. Plugin-native parts (skills, agents,
  * commands, hooks) are installed by each harness's own plugin/extension
- * command; this module writes what those can't: always-on rules (Claude),
- * the projectx MCP server behind the order gateway with absolute paths, agent
- * roles (Codex), and hooks (Qwen settings). Every write is idempotent and
- * confined to a marked block or keyed entries owned by the harness.
+ * command; this module writes what those can't: always-on rules (Claude), the
+ * projectx MCP server behind the order gateway with absolute paths, agent
+ * roles (Codex), and the autonomous-run permission allowlist (Qwen, scoped to
+ * workspace/). Every write is idempotent and confined to a marked block or
+ * keyed entries owned by the harness. A file's first backup is never overwritten.
  */
 
 const fs = require('fs');
@@ -20,6 +21,13 @@ const PROJECTX_ENV = [
   'PROJECTX_ALLOWED_SYMBOLS', 'PROJECTX_MAX_ORDER_SIZE', 'PROJECTX_MAX_POSITION_SIZE', 'PROJECTX_MAX_DAILY_LOSS',
   'PROJECTX_JOURNAL_PATH', 'PROJECTX_API_URL', 'PROJECTX_MARKET_HUB_URL',
 ];
+// Order-gate settings the gateway reads; Codex forwards only listed variables.
+const FTH_ENV = [
+  'FTH_AUTONOMOUS', 'FTH_PAPER', 'FTH_KILL_SWITCH_FILE', 'FTH_STRATEGIES_DIRS', 'FTH_BLACKOUTS_FILE', 'FTH_GATE_LOG',
+  'FTH_NO_ENTRY_WINDOWS', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_LOSS_COOLDOWN_MIN',
+  'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP',
+];
+const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
 
 function gatewayArgs(root, projectxEntry) {
   return [path.join(root, 'scripts', 'mcp-gateway.js'), '--', 'node', projectxEntry];
@@ -52,8 +60,11 @@ function codexConfigBlock(root, projectxEntry) {
     'command = "node"',
     `args = [${args}]`,
     'startup_timeout_sec = 30',
-    '# Forward credentials and guardrails from the environment that launches Codex.',
-    `env_vars = [${PROJECTX_ENV.map(v => JSON.stringify(v)).join(', ')}]`,
+    '# projectx marks order tools destructive; under approval_policy "never" (codex exec)',
+    '# Codex would refuse them. The gateway enforces the order gate on every call instead.',
+    'default_tools_approval_mode = "approve"',
+    '# Forward credentials, guardrails, and order-gate settings from the launching environment.',
+    `env_vars = [${[...PROJECTX_ENV, ...FTH_ENV].map(v => JSON.stringify(v)).join(', ')}]`,
     '',
     codexAgentsTable(loadAgents(root), path.join(root, '.codex', 'agents').split(path.sep).join('/')),
   ].join('\n');
@@ -71,42 +82,27 @@ function planCodex({ root, home, projectxEntry }) {
       `codex plugin marketplace add ${root}`,
       'codex plugin add futures-trading-harness@futures-trading-harness',
       'Open /hooks in Codex once and trust the harness hooks (the MCP gateway enforces the order gate either way).',
-      `Run trading sessions from ${path.join(root, 'workspace')} so Codex reads workspace/AGENTS.md.`,
+      `Run trading sessions from ${path.join(root, 'workspace')} so Codex reads workspace/AGENTS.md (its sandbox keeps writes inside workspace/ and /tmp).`,
     ],
   };
 }
 
-function hookCommand(root, id, script, profiles) {
-  return `node ${JSON.stringify(path.join(root, 'scripts', 'hooks', 'run-with-flags.js'))} ${id} ${script} ${profiles}`;
-}
+const isOurHook = group => (group.hooks || []).some(h => /run-with-flags\.js"? (pre|session-start|stop):trading:/.test(String(h.command || '')));
 
-/** Hooks in settings.json shape, with absolute paths (no plugin root variable outside plugins). */
-function settingsHooks(root) {
-  const source = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8')).hooks;
-  const out = {};
-  for (const [event, groups] of Object.entries(source)) {
-    out[event] = groups.map(g => ({
-      ...g,
-      hooks: g.hooks.map(h => {
-        const m = /run-with-flags\.js" (\S+) (\S+) (\S+)$/.exec(h.command);
-        if (!m) throw new Error(`unexpected hook command in hooks.json: ${h.command}`);
-        return { ...h, command: hookCommand(root, m[1], m[2], m[3]) };
-      }),
-    }));
-  }
-  return out;
-}
-
-const isOurs = (group, root) => (group.hooks || []).some(h => String(h.command || '').includes(path.join(root, 'scripts', 'hooks', 'run-with-flags.js'))
-  || /run-with-flags\.js"? (pre|session-start|stop):trading:/.test(String(h.command || '')));
-
-/** Merge harness hooks and the projectx MCP server into a Qwen settings object. */
+/**
+ * User-level Qwen settings: the projectx MCP server behind the gateway. Hooks
+ * come from the extension (qwen-extension/hooks); any harness hooks an older
+ * install merged here are removed so they don't run twice.
+ */
 function mergeQwenSettings(settings, root, projectxEntry) {
   const next = { ...settings };
-  next.hooks = { ...(settings.hooks || {}) };
-  for (const [event, groups] of Object.entries(settingsHooks(root))) {
-    const kept = (next.hooks[event] || []).filter(g => !isOurs(g, root));
-    next.hooks[event] = [...kept, ...groups];
+  if (settings.hooks) {
+    next.hooks = {};
+    for (const [event, groups] of Object.entries(settings.hooks)) {
+      const kept = (groups || []).filter(g => !isOurHook(g));
+      if (kept.length) next.hooks[event] = kept;
+    }
+    if (Object.keys(next.hooks).length === 0) delete next.hooks;
   }
   const existing = settings.mcpServers && settings.mcpServers.projectx;
   const ours = { command: 'node', args: gatewayArgs(root, projectxEntry), timeout: 60000 };
@@ -115,6 +111,31 @@ function mergeQwenSettings(settings, root, projectxEntry) {
   }
   next.mcpServers = { ...(settings.mcpServers || {}), projectx: { ...(existing || {}), ...ours } };
   return next;
+}
+
+/**
+ * Project settings for workspace/ (where autonomous Qwen runs start): allow the
+ * projectx tools, reading, scratch files, and the harness's own scripts; deny
+ * edits to the harness, its state, and harness configs, so a run can't loosen
+ * its own limits.
+ */
+function qwenWorkspaceSettings(root, home) {
+  const abs = p => `/${p}`; // Qwen rules use //absolute/path
+  return {
+    permissions: {
+      allow: [
+        'mcp__projectx', 'Read', 'Skill', 'Agent', 'WebFetch', 'web_search',
+        'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
+        ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
+      ],
+      deny: [
+        `Edit(${abs(`${root}/**`)})`,
+        `Edit(${abs(path.join(home, '.futures-trading-harness'))}/**)`,
+        `Edit(${abs(path.join(home, '.projectx-mcp'))}/**)`,
+        `Edit(${abs(path.join(home, '.qwen'))}/**)`,
+      ],
+    },
+  };
 }
 
 function planQwen({ root, home, projectxEntry }) {
@@ -128,11 +149,14 @@ function planQwen({ root, home, projectxEntry }) {
     }
   }
   return {
-    writes: [{ file, content: `${JSON.stringify(mergeQwenSettings(settings, root, projectxEntry), null, 2)}\n` }],
+    writes: [
+      { file, content: `${JSON.stringify(mergeQwenSettings(settings, root, projectxEntry), null, 2)}\n` },
+      { file: path.join(root, 'workspace', '.qwen', 'settings.json'), content: `${JSON.stringify(qwenWorkspaceSettings(root, home), null, 2)}\n` },
+    ],
     next: [
-      `qwen extensions install ${root}`,
-      'Set credentials: qwen extensions settings set futures-trading-harness "TopstepX API key" (and username), or export PROJECTX_* in your shell.',
-      `Run trading sessions from ${path.join(root, 'workspace')} so Qwen reads workspace/QWEN.md.`,
+      `qwen extensions link ${path.join(root, 'qwen-extension')}   (link, not install: the extension uses symlinks to this checkout)`,
+      'Export PROJECTX_USERNAME, PROJECTX_API_KEY and the PROJECTX_* guardrails in the shell that launches qwen (extension settings do not reach MCP servers).',
+      `Run trading sessions from ${path.join(root, 'workspace')}; its .qwen/settings.json holds the autonomous-run allowlist.`,
     ],
   };
 }
@@ -141,7 +165,8 @@ function planClaude({ root, home, projectxEntry }) {
   const rulesDir = path.join(root, 'rules', 'trading');
   const writes = fs.readdirSync(rulesDir).filter(f => f.endsWith('.md')).sort()
     .map(f => ({ file: path.join(home, '.claude', 'rules', 'trading', f), content: fs.readFileSync(path.join(rulesDir, f), 'utf8') }));
-  const mcp = ['claude mcp add projectx --scope user', ...PROJECTX_ENV.slice(0, 3).map(v => `--env ${v}=...`), '--', 'node', ...gatewayArgs(root, projectxEntry).map(a => JSON.stringify(a))].join(' ');
+  const guardrails = PROJECTX_ENV.filter(v => !/(JOURNAL_PATH|API_URL|HUB_URL)$/.test(v));
+  const mcp = ['claude mcp add projectx --scope user', ...guardrails.map(v => `--env ${v}=...`), '--', 'node', ...gatewayArgs(root, projectxEntry).map(a => JSON.stringify(a))].join(' ');
   return {
     writes,
     next: [
@@ -158,7 +183,8 @@ const TARGETS = { claude: planClaude, codex: planCodex, qwen: planQwen };
 function applyPlan(plan) {
   for (const w of plan.writes) {
     fs.mkdirSync(path.dirname(w.file), { recursive: true });
-    if (fs.existsSync(w.file)) fs.copyFileSync(w.file, `${w.file}.fth-backup`);
+    // Keep the first backup: it is the user's file from before any install.
+    if (fs.existsSync(w.file) && !fs.existsSync(`${w.file}.fth-backup`)) fs.copyFileSync(w.file, `${w.file}.fth-backup`);
     fs.writeFileSync(w.file, w.content);
   }
 }
@@ -169,8 +195,8 @@ module.exports = {
   TARGETS,
   upsertBlock,
   codexConfigBlock,
-  settingsHooks,
   mergeQwenSettings,
+  qwenWorkspaceSettings,
   planClaude,
   planCodex,
   planQwen,

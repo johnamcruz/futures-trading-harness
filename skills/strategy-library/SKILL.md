@@ -12,25 +12,28 @@ Strategies are Markdown documents, not code. Each lives at
 
 - Before any plan: which strategies apply to this symbol, now?
 - When tagging an order: the tag `setup:<name>` must name an active strategy.
-- When a script path is needed: find `$FTH_ROOT`.
+- When a script path is needed: find the harness root, written `<root>` below.
 
 ## How It Works
 
-### Find the harness root (`$FTH_ROOT`)
+### Find the harness root (`<root>`)
 
-The folder that contains `scripts/strategies.js`. In order:
+The absolute path of the folder that contains `scripts/strategies.js`. In order:
 
-1. The `FTH_ROOT` environment variable, or the "Harness root" line in the
-   session briefing.
-2. For a plugin install: two directories above this skill's folder.
-3. Ask the user.
+1. The autonomous prompt or the session briefing ("Harness root (FTH_ROOT): /abs/path").
+2. The `FTH_ROOT` environment variable (`echo $FTH_ROOT`).
+3. The parent of the `workspace/` folder you were started in, or two
+   directories above this skill's folder for a plugin install.
+
+Always write the absolute path in commands (`node /abs/path/scripts/strategies.js list`).
+Autonomous runs only permit these scripts by absolute path.
 
 ### Read the library
 
 ```bash
-node "$FTH_ROOT/scripts/strategies.js" list           # name, status, signal, instruments
-node "$FTH_ROOT/scripts/strategies.js" show orb       # the full STRATEGY.md
-node "$FTH_ROOT/scripts/strategies.js" scan /tmp/fth/MNQ-3m.json --symbol MNQ
+node <root>/scripts/strategies.js list           # name, status, signal, instruments
+node <root>/scripts/strategies.js show orb       # the full STRATEGY.md
+node <root>/scripts/strategies.js scan /tmp/fth/MNQ-3m.json --symbol MNQ
 ```
 
 `scan` runs market-snapshot with each strategy's `params` and reports, per

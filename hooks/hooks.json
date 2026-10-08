@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*projectx.*__place_order",
+        "matcher": "mcp__.*projectx.*__(place_order|modify_order)",
         "hooks": [
           {
             "type": "command",

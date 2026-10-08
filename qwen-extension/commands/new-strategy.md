@@ -4,5 +4,5 @@ description: "Create a new STRATEGY.md from an idea, strategy code, or a backtes
 
 Use the `strategy-authoring` skill (with the `strategy-researcher` agent role for
 code or backtests) to create the strategy: {{args}}
-Finish by running `node "$FTH_ROOT/scripts/strategies.js" validate` and showing
+Finish by running `node <root>/scripts/strategies.js validate` and showing
 the result.

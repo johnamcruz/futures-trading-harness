@@ -28,7 +28,21 @@ const DEFAULTS = {
   extraArgs: [],
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
-const CLAUDE_TOOLS = ['mcp__projectx', 'Read', 'Write', 'Bash(node:*)', 'Bash(mkdir:*)', 'Skill', 'Agent', 'WebSearch', 'WebFetch'];
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
+
+/**
+ * Claude Code tools for an autonomous run: the projectx MCP server, reading,
+ * scratch files under /tmp/fth, and only the harness's own read/append scripts
+ * by absolute path. No general shell or file writes, so the run can't edit
+ * strategies, settings, the kill switch, or the journal file.
+ */
+function claudeTools(root) {
+  return [
+    'mcp__projectx', 'Read', 'Glob', 'Grep', 'Skill', 'Agent', 'WebSearch', 'WebFetch',
+    'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
+    ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
+  ];
+}
 
 function parseAt(spec) {
   const m = /^(\d{1,2}):(\d{2})@(.+)$/.exec(String(spec || '').trim());
@@ -59,14 +73,25 @@ function validateConfig(raw) {
   return cfg;
 }
 
-function prompts(cfg, now) {
+function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.`;
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
+  const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}.`,
     trade: symbol => `${head} Run the trade-session skill for ${symbol}${acct}${cfg.paper ? ' in paper mode (plan only, no orders)' : ''}.`,
     eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
+}
+
+/** Environment for a harness run: root, autonomous lock-down, and paper mode. */
+function childEnv(cfg, root, base = process.env) {
+  const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1' };
+  if (cfg.paper) {
+    env.FTH_PAPER = '1';
+    env.PROJECTX_TRADING_ENABLED = 'false';
+  }
+  return env;
 }
 
 /** argv for one headless run. */
@@ -76,11 +101,13 @@ function buildCommand(cfg, prompt, root) {
   switch (cfg.harness) {
     case 'claude':
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
-        '--allowedTools', CLAUDE_TOOLS.join(','), ...(model ? ['--model', model] : []), ...extra];
+        '--allowedTools', claudeTools(root).join(','), ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"', ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
-      return ['qwen', '-p', prompt, '--approval-mode', 'yolo', '--output-format', 'json', '--max-session-turns', '80',
+      // Default approval mode: only tools allowed in ~/.qwen/settings.json
+      // permissions (written by scripts/install.js --target qwen) run headless.
+      return ['qwen', '-p', prompt, '--approval-mode', 'default', '--output-format', 'json', '--max-session-turns', '80',
         ...(model ? ['--model', model] : []), ...extra];
     default:
       return cfg.command.map(a => String(a).replace('{prompt}', prompt));
@@ -107,6 +134,11 @@ function freshDay(key) {
  */
 function decide(cfg, state, now, { killSwitch = false } = {}) {
   const key = dayKey(now);
+  // A previous trading day that traded but never finished end of day (runner
+  // down, crash): flatten first, whatever the time.
+  if (state && state.day !== key && !state.eodDone && (state.cycles > 0 || state.premarketDone)) {
+    return { action: 'eod', state: { ...state } };
+  }
   const s = state && state.day === key ? { ...state } : freshDay(key);
   if (cfg.weekdaysOnly && isWeekend(now)) return { action: null, state: s };
 
@@ -146,7 +178,8 @@ function cycleResult(output) {
 module.exports = {
   DEFAULTS,
   HARNESSES,
-  CLAUDE_TOOLS,
+  claudeTools,
+  childEnv,
   parseAt,
   validateConfig,
   prompts,

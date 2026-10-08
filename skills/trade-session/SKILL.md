@@ -28,7 +28,10 @@ cycle; never loop inside one run.
 ### 2. Parallel read
 
 Run these roles at the same time with your harness's subagents (Claude Code:
-the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles).
+the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles),
+and wait for every result before step 3. On Qwen Code, named subagents run in
+the background by default: launch them with `run_in_background: false`, and
+always run `risk-manager` phase 2 and `trade-executor` in the foreground.
 Without subagents, play each role yourself in turn. Pass symbol, contractId,
 and the current time.
 

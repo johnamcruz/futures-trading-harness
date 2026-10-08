@@ -17,16 +17,24 @@ const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
-const SETUP_TAG = /\bsetup:([a-z0-9][a-z0-9_-]*)/i;
-const STOP_IN_TEXT = /\bstop\b[^\d\n]{0,25}\d/i;
+// The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
+const SETUP_TAG = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
+// "stop 21450.25", "stop at 21450", "stop: 21450" - a number right after the word.
+const STOP_IN_TEXT = /\bstop(?:\s+at)?\s*[:=@]?\s*\d+(?:\.\d+)?\b/i;
 
 function isRiskReducing(rationale) {
   return RISK_REDUCING.test(String(rationale || ''));
 }
 
-/** Paper-trade reviews (tag `paper`) never count toward real trading state. */
-function liveReviews(entries) {
-  return entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper'));
+/**
+ * Reviews that count toward live trading state: not tagged `paper`, and graded
+ * with a result tag (result:win|loss|scratch|nofill). With a root, a review that
+ * names a different contract doesn't count.
+ */
+function liveReviews(entries, root = null) {
+  return entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper')
+    && (reviewResult(e) !== null || hasTag(e, 'result:nofill'))
+    && (!root || !e.contractId || contractRoot(e.contractId) === root));
 }
 
 function successfulEntries(dayEntries) {
@@ -36,12 +44,9 @@ function successfulEntries(dayEntries) {
     && !isRiskReducing(e.text));
 }
 
+/** A plan counts only when it names the contract (contractId) being traded. */
 function planMatches(entry, contractId, root) {
-  if (entry.contractId) {
-    return entry.contractId === contractId || contractRoot(entry.contractId) === root;
-  }
-  const escaped = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`\\b${escaped}\\b`, 'i').test(String(entry.text || ''));
+  return Boolean(entry.contractId) && (entry.contractId === contractId || contractRoot(entry.contractId) === root);
 }
 
 function fmtMin(ms) {
@@ -101,11 +106,12 @@ function lossState(dayEntries) {
  * null the strategy check is skipped (tests of other checks); the hook and the
  * MCP gateway always pass it.
  */
-function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null }) {
+function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, journalTruncated = false }) {
   if (isRiskReducing(input.rationale)) return { intent: 'risk-reducing', violations: [] };
 
   const rationale = String(input.rationale || '');
-  const dayEntries = entriesSince(entries, tradingDayStart(now));
+  const dayStart = tradingDayStart(now);
+  const dayEntries = entriesSince(entries, dayStart);
   const skip = config.skipChecks || new Set();
   const violations = [];
   const add = (check, message) => {
@@ -113,6 +119,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   };
 
   const setup = SETUP_TAG.exec(rationale);
+  add('paper-mode', config.paper ? 'Paper mode (FTH_PAPER=1): no live entries. Journal the plan tagged paper instead.' : null);
+  const oldest = entries.length ? entryTime(entries[0]) : NaN;
+  add('journal-window', journalTruncated && !(oldest <= dayStart.getTime())
+    ? 'The journal is too large to read back to the start of the trading day, so the gate cannot see today\'s history. Archive old journal entries.'
+    : null);
   add('kill-switch', config.killSwitchFile && fs.existsSync(config.killSwitchFile)
     ? `Kill switch is on (${config.killSwitchFile}). No new entries until the user removes it.`
     : null);
@@ -143,17 +154,38 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     ? `${losses} losing trades this trading day (limit ${config.maxDailyLosses}). Done until 17:00 CT.`
     : null);
 
-  const entered = successfulEntries(dayEntries).length;
-  const reviewed = liveReviews(dayEntries).length;
+  const root = contractRoot(input.contractId);
+  const entered = successfulEntries(dayEntries).filter(e => !e.contractId || contractRoot(e.contractId) === root).length;
+  const reviewed = liveReviews(dayEntries, root).length;
+  const enteredAll = successfulEntries(dayEntries).length;
   add('review-before-next-entry', entered > reviewed
     ? `${entered - reviewed} earlier entr${entered - reviewed === 1 ? 'y has' : 'ies have'} no review. `
       + 'Manage or close it, then journal_add {kind:"review", tags:["result:win|loss|scratch|nofill", "setup:<name>"]}.'
     : null);
-  add('max-entries', config.maxEntriesPerDay > 0 && entered >= config.maxEntriesPerDay
-    ? `${entered} entries this trading day (limit ${config.maxEntriesPerDay}).`
+  add('max-entries', config.maxEntriesPerDay > 0 && enteredAll >= config.maxEntriesPerDay
+    ? `${enteredAll} entries this trading day (limit ${config.maxEntriesPerDay}).`
     : null);
 
   return { intent: 'entry', violations };
+}
+
+/**
+ * modify_order can resize a working order, which would add exposure without
+ * any entry check. Price changes (moving a stop or target) stay allowed so
+ * positions can always be managed; size changes must go through cancel_order
+ * plus a new, gated place_order (or partial_close_position to reduce).
+ */
+function evaluateModify({ input = {}, config }) {
+  const skip = (config && config.skipChecks) || new Set();
+  const violations = [];
+  if (input.size !== undefined && input.size !== null && !skip.has('modify-size')) {
+    violations.push({
+      check: 'modify-size',
+      message: 'modify_order may change prices only. To change size, cancel the order and place a new one '
+        + '(which goes through the order gate), or use partial_close_position to reduce.',
+    });
+  }
+  return { intent: 'modify', violations };
 }
 
 function formatBlock(violations) {
@@ -169,5 +201,6 @@ module.exports = {
   successfulEntries,
   lossState,
   evaluateOrder,
+  evaluateModify,
   formatBlock,
 };

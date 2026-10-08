@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 
 const DEFAULT_JOURNAL_PATH = path.join(os.homedir(), '.projectx-mcp', 'journal.jsonl');
-const MAX_TAIL_BYTES = 2 * 1024 * 1024;
+const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 
 function expandHome(p) {
   if (p === '~') return os.homedir();
@@ -28,12 +28,17 @@ function resolveJournalPath(env = process.env) {
  * the first (possibly partial) line of a tail is dropped. Malformed lines are skipped.
  * A missing journal returns []. Other read errors throw so callers can fail closed.
  */
-function readJournal(journalPath, { maxBytes = MAX_TAIL_BYTES } = {}) {
+function readJournal(journalPath, opts = {}) {
+  return readJournalWindow(journalPath, opts).entries;
+}
+
+/** Like readJournal, plus `truncated: true` when older bytes were skipped. */
+function readJournalWindow(journalPath, { maxBytes = MAX_TAIL_BYTES } = {}) {
   let fd;
   try {
     fd = fs.openSync(journalPath, 'r');
   } catch (err) {
-    if (err.code === 'ENOENT') return [];
+    if (err.code === 'ENOENT') return { entries: [], truncated: false };
     throw err;
   }
   try {
@@ -43,7 +48,7 @@ function readJournal(journalPath, { maxBytes = MAX_TAIL_BYTES } = {}) {
     fs.readSync(fd, buffer, 0, length, size - length);
     let lines = buffer.toString('utf8').split('\n');
     if (length < size) lines = lines.slice(1);
-    return lines.filter(Boolean).flatMap(line => {
+    const entries = lines.filter(Boolean).flatMap(line => {
       try {
         const entry = JSON.parse(line);
         return entry && typeof entry === 'object' && typeof entry.kind === 'string' ? [entry] : [];
@@ -51,6 +56,7 @@ function readJournal(journalPath, { maxBytes = MAX_TAIL_BYTES } = {}) {
         return [];
       }
     });
+    return { entries, truncated: length < size };
   } finally {
     fs.closeSync(fd);
   }
@@ -92,6 +98,7 @@ module.exports = {
   DEFAULT_JOURNAL_PATH,
   resolveJournalPath,
   readJournal,
+  readJournalWindow,
   entryTime,
   entriesSince,
   hasTag,
