@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies, validateStrategy, scan, strategyDirs, SIGNALS } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, validateStrategy, scan, strategyDirs, BUILT_IN_SIGNALS } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { run } = require('../../scripts/strategies');
@@ -28,7 +28,7 @@ test('bundled strategies are all valid and cover every snapshot signal', () => {
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
   const signals = Object.keys(snapshot(Array.from({ length: 5 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 14, i)).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 }))).signals);
-  assert.deepStrictEqual([...SIGNALS].filter(s => s !== 'manual').sort(), [...signals].sort());
+  assert.deepStrictEqual([...BUILT_IN_SIGNALS].sort(), [...signals].sort());
   for (const sig of signals) assert.ok(strategies.some(s => s.signal === sig), `no strategy uses signal ${sig}`);
 });
 
@@ -101,4 +101,32 @@ test('CLI list, show, validate, and errors', () => {
   assert.strictEqual(run(['validate'], { env: { FTH_STRATEGIES_DIRS: dir }, out: () => {} }), 1);
   assert.throws(() => run(['show', 'nope'], { env: {}, out: capture }), /unknown strategy/);
   assert.throws(() => run(['bogus'], { env: {}, out: capture }), /usage/);
+});
+
+test('a rules strategy written only in Markdown validates and fires in scan', () => {
+  const dir = tmpDir();
+  writeStrategy(dir, 'md_breakout', [
+    'name: md_breakout', 'description: Markdown-only breakout test strategy: close crosses above the prior 5-bar high.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules',
+    'rules:', '  long:', '    - close crosses_above highest(5)[1]', '    - volume > 0',
+    'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  writeStrategy(dir, 'md_broken', [
+    'name: md_broken', 'description: Markdown rules with a typo in a series name should be invalid.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules',
+    'rules:', '  long:', '    - close crosses_above hihgest(5)',
+    'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir });
+  assert.match(strategies.find(s => s.name === 'md_broken').errors.join(), /unknown function "hihgest/);
+  const md = strategies.filter(s => s.name === 'md_breakout');
+  assert.ok(md[0].valid, md[0].errors.join());
+  const t = i => new Date(Date.UTC(2026, 9, 7, 14, 0) + i * 180000).toISOString();
+  // highest(5)[1] is the 5-bar high as of the previous bar, so a jump above it fires.
+  const bars = [100, 100, 100, 100, 100, 100, 105].map((c, i) => ({ t: t(i), o: c, h: c, l: c, c, v: 10 }));
+  const [r] = scan(md, { bars }, { symbol: 'MNQ' });
+  assert.strictEqual(r.signal, 'rules');
+  assert.ok(Array.isArray(r.rules.long));
+  assert.strictEqual(r.rules.long[1].ok, true);
+  assert.strictEqual(r.direction, 'long');
 });

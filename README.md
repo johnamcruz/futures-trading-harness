@@ -68,6 +68,7 @@ strategies/
   supertrend/STRATEGY.md   SuperTrend flip              (signal: supertrend)
   bos/STRATEGY.md          break of structure           (signal: bos)
   cisd_ote/STRATEGY.md     CISD + fib zone              (signal: manual)
+  vwap_reclaim/STRATEGY.md VWAP reclaim, paper          (signal: rules, written in Markdown)
   _template/STRATEGY.md    copy this to add a strategy
 ```
 
@@ -81,7 +82,7 @@ status: active                     # paper | active | disabled
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:45-11:30@America/New_York"]
-signal: orb                        # built-in detector, or manual
+signal: orb                        # rules (conditions below), manual, or a built-in detector
 params:                           # optional market-snapshot overrides
   orbMinutes: 15
 filters:
@@ -97,6 +98,22 @@ risk:
 node scripts/strategies.js list
 node scripts/strategies.js validate
 node scripts/strategies.js scan bars.json --symbol MNQ   # candidates on the latest closed bar
+```
+
+A mechanical trigger is written in Markdown too, as rules evaluated in code
+on each closed bar; no JavaScript needed:
+
+```yaml
+signal: rules
+rules:
+  long:
+    - close crosses_above vwap_rth
+    - close > ema(50)
+    - adx(14) >= 20
+  short:
+    - close crosses_below vwap_rth
+    - close < ema(50)
+    - adx(14) >= 20
 ```
 
 To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or

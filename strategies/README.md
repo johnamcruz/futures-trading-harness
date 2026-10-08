@@ -17,6 +17,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `supertrend` | SuperTrend flip | active |
 | `bos` | break of structure | active |
 | `cisd_ote` | manual (12m CISD + fib zone) | active |
+| `vwap_reclaim` | rules (written in Markdown) | paper |
 
 ## Add a strategy
 
@@ -28,9 +29,13 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 4. Paper-trade it (`/trade-plan`, reviews tagged `paper`), then check
    `/setup-scorecard` before setting `status: active`.
 
-A strategy with `signal: manual` needs no code: the agents evaluate its trigger
-from the body. To make a trigger mechanical, add a detector to
-`scripts/lib/trading/market-snapshot.js` `signals`, with a test.
+No strategy needs code. A mechanical trigger is written as `signal: rules`
+with `long:`/`short:` condition lists in the frontmatter (see
+`vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
+code evaluates it on every closed bar. A discretionary trigger uses
+`signal: manual` and is judged by the agents from the body. The five built-in
+detectors exist only because those strategies were ported verbatim from
+algoTraderBot.
 
 ## Commands
 

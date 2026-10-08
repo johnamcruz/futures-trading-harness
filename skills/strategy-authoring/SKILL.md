@@ -24,7 +24,8 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `instruments` | Contract roots, e.g. `[MNQ, MES]` |
    | `timeframe` | Trigger timeframe, e.g. `3m` |
    | `sessions` | Optional `"HH:MM-HH:MM@Zone"` windows; entries only inside |
-   | `signal` | `orb`, `ema_cross`, `keltner`, `supertrend`, `bos` (built-in detectors) or `manual` |
+   | `signal` | `rules` (trigger written in `rules`, checked by code), `manual` (agents judge the body), or a built-in detector: `orb`, `ema_cross`, `keltner`, `supertrend`, `bos` |
+   | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |
    | `params` | Optional market-snapshot overrides (e.g. `orbMinutes: 30`) |
    | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr` |
    | `risk` | `stop` (`atr:<k>`, `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd` |
@@ -38,27 +39,45 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
 5. Validate: `node <root>/scripts/strategies.js validate`.
 6. Promote only on evidence: paper-trade it (reviews tagged `paper`), run
    setup-expectancy, and set `status: active` only with the user's approval.
-7. A mechanical trigger the built-in detectors don't cover needs code: add it
-   to `signals` in `scripts/lib/trading/market-snapshot.js`, add it to
-   `SIGNALS` in `scripts/lib/trading/strategies.js`, and add tests.
+7. Write mechanical triggers as `rules`, not code. A condition is
+   `<expr> <op> <expr>` with `>`, `>=`, `<`, `<=`, `crosses_above`,
+   `crosses_below`. Expressions use series and numbers joined by `+`, `-`, and
+   `number *`: `open high low close volume`, `ema(n) sma(n) atr(n) adx(n)
+   highest(n) lowest(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
+   `vwap_session vwap_rth or_high or_low swing_high swing_low`,
+   `prior_high prior_low prior_close overnight_high overnight_low`, `minute_et`.
+   `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
+   bar (without it the current bar is included, so a close can never cross
+   above it). `validate` reports typos and unknown series. Only a pattern the
+   rules can't express (multi-bar zone logic like cisd_ote) needs `manual` or
+   a new detector in code.
 
 ## Examples
 
 ```yaml
 ---
-name: vwap_reclaim
-description: Long-only VWAP reclaim on MNQ/MES after a morning flush below RTH VWAP; manual trigger on 3-minute bars.
+name: donchian_break
+description: 20-bar Donchian breakout on MNQ/MES 3-minute bars with an ADX trend filter, written entirely as rules.
 version: 1
 status: paper
 instruments: [MNQ, MES]
 timeframe: 3m
-sessions: ["10:00-12:00@America/New_York"]
-signal: manual
-filters:
-  adx_max: 30
+sessions: ["09:45-15:00@America/New_York"]
+signal: rules
+rules:
+  long:
+    - close crosses_above highest(20)[1]
+    - adx(14) >= 20
+    - close > vwap_rth
+  short:
+    - close crosses_below lowest(20)[1]
+    - adx(14) >= 20
+    - close < vwap_rth
 risk:
-  stop: structure
+  stop: atr:1
   min_rr: 2
 source: user idea, 2026-10-08
 ---
 ```
+
+See `strategies/vwap_reclaim/STRATEGY.md` for a complete rules strategy.

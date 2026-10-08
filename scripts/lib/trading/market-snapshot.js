@@ -137,4 +137,4 @@ function snapshot(input, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot };
+module.exports = { PARAMS, snapshot, levels };

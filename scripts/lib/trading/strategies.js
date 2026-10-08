@@ -16,10 +16,14 @@ const os = require('os');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
 const { parseWindows, inWindow } = require('./clock');
-const { PARAMS, snapshot } = require('./market-snapshot');
+const { PARAMS, snapshot, levels } = require('./market-snapshot');
+const { normalizeBars } = require('./indicators');
+const { compileRules, evaluateRules } = require('./rules');
 
 const STATUSES = ['active', 'paper', 'disabled'];
-const SIGNALS = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'manual'];
+// Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
+const SIGNALS = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'rules', 'manual'];
+const BUILT_IN_SIGNALS = SIGNALS.filter(s => s !== 'rules' && s !== 'manual');
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,
   adx_max: v => typeof v === 'number' && v >= 0,
@@ -56,7 +60,12 @@ function validateStrategy(data, body, folderName) {
   req(Array.isArray(data.instruments) && data.instruments.length > 0
     && data.instruments.every(s => typeof s === 'string' && /^[A-Z0-9]+$/.test(s)), 'instruments: list of contract roots, e.g. [MNQ, MES]');
   req(typeof data.timeframe === 'string' && TIMEFRAME.test(data.timeframe), 'timeframe: e.g. 3m, 15m, 1h');
-  req(SIGNALS.includes(data.signal), `signal: one of ${SIGNALS.join(', ')} (manual = the LLM evaluates the trigger from the body)`);
+  req(SIGNALS.includes(data.signal), `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body)`);
+  if (data.signal === 'rules') {
+    errors.push(...compileRules(data.rules).errors);
+  } else if (data.rules !== undefined) {
+    errors.push('rules: only used with signal: rules');
+  }
 
   if (data.sessions !== undefined && data.sessions !== null) {
     const list = Array.isArray(data.sessions) ? data.sessions : [];
@@ -106,7 +115,8 @@ function loadStrategyFile(file) {
     return { name: folderName, file, valid: false, errors: [err.message] };
   }
   const errors = validateStrategy(parsed.data, parsed.body, folderName);
-  return { ...parsed.data, name: folderName, file, body: parsed.body, valid: errors.length === 0, errors };
+  const compiledRules = parsed.data.signal === 'rules' && errors.length === 0 ? compileRules(parsed.data.rules).compiled : null;
+  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, valid: errors.length === 0, errors };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */
@@ -177,7 +187,16 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       results.push({ ...base, signal: 'manual', candidate: session, note: 'evaluate the trigger from STRATEGY.md' });
       continue;
     }
-    const direction = snap.signals[s.signal];
+    let direction;
+    let ruleDetail;
+    if (s.signal === 'rules') {
+      const norm = normalizeBars(bars);
+      const r = evaluateRules(s.compiledRules, norm, { ...PARAMS, ...(s.params || {}) }, levels(norm));
+      direction = r.direction;
+      ruleDetail = { long: r.long, short: r.short };
+    } else {
+      direction = snap.signals[s.signal];
+    }
     const fails = filterFailures(s, snap);
     const atrMult = /^atr:(.+)$/.exec(s.risk.stop);
     const atr20 = snap.volatility.atr20;
@@ -191,6 +210,7 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       entryRef: snap.last.c,
       stopDistance: stopDistance === null ? null : Math.round(stopDistance * 1e4) / 1e4,
       minRR: s.risk.min_rr,
+      ...(ruleDetail ? { rules: ruleDetail } : {}),
     });
   }
   return results;
@@ -210,6 +230,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now) {
 module.exports = {
   STATUSES,
   SIGNALS,
+  BUILT_IN_SIGNALS,
   FILTERS,
   strategyDirs,
   validateStrategy,

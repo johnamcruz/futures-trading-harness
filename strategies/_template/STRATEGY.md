@@ -6,7 +6,14 @@ status: paper                 # paper | active | disabled. New strategies start 
 instruments: [MNQ, MES]       # contract roots the strategy may trade
 timeframe: 3m                 # trigger timeframe: 1m, 3m, 5m, 15m, 1h ...
 sessions: ["09:45-11:30@America/New_York"]   # optional; entries only inside these windows
-signal: manual                # orb | ema_cross | keltner | supertrend | bos | manual
+signal: rules                 # rules (conditions below) | manual (agents judge the body) | orb | ema_cross | keltner | supertrend | bos
+rules:                        # with signal: rules - every condition in a side must hold on the closed bar
+  long:
+    - close crosses_above highest(20)[1]
+    - adx(14) >= 18
+  short:
+    - close crosses_below lowest(20)[1]
+    - adx(14) >= 18
 params:                       # optional market-snapshot overrides (see scripts/lib/trading/market-snapshot.js PARAMS)
   adxGate: 18
 filters:                      # optional numeric gates checked by code
@@ -37,9 +44,10 @@ section. Run `node scripts/strategies.js validate` until it passes.
 
 ### Trigger
 
-- The exact, closed-bar condition that fires the entry. Mechanical strategies
-  name the snapshot `signal`; manual strategies describe it precisely enough
-  that two traders would agree whether it fired.
+- The exact, closed-bar condition that fires the entry. With `signal: rules`
+  the `rules` block is the trigger (restate it here in words); with
+  `signal: manual` describe it precisely enough that two traders would agree
+  whether it fired.
 
 ### Entry, stop, targets
 

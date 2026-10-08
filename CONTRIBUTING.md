@@ -6,9 +6,11 @@
    `strategy-authoring` skill / `/new-strategy`).
 2. Fill in the frontmatter and every body section; keep `status: paper`.
 3. `node scripts/strategies.js validate`
-4. For a new mechanical trigger, add a detector to `signals` in
-   `scripts/lib/trading/market-snapshot.js` and to `SIGNALS` in
-   `scripts/lib/trading/strategies.js`, with tests. Otherwise use `signal: manual`.
+4. Write mechanical triggers as `signal: rules` in the frontmatter, and
+   discretionary ones as `signal: manual`. A new detector in code is a last
+   resort for patterns the rule language can't express; it goes in `signals`
+   in `scripts/lib/trading/market-snapshot.js` and `SIGNALS` in
+   `scripts/lib/trading/strategies.js`, with tests.
 
 ## Adding a skill, agent, or command
 
