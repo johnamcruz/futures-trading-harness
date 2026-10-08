@@ -211,20 +211,22 @@ function sessionKey(t, anchorMin) {
 /**
  * VWAP anchored at `anchorMin` ET. With `untilMin`, bars at or after that time
  * (or before the anchor) are outside the session and get NaN (RTH: 570 to 960).
+ * A session already under way at the first bar is partial: NaN, not a VWAP
+ * of whatever part the bars happen to hold.
  */
 function anchoredVwap(bars, anchorMin, untilMin = null) {
   const out = new Array(bars.length).fill(NaN);
-  let key = null; let pv = 0; let vol = 0;
+  let key = null; let pv = 0; let vol = 0; let complete = false;
   for (let i = 0; i < bars.length; i += 1) {
     if (untilMin !== null) {
       const { minute } = etInfo(bars[i].t);
       if (minute < anchorMin || minute >= untilMin) continue;
     }
     const k = sessionKey(bars[i].t, anchorMin);
-    if (k !== key) { key = k; pv = 0; vol = 0; }
+    if (k !== key) { key = k; pv = 0; vol = 0; complete = i > 0; }
     pv += ((bars[i].h + bars[i].l + bars[i].c) / 3) * bars[i].v;
     vol += bars[i].v;
-    out[i] = vol > 0 ? pv / vol : NaN;
+    out[i] = complete && vol > 0 ? pv / vol : NaN;
   }
   return out;
 }

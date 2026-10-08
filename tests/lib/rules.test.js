@@ -120,9 +120,9 @@ test('a break on the first bar after the opening range is a cross', () => {
 test('a level that starts over is not a cross', () => {
   const mk = (iso, c) => ({ t: iso, o: c, h: c + 0.25, l: c - 0.25, c, v: 100 });
   // Session VWAP restarts at 18:00 ET (22:00Z): price is below the old VWAP and the new one starts at its typical price.
-  const b = normalizeBars([mk('2026-10-07T21:50:00Z', 21540), mk('2026-10-07T21:55:00Z', 21480), { t: '2026-10-07T22:00:00Z', o: 21479, h: 21479, l: 21477, c: 21479, v: 100 }]);
+  const b = normalizeBars([mk('2026-10-06T21:55:00Z', 21540), mk('2026-10-07T21:50:00Z', 21540), mk('2026-10-07T21:55:00Z', 21480), { t: '2026-10-07T22:00:00Z', o: 21479, h: 21479, l: 21477, c: 21479, v: 100 }]);
   const get = seriesSource(b, { ...PARAMS });
-  assert.ok(get('close')[1] < get('vwap_session')[1] && get('close')[2] > get('vwap_session')[2], 'the scenario would otherwise read as a cross');
+  assert.ok(get('close')[2] < get('vwap_session')[2] && get('close')[3] > get('vwap_session')[3], 'the scenario would otherwise read as a cross');
   const r = evaluateRules(compileRules({ long: ['close crosses_above vwap_session'] }).compiled, b, { ...PARAMS });
   assert.strictEqual(r.direction, null);
 });

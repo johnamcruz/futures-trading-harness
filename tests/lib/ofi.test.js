@@ -64,3 +64,15 @@ test('ofi_absorption fires when heavy selling fails to move price and the bar tu
   const tail = [[21499, 21502, 21498.5, 21499, 400], [21499, 21502, 21498.5, 21499, 400], [21499, 21502, 21498.5, 21499, 400], [21499, 21502, 21498.5, 21499, 400], [21499, 21500.75, 21498.75, 21500.5, 300]];
   assert.deepStrictEqual(fired(series(tail)), { ofi: null, ofi_absorption: 'long' });
 });
+
+test('vol_sma is missing, not 0, when its bars traded no volume', () => {
+  const get = seriesSource(mk([[10, 11, 9, 11, 0], [11, 12, 10, 10, 0]]), PARAMS);
+  assert.ok(get('vol_sma(2)').every(Number.isNaN));
+});
+
+test('the runner keeps three trading days of bars (at least 2000) for the scan', () => {
+  const { validateConfig } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 1 }).bars, 4140);
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3 }).bars, 2000);
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, bars: 800 }).bars, 800);
+});

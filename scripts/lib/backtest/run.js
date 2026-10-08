@@ -140,6 +140,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     const from = cfg.start === null ? 0 : Math.max(0, (first === -1 ? bars.length : first) - cfg.window - WARMUP_BARS);
     const to = cfg.end === null ? bars.length : bars.findIndex(b => ms(b) >= cfg.end);
     bars = bars.slice(from, to === -1 ? bars.length : to);
+    if (bars.every(b => !(b.v > 0))) log(`warning: ${m.file} has no volume (no volume column, or all zero); order-flow series (ofi, delta, vol_sma) are missing, so strategies using them never fire`);
     if (bars.length < cfg.window) throw new Error(`${m.file}: only ${bars.length} bars in range; need at least ${cfg.window} (window) before the first trade`);
     return { ...m, bars };
   });

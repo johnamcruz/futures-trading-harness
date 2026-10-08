@@ -127,8 +127,11 @@ bar files through the same strategy evaluator the live scan uses.
   backtest counts toward the peak. Live can therefore arm the trail one bar
   later than a backtest.
 - Rules are evaluated over the whole series in a backtest. Live, they see
-  the runner's last `bars`. Long EMAs, and `prior_*` levels on 1-minute
-  bars, can differ or be missing live unless `bars` covers them.
+  the runner's `bars`: by default three trading days (at least 2000 bars),
+  so prior-day and overnight levels, session VWAP and long indicators match
+  the backtest. A level or VWAP for a session the bars start in the middle
+  of is missing rather than wrong. A manual scan on fewer bars (e.g. a
+  500-bar `get_bars`) can show those as missing.
 - Order flow (`ofi`, `delta`) is estimated from each bar's shape and
   volume, not from a bid/ask split.
 - The hook can't see positions; only the gateway checks that `[exit]` and

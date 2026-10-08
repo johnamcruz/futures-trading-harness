@@ -22,7 +22,8 @@ const DEFAULTS = {
   workdir: 'workspace',
   timeframe: 3, // minutes per bar; a cycle runs after each closed bar
   trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
-  bars: 500, // closed bars written to dataDir and scanned each bar (algoTraderBot's BARS_WINDOW)
+  bars: null, // closed bars written to dataDir and scanned each bar; default max(2000, 3 trading days), so
+  // prior-day and overnight levels and long indicators match a backtest (cisd_ote still uses the last 500)
   dataDir: null, // default ~/.futures-trading-harness/bars (runner-owned; agents can read it but not write it)
   barDelaySeconds: 2, // wait after the scheduled close before polling
   barPollSeconds: 2, // between polls while waiting for the closed bar
@@ -131,6 +132,11 @@ function sessionPastEod(cfg) {
   return false;
 }
 
+/** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
+function historyBars(timeframe) {
+  return Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe));
+}
+
 function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
@@ -145,6 +151,7 @@ function validateConfig(raw) {
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
   if (!Array.isArray(cfg.earlyCloseDates) || !cfg.earlyCloseDates.every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push('earlyCloseDates: ["YYYY-MM-DD", ...]');
   if (cfg.earlyCloseEodAt && !parseAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone"');
+  if (cfg.bars === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.bars = historyBars(cfg.timeframe);
   for (const k of ['timeframe', 'bars', 'maxCyclesPerDay', 'cycleTimeoutMinutes', 'maxConsecutiveErrors', 'barPollSeconds', 'barTimeoutSeconds']) {
     if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive integer`);
   }
@@ -303,6 +310,7 @@ function cycleResult(output) {
 }
 
 module.exports = {
+  historyBars,
   DEFAULTS,
   HARNESSES,
   claudeTools,

@@ -264,7 +264,8 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'lowest': return rolling(field('l'), len, w => Math.min(...w));
         case 'ofi': return ind.ofi(bars, len);
         case 'delta': return rolling(ind.barDelta(bars), len, w => w.reduce((a, b) => a + b, 0));
-        case 'vol_sma': return rolling(field('v'), len, w => w.reduce((a, b) => a + (Number(b) || 0), 0) / len);
+        // No volume at all (a file without a volume column) is unknown, not 0.
+        case 'vol_sma': return rolling(field('v'), len, w => { const t = w.reduce((a, b) => a + (Number(b) || 0), 0); return t > 0 ? t / len : NaN; });
         default: break;
       }
     }

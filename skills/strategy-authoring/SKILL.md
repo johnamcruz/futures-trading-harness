@@ -56,9 +56,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    above it). `minute_et` is the bar's open time in New York minutes (9:45 =
    585). `prior_*` is the last completed RTH day and `overnight_*` this Globex
    session before 9:30 ET up to the previous bar, as each bar saw them; a
-   session the bars start mid-way through has none. The live scan sees the
-   runner's last `bars` (500), so on 1-minute bars `prior_*` stays missing
-   unless `bars` covers the prior RTH day. `ofi(n)` is order-flow imbalance
+   session the bars start mid-way through has none (likewise `vwap_session`
+   and `vwap_rth`). The runner scans three trading days of bars, enough
+   for these and for long indicators to match a backtest. `ofi(n)` is order-flow imbalance
    over n bars, from -1 (all selling) to +1 (all buying): each bar's volume
    signed by where it closed in its range. `delta(n)` is that signed volume
    summed, `vol_sma(n)` the average volume per bar. A value

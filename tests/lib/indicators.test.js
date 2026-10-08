@@ -67,7 +67,8 @@ test('anchored vwap resets at the anchor and rth vwap ignores overnight bars', (
   assert.ok(Number.isNaN(rth[0]));
   close(rth[1], 2); close(rth[2], 3.5);
   const globex = ind.anchoredVwap([bar(t(21, 55), 0, 10, 10, 10, 1), bar(t(22, 0), 0, 20, 20, 20, 1)], 18 * 60);
-  close(globex[0], 10); close(globex[1], 20); // 18:00 ET starts a new session
+  assert.ok(Number.isNaN(globex[0]), 'a session already under way at the first bar is partial');
+  close(globex[1], 20); // 18:00 ET starts a new session
 });
 
 test('ADX starts from flat bars instead of staying undefined', () => {
