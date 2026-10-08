@@ -10,7 +10,12 @@
  * server. Everything else passes through unchanged.
  */
 
-const ORDER_TOOL = /(?:^|__)(place_order|modify_order)$/;
+const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order)$/;
+// Calls that change orders or positions: the gateway waits for the server's
+// answer to each before reading the next client message, so a check never
+// runs while an earlier order is still in flight.
+const LANE_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
+const INTERNAL_ID = /^fth-gw-/;
 
 /** The gated tool name ('place_order' | 'modify_order') for a tools/call message, else null. */
 function orderTool(msg) {
@@ -21,6 +26,12 @@ function orderTool(msg) {
 
 function isOrderCall(msg) {
   return orderTool(msg) !== null;
+}
+
+/** True for a tools/call that changes orders or positions. */
+function isLaneCall(msg) {
+  return Boolean(msg && typeof msg === 'object' && msg.method === 'tools/call' && msg.params
+    && LANE_TOOL.test(String(msg.params.name || '')));
 }
 
 function blockedResponse(id, text) {
@@ -46,12 +57,16 @@ async function handleClientLine(line, check, log = () => {}) {
   }
 
   const decide = async item => {
+    // Ids starting with fth-gw- belong to the gateway's own calls to the server.
+    if (item && typeof item === 'object' && typeof item.id === 'string' && INTERNAL_ID.test(item.id)) {
+      return { blocked: { jsonrpc: '2.0', id: item.id, error: { code: -32600, message: 'request ids starting with fth-gw- are reserved by the gateway' } } };
+    }
     const tool = orderTool(item);
     if (!tool) return { item };
     const args = item.params.arguments || {};
     let result;
     try {
-      result = await check(args, tool);
+      result = await check(args, tool, item.id);
     } catch (err) {
       result = { allowed: false, message: `Blocked by trading harness gateway: the order gate could not run (${err.message}). The order was not sent.`, violations: [{ check: 'gateway-error', message: err.message }] };
     }
@@ -80,13 +95,13 @@ async function handleClientLine(line, check, log = () => {}) {
  * ids prefixed "fth-gw-" and their responses are consumed here, never shown to
  * the client.
  */
-function childCaller(writeToChild, { timeoutMs = 15000 } = {}) {
+function childCaller(writeToChild, { timeoutMs = 15000, nonce = require('crypto').randomBytes(6).toString('hex') } = {}) {
   let seq = 0;
   const pending = new Map();
   return {
     call(name, args) {
       seq += 1;
-      const id = `fth-gw-${seq}`;
+      const id = `fth-gw-${nonce}-${seq}`;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id);
@@ -144,4 +159,4 @@ function lineSplitter(onLine) {
   };
 }
 
-module.exports = { orderTool, isOrderCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+module.exports = { orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

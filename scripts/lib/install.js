@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadAgents, codexAgentsTable } = require('./harness-sync');
+const { NEWS_DOMAINS } = require('./autotrader');
 
 const MARK_BEGIN = '# >>> futures-trading-harness >>>';
 const MARK_END = '# <<< futures-trading-harness <<<';
@@ -121,18 +122,25 @@ function mergeQwenSettings(settings, root, projectxEntry) {
  */
 function qwenWorkspaceSettings(root, home) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
+  const h = p => abs(path.join(home, p));
+  const dataDir = path.join(home, '.futures-trading-harness', 'bars');
   return {
     permissions: {
       allow: [
-        'mcp__projectx', 'Read', 'Skill', 'Agent', 'WebFetch', 'web_search',
+        'mcp__projectx', 'Skill', 'Agent', 'web_search',
+        ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
+        `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs('/tmp/fth')}/**)`,
         'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
         ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
       ],
       deny: [
         `Edit(${abs(`${root}/**`)})`,
-        `Edit(${abs(path.join(home, '.futures-trading-harness'))}/**)`,
-        `Edit(${abs(path.join(home, '.projectx-mcp'))}/**)`,
-        `Edit(${abs(path.join(home, '.qwen'))}/**)`,
+        `Edit(${h('.futures-trading-harness')}/**)`,
+        `Edit(${h('.projectx-mcp')}/**)`,
+        `Edit(${h('.qwen')}/**)`,
+        `Read(${abs('/proc')}/**)`,
+        `Read(${h('.qwen')}/**)`, `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`,
+        `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
       ],
     },
   };

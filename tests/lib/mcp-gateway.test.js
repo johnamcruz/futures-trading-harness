@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { handleClientLine, isOrderCall, orderTool, childCaller, lineSplitter } = require('../../scripts/lib/trading/mcp-gateway');
+const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter } = require('../../scripts/lib/trading/mcp-gateway');
 
 const call = (id, name, args = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 const allow = () => ({ allowed: true, violations: [] });
@@ -66,6 +66,7 @@ test('childCaller correlates its own responses and leaves others alone', async (
   const sent = [];
   const caller = childCaller(line => sent.push(JSON.parse(line)), { timeoutMs: 50 });
   const p = caller.call('list_open_positions', { accountId: 1 });
+  assert.match(sent[0].id, /^fth-gw-[0-9a-f]{12}-1$/, 'ids carry a random nonce');
   assert.strictEqual(sent[0].params.name, 'list_open_positions');
   assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: 7, result: {} })), false);
   assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: sent[0].id, result: { ok: 1 } })), true);
@@ -74,4 +75,13 @@ test('childCaller correlates its own responses and leaves others alone', async (
   const q = caller.call('x', {});
   caller.rejectAll('server exited');
   await assert.rejects(q, /server exited/);
+});
+
+test('client requests may not use the gateway-reserved id prefix; lane calls are recognized', async () => {
+  const r = await handleClientLine(JSON.stringify({ jsonrpc: '2.0', id: 'fth-gw-1', method: 'tools/call', params: { name: 'list_open_positions' } }), () => ({ allowed: true }));
+  assert.strictEqual(r.forward, null);
+  assert.match(r.respond[0].error.message, /reserved/);
+  assert.strictEqual(isLaneCall(call(1, 'close_position')), true);
+  assert.strictEqual(isLaneCall(call(1, 'get_bars')), false);
+  assert.strictEqual(orderTool(call(1, 'cancel_order')), 'cancel_order');
 });

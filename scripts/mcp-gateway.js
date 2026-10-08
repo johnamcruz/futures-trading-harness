@@ -21,23 +21,31 @@
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, evaluateAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
+const { parseToolJson, netPosition, evaluateAccount, evaluateCancel, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 
 const ROOT = path.resolve(__dirname, '..');
+const LANE_TIMEOUT_MS = 30000;
+const LEDGER_TTL_MS = 30000;
 
-async function accountViolations(args, caller, now) {
+async function accountFacts(args, caller, withTrades = true) {
   const accountId = args.accountId;
   const [positions, orders, trades] = await Promise.all([
     caller.call('list_open_positions', { accountId }).then(r => parseToolJson(r, 'list_open_positions')),
     caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
-    caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')),
+    withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
   ]);
+  return { positions, orders, trades };
+}
+
+async function accountViolations(args, caller, now, ledger) {
+  const { positions, orders, trades } = await accountFacts(args, caller);
   const config = loadConfig(process.env);
-  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config });
+  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger });
   const gated = regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies);
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);
@@ -45,7 +53,7 @@ async function accountViolations(args, caller, now) {
     const result = parseToolJson(await caller.call('get_bars', req), 'get_bars');
     violations.push(...regimeViolation(gated, result.bars || result, config));
   }
-  return violations;
+  return { violations, observedNet: Array.isArray(positions) ? netPosition(positions, args.contractId) : null };
 }
 
 function main(argv) {
@@ -66,20 +74,62 @@ function main(argv) {
   const write = line => process.stdout.write(`${line}\n`);
   const toChild = line => { if (child.stdin.writable) child.stdin.write(`${line}\n`); };
   const caller = childCaller(toChild);
+  // Market orders let through recently, until the account reflects them (see pendingNet).
+  let ledger = [];
+  const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
 
-  const check = async (args, tool) => {
+  const check = async (args, tool, id) => {
     const now = new Date();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
+    if (tool === 'cancel_order') {
+      const { positions, orders } = await accountFacts(args, caller, false);
+      const violations = evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env) });
+      return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
+    }
     if (tool !== 'place_order') return base;
-    const extra = await accountViolations(args, caller, now);
-    const violations = [...base.violations, ...extra];
+    ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
+    const extra = await accountViolations(args, caller, now, ledger);
+    const violations = [...base.violations, ...extra.violations];
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
+  };
+
+  // Responses the order lane is waiting for, by client request id.
+  const waiting = new Map();
+  const awaitResponse = id => new Promise(resolve => {
+    const timer = setTimeout(() => { waiting.delete(id); resolve(null); }, LANE_TIMEOUT_MS);
+    waiting.set(id, msg => { clearTimeout(timer); resolve(msg); });
+  });
+  const noteResponse = line => {
+    if (waiting.size === 0) return;
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch (_err) {
+      return;
+    }
+    const done = msg && waiting.get(msg.id);
+    if (done) {
+      waiting.delete(msg.id);
+      done(msg);
+    }
+  };
+  const recordSent = (id, response) => {
+    const sent = sentNet.get(id);
+    sentNet.delete(id);
+    if (!sent || !response || response.error || (response.result && response.result.isError)) return;
+    const { args, observedNet } = sent;
+    if (String(args.type).toLowerCase() !== 'market' || observedNet === null) return; // resting orders show up in list_open_orders
+    const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, at: Date.now() });
   };
   const log = e => logDecision(e, process.env);
 
   // Server → client: whole lines only; responses to the gateway's own calls are consumed.
   const fromServer = lineSplitter(line => {
-    if (!caller.consume(line)) write(line);
+    if (caller.consume(line)) return;
+    write(line);
+    noteResponse(line);
   });
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', chunk => fromServer.push(chunk));
@@ -90,8 +140,19 @@ function main(argv) {
     queue = queue.then(async () => {
       const { forward, respond } = await handleClientLine(line, check, log);
       for (const r of respond) write(JSON.stringify(r));
-      if (forward !== null) toChild(forward);
-    });
+      if (forward === null) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(forward);
+      } catch (_err) {
+        parsed = null;
+      }
+      const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
+      const replies = lane.map(m => awaitResponse(m.id).then(r => recordSent(m.id, r)));
+      toChild(forward);
+      // Hold the lane until the server has answered every order-changing call.
+      await Promise.all(replies);
+    }).catch(err => process.stderr.write(`[mcp-gateway] ${err.message}\n`));
   });
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => fromClient.push(chunk));

@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, signalDecision } = require('../../scripts/lib/autotrader');
+const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -35,6 +35,11 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.ok(tools.includes('Bash(node /fth/scripts/strategies.js:*)'));
   assert.ok(!tools.some(t => t === 'Write' || t === 'Bash' || /^Bash\(node:/.test(t)), 'no general write or shell access');
   assert.deepStrictEqual(claudeTools('/r').filter(t => t.startsWith('Write')), ['Write(//tmp/fth/**)']);
+  assert.ok(!tools.includes('Read') && !tools.includes('WebFetch'), 'reads and fetches are scoped');
+  assert.ok(tools.includes('Read(//fth/**)') && tools.includes('WebFetch(domain:bls.gov)'));
+  const denied = claude[claude.indexOf('--disallowedTools') + 1].split(',');
+  assert.ok(denied.includes('Read(//proc/**)') && denied.includes('Write(//fth/**)'));
+  assert.ok(claudeDenied('/r', { home: '/h' }).includes('Edit(//h/.futures-trading-harness/**)'));
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);
   const qwen = buildCommand(cfg, p, '/fth');
@@ -113,6 +118,12 @@ test('signal trigger runs on an open position or a mechanical candidate only', (
   assert.deepStrictEqual(signalDecision([], -1), { run: true, reason: 'position open (net -1)' });
   assert.strictEqual(signalDecision([{ name: 'orb', candidate: true, signal: 'orb', direction: 'long' }], 0).reason, 'strategy candidate: orb long');
   assert.strictEqual(signalDecision([{ name: 'cisd_ote', candidate: true, signal: 'manual' }, { name: 'orb', candidate: false, signal: 'orb' }], 0).run, false);
+});
+
+test('Claude settings that ask or deny order tools are reported', () => {
+  assert.deepStrictEqual(claudeOrderToolConflicts([{ permissions: { ask: ['mcp__projectx__place_order', 'Bash'], allow: ['mcp__projectx__get_bars'] } }, { permissions: { deny: ['mcp__projectx'] } }]),
+    ['ask: mcp__projectx__place_order', 'deny: mcp__projectx']);
+  assert.deepStrictEqual(claudeOrderToolConflicts([{}, null]), []);
 });
 
 test('cycleResult finds the last reported result', () => {

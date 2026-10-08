@@ -36,7 +36,7 @@ inventory (Wednesday 10:30 ET); gold to US data and rates.
 (or `FTH_BLACKOUTS_FILE`): a JSON array of `{ "start": ISO-8601, "end":
 ISO-8601, "reason": "CPI" }`. During premarket, after confirming the
 day's calendar, add the high-impact events with a 5–10 minute buffer on each
-side using `node <root>/scripts/blackouts.js" add --start <ISO> --end <ISO> --reason <event>`.
+side using `node <root>/scripts/blackouts.js add --start <ISO> --end <ISO> --reason <event>`.
 The script is append-only; never edit the file by hand.
 
 ## Examples

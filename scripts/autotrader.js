@@ -29,7 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
@@ -192,7 +192,17 @@ function checkStrategies(cfg) {
 }
 
 function resolveDataDir(cfg) {
-  return cfg.dataDir ? cfg.dataDir.replace(/^~(?=\/)/, os.homedir()) : path.join(HOME_DIR, 'bars');
+  return dataDirFor(cfg);
+}
+
+/** Claude settings that would silently refuse order tools in an unattended run. */
+function checkClaudeSettings(cfg) {
+  if (cfg.harness !== 'claude') return;
+  const files = [path.join(os.homedir(), '.claude', 'settings.json'), path.join(ROOT, cfg.workdir, '.claude', 'settings.json'), path.join(ROOT, cfg.workdir, '.claude', 'settings.local.json')];
+  const hits = claudeOrderToolConflicts(files.map(f => readJson(f, null)).filter(Boolean));
+  if (hits.length) {
+    throw new Error(`Claude settings would block order tools in unattended runs (${hits.join('; ')}). Remove these ask/deny rules for autonomous use; the order gate and the runner's allowlist still apply.`);
+  }
 }
 
 async function main(argv) {
@@ -203,6 +213,7 @@ async function main(argv) {
   const opts = { dryRun: argv.includes('--dry-run') };
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   checkStrategies(cfg);
+  checkClaudeSettings(cfg);
 
   const once = arg(argv, '--once');
   if (once) {

@@ -188,3 +188,26 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.strictEqual(log[0].decision, 'blocked');
 });
+
+test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills are in flight', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const env = {
+    PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '',
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const exit = id => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, side: 'sell', rationale: '[exit] flatten' } } });
+  // Three exits written at once, as parallel tool calls would.
+  gw.stdin.write(`${[exit(1), exit(2), exit(3)].map(m => JSON.stringify(m)).join('\n')}\n`);
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
+  assert.strictEqual(byId[1].result.isError, undefined, 'the first exit is forwarded');
+  for (const id of [2, 3]) {
+    assert.strictEqual(byId[id].result.isError, true, `exit ${id} must be blocked`);
+    assert.match(byId[id].result.content[0].text, /\[exposure\]/);
+  }
+});

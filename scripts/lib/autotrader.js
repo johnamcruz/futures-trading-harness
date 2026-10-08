@@ -8,6 +8,8 @@
  * order gate and the projectx-mcp guardrails.
  */
 
+const os = require('os');
+const path = require('path');
 const { parseWindows, inWindow, minutesOfDay, zonedParts } = require('./trading/clock');
 
 const DEFAULTS = {
@@ -39,19 +41,66 @@ const DEFAULTS = {
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
 const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
+/** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
+const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
+
+/** Where the runner writes closed bars (runner-owned; agents read it). */
+function resolveDataDir(cfg, home = os.homedir()) {
+  return cfg.dataDir ? cfg.dataDir.replace(/^~(?=\/)/, home) : path.join(home, '.futures-trading-harness', 'bars');
+}
+
+/** Claude rule for an absolute path ("//abs/path"). */
+const abs = p => `/${p}`;
 
 /**
- * Claude Code tools for an autonomous run: the projectx MCP server, reading,
- * scratch files under /tmp/fth, and only the harness's own read/append scripts
- * by absolute path. No general shell or file writes, so the run can't edit
- * strategies, settings, the kill switch, or the journal file.
+ * Claude Code permissions for an autonomous run. Allowed: the projectx MCP
+ * server, reading the harness, the bar data, and /tmp/fth, writing /tmp/fth,
+ * the harness's own read/append scripts by absolute path, skills, subagents,
+ * web search, and fetching calendar sites. Denied explicitly (deny beats any
+ * broader allow in the user's settings): reading credentials and other
+ * agents' configs, and writing the harness, its state, or Claude settings.
  */
-function claudeTools(root) {
+function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home) } = {}) {
   return [
-    'mcp__projectx', 'Read', 'Glob', 'Grep', 'Skill', 'Agent', 'WebSearch', 'WebFetch',
+    'mcp__projectx', 'Skill', 'Agent', 'WebSearch',
+    ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
+    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, 'Read(//tmp/fth/**)',
     'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
   ];
+}
+
+function claudeDenied(root, { home = os.homedir() } = {}) {
+  const h = p => abs(path.join(home, p));
+  return [
+    'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
+    `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
+    `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
+    `Edit(${h('.futures-trading-harness')}/**)`, `Write(${h('.futures-trading-harness')}/**)`,
+    `Edit(${h('.projectx-mcp')}/**)`, `Write(${h('.projectx-mcp')}/**)`,
+    `Edit(${h('.claude')}/**)`, `Write(${h('.claude')}/**)`,
+  ];
+}
+
+const ORDER_TOOL_NAMES = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
+
+/**
+ * Claude settings rules that would stop an autonomous run from using order
+ * tools: "ask" beats "allow" and is refused without a user, and "deny" wins.
+ * Returns the offending rules from the given settings objects.
+ */
+function claudeOrderToolConflicts(settingsList) {
+  const hits = [];
+  for (const s of settingsList) {
+    const perms = (s && s.permissions) || {};
+    for (const kind of ['ask', 'deny']) {
+      for (const rule of perms[kind] || []) {
+        const r = String(rule);
+        if (r === 'mcp__projectx' || ORDER_TOOL_NAMES.some(t => r === `mcp__projectx__${t}`)) hits.push(`${kind}: ${r}`);
+      }
+    }
+  }
+  return hits;
 }
 
 function parseAt(spec) {
@@ -137,7 +186,9 @@ function buildCommand(cfg, prompt, root) {
   switch (cfg.harness) {
     case 'claude':
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root).join(','), ...(model ? ['--model', model] : []), ...extra];
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg) }).join(','),
+        '--disallowedTools', claudeDenied(root).join(','),
+        ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"', ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
@@ -227,6 +278,10 @@ module.exports = {
   DEFAULTS,
   HARNESSES,
   claudeTools,
+  claudeDenied,
+  claudeOrderToolConflicts,
+  resolveDataDir,
+  NEWS_DOMAINS,
   childEnv,
   parseAt,
   validateConfig,

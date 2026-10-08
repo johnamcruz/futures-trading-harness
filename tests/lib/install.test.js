@@ -60,8 +60,11 @@ test('qwen workspace permissions allow harness scripts and deny edits to the har
   assert.ok(p.allow.includes('mcp__projectx'));
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
   assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
-  assert.ok(!p.allow.some(r => r === 'Bash' || r === 'Edit'));
-  assert.deepStrictEqual(p.deny, ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/**)', 'Edit(//home/u/.qwen/**)']);
+  assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
+  assert.ok(p.allow.includes('WebFetch(bls.gov)'));
+  assert.ok(!p.allow.some(r => ['Bash', 'Edit', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
+  for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/**)', 'Edit(//home/u/.qwen/**)',
+    'Read(//proc/**)', 'Read(//home/u/.claude.json)', 'Read(//fth/**/.env)']) assert.ok(p.deny.includes(rule), rule);
 });
 
 test('plans write to the right files and backups are made', () => {

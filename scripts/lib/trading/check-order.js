@@ -38,6 +38,8 @@ function readBlackouts(file) {
  */
 function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order' } = {}) {
   const config = loadConfig(env);
+  // cancel_order needs live account data; only the gateway checks it (account-gate.js).
+  if (tool === 'cancel_order') return { allowed: true, intent: 'cancel', violations: [], message: '' };
   if (tool === 'modify_order') {
     const r = evaluateModify({ input: input || {}, config });
     const ok = r.violations.length === 0;

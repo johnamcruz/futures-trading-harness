@@ -50,9 +50,9 @@ native adapters generated for each harness.
 |---|---|---|---|
 | Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT flatten | No |
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
-| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position, no entries while a position is open, loss streak and daily losses from real fills, no resizing working orders | No (deterministic, fails closed) |
+| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, no resizing working orders, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane: each waits for the server's answer, and market orders not yet visible in positions are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
-| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), tool allowlists with no general shell or file writes, kill switch, caps, timeouts, end-of-day catch-up | No |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/` and `/tmp`; the shell is available) | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
 Always register projectx **through the gateway** (the installer does): it is
@@ -236,6 +236,21 @@ with the allowlist in `workspace/.qwen/settings.json`, and Codex runs in its
 `workspace-write` sandbox. Start with `"paper": true` and tight server limits
 (`PROJECTX_MAX_POSITION_SIZE=1`, a small `PROJECTX_MAX_DAILY_LOSS`, a practice
 account in `PROJECTX_ALLOWED_ACCOUNT_IDS`).
+
+For unattended Claude runs, remove any `ask` rules on projectx order tools
+from your Claude settings (`mcp-configs/settings.example.json` has them for
+interactive use): "ask" can't be answered without a user, so the runner
+refuses to start while they're present.
+
+More runner settings: `"cycle": "lean"` skips the parallel analysts unless a
+strategy fires (use it for 1-minute bars so a cycle fits in one bar);
+`maxCyclesPerDay` (400) switches to manage-only cycles once reached;
+`cycleTimeoutMinutes` defaults to max(3, 2 x timeframe), and a cycle stopped
+by the timeout makes the next one start by checking protective stops;
+`earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME early-close
+sessions; bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
+`dataDir` is set. With several `symbols`, one cycle covers every symbol whose
+bar closed, so none is starved.
 
 ### Order gate settings
 

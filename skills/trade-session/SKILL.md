@@ -29,6 +29,14 @@ inside one run.
 
 ### 2. Parallel read
 
+**Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
+fits inside one bar): skip the parallel analysts. Run market-snapshot and
+`strategies.js scan` on the bars file yourself, manage any open position, and
+only when a strategy is a candidate run `risk-manager` (phase 1 and 2) before
+executing. Everything else in this skill still applies.
+
+**Full cycle** (default):
+
 If the prompt names a bars file (the autonomous runner writes the bars that
 just closed, e.g. `/tmp/fth/MNQ-3m.json`), pass its path to every analyst:
 they run market-snapshot and `strategies.js scan` on it instead of fetching

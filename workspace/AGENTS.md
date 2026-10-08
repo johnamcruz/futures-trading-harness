@@ -8,12 +8,14 @@ harness (Claude Code, Codex, Qwen Code, or any agent that reads AGENTS.md).
 
 ## Start here
 
-- The harness root (`FTH_ROOT`) is the parent of this `workspace/` folder;
-  scripts live in `$FTH_ROOT/scripts/`, strategies in `$FTH_ROOT/strategies/`.
-- Before trading, read the skill you need from `$FTH_ROOT/skills/<name>/SKILL.md`
+- The harness root (`<root>`, also in `FTH_ROOT` and the session briefing) is the
+  absolute path of the parent of this `workspace/` folder. Scripts are in
+  `<root>/scripts/`, strategies in `<root>/strategies/`. Always write the absolute
+  path in commands; autonomous runs only allow the harness scripts that way.
+- Before trading, read the skill you need from `<root>/skills/<name>/SKILL.md`
   if your harness has not loaded it. Start with `trade-session`, `premarket`,
   `end-of-day`, or `autonomous-trading`.
-- Strategies are Markdown files: `node "$FTH_ROOT/scripts/strategies.js" list`.
+- Strategies are Markdown files: `node <root>/scripts/strategies.js list`.
 - Delegate to the agent roles below with your harness's subagents; without
   subagents, read the role file and play the role yourself.
 
