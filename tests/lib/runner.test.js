@@ -287,7 +287,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
       },
       async accountState() {
         return {
-          positions: closed.length ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500 }],
+          positions: closed.length ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(et(10, 0) + 5000).toISOString() }],
           orders: closed.length ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice }],
         };
       },
@@ -300,7 +300,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
     clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: () => '/b.json', scanFor: () => [],
-    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40 }],
+    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(et(10, 0) + 3000).toISOString() }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
   while (clockRef.t < et(10, 15)) clockRef.t += await runner.step();
@@ -308,4 +308,84 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
   // Bar 4: peak 4R -> 21535, but its low 21534 is already through it -> closed at market.
   assert.deepStrictEqual(modified, [21520, 21530]);
   assert.deepStrictEqual(closed, ['CON.F.US.MNQ.Z26']);
+});
+
+/**
+ * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
+ * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
+ */
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490 }) {
+  const clockRef = { t: et(10, 0) + 2000 };
+  const step = 180000;
+  const calls = { modified: [], closed: [], cancelled: [] };
+  let stopPrice = stopAt;
+  let failsLeft = modifyFails;
+  let flat = false;
+  const runner = createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+    client: {
+      async activeContract() { return { id: 'CON.F.US.MNQ.Z26', tickSize: 0.25, tickValue: 0.5 }; },
+      async closedBars() {
+        const lastOpen = Math.floor((clockRef.t - 1000) / step) * step - step;
+        const out = [];
+        for (let t = lastOpen - 6 * step; t <= lastOpen; t += step) {
+          const m = Math.round((t - et(10, 0)) / 60000);
+          const [h, l, c] = tape[m] || [21501, 21499, 21500];
+          out.push({ t: new Date(t).toISOString(), o: c, h, l, c, v: 1 });
+        }
+        return out;
+      },
+      async accountState() {
+        return {
+          positions: flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }],
+          orders: calls.cancelled.length ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice }, { id: 10, contractId: 'CON.F.US.MNQ.Z26', type: 1, side: 1, size: 1, limitPrice: 21600 }],
+        };
+      },
+      async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
+      async closePosition() { calls.closed.push(clockRef.t); flat = true; },
+      async cancelOrder(acct, id) { calls.cancelled.push(id); },
+      async netPosition() { return flat ? 0 : 1; },
+      async workingOrders() { return 1; },
+    },
+    clock: { now: () => new Date(clockRef.t) },
+    runCycle: async () => { clockRef.t += cycleMs; return { ok: true, timedOut: false }; },
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+    writeBars: () => '/b.json', scanFor: () => [],
+    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
+    strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
+  });
+  while (clockRef.t < until) clockRef.t += await runner.step();
+  return { ...calls, runner };
+}
+
+test('trailing: prices from before a mid-bar fill do not count toward the peak', async () => {
+  // A limit fills at 10:04:30 inside the 10:03 bar, which earlier traded up to 21521.
+  const r = await trailSim({ tape: { 3: [21521, 21499, 21503] }, fillAt: et(10, 4, 30), until: et(10, 12) });
+  assert.deepStrictEqual([r.modified, r.closed], [[], []]);
+});
+
+test('trailing: bars that close while a cycle runs are still applied, in order', async () => {
+  const r = await trailSim({ tape: { 0: [21525, 21521, 21524], 3: [21524, 21515, 21516] }, cycleMs: 290000, until: et(10, 15) });
+  // Peak 2.5R on the 10:00 bar -> stop 21520; the 10:03 bar (seen late) goes through it.
+  assert.ok(r.modified.includes(21520) || r.closed.length === 1, JSON.stringify(r));
+});
+
+test('trailing: when the modify fails, a bar through the unrested level closes the trade and its orders are cancelled', async () => {
+  const r = await trailSim({ tape: { 0: [21525, 21521, 21524], 3: [21524, 21518, 21519] }, modifyFails: 5, until: et(10, 12) });
+  assert.strictEqual(r.closed.length, 1);
+  assert.deepStrictEqual(r.cancelled.sort(), [10, 9]);
+});
+
+test('trailing: an entry record from an earlier day is not used for today\'s position', async () => {
+  const r = await trailSim({ tape: { 0: [21525, 21521, 21524] }, record: { at: new Date(et(10, 0) - 864e5).toISOString(), stopTicks: 8 }, until: et(10, 9) });
+  assert.deepStrictEqual([r.modified, r.closed], [[], []]);
+});
+
+test('after the session, with trades today, the runner keeps housekeeping until end of day', () => {
+  const { decide } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', account: '7' });
+  const s = { day: '2026-10-07', premarketDone: true, eodDone: false, cycles: 5, lastCycleAt: null };
+  assert.strictEqual(decide(cfg, s, new Date(et(15, 20))).action, 'housekeep');
+  assert.strictEqual(decide(cfg, { ...s, cycles: 0 }, new Date(et(15, 20))).action, null);
+  assert.strictEqual(decide(cfg, s, new Date(et(15, 55))).action, 'eod');
 });

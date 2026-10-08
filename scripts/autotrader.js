@@ -111,12 +111,17 @@ function runOnce(cfg, argv, timeoutMs) {
 }
 
 let workspaceBaseline = null;
+// The files as they were when the guard last tripped: already reported, so
+// they don't trip it again once the operator has looked and cleared the kill switch.
+let workspaceAcknowledged = null;
 
 /** Refuse to run (and switch trading off) if a run changed the workspace's instructions or settings. */
 function guardWorkspace(cfg, killSwitchFile, when) {
   if (!workspaceBaseline) return true;
-  const changed = changedFiles(workspaceBaseline, workspaceFingerprint(path.resolve(ROOT, cfg.workdir)));
-  if (!changed.length) return true;
+  const current = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
+  const changed = changedFiles(workspaceBaseline, current);
+  if (!changed.length) return true; // as at start (or restored)
+  if (workspaceAcknowledged && !changedFiles(workspaceAcknowledged, current).length) return true; // already reported
   const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review the change (git diff workspace/; node scripts/sync-harness.js restores generated files), then remove this file to resume.`;
   try {
     if (!fs.existsSync(killSwitchFile)) fs.writeFileSync(killSwitchFile, `${reason}\n`);
@@ -124,10 +129,10 @@ function guardWorkspace(cfg, killSwitchFile, when) {
     // reported below either way
   }
   process.stderr.write(`[autotrader] ${reason}\n`);
-  // The kill switch now carries the alarm; take the files as they are as the
-  // new baseline, so removing the kill switch resumes trading and end of day
-  // isn't failed over and over.
-  workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
+  // The kill switch now carries the alarm. Restoring the files, or removing
+  // the kill switch after looking at them, resumes trading; any further
+  // change trips the guard again.
+  workspaceAcknowledged = current;
   return false;
 }
 

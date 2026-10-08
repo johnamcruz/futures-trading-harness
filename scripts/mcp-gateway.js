@@ -49,7 +49,9 @@ function recordEntryOrder(env, orderId, args) {
     const file = path.join(harnessHome(env), 'entry-orders.json');
     const list = readJson(file, []);
     const setup = /^\s*setup:([a-z0-9][a-z0-9_-]*)/i.exec(String(args.rationale || ''));
-    const stop = STOP_PRICE.exec(String(args.rationale || ''));
+    // The planned stop is the last "stop <price>" ("buy stop 21510 above the high, stop 21490" plans 21490).
+    const stops = [...String(args.rationale || '').matchAll(new RegExp(STOP_PRICE.source, 'gi'))];
+    const stop = stops.length ? stops[stops.length - 1] : null;
     const entry = {
       orderId, contractId: args.contractId, side: String(args.side || '').toLowerCase(), setup: setup ? setup[1].toLowerCase() : null,
       stopTicks: args.stopLossBracket && Number(args.stopLossBracket.ticks) > 0 ? Number(args.stopLossBracket.ticks) : null,

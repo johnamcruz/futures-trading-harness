@@ -256,13 +256,17 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   const eod = parseAt(cfg.earlyCloseDates.includes(key) && cfg.earlyCloseEodAt ? cfg.earlyCloseEodAt : cfg.eodAt);
   const afterEod = eod && minutesOfDay(now, eod.timeZone) >= eod.minute;
   if (afterEod) return { action: s.eodDone ? null : 'eod', state: s };
-  if (killSwitch) return { action: null, state: s };
+  // After the day has traded and until end of day, keep the runner's
+  // housekeeping (trailing stops, leftover orders) going even when no cycle
+  // may run: outside the sessions or with the kill switch on.
+  const idle = { action: cfg.account && !cfg.paper && s.cycles > 0 ? 'housekeep' : null, state: s };
+  if (killSwitch) return idle;
 
   const pre = parseAt(cfg.premarketAt);
   if (pre && !s.premarketDone && minutesOfDay(now, pre.timeZone) >= pre.minute) return { action: 'premarket', state: s };
 
   const windows = parseWindows(cfg.sessions.join(',')).windows;
-  if (!windows.some(w => inWindow(now, w))) return { action: null, state: s };
+  if (!windows.some(w => inWindow(now, w))) return idle;
   // Past the cap, keep managing positions and working orders; just no new entries.
   return { action: s.cycles >= cfg.maxCyclesPerDay ? 'manage' : 'trade', state: s };
 }

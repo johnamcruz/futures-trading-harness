@@ -29,6 +29,7 @@ const { decide, recordRun, prompts, signalDecision, dayKey } = require('./autotr
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot } = require('./trading/journal');
 const { trailStep } = require('./trading/trail');
+const { tradingDayStart } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
 
 const IDLE_MS = 5000;
@@ -36,6 +37,7 @@ const RESYNCS_BEFORE_REROLL = 3;
 const MAX_POLL_MS = 10000;
 const LOOKUP_RETRY_MS = 30000;
 const MAX_RETRY_MS = 60000;
+const FILL_GRACE_MS = 30000;
 
 function createRunner(deps) {
   const {
@@ -97,13 +99,13 @@ function createRunner(deps) {
       }
       if (step.event === 'bar' || step.event === 'stale') sym = { ...sym, misses: 0, resyncs: 0 };
       syms[i] = sym;
-      if (step.event === 'stale' && !recover) {
-        log(`${sym.symbol}: bar ${step.bar.t} skipped, closed too long ago to act on`);
-        return null;
-      }
       if (step.event !== 'bar' && step.event !== 'stale') return null;
+      // A stale bar (closed while a cycle ran) starts no cycle, but its prices
+      // still feed the trailing stop and the leftover-order check.
+      const stale = step.event === 'stale' && !recover;
+      if (stale) log(`${sym.symbol}: bar ${step.bar.t} closed too long ago to start a cycle; housekeeping only`);
       const file = writeBars(sym, step.bars);
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars: step.bars, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars: step.bars, stale, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -124,60 +126,105 @@ function createRunner(deps) {
   }
 
   /**
-   * Trailing exit for a position whose strategy trails (exit block). The
-   * trade's entry, initial risk, and peak live in state.trails[contractId],
-   * keyed by the position, so a restart keeps the peak.
+   * Trailing exit for a position whose strategy trails (exit block), the
+   * backtester's rule applied live:
+   *   - the trade is matched to the entry the gateway recorded for it (same
+   *     root and side, recorded this trading day and no later than the fill);
+   *   - 1R comes from the planned bracket, else the working stop when the
+   *     trade is first seen, else the "stop <price>" in the rationale, and must
+   *     be at least 4 ticks;
+   *   - only bars that opened after the fill count (the fill bar's earlier
+   *     prices aren't the trade's; a fill within 30 s of a bar's open counts
+   *     that bar), and every such bar is applied once, in
+   *     order, even the ones that closed while a cycle was running;
+   *   - the resting stop order is the truth: the stop is tightened by
+   *     modifying it, the new level is kept only once the modify succeeded,
+   *     and when a bar went through a level the resting stop wasn't at yet,
+   *     the trade is closed at market and its leftover orders are cancelled.
+   * State lives in state.trails[contractId], keyed by the position.
    */
   async function trailPosition(item, { positions, orders }) {
     const p = positions.find(x => x.contractId === item.contractId && Number(x.size || 0) > 0);
     const trails = { ...(state.trails || {}) };
+    const save = t => { trails[item.contractId] = t; state = { ...state, trails }; };
     if (!p) {
       if (trails[item.contractId]) { delete trails[item.contractId]; state = { ...state, trails }; }
       return;
     }
+    const tick = Number(item.tickSize) || 0;
     const sign = p.type === 1 ? 1 : p.type === 2 ? -1 : 0;
+    const opened = Date.parse(p.creationTimestamp);
     const key = String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`);
     const protective = orders.filter(o => o.contractId === item.contractId && Number(o.type) === 4 && (Number(o.side) === 0 ? 1 : -1) === -sign);
     const stopOrder = protective.length === 1 ? protective[0] : null;
     let t = trails[item.contractId];
     if (!t || t.key !== key) {
       const side = sign > 0 ? 'buy' : 'sell';
-      const rec = [...entryOrders()].reverse().find(e => contractRoot(e.contractId) === contractRoot(item.contractId) && e.setup && (!e.side || e.side === side));
+      const firstSeen = clock.now().getTime();
+      const fillAt = Number.isFinite(opened) ? opened : firstSeen;
+      const dayStart = tradingDayStart(new Date(fillAt)).getTime();
+      const rec = [...entryOrders()].reverse().find(e => {
+        const at = Date.parse(e.at);
+        return contractRoot(e.contractId) === contractRoot(item.contractId) && e.setup && (!e.side || e.side === side)
+          && at >= dayStart && at <= fillAt + 120000;
+      });
       const strategy = rec && strategyNamed(rec.setup);
       const plan = strategy ? exitPlan(strategy) : null;
       const entry = Number(p.averagePrice);
-      const tick = Number(item.tickSize) || 0;
       let risk = null;
       if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;
-      else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
       else if (stopOrder && sign * (entry - Number(stopOrder.stopPrice)) > 0) risk = sign * (entry - Number(stopOrder.stopPrice));
-      t = plan && plan.trailActivateR !== null && risk > 0 && tick > 0
-        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, plan }
+      else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
+      const ok = plan && plan.trailActivateR !== null && tick > 0 && risk >= 4 * tick - 1e-9;
+      t = ok
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, plan, since: fillAt, lastBarT: null }
         : { key, skip: true };
-      trails[item.contractId] = t;
-      state = { ...state, trails };
-      if (!t.skip) log(`${item.symbol}: trailing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R)`);
+      save(t);
+      if (ok) log(`${item.symbol}: trailing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R)`);
+      else if (plan && plan.trailActivateR !== null) log(`${item.symbol}: ${rec.setup} position not trailed: no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
-    const bar = item.bars[item.bars.length - 1];
-    const current = stopOrder ? Number(stopOrder.stopPrice) : t.stop;
-    const step = trailStep({ ...t, stop: sign > 0 ? Math.max(current, t.stop) : Math.min(current, t.stop) }, bar, t.plan, Number(item.tickSize));
-    trails[item.contractId] = { ...t, peakR: step.peakR, stop: step.stop };
-    state = { ...state, trails };
-    if (step.close) {
+    // Every bar that opened after the fill (a market fill seconds into a bar
+    // counts that bar, as the backtest does) and hasn't been applied yet.
+    const bars = item.bars.filter(b => Date.parse(b.t) >= t.since - FILL_GRACE_MS && (t.lastBarT === null || Date.parse(b.t) > Date.parse(t.lastBarT)));
+    if (!bars.length) return;
+    const resting = stopOrder ? Number(stopOrder.stopPrice) : t.stop;
+    let peakR = t.peakR;
+    let target = resting;
+    let cross = null;
+    for (const bar of bars) {
+      // A level the resting stop never reached (a modify that failed or came
+      // too late) protects nothing: a bar through it means out at market.
+      if (sign * (target - resting) > 0 && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
+      const step = trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
+      peakR = step.peakR;
+      target = step.stop;
+      if (step.close) { cross = { bar, stop: step.stop }; break; }
+    }
+    const lastBarT = bars[bars.length - 1].t;
+    if (cross) {
+      const level = cross.stop;
       await client.closePosition(cfg.account, item.contractId);
-      log(`${item.symbol}: trail: bar ${bar.t} went through the new stop ${step.stop}; closed ${t.setup} at market (peak ${step.peakR.toFixed(2)}R)`);
+      save({ ...t, peakR, lastBarT });
+      log(`${item.symbol}: trail: price went through the new stop ${level} (resting ${resting}); closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
+      for (const o of orders.filter(x => x.contractId === item.contractId)) {
+        try {
+          await client.cancelOrder(cfg.account, o.id);
+        } catch (err) {
+          log(`${item.symbol}: could not cancel ${o.id} after the trail close (${err.message}); the next bar retries`, 'error');
+        }
+      }
       return;
     }
+    save({ ...t, peakR, lastBarT });
+    if (sign * (target - resting) < tick - 1e-9) return;
     if (!stopOrder) {
-      if (step.active) log(`${item.symbol}: trail wants the stop at ${step.stop} but there is no single working stop order to move`, 'error');
+      log(`${item.symbol}: trail wants the stop at ${target} but there is no single working stop order to move`, 'error');
       return;
     }
-    const tick = Number(item.tickSize);
-    if (sign * (step.stop - current) >= tick - 1e-9) {
-      await client.modifyStop(cfg.account, stopOrder.id, step.stop);
-      log(`${item.symbol}: trail: stop ${current} -> ${step.stop} (peak ${step.peakR.toFixed(2)}R)`);
-    }
+    await client.modifyStop(cfg.account, stopOrder.id, target);
+    save({ ...trails[item.contractId], stop: target });
+    log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);
   }
 
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
@@ -249,7 +296,7 @@ function createRunner(deps) {
       // A failed end of day is retried, with a growing pause (5 s .. 60 s).
       return ok ? 0 : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
     }
-    if (d.action !== 'trade' && d.action !== 'manage') return IDLE_MS;
+    if (d.action !== 'trade' && d.action !== 'manage' && d.action !== 'housekeep') return IDLE_MS;
 
     const ready = [];
     for (let i = 0; i < syms.length; i += 1) {
@@ -259,15 +306,16 @@ function createRunner(deps) {
       if (item) ready.push(item);
     }
     if (ready.length) {
+      // Trailing stops and leftover orders first: they only ever reduce risk.
+      for (const item of ready) await housekeeping(item);
+      if (state.trails) saveState(state);
       // Re-check: a symbol's poll may have taken a while, the kill switch may be on now.
       const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() });
       state = again.state;
       if (again.action === 'trade' || again.action === 'manage') {
         const manageOnly = again.action === 'manage';
         const run = [];
-        for (const item of ready) await housekeeping(item);
-        if (state.trails) saveState(state);
-        for (const item of ready) {
+        for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
           if (w.run) run.push(item);
           else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
