@@ -7,6 +7,7 @@
  */
 
 const ind = require('./indicators');
+const { classifyRegime } = require('./regime');
 const { zonedParts } = require('./clock');
 
 const PARAMS = {
@@ -127,6 +128,7 @@ function snapshot(input, overrides = {}) {
       vwapRth: round(at(vwapRth, i)),
     },
     signals,
+    regime: classifyRegime(bars),
     referenceStop: stopDistance === null ? null : {
       distance: round(stopDistance),
       long: round(last.c - stopDistance),

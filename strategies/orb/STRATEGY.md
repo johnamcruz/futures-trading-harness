@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:45-11:30@America/New_York"]
+regimes: [trend, transition, high-vol]
 signal: orb
 params:
   orbMinutes: 15

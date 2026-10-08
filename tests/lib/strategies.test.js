@@ -73,7 +73,7 @@ test('scan reports mechanical candidates with filters and sessions, and lists ma
   push(100, 101.2, 99.9, 100.8);
   push(100.8, 102, 100.7, 101.9); // closes above the 101 OR high at 09:48 ET
   const { strategies } = loadStrategies(ROOT, {});
-  const loose = strategies.map(s => (s.name === 'orb' ? { ...s, filters: {}, params: { orbAdx: 0 } } : s));
+  const loose = strategies.map(s => (s.name === 'orb' ? { ...s, filters: {}, params: { orbAdx: 0 }, regimes: undefined } : s));
   const results = scan(loose, { bars }, { symbol: 'MNQ' });
   const orb = results.find(r => r.name === 'orb');
   assert.strictEqual(orb.direction, 'long');
@@ -129,4 +129,16 @@ test('a rules strategy written only in Markdown validates and fires in scan', ()
   assert.ok(Array.isArray(r.rules.long));
   assert.strictEqual(r.rules.long[1].ok, true);
   assert.strictEqual(r.direction, 'long');
+});
+
+test('scan marks strategies out of regime and never makes them candidates', () => {
+  const { strategies } = loadStrategies(ROOT, {});
+  const t = i => new Date(Date.UTC(2026, 9, 7, 13, 30) + i * 180000).toISOString();
+  const ranging = Array.from({ length: 160 }, (_, k) => { const c = 100 + Math.sin(k / 2) * 2; return { t: t(k), o: c, h: c + 1, l: c - 1, c, v: 1 }; });
+  const results = scan(strategies, { bars: ranging }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 9, 7, 15, 0)) });
+  const bos = results.find(r => r.name === 'bos');
+  assert.strictEqual(bos.regime, 'range');
+  assert.strictEqual(bos.inRegime, false);
+  assert.strictEqual(bos.candidate, false);
+  assert.strictEqual(results.find(r => r.name === 'cisd_ote').inRegime, true);
 });

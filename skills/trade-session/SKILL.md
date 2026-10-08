@@ -54,8 +54,13 @@ and the current time.
 
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
-- Pick at most one strategy that is a `candidate` in the scan (or a manual
-  strategy whose trigger you verified on closed bars). `show` it (strategy-library)
+- Start from the computed regime (`regime` in market-snapshot, the same value
+  `strategies.js scan` reports): trend-up, trend-down, range, or transition,
+  plus volatility. Don't override it with a narrative; if the analysts disagree
+  with it, say why in the plan.
+- Pick at most one strategy that is a `candidate` in the scan (candidates are
+  already in session and in regime), or a manual strategy whose trigger you
+  verified on closed bars and whose `regimes` fit. `show` it (strategy-library)
   and check every context filter and skip rule against the reports.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
@@ -63,7 +68,7 @@ and the current time.
 
 ### 4. Plan
 
-`journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`:
+`journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>", "regime:<primary>"]}`:
 thesis, trigger (what happened, price, time), entry, stop, target, size
 (position-sizing), $ risk, R:R, skip rules checked, analyst agreement. Add the
 tag `paper` in plan-only mode.

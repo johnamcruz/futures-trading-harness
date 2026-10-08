@@ -17,7 +17,11 @@ How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX 
    new mechanical detector.
 4. **Workflows are skills.** Every harness supports SKILL.md; commands are thin
    shims.
-5. **Autonomy is a scheduler, not a long-lived agent.** Each cycle is one
+5. **Regime-aware strategy selection.** A deterministic regime label on every
+   closed bar decides which strategies are in play (`regimes:` in STRATEGY.md);
+   reviews tagged by regime feed the per-regime scorecard, which is how the
+   lineup adapts over time.
+6. **Autonomy is a scheduler, not a long-lived agent.** Each cycle is one
    short, headless run with a fresh context; state lives in the journal.
 
 ## Harness support
@@ -58,6 +62,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `exposure` | `[exit]`/`[protect]` must be opposite the open position, within its size, without stacking resting stops or limits beyond it | no | yes |
 | `position-open` | No new entry while the contract has a position | no | yes |
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
+| `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 
 Malformed or oversized input, unreadable state, invalid config, a failed
 account query, or a crash blocks the order. In autonomous runs

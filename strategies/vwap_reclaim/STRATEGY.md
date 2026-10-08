@@ -6,6 +6,8 @@ status: paper
 instruments: [MNQ, MES]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
+regimes: [trend]
+regime_gate: true
 signal: rules
 rules:
   long:

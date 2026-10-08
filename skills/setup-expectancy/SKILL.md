@@ -32,9 +32,16 @@ description: Measure whether each futures setup has an edge - win rate, average 
    | n ≥ 20, E < 0 | Restricted: only in its best context, or cut |
    | Rule-break share > 20% | Fix execution before judging the setup |
 
-5. Compare live stats with the backtest numbers recorded in the strategy. Live
+5. **By regime.** Split each strategy's reviews by their `regime:*` tag. A
+   strategy that is positive overall but negative in one regime should drop
+   that regime from its `regimes:` list (and may set `regime_gate: true`); one
+   that only works in a regime it doesn't list should add it. Propose the
+   change to the user with the numbers; strategy files are edited by the user,
+   never inside an autonomous run. This is how the desk adapts to regimes over
+   time.
+6. Compare live stats with the backtest numbers recorded in the strategy. Live
    far worse than backtest usually means execution drift or regime change.
-6. Record the decision as a `lesson` tagged with the setup.
+7. Record the decision as a `lesson` tagged with the setup and regime.
 
 ## Examples
 
@@ -42,4 +49,5 @@ description: Measure whether each futures setup has an edge - win rate, average 
 setup:ema_cross  n=34  p=0.41  W=2.1R  L=1.0R  E=+0.27R  sd=1.4  band ±0.48 → unproven
 setup:orb        n=41  p=0.46  W=1.9R  L=1.0R  E=+0.33R  sd=1.3  band ±0.41 → unproven
 setup:keltner    n=22  p=0.27  W=1.8R  L=1.0R  E=-0.24R → restricted to ADX>25 mornings
+  by regime: trend n=12 E=+0.21R | transition n=10 E=-0.78R → propose regimes: [trend, high-vol]
 ```

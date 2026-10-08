@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:35-11:30@America/New_York", "13:30-15:55@America/New_York"]
+regimes: [trend, transition]
 signal: ema_cross
 filters:
   adx_min: 18

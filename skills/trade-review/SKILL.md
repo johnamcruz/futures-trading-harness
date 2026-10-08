@@ -27,7 +27,8 @@ description: Review closed futures trades against their plan - R multiple, plan 
 4. **Write the review** with `journal_add {kind:"review", contractId, text, tags}`:
    - text: plan vs. actual, R, grade, what to repeat or change.
    - tags: exactly one of `result:win | result:loss | result:scratch (|R| < 0.2) |
-     result:nofill`; `setup:<name>`; the symbol; any `mistake:<kind>`
+     result:nofill`; `setup:<name>`; `regime:<primary>` (from the plan); the
+     symbol; any `mistake:<kind>`
      (`mistake:chased`, `mistake:no-stop`, `mistake:moved-stop`,
      `mistake:early-exit`, `mistake:oversize`, `mistake:rule-break`).
 5. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:

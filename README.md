@@ -58,6 +58,19 @@ native adapters generated for each harness.
 Always register projectx **through the gateway** (the installer does): it is
 the one layer that works the same on every harness and sees the real account.
 
+## Adapting to the market regime
+
+Every closed bar gets a deterministic regime label
+(`scripts/lib/trading/regime.js`): `trend-up`, `trend-down`, `range`, or
+`transition`, plus high/normal/low volatility, from ADX, EMA slope, VWAP
+crosses, and ATR versus its average. Strategies declare the regimes they fit
+(`regimes: [trend, high-vol]`). The scan only offers in-regime strategies, so
+the desk switches playbooks as the market changes, and `regime_gate: true` makes
+the MCP gateway enforce it at order time. Plans and reviews carry a
+`regime:<label>` tag, and the setup scorecard reports each strategy's results by
+regime, so the strategy lineup is tuned from evidence: drop a regime where a
+strategy loses, add one where it works.
+
 ## Strategies are Markdown
 
 ```text
@@ -79,6 +92,7 @@ Each file has code-checked frontmatter and a body the agents follow:
 name: orb
 description: Opening range breakout for equity index futures ...
 status: active                     # paper | active | disabled
+regimes: [trend, transition, high-vol]   # regimes the strategy fits
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:45-11:30@America/New_York"]

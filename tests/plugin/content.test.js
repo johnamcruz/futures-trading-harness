@@ -54,7 +54,8 @@ test('agents declare name, description, tools, model; only the executor can writ
 });
 
 test('backticked skill and agent references point at files that exist', () => {
-  const known = new Set([...skills, ...agents]);
+  const { TAGS: REGIME_TAGS } = require('../../scripts/lib/trading/regime');
+  const known = new Set([...skills, ...agents, ...REGIME_TAGS]);
   const candidates = /`([a-z]+(?:-[a-z]+)+)`/g;
   const roleOrSkill = /-(analyst|manager|executor|reviewer|researcher)$|^(trade|strategy|market|premarket|end|autonomous|setup|position|prop|session|liquidity|vwap|trend|multi|topstepx)-/;
   const files = [

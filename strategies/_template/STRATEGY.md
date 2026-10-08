@@ -6,6 +6,8 @@ status: paper                 # paper | active | disabled. New strategies start 
 instruments: [MNQ, MES]       # contract roots the strategy may trade
 timeframe: 3m                 # trigger timeframe: 1m, 3m, 5m, 15m, 1h ...
 sessions: ["09:45-11:30@America/New_York"]   # optional; entries only inside these windows
+regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol
+regime_gate: false            # true = the MCP gateway refuses entries when the live regime doesn't fit
 signal: rules                 # rules (conditions below) | manual (agents judge the body) | orb | ema_cross | keltner | supertrend | bos
 rules:                        # with signal: rules - every condition in a side must hold on the closed bar
   long:

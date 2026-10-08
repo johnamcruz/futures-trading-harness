@@ -19,6 +19,7 @@ const { parseWindows, inWindow } = require('./clock');
 const { PARAMS, snapshot, levels } = require('./market-snapshot');
 const { normalizeBars } = require('./indicators');
 const { compileRules, evaluateRules } = require('./rules');
+const { TAGS: REGIME_TAGS, classifyRegime, regimeFits } = require('./regime');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
@@ -72,6 +73,14 @@ function validateStrategy(data, body, folderName) {
     const { errors: bad } = parseWindows(list.join(','));
     req(Array.isArray(data.sessions) && list.length > 0 && bad.length === 0,
       `sessions: list of "HH:MM-HH:MM@Time/Zone" windows${bad.length ? ` (invalid: ${bad.join(', ')})` : ''}`);
+  }
+  if (data.regimes !== undefined && data.regimes !== null) {
+    req(Array.isArray(data.regimes) && data.regimes.length > 0 && data.regimes.every(r => REGIME_TAGS.includes(r)),
+      `regimes: a list of ${REGIME_TAGS.join(', ')}`);
+  }
+  if (data.regime_gate !== undefined) {
+    req(typeof data.regime_gate === 'boolean', 'regime_gate: true or false');
+    req(data.regime_gate !== true || Array.isArray(data.regimes), 'regime_gate: needs a regimes list');
   }
   if (data.filters !== undefined && data.filters !== null) {
     if (typeof data.filters !== 'object' || Array.isArray(data.filters)) {
@@ -176,15 +185,20 @@ function inSessions(strategy, now) {
 function scan(strategies, bars, { symbol, now = null } = {}) {
   const root = String(symbol || '').toUpperCase();
   const results = [];
+  const regime = classifyRegime(normalizeBars(bars));
   for (const s of strategies) {
     if (!s.valid || s.status === 'disabled') continue;
     if (root && !s.instruments.includes(root)) continue;
     const snap = snapshot(bars, s.params || {});
     const at = now || new Date(snap.last.t);
     const session = inSessions(s, at);
-    const base = { name: s.name, status: s.status, timeframe: s.timeframe, inSession: session };
+    const inRegime = regimeFits(s.regimes, regime);
+    const base = {
+      name: s.name, status: s.status, timeframe: s.timeframe, inSession: session,
+      regime: regime ? regime.primary : null, regimes: s.regimes || null, inRegime,
+    };
     if (s.signal === 'manual') {
-      results.push({ ...base, signal: 'manual', candidate: session, note: 'evaluate the trigger from STRATEGY.md' });
+      results.push({ ...base, signal: 'manual', candidate: session && inRegime, note: 'evaluate the trigger from STRATEGY.md' });
       continue;
     }
     let direction;
@@ -206,7 +220,7 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       signal: s.signal,
       direction: direction || null,
       filtersFailed: fails,
-      candidate: Boolean(direction) && session && fails.length === 0,
+      candidate: Boolean(direction) && session && inRegime && fails.length === 0,
       entryRef: snap.last.c,
       stopDistance: stopDistance === null ? null : Math.round(stopDistance * 1e4) / 1e4,
       minRR: s.risk.min_rr,

@@ -38,7 +38,8 @@ node <root>/scripts/strategies.js scan /tmp/fth/MNQ-3m.json --symbol MNQ
 
 `scan` runs market-snapshot with each strategy's `params` and reports, per
 strategy: `direction` (mechanical signal on the last closed bar),
-`filtersFailed`, `inSession`, `candidate`, and `stopDistance`. `signal: rules`
+`filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
+`inRegime` (fits the strategy's `regimes`), `candidate`, and `stopDistance`. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
 one did or didn't fire. Strategies with `signal: manual` are listed with
 `candidate: true` when in session; you evaluate their trigger from the body.

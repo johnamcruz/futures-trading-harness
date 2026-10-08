@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["08:00-16:00@America/New_York"]
+regimes: [range, transition]
 signal: manual
 risk:
   stop: structure

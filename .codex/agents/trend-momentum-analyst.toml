@@ -19,8 +19,10 @@ calling `get_bars`.
    `strategy-library`.
 2. Fetch closed bars: 15m (160) and 3m (300). Save each to
    `/tmp/fth/trend-<SYMBOL>-<tf>.json` and run the market-snapshot script.
-3. Regime: trend / range / expansion, from ADX level and slope, EMA 9/20/50
-   alignment, SuperTrend stability, Keltner position, ATR vs its recent range.
+3. Regime: report the computed `regime` from the snapshot (primary,
+   volatility, metrics) on each timeframe, then add what the indicators say
+   about its quality (ADX slope, EMA 9/20/50 alignment, SuperTrend stability,
+   Keltner position). Flag disagreement between timeframes.
 4. Strategies: run `node <root>/scripts/strategies.js scan
    /tmp/fth/trend-<SYMBOL>-3m.json --symbol <SYMBOL>`. For every result with a
    direction, `show` the strategy and check its context filter and skip rules
@@ -31,7 +33,7 @@ calling `get_bars`.
 
 ```text
 ## Trend/Momentum: <SYMBOL> @ <last bar time ET>
-Regime: trend-up | trend-down | range | expansion (confidence)
+Regime (computed): 15m <primary>/<volatility>, 3m <primary>/<volatility>; quality notes
 15m: EMA20 <v> slope <+/->, ADX <v> (<slope>), SuperTrend <dir> @ <line>
 3m:  EMA9 <v> / EMA20 <v>, ADX <v> (<slope>), Keltner <pos>, ATR14 <v>
 Strategies: setup:<name> long|short (candidate | skipped: <rule>) | none

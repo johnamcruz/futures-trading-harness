@@ -22,7 +22,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, evaluateAccount } = require('./lib/trading/account-gate');
+const { parseToolJson, evaluateAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 
@@ -35,7 +36,16 @@ async function accountViolations(args, caller, now) {
     caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
     caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')),
   ]);
-  return evaluateAccount({ input: args, positions, orders, trades, now, config: loadConfig(process.env) });
+  const config = loadConfig(process.env);
+  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config });
+  const gated = regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies);
+  if (gated) {
+    const req = barsRequest(args.contractId, gated.timeframe);
+    if (!req) throw new Error(`cannot fetch bars for timeframe ${gated.timeframe}`);
+    const result = parseToolJson(await caller.call('get_bars', req), 'get_bars');
+    violations.push(...regimeViolation(gated, result.bars || result, config));
+  }
+  return violations;
 }
 
 function main(argv) {

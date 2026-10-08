@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:35-15:30@America/New_York"]
+regimes: [trend, high-vol]
 signal: keltner
 filters:
   adx_min: 20

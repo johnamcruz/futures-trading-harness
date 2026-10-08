@@ -39,6 +39,9 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      anchor), vwapRth (09:30 ET anchor).
    - `signals`: `long`/`short`/`null` per strategy trigger on the last bar:
      `ema_cross`, `keltner`, `supertrend`, `bos`, `orb` (with their ADX gates).
+   - `regime`: primary (trend-up, trend-down, range, transition), volatility
+     (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
+     in ATRs, VWAP crosses in 30 bars, ATR vs its average).
    - `referenceStop`: distance and long/short stop prices. Round to `tickSize`.
 5. Never quote a number the script did not produce or a tool did not return.
 
