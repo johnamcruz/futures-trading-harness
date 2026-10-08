@@ -22,6 +22,9 @@ sized from the cushion in micros or minis (`contracts: micro | mini | auto`),
 with a trained policy (`policy: { bundle }`) deciding which setups to take.
 The harness tracks the attempt and enforces it:
 
+- In autonomous runs the cycle prompt carries each running attempt's state
+  (balance, floor, cushion, profit, the day, sessions left, the size budget,
+  any entry block) and the live verdicts, from the runner's latest snapshot.
 - `node <root>/scripts/combine.js status` (`<root>`: the harness root, FTH_ROOT) shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;

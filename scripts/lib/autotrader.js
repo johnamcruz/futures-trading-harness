@@ -242,7 +242,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, accounts = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
@@ -253,11 +253,18 @@ function prompts(cfg, now, root = '') {
         manageOnly ? 'manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries)' : '',
       ].filter(Boolean).join('; ');
       const recover = recovered ? ' The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.' : '';
+      // The prop attempts' state, so every agent plans within it without a tool call (the gate enforces it).
+      const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
+      const signed = x => `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`;
+      const attempts = accounts.map(a => ` ${a.account} attempt (${a.status}): balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
+        + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${a.sessionsLeft} session${a.sessionsLeft === 1 ? '' : 's'} left`
+        + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}`
+        + `${a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : ''}.`);
       // A policy strategy's verdicts: the only entries the gate will accept (prop-challenge-pacing skill).
       const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${attempts.join('')}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };

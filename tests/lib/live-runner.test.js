@@ -77,6 +77,11 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.deepStrictEqual(balances, ['7', '7']);
   assert.strictEqual(prop.combineBlock(home, account.name, now), null);
   assert.strictEqual(prop.readAttempt(home, account.name).snapshot.balance, 50250);
+  // The state the cycle prompt shows: 0.2 x ($50,250 - $48,000 floor) = $450 for prop_x (default sizing).
+  const [sum] = hooks.summaries(now);
+  assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
+    { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });
+  assert.deepStrictEqual(setup({ start: false }).hooks.summaries(now), [], 'no attempt, no state');
   await hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07');
   await hooks.endOfDay(new Date('2026-10-07T19:55:00Z'), '2026-10-07');
   assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250 }]);

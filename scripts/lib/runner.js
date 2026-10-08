@@ -530,7 +530,15 @@ function createRunner(deps) {
         const timeoutMs = limitFor(again.action, cycleNow);
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover });
+          let accounts = [];
+          if (prop && typeof prop.summaries === 'function') {
+            try {
+              accounts = prop.summaries(cycleNow);
+            } catch (err) {
+              log(`account state for the prompt unavailable (${err.message})`, 'error');
+            }
+          }
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, accounts });
           recover = false;
           const r = await runCycle(again.action, prompt, { timeoutMs });
           state = recordRun(state, 'trade', cycleNow);

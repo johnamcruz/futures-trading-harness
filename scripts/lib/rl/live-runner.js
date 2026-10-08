@@ -20,6 +20,7 @@ const { contractRoot } = require('../trading/journal');
 const { specFor, familyOf } = require('../trading/contracts');
 const { loadBundle, bundleMismatch } = require('./policy-bundle');
 const live = require('./live');
+const combine = require('../trading/combine');
 
 function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {} }) {
   const bundles = new Map();
@@ -80,6 +81,25 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
 
   return {
     accounts,
+    /**
+     * The running attempts' state for the cycle prompt, from the latest
+     * snapshot: balance, floor, cushion, progress, the day, sessions left,
+     * each policy strategy's size budget, and any entry block. The gate
+     * enforces the same numbers.
+     */
+    summaries(now = new Date()) {
+      const out = [];
+      for (const a of accounts()) {
+        const r = live.readAttempt(home, a.name);
+        if (!r) continue;
+        const cs = stateOf(a);
+        const s = combine.summary(cs);
+        const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
+          .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
+        out.push({ ...s, snapshotAt: r.snapshot ? r.snapshot.at : null, budgets, entryBlock: live.combineBlock(home, a.name, now) });
+      }
+      return out;
+    },
     /** Every bar: the balance and open positions now. */
     snapshot: now => balances(now, (a, b, t, open) => live.snapshot(home, a, b, t, { open })),
     /** After the end-of-day flatten: the closing balance of trading day `day` (YYYY-MM-DD). */

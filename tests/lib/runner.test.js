@@ -337,7 +337,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
 async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined }) {
   const clockRef = { t: startAt };
   const step = 180000;
-  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [] };
+  const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [] };
   let stopPrice = stopAt;
   let failsLeft = modifyFails;
   let flat = startFlat;
@@ -373,7 +373,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async workingOrders() { return flat ? 0 : 1; },
     },
     clock: { now: () => new Date(clockRef.t) }, prop,
-    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
+    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
     entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
@@ -485,11 +485,15 @@ test('after the session, with trades today, the runner keeps housekeeping until 
 
 /** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
 function fakeProp({ position = () => 'hold', screen = r => r } = {}) {
-  const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [] };
+  const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
   return {
     calls,
     async snapshot(now) { calls.snapshots.push(now.getTime()); },
     async endOfDay(now, day) { calls.eod.push(now.getTime()); calls.eodDays.push(day); },
+    summaries() {
+      calls.summaries += 1;
+      return [{ account: 'mini', status: 'active', balance: 50100, floor: 48000, cushion: 2100, profit: 100, target: 3000, dayPnl: 100, sessionsLeft: 29, budgets: [], entryBlock: null }];
+    },
     screen(results, info) { calls.screens.push({ results, info }); return screen(results); },
     position(args) { calls.positions.push(args); return position(args); },
   };
@@ -531,6 +535,9 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   assert.deepStrictEqual(a.cycles.filter(c => c === 'trade'), []);
   const take = fakeProp();
   const b = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: take, until: et(10, 10), trigger: 'signal' });
+  // Each trade cycle's prompt carries the attempt's state.
+  assert.ok(take.calls.summaries >= 1);
+  assert.match(b.prompts.find(x => /trade-session/.test(x)), /mini attempt \(active\): balance \$50,100, floor \$48,000, cushion \$2,100/);
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
   const c = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: each, until: et(10, 10) });

@@ -240,3 +240,16 @@ test('the runner polls one contract per micro/mini index', () => {
   assert.throws(() => validateConfig({ symbols: ['MNQ', 'NQ'] }), /one contract per index/);
   assert.doesNotThrow(() => validateConfig({ symbols: ['MNQ', 'MES'] }));
 });
+
+test('the cycle prompt carries each running prop attempt\'s state', () => {
+  const p = prompts(validateConfig({ account: '123' }), et(10, 0));
+  const accounts = [{
+    account: 'topstep_100k', status: 'active', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
+    budgets: [{ strategy: 'prop_portfolio_3m', budgetUsd: 975 }], entryBlock: null,
+  }];
+  const text = p.trade([{ symbol: 'MNQ' }], { accounts });
+  assert.match(text, /topstep_100k attempt \(active\): balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
+  const blocked = p.trade([{ symbol: 'MNQ' }], { accounts: [{ ...accounts[0], entryBlock: 'a position is open on the account' }] });
+  assert.match(blocked, /new entries blocked: a position is open on the account\./);
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ' }]), /attempt/);
+});

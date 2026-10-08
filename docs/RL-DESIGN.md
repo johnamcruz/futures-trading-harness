@@ -184,5 +184,6 @@ Rules:
   refuses any entry while a position is open anywhere on the account, and
   while an attempt runs, any entry that isn't its policy strategy's. These
   checks fail closed and can't be skipped.
-- The agents see the account state and the live verdicts (`/combine-status`)
-  and follow the `prop-challenge-pacing` skill.
+- The agents see the account state and the live verdicts in every cycle
+  prompt (and with `/combine-status`), and follow the `prop-challenge-pacing`
+  skill.
