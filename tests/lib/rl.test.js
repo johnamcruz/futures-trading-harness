@@ -55,7 +55,7 @@ const account = (extra = {}) => ({
   daily_loss_soft: 400, consistency_pct: 0, sessions: 4, max_contracts: { MNQ: 20 }, fees_per_side: { MNQ: 0.37 }, ...extra,
 });
 const market = bars => ({ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 });
-const engine = { timeframe: 3, gate: false, gateConfig: loadConfig({}), window: 160 };
+const engine = { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, gateConfig: loadConfig({}), window: 160 };
 
 test('a run with an account is a prop challenge: sized from the cushion, ends on pass, blow, or timeout', () => {
   const bars = series(30);

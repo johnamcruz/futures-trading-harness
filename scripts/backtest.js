@@ -8,8 +8,9 @@
  *   node scripts/backtest.js --config backtest.json
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
  *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
- *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--out dir]
+ *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--fill next-open|close] [--out dir]
  *       [--prop <policy strategy> [--bundle <name>] [--every 5]]   prop challenge attempts
+ *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
  *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
  *
  * `fetch` downloads 1-minute bars from ProjectX (PROJECTX_USERNAME /
@@ -75,17 +76,32 @@ function configFrom(argv) {
   if (num('--size') !== undefined) { cfg.size = num('--size'); cfg.riskPerTrade = null; }
   if (num('--risk') !== undefined) { cfg.riskPerTrade = num('--risk'); delete cfg.size; }
   if (num('--slippage') !== undefined) cfg.slippageTicks = num('--slippage');
+  if (arg(argv, '--fill')) cfg.fill = arg(argv, '--fill');
   if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
   if (arg(argv, '--prop')) cfg.prop = arg(argv, '--prop');
   if (arg(argv, '--bundle')) cfg.bundle = arg(argv, '--bundle');
   if (num('--every') !== undefined) cfg.every = num('--every');
   if (arg(argv, '--debug')) cfg.debug = arg(argv, '--debug');
+  if (argv.includes('--walk-forward')) {
+    // --grid name=v1,v2 (repeatable), --train-months, --test-months, --min-trades
+    const grid = {};
+    argv.forEach((a, i) => {
+      if (a !== '--grid') return;
+      const m = /^([A-Za-z_.]+)=(.+)$/.exec(String(argv[i + 1] || ''));
+      if (!m) throw new Error('--grid name=v1,v2,... (a strategy param or exit.<key>)');
+      grid[m[1]] = m[2].split(',').map(Number);
+    });
+    cfg.walkForward = { ...(cfg.walkForward || {}), ...(Object.keys(grid).length ? { grid } : {}) };
+    for (const [flag, key] of [['--train-months', 'trainMonths'], ['--test-months', 'testMonths'], ['--min-trades', 'minTrades']]) {
+      if (num(flag) !== undefined) cfg.walkForward[key] = num(flag);
+    }
+  }
   return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };
 }
 
 // Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
-const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--out', '--prop', '--bundle', '--every', '--debug'];
-const BOOL_FLAGS = ['--no-gate'];
+const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--out', '--prop', '--bundle', '--every', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
+const BOOL_FLAGS = ['--no-gate', '--walk-forward'];
 
 function unknownFlags(argv) {
   const bad = [];
@@ -107,6 +123,14 @@ async function main(argv) {
   const log = msg => process.stdout.write(`[backtest] ${msg}\n`);
   const started = Date.now();
   const { report, runDir } = runBacktest(cfg, { root: ROOT, baseDir, outRoot: path.join(harnessHome(), 'backtests'), log });
+  if (report.walkForward) {
+    const o = report.outOfSample;
+    const b = report.baseline;
+    log(`out of sample, tuned: ${o.trades} trades | mean ${o.meanR ?? '-'}R | sum ${o.sumR}R | net $${o.netPnL} | edge ${o.edge}`);
+    log(`out of sample, defaults: ${b.trades} trades | mean ${b.meanR ?? '-'}R | sum ${b.sumR}R | net $${b.netPnL}`);
+    log(`retention ${report.retention ?? '-'} | folds positive ${report.positiveFolds} | report: ${path.join(runDir, 'walk-forward.md')}`);
+    return 0;
+  }
   if (report.baseline) {
     const pct = x => (x === null ? '-' : `${Math.round(x * 100)}%`);
     const line = (label, x) => log(`${label}: ${x.attempts} attempts | pass ${pct(x.passRate)} | win rate ${pct(x.winRate)} | blow ${pct(x.blowRate)} | timeout ${x.timeout} | median days to pass ${x.medianDaysToPass ?? '-'} | avg profit $${x.avgProfit}`);

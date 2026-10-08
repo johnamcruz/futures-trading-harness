@@ -22,6 +22,9 @@
  *                take and when to close; needs an account. The rules-only
  *                baseline is always reported next to it.
  *   sizing       combine sizing (combine.js DEFAULT_SIZING keys)
+ *   walkForward  { grid: { "<param>": [values] }, trainMonths, testMonths,
+ *                minTrades }: walk-forward test of the one strategy named in
+ *                `strategies` (walk-forward.js); writes walk-forward.md/json
  *   debug        a strategy name: write its verdict on every bar (fired or
  *                not, the rules that failed, its detectors' state) to
  *                decisions-<name>.jsonl in the run folder
@@ -33,7 +36,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadStrategies } = require('../trading/strategies');
-const { loadBars, barMinutes, aggregate } = require('./data');
+const { loadBars, barMinutes, aggregate, auditBars } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
 const { buildReport, toMarkdown, toCsv } = require('./report');
@@ -44,6 +47,7 @@ const { CONTRACT_SPECS } = require('../trading/contracts');
 const { accountNamed } = require('../trading/accounts');
 const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
 const { marketHoursErrors } = require('../autotrader');
+const walkForward = require('./walk-forward');
 
 const WARMUP_BARS = 2000;
 
@@ -91,7 +95,7 @@ function validateBacktestConfig(raw, baseDir) {
       throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy now; name it with "prop": "<policy strategy>" (signal: policy)`);
     }
   }
-  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, debug: null, ...(raw || {}) };
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, debug: null, walkForward: null, ...(raw || {}) };
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
@@ -109,6 +113,7 @@ function validateBacktestConfig(raw, baseDir) {
   }
   if (cfg.earlyCloseEodAt && !validAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone", no later than 13:00 ET');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
+  if (!['next-open', 'close'].includes(cfg.fill)) errors.push('fill: "next-open" (entries fill at the next bar\'s open, as live after the cycle) or "close" (at the signal bar\'s close, as algoTraderBot)');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
   if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');
@@ -117,6 +122,12 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.bundle !== null && !(typeof cfg.bundle === 'string' && cfg.prop !== null)) errors.push('bundle: a policy bundle (models/<name>.json) to try in place of the policy strategy\'s own; needs prop');
   if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
   if (cfg.debug !== null && !(typeof cfg.debug === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.debug))) errors.push('debug: a strategy name, to log its verdict on every bar');
+  if (cfg.walkForward !== null) {
+    const w = cfg.walkForward;
+    if (!w || typeof w !== 'object' || Array.isArray(w)) errors.push('walkForward: { grid, trainMonths, testMonths, minTrades }');
+    else if (cfg.prop !== null) errors.push('walkForward: tests one rules strategy; a prop run is validated by rl/ship.py');
+    else if (!(Array.isArray(cfg.strategies) && cfg.strategies.length === 1)) errors.push('walkForward: name exactly one strategy in "strategies"');
+  }
   let start = null;
   let end = null;
   try { start = parseTimeArg(cfg.start, 'start'); } catch (err) { errors.push(err.message); }
@@ -166,6 +177,25 @@ function pickStrategies(all, cfg) {
   return all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual');
 }
 
+/** A walk-forward test of one strategy (walk-forward.js). Returns { report, runDir }. */
+function runWalk(cfg, strategy, markets, { baseDir, outRoot, env, runId, log }) {
+  const w = cfg.walkForward;
+  const firstTradable = Math.max(...markets.map(m => Date.parse(m.bars[Math.min(cfg.window, m.bars.length - 1)].t)));
+  const from = cfg.start !== null ? Math.max(cfg.start, firstTradable) : firstTradable;
+  const to = cfg.end !== null ? cfg.end : Math.min(...markets.map(m => Date.parse(m.bars[m.bars.length - 1].t) + 1));
+  log(`walk-forward ${strategy.name}: ${walkForward.combinations(w.grid || {}).length} combinations, ${w.trainMonths ?? 6} month(s) in sample, ${w.testMonths ?? 1} out of sample`);
+  const report = walkForward.runWalkForward(markets, strategy, {
+    ...w, from, to, engine: { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) },
+  });
+  const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
+  const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
+  fs.mkdirSync(runDir, { recursive: true });
+  writeJsonAtomic(path.join(runDir, 'walk-forward.json'), report);
+  fs.writeFileSync(path.join(runDir, 'walk-forward.md'), walkForward.toMarkdown(report));
+  fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
+  return { report: { walkForward: true, ...report }, runDir };
+}
+
 /** Run a backtest. Returns { report, runDir }. */
 function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = process.env, runId = null, log = () => {} }) {
   const cfg = validateBacktestConfig(raw, baseDir);
@@ -196,6 +226,9 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     const from = cfg.start === null ? 0 : Math.max(0, (first === -1 ? bars.length : first) - cfg.window - WARMUP_BARS);
     const to = cfg.end === null ? bars.length : bars.findIndex(b => ms(b) >= cfg.end);
     bars = bars.slice(from, to === -1 ? bars.length : to);
+    const audit = auditBars(bars, cfg.timeframe);
+    for (const w of audit.warnings) log(`warning: ${m.symbol} data: ${w}`);
+    m.audit = audit;
     if (bars.every(b => !(b.v > 0))) log(`warning: ${m.file} has no volume (no volume column, or all zero); order-flow series (ofi, delta, vol_sma) are missing, so strategies using them never fire`);
     if (bars.length < cfg.window) throw new Error(`${m.file}: only ${bars.length} bars in range; need at least ${cfg.window} (window) before the first trade`);
     return { ...m, bars };
@@ -212,7 +245,8 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   }
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
   if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log });
-  const { trades, skipped } = runEngine(markets, strategies, { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) });
+  if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
+  const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
     if (!strategies.some(s => s.instruments.includes(m.symbol))) skipped[m.symbol] = 'no selected strategy trades this symbol';
   }
@@ -224,7 +258,8 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     start: cfg.start !== null ? new Date(cfg.start).toISOString() : first,
     end: cfg.end !== null ? new Date(cfg.end).toISOString() : last,
     size: cfg.riskPerTrade ? `risk $${cfg.riskPerTrade} (max ${cfg.maxContracts})` : cfg.size,
-    slippageTicks: cfg.slippageTicks, skipped,
+    slippageTicks: cfg.slippageTicks, fill: cfg.fill, expired, skipped,
+    dataAudit: Object.fromEntries(markets.map(m => [m.symbol, m.audit])),
   });
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });

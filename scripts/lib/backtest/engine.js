@@ -31,10 +31,15 @@
  * size, and whether to close a trade that is past its ratchet. The
  * challenge env (rl/challenge-env.js) trains on exactly this loop.
  *
- * Fills: market entries at the bar close plus `slippageTicks`; stops at the
- * stop price (or the bar's open when it gapped through) minus slippage;
- * targets at the target price (or a better open); trailing closes at the bar
- * close. Results are in R (1R = the initial stop distance, before costs, as
+ * Fills: by default (`fill: 'next-open'`) a market entry fills at the next
+ * bar's open plus `slippageTicks` (1): live, the order goes in after the
+ * cycle that read the closed bar, during the next bar. A setup whose fill bar
+ * opens through its stop or (for a target level) its target, or falls in
+ * another trading day or after end of day, expires untraded (`expired`).
+ * `fill: 'close'` fills at the signal bar's close, as algoTraderBot does.
+ * Stops fill at the stop price (or the bar's open when it gapped through)
+ * minus slippage; targets at the target price (or a better open); trailing
+ * closes at the bar close. Results are in R (1R = the initial stop distance, before costs, as
  * algoTraderBot reports) and in dollars after fees and slippage.
  */
 
@@ -62,7 +67,8 @@ const DEFAULTS = {
   size: 1,
   riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like algoTraderBot --risk)
   maxContracts: 5,
-  slippageTicks: 0,
+  slippageTicks: 1, // per market fill (entries and stops), in ticks
+  fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
@@ -179,6 +185,7 @@ function runEngine(markets, strategies, opts = {}) {
   let closesToday = []; // { pnl, ts } of closed trades this trading day
   let equity = 0;
   const curve = [];
+  let expired = 0; // setups whose next-bar fill never happened (gap through the stop or target, new day, end of day)
 
   const tfMs = book => timeframeMs(`${o.timeframe}m`) || (book.bars[1] ? book.bars[1].ms - book.bars[0].ms : 60000);
   const closeTrade = (book, bar, price, reason) => {
@@ -254,6 +261,7 @@ function runEngine(markets, strategies, opts = {}) {
         // Nothing is carried into a new trading day: close what yesterday left
         // (data with no bar after the close) at its last bar.
         for (const b of books) {
+          if (b.pos && b.pos.pending && b.pos.tradingDay !== dayKey) { b.pos = null; expired += 1; }
           if (b.pos && b.pos.tradingDay !== dayKey) closeTrade(b, b.bars[b.lastIndex], b.bars[b.lastIndex].c, 'eod');
         }
         if (cs) {
@@ -266,6 +274,30 @@ function runEngine(markets, strategies, opts = {}) {
       closesToday = [];
     }
     book.lastIndex = i;
+
+    // The exchange calendar, as live: holidays have no session; early closes
+    // end at 13:00 ET with end of day at earlyCloseEodAt.
+    const tday = tradingDayKey(closeAt);
+    const early = earlyDays.has(tday);
+    const eod = early && eodEarly ? eodEarly : eodNormal;
+    const afterEod = closedDays.has(tday) || (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt))
+      || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
+
+    // 0. A setup from the previous bar fills at this bar's open (fill: next-open), or expires.
+    if (book.pos && book.pos.pending) {
+      const q = book.pos;
+      const entry = onTick(bar.o + q.sign * o.slippageTicks * book.tickSize, book.tickSize);
+      const stop = onTick(entry - q.sign * q.risk, book.tickSize);
+      const target = q.targetFrom === 'entry' ? onTick(entry + q.sign * q.targetTicks * book.tickSize, book.tickSize) : q.target;
+      const gapped = q.sign * (entry - q.signalStop) <= 0 || (q.targetFrom === 'level' && q.sign * (target - entry) < book.tickSize - 1e-9);
+      if (gapped || afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) {
+        book.pos = null;
+        expired += 1;
+      } else {
+        Object.assign(q, { pending: false, entry, stop, initialStop: stop, target, entryTime: bar.t });
+        entriesToday += 1;
+      }
+    }
 
     // 1. Broker: the resting stop and target against this bar.
     // Hard rule: no trade is carried past the close into the next trading
@@ -303,13 +335,6 @@ function runEngine(markets, strategies, opts = {}) {
     // 2. Manage an open trade at the bar's close. Like algoTraderBot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    // The exchange calendar, as live: holidays have no session; early closes
-    // end at 13:00 ET with end of day at earlyCloseEodAt.
-    const tday = tradingDayKey(closeAt);
-    const early = earlyDays.has(tday);
-    const eod = early && eodEarly ? eodEarly : eodNormal;
-    const afterEod = closedDays.has(tday) || (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt))
-      || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
     let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
@@ -404,17 +429,29 @@ function runEngine(markets, strategies, opts = {}) {
       book.pos = null;
       continue;
     }
+    if (o.fill === 'next-open') {
+      // Fills at the next bar's open (step 0 there). The stop keeps its distance from the
+      // fill; a fill at or through the signal's stop level means the setup is gone.
+      Object.assign(book.pos, {
+        pending: true,
+        signalStop: book.pos.initialStop,
+        targetFrom: plan.targetR ? 'entry' : plan.target ? 'level' : null,
+        targetTicks: plan.targetR ? Math.round((book.pos.target - entry) * sign / book.tickSize) : null,
+      });
+      continue;
+    }
     entriesToday += 1;
   }
 
   // Settle anything still open at the end of the data, at the last close.
   for (const book of books) {
+    if (book.pos && book.pos.pending) { book.pos = null; expired += 1; }
     if (book.pos) {
       const last = book.bars[book.lastIndex];
       closeTrade(book, last, last.c, 'end');
     }
   }
-  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions };
+  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions, expired };
 }
 
 module.exports = { roundHalfEven, DEFAULTS, prepare, runEngine };

@@ -26,6 +26,8 @@ const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 
 const POSITION_SIGN = { 1: 1, 2: -1 };
+// Equity index families (by their micro root): one direction-correlated bet.
+const EQUITY_INDEX = new Set(['MNQ', 'MES', 'MYM', 'M2K']);
 const STOP_TYPES = new Set([3, 4, 5]); // stop_limit, stop, trailing_stop
 const LIMIT_TYPES = new Set([1, 6, 7]); // limit, join_bid, join_ask (all rest in the book)
 const ORDER_TYPE_IDS = { limit: 1, market: 2, stop: 4, trailing_stop: 5, join_bid: 6, join_ask: 7 };
@@ -214,6 +216,16 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       ? `A ${root} position is open (${open.map(p => `${p.contractId} ${POSITION_SIGN[p.type] > 0 ? 'long' : 'short'} ${p.size}`).join(', ')}). Manage it; new entries wait until it is flat. To reduce, use an [exit] order.`
       : `A ${root} position is about to open (a recent order has not shown up yet, net ${projected}). New entries wait until it is flat.`)
     : null);
+  // Correlated exposure: the equity index futures (NQ, ES, YM, RTY and their micros) move
+  // together, so a second same-direction position on another index is the same bet twice.
+  if (EQUITY_INDEX.has(familyRoot(root)) && sideSign) {
+    const same = positions.filter(q => Number(q.size || 0) > 0 && POSITION_SIGN[q.type] === sideSign
+      && familyRoot(contractRoot(q.contractId)) !== familyRoot(root) && EQUITY_INDEX.has(familyRoot(contractRoot(q.contractId))));
+    const cap = (config && config.maxCorrelatedPositions) || 1;
+    add('correlated-exposure', same.length >= cap
+      ? `${same.map(q => q.contractId).join(', ')} ${same.length === 1 ? 'is' : 'are'} already ${sideSign > 0 ? 'long' : 'short'}; equity index futures move together, so another ${sideSign > 0 ? 'long' : 'short'} index position doubles the same bet (limit ${cap} per direction, FTH_MAX_CORRELATED_POSITIONS). Manage that one, or trade the other side.`
+      : null);
+  }
   const working = busy ? [] : orders.filter(o => contractRoot(o.contractId) === root);
   add('working-orders', working.length
     ? `${working.length} ${root} order${working.length === 1 ? ' is' : 's are'} working while flat (${working.map(o => o.id).join(', ')}). `

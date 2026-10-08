@@ -428,6 +428,13 @@ function createRunner(deps) {
         } catch (err) {
           log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
         }
+      } else {
+        // The decision log still gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
+        try {
+          logScan(item, scanFor(item.symbol, item.bars), { run: true, reason: 'bar closed' });
+        } catch (err) {
+          log(`${item.symbol}: scan for the decision log failed (${err.message})`, 'error');
+        }
       }
       return { run: true, reason: 'bar closed' };
     }

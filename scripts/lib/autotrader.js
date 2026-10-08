@@ -42,6 +42,8 @@ const DEFAULTS = {
   closedDates: [], // e.g. ["2026-11-26", "2026-12-25"]: CME holidays with no session (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
+  alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
+  alertCommand: null, // or an argv array run with the message in FTH_ALERT, e.g. ["osascript", "-e", "display notification (system attribute \"FTH_ALERT\")"]
   orderFlow: 'auto', // record real order flow from the TopstepX market hub: true, false, or 'auto' (when a strategy on this timeframe declares connectors: [order_flow])
   paper: false,
   model: '',
@@ -228,6 +230,8 @@ function validateConfig(raw) {
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (![true, false, 'auto'].includes(cfg.orderFlow)) errors.push('orderFlow: true, false, or "auto"');
+  if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
+  if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
   if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
   if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {

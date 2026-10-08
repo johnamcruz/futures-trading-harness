@@ -12,6 +12,11 @@
  *   node scripts/autotrader.js --config autotrader.json            run the schedule
  *   node scripts/autotrader.js --config autotrader.json --once trade [--symbol MNQ]
  *   node scripts/autotrader.js --config autotrader.json --dry-run  print the next action
+ *   node scripts/autotrader.js --status [--stale-minutes 10]        watchdog: exit 1 if the runner is silent or stopped
+ *
+ * Alerts: every runner error, and the kill switch tripping, goes to
+ * <FTH_HOME>/logs/alerts-<day>.jsonl and, when configured, to alertWebhook /
+ * alertCommand (scripts/lib/alerts.js).
  *
  * Needs PROJECTX_USERNAME and PROJECTX_API_KEY (read-only use: contracts, bars,
  * positions, working orders) in its environment, like projectx-mcp.
@@ -45,6 +50,7 @@ const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { writeMtfRecord } = require('./lib/trading/mtf-state');
+const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -220,6 +226,15 @@ function writeQwenSettings(cfg, dataDir, opts) {
 }
 
 async function main(argv) {
+  if (argv.includes('--status')) {
+    // The watchdog: for cron / launchd / a monitor. Exit 1 pages someone.
+    const stale = arg(argv, '--stale-minutes') !== undefined ? Number(arg(argv, '--stale-minutes')) : 10;
+    const st = watchdogStatus(HOME_DIR, { staleMinutes: stale, killSwitchFile: loadConfig(process.env).killSwitchFile });
+    process.stdout.write(st.ok
+      ? `runner ok: last pass ${st.ageMinutes} min ago (pid ${st.heartbeat.pid})\n`
+      : `runner NOT ok:\n${st.problems.map(p => `- ${p}`).join('\n')}\n`);
+    return st.ok ? 0 : 1;
+  }
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run]');
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
@@ -268,11 +283,14 @@ async function main(argv) {
   process.on('exit', releaseLock);
 
   // Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
+  const alert = createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` });
   const log = (msg, level) => {
     const now = new Date();
     const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
     (level === 'error' ? process.stderr : process.stdout).write(line);
     appendLog(now, line);
+    // Every error is an alert (throttled); a human hears about trouble while it matters.
+    if (level === 'error') alert(msg);
   };
   const client = createClient();
   const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
@@ -317,9 +335,15 @@ async function main(argv) {
   event({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
   process.on('exit', code => event({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
+  const beat = () => writeHeartbeat(HOME_DIR, { symbols: cfg.symbols, timeframe: cfg.timeframe, killSwitch: fs.existsSync(killSwitchFile) });
   for (;;) {
     const ms = await runner.step();
-    if (ms > 0) await new Promise(r => setTimeout(r, ms));
+    beat();
+    // Long waits (the daily break, the weekend) in one-minute pieces, so the heartbeat stays fresh.
+    for (let left = ms; left > 0; left -= 60000) {
+      await new Promise(r => setTimeout(r, Math.min(left, 60000)));
+      beat();
+    }
   }
 }
 
