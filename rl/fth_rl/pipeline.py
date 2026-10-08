@@ -29,12 +29,14 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import time
+import traceback
 from pathlib import Path
 
-from . import REPO_ROOT
+from . import REPO_ROOT, runlog
 from .bridge import EnvServer
 from .config import MIN_PASS_RATE, NAME, gate_failures, load_config
-from .train import build_bundle, evaluate_oos, harness_home, log, log_oos_look, pct, promote, rank, server_info, train_seed, write_bundle
+from .train import build_bundle, evaluate_oos, harness_home, log, log_oos_look, pct, promote, rank, results_line, server_info, train_seed, write_bundle
 
 # What a sweep may search or anchor: training and reward levers only. Never
 # the account, data, windows, strategies, or the gate.
@@ -253,9 +255,18 @@ def merge(results):
     blown = sum(r["blown"] for r in results)
     trades = sum(r.get("trades") or 0 for r in results)
     wins = sum(r.get("wins") or 0 for r in results)
+    losses = sum(r.get("losses") or 0 for r in results)
+
+    def weighted(key, count):
+        # Seeds' averages back to sums, then over all seeds' counts.
+        num = sum((r.get(key) or 0) * (r.get(count) or 0) for r in results)
+        den = sum(r.get(count) or 0 for r in results if r.get(key) is not None)
+        return round(num / den, 3) if den else None
+
     return {
-        "attempts": n, "passed": passed, "blown": blown, "trades": trades, "wins": wins,
+        "attempts": n, "passed": passed, "blown": blown, "trades": trades, "wins": wins, "losses": losses,
         "passRate": round(passed / n, 3), "blowRate": round(blown / n, 3), "winRate": round(wins / trades, 3) if trades else None,
+        "avgWinR": weighted("avgWinR", "wins"), "avgLossR": weighted("avgLossR", "losses"), "expectancyR": weighted("expectancyR", "trades"),
         "avgProfit": round(sum(r["avgProfit"] * r["attempts"] for r in results) / n),
         "tradesPerAttempt": round(sum(r["tradesPerAttempt"] * r["attempts"] for r in results) / n, 1),
     }
@@ -294,6 +305,35 @@ def objective(sw):
     def run(trial):
         params = sample(trial, sw["searched"])
         tdir = sw["out"] / "sweep" / f"trial_{trial.number:03d}"
+        # The trial's lines also go to trial_NNN/train.log; its events carry trial=N.
+        with runlog.scope(file=tdir / "train.log", trial=trial.number):
+            return run_logged(trial, params, tdir)
+
+    def run_logged(trial, params, tdir):
+        t0 = time.time()
+        runlog.event("trial_start", params=params)
+
+        def record(state, **extra):
+            out = {"number": trial.number, "state": state, "params": params, "minutes": round((time.time() - t0) / 60, 2), **extra}
+            runlog.event("trial", **out)
+            write_config(tdir / "summary.json", runlog._clean(out))
+
+        try:
+            value, sel, results = run_trial(trial, params, tdir)
+        except optuna.TrialPruned as err:
+            log(f"pruned after {(time.time() - t0) / 60:.1f} min ({err or 'below the median at a checkpoint'})")
+            record("pruned", reason=str(err) or "below the median at a checkpoint", checkpoint=trial.user_attrs.get("last_checkpoint"))
+            raise
+        except Exception as err:
+            log(f"failed after {(time.time() - t0) / 60:.1f} min: {type(err).__name__}: {err}", "ERROR")
+            record("failed", error=f"{type(err).__name__}: {err}", traceback=traceback.format_exc())
+            raise
+        feasible = value >= 0
+        reason = None if feasible else ("a blow on the selection window" if (sel.get("blown") or 0) > 0 else f"under {st['min_trades_per_attempt']} trades per attempt")
+        record("complete" if feasible else "infeasible", value=value, feasible=feasible, reason=reason, selection=sel, seeds=results)
+        return value
+
+    def run_trial(trial, params, tdir):
         cfg_path = write_config(tdir / "config.json", trial_raw(sw["raw"], sw["path"], params))
         trial.set_user_attr("config", str(cfg_path))
         cfg = load_config(cfg_path)
@@ -314,7 +354,9 @@ def objective(sw):
                     venv.training = True
                 value = score(sel, st["min_trades_per_attempt"], st["win_rate_weight"])
                 trial.report(value, k)
-                log(f"trial {trial.number} checkpoint {k}/{st['checkpoints']}: pass {pct(sel['passRate'])} blow {pct(sel['blowRate'])} -> {value:.3f}")
+                trial.set_user_attr("last_checkpoint", k)
+                log(f"trial {trial.number} checkpoint {k}/{st['checkpoints']}: {results_line(sel)} -> score {value:.3f}")
+                runlog.event("checkpoint", k=k, of=st["checkpoints"], value=value, selection={x: v for x, v in sel.items() if x != "months"})
                 if trial.should_prune():
                     raise optuna.TrialPruned()
 
@@ -329,14 +371,33 @@ def objective(sw):
         trial.set_user_attr("selection", sel)
         trial.set_user_attr("seeds", results)
         trial.set_user_attr("feasible", value >= 0)
-        log(f"trial {trial.number}: selection pass {pct(sel['passRate'])} win {pct(sel.get('winRate'))} blow {pct(sel['blowRate'])} -> {value:.3f}{'' if value >= 0 else ' (infeasible)'}")
-        return value
+        log(f"trial {trial.number} selection: {results_line(sel)} -> score {value:.3f}{'' if value >= 0 else ' (infeasible)'}")
+        return value, sel, results
 
     return run
 
 
 def run_sweep(path, n_trials=None, n_jobs=None, dry_run=False):
     sw = load_sweep(path)
+    runlog.start(sw["out"] / "sweep", "sweep", sw["raw"], configFile=str(sw["path"]), searched=sw["searched"], anchored=sw["anchored"], dryRun=dry_run)
+    try:
+        study = _run_sweep(sw, n_trials, n_jobs, dry_run)
+    except BaseException as err:
+        runlog.failed(err)
+        raise
+    if study is None:
+        runlog.finish("dry_run")
+        return None
+    states = {}
+    for t in study.trials:
+        states[t.state.name.lower()] = states.get(t.state.name.lower(), 0) + 1
+    best = best_trial(study)
+    runlog.finish("done", trials=len(study.trials), states=states, best=best.number if best else None,
+                  bestSelection=best.user_attrs.get("selection") if best else None)
+    return study
+
+
+def _run_sweep(sw, n_trials, n_jobs, dry_run):
     st = sw["study"]
     log(f"sweep {sw['raw']['name']}: {len(sw['searched'])} searched ({', '.join(sw['searched'])}), "
         f"{len(sw['anchored'])} anchored; out {sw['out']}")
@@ -397,6 +458,17 @@ def load_retrain(path):
 
 def run_retrain(path, dry_run=False):
     rt = load_retrain(path)
+    runlog.start(rt["out"], "retrain", rt["raw"], configFile=str(path), dryRun=dry_run)
+    try:
+        out = _run_retrain(rt, dry_run)
+    except BaseException as err:
+        runlog.failed(err)
+        raise
+    runlog.finish("dry_run" if dry_run else "done", seeds=sorted((out or {}).get("seeds", {}).keys()) if out else None)
+    return out
+
+
+def _run_retrain(rt, dry_run):
     study = make_study(rt["sweep"], create=False)
     t = best_trial(study, None if rt["trial"] == "best" else rt["trial"])
     if t is None:
@@ -428,7 +500,8 @@ def run_retrain(path, dry_run=False):
                 continue
             network = train_seed(cfg, seed, rt["out"])
             sel = server.evaluate(starts, w["select"][1], network)
-            log(f"seed {seed} selection: pass {pct(sel['passRate'])}, win {pct(sel.get('winRate'))}, blow {pct(sel['blowRate'])}, avg profit ${sel['avgProfit']}")
+            log(f"seed {seed} selection: {results_line(sel)}")
+            runlog.event("evaluation", window="select", seed=seed, result=sel)
             candidates["seeds"][str(seed)] = {"network": str(rt["out"] / "seeds" / f"seed_{seed}_network.json"), "selection": sel}
             write_config(cand_file, candidates)
     return candidates
@@ -461,6 +534,18 @@ def load_ship(path):
 
 def run_ship(path, dry_run=False, models_dir=None):
     sh = load_ship(path)
+    runlog.start(sh["out"], "ship", sh["raw"], configFile=str(path), dryRun=dry_run)
+    try:
+        bundle, dest = _run_ship(sh, dry_run, models_dir)
+    except BaseException as err:
+        runlog.failed(err)
+        raise
+    runlog.finish("dry_run" if bundle is None else "promoted" if dest else "not_validated",
+                  **({"validated": bundle["validated"], "gateFailures": bundle["gateFailures"], "promotedTo": str(dest) if dest else None} if bundle else {}))
+    return bundle, dest
+
+
+def _run_ship(sh, dry_run, models_dir):
     rt = sh["retrain"]
     cand_file = rt["out"] / "candidates.json"
     if not cand_file.exists():

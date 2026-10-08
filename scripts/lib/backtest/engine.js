@@ -99,6 +99,16 @@ const onTick = (x, tick) => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
  * trade it, cached setups, and the market features the policy observes.
  * Reusable across runs (episodes) on the same data.
  */
+/** The setup behind an entry, for the trade record: stop, target, and detector state on the signal bar. */
+function setupOf(book, pick, i) {
+  const why = book.ev.at(pick.s, i, { describe: true });
+  return {
+    signalBar: book.bars[i].t, close: book.bars[i].c, stopDistance: pick.r.stopDistance,
+    ...(why.targetDistance ? { targetDistance: why.targetDistance } : {}),
+    ...(why.detail ? { detail: why.detail } : {}),
+  };
+}
+
 function prepare(markets, strategies, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   const skipped = new Map(); // strategy -> reason, for strategies that can't be traded mechanically
@@ -108,7 +118,7 @@ function prepare(markets, strategies, opts = {}) {
       if (!s.valid || s.status === 'disabled') return false;
       if (!s.instruments.includes(m.symbol)) return false;
       if (s.signal === 'manual') { skipped.set(s.name, 'manual strategies need the LLM'); return false; }
-      if (!/^atr:/.test(s.risk.stop) && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
+      if (!/^atr:/.test(typeof s.risk.stop === 'string' ? s.risk.stop : '') && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
       return true;
     });
     const ev = createEvaluator(bars, { window: o.window });
@@ -185,6 +195,9 @@ function runEngine(markets, strategies, opts = {}) {
       mfeR: Math.round(p.peakR * 1000) / 1000,
       maeR: Math.round(p.troughR * 1000) / 1000,
       barsHeld: p.barsHeld, reason, pnl: round2(gross), fees: round2(fees), net: round2(net),
+      target: p.target,
+      // Why it was taken: the setup's stop and target distances and its detectors' state (trades.jsonl).
+      ...(p.setup ? { setup: p.setup } : {}),
     };
     trades.push(t);
     if (net > 0) wins += 1;
@@ -377,9 +390,20 @@ function runEngine(markets, strategies, opts = {}) {
       sign, entry, risk, size, plan,
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
       // As algoTraderBot: target ticks from the unrounded stop distance.
-      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
+      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize)
+        // exit.target: a level, the signal bar's close plus the distance (e.g. the far side of a CRT range);
+        // an entry whose fill is already at or past it is skipped below.
+        : plan.target && pick.r.targetDistance > 0
+          ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize)
+          : null,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
+      setup: setupOf(book, pick, i),
     };
+    // A target level the fill already reached (slippage past it) leaves no reward: no trade.
+    if (plan.target && !plan.targetR && (book.pos.target === null || sign * (book.pos.target - entry) < book.tickSize - 1e-9)) {
+      book.pos = null;
+      continue;
+    }
     entriesToday += 1;
   }
 

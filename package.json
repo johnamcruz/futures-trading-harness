@@ -21,7 +21,9 @@
     "snapshot": "node scripts/market-snapshot.js",
     "autotrader": "node scripts/autotrader.js",
     "gateway": "node scripts/mcp-gateway.js",
-    "install-harness": "node scripts/install.js"
+    "install-harness": "node scripts/install.js",
+    "check:secrets": "node scripts/check-secrets.js",
+    "hooks:install": "node scripts/check-secrets.js --install-hook"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -6,7 +6,7 @@ status: paper                 # paper until a validated bundle is shipped and th
 instruments: [MNQ, NQ]        # the Nasdaq family: bars from MNQ; trades MNQ or NQ (contracts)
 timeframe: 3m
 signal: policy                # a trained policy trades the setups of the strategies below
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim]   # priority order: the first that fires on a bar is the setup
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h]   # priority order: the first that fires on a bar is the setup
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing:                       # risk from the headroom above the floor
   cushion_frac: 0.3           # a trade risks at most 30% of the cushion above the floor ...
@@ -26,7 +26,7 @@ source: docs/RL-DESIGN.md; trained by rl/ (sweep -> retrain -> ship, rl/configs/
 
 # Strategy: Prop Portfolio 3m (`setup:prop_portfolio_3m`)
 
-A prop-challenge strategy. It trades the setups of the seven 3-minute rules
+A prop-challenge strategy. It trades the setups of the nine 3-minute rules
 strategies on the Topstep 100K combine, and a trained policy decides what to
 do with each one. Without a `policy` bundle it takes every setup at the
 account's size budget (the rules-only baseline the policy is measured
@@ -41,7 +41,7 @@ against).
 
 ## How It Works
 
-1. On every closed 3-minute bar the runner scans the seven strategies in the
+1. On every closed 3-minute bar the runner scans the nine strategies in the
    order listed. The first one with a setup (its own rules and stop) is this
    strategy's setup. The strategies don't trade on their own while the
    attempt runs.

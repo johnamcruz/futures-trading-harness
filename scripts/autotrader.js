@@ -25,6 +25,11 @@
 
 'use strict';
 
+// Credentials and settings from a .env file (<FTH_HOME>/.env, or the repo's
+// git-ignored .env); a variable already set in the environment wins. Logs key
+// names only, to stderr.
+require('./lib/env-file').loadEnvForCli('autotrader');
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -34,6 +39,7 @@ const { createClient } = require('./lib/projectx-rest');
 const { createPropHooks } = require('./lib/rl/live-runner');
 const { createRecorder } = require('./lib/orderflow-recorder');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
+const { scanRecord, appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
@@ -160,7 +166,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   process.stdout.write(`[autotrader] ${result}\n`);
   const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
   // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
-  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut };
+  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut, result, code: res.code ?? null };
 }
 
 function loadState(cfg) {
@@ -260,7 +266,13 @@ async function main(argv) {
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('exit', releaseLock);
 
-  const log = (msg, level) => (level === 'error' ? process.stderr : process.stdout).write(`[autotrader] ${new Date().toISOString()} ${msg}\n`);
+  // Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
+  const log = (msg, level) => {
+    const now = new Date();
+    const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
+    (level === 'error' ? process.stderr : process.stdout).write(line);
+    appendLog(now, line);
+  };
   const client = createClient();
   const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
   const flow = wantFlow && !opts.dryRun ? createRecorder({ home: HOME_DIR, getToken: client.getToken, log }) : null;
@@ -292,9 +304,16 @@ async function main(argv) {
       return scan(sameTf, { bars }, { symbol, now: new Date() });
     },
     log,
+    // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
+    scanLog: rec => appendJsonl(path.join(HOME_DIR, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
+    // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
+    event: ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev),
     entryOrders: () => entryOrders(HOME_DIR),
     strategyNamed: name => loadStrategies(ROOT, process.env).strategies.find(s => s.name === name && s.valid) || null,
   });
+  const event = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
+  event({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
+  process.on('exit', code => event({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   for (;;) {
     const ms = await runner.step();

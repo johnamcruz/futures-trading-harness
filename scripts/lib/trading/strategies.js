@@ -65,7 +65,7 @@ const POLICY_KEYS = ['bundle'];
  */
 const CONNECTORS = { order_flow: /\b(ofi|delta)\(/ };
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
-const EXIT_KEYS = ['target_r', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
+const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -74,6 +74,7 @@ const PARAM_RULES = {
   emaFast: 'int', emaSlow: 'int', adxPeriod: 'int', adxSlopeBars: 'int', stPeriod: 'int', kcLen: 'int', kcAtr: 'int',
   swingK: 'int', orbMinutes: 'int', atrStop: 'int',
   stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
+  crtSweepBars: 'int', crtShiftBars: 'int', crtMaxDepth: 'pos', crtMinRangeAtr: 'nonneg', crtBufferAtr: 'nonneg', crtMinRR: 'pos',
 };
 
 function editDistance(a, b) {
@@ -136,6 +137,8 @@ function validateStrategy(data, body, folderName) {
     }
     req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");
     req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (past the ratchet the policy may bank the trade)');
+    // Its setups come from other strategies' scans, which carry no target distance of its own.
+    req(!(data.exit && data.exit.target !== undefined), 'exit.target: not for a policy strategy (its trades exit by its trail; the strategies it lists keep their own targets only when traded on their own)');
     req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
   } else {
     for (const k of POLICY_STRATEGY_KEYS) {
@@ -147,7 +150,7 @@ function validateStrategy(data, body, folderName) {
   if (!Array.isArray(connectors) || !connectors.every(c => Object.keys(CONNECTORS).includes(c))) {
     errors.push(`connectors: a list of ${Object.keys(CONNECTORS).join(', ')}`);
   } else {
-    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || ''] );
+    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || '', (data.exit && data.exit.target) || '']);
     for (const [name, uses] of Object.entries(CONNECTORS)) {
       if (uses.test(text) && !connectors.includes(name)) errors.push(`connectors: the rules use ${name} data; declare connectors: [${name}]`);
     }
@@ -196,7 +199,15 @@ function validateStrategy(data, body, folderName) {
     errors.push('risk: a map with stop and min_rr');
   } else {
     for (const k of Object.keys(risk)) if (!RISK_KEYS.includes(k)) errors.push(`risk.${k}: unknown key${suggest(k, RISK_KEYS)}`);
-    if (typeof risk.stop === 'string' && !STOP.test(risk.stop)) {
+    if (risk.stop && typeof risk.stop === 'object' && !Array.isArray(risk.stop)) {
+      // A distance per side: { long: <expr>, short: <expr> } (a sweep strategy's stop sits beyond the swept extreme).
+      const keys = Object.keys(risk.stop);
+      if (keys.length !== 2 || !keys.includes('long') || !keys.includes('short')) errors.push('risk.stop: a map has exactly long and short, each a distance expression');
+      for (const side of ['long', 'short']) {
+        if (typeof risk.stop[side] !== 'string') { if (side in risk.stop) errors.push(`risk.stop.${side}: a distance expression`); continue; }
+        try { compileExpression(risk.stop[side]); } catch (err) { errors.push(`risk.stop.${side}: a distance expression (${err.message})`); }
+      }
+    } else if (typeof risk.stop === 'string' && !STOP.test(risk.stop)) {
       // A stop distance written as a rules expression, e.g. "0.5 * atr(20)".
       try { compileExpression(risk.stop); } catch (err) { errors.push(`risk.stop: atr:<multiple above 0> | structure | swing | manual | a distance expression (${err.message})`); }
     } else {
@@ -216,7 +227,21 @@ function validateStrategy(data, body, folderName) {
       }
       if (x.max_bars !== undefined) req(Number.isInteger(x.max_bars) && x.max_bars > 0, 'exit.max_bars: a whole number of bars');
       req((x.trail_activate_r === undefined) === (x.trail_giveback_r === undefined), 'exit: trail_activate_r and trail_giveback_r go together');
-      req(x.target_r !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, or trail_activate_r and trail_giveback_r');
+      if (x.target !== undefined) {
+        // A target distance from the entry bar's close, written as an expression (e.g. crt_target(60): the far side of the range).
+        const sides = x.target && typeof x.target === 'object' && !Array.isArray(x.target) ? x.target : null;
+        if (sides && (Object.keys(sides).length !== 2 || typeof sides.long !== 'string' || typeof sides.short !== 'string')) {
+          errors.push('exit.target: a distance expression, or a map with exactly long and short expressions');
+        } else if (!sides && typeof x.target !== 'string') {
+          errors.push('exit.target: a distance expression, e.g. crt_target(60)');
+        } else {
+          for (const [k, e] of Object.entries(sides || { '': x.target })) {
+            try { compileExpression(e); } catch (err) { errors.push(`exit.target${k ? `.${k}` : ''}: ${err.message}`); }
+          }
+        }
+        req(x.target_r === undefined, 'exit: target_r or target, not both');
+      }
+      req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
       if (x.target_r !== undefined && x.trail_activate_r !== undefined) {
         req(x.trail_activate_r < x.target_r, 'exit: with both, trail_activate_r must be below target_r (the target would fill first)');
       }
@@ -243,8 +268,14 @@ function loadStrategyFile(file) {
   const ok = errors.length === 0;
   const compiledRules = parsed.data.signal === 'rules' && ok ? compileRules(parsed.data.rules).compiled : null;
   const stop = ok ? parsed.data.risk.stop : null;
-  const compiledStop = ok && !STOP.test(stop) ? compileExpression(stop) : null;
-  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, valid: ok, errors };
+  const perSide = stop && typeof stop === 'object';
+  const compiledStop = !ok ? null
+    : perSide ? { long: compileExpression(stop.long), short: compileExpression(stop.short) }
+      : !STOP.test(stop) ? compileExpression(stop) : null;
+  const tgt = ok && parsed.data.exit ? parsed.data.exit.target : undefined;
+  const compiledTarget = tgt === undefined ? null
+    : typeof tgt === 'string' ? compileExpression(tgt) : { long: compileExpression(tgt.long), short: compileExpression(tgt.short) };
+  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */

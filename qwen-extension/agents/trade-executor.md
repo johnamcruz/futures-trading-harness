@@ -39,6 +39,11 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
      (from +2R, giving back 0.5R for the ported strategies).
    - **Target** (`targetR` set): stop and target at `targetR` × the stop
      distance.
+   - **Target level** (`exit.target` set, the scan gives `targetDistance`):
+     the target is the signal bar's close ± `targetDistance` (a level, e.g.
+     the far side of a CRT range), never R-based.
+   - **Time stop** (`maxBars` set): close at market once the trade has been
+     open that many bars without filling stop or target.
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
    target) in ticks when the account supports brackets. Rationale:
    `setup:<name> <side> <trigger>, stop <price>[, target <price>], risk $<x>`.

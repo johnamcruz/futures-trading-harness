@@ -107,6 +107,11 @@ The exit follows the strategy's `exit` (shown in the scan):
   2R and 0.5R.
 - **Target:** stop and target at `targetR` (or `risk.min_rr`) times the stop
   distance.
+- **Target level:** with `exit.target` the scan gives `targetDistance`: the
+  target is the signal bar's close ± that distance (e.g. a CRT range's far
+  side).
+- **Time stop:** with `maxBars`, close at market after that many bars in the
+  trade if neither the stop nor the target has filled.
 
 ### 5. Verdict
 

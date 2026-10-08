@@ -31,9 +31,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |
    | `params` | Optional overrides of the snapshot and rules series (e.g. `orbMinutes: 30`); periods must be whole numbers |
    | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr`; checked by the scan only, not at order time |
-   | `exit` | Optional: `trail_activate_r` + `trail_giveback_r` (trail the stop from +NR, giving back MR; trend setups use 2 / 0.5), `target_r` (fixed target), `max_bars`. Without it the target is `risk.min_rr`. The backtester and the live runner apply it |
+   | `exit` | Optional: `trail_activate_r` + `trail_giveback_r` (trail the stop from +NR, giving back MR; trend setups use 2 / 0.5), `target_r` (fixed target), `target` (a distance expression from the signal close, or `{ long, short }`, e.g. `crt_target(60)`: a target at a level instead of R), `max_bars` (time stop). Without it the target is `risk.min_rr`. The backtester and the live runner apply it |
    | `signal: policy` | A policy strategy: the prop challenge as a strategy (see `strategies/prop_portfolio_3m`). `strategies` lists the rules strategies whose setups it trades, in priority order, all on its timeframe; `account` names `accounts/<name>/ACCOUNT.md` (the gate enforces its floor, daily limits, and size budget); `sizing` sets risk per trade from the cushion (`cushion_frac` ≤ 1, `cap_usd`, `clock_k`, `r_per_session`, `min_size_guard`); `contracts` is `micro`, `mini`, or `auto` (minis once the size reaches one mini); `exit` needs a trail (the policy may bank a trade past it); `risk.stop: strategy` keeps each setup's own stop; `policy: { bundle }` names a trained policy (see the `policy-training` skill), or is left out to take every setup as sized. Only policy strategies have these keys |
-   | `risk` | `stop` (`atr:<k>`, a distance expression such as `0.5 * atr(20)` or `cisd_ote_risk`, `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists; `min_rr` and `max_risk_usd` are applied by the agents (risk-manager), not by code |
+   | `risk` | `stop` (`atr:<k>`, a distance expression such as `0.5 * atr(20)` or `cisd_ote_risk`, a map `{ long: <expr>, short: <expr> }` when each side's stop sits somewhere else (beyond a swept low or high, as in `crt_1h`), `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists; `min_rr` and `max_risk_usd` are applied by the agents (risk-manager), not by code |
    | `source`, `version` | Where it came from; bump version on rule changes |
 
 3. Body (read by the agents): `## When to Use`, `## How It Works` (context
@@ -52,7 +52,15 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `ofi(n) delta(n) vol_sma(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
    `prior_high prior_low prior_close overnight_high overnight_low`, `minute_et`,
-   `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector).
+   `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector), and
+   higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
+   (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`
+   (the one in progress, up to this bar); m divides a day (60 = 1 hour, 240 =
+   4 hours, candles aligned to the 18:00 ET open: 18, 22, 02, 06, 10, 14 ET).
+   `htfc_low(60) < htf_low(60)` says this hour swept the last hour's low.
+   `crt_dir(m) crt_risk(m) crt_target(m)` are the Candle Range Theory sweep
+   detector on m-minute candles (one setup per candle, tuned by the
+   `crt*` params; see `crt_1h`).
    `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
    bar (without it the current bar is included, so a close can never cross
    above it). `minute_et` is the bar's open time in New York minutes (9:45 =

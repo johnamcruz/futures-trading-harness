@@ -31,10 +31,11 @@ from . import REPO_ROOT
 from .bridge import EnvServer
 from .config import MIN_PASS_RATE, gate_failures, load_config
 from .export import check_export, export_network
+from . import runlog
 
 
-def log(msg):
-    print(f"[train-policy] {msg}", flush=True)
+def log(msg, level="INFO"):
+    runlog.log(msg, level, stage="train-policy")
 
 
 def harness_home():
@@ -61,8 +62,66 @@ def make_vec_env(cfg, window, seed):
     return VecNormalize(venv, norm_obs=True, norm_reward=cfg["normalize_reward"], clip_obs=cfg["clip_obs"], gamma=cfg["ppo"]["gamma"], epsilon=1e-8)
 
 
-def progress_callback(every_steps, checkpoint=None, checkpoints=0, total=0):
-    """Logs pass/blow/timeout rates while training; with `checkpoint`, calls
+# PPO internals worth watching, as SB3 records them after each update.
+PPO_STATS = {"train/entropy_loss": "entropy", "train/approx_kl": "kl", "train/clip_fraction": "clip", "train/explained_variance": "ev",
+             "train/value_loss": "vloss", "train/policy_gradient_loss": "pgloss", "train/learning_rate": "lr"}
+
+
+class Window:
+    """Attempt outcomes over one logging window (reset after each line)."""
+
+    def __init__(self):
+        self.n = self.passed = self.blown = self.timeout = self.trades = self.wins = self.losses = 0
+        self.win_r = self.loss_r = self.sum_r = 0.0
+        self.profit = 0.0
+        self.sessions = 0
+        self.reward = 0.0
+
+    def add(self, o, reward):
+        self.n += 1
+        st = o.get("status")
+        self.passed += st == "passed"
+        self.blown += st == "blown"
+        self.timeout += st == "timeout"
+        self.trades += o.get("trades") or 0
+        self.wins += o.get("wins") or 0
+        self.losses += o.get("losses") or 0
+        self.win_r += o.get("winR") or 0
+        self.loss_r += o.get("lossR") or 0
+        self.sum_r += o.get("sumR") or 0
+        self.profit += o.get("profit") or 0
+        self.sessions += o.get("sessions") or 0
+        self.reward += reward
+
+    def stats(self):
+        n = self.n or None
+        rate = (lambda k: getattr(self, k) / n) if n else (lambda k: None)
+        decided = self.wins + self.losses
+        return {
+            "attempts": self.n, "pass": rate("passed"), "blow": rate("blown"), "timeout": rate("timeout"),
+            "winRate": self.wins / decided if decided else None, "tradesPerAttempt": self.trades / n if n else None,
+            "avgWinR": self.win_r / self.wins if self.wins else None, "avgLossR": self.loss_r / self.losses if self.losses else None,
+            "expectancyR": self.sum_r / self.trades if self.trades else None,
+            "avgProfit": self.profit / n if n else None, "avgSessions": self.sessions / n if n else None, "epReward": self.reward / n if n else None,
+        }
+
+
+def progress_line(seed, steps, total, sps, eta, w, ppo):
+    f = lambda x, spec: "-" if x is None else format(x, spec)  # noqa: E731
+    ppo_txt = " ".join(f"{k} {v:.3g}" for k, v in ppo.items()) or "ppo -"
+    return (f"seed {seed} [{steps:>9,}/{total:,} {steps / total:4.0%}] {sps:,.0f} steps/s ETA {runlog.fmt_duration(eta)} | "
+            f"attempts {w['attempts']} pass {f(w['pass'], '.0%')} blow {f(w['blow'], '.0%')} timeout {f(w['timeout'], '.0%')} | "
+            f"win {f(w['winRate'], '.0%')} avg winR {f(w['avgWinR'], '.2f')} lossR {f(w['avgLossR'], '.2f')} exp {f(w['expectancyR'], '+.2f')}R | "
+            f"trades/att {f(w['tradesPerAttempt'], '.1f')} profit ${f(w['avgProfit'], ',.0f')} "
+            f"sessions {f(w['avgSessions'], '.1f')} ep reward {f(w['epReward'], '.2f')} | {ppo_txt}")
+
+
+def progress_callback(every_steps, checkpoint=None, checkpoints=0, total=0, seed=None):
+    """Logs training progress every `every_steps`: speed and ETA, the attempts
+    finished in the window (pass / blow / timeout, win rate, trades, profit,
+    episode reward), and PPO's internals (entropy, KL, clip fraction,
+    explained variance, losses). Each finished attempt is an `attempt` event,
+    each line a `progress` event. With `checkpoint`, calls
     checkpoint(model, vec_env, k) at k = 1..checkpoints evenly spaced points
     (the sweep's pruning evaluation; it may raise to stop the run)."""
     from stable_baselines3.common.callbacks import BaseCallback
@@ -71,22 +130,39 @@ def progress_callback(every_steps, checkpoint=None, checkpoints=0, total=0):
         def __init__(self):
             super().__init__()
             self.next_k = 1
-            self.tally = {"passed": 0, "blown": 0, "timeout": 0, "other": 0}
+            self.window = Window()
             self.last = 0
-            self.samples = []
+            self.t0 = None
+            self.ep_reward = None
+
+        def _on_training_start(self):
+            self.t0 = time.time()
+            self.ep_reward = np.zeros(self.training_env.num_envs)
 
         def _on_step(self):
-            for info in self.locals.get("infos", []):
+            env = self.training_env
+            raw = env.get_original_reward() if hasattr(env, "get_original_reward") else self.locals.get("rewards")
+            if raw is not None:
+                self.ep_reward += np.asarray(raw, dtype=float).reshape(-1)[: len(self.ep_reward)]
+            for k, info in enumerate(self.locals.get("infos", [])):
                 o = info.get("outcome")
                 if o:
-                    k = o["status"] if o["status"] in self.tally else "other"
-                    self.tally[k] += 1
+                    r = float(self.ep_reward[k]) if k < len(self.ep_reward) else 0.0
+                    self.window.add(o, r)
+                    runlog.event("attempt", seed=seed, step=self.num_timesteps, reward=r,
+                                 **{x: o.get(x) for x in ("start", "status", "sessions", "profit", "balance", "trades", "wins", "losses", "winR", "lossR", "sumR")})
+                    if k < len(self.ep_reward):
+                        self.ep_reward[k] = 0.0
             if self.num_timesteps - self.last >= every_steps:
                 self.last = self.num_timesteps
-                t = self.tally
-                n = sum(t.values()) or 1
-                log(f"  {self.num_timesteps} steps: {n} attempts, pass {t['passed'] / n:.0%}, blow {t['blown'] / n:.0%}, timeout {t['timeout'] / n:.0%}")
-                self.tally = {k: 0 for k in t}
+                elapsed = max(time.time() - (self.t0 or time.time()), 1e-9)
+                sps = self.num_timesteps / elapsed
+                eta = (total - self.num_timesteps) / sps if sps > 0 and total else None
+                ppo = {short: float(self.model.logger.name_to_value[k]) for k, short in PPO_STATS.items() if k in self.model.logger.name_to_value}
+                w = self.window.stats()
+                log(progress_line(seed, self.num_timesteps, total or self.num_timesteps, sps, eta, w, ppo))
+                runlog.event("progress", seed=seed, step=self.num_timesteps, total=total, stepsPerSec=sps, etaSec=eta, **w, ppo=ppo)
+                self.window = Window()
             if checkpoint and self.next_k < checkpoints and self.num_timesteps >= total * self.next_k / checkpoints:
                 checkpoint(self.model, self.training_env, self.next_k)
                 self.next_k += 1
@@ -117,8 +193,12 @@ def train_seed(cfg, seed, out_dir, checkpoint=None, checkpoints=0):
         )
         started = time.time()
         total = cfg["total_timesteps"]
-        model.learn(total_timesteps=total, callback=progress_callback(max(total // 10, 1), checkpoint, checkpoints, total))
-        log(f"seed {seed}: trained {total} steps in {(time.time() - started) / 60:.1f} min")
+        log(f"seed {seed}: {total:,} steps, {cfg['n_envs']} envs, net {cfg['hidden']}, ppo {json.dumps(cfg['ppo'])}")
+        runlog.event("seed_start", seed=seed, total=total, nEnvs=cfg["n_envs"], hidden=cfg["hidden"], ppo=cfg["ppo"])
+        model.learn(total_timesteps=total, callback=progress_callback(max(total // 20, 1), checkpoint, checkpoints, total, seed))
+        minutes = (time.time() - started) / 60
+        log(f"seed {seed}: trained {total:,} steps in {minutes:.1f} min ({total / max(minutes * 60, 1e-9):,.0f} steps/s)")
+        runlog.event("seed_trained", seed=seed, total=total, minutes=minutes)
         venv.training = False
         network = export_network(model, venv)
         seed_dir = out_dir / "seeds"
@@ -166,9 +246,21 @@ def pct(x):
     return "-" if x is None else f"{round(x * 1000) / 10}%"
 
 
+def rfmt(x, sign=False):
+    return "-" if x is None else (f"{x:+.2f}R" if sign else f"{x:.2f}R")
+
+
+def results_line(r):
+    """An evaluation in one line: pass, blow, and win rate, average win and loss R, expectancy, profit, trades."""
+    return (f"{r.get('attempts')} attempts: pass {pct(r.get('passRate'))}, blow {pct(r.get('blowRate'))}, win {pct(r.get('winRate'))}, "
+            f"avg winR {rfmt(r.get('avgWinR'))}, avg lossR {rfmt(r.get('avgLossR'))}, expectancy {rfmt(r.get('expectancyR'), True)}, "
+            f"avg profit ${r.get('avgProfit')}, trades/attempt {r.get('tradesPerAttempt')}")
+
+
 def report_md(b):
     def row(label, r):
-        return (f"| {label} | {r['attempts']} | {pct(r['passRate'])} | {pct(r.get('winRate'))} | {pct(r['blowRate'])} | "
+        return (f"| {label} | {r['attempts']} | {pct(r['passRate'])} | {pct(r.get('winRate'))} | {rfmt(r.get('avgWinR'))} | {rfmt(r.get('avgLossR'))} | "
+                f"{rfmt(r.get('expectancyR'), True)} | {pct(r['blowRate'])} | "
                 f"{r['medianDaysToPass'] if r['medianDaysToPass'] is not None else '-'} | {r['avgProfit']} | {r['tradesPerAttempt']} |")
 
     gate = b["gate"]
@@ -185,8 +277,8 @@ def report_md(b):
         lines += ["", "Failed:", ""] + [f"- {f}" for f in b["gateFailures"]]
     lines += [
         "",
-        "| Window | Attempts | Pass | Win rate | Blow | Median days to pass | Avg profit $ | Trades/attempt |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Window | Attempts | Pass | Win rate | Avg win R | Avg loss R | Expectancy | Blow | Median days to pass | Avg profit $ | Trades/attempt |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
         row("Selection (policy)", b["selection"]),
         row("Out of sample (policy)", b["oos"]),
         row("Out of sample (rules only)", b["baseline"]),
@@ -214,8 +306,12 @@ def evaluate_oos(server, cfg, network):
     baseline = server.evaluate(oos_starts, w["oos"][1], None)
     oos = server.evaluate(oos_starts, w["oos"][1], network)
     fails = gate_failures(oos, cfg["min_pass_rate"], cfg["min_win_rate"])
-    log(f"out of sample: policy pass {pct(oos['passRate'])} win {pct(oos.get('winRate'))} blow {pct(oos['blowRate'])}; "
-        f"rules only pass {pct(baseline['passRate'])} win {pct(baseline.get('winRate'))} blow {pct(baseline['blowRate'])}; {'VALIDATED' if not fails else 'not validated: ' + '; '.join(fails)}")
+    log(f"out of sample, policy: {results_line(oos)}")
+    log(f"out of sample, rules only: {results_line(baseline)}")
+    log(f"out of sample: {'VALIDATED' if not fails else 'not validated: ' + '; '.join(fails)}")
+    runlog.event("evaluation", window="oos", policy=oos, baseline=baseline, gateFailures=fails, validated=not fails)
+    for m, r in oos.get("months", {}).items():
+        log(f"  oos {m}: {results_line(r)}")
     return oos, baseline, fails
 
 
@@ -326,7 +422,8 @@ def train(cfg, out_dir):
             log(f"seed {seed}: training on {cfg['windows']['train'][0]} .. {cfg['windows']['train'][1]}")
             network = train_seed(cfg, seed, out_dir)
             sel = server.evaluate(select_starts, w["select"][1], network)
-            log(f"seed {seed} selection: pass {pct(sel['passRate'])}, win {pct(sel.get('winRate'))}, blow {pct(sel['blowRate'])}, avg profit ${sel['avgProfit']}")
+            log(f"seed {seed} selection: {results_line(sel)}")
+            runlog.event("evaluation", window="select", seed=seed, result=sel)
             seeds_report.append({"seed": seed, "selection": {k: v for k, v in sel.items() if k != "months"}})
             if best is None or rank(sel) < rank(best["selection"]):
                 best = {"seed": seed, "network": network, "selection": sel}
@@ -355,13 +452,22 @@ def main(argv=None):
         return 1
     out_dir = Path(args.out or cfg.get("outDir") or harness_home() / "policies" / cfg["name"]).resolve()
     started = time.time()
-    bundle = train(cfg, out_dir)
+    runlog.start(out_dir, "train", cfg, configFile=str(args.config), quick=args.quick)
+    try:
+        bundle = train(cfg, out_dir)
+    except BaseException as err:
+        runlog.failed(err)
+        raise
     log(f"wrote {out_dir / (cfg['name'] + '.json')} and report.md ({(time.time() - started) / 60:.1f} min)")
+    summary = {"validated": bundle["validated"], "chosenSeed": bundle["training"]["chosenSeed"], "gateFailures": bundle["gateFailures"],
+               "oos": {k: bundle["oos"].get(k) for k in ("attempts", "passRate", "blowRate", "winRate")}}
     if args.promote:
         if not bundle["validated"]:
             log("not promoted: the bundle failed the gate (see report.md); zero blows and the pass rate are not waivable")
+            runlog.finish("not_validated", **summary)
             return 2
         log(f"promoted to {promote(out_dir, cfg['name'], args.models_dir)}")
+    runlog.finish("done", **summary)
     return 0
 
 

@@ -25,8 +25,11 @@ description: Rules for running the trading harness unattended (headless, schedul
    Before your cycle, the runner has already done two things:
    - cancelled leftover orders on a flat contract;
    - for strategies whose exit trails, applied the trailing stop: hold the
-     initial stop until +2R, then 0.5R behind the best price.
-   Don't loosen a stop it set.
+     initial stop until +2R, then 0.5R behind the best price;
+   - for strategies with a time stop (`exit.max_bars`), closed a trade that
+     has been open that long.
+   Don't loosen a stop it set. To see why a setup did or didn't fire, read
+   that bar's record in `<FTH_HOME>/logs/scans-<day>.jsonl`.
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
    the server ends the entry attempt. Fix what the block names when it is
    yours to fix (for example, review a closed trade, cancel a leftover order),

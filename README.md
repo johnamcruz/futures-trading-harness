@@ -245,8 +245,24 @@ plugin. It prints the remaining native commands:
 Credentials (`PROJECTX_USERNAME`, `PROJECTX_API_KEY`) and guardrails
 (`PROJECTX_TRADING_ENABLED`, `PROJECTX_ALLOWED_SYMBOLS`, ...) go in the
 environment that launches the harness (Qwen's extension settings don't reach
-MCP servers). See
+MCP servers), or in a `.env` file. See
 `mcp-configs/` for examples.
+
+**`.env` files.** The autotrader, the MCP gateway, `backtest.js fetch`, and
+`orderflow.js` read, in order: `$FTH_ENV_FILE` (if set),
+`~/.futures-trading-harness/.env` (preferred: outside the repo), and a
+`.env` in the repo root. The first value found wins, a variable already set
+in the environment wins over all of them, and only key names are logged.
+Start from `.env.example`:
+
+```bash
+cp .env.example ~/.futures-trading-harness/.env && chmod 600 ~/.futures-trading-harness/.env
+```
+
+The repo's `.gitignore` ignores `.env` and `.env.*` (not `.env.example`).
+`npm run check:secrets` (also in CI) fails on any env file or credential
+value in tracked files, and `npm run hooks:install` adds a git pre-commit
+hook that checks every commit's staged files the same way.
 
 ## Running it
 
@@ -297,7 +313,28 @@ the official candle.
 
 The runner needs `PROJECTX_USERNAME` and `PROJECTX_API_KEY` in its
 environment (read-only use: contracts, bars, positions). It logs everything to
-`~/.futures-trading-harness/logs/` and never runs two cycles at once. Each run
+`~/.futures-trading-harness/logs/` and never runs two cycles at once:
+`autotrader-<day>.log` holds every runner line (timestamped, `INFO` or
+`ERROR`: each bar's close and whether a cycle ran and why, stops trailed,
+time stops, verdicts, account reads) and each cycle's output, and
+`scans-<day>.jsonl` holds one record per scanned bar with every strategy's
+verdict and why (the rules that failed, session, its detectors' state, such
+as a CRT sweep's range and reason), and `events-<day>.jsonl` one record per
+thing that happens: start and stop, each cycle (start, end, duration, result
+line, timeout), the account read for it (balance, positions, prop attempt),
+positions picked up for management, stops moved, closes (why, R at close,
+best and worst R, bars held), end-of-day flattens and closes recorded, the
+kill switch, and errors.
+
+Training logs go next to each run's outputs, in `logs/`: `<stage>.log`
+(every line, timestamped: per seed, steps, steps/s, ETA, pass / blow /
+timeout, win rate, trades and profit per attempt, episode reward, and PPO's
+entropy, KL, clip fraction, explained variance, and losses),
+`<stage>.jsonl` (every attempt, progress line, evaluation, and sweep trial
+with its params, score, and state: complete, infeasible and why, pruned at
+which checkpoint, or failed with its traceback), and a run manifest
+(`run.json`: config, git commit, library versions, start, end, status).
+Each sweep trial also writes `trial_NNN/train.log` and `summary.json`. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the
@@ -377,7 +414,7 @@ trained policy learns which to take, at what size, and when to bank a trade
 
 ```yaml
 signal: policy
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim]   # every 3-minute strategy
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
 contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)

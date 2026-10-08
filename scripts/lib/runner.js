@@ -40,6 +40,7 @@ const famOf = contractId => familyRoot(contractRoot(contractId));
 const { trailStep } = require('./trading/trail');
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
+const { timeframeMs } = require('./trading/evaluator');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -58,6 +59,8 @@ function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
+    scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
+    event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
     accountReadMs = ACCOUNT_READ_MS,
@@ -72,10 +75,30 @@ function createRunner(deps) {
   const delayMs = cfg.barDelaySeconds * 1000;
   const timeoutMs = cfg.barTimeoutSeconds * 1000;
 
+  /** An event for the event log; a failure to log never stops the pass. */
+  function emit(kind, data = {}) {
+    try {
+      event({ at: clock.now().toISOString(), kind, ...data });
+    } catch (_err) {
+      // logging is best effort
+    }
+  }
+
+  /** Run an agent cycle, timed, with its outcome in the event log. */
+  async function timedCycle(action, prompt, limits, info = {}) {
+    const t0 = clock.now().getTime();
+    emit('cycle_start', { action, timeoutMs: limits.timeoutMs, ...info });
+    const r = await runCycle(action, prompt, limits);
+    emit('cycle_end', { action, ms: clock.now().getTime() - t0, ok: Boolean(r && r.ok), timedOut: Boolean(r && r.timedOut), result: (r && r.result) || null, ...info });
+    if (r && r.result) log(`${action}: ${r.result}`);
+    return r;
+  }
+
   function record(ok, timedOut, now) {
     errors = ok ? 0 : errors + 1;
     if (errors >= cfg.maxConsecutiveErrors && !isKillSwitchOn()) {
       createKillSwitch(`created by autotrader after ${errors} failed runs at ${now.toISOString()}`);
+      emit('kill_switch', { reason: `${errors} failed runs in a row` });
       log(`${errors} failed runs in a row: kill switch created. Remove it to resume.`, 'error');
     }
     if (timedOut) recover = true;
@@ -216,13 +239,21 @@ function createRunner(deps) {
       if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;
       else if (stopOrder && sign * (entry - Number(stopOrder.stopPrice)) > 0) risk = sign * (entry - Number(stopOrder.stopPrice));
       else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
-      const ok = plan && plan.trailActivateR !== null && tick > 0 && risk >= 4 * tick - 1e-9;
+      // Managed: a trailing exit, or a time stop (max_bars), or both.
+      const managed = plan && (plan.trailActivateR !== null || plan.maxBars);
+      // max_bars counts the strategy's own bars; the runner sees its own timeframe's.
+      const tfMin = ((strategy && timeframeMs(strategy.timeframe)) || cfg.timeframe * 60000) / 60000;
+      const maxRunnerBars = plan && plan.maxBars ? Math.ceil((plan.maxBars * tfMin) / cfg.timeframe) : null;
+      const ok = managed && tick > 0 && risk >= 4 * tick - 1e-9;
       t = ok
-        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, since: fillAt, lastBarT: null }
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null }
         : { key, skip: true };
       save(t);
-      if (ok) log(`${item.symbol}: trailing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R)`);
-      else if (plan && plan.trailActivateR !== null) log(`${item.symbol}: ${rec.setup} position not trailed: no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
+      if (ok) {
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
+        log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
+        emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars });
+      } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
     // Every bar that opened after the fill (a market fill seconds into a bar
@@ -251,6 +282,9 @@ function createRunner(deps) {
     const lastBarT = bars[bars.length - 1].t;
     const closeOut = async why => {
       await client.closePosition(cfg.account, cid);
+      const last = bars[bars.length - 1];
+      emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
+        lastClose: last.c, rNow: (sign * (last.c - t.entry)) / t.risk, peakR, troughR, barsHeld });
       save({ ...t, peakR, troughR, barsHeld, lastBarT });
       log(`${item.symbol}: ${why}; closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
       for (const o of orders.filter(x => x.contractId === cid)) {
@@ -263,6 +297,12 @@ function createRunner(deps) {
     };
     if (cross) {
       await closeOut(`trail: price went through the new stop ${cross.stop} (resting ${resting ?? 'none'})`);
+      return;
+    }
+    // The strategy's time stop (exit.max_bars), as the backtester applies it.
+    const maxBars = t.maxRunnerBars || t.plan.maxBars;
+    if (maxBars && barsHeld >= maxBars) {
+      await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
     // Past the ratchet, a strategy's policy may bank the trade (as in training).
@@ -290,6 +330,7 @@ function createRunner(deps) {
       return;
     }
     await client.modifyStop(cfg.account, stopOrder.id, target);
+    emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: target, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: target });
     log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);
   }
@@ -355,6 +396,15 @@ function createRunner(deps) {
     return [net || mine.reduce((n, p) => n + Number(p.size || 0), 0), orders.filter(o => famOf(o.contractId) === fam).length];
   }
 
+  /** Record a scanned bar in the decision log; a failure to log never stops the pass. */
+  function logScan(item, results, decision) {
+    try {
+      scanLog({ at: clock.now(), symbol: item.symbol, contractId: item.contractId, bar: item.bar, results, decision });
+    } catch (err) {
+      log(`${item.symbol}: decision log failed (${err.message})`, 'error');
+    }
+  }
+
   async function wanted(item, manageOnly) {
     if (cfg.trigger === 'bar' && !manageOnly) {
       // Every bar runs a cycle; a policy still records its verdicts for the gate.
@@ -364,6 +414,7 @@ function createRunner(deps) {
           if (net === 0 && working === 0) {
             const screened = prop.screen(scanFor(item.symbol, item.bars), { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
             item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
+            logScan(item, screened, { run: true, reason: 'bar closed' });
           }
         } catch (err) {
           log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
@@ -383,7 +434,9 @@ function createRunner(deps) {
         ? prop.screen(results, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() })
         : results;
       item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
-      return signalDecision(screened, net, working, { paper: cfg.paper });
+      const decision = signalDecision(screened, net, working, { paper: cfg.paper });
+      logScan(item, screened, decision);
+      return decision;
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       return { run: true, reason: `account check failed (${err.message})` };
@@ -400,6 +453,7 @@ function createRunner(deps) {
       return await stepOnce();
     } catch (err) {
       log(`runner error: ${err.message}`, 'error');
+      emit('error', { where: 'runner', error: err.message, stack: err.stack ? String(err.stack).split('\n').slice(0, 6).join('\n') : null });
       try {
         record(false, false, clock.now());
       } catch (_err) {
@@ -423,6 +477,7 @@ function createRunner(deps) {
       for (const p of open) {
         await client.closePosition(cfg.account, p.contractId);
         log(`${why}: ${p.contractId} was open; closed at market`, 'error');
+        emit('flatten', { why, contractId: p.contractId, size: Number(p.size), side: p.type === 1 ? 'long' : p.type === 2 ? 'short' : null });
       }
       for (const o of orders.filter(x => roots.has(famOf(x.contractId)))) await client.cancelOrder(cfg.account, o.id);
       return true;
@@ -476,6 +531,15 @@ function createRunner(deps) {
     }
   }
 
+  /** The account as read for a run, for the event log. */
+  function accountEvent(a) {
+    if (a.error) return { id: a.id, error: a.error };
+    return {
+      id: a.id, balance: a.balance, positions: a.positions ? a.positions.map(p => ({ contractId: p.contractId, side: p.type === 1 ? 'long' : p.type === 2 ? 'short' : null, size: p.size, averagePrice: p.averagePrice })) : null,
+      workingOrders: a.workingOrders, attempts: (a.attempts || []).map(x => ({ account: x.account, status: x.status, balance: x.balance, floor: x.floor, cushion: x.cushion, profit: x.profit, dayPnl: x.dayPnl, entryBlock: x.entryBlock || null })),
+    };
+  }
+
   /** Milliseconds from `now` to today's end of day (Infinity if none). */
   function msToEod(now) {
     const eod = endOfDayAt(cfg, now);
@@ -507,11 +571,13 @@ function createRunner(deps) {
     try {
       await prop.endOfDay(now, day);
       if (pendingClose.tries > 1) log(`end of day: the close of ${day} is recorded`);
+      emit('close_recorded', { day, tries: pendingClose.tries });
       pendingClose = null;
     } catch (err) {
       const final = /already recorded/.test(err.message) || pendingClose.tries >= CLOSE_TRIES;
       log(`end of day: could not record the close of ${day} (${err.message}); `
         + (final ? `giving up: prop entries stay refused until it is recorded (node scripts/combine.js record-day --account <name> --day ${day} --balance <dollars>)` : 'retrying in a minute'), 'error');
+      emit('close_record_failed', { day, tries: pendingClose.tries, error: err.message, final });
       if (final) pendingClose = null;
     }
   }
@@ -540,7 +606,8 @@ function createRunner(deps) {
         // The time limit counts from after the account read.
         const timeoutMs = limitFor(d.action, clock.now());
         if (timeoutMs < 30000) { noTime(); continue; }
-        const r = await runCycle(d.action, prompt(acct), { timeoutMs });
+        if (acct) emit('account', accountEvent(acct));
+        const r = await timedCycle(d.action, prompt(acct), { timeoutMs });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
       // Then check again: flatten whatever the run left open.
@@ -557,6 +624,7 @@ function createRunner(deps) {
       }
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
+      emit(d.action, { day: d.state.day, ok, cyclesToday: state.cycles });
       record(ok, false, now);
       saveState(state);
       // A failed end of day is retried, with a growing pause (5 s .. 60 s).
@@ -601,8 +669,8 @@ function createRunner(deps) {
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
-          if (w.run) run.push(item);
-          else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
+          if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
+          else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }
         let cycleNow = clock.now();
         let timeoutMs = limitFor(again.action, cycleNow);
@@ -617,7 +685,8 @@ function createRunner(deps) {
         else if (run.length) {
           const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
           recover = false;
-          const r = await runCycle(again.action, prompt, { timeoutMs });
+          if (acct) emit('account', accountEvent(acct));
+          const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
           state = recordRun(state, 'trade', cycleNow);
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);

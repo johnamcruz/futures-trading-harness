@@ -17,6 +17,8 @@ const PARAMS = {
   swingK: 2,
   orbMinutes: 15,
   atrStop: 20, stopAtrMult: 0.5,
+  // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
+  crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
 };
 
 const RTH_OPEN = 9 * 60 + 30;

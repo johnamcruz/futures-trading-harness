@@ -46,6 +46,27 @@ class TrainTest(unittest.TestCase):
         self.assertIn("winRate", bundle["oos"])
         self.assertEqual(bundle["oos"]["attempts"], bundle["baseline"]["attempts"])
         self.assertTrue((d / "out" / "report.md").read_text().startswith("# Policy synthetic_policy"))
+        # The run's logs: every line, structured events, and the manifest.
+        logs = d / "out" / "logs"
+        text = (logs / "train.log").read_text()
+        self.assertRegex(text, r"\[train-policy\] \d{4}-\d\d-\d\dT\S+Z INFO seed 1 \[.*steps/s ETA .* \| attempts \d+ pass \S+ blow \S+ timeout \S+ \| win \S+ avg winR \S+ lossR \S+ exp \S+ \|")
+        self.assertRegex(text, r"out of sample, policy: \d+ attempts: pass \S+, blow \S+, win \S+, avg winR \S+, avg lossR \S+, expectancy ")
+        self.assertRegex(text, r"seed 1 selection: \d+ attempts: pass .* avg winR ")
+        events = [json.loads(x) for x in (logs / "train.jsonl").read_text().splitlines()]
+        kinds = {e["kind"] for e in events}
+        self.assertTrue({"seed_start", "attempt", "progress", "seed_trained", "evaluation"} <= kinds, kinds)
+        attempt = next(e for e in events if e["kind"] == "attempt")
+        self.assertTrue({"seed", "step", "status", "profit", "trades", "wins", "losses", "winR", "lossR", "sumR", "reward"} <= set(attempt))
+        progress = next(e for e in events if e["kind"] == "progress")
+        self.assertTrue({"stepsPerSec", "etaSec", "attempts", "pass", "blow", "winRate", "avgWinR", "avgLossR", "expectancyR", "ppo"} <= set(progress))
+        self.assertIn("Avg win R", (d / "out" / "report.md").read_text())
+        self.assertIn("avgWinR", bundle["oos"])
+        run = json.loads((logs / "run.json").read_text())
+        self.assertEqual(run["status"], "not_validated")
+        self.assertEqual(run["config"]["name"], "synthetic_policy")
+        self.assertIn("python", run["versions"])
+        self.assertIsNotNone(run["ended"])
+        self.assertFalse(run["summary"]["validated"])
         out = subprocess.run([node_binary(), "-e", JS, str(bundle_file)], capture_output=True, text=True, cwd=REPO_ROOT, check=True)
         checks = json.loads(out.stdout)
         self.assertEqual(checks["research"], [])

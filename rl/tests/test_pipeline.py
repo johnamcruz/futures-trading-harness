@@ -63,6 +63,16 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(cfg["ppo"]["learning_rate"], t.params["ppo.learning_rate"], "sampled")
             self.assertIn(cfg["hidden"], ([16], [32, 32]))
             self.assertTrue(Path(cfg["data"]["MNQ"]).is_absolute())
+            # Every trial is logged: its params, state, score, and its own log file.
+            sweep_logs = d / "out" / "sweep" / "logs"
+            trials = [json.loads(x) for x in (sweep_logs / "sweep.jsonl").read_text().splitlines() if json.loads(x)["kind"] == "trial"]
+            self.assertEqual(sorted(t["number"] for t in trials), [0, 1])
+            self.assertTrue(all(t["state"] in ("complete", "infeasible", "pruned") and "params" in t and "minutes" in t for t in trials))
+            self.assertTrue(all(t["reason"] for t in trials if t["state"] == "infeasible"))
+            self.assertIn("trial=0", (d / "out" / "sweep" / "trial_000" / "train.log").read_text())
+            self.assertEqual(json.loads((d / "out" / "sweep" / "trial_000" / "summary.json").read_text())["number"], 0)
+            self.assertEqual(json.loads((sweep_logs / "run.json").read_text())["status"] if (sweep_logs / "run.json").exists()
+                             else json.loads((sweep_logs / "sweep.run.json").read_text())["status"], "done")
             # The sweep never sees the out-of-sample window: nothing under ship/ yet.
             self.assertFalse((d / "out" / "ship").exists())
             if pipeline.best_trial(study) is None:
@@ -89,6 +99,9 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(bundle["training"]["oosLooks"], 1)
             self.assertEqual(bundle["gate"]["minPassRate"], 1.0)
             self.assertTrue((d / "out" / "ship" / "report.md").exists())
+            ship_run = json.loads((d / "out" / "ship" / "logs" / "ship.run.json").read_text())
+            self.assertEqual(ship_run["status"], "not_validated")
+            self.assertIn("ship synthetic_policy", (d / "out" / "ship" / "logs" / "ship.log").read_text())
             self.assertEqual(bundle["strategy"], "prop_test")
             self.assertEqual(bundle["components"], ["ema_wide"])
             self.assertTrue(bundle["engine"]["gate"])

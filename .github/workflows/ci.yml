@@ -34,3 +34,5 @@ jobs:
       - run: npm run lint
       - run: npm run sync:check
       - run: node scripts/strategies.js validate
+      # No env files or credential values in the repository.
+      - run: npm run check:secrets

@@ -51,7 +51,14 @@ python -m unittest discover -s rl/tests -t rl                                   
 
 Outputs go to `<out>` = the sweep's `out_dir`, else `<FTH_HOME>/rl/<family>`:
 `sweep/` (study, trials), `retrain/` (seeds, `candidates.json` with the config
-they were trained with), `ship/` (bundle, `report.md`, `oos_log.jsonl`). A
+they were trained with), `ship/` (bundle, `report.md`, `oos_log.jsonl`).
+Every stage also writes `logs/`: `<stage>.log` (every line, timestamped:
+progress per seed with steps/s, ETA, pass / blow / timeout, win rate, trades,
+profit, episode reward, and PPO internals), `<stage>.jsonl` (every training
+attempt, progress line, evaluation, and trial with its params, score, and
+state, and why it was infeasible, pruned, or failed), and a run manifest
+(`run.json` or `<stage>.run.json`: config, git commit, versions, status).
+Each trial also keeps `trial_NNN/train.log` and `summary.json`. A
 study is bound to its strategy, data, and windows and won't resume after they
 change; out-of-sample looks are also counted harness-wide in
 `<FTH_HOME>/rl/oos_looks.jsonl`.

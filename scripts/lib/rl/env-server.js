@@ -97,7 +97,12 @@ function serve({ env, meta = {}, readLine, writeLine }) {
     }
     const wins = out.trades.filter(t => t.net > 0).length;
     const losses = out.trades.filter(t => t.net < 0).length;
-    const outcome = { start: out.start, status: out.status, sessions: out.sessions, profit: out.profit, balance: out.balance, trades: out.trades.length, wins, losses };
+    // R per trade (after the stop it was sized from): winners', losers', and all of them, for win R / loss R / expectancy.
+    const sumR = f => Math.round(out.trades.filter(f).reduce((a, t) => a + (Number.isFinite(t.r) ? t.r : 0), 0) * 1000) / 1000;
+    const outcome = {
+      start: out.start, status: out.status, sessions: out.sessions, profit: out.profit, balance: out.balance, trades: out.trades.length, wins, losses,
+      winR: sumR(t => t.net > 0), lossR: sumR(t => t.net < 0), sumR: sumR(() => true),
+    };
     if (lastBalance === null) reply({ done: true, outcome, decisions: 0 });
     else {
       const reward = denseReward(env, lastBalance, out.balance) + tradeReward(env, wins - last.wins, losses - last.losses) + outcomeReward(env, out);
