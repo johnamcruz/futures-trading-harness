@@ -39,8 +39,10 @@ description: Rules for running the trading harness unattended (headless, schedul
    otherwise end the cycle. Never edit harness files, settings, environment,
    strategy status, blackouts (except adding them in premarket), or the journal
    file to get past a limit.
-5. **Kill switch.** If `<FTH_HOME>/STOP` (default `~/.futures-trading-harness/STOP`) exists, place no new
-   entries; manage or flatten open positions only.
+5. **Kill switch.** When `<FTH_HOME>/STOP` exists the runner starts only
+   manage cycles and the gate refuses every entry; you don't need to check
+   the file (you can't read it). If an entry is refused with `[kill-switch]`,
+   manage or flatten open positions only, and end.
 6. **Leave a trail.** Every cycle ends with a journal `note` (or plan, review)
    so the next cycle and the human can see what happened, and a final line:
    `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`.

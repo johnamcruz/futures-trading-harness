@@ -20,7 +20,10 @@ skills `trade-review` and `setup-expectancy`.
    `[exit]`/`[protect]` that actually opened risk is `mistake:rule-break`.
 4. `journal_add {kind:"review", contractId, orderId, text, tags}` with exactly
    one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag.
-5. Review `order_blocked` entries: why did the plan reach a block?
+5. Review blocked orders: the server's own (`order_blocked` in the
+   journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, one JSON
+   line per decision with the checks that refused it). Why did the plan reach
+   a block?
 6. At end of day only: compare with `get_performance` and earlier reviews of
    the same setup; write at most 1–3 `lesson` entries, each with its evidence
    count. Don't write lessons from a single trade unless it's a rule break.

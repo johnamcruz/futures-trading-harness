@@ -50,10 +50,25 @@ const STYLES = ['trend', 'reversal'];
 const LABEL = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 240: '4h', 1440: 'daily' };
 const label = m => LABEL[m] || `${m}m`;
 
+/** The bars' step in ms: the smallest gap between the last 50 bars (gaps only ever add time). */
+function stepOf(bars) {
+  let step = Infinity;
+  for (let i = Math.max(1, bars.length - 50); i < bars.length; i += 1) {
+    const d = Date.parse(bars[i].t) - Date.parse(bars[i - 1].t);
+    if (d > 0 && d < step) step = d;
+  }
+  return Number.isFinite(step) ? step : 60000;
+}
+
+/** Does the bar at `t` (lasting `stepMs`) close exactly on an m-minute candle boundary? Then its candle is complete. */
+function closesCandle(t, stepMs, minutes) {
+  return startsOnOpen({ t: new Date(Date.parse(t) + stepMs).toISOString() }, minutes);
+}
+
 /**
  * The m-minute candles in `bars`: [{ t, o, h, l, c, v, start, end, complete }].
- * The last candle is in progress (complete: false); a first candle the bars
- * start partway into is dropped.
+ * The last candle is in progress (complete: false) unless the last bar closed
+ * on its boundary; a first candle the bars start partway into is dropped.
  */
 function candles(bars, minutes) {
   const h = ind.htfCandles(bars, minutes);
@@ -75,7 +90,8 @@ function candles(bars, minutes) {
     }
   }
   if (cur) out.push(cur);
-  return out.filter(c => !c.cut).map((c, k, all) => ({ ...c, complete: k < all.length - 1 }));
+  const lastDone = bars.length > 0 && closesCandle(bars[bars.length - 1].t, stepOf(bars), minutes);
+  return out.filter(c => !c.cut).map((c, k, all) => ({ ...c, complete: k < all.length - 1 || lastDone }));
 }
 
 function startsOnOpen(bar, minutes) {
@@ -284,28 +300,38 @@ function ruleLine(r) {
   return `Trend rule: prevailing trend ${r.prevailing}; trend strategies may not go ${against}, reversal strategies (mtf: reversal) may.`;
 }
 
-/** Per bar: the m-minute bias as of the last candle completed before that bar (causal). */
+/**
+ * Per bar: the m-minute bias as of the candles completed by that bar's close
+ * (causal: a candle that closes with the bar counts; the one in progress doesn't).
+ */
 function biasSeries(bars, minutes, opts = {}) {
   const n = bars.length;
   const out = new Array(n).fill(NaN);
   const h = ind.htfCandles(bars, minutes);
+  const step = stepOf(bars);
   const done = [];
   let cur = null;
   let bias = NaN;
+  const finish = () => {
+    if (cur && !cur.cut) {
+      done.push(cur);
+      // Every completed candle, as mtfRead reads them: the rule and the read agree.
+      bias = done.length >= 3 ? readTimeframe(done, opts).bias : NaN;
+    }
+    cur = null;
+  };
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
     if (!cur || cur.key !== h.key[i]) {
-      if (cur && !cur.cut) {
-        done.push(cur);
-        // Every completed candle, as mtfRead reads them: the rule and the read agree.
-        bias = done.length >= 3 ? readTimeframe(done, opts).bias : NaN;
-      }
+      finish();
       cur = { key: h.key[i], t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, cut: i === 0 && !startsOnOpen(b, minutes) };
     } else {
       cur.h = Math.max(cur.h, b.h);
       cur.l = Math.min(cur.l, b.l);
       cur.c = b.c;
     }
+    // This bar closes its candle: it is complete now, not when the next bar opens.
+    if (closesCandle(b.t, step, minutes)) finish();
     out[i] = bias;
   }
   return out;

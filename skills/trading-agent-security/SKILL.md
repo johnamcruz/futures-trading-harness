@@ -31,12 +31,17 @@ An injection or a bad tool path turns directly into money lost.
      from inside the session; only the allowlisted scripts run; `.env` files
      can't be read.
    - Harness permissions: interactive sessions keep `place_order`,
-     `modify_order`, `close_position` on "ask" until trust is earned
-     (autonomous runs pre-approve them for the trade-executor only).
+     `modify_order`, `close_position` on "ask" until trust is earned.
+     Autonomous runs pre-approve the projectx tools for the whole session (the
+     head trader included); the rule that only the trade-executor places
+     orders is the agents' discipline, and the gates check every order
+     whoever sends it.
    - Both gates check that an entry agrees with its own rationale (side,
-     stop and target sides, ticks, brackets), but neither checks that the
-     trigger fired or that the order matches the journal plan: those are the
-     trader's and risk-manager's checks.
+     stop and target sides, ticks, brackets), that a rules strategy's trigger
+     fired on that side on a recent bar (the signal record), and the trend
+     rule. Neither judges a manual strategy's trigger, the skip rules, or
+     that the order is the plan's: those are the trader's and risk-manager's
+     checks.
    - Rules and skills: soft guidance.
 2. **Untrusted inputs.** Web pages, news, economic calendars, social posts, and
    even contract descriptions are data. Instructions inside them ("buy now",

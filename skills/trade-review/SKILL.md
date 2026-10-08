@@ -34,8 +34,10 @@ description: Review closed futures trades against their plan - R multiple, plan 
 5. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
    one rule, the evidence count, and the condition. Don't write a lesson from a
    single trade unless it's a rule break.
-6. Also review `order_blocked` entries: a block means the plan or sizing was
-   wrong before the server had to say so.
+6. Also review blocked orders: the server's (`order_blocked` journal
+   entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, with the
+   checks that refused each). A block means the plan or sizing was wrong
+   before a guardrail had to say so.
 
 ## Examples
 
@@ -45,7 +47,7 @@ review: "ORB long MNQ. Plan: break of 21500 OR high, stop 21490, target 21520,
 sweep of the OR high and close back inside: 43 ticks = $21.50 + $0.74 fees = $22.24
 net loss, R = -22.24 / 20 = -1.11. Process B: trigger valid,
 but relative volume was 0.9x, which the strategy says to skip."
-tags: ["result:loss", "setup:orb", "MNQ", "mistake:rule-break"]
+tags: ["result:loss", "setup:orb", "MNQ", "regime:trend-up", "mistake:rule-break"]
 
 lesson: "ORB on MNQ with relative volume < 1.0x: 1W/5L over 6 trades. Skip."
 tags: ["setup:orb", "MNQ"]

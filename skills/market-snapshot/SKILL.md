@@ -15,16 +15,17 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 ## How It Works
 
-1. Fetch closed bars, oldest first:
-   `get_bars {contractId, unit:"minute", unitNumber:3, limit:2000, includePartialBar:false}`.
-   Use 2000 bars (the autonomous runner keeps at least as many in its bars
-   file; prefer that file): enough for EMA(200), prior-day levels, and the
+1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
+   file (the prompt names it). Otherwise:
+   `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --count 2000`
+   writes `/tmp/fth/MNQ-3m.json` and prints when its last bar closed.
+   Don't paste a `get_bars` reply into a file: 2000 bars are far more than a
+   tool reply can carry. 2000 bars are enough for EMA(200), prior-day levels, and the
    1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,
    the regime) read their own trailing 500 bars, as their source did.
    3-minute bars match the strategy parameters (1-minute for the flow
    strategies).
-2. Save the tool's JSON result verbatim to a temp file, e.g.
-   `/tmp/fth/MNQ-3m.json` (create the folder first).
+2. (The file is projectx get_bars JSON; CSV and Parquet files work too.)
 3. Run the script from the harness root (`<root>`, an absolute path; see the
    `strategy-library` skill for how to find it):
 
@@ -42,6 +43,13 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET
      anchor), vwapRth (09:30 ET anchor; null before today's 09:30 ET open
      and after 16:00 ET: use vwapSession then, as the strategy filters do).
+   - `vwap`: which VWAP applies now (`rth` or `session`), the distance in
+     ATR(14), and the RTH and session crosses in the last 30 bars.
+   - `participation`: relative volume of the last bar and the last 3 vs the
+     opening-range average, the 20 bars before, and the same time the
+     previous day (orb's skip rule reads `relVolLastVsOpeningRange`).
+   - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
+     0.1 x ATR), and open fair value gaps.
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, VWAP crosses in 30 bars, ATR vs its average).

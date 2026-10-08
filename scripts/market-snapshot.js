@@ -18,7 +18,13 @@ const { PARAMS, snapshot } = require('./lib/trading/market-snapshot');
 function parseArgs(argv) {
   const overrides = {};
   let file = null;
-  for (const arg of argv) {
+  // --name=value or --name value.
+  const args = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const bare = /^--[A-Za-z0-9]+$/.test(argv[i]);
+    if (bare && argv[i + 1] !== undefined) { args.push(`${argv[i]}=${argv[i + 1]}`); i += 1; } else args.push(argv[i]);
+  }
+  for (const arg of args) {
     const m = /^--([A-Za-z0-9]+)=(.+)$/.exec(arg);
     if (m) {
       if (!(m[1] in PARAMS)) throw new Error(`unknown parameter --${m[1]} (known: ${Object.keys(PARAMS).join(', ')})`);

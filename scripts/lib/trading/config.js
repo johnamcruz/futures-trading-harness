@@ -73,6 +73,8 @@ function loadConfig(env = process.env) {
     maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', 6), // 0 = off
     // How old the multi-timeframe record may be (minutes after its last bar closed).
     mtfMaxAgeMin: intEnv(env, 'FTH_MTF_MAX_AGE_MIN', 15, { min: 1 }),
+    // How long after its bar closed a rules strategy's signal may still be entered (signal-state.js).
+    signalMaxAgeMin: intEnv(env, 'FTH_SIGNAL_MAX_AGE_MIN', 10, { min: 1 }),
     // Open equity-index positions in one direction across indexes (MNQ, MES, MYM, M2K and minis), the new one included.
     maxCorrelatedPositions: intEnv(env, 'FTH_MAX_CORRELATED_POSITIONS', 1, { min: 1 }),
     // Entries only inside these windows (empty = any time). Default: the

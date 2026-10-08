@@ -26,21 +26,27 @@ inside one run.
 - **Know the account before deciding anything**: balance, today's realized
   P&L and room to the daily limits, open positions, working orders, and, if a
   prop attempt is running, its floor, cushion, progress to the target,
-  sessions left, and size budget. In autonomous runs the cycle prompt states
-  them (as read just before the run); otherwise, or when the prompt says
-  they're unavailable, read `get_account_snapshot` (and
-  `node <root>/scripts/combine.js status` for an attempt). Every decision
-  below (take, skip, size, manage, stand down) is made with these numbers.
+  sessions left, and size budget. The autonomous prompt states the balance,
+  positions, working orders, and any attempt's numbers (as read just before
+  the run); it does not carry today's P&L or the room to the daily limit, so
+  read `get_account_snapshot` (`remainingBeforeLimit`) every cycle that may
+  enter, and `node <root>/scripts/combine.js status` for an attempt. Every
+  decision below (take, skip, size, manage, stand down) is made with these
+  numbers.
 - **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`), apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only. If the strategy's
   exit trails (`exit` in the scan) and the autonomous runner is running, it
   already moved the stop on this bar: don't touch it unless you are exiting.
-  In an interactive session no runner trails: move the stop yourself by the
-  same rule (from `trailActivateR` of open profit, keep the stop
-  `trailGivebackR` behind the best price, rounded to the tick, toward the
-  market only), and close at market after `maxBars` bars for a time stop.
+  **Interactive, no runner:** nobody else manages the trade, so run this
+  skill again after every closed bar while the position is open (fetch the
+  bar with `bars.js`). On each: from `trailActivateR` of open profit, move the
+  stop to `trailGivebackR` behind the best price since entry, rounded to the
+  tick, toward the market only; if the bar already traded through that new
+  level, close at market instead; after `maxBars` bars in the trade, close at
+  market (time stop). The strategy bodies' "don't move the stop yourself"
+  means: not while the runner trails it.
 - **Fresh data or no decision**: the last closed bar in the bars file must be
   no older than one bar of its timeframe (plus a minute) at the cycle's time,
   and the file's timeframe must be the one you are trading (a scan of 1m bars
@@ -64,6 +70,10 @@ inside one run.
   first: the order may have reached the exchange. `get_bars` allows 50
   requests per 30 s across all agents: use the bars file, don't refetch. If
   account state can't be read, place nothing new; report and end.
+- **Bars, interactively** (no runner bars file): `node <root>/scripts/bars.js
+  --symbol <SYMBOL> --timeframe <3 or 1> --record` writes 2000 closed bars to
+  `/tmp/fth/<SYMBOL>-<tf>m.json` and records the multi-timeframe read for the
+  gate. Never paste a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 
@@ -73,15 +83,23 @@ skill). **The trend rule is enforced:** a trend strategy never enters
 against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
 only a strategy with `mtf: reversal` may fade it. The scan already drops
 such candidates and the order gate refuses them. In autonomous runs the
-prompt states the recorded rule; interactively, record it before any entry
-with `node <root>/scripts/mtf.js <bars file> --record --symbol <SYMBOL>` (the
-gate refuses trend entries without a read less than 15 minutes old). Never
+prompt states the recorded rule; interactively, `bars.js --record` (or
+`mtf.js <bars file> --record --symbol <SYMBOL>`) records it (the gate refuses
+trend entries unless the recorded bar closed less than 15 minutes ago: fetch
+fresh bars, re-recording an old file doesn't help). Never
 argue a trend strategy into a counter-trend trade. For the candidate's side: `aligned` → the strategy's normal size;
 `pullback` → no entry until the trigger timeframe turns back; `mixed` → half
-size, `floor(size / 2)`, and skip if that is 0 (a 1-contract plan in a mixed
-read is a skip); `counter` → skip (a trend strategy can't take it), unless it is a
+size, `floor(size / 2)`, and skip if that is 0 (with the size-1 micro rule of
+position-sizing, every mixed read is a skip); `counter` → skip (a trend strategy can't take it), unless it is a
 reversal strategy judged as the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
 A policy verdict (below) is already sized: don't halve it.
+
+**The trigger is checked too.** The scan's `candidate` is the trigger: the
+gate refuses a rules strategy's entry unless that strategy fired, on that
+side, on a bar that closed less than 10 minutes ago, per the signal record
+(the runner records every bar; interactively, `node <root>/scripts/strategies.js
+scan <bars file> --symbol <SYMBOL> --record`). A different setup tag on the
+same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
@@ -96,7 +114,7 @@ with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
 If the prompt names a bars file (the autonomous runner writes the bars that
 just closed, e.g. `~/.futures-trading-harness/bars/MNQ-3m.json`), pass its path to every analyst:
 they run market-snapshot and `strategies.js scan` on it instead of fetching
-that timeframe again. Other timeframes are still fetched with `get_bars`.
+that timeframe again. Other timeframes they fetch with `bars.js`.
 
 Run these roles at the same time with your harness's subagents (Claude Code:
 the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles),
@@ -111,7 +129,7 @@ and the current time.
 | `market-structure-analyst` | Bias, swings, levels, structure strategies in play |
 | `trend-momentum-analyst` | Regime, indicator values, strategy scan results |
 | `volume-liquidity-analyst` | VWAP, participation, liquidity, sweeps |
-| `news-calendar-analyst` | Today's events, proposed blackouts |
+| `news-calendar-analyst` | Today's events, proposed blackouts. Premarket only: on trade cycles read `node <root>/scripts/blackouts.js list` instead, and run it only when no blackout was recorded for today's scheduled events |
 | `risk-manager` (phase 1) | Account state, limits, budget, stand-down conditions |
 
 ### 3. Head-trader synthesis (you)
@@ -134,8 +152,8 @@ and the current time.
   this direction on the last closed bar (candidates are already in session and
   in regime: the trigger fired), or a manual strategy whose trigger you
   verified on closed bars and whose `regimes` fit; quote the trigger in the
-  plan. The order gate does not check that a trigger fired: you and
-  risk-manager do. `show` it (strategy-library) and check every context
+  plan. The gate checks a rules strategy's trigger from the signal record;
+  a manual strategy's trigger is yours and risk-manager's to verify. `show` it (strategy-library) and check every context
   filter and skip rule against the reports.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason

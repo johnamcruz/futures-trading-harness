@@ -76,9 +76,12 @@ one did or didn't fire. Strategies with `signal: manual` are listed with
 
 Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. `paper` strategies can only be paper-traded. The gate does
-**not** check that the trigger fired or that the order is the plan's: those
-are yours and risk-manager's. It does refuse an order that contradicts its
+`sessions`. `paper` strategies can only be paper-traded. A rules strategy
+enters only on its own trigger (`trigger-fired`): the signal record must show
+it fired on that side on a bar that closed less than 10 minutes ago (the
+runner records every bar; interactively `scan ... --record`). The gate does
+**not** judge a manual strategy's trigger, the skip rules, or that the order
+is the plan's: those are yours and risk-manager's. It does refuse an order that contradicts its
 own rationale (`order-consistency`): write the side right after the tag
 (`setup:orb long ...`), the stop and target as prices on the tick, and
 brackets the same distance as those prices.

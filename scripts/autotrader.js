@@ -50,6 +50,7 @@ const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { writeMtfRecord } = require('./lib/trading/mtf-state');
+const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -317,6 +318,7 @@ async function main(argv) {
       return file;
     },
     recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
+    recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.
       const { strategies } = loadStrategies(ROOT, process.env);

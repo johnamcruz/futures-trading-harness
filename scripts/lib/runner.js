@@ -62,6 +62,8 @@ function createRunner(deps) {
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
+    // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
+    recordSignals = () => {},
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
@@ -407,6 +409,11 @@ function createRunner(deps) {
 
   /** Record a scanned bar in the decision log; a failure to log never stops the pass. */
   function logScan(item, results, decision) {
+    try {
+      recordSignals(item, results);
+    } catch (err) {
+      log(`${item.symbol}: could not record the bar's signals (${err.message}); the gate refuses rules entries`, 'error');
+    }
     try {
       scanLog({ at: clock.now(), symbol: item.symbol, contractId: item.contractId, bar: item.bar, results, decision });
     } catch (err) {

@@ -24,10 +24,10 @@ Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 | 18:00 (Sun–Thu) | Globex open; trading day starts (17:00 CT) | Session opens; daily counters reset |
 | 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
-| 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout ±5–10 min |
+| 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout 08:25–08:40 |
 | 09:30–09:35 | Opening print, widest spreads | No entries (gate) |
 | 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Primary window for ORB |
-| 10:00 | ISM, JOLTS, consumer confidence | Blackout ±5 min |
+| 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
@@ -63,15 +63,15 @@ inventory (Wednesday 10:30 ET); gold to US data and rates.
 **Blackouts.** The order gate reads `~/.futures-trading-harness/blackouts/blackouts.json`
 (or `FTH_BLACKOUTS_FILE`): a JSON array of `{ "start": ISO-8601, "end":
 ISO-8601, "reason": "CPI" }`. During premarket, after confirming the
-day's calendar, add the high-impact events with a 5–10 minute buffer on each
-side using `node <root>/scripts/blackouts.js add --start <ISO> --end <ISO> --reason <event>`.
+day's calendar, add the high-impact events from 5 minutes before to 10
+minutes after (FOMC: 13:55 to 15:00 ET) using `node <root>/scripts/blackouts.js add --start <ISO> --end <ISO> --reason <event>`.
 The script is append-only; never edit the file by hand.
 
 ## Examples
 
 ```json
 [
-  { "start": "2026-10-14T12:20:00Z", "end": "2026-10-14T12:40:00Z", "reason": "CPI 08:30 ET" },
+  { "start": "2026-10-14T12:25:00Z", "end": "2026-10-14T12:40:00Z", "reason": "CPI 08:30 ET" },
   { "start": "2026-10-28T17:55:00Z", "end": "2026-10-28T19:00:00Z", "reason": "FOMC 14:00 ET" }
 ]
 ```

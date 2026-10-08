@@ -17,12 +17,16 @@ function tmpDir() {
 }
 
 /**
- * A harness home with a multi-timeframe record (mtf-state.js) for MNQ, so the
- * gate's trend rule has a read. Default: every frame up, closed at closedAt.
+ * A harness home with a multi-timeframe record (mtf-state.js) and a signal
+ * record (signal-state.js) for MNQ, so the gate's trend rule and trigger check
+ * have a read. Default: every frame up, orb fired long, closed at closedAt.
  */
-function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedAt = '2026-10-07T13:57:00.000Z', symbol = 'MNQ' } = {}) {
+function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedAt = '2026-10-07T13:57:00.000Z', symbol = 'MNQ', fired = [{ name: 'orb', direction: 'long' }] } = {}) {
   fs.mkdirSync(path.join(home, 'mtf'), { recursive: true });
   fs.writeFileSync(path.join(home, 'mtf', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, biases }));
+  // And the signal record (signal-state.js): which rules strategies fired on that bar.
+  fs.mkdirSync(path.join(home, 'signals'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'signals', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, candidates: fired }));
   return home;
 }
 

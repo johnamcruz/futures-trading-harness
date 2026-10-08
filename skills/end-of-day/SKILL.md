@@ -30,7 +30,8 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    --day YYYY-MM-DD --balance <dollars>` (the balance after the session's
    last fill); tell them the exact command. Agents don't run it.
 6. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
-   total, rule breaks, blocked orders, lessons, and tomorrow's focus.
+   total, rule breaks, blocked orders (journal `order_blocked` and
+   `<FTH_HOME>/logs/gate-log.jsonl`), lessons, and tomorrow's focus.
 
 ## Examples
 

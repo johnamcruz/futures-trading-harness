@@ -487,7 +487,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
-| `FTH_GATE_LOG` | `~/.futures-trading-harness/gate-log.jsonl` | Gate decisions |
+| `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
 | `PROJECTX_JOURNAL_PATH` | `~/.projectx-mcp/journal.jsonl` | Must match the MCP server |
 

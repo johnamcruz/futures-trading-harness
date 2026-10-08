@@ -125,6 +125,18 @@ test('order gate: a trend strategy entry against the recorded prevailing trend i
   assert.match(gate(orderPayload(), none.env).stderr, /\[mtf-trend\] No multi-timeframe read for MNQ/);
 });
 
+test('order gate: a rules strategy entry needs its own trigger in the signal record', () => {
+  const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const order = orderPayload({ ...ORDER, rationale: 'setup:crossing long, stop 21480, target 21540' });
+  const none = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired: [] }) });
+  const r = gate(order, none.env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[trigger-fired\] setup:crossing long did not fire on the last closed MNQ bar/);
+  const fired = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired: [{ name: 'crossing', direction: 'long' }] }) });
+  const ok = gate(order, fired.env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);
@@ -234,8 +246,8 @@ test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even wi
 });
 
 test('stop hook asks once for a review of unreviewed entries', () => {
-  const now = new Date();
-  const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(now.getTime() - 60000).toISOString() })));
+  // An entry a minute before the gate's test clock (a fixed Wednesday morning, whatever the wall clock says).
+  const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(Date.parse(TEST_NOW) - 60000).toISOString() })));
   const run = payload => runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict', payload, env);
   const first = run({ stop_hook_active: false });
   assert.strictEqual(first.code, 2);

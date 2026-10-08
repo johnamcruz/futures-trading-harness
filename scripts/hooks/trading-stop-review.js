@@ -9,6 +9,7 @@
 const { tradingDayStart } = require('../lib/trading/clock');
 const { resolveJournalPath, readJournal, entriesSince } = require('../lib/trading/journal');
 const { liveReviews, successfulEntries } = require('../lib/trading/order-gate');
+const { gateNow } = require('../lib/trading/config');
 
 function unreviewedCount(entries, now) {
   const today = entriesSince(entries, tradingDayStart(now));
@@ -27,7 +28,8 @@ function run(rawInput, _ctx = {}, deps = {}) {
   const env = deps.env || process.env;
   let pending;
   try {
-    pending = unreviewedCount(readJournal(resolveJournalPath(env)), deps.now || new Date());
+    // The gate's clock: the wall clock, shifted only in the test suite (FTH_TEST_NOW).
+    pending = unreviewedCount(readJournal(resolveJournalPath(env)), deps.now || gateNow(env));
   } catch (_err) {
     return '';
   }

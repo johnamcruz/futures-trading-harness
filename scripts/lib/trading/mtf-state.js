@@ -74,7 +74,7 @@ function readRecord(home, root) {
  */
 function checkTrend(home, { root, side, style = 'trend', strategy, now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
   if (style === 'reversal') return null;
-  const how = `Run node <root>/scripts/mtf.js <${familyRoot(root)} trigger bars> --record --symbol ${root} (the autonomous runner records it every bar).`;
+  const how = `Fetch fresh bars and record the read: node <root>/scripts/bars.js --symbol ${root} --timeframe <minutes> --record (or mtf.js <a fresh bars file> --record --symbol ${root}; re-recording an old file stays stale). The autonomous runner records it every bar.`;
   const rec = readRecord(home, root);
   if (!rec) return `No multi-timeframe read for ${familyRoot(root)}: setup:${strategy} is a trend strategy and may not enter without one. ${how}`;
   if (rec.error || !rec.biases || !rec.closedAt) return `The multi-timeframe record for ${familyRoot(root)} is unreadable (${rec.error || 'missing fields'}). ${how}`;

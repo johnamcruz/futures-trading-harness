@@ -25,12 +25,14 @@ function path3m(from, n, p, wiggle = 1) {
 }
 const zigzag = (slope, amp = 6, period = 10) => k => 20000 + slope * k + amp * Math.sin((2 * Math.PI * k) / period);
 
-test('candles: OHLCV per m-minute candle aligned to the hour; a cut-off first candle is dropped, the last is in progress', () => {
+test('candles: OHLCV per m-minute candle aligned to the hour; a cut-off first candle is dropped; the last is in progress until its closing bar', () => {
   const b = path3m(et(9, 30), 50, k => 100 + k); // 09:30 .. 11:57
   const cs = candles(b, 60);
   assert.deepStrictEqual(cs.map(c => c.t), [et(10, 0), et(11, 0)].map(x => new Date(x).toISOString()), 'the 09:00 hour starts mid-way: dropped');
   assert.deepStrictEqual([cs[0].o, cs[0].h, cs[0].l, cs[0].c, cs[0].v], [110, 130, 109, 129, 200]);
-  assert.deepStrictEqual(cs.map(c => c.complete), [true, false]);
+  // The last bar (11:57) closes at 12:00, the 11:00 candle's end: complete now, not one bar later.
+  assert.deepStrictEqual(cs.map(c => c.complete), [true, true]);
+  assert.deepStrictEqual(candles(b.slice(0, 49), 60).map(c => c.complete), [true, false], 'ending at 11:57, the 11:00 candle is still forming');
 });
 
 test('readTimeframe: up, down, and range trends from the three votes; too few candles is unknown', () => {
@@ -69,7 +71,9 @@ test('mtfRead on real NQ: one line per timeframe, highest first, and the alignme
   assert.strictEqual(r.lines.length, 5);
   assert.match(r.lines[4], /^Trend rule: /);
   assert.match(r.lines[3], /^Alignment: long (aligned|pullback|counter|mixed), short (aligned|pullback|counter|mixed); bias (long|short|neutral)/);
-  assert.ok(r.frames.every(f => f.forming && f.read.candles > 0));
+  // The last bar (04:12) closes at 04:15: the 15m candle is complete; the 1h and 4h are still forming.
+  assert.ok(r.frames.every(f => f.read.candles > 0));
+  assert.deepStrictEqual(r.frames.map(f => Boolean(f.forming)), [true, true, false]);
   const daily = Array.from({ length: 60 }, (_, k) => ({ t: new Date(Date.UTC(2026, 1, 1) + k * 86400000).toISOString(), o: 20000 + 20 * k, h: 20040 + 20 * k, l: 19970 + 20 * k, c: 20030 + 20 * k, v: 1 }));
   const withDaily = mtfRead(bars, { daily });
   assert.strictEqual(withDaily.frames[0].label, 'daily');

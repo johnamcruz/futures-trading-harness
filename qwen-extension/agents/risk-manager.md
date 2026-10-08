@@ -65,12 +65,15 @@ Check, in order, and stop at the first failure:
 0. The trigger fired: the scan shows the strategy `candidate: true` in this
    direction on the last closed bar (or, for a manual strategy, the plan
    quotes the trigger on closed bars and you can see it in the bars), or, for
-   a policy strategy, a live verdict matches the plan. Otherwise VETO: the
-   order gate does not check triggers.
+   a policy strategy, a live verdict matches the plan. Otherwise VETO. (The
+   gate checks rules strategies' triggers from the signal record; a manual
+   strategy's trigger only you check.)
 1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
    on the side the prevailing trend allows (the plan quotes the `Trend rule:`
    line of `mtf.js`, or the scan's `mtf`). Against it, VETO: the gate refuses
    it anyway. A reversal strategy fading it: at most half size, nearest target.
+   The alignment for the side: `pullback` → VETO until the trigger timeframe
+   turns back; `mixed` → half size (`floor(size / 2)`, VETO if 0).
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits.
 4. Entry, stop, and target are on the correct sides; prices are multiples of

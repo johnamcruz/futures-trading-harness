@@ -12,13 +12,17 @@ You cannot place orders and must not try.
 ## Method
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
-writes the bars that just closed), use it for that timeframe instead of
-calling `get_bars`.
+writes the bars that just closed), use it for that timeframe. Fetch any other
+timeframe to a file with `node <root>/scripts/bars.js --symbol <SYMBOL>
+--timeframe <minutes> --count <n> --out <file>` (it prints the file and when
+the last bar closed); never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trend-momentum-indicators`, `market-snapshot`, and
    `strategy-library`.
-2. Fetch closed bars: 15m (160) and 3m (500). Save each to
-   `/tmp/fth/trend-<SYMBOL>-<tf>.json` and run the market-snapshot script.
+2. Bars: the 3m file (2000 bars) and, with `bars.js`, 15m (160) to
+   `/tmp/fth/trend-<SYMBOL>-15m.json`. Run the market-snapshot script on each,
+   and `mtf.js` on the 3m file (its `Trend rule:` line is enforced by the scan
+   and the gate).
 3. Regime: report the computed `regime` from the snapshot (primary,
    volatility, metrics) on each timeframe, then add what the indicators say
    about its quality (ADX slope, EMA 9/20/50 alignment, SuperTrend stability,

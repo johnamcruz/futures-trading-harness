@@ -30,7 +30,7 @@ const FTH_ENV = [
   'FTH_HOME',
 ];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
-const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js'];
+const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js'];
 
 function gatewayArgs(root, projectxEntry) {
   return [path.join(root, 'scripts', 'mcp-gateway.js'), '--', 'node', projectxEntry];

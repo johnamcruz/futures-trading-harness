@@ -27,15 +27,15 @@ than two requests:
 
 | Role | Timeframe | Source |
 |---|---|---|
-| Context | daily | `get_bars` `unit:"day", unitNumber:1`, 60 bars, saved to `/tmp/fth/<SYMBOL>-1d.json` |
+| Context | daily | `node <root>/scripts/bars.js --symbol <SYMBOL> --daily` (60 bars to `/tmp/fth/<SYMBOL>-1d.json`) |
 | Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
 | Bias | 1 hour | built from the trigger bars |
 | Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `get_bars` `unit:"minute"`, 2000 bars |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `node <root>/scripts/bars.js --symbol <SYMBOL> --timeframe 3 --record` (2000 bars to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
 
 Without `--daily` the highest timeframe is the 4-hour: the alignment is then
 judged from it, and the plan says "no daily read". Fetch the daily bars once
-a session (premarket) and reuse the file; if `get_bars` fails, go on without
+a session (premarket) and reuse the file; if the fetch fails, go on without
 them rather than retrying.
 
 ### 2. Run the read
@@ -46,7 +46,7 @@ node <root>/scripts/mtf.js <trigger bars> --tf=15,60,240 --json    # every numbe
 ```
 
 `<trigger bars>` is the runner's bars file (e.g.
-`~/.futures-trading-harness/bars/MNQ-3m.json`), a saved `get_bars` reply, or a
+`~/.futures-trading-harness/bars/MNQ-3m.json`), a `bars.js` file, or a
 CSV / Parquet file. Candles align to the 18:00 ET open: 1-hour candles open
 on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
 Only completed candles decide a trend; the one forming is reported apart.

@@ -51,7 +51,8 @@ ticks), as algoTraderBot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),
-after every closed bar. Don't move the stop yourself; exit early only with an
+after every closed bar. While the runner runs, don't move the stop yourself (interactively, trail it by
+the same rule after each bar: the trade-session skill); exit early only with an
 `[exit]` order when the plan's invalidation happens.
 
 ### Skip when (harness judgment: the source takes every signal)

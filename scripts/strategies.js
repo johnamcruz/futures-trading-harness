@@ -5,7 +5,12 @@
  *   node scripts/strategies.js list [--json]
  *   node scripts/strategies.js show <name>
  *   node scripts/strategies.js validate
- *   node scripts/strategies.js scan <bars.json|-> --symbol MNQ [--now ISO]
+ *   node scripts/strategies.js scan <bars file|-> --symbol MNQ [--now ISO] [--record]
+ *
+ * scan --record also records which rules strategies fired on the last closed
+ * bar (only those on the bars' timeframe), for the order gate's trigger check
+ * (trading/signal-state.js); refused in autonomous runs, where the runner
+ * records every bar.
  */
 
 'use strict';
@@ -14,12 +19,24 @@ const fs = require('fs');
 const { readBarsArg } = require('./lib/backtest/data');
 const path = require('path');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
+const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
+const { timeframeMs } = require('./lib/trading/evaluator');
+const { normalizeBars } = require('./lib/trading/indicators');
+const { harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
 
-function option(args, name) {
-  const i = args.indexOf(name);
-  return i === -1 ? undefined : args[i + 1];
+/** --name value or --name=value; every other flag is an error, so a typo can't be ignored silently. */
+function options(args, valueFlags, boolFlags) {
+  const o = { _: [] };
+  for (let i = 0; i < args.length; i += 1) {
+    const [flag, inline] = args[i].split(/=(.*)/s);
+    if (valueFlags.includes(flag)) o[flag] = inline !== undefined ? inline : args[++i];
+    else if (boolFlags.includes(flag) && inline === undefined) o[flag] = true;
+    else if (!args[i].startsWith('--')) o._.push(args[i]);
+    else throw new Error(`unknown argument: ${args[i]} (flags: ${[...valueFlags, ...boolFlags].join(' ')})`);
+  }
+  return o;
 }
 
 function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {}) {
@@ -31,7 +48,7 @@ function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {
       name: s.name, status: s.valid ? s.status : 'INVALID', instruments: s.instruments, timeframe: s.timeframe,
       signal: s.signal, sessions: s.sessions || [], description: s.description, file: s.file,
     }));
-    if (args.includes('--json')) out(`${JSON.stringify(rows, null, 2)}\n`);
+    if (options(args, [], ['--json'])['--json']) out(`${JSON.stringify(rows, null, 2)}\n`);
     else for (const r of rows) out(`${r.name.padEnd(14)} ${String(r.status).padEnd(9)} ${String(r.signal).padEnd(11)} ${(r.instruments || []).join(',')}  ${r.description || ''}\n`);
     return 0;
   }
@@ -51,14 +68,27 @@ function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {
     return bad === 0 ? 0 : 1;
   }
   if (cmd === 'scan') {
-    if (!args[0]) throw new Error('scan needs a bars file (get_bars JSON) or -');
-    const bars = readBarsArg(args[0]);
-    const nowArg = option(args, '--now');
-    const results = scan(strategies, bars, { symbol: option(args, '--symbol'), now: nowArg ? new Date(nowArg) : new Date() });
+    const o = options(args, ['--symbol', '--now'], ['--record']);
+    if (!o._[0]) throw new Error('scan needs a bars file (get_bars JSON, CSV, Parquet) or -');
+    const bars = readBarsArg(o._[0]);
+    const now = o['--now'] ? new Date(o['--now']) : new Date();
+    if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${o['--now']})`);
+    const results = scan(strategies, bars, { symbol: o['--symbol'], now });
     out(`${JSON.stringify(results, null, 2)}\n`);
+    if (o['--record']) {
+      if (env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records every bar itself');
+      if (!o['--symbol']) throw new Error('--record needs --symbol <ROOT>');
+      const norm = normalizeBars(bars);
+      const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
+      const stepMs = Math.min(...diffs);
+      // Only strategies on the bars' own timeframe can have fired on them.
+      const sameTf = results.filter(r => timeframeMs(r.timeframe) === stepMs);
+      const file = writeSignals(harnessHome(env), buildSignals(sameTf, { symbol: o['--symbol'], bar: norm[norm.length - 1], stepMs, now, source: o._[0] }));
+      process.stderr.write(`[strategies] recorded for the order gate: ${file}\n`);
+    }
     return 0;
   }
-  throw new Error('usage: strategies.js list [--json] | show <name> | validate | scan <bars.json> --symbol <ROOT> [--now ISO]');
+  throw new Error('usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record]');
 }
 
 if (require.main === module) {

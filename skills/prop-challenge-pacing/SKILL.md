@@ -38,6 +38,16 @@ The harness tracks the attempt and enforces it:
   entry: after a stop-out, wait for the next setup's verdict. Never argue with
   it or route around it. Past the ratchet the runner may close the trade on the policy's
   word.
+- **Before the first live entry** (the user's steps, not an agent's): the
+  policy strategy ships with `status: paper`, so the user sets
+  `status: active` in its STRATEGY.md (and `policy: { bundle }` once a
+  bundle passed `rl/ship.py`), and starts the attempt with `combine.js
+  start`. Until then every verdict entry is refused (`[strategy] ... status
+  "paper"`): report it and stand aside.
+- **A verdict for the mini** (`NQ` while the bars are MNQ's): find the NQ
+  contractId with `search_contracts` (the active contract; ProjectX names NQ
+  `ENQ`, ES `EP`), and write the plan **and** the order with that
+  contractId; a plan for the MNQ contract doesn't count for an NQ order.
 - The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;
   none can be skipped): no started attempt
   (`node <root>/scripts/combine.js start --account <name>`, the user's call); a

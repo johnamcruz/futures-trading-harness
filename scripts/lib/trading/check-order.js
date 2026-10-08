@@ -63,7 +63,8 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
 
 function gateLogPath(env = process.env) {
   return String(env.FTH_GATE_LOG || '').trim()
-    || path.join(harnessHome(env), 'gate-log.jsonl');
+    // Under logs/, which autonomous agents may read: a blocked order's reason is part of its review.
+    || path.join(harnessHome(env), 'logs', 'gate-log.jsonl');
 }
 
 /** Append a decision to the gate log (best effort; never throws). */

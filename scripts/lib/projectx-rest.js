@@ -14,6 +14,7 @@ const { idSymbol } = require('./trading/contracts');
 const DEFAULT_API_URL = 'https://api.topstepx.com';
 const TOKEN_TTL_MS = 20 * 60 * 60 * 1000;
 const BAR_UNIT_MINUTE = 2;
+const BAR_UNIT_DAY = 4;
 const REQUEST_TIMEOUT_MS = 15000; // a hung API must not hold up the loop (end of day included)
 
 class ProjectXRestError extends Error {}
@@ -91,16 +92,19 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
       return { id: exact.id, name: exact.name, tickSize: Number(exact.tickSize), tickValue: Number(exact.tickValue) };
     },
 
-    /** Closed minute bars, oldest first, in projectx-mcp's {t,o,h,l,c,v} shape. */
-    async closedBars(contractId, { minutes, limit, now = new Date() }) {
-      const span = minutes * 60000 * limit * 2 + 4 * 864e5; // covers weekends and the daily break
+    /**
+     * Closed bars, oldest first, in projectx-mcp's {t,o,h,l,c,v} shape: minute
+     * bars (`minutes`), or daily bars with `daily: true`.
+     */
+    async closedBars(contractId, { minutes, limit, now = new Date(), daily = false }) {
+      const span = daily ? (limit * 2 + 10) * 864e5 : minutes * 60000 * limit * 2 + 4 * 864e5; // covers weekends and the daily break
       const res = await post('/api/History/retrieveBars', {
         contractId,
         live: false,
         startTime: new Date(now.getTime() - span).toISOString(),
         endTime: now.toISOString(),
-        unit: BAR_UNIT_MINUTE,
-        unitNumber: minutes,
+        unit: daily ? BAR_UNIT_DAY : BAR_UNIT_MINUTE,
+        unitNumber: daily ? 1 : minutes,
         limit,
         includePartialBar: false,
       });

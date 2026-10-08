@@ -51,7 +51,7 @@ const DEFAULTS = {
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
-const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js'];
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
@@ -269,7 +269,7 @@ function accountText(state) {
 
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
@@ -292,7 +292,8 @@ function prompts(cfg, now, root = '') {
       // A policy strategy's verdicts: the only entries the gate will accept (prop-challenge-pacing skill).
       const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
-        : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
+        : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
+          + `${v.contract && v.contractId && !String(v.contractId).includes(`.${v.contract}.`) ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
       return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,

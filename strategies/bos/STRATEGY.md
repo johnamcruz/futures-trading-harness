@@ -51,7 +51,8 @@ ticks), as algoTraderBot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),
-after every closed bar. Don't move the stop yourself; exit early only with an
+after every closed bar. While the runner runs, don't move the stop yourself (interactively, trail it by
+the same rule after each bar: the trade-session skill); exit early only with an
 `[exit]` order when the plan's invalidation happens.
 
 ### Skip when (harness judgment: the source takes every signal)
@@ -59,7 +60,7 @@ after every closed bar. Don't move the stop yourself; exit early only with an
 - The break is a single wick-heavy bar that closes barely beyond the level
   (< 2 ticks).
 - It breaks into prior-day or overnight high/low within 1R (sweep risk).
-- Counter to the 1h trend (that's a CHoCH; use strategy-cisd-ote rules instead).
+- Counter to the 1h trend (that's a CHoCH; use the `cisd_ote` strategy instead).
 
 ## Examples
 

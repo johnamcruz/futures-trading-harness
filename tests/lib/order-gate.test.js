@@ -7,7 +7,7 @@ const { loadConfig } = require('../../scripts/lib/trading/config');
 const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
-const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9 };
+const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
 const checks = r => r.violations.map(v => v.check).sort();
 const evaluate = (input, entries, opts = {}) =>
   evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
@@ -556,4 +556,17 @@ test('mtf-trend: a policy strategy entry is judged by the strategy whose setup i
   assert.match(run('ema_cross', down).violations.find(v => v.check === 'mtf-trend').message, /setup:ema_cross long is against the prevailing 4h down trend/);
   assert.ok(!run('crt_1h', down).violations.some(v => v.check === 'mtf-trend'), 'a reversal component may fade it');
   assert.ok(!run('ema_cross', { 240: 1, 60: 1, 15: 1 }).violations.some(v => v.check === 'mtf-trend'));
+});
+
+test('trigger-fired: a rules strategy enters only on its own fired trigger, on that side, on a recent bar; hard', () => {
+  const rules = trendStrategy({ signal: 'rules', mtf: 'reversal' });
+  const ev = (home, input = entryOrder(), extra = {}) => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, mtfMaxAgeMin: 15, signalMaxAgeMin: 10, skipChecks: new Set(['trigger-fired']), ...extra }, strategies: [rules] });
+  assert.deepStrictEqual(ev(trendHome(undefined, { fired: [{ name: 'orb', direction: 'long' }] })).violations, []);
+  const relabel = ev(trendHome(undefined, { fired: [{ name: 'bos', direction: 'long' }] }));
+  assert.deepStrictEqual(checks(relabel), ['trigger-fired'], 'not skippable');
+  assert.match(relabel.violations[0].message, /setup:orb long did not fire.*fired: bos long/);
+  assert.match(ev(trendHome(undefined, { closedAt: '2026-10-07T13:40:00.000Z' })).violations[0].message, /the setup has expired/);
+  // Manual strategies are the LLM's judgment: no trigger record needed.
+  assert.deepStrictEqual(ev(tmpDir(), entryOrder(), {}).violations.filter(v => v.check === 'trigger-fired').length, 1);
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: trendHome(undefined, { fired: [] }), mtfMaxAgeMin: 15 }, strategies: [trendStrategy()] }).violations, []);
 });

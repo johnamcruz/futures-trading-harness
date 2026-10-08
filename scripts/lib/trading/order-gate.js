@@ -17,6 +17,7 @@ const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
+const { checkTrigger } = require('./signal-state');
 const { specFor } = require('./contracts');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -250,6 +251,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     }
     const msg = checkTrend(config.home, { root, side: input.side, style: judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
+    // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
+    // recent bar (signal-state.js): no relabelled setup tag, no stale signal.
+    if (named.signal === 'rules') {
+      const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, now, maxAgeMin: config.signalMaxAgeMin });
+      if (fired) violations.push({ check: 'trigger-fired', message: fired });
+    }
   }
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries }));
@@ -259,7 +266,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // limits, or the size budget.
     const running = runningAttempts(config.home);
     if (running.length) {
-      violations.push({ check: 'combine', message: `A ${running.join(', ')} attempt is running: only a policy strategy that trades it (account: ${running[0]}) may enter. End it with node scripts/combine.js stop --account ${running[0]}.` });
+      violations.push({ check: 'combine', message: `A ${running.join(', ')} attempt is running: only a policy strategy that trades it (account: ${running[0]}) may enter. Stand aside: whether to end the attempt (node scripts/combine.js stop --account ${running[0]}) is the user's decision, never an agent's.` });
     }
   }
 

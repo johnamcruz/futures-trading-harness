@@ -701,3 +701,13 @@ test('every closed bar records the multi-timeframe read for the gate, and the cy
   assert.match(failed.cycles[0].prompt, /MNQ: no multi-timeframe record this bar, so the gate refuses trend strategies' entries/);
   assert.ok(logs.some(l => /error MNQ: could not record the multi-timeframe read \(disk full\)/.test(l)), logs.join('\n'));
 });
+
+test('every scanned bar records its signals for the gate, also on the default bar trigger', async () => {
+  const recorded = [];
+  const scan = [{ name: 'orb', signal: 'rules', status: 'active', candidate: true, direction: 'long', stopDistance: 5 }];
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => scan, recordSignals: (item, results) => recorded.push([item.symbol, item.bar.t, results.length]) },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([s, t, n]) => s === 'MNQ' && t && n === 1), JSON.stringify(recorded));
+});

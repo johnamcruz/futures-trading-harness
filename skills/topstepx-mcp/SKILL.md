@@ -83,8 +83,12 @@ file at `PROJECTX_JOURNAL_PATH` (default `~/.projectx-mcp/journal.jsonl`):
 one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds: `plan`, `note`,
 `review`, `lesson`; every `place_order` writes an `order_placed` entry by
 itself. Write through the tools only; never edit the file. The gate reads
-plans (age, `setup:` tag) and reviews (every entry reviewed before the next)
-from it.
+plans (a plan for this contract within `FTH_PLAN_MAX_AGE_MIN`, 120) and
+reviews (every entry reviewed before the next) from it. Which strategy fired
+it reads from the signal record (`strategies.js scan --record`), not the
+plan. Optional parameters the gate and reviews use: `journal_read {kind, tag}`
+filters, `journal_add {orderId}` links a review to its order, and
+`modify_order {reason}` labels a stop change (`[protect] ...`).
 
 ### Harness rationale convention (the order gate reads it)
 

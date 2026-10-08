@@ -84,6 +84,96 @@ function signalSeries(bars, overrides = {}) {
   return s;
 }
 
+const etMinute = t => { const q = zonedParts(new Date(t), 'America/New_York'); return { day: `${q.year}-${q.month}-${q.day}`, minute: q.hour * 60 + q.minute }; };
+const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+const ratio = (x, y) => (x !== null && y ? round(x / y, 2) : null);
+
+/**
+ * Participation: the last bar's and the last 3 bars' volume against the
+ * opening range's average bar (today, once it has closed), the 20 bars before,
+ * and the same time on the previous day in the data.
+ */
+function participation(bars, orbMinutes) {
+  const i = bars.length - 1;
+  const vol = b => (Number.isFinite(b.v) ? b.v : 0);
+  const last3 = mean(bars.slice(-3).map(vol));
+  const prior20 = mean(bars.slice(Math.max(0, i - 23), i - 2).map(vol));
+  const now = etMinute(bars[i].t);
+  const orBars = bars.filter(b => { const e = etMinute(b.t); return e.day === now.day && e.minute >= RTH_OPEN && e.minute < RTH_OPEN + orbMinutes; });
+  const orAvg = now.minute >= RTH_OPEN + orbMinutes && orBars.length ? mean(orBars.map(vol)) : null;
+  const yesterday = [...bars].reverse().find(b => { const e = etMinute(b.t); return e.day !== now.day && e.minute === now.minute; });
+  return {
+    lastBarVolume: vol(bars[i]),
+    relVolLastVsOpeningRange: ratio(vol(bars[i]), orAvg),
+    relVolLast3VsOpeningRange: ratio(last3, orAvg),
+    relVolLast3VsPrior20: ratio(last3, prior20),
+    relVolVsSameTimePriorDay: yesterday ? ratio(vol(bars[i]), vol(yesterday)) : null,
+    note: 'relative volume = this volume / that average; under 1.0 is thin participation, 1.5+ strong',
+  };
+}
+
+/** Closes crossing a VWAP over the last `n` bars (where it has a value): many crosses = rotation, few = trend. */
+function vwapCrosses(bars, vwap, n = 30) {
+  let crosses = 0;
+  let side = 0;
+  for (let i = Math.max(0, bars.length - n); i < bars.length; i += 1) {
+    if (!Number.isFinite(vwap[i])) continue;
+    const s2 = Math.sign(bars[i].c - vwap[i]);
+    if (s2 !== 0 && side !== 0 && s2 !== side) crosses += 1;
+    if (s2 !== 0) side = s2;
+  }
+  return crosses;
+}
+
+/**
+ * Liquidity: the last 4 confirmed swing highs and lows, equal highs and lows
+ * among them (within 0.1 x ATR(14): resting stops), and the open fair value
+ * gaps of the last 60 bars (3-bar gaps price hasn't traded back through).
+ */
+function liquidity(bars, k, atrNow) {
+  const highs = [];
+  const lows = [];
+  for (let j = k; j < bars.length - k; j += 1) {
+    let hi = true;
+    let lo = true;
+    for (let m = j - k; m <= j + k; m += 1) {
+      if (m === j) continue;
+      if (!(bars[j].h > bars[m].h)) hi = false;
+      if (!(bars[j].l < bars[m].l)) lo = false;
+    }
+    if (hi) highs.push({ price: bars[j].h, t: bars[j].t });
+    if (lo) lows.push({ price: bars[j].l, t: bars[j].t });
+  }
+  const tol = atrNow ? 0.1 * atrNow : 0;
+  const equal = list => {
+    const out = [];
+    for (let a = 0; a < list.length; a += 1) {
+      for (let b = a + 1; b < list.length; b += 1) {
+        if (Math.abs(list[a].price - list[b].price) <= tol) out.push({ prices: [list[a].price, list[b].price], at: [list[a].t, list[b].t] });
+      }
+    }
+    return out.slice(-3);
+  };
+  const recentHighs = highs.slice(-12);
+  const recentLows = lows.slice(-12);
+  const fvgs = [];
+  for (let j = Math.max(2, bars.length - 60); j < bars.length; j += 1) {
+    const a = bars[j - 2];
+    const c = bars[j];
+    const later = bars.slice(j + 1);
+    if (a.h < c.l && !later.some(b => b.l <= a.h)) fvgs.push({ side: 'bullish', low: a.h, high: c.l, at: bars[j - 1].t });
+    if (a.l > c.h && !later.some(b => b.h >= a.l)) fvgs.push({ side: 'bearish', low: c.h, high: a.l, at: bars[j - 1].t });
+  }
+  return {
+    swingHighs: highs.slice(-4),
+    swingLows: lows.slice(-4),
+    equalHighs: equal(recentHighs),
+    equalLows: equal(recentLows),
+    openFvgs: fvgs.slice(-3),
+    note: 'equal = within 0.1 x ATR(14); open FVG = a 3-bar gap price has not traded back into since (last 60 bars)',
+  };
+}
+
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
@@ -123,6 +213,15 @@ function snapshot(input, overrides = {}) {
       vwapSession: round(at(vwapSession, i)),
       vwapRth: round(at(vwapRth, i)),
     },
+    vwap: {
+      // RTH VWAP exists 09:30-16:00 ET; outside it the session VWAP (18:00 ET anchor) applies, as in the strategy filters.
+      applies: at(vwapRth, i) !== null ? 'rth' : 'session',
+      distanceAtr: (() => { const v = at(vwapRth, i) ?? at(vwapSession, i); const a = at(atr14, i); return v !== null && a ? round((last.c - v) / a, 2) : null; })(),
+      rthCrossesLast30: vwapCrosses(bars, vwapRth),
+      sessionCrossesLast30: vwapCrosses(bars, vwapSession),
+    },
+    participation: participation(bars, p.orbMinutes),
+    liquidity: liquidity(bars, p.swingK, at(atr14, i)),
     regime: classifyRegime(bars),
     referenceStop: stopDistance === null ? null : {
       distance: round(stopDistance),
