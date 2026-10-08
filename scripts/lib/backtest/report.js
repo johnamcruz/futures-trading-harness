@@ -110,6 +110,8 @@ function buildReport(trades, meta) {
     bySymbol: groupBy(sorted, t => t.symbol),
     byMonth: groupBy(sorted, t => t.exitTime.slice(0, 7)),
     byHour: groupBy(sorted, hourOf),
+    // Does agreement help? Trades by how many strategies fired their side on the signal bar.
+    byConfluence: groupBy(sorted, t => `${t.confluence || 1} agreeing${t.conflict ? `, ${t.conflict} against` : ''}`),
     byWeekday: groupBy(sorted, weekdayOf),
     trades: sorted,
   };
@@ -157,6 +159,10 @@ function toMarkdown(report) {
     '## By month',
     '',
     table(report.byMonth),
+    '',
+    '## By confluence (strategies firing the same side on the signal bar)',
+    '',
+    table(report.byConfluence || {}),
     '',
     '## By entry hour (ET)',
     '',

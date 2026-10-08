@@ -69,6 +69,8 @@ const DEFAULTS = {
   maxContracts: 5,
   slippageTicks: 1, // per market fill (entries and stops), in ticks
   fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
+  minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
+  conflict: 'priority', // strategies firing both sides: 'priority' (the first in order trades) or 'skip' (no entry)
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
@@ -129,13 +131,21 @@ function prepare(markets, strategies, opts = {}) {
     });
     const ev = createEvaluator(bars, { window: o.window });
     const memo = new Map();
-    // The first candidate on bar i, in strategy order (the scan at the bar's close).
+    // The first candidate on bar i, in strategy order (the scan at the bar's close), with its
+    // confluence: how many strategies fired its side and how many the other.
     const setupAt = i => {
       if (!memo.has(i)) {
-        let pick = null;
+        const fired = [];
         for (const s of usable) {
           const r = ev.at(s, i, { describe: false });
-          if (r.candidate && r.stopDistance > 0) { pick = { s, r }; break; }
+          if (r.candidate && r.direction) fired.push({ s, r });
+        }
+        let pick = fired.find(f => f.r.stopDistance > 0) || null;
+        if (pick) {
+          const withIt = fired.filter(f => f.r.direction === pick.r.direction).length;
+          const against = fired.length - withIt;
+          if (withIt < (o.minConfluence || 1) || (against > 0 && o.conflict === 'skip')) pick = null;
+          else pick = { ...pick, confluence: withIt, against };
         }
         memo.set(i, pick);
       }
@@ -203,6 +213,7 @@ function runEngine(markets, strategies, opts = {}) {
       mfeR: Math.round(p.peakR * 1000) / 1000,
       maeR: Math.round(p.troughR * 1000) / 1000,
       barsHeld: p.barsHeld, reason, pnl: round2(gross), fees: round2(fees), net: round2(net),
+      confluence: p.confluence || 1, conflict: p.conflict || 0,
       target: p.target,
       // Why it was taken: the setup's stop and target distances and its detectors' state (trades.jsonl).
       ...(p.setup ? { setup: p.setup } : {}),
@@ -425,6 +436,7 @@ function runEngine(markets, strategies, opts = {}) {
           ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize)
           : null,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
+      confluence: pick.confluence || 1, conflict: pick.against || 0,
       setup: setupOf(book, pick, i),
     };
     // A target level the fill already reached (slippage past it) leaves no reward: no trade.

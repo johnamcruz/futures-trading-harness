@@ -358,7 +358,23 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       results.push({ name: s.name, status: s.status, error: err.message, candidate: false });
     }
   }
-  return results;
+  return withConfluence(results);
+}
+
+/**
+ * Confluence: for every strategy that fired, the other strategies on its
+ * timeframe that fired the same way (`with`) and the other way (`against`)
+ * on the same bar.
+ */
+function withConfluence(results) {
+  const fired = results.filter(r => r.candidate && r.direction);
+  return results.map(r => (r.candidate && r.direction ? {
+    ...r,
+    confluence: {
+      with: fired.filter(o => o !== r && o.timeframe === r.timeframe && o.direction === r.direction).map(o => o.name),
+      against: fired.filter(o => o !== r && o.timeframe === r.timeframe && o.direction !== r.direction).map(o => o.name),
+    },
+  } : r));
 }
 
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */

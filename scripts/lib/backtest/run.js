@@ -113,6 +113,8 @@ function validateBacktestConfig(raw, baseDir) {
   }
   if (cfg.earlyCloseEodAt && !validAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone", no later than 13:00 ET');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
+  if (!(Number.isInteger(cfg.minConfluence) && cfg.minConfluence >= 1)) errors.push('minConfluence: strategies that must fire the same side, 1 or more');
+  if (!['priority', 'skip'].includes(cfg.conflict)) errors.push('conflict: "priority" (the first strategy in order trades) or "skip" (no entry when strategies disagree)');
   if (!['next-open', 'close'].includes(cfg.fill)) errors.push('fill: "next-open" (entries fill at the next bar\'s open, as live after the cycle) or "close" (at the signal bar\'s close, as algoTraderBot)');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');

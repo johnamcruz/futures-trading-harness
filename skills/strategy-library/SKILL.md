@@ -47,7 +47,9 @@ bar is fresh (no older than one bar plus a minute).
 `scan` runs market-snapshot with each strategy's `params` and reports, per
 strategy: `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`), `mtf` (the trend rule: the 4h,
+`inRegime` (fits the strategy's `regimes`), `confluence` (on a strategy
+that fired: the other strategies on its timeframe that fired the same side,
+`with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
 1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
 this strategy's style), `candidate`, and `stopDistance`. A trend strategy
 that fires against the prevailing trend is never a candidate (`filtersFailed`

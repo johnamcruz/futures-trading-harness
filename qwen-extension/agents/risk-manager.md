@@ -74,6 +74,9 @@ Check, in order, and stop at the first failure:
    it anyway. A reversal strategy fading it: at most half size, nearest target.
    The alignment for the side: `pullback` → VETO until the trigger timeframe
    turns back; `mixed` → half size (`floor(size / 2)`, VETO if 0).
+   Conflict: other strategies fired the other side on the same bar (the
+   scan's `confluence.against`) → VETO unless the plan is a reversal at a
+   higher-timeframe level and says why.
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits.
 4. Entry, stop, and target are on the correct sides; prices are multiples of

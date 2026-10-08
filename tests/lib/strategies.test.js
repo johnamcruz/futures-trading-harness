@@ -286,3 +286,24 @@ test('CLI scan reads CSV bars as well as get_bars JSON', () => {
   assert.ok(results.length > 3 && results.every(x => x.name));
   assert.ok(results.some(x => x.mtf && x.mtf.ready), 'scan results carry the trend rule');
 });
+
+test('scan: each strategy that fired lists the others firing with it and against it on its timeframe', () => {
+  const dir = tmpDir();
+  const mk = (name, side) => writeStrategy(dir, name, [
+    `name: ${name}`, `description: Fires ${side} on every bar, a confluence test strategy for the scan.`, 'status: active', 'instruments: [MNQ]',
+    'timeframe: 3m', 'signal: rules', 'mtf: reversal', 'rules:', `  ${side}:`, '    - volume > 0', 'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  mk('up_a', 'long');
+  mk('up_b', 'long');
+  mk('down_c', 'short');
+  const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => ['up_a', 'up_b', 'down_c'].includes(s.name));
+  const bars = Array.from({ length: 60 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + k * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100 + (k % 3), v: 10 }));
+  const r = Object.fromEntries(scan(mine, { bars }, { symbol: 'MNQ' }).map(x => [x.name, x]));
+  assert.deepStrictEqual(r.up_a.confluence, { with: ['up_b'], against: ['down_c'] });
+  assert.deepStrictEqual(r.down_c.confluence, { with: [], against: ['up_a', 'up_b'] });
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const p = prompts(validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' }), new Date(), '/r')
+    .trade([{ symbol: 'MNQ', bar: { t: bars[59].t, c: 100, file: '/f', contractId: 'C' }, scan: Object.values(r) }]);
+  assert.match(p, /MNQ fired on this bar .*: down_c short; against up_a, up_b \| up_a long with up_b; against down_c/);
+  assert.match(p, /Strategies disagree on the side: stand aside/);
+});

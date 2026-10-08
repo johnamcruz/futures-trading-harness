@@ -155,6 +155,13 @@ and the current time.
   skip. Never plan the component strategy (e.g. `orb`) yourself; the gate
   refuses it. The rest of this step still decides whether the market permits
   it (events, red flags).
+- **Confluence.** Several strategies firing the same side on the bar (the
+  scan's `confluence.with`, the prompt's "fired on this bar" line) is a
+  stronger setup: say so in the plan, and prefer it over a lone signal. Strategies firing
+  both sides (`confluence.against`) is a conflict: stand aside, unless the
+  one you'd take is a reversal at a higher-timeframe level and the plan says
+  why the others are wrong. The backtest reports results by confluence
+  (`byConfluence`); trust it over a feeling that agreement helps.
 - Otherwise pick at most one strategy that is a `candidate` in the scan in
   this direction on the last closed bar (candidates are already in session and
   in regime: the trigger fired), or a manual strategy whose trigger you

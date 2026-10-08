@@ -33,7 +33,10 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    --timeframe <minutes>` compares the day's entries with the signals the
    runner saw: how many were taken, passed (with the note that says why), and
    entries with no signal behind them. Quote its first line.
-7. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
+7. `node <root>/scripts/lessons.js`: the instincts the reviews add up to
+   (setups to favour or avoid by regime, recurring mistakes). Write a lesson
+   only when one has the evidence (the trade-review rules).
+8. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
    total, rule breaks, blocked orders (journal `order_blocked` and
    `<FTH_HOME>/logs/gate-log.jsonl`), signals taken vs passed, lessons, and
    tomorrow's focus.

@@ -50,6 +50,9 @@ description: Measure whether each futures setup has an edge - win rate, average 
    backtest of the same days trades every signal). If passing signals doesn't
    improve E, the filter costs trades without adding edge: say so.
 8. Record the decision as a `lesson` tagged with the setup and regime.
+   `node <root>/scripts/lessons.js` shows the same evidence as ranked
+   instincts (confidence 0.3 to 0.9 from the number of trades), which every
+   cycle prompt and session briefing carries.
 
 ## Examples
 

@@ -372,3 +372,21 @@ test('data audit: missing bars inside market hours, jumps from an unadjusted rol
   assert.strictEqual(a.warnings.length, 3);
   assert.match(a.warnings[1], /jump more than 8 x ATR .* unadjusted roll/);
 });
+
+test('confluence: trades record how many strategies agreed; minConfluence and conflict: skip filter entries', () => {
+  const a = strategy({ name: 'a' });
+  const b = strategy({ name: 'b' });
+  const shortRules = { short: ['close crosses_above 100.5'] };
+  const c = strategy({ name: 'c', rules: shortRules, compiledRules: compileRules(shortRules).compiled });
+  const path = [[100.5, 101.2, 100.4, 101], [101, 104.5, 100.9, 104], [104, 104.5, 103.5, 104]];
+  const go = (list, opts = {}) => runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], list, { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, ...opts }).trades;
+  const [t] = go([a, b]);
+  assert.deepStrictEqual([t.strategy, t.confluence, t.conflict], ['a', 2, 0]);
+  assert.strictEqual(go([a]).length, 1);
+  assert.strictEqual(go([a], { minConfluence: 2 }).length, 0, 'one strategy alone is not enough');
+  const [mixed] = go([a, c]);
+  assert.deepStrictEqual([mixed.strategy, mixed.confluence, mixed.conflict], ['a', 1, 1]);
+  assert.strictEqual(go([a, c], { conflict: 'skip' }).length, 0, 'strategies disagree: no entry');
+  const { buildReport } = require('../../scripts/lib/backtest/report');
+  assert.deepStrictEqual(Object.keys(buildReport([t, mixed], {}).byConfluence), ['1 agreeing, 1 against', '2 agreeing']);
+});

@@ -9,6 +9,7 @@
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
  *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
  *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--fill next-open|close] [--out dir]
+ *       [--min-confluence 2] [--conflict priority|skip]   require agreeing strategies / skip disagreement
  *       [--prop <policy strategy> [--bundle <name>] [--every 5]]   prop challenge attempts
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
  *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
@@ -77,6 +78,8 @@ function configFrom(argv) {
   if (num('--risk') !== undefined) { cfg.riskPerTrade = num('--risk'); delete cfg.size; }
   if (num('--slippage') !== undefined) cfg.slippageTicks = num('--slippage');
   if (arg(argv, '--fill')) cfg.fill = arg(argv, '--fill');
+  if (num('--min-confluence') !== undefined) cfg.minConfluence = num('--min-confluence');
+  if (arg(argv, '--conflict')) cfg.conflict = arg(argv, '--conflict');
   if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
   if (arg(argv, '--prop')) cfg.prop = arg(argv, '--prop');
   if (arg(argv, '--bundle')) cfg.bundle = arg(argv, '--bundle');
@@ -100,7 +103,7 @@ function configFrom(argv) {
 }
 
 // Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
-const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--out', '--prop', '--bundle', '--every', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
+const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--min-confluence', '--conflict', '--out', '--prop', '--bundle', '--every', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
 const BOOL_FLAGS = ['--no-gate', '--walk-forward'];
 
 function unknownFlags(argv) {

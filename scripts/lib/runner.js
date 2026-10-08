@@ -64,6 +64,8 @@ function createRunner(deps) {
     recordMtf = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
     recordSignals = () => {},
+    // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
+    lessons = () => [],
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
@@ -428,7 +430,9 @@ function createRunner(deps) {
         try {
           const [net, working] = await exposure(item);
           if (net === 0 && working === 0) {
-            const screened = prop.screen(scanFor(item.symbol, item.bars), { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
+            const scanned = scanFor(item.symbol, item.bars);
+            item.scan = scanned;
+            const screened = prop.screen(scanned, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
             item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
             logScan(item, screened, { run: true, reason: 'bar closed' });
           }
@@ -438,7 +442,8 @@ function createRunner(deps) {
       } else {
         // The decision log still gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
         try {
-          logScan(item, scanFor(item.symbol, item.bars), { run: true, reason: 'bar closed' });
+          item.scan = scanFor(item.symbol, item.bars);
+          logScan(item, item.scan, { run: true, reason: 'bar closed' });
         } catch (err) {
           log(`${item.symbol}: scan for the decision log failed (${err.message})`, 'error');
         }
@@ -452,6 +457,7 @@ function createRunner(deps) {
         return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
       }
       const results = scanFor(item.symbol, item.bars);
+      item.scan = results;
       // A policy screens its strategy's setups (only when flat: a verdict is for a new entry).
       const screened = prop && net === 0 && working === 0
         ? prop.screen(results, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() })
@@ -706,7 +712,7 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [] });
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: x.scan })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons(); } catch (_err) { return []; } })() });
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });

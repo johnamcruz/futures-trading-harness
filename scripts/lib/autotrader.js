@@ -52,7 +52,7 @@ const DEFAULTS = {
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
-const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js'];
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
@@ -281,6 +281,19 @@ function recentBarsText(symbol, bars, timeframe) {
   return ` ${symbol} last ${list.length} closed ${timeframe}m bars (ET open time, oldest first): ${rows.join('; ')}.`;
 }
 
+/** What fired on this bar, with its confluence: "orb long (with ema_cross; against bos)". */
+function signalsText(symbol, scan) {
+  if (!Array.isArray(scan)) return '';
+  const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
+  if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
+  const one = r => {
+    const c = r.confluence || { with: [], against: [] };
+    return `${r.name} ${r.direction}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}`;
+  };
+  const conflict = fired.some(r => r.confluence && r.confluence.against.length);
+  return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}`;
+}
+
 /** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
 function historyText(history) {
   const list = (history || []).slice(-RECENT_IN_PROMPT);
@@ -298,12 +311,13 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [] } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
-      const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan }) =>
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
         + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
-        + recentBarsText(symbol, bar.recent, cfg.timeframe));
+        + recentBarsText(symbol, bar.recent, cfg.timeframe)
+        + signalsText(symbol, scan));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
@@ -316,7 +330,7 @@ function prompts(cfg, now, root = '') {
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
           + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')}${historyText(history)} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')}${historyText(history)}${lessons.length ? ` Instincts from your reviewed trades (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };

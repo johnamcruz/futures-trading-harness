@@ -53,6 +53,8 @@ const { writeMtfRecord } = require('./lib/trading/mtf-state');
 const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
+const { digest } = require('./lib/trading/instincts');
+const { resolveJournalPath, readJournal } = require('./lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -323,6 +325,7 @@ async function main(argv) {
       return file;
     },
     recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
+    lessons: () => digest(readJournal(resolveJournalPath(process.env)), 5),
     recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.

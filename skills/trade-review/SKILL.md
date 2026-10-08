@@ -28,9 +28,13 @@ description: Review closed futures trades against their plan - R multiple, plan 
    - text: plan vs. actual, R, grade, what to repeat or change.
    - tags: exactly one of `result:win | result:loss | result:scratch (|R| < 0.2) |
      result:nofill`; `setup:<name>`; `regime:<primary>` (from the plan); the
-     symbol; any `mistake:<kind>`
+     symbol; `r:<R net of fees>` (e.g. `r:-1.11`); any `mistake:<kind>`
      (`mistake:chased`, `mistake:no-stop`, `mistake:moved-stop`,
      `mistake:early-exit`, `mistake:oversize`, `mistake:rule-break`).
+   These tags are how the desk learns: `node <root>/scripts/lessons.js`
+   turns them into instincts (each setup's record by regime, recurring
+   mistakes) that every later cycle sees. A review without them teaches
+   nothing.
 5. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
    one rule, the evidence count, and the condition. Don't write a lesson from a
    single trade unless it's a rule break.
@@ -47,7 +51,7 @@ review: "ORB long MNQ. Plan: break of 21500 OR high, stop 21490, target 21520,
 sweep of the OR high and close back inside: 43 ticks = $21.50 + $0.74 fees = $22.24
 net loss, R = -22.24 / 20 = -1.11. Process B: trigger valid,
 but relative volume was 0.9x, which the strategy says to skip."
-tags: ["result:loss", "setup:orb", "MNQ", "regime:trend-up", "mistake:rule-break"]
+tags: ["result:loss", "setup:orb", "MNQ", "regime:trend-up", "r:-1.11", "mistake:rule-break"]
 
 lesson: "ORB on MNQ with relative volume < 1.0x: 1W/5L over 6 trades. Skip."
 tags: ["setup:orb", "MNQ"]

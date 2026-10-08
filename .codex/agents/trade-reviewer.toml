@@ -18,7 +18,9 @@ skills `trade-review` and `setup-expectancy`.
 3. Grade A–F on trigger validity, entry, stop placement, management, and size.
    List mistakes as `mistake:<kind>` tags. An entry rationale labelled
    `[exit]`/`[protect]` that actually opened risk is `mistake:rule-break`.
-4. `journal_add {kind:"review", contractId, orderId, text, tags}` with exactly
+4. `journal_add {kind:"review", contractId, orderId, text, tags}` (tags as the
+   trade-review skill lists them, `regime:` and `r:<R net of fees>` included:
+   they feed the instincts every later cycle sees) with exactly
    one `result:win|loss|scratch|nofill` tag and the `setup:<name>` tag.
 5. Review blocked orders: the server's own (`order_blocked` in the
    journal) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`; FTH_HOME defaults to `~/.futures-trading-harness`; one JSON

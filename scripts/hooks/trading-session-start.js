@@ -14,6 +14,7 @@ const { resolveJournalPath, readJournal, entriesSince } = require('../lib/tradin
 const { lossState, liveReviews } = require('../lib/trading/order-gate');
 const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
 const { sessionsText } = require('../lib/trading/combine');
+const { digest } = require('../lib/trading/instincts');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
 const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
@@ -83,6 +84,9 @@ function buildBriefing(entries, now, config, root = null, home = null) {
       lines.push(`- ${clip(l.text)}${tags}`);
     }
   }
+  const learned = digest(entries);
+  lines.push('', '### Instincts from your reviews (confidence 0.3-0.9; notes, not rules)');
+  lines.push(...(learned.length ? learned.map(x => `- ${clip(x)}`) : ['- none yet: they grow from reviewed trades']));
   lines.push('', 'Start sessions with /premarket or /trade-session. Orders are gated by the harness order gate.');
   return lines.join('\n');
 }
