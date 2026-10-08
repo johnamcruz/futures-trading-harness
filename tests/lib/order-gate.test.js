@@ -291,6 +291,9 @@ test('combine: at the profit target the gate stops entries only once today\'s cl
   // $1,000, $1,000, then +$1,100 today: the close passes, so entries stop.
   const spread = propSetup({ account: consistent, days: [['2026-10-05', 51000], ['2026-10-06', 52000]], balance: 53100 });
   assert.match(spread(entryOrder()).violations[0].message, /at the profit target: no new entries/);
+  // $1,000 yesterday, +$2,100 today: today is the best day, so more today can't meet consistency.
+  const record = propSetup({ account: consistent, days: [['2026-10-06', 51000]], balance: 53100 });
+  assert.match(record(entryOrder()).violations[0].message, /today the best day \(\$2100\).*entries resume next session/);
 });
 
 test('policy: an entry needs a fresh verdict for this contract and side, at no more than its size', () => {

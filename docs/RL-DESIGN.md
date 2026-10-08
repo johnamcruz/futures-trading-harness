@@ -73,8 +73,10 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
 - `max_contracts` per symbol.
 - `consistency_pct`: the best day may be at most this share of the total
   profit for a pass (0 = no rule). At the target, new entries stop once
-  today's close would pass; while consistency isn't met, trading goes on,
-  or the attempt could only time out.
+  today's close would pass; while consistency isn't met, trading goes on
+  (or the attempt could only time out), except on a day that is already
+  the best one, where more profit can't help. Clock sizing sizes for the
+  profit consistency needs, not only the target.
 - `sessions`: attempt length for training and evaluation.
 
 ## The env
