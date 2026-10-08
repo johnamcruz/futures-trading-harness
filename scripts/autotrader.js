@@ -161,7 +161,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   process.stdout.write(`[autotrader] ${result}\n`);
   const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
   // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
-  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut };
+  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut, result, code: res.code ?? null };
 }
 
 function loadState(cfg) {
@@ -301,9 +301,14 @@ async function main(argv) {
     log,
     // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
     scanLog: rec => appendJsonl(path.join(HOME_DIR, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
+    // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
+    event: ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev),
     entryOrders: () => entryOrders(HOME_DIR),
     strategyNamed: name => loadStrategies(ROOT, process.env).strategies.find(s => s.name === name && s.valid) || null,
   });
+  const event = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
+  event({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
+  process.on('exit', code => event({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   for (;;) {
     const ms = await runner.step();

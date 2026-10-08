@@ -46,6 +46,24 @@ class TrainTest(unittest.TestCase):
         self.assertIn("winRate", bundle["oos"])
         self.assertEqual(bundle["oos"]["attempts"], bundle["baseline"]["attempts"])
         self.assertTrue((d / "out" / "report.md").read_text().startswith("# Policy synthetic_policy"))
+        # The run's logs: every line, structured events, and the manifest.
+        logs = d / "out" / "logs"
+        text = (logs / "train.log").read_text()
+        self.assertRegex(text, r"\[train-policy\] \d{4}-\d\d-\d\dT\S+Z INFO seed 1 \[.*steps/s ETA .* \| attempts \d+ pass ")
+        self.assertIn("out of sample: policy pass", text)
+        events = [json.loads(x) for x in (logs / "train.jsonl").read_text().splitlines()]
+        kinds = {e["kind"] for e in events}
+        self.assertTrue({"seed_start", "attempt", "progress", "seed_trained", "evaluation"} <= kinds, kinds)
+        attempt = next(e for e in events if e["kind"] == "attempt")
+        self.assertTrue({"seed", "step", "status", "profit", "trades", "wins", "losses", "reward"} <= set(attempt))
+        progress = next(e for e in events if e["kind"] == "progress")
+        self.assertTrue({"stepsPerSec", "etaSec", "attempts", "pass", "blow", "winRate", "ppo"} <= set(progress))
+        run = json.loads((logs / "run.json").read_text())
+        self.assertEqual(run["status"], "not_validated")
+        self.assertEqual(run["config"]["name"], "synthetic_policy")
+        self.assertIn("python", run["versions"])
+        self.assertIsNotNone(run["ended"])
+        self.assertFalse(run["summary"]["validated"])
         out = subprocess.run([node_binary(), "-e", JS, str(bundle_file)], capture_output=True, text=True, cwd=REPO_ROOT, check=True)
         checks = json.loads(out.stdout)
         self.assertEqual(checks["research"], [])

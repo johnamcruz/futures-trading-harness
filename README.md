@@ -303,7 +303,22 @@ environment (read-only use: contracts, bars, positions). It logs everything to
 time stops, verdicts, account reads) and each cycle's output, and
 `scans-<day>.jsonl` holds one record per scanned bar with every strategy's
 verdict and why (the rules that failed, session, its detectors' state, such
-as a CRT sweep's range and reason). Each run
+as a CRT sweep's range and reason), and `events-<day>.jsonl` one record per
+thing that happens: start and stop, each cycle (start, end, duration, result
+line, timeout), the account read for it (balance, positions, prop attempt),
+positions picked up for management, stops moved, closes (why, R at close,
+best and worst R, bars held), end-of-day flattens and closes recorded, the
+kill switch, and errors.
+
+Training logs go next to each run's outputs, in `logs/`: `<stage>.log`
+(every line, timestamped: per seed, steps, steps/s, ETA, pass / blow /
+timeout, win rate, trades and profit per attempt, episode reward, and PPO's
+entropy, KL, clip fraction, explained variance, and losses),
+`<stage>.jsonl` (every attempt, progress line, evaluation, and sweep trial
+with its params, score, and state: complete, infeasible and why, pruned at
+which checkpoint, or failed with its traceback), and a run manifest
+(`run.json`: config, git commit, library versions, start, end, status).
+Each sweep trial also writes `trial_NNN/train.log` and `summary.json`. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the
