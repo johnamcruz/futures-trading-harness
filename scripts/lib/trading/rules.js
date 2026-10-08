@@ -52,6 +52,10 @@
  *               one per candle
  *   crt_risk(m) that setup's stop distance (to the sweep extreme plus a buffer)
  *   crt_target(m) its distance to the far side of the previous candle (the CRT target)
+ *   mtf_bias(m) the m-minute trend as of the last m-minute candle completed
+ *               before this bar: 1 up, -1 down, 0 range (scripts/lib/trading/mtf.js:
+ *               close vs EMA20, EMA20 vs EMA50, swing structure; two of three).
+ *               mtf_bias(240) >= 0 keeps a long out of a 4-hour downtrend
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
@@ -63,6 +67,7 @@
 const ind = require('./indicators');
 const cisd = require('./cisd-ote');
 const crt = require('./crt');
+const mtf = require('./mtf');
 const { zonedParts } = require('./clock');
 
 const RTH_OPEN = 9 * 60 + 30;
@@ -70,7 +75,7 @@ const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
-const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target']);
+const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias']);
 const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
@@ -304,6 +309,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'crt_dir': return crtOf(len).dir;
         case 'crt_risk': return crtOf(len).risk;
         case 'crt_target': return crtOf(len).target;
+        case 'mtf_bias': return mtf.biasSeries(bars, len);
         default: break;
       }
     }
@@ -367,7 +373,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
-    if (h && HTF.has(h[1]) && !h[1].startsWith('crt_')) { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
+    if (h && HTF.has(h[1]) && !h[1].startsWith('crt_') && h[1] !== 'mtf_bias') { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
     if (LEVELS.has(key)) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];

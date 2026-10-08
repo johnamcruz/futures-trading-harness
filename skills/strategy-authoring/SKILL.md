@@ -60,7 +60,10 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `htfc_low(60) < htf_low(60)` says this hour swept the last hour's low.
    `crt_dir(m) crt_risk(m) crt_target(m)` are the Candle Range Theory sweep
    detector on m-minute candles (one setup per candle, tuned by the
-   `crt*` params; see `crt_1h`).
+   `crt*` params; see `crt_1h`). `mtf_bias(m)` is the m-minute trend as of
+   the last m-minute candle completed before the bar (1 up, -1 down, 0 range;
+   the `multi-timeframe-analysis` skill): `mtf_bias(240) >= 0` keeps a long
+   out of a 4-hour downtrend.
    `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
    bar (without it the current bar is included, so a close can never cross
    above it). `minute_et` is the bar's open time in New York minutes (9:45 =

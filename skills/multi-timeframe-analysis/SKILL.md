@@ -1,47 +1,135 @@
 ---
 name: multi-timeframe-analysis
-description: Top-down futures analysis across timeframes (daily/4h for context, 1h/15m for bias, 5m/3m/1m for the trigger) within the ProjectX bar rate limit. Use when building a bias or a plan, or when timeframes disagree.
+description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed; strategies can require it in rules with mtf_bias(m). Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
 ---
 
 # Multi-Timeframe Analysis
 
+A trigger on 3-minute bars is worth more when the timeframes above it point
+the same way, and it is a pullback (or a trap) when they don't. This skill
+makes that read the same every time: one script reads the trend on each
+higher timeframe from the bars you already have, and labels each side.
+
 ## When to Use
 
-- Premarket preparation and every new trade plan.
-- A trigger timeframe signal conflicts with the higher timeframe.
+- Premarket: the bias per timeframe and the levels of the day.
+- Every trade plan, before risk-manager phase 1: is this setup with the
+  higher timeframes, a pullback inside them, or against them?
+- Whenever the trigger timeframe and a higher timeframe disagree.
 
 ## How It Works
 
-1. **Budget requests.** `get_bars` allows 50 requests per 30 s across all
-   agents. Use one request per timeframe:
+### 1. Get the bars (one request per timeframe at most)
 
-   | Role | Timeframe | `get_bars` | Bars |
-   |---|---|---|---|
-   | Context | daily | `unit:"day", unitNumber:1` | 30 |
-   | Bias | 1 hour | `unit:"hour", unitNumber:1` | 120 |
-   | Setup | 15 min | `unit:"minute", unitNumber:15` | 160 |
-   | Trigger | 3 min | `unit:"minute", unitNumber:3` | 300 |
+`get_bars` allows 50 requests per 30 s across all agents. The higher
+intraday timeframes are built from the trigger bars, so you rarely need more
+than two requests:
 
-2. **Run market-snapshot on each** and record trend direction (EMA 20 vs 50,
-   SuperTrend), ADX, and the nearest levels.
-3. **Align.**
-   - All aligned → full strategy size and target.
-   - Context against bias → trade only at strong levels, reduce target to the
-     next opposing level.
-   - Trigger against bias → it's a pullback; wait for the trigger timeframe to
-     turn back with the bias.
-4. **Levels flow down.** Draw levels from higher timeframes (prior day high
-   and low, overnight high and low, weekly levels, 1h swings) and treat them as
-   targets or reasons to skip on the trigger timeframe.
-5. **One sentence per timeframe.** "Daily: range 20900–21700, mid 21300.
-   1h: uptrend, ADX 26. 15m: pullback to VWAP. 3m: CHoCH up."
+| Role | Timeframe | Source |
+|---|---|---|
+| Context | daily | `get_bars` `unit:"day", unitNumber:1`, 60 bars, saved to `/tmp/fth/<SYMBOL>-1d.json` |
+| Context | 4 hours | built from the trigger bars (needs 50+ candles for its slow EMA: 2000+ 3m bars, else use `get_bars` `unit:"hour", unitNumber:4`) |
+| Bias | 1 hour | built from the trigger bars |
+| Setup | 15 minutes | built from the trigger bars |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file, or `get_bars` `unit:"minute"`, 2000 bars |
+
+### 2. Run the read
+
+```bash
+node <root>/scripts/mtf.js <trigger bars> --daily=/tmp/fth/<SYMBOL>-1d.json
+node <root>/scripts/mtf.js <trigger bars> --tf=15,60,240 --json    # every number
+```
+
+`<trigger bars>` is the runner's bars file (e.g.
+`~/.futures-trading-harness/bars/MNQ-3m.json`), a saved `get_bars` reply, or a
+CSV / Parquet file. Candles align to the 18:00 ET open: 1-hour candles open
+on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
+Only completed candles decide a trend; the one forming is reported apart.
+
+Each timeframe's trend has three votes:
+
+1. The close against EMA 20.
+2. EMA 20 against EMA 50 (no vote with fewer than 50 candles, and the line
+   says so).
+3. Swing structure: higher highs and higher lows (HH/HL), lower highs and
+   lower lows (LH/LL), or mixed.
+
+Two votes the same way, and none against, set the trend (UP or DOWN);
+anything else is RANGE. Each line also gives ADX, ATR, where the close sits
+in the last 20 candles' range, and the swing high and low.
+
+### 3. Read the alignment
+
+From the highest timeframe down, for each side:
+
+| Label | Means | What to do |
+|---|---|---|
+| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at full size and its full target |
+| `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then enter. Do not enter while it is still moving against you |
+| `mixed` | timeframes disagree without a clear pullback | Half size, or the nearest opposing level as the target; skip in a quiet session |
+| `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size and the nearest target |
+
+The `bias` (long, short, or neutral) weights the higher timeframes more
+(score out of ±max): use it for the game plan's headline.
+
+Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `cisd_ote`) trade
+against the lower timeframes by design: judge them against the timeframe
+above their range candle (for `crt_1h`, the 4-hour trend; for `crt_4h`,
+the daily).
+
+### 4. Levels flow down
+
+Take levels from the higher timeframes (the daily and 4-hour swing highs and
+lows, the previous candle's high and low on each, the prior day's high and
+low) and treat them as targets on the trigger timeframe, or as reasons to
+skip a setup that runs straight into one.
+
+### 5. Write it down
+
+One line per timeframe and the verdict, in the plan entry and the premarket
+note, so reviews can grade it:
+
+```text
+Daily UP (HH/HL). 4h UP. 1h UP, ADX 26. 15m DOWN (pullback to the 1h EMA20).
+Long: pullback (wait for a 3m shift up). Short: counter.
+```
+
+### 6. In rules (mechanical strategies)
+
+`mtf_bias(m)` is the same trend per bar, causal (each bar sees only candles
+completed before it): 1 up, -1 down, 0 range. Add it to a strategy's rules
+to keep its trades with the higher timeframe, and backtest both versions:
+
+```yaml
+rules:
+  long:
+    - close crosses_above ema(20)
+    - mtf_bias(60) > 0          # the 1-hour trend is up
+    - mtf_bias(240) >= 0        # and the 4-hour isn't down
+```
+
+The ported strategies keep their source's rules (parity); try a filter in a
+copy (e.g. `strategies/ema_cross_mtf/`) and compare the two with
+`scripts/backtest.js`.
 
 ## Examples
 
 ```text
-Daily up, 1h up (ADX 28), 15m pulling back into session VWAP, 3m EMA cross up
-with ADX 19 → aligned long; the ema_cross strategy applies, target 1h swing high.
+$ node scripts/mtf.js ~/.futures-trading-harness/bars/MNQ-3m.json --daily=/tmp/fth/MNQ-1d.json
+daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/HL), ADX 24.1, ...
+4h: UP (close 21652.25 vs EMA20 21590.75, EMA20 vs EMA50 21470.5, structure HH/HL), ADX 21.3, ...
+1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
+15m: DOWN (close 21652.25 vs EMA20 21661, EMA20 vs EMA50 21664.5, structure LH/LL), ADX 18.2, ...
+Alignment: long pullback, short counter; bias long (score 8 of ±10).
 
-Daily down, 1h range, 3m ORB long → counter-context. Skip, or half target to
-the overnight high.
+-> Longs are a pullback: wait for a 3m shift up (ema_cross or bos long), target the 1h swing high.
+   Shorts are counter: skip, including a 3m keltner short.
+
+$ node scripts/mtf.js tests/fixtures/parity/NQ-3m.csv
+4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
+1h: RANGE (... structure mixed), ADX 14.14, ...
+15m: DOWN (... structure LH/LL), ADX 22.49, ...
+Alignment: long mixed, short counter; bias long (score 2 of ±6).
+
+-> Longs: mixed (half size or nearest target). Shorts: against the 4-hour trend, skip.
 ```

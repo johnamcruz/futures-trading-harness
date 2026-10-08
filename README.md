@@ -210,7 +210,7 @@ strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTra
 | `accounts/` | Prop account profiles (`ACCOUNT.md`): Topstep 50K, 100K, 150K combines |
 | `models/` | Promoted policy bundles (trained prop-challenge policies) |
 | `rl/` | Python trainer for prop-challenge policies: MaskablePPO on the harness's own backtester, Optuna sweep → retrain → ship with JSON config families |
-| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/train-policy` |
+| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/train-policy`, `/mtf` |
 | `rules/trading/` | Always-on rules |
 | `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
 | `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
