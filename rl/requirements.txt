@@ -5,3 +5,4 @@ gymnasium>=1.0
 torch>=2.2
 stable-baselines3>=2.3
 sb3-contrib>=2.3
+optuna>=3.6

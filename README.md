@@ -224,7 +224,7 @@ Generated files come from the canonical sources: `node scripts/sync-harness.js`
 
 ## Setup
 
-Requires Node.js 18+ (22+ for the order-flow connector) and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
+Requires Node.js 22+ and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
 (`npm install && npm run build`; note the path to `dist/index.js`).
 
 ```bash

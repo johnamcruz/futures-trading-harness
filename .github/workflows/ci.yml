@@ -11,15 +11,24 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node: [20, 22]
+    env:
+      # The Python trainer's tests (rl/tests) must run, not skip.
+      FTH_PYTHON: python
+      FTH_REQUIRE_PYTHON: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version-file: .nvmrc
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: rl/requirements.txt
+      # CPU torch (the policy is a small MLP), then the rest of the trainer.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -r rl/requirements.txt
       - run: npm ci
       - run: npm test
       - run: npm run lint

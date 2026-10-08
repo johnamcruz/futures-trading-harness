@@ -1,6 +1,7 @@
 """sweep -> retrain -> ship on synthetic bars, tiny budgets. Needs optuna, torch, sb3-contrib."""
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,7 +47,8 @@ def family(d, **ship):
     return env
 
 
-@unittest.skipUnless(HAVE, "optuna / torch / sb3-contrib not installed")
+# CI (FTH_REQUIRE_PYTHON=1) runs it whatever is installed: a missing package fails there.
+@unittest.skipUnless(HAVE or os.environ.get("FTH_REQUIRE_PYTHON") == "1", "optuna / torch / sb3-contrib not installed")
 class PipelineTest(unittest.TestCase):
     def test_sweep_retrain_ship(self):
         d = Path(tempfile.mkdtemp())

@@ -23,7 +23,7 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
   const userName = String(env.PROJECTX_USERNAME || '');
   const apiKey = String(env.PROJECTX_API_KEY || '');
   if (!userName || !apiKey) throw new ProjectXRestError('PROJECTX_USERNAME and PROJECTX_API_KEY must be set for the bar clock');
-  if (typeof fetchFn !== 'function') throw new ProjectXRestError('global fetch is unavailable (Node 18+ required)');
+  if (typeof fetchFn !== 'function') throw new ProjectXRestError('global fetch is unavailable (Node 22+ required)');
 
   let token = null;
   let tokenAt = 0;

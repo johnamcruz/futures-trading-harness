@@ -52,7 +52,7 @@ node scripts/strategies.js validate
 
 ## Rules for changes
 
-- CommonJS, Node 18+, no runtime dependencies (plugin installs don't run npm install).
+- CommonJS, Node 22+ (`.nvmrc`), no runtime dependencies (plugin installs don't run npm install).
   Python (`rl/requirements.txt`) is for training only; nothing at runtime needs it.
 - Hooks and the gateway read only local state; no network. Hook scripts stay under 200 lines.
 - The order gate fails closed in both the hook (`FAIL_CLOSED_HOOKS` in

@@ -2,6 +2,7 @@
 unvalidated one is never promoted. Needs torch, stable-baselines3, sb3-contrib."""
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -27,7 +28,7 @@ process.stdout.write(JSON.stringify({ research: checkBundle(b, { requireValidate
 """
 
 
-@unittest.skipUnless(HAVE_SB3, "torch / stable-baselines3 / sb3-contrib not installed")
+@unittest.skipUnless(HAVE_SB3 or os.environ.get("FTH_REQUIRE_PYTHON") == "1", "torch / stable-baselines3 / sb3-contrib not installed")
 class TrainTest(unittest.TestCase):
     def test_quick_training_writes_a_bundle_the_harness_loads_and_refuses_to_promote_it_unvalidated(self):
         from fth_rl.train import main
