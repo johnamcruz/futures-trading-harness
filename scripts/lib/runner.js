@@ -174,7 +174,7 @@ function createRunner(deps) {
         // Without a fresh record the gate refuses trend strategies' entries (fail closed).
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend } };
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, recent: bars.slice(-10) } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -706,11 +706,13 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [] });
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
           state = recordRun(state, 'trade', cycleNow);
+          // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
+          state = { ...state, history: [...((state && state.history) || []), { at: cycleNow.toISOString(), symbols: run.map(x => x.symbol), result: (r && r.result) || null }].slice(-10) };
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
         }

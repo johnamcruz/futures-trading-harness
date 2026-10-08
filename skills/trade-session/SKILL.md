@@ -20,6 +20,13 @@ inside one run.
 
 ## How It Works
 
+### 0. Load the skills
+
+Before any decision, load `trade-session` (this skill),
+`multi-timeframe-analysis`, and `strategy-library` (Claude Code: the Skill
+tool). The order gate refuses an entry from a session that hasn't (Claude
+transcripts). Load the others as a step names them.
+
 ### 1. State first
 
 - `get_server_config`. Trading disabled → plan-only mode.

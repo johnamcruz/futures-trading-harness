@@ -52,6 +52,7 @@ const { harnessHome } = require('./lib/paths');
 const { writeMtfRecord } = require('./lib/trading/mtf-state');
 const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
+const { writeCycleLog } = require('./lib/cycle-log');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -170,6 +171,10 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const res = await runOnce(cfg, argv, timeoutMs);
   const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
+  // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
+  const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
+  process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
+  if (summary.missingSkills.length) process.stderr.write(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   process.stdout.write(`[autotrader] ${result}\n`);
   const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);

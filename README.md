@@ -324,7 +324,13 @@ thing that happens: start and stop, each cycle (start, end, duration, result
 line, timeout), the account read for it (balance, positions, prop attempt),
 positions picked up for management, stops moved, closes (why, R at close,
 best and worst R, bars held), end-of-day flattens and closes recorded, the
-kill switch, and errors.
+kill switch, and errors. `cycles-<day>.jsonl` has one line per cycle with
+what the model saw and did (its prompt's size, the skills it loaded, its tool
+calls by name, the orders it sent, and skills an entry needed but it never
+loaded), and `cycles/<day>/<time>-<action>.json` the whole cycle: the prompt
+(with the last 10 bars and the model's last 10 results), the transcript, and
+the summary. `gate-log.jsonl` has every order the gate refused and why;
+`alerts-<day>.jsonl` every alert.
 
 Training logs go next to each run's outputs, in `logs/`: `<stage>.log`
 (every line, timestamped: per seed, steps, steps/s, ETA, pass / blow /

@@ -37,7 +37,7 @@ function readBlackouts(file) {
  * Returns { allowed, intent, violations, message }. `tool` is the projectx tool
  * being called: place_order (default) or modify_order.
  */
-function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order' } = {}) {
+function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order', transcriptPath = null } = {}) {
   const config = loadConfig(env);
   // cancel_order needs live account data; only the gateway checks it (account-gate.js).
   if (tool === 'cancel_order') return { allowed: true, intent: 'cancel', violations: [], message: '' };
@@ -56,6 +56,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
     blackouts: readBlackouts(config.blackoutsFile),
     strategies: loadStrategies(pluginRoot, env).strategies,
     accounts: loadAccounts(pluginRoot, env).accounts,
+    transcriptPath,
   });
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations) };

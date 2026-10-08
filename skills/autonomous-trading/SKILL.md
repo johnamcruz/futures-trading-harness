@@ -31,8 +31,12 @@ description: Rules for running the trading harness unattended (headless, schedul
      has been open that long.
    Don't loosen a stop it set. To see why a setup did or didn't fire, read
    that bar's record in `<FTH_HOME>/logs/scans-<day>.jsonl` (the runner's own
-   log is `<FTH_HOME>/logs/autotrader-<day>.log`; both are readable, nothing
-   else in `<FTH_HOME>` needs to be).
+   log is `<FTH_HOME>/logs/autotrader-<day>.log`; your earlier cycles, with
+   their prompts, tool calls, and skills loaded, are in
+   `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate's
+   decisions in `logs/gate-log.jsonl`). The prompt also carries the last 10
+   closed bars and your last 10 cycle results: read them, and don't reverse a
+   recent decision without saying what changed.
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
    the server ends the entry attempt. Fix what the block names when it is
    yours to fix (for example, review a closed trade, cancel a leftover order),

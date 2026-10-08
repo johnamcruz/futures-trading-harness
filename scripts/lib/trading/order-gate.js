@@ -18,6 +18,7 @@ const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
+const { checkSkillsLoaded } = require('./skills-loaded');
 const { specFor } = require('./contracts');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -210,7 +211,7 @@ function lossState(dayEntries) {
  * account profiles: a strategy that trades an account gets the hard `combine`
  * and `policy` checks (prop-state.js), which no setting can skip.
  */
-function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, accounts = [], journalTruncated = false }) {
+function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, accounts = [], journalTruncated = false, transcriptPath = null }) {
   if (isRiskReducing(input.rationale)) return { intent: 'risk-reducing', violations: [] };
 
   const rationale = String(input.rationale || '');
@@ -276,6 +277,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       + 'and place a [protect] stop order right after the fill.');
 
   add('order-consistency', checkConsistency(input, rationale));
+  // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
+  add('skills-loaded', checkSkillsLoaded(transcriptPath));
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);

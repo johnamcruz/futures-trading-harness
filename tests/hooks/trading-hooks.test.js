@@ -137,6 +137,19 @@ test('order gate: a rules strategy entry needs its own trigger in the signal rec
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate: with a Claude transcript, an entry needs the trading skills loaded in the session', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, skill('trade-session'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
+  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill).join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);

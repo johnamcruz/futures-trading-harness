@@ -268,6 +268,26 @@ function accountText(state) {
   return head + attempts.join('');
 }
 
+const RECENT_IN_PROMPT = 10;
+
+/** The last closed bars, oldest first, compact: "09:33 O 21500.25 H 21504 L 21498.5 C 21503.75 V 1200 (+3.5)". */
+function recentBarsText(symbol, bars, timeframe) {
+  const list = (bars || []).slice(-RECENT_IN_PROMPT);
+  if (!list.length) return '';
+  const { zonedParts } = require('./trading/clock');
+  const hhmm = t => { const p = zonedParts(new Date(t), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`; };
+  const num = x => (Number.isFinite(x) ? Number(x.toFixed(4)) : '?');
+  const rows = list.map(b => `${hhmm(b.t)} O ${num(b.o)} H ${num(b.h)} L ${num(b.l)} C ${num(b.c)} V ${b.v ?? '?'} (${b.c >= b.o ? '+' : ''}${num(b.c - b.o)})`);
+  return ` ${symbol} last ${list.length} closed ${timeframe}m bars (ET open time, oldest first): ${rows.join('; ')}.`;
+}
+
+/** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
+function historyText(history) {
+  const list = (history || []).slice(-RECENT_IN_PROMPT);
+  if (!list.length) return '';
+  return ` Your last ${list.length} cycle(s), oldest first: ${list.map(h => `${h.at.slice(11, 16)}Z ${(h.symbols || []).join(',')}: ${String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '')}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
@@ -278,11 +298,12 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
-        + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`));
+        + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + recentBarsText(symbol, bar.recent, cfg.timeframe));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
@@ -295,7 +316,7 @@ function prompts(cfg, now, root = '') {
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
           + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')}${historyText(history)} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
@@ -318,13 +339,14 @@ function buildCommand(cfg, prompt, root, env = process.env) {
   const model = cfg.model ? String(cfg.model) : '';
   switch (cfg.harness) {
     case 'claude':
-      return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
+      // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
+      return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
         '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
         '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
-      return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
+      return ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
         '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
         ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':
