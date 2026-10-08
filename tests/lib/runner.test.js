@@ -334,7 +334,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false }) {
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [] };
@@ -371,6 +371,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return flat ? 0 : 1; },
+      async accountBalance() { if (balanceFails) throw new Error('HTTP 503'); return 50100; },
     },
     clock: { now: () => new Date(clockRef.t) }, prop,
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false }; },
@@ -537,10 +538,21 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   const b = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: take, until: et(10, 10), trigger: 'signal' });
   // Each trade cycle's prompt carries the attempt's state.
   assert.ok(take.calls.summaries >= 1);
-  assert.match(b.prompts.find(x => /trade-session/.test(x)), /mini attempt \(active\): balance \$50,100, floor \$48,000, cushion \$2,100/);
+  const tradePrompt = b.prompts.find(x => /trade-session/.test(x));
+  assert.match(tradePrompt, /Account 7 at [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100; flat; 0 working orders\./);
+  assert.match(tradePrompt, /mini attempt \(active\): balance \$50,100, floor \$48,000, cushion \$2,100/);
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
   const c = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: each, until: et(10, 10) });
   assert.ok(each.calls.screens.length >= 1 && c.cycles.includes('trade'));
   assert.ok(b.cycles.filter(c => c === 'trade').length >= 1);
+});
+
+test('every run\'s prompt states the account, read just before it; an unreadable account is said, not hidden', async () => {
+  const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52) });
+  const eod = r.prompts.find(x => /end-of-day skill/.test(x));
+  assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./, 'the end-of-day run sees the account after the flatten');
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; open: CON.F.US.MNQ.Z26 long 1 @ 21500; 2 working orders\./);
+  const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
+  assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });

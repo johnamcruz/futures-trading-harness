@@ -241,15 +241,20 @@ test('the runner polls one contract per micro/mini index', () => {
   assert.doesNotThrow(() => validateConfig({ symbols: ['MNQ', 'MES'] }));
 });
 
-test('the cycle prompt carries each running prop attempt\'s state', () => {
+test('every cycle prompt carries the account: balance, positions, orders, and each running prop attempt', () => {
   const p = prompts(validateConfig({ account: '123' }), et(10, 0));
-  const accounts = [{
+  const attempts = [{
     account: 'topstep_100k', status: 'active', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
     budgets: [{ strategy: 'prop_portfolio_3m', budgetUsd: 975 }], entryBlock: null,
   }];
-  const text = p.trade([{ symbol: 'MNQ' }], { accounts });
+  const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
+  const text = p.trade([{ symbol: 'MNQ' }], { state });
+  assert.match(text, /Account 123 at 2026-10-07T14:00:01.000Z: balance \$101,250; open: CON.F.US.ENQ.Z26 long 2 @ 21500.25; 1 working order\./);
   assert.match(text, /topstep_100k attempt \(active\): balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
-  const blocked = p.trade([{ symbol: 'MNQ' }], { accounts: [{ ...accounts[0], entryBlock: 'a position is open on the account' }] });
-  assert.match(blocked, /new entries blocked: a position is open on the account\./);
-  assert.doesNotMatch(p.trade([{ symbol: 'MNQ' }]), /attempt/);
+  const flat = { ...state, positions: [], workingOrders: 0, attempts: [{ ...attempts[0], entryBlock: 'a position is open on the account' }] };
+  assert.match(p.trade([{ symbol: 'MNQ' }], { state: flat }), /balance \$101,250; flat; 0 working orders\..*new entries blocked: a position is open on the account\./);
+  assert.match(p.premarket('MNQ', { state }), /Account 123 .*balance \$101,250.*Run the premarket skill/);
+  assert.match(p.eod({ state }), /Account 123 .*Run the end-of-day skill/);
+  assert.match(p.trade([{ symbol: 'MNQ' }], { state: { id: '123', error: 'HTTP 503' } }), /Account 123: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ' }]), /Account|attempt/);
 });

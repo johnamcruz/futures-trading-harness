@@ -12,6 +12,23 @@ const { loadConfig } = require('../lib/trading/config');
 const { tradingDayStart } = require('../lib/trading/clock');
 const { resolveJournalPath, readJournal, entriesSince } = require('../lib/trading/journal');
 const { lossState, liveReviews } = require('../lib/trading/order-gate');
+const { runningAttempts, readAttempt } = require('../lib/trading/prop-state');
+
+const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
+
+/** Each running prop attempt as of its last snapshot (local state; the runner refreshes it each bar). */
+function attemptLines(home, now) {
+  return runningAttempts(home).map(name => {
+    const r = readAttempt(home, name);
+    const s = r && r.snapshot;
+    if (!s || !s.summary) return `- ${name}: attempt started ${r ? r.startedAt : '?'}, no balance snapshot yet (node <root>/scripts/combine.js status)`;
+    const m = s.summary;
+    const age = Math.max(0, Math.round((now.getTime() - Date.parse(s.at)) / 60000));
+    return `- ${name} (${m.status}) as of ${s.at} (${age} min ago): balance ${usd(m.balance)}, floor ${usd(m.floor)}, cushion ${usd(m.cushion)}, `
+      + `profit ${usd(m.profit)} of ${usd(m.target)}, day ${usd(m.dayPnl)}, ${m.sessionsLeft} sessions left`
+      + `${r.missedClose ? `; the close of ${r.missedClose} was never recorded` : ''}${s.block ? `; entries blocked: ${s.block}` : ''}`;
+  });
+}
 
 const MAX_LESSONS = 10;
 const MAX_TEXT = 300;
@@ -21,7 +38,7 @@ function clip(text) {
   return t.length > MAX_TEXT ? `${t.slice(0, MAX_TEXT - 1)}…` : t;
 }
 
-function buildBriefing(entries, now, config, root = null) {
+function buildBriefing(entries, now, config, root = null, home = null) {
   const dayStart = tradingDayStart(now);
   const today = entriesSince(entries, dayStart);
   const lessons = entries.filter(e => e.kind === 'lesson').slice(-MAX_LESSONS);
@@ -48,6 +65,9 @@ function buildBriefing(entries, now, config, root = null) {
   } else if (streak >= config.maxConsecutiveLosses) {
     lines.push(`Loss streak at ${streak}: write a lesson before any new entry; cooldown ${config.lossCooldownMin} min.`);
   }
+  lines.push('', 'Know the account before every decision: get_account_snapshot (balance, today\'s P&L, open positions, working orders).');
+  const attempts = home ? attemptLines(home, now) : [];
+  if (attempts.length) lines.push('', '### Prop attempts (the order gate enforces these)', ...attempts);
   lines.push('', '### Standing lessons (newest last)');
   if (lessons.length === 0) {
     lines.push('- none yet');
@@ -78,7 +98,8 @@ function run(_rawInput, ctx = {}, deps = {}) {
   exportRoot(root, env);
   try {
     const entries = readJournal(resolveJournalPath(env));
-    return buildBriefing(entries, deps.now || new Date(), loadConfig(env), root);
+    const config = loadConfig(env);
+    return buildBriefing(entries, deps.now || new Date(), config, root, config.home);
   } catch (err) {
     return { stderr: `[TradingSessionStart] journal unavailable: ${err.message}`, exitCode: 0 };
   }

@@ -232,17 +232,39 @@ function validateConfig(raw) {
   return cfg;
 }
 
+const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
+const signed = x => `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`;
+
+/**
+ * The account as the runner read it just before the run (accountState in
+ * runner.js): balance, open positions, working orders, and each running prop
+ * attempt's state. Every decision is made with these numbers in view; when
+ * they couldn't be read, the prompt says so and asks for a fresh read first.
+ */
+function accountText(state) {
+  if (!state) return '';
+  if (state.error) return ` Account ${state.id}: state unavailable (${state.error}); read get_account_snapshot before deciding anything.`;
+  const positions = (state.positions || []).map(p => `${p.contractId} ${p.type === 1 ? 'long' : p.type === 2 ? 'short' : '?'} ${p.size} @ ${p.averagePrice}`);
+  const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; `
+    + `${positions.length ? `open: ${positions.join(', ')}` : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}.`;
+  const attempts = (state.attempts || []).map(a => ` ${a.account} attempt (${a.status}): balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
+    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${a.sessionsLeft} session${a.sessionsLeft === 1 ? '' : 's'} left`
+    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}`
+    + `${a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : ''}.`);
+  return head + attempts.join('');
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
-    premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
+    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, accounts = [] } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
@@ -253,20 +275,13 @@ function prompts(cfg, now, root = '') {
         manageOnly ? 'manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries)' : '',
       ].filter(Boolean).join('; ');
       const recover = recovered ? ' The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.' : '';
-      // The prop attempts' state, so every agent plans within it without a tool call (the gate enforces it).
-      const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
-      const signed = x => `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`;
-      const attempts = accounts.map(a => ` ${a.account} attempt (${a.status}): balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
-        + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${a.sessionsLeft} session${a.sessionsLeft === 1 ? '' : 's'} left`
-        + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}`
-        + `${a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : ''}.`);
       // A policy strategy's verdicts: the only entries the gate will accept (prop-challenge-pacing skill).
       const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${attempts.join('')}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
-    eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
+    eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
 }
 
@@ -398,6 +413,7 @@ function cycleResult(output) {
 }
 
 module.exports = {
+  accountText,
   endOfDayAt,
   marketHoursErrors,
   historyBars,

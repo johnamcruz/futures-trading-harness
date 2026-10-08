@@ -153,6 +153,22 @@ test('session-start briefing lists lessons and day state', () => {
   assert.match(r.stdout, /Trading harness briefing/);
   assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
+  assert.match(r.stdout, /Know the account before every decision: get_account_snapshot/);
+  assert.doesNotMatch(r.stdout, /Prop attempts/);
+});
+
+test('session-start briefing states each running prop attempt from its last snapshot', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const home = tmpDir();
+  const account = accountNamed(REPO, 'topstep_100k', {});
+  prop.startAttempt(home, account, new Date('2026-10-05T14:00:00Z'));
+  prop.snapshot(home, account, 101250, new Date());
+  const { env } = setup([], { FTH_HOME: home });
+  const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
+  assert.strictEqual(r.code, 0);
+  assert.match(r.stdout, /### Prop attempts \(the order gate enforces these\)/);
+  assert.match(r.stdout, /- topstep_100k \(active\) as of .* \(0 min ago\): balance \$101,250, floor \$97,000, cushion \$4,250, profit \$1,250 of \$6,000/);
 });
 
 test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {

@@ -427,6 +427,36 @@ function createRunner(deps) {
   const eodBackstop = () => flattenAll('end of day');
   let lastHoursCheck = 0;
 
+  /**
+   * The account for a run's prompt: balance, open positions, working orders,
+   * and each running prop attempt's state (null without an account). A failed
+   * read is reported in the prompt, never hidden.
+   */
+  async function accountSnapshot(now) {
+    if (!cfg.account || (typeof client.accountState !== 'function' && typeof client.accountBalance !== 'function')) return null;
+    try {
+      const [state, balance] = await Promise.all([
+        typeof client.accountState === 'function' ? client.accountState(cfg.account) : { positions: [], orders: [] },
+        typeof client.accountBalance === 'function' ? client.accountBalance(cfg.account) : NaN,
+      ]);
+      let attempts = [];
+      if (prop && typeof prop.summaries === 'function') {
+        try {
+          attempts = prop.summaries(now);
+        } catch (err) {
+          log(`prop attempt state unavailable for the prompt (${err.message})`, 'error');
+        }
+      }
+      return {
+        id: cfg.account, at: now.toISOString(), balance,
+        positions: state.positions.filter(p => Number(p.size || 0) > 0), workingOrders: state.orders.length, attempts,
+      };
+    } catch (err) {
+      log(`account state for the prompt unavailable (${err.message})`, 'error');
+      return { id: cfg.account, error: err.message };
+    }
+  }
+
   /** Milliseconds from `now` to today's end of day (Infinity if none). */
   function msToEod(now) {
     const eod = endOfDayAt(cfg, now);
@@ -455,14 +485,15 @@ function createRunner(deps) {
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
       if (d.action === 'eod') ok = await eodBackstop();
-      const jobs = d.action === 'eod' ? [p.eod()] : cfg.symbols.map(s => p.premarket(s));
+      // Each job is built with the account as it is when that run starts.
+      const jobs = d.action === 'eod' ? [state => p.eod({ state })] : cfg.symbols.map(s => state => p.premarket(s, { state }));
       for (const prompt of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
         if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
         const timeoutMs = limitFor(d.action, at);
         if (timeoutMs < 30000) { log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`); continue; }
-        const r = await runCycle(d.action, prompt, { timeoutMs });
+        const r = await runCycle(d.action, prompt(await accountSnapshot(clock.now())), { timeoutMs });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
       // Then check again: flatten whatever the run left open.
@@ -530,15 +561,8 @@ function createRunner(deps) {
         const timeoutMs = limitFor(again.action, cycleNow);
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          let accounts = [];
-          if (prop && typeof prop.summaries === 'function') {
-            try {
-              accounts = prop.summaries(cycleNow);
-            } catch (err) {
-              log(`account state for the prompt unavailable (${err.message})`, 'error');
-            }
-          }
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, accounts });
+          const acct = await accountSnapshot(cycleNow);
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
           recover = false;
           const r = await runCycle(again.action, prompt, { timeoutMs });
           state = recordRun(state, 'trade', cycleNow);
