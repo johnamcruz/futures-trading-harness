@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools } = require('../../scripts/lib/autotrader');
+const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, signalDecision } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -14,8 +14,12 @@ const et = (h, m, day = 7) => new Date(Date.UTC(2026, 9, day, h + 4, m)); // Oct
 
 test('config defaults validate and bad configs list every problem', () => {
   assert.strictEqual(cfg.symbols[0], 'MNQ');
-  assert.throws(() => validateConfig({ harness: 'gpt', symbols: [], sessions: ['bad'], eodAt: '25:00@UTC', cycleMinutes: 0 }),
-    /harness[\s\S]*symbols[\s\S]*sessions[\s\S]*eodAt[\s\S]*cycleMinutes/);
+  assert.throws(() => validateConfig({ harness: 'gpt', symbols: [], sessions: ['bad'], eodAt: '25:00@UTC', timeframe: 0 }),
+    /harness[\s\S]*symbols[\s\S]*sessions[\s\S]*eodAt[\s\S]*timeframe/);
+  assert.throws(() => validateConfig({ trigger: 'signal' }), /account: required/);
+  assert.throws(() => validateConfig({ cycleMinutes: 3 }), /replaced by timeframe/);
+  assert.throws(() => validateConfig({ timeframe: 90 }), /1 to 60/);
+  assert.strictEqual(validateConfig({ timeframe: 1 }).timeframe, 1);
   assert.throws(() => validateConfig({ harness: 'custom', command: ['agent'] }), /\{prompt\}/);
   assert.deepStrictEqual(parseAt('09:05@America/New_York'), { minute: 545, timeZone: 'America/New_York' });
   assert.strictEqual(parseAt('9am'), null);
@@ -58,8 +62,7 @@ test('schedule: premarket, then trade cycles at the interval, then end of day on
   ({ action, state } = decide(cfg, state, et(9, 40)));
   assert.strictEqual(action, 'trade');
   state = recordRun(state, 'trade', et(9, 40));
-  assert.strictEqual(decide(cfg, state, et(9, 41)).action, null); // interval
-  assert.strictEqual(decide(cfg, state, et(9, 43)).action, 'trade');
+  assert.strictEqual(decide(cfg, state, et(9, 41)).action, 'trade'); // the bar clock times each cycle
   assert.strictEqual(decide(cfg, state, et(15, 10)).action, null); // after sessions, before eod
   ({ action, state } = decide(cfg, state, et(15, 55)));
   assert.strictEqual(action, 'eod');
@@ -94,6 +97,18 @@ test('child env locks the gate and paper mode disables trading', () => {
   const paper = childEnv(validateConfig({ paper: true }), '/r', {});
   assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
   assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; run its scripts as `node \/r\/scripts/);
+});
+
+test('trade prompt carries the closed bar and its data file', () => {
+  const p = prompts(validateConfig({ timeframe: 1 }), et(10, 1), '/r').trade('MNQ', { t: '2026-10-07T14:00:00Z', c: 21503.25, file: '/tmp/fth/MNQ-1m.json', contractId: 'CON.F.US.MNQ.Z26' });
+  assert.match(p, /A 1-minute MNQ bar just closed \(open 2026-10-07T14:00:00Z, close 21503.25\)/);
+  assert.match(p, /\/tmp\/fth\/MNQ-1m\.json .*contractId CON\.F\.US\.MNQ\.Z26/);
+});
+
+test('signal trigger runs on an open position or a mechanical candidate only', () => {
+  assert.deepStrictEqual(signalDecision([], -1), { run: true, reason: 'position open (net -1)' });
+  assert.strictEqual(signalDecision([{ name: 'orb', candidate: true, signal: 'orb', direction: 'long' }], 0).reason, 'strategy candidate: orb long');
+  assert.strictEqual(signalDecision([{ name: 'cisd_ote', candidate: true, signal: 'manual' }, { name: 'orb', candidate: false, signal: 'orb' }], 0).run, false);
 });
 
 test('cycleResult finds the last reported result', () => {

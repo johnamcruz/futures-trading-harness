@@ -2,9 +2,10 @@
 
 /**
  * Pure scheduling and command-building logic for the autonomous runner.
- * The runner never trades itself: it starts one headless harness run per
- * cycle (Claude Code, Codex, Qwen Code, or any CLI agent), and every order
- * still passes the order gate and the projectx-mcp guardrails.
+ * The runner never trades itself: on every closed bar of the configured
+ * timeframe (see bar-clock.js) it starts one headless harness run (Claude
+ * Code, Codex, Qwen Code, or any CLI agent), and every order still passes the
+ * order gate and the projectx-mcp guardrails.
  */
 
 const { parseWindows, inWindow, minutesOfDay, zonedParts } = require('./trading/clock');
@@ -15,7 +16,13 @@ const DEFAULTS = {
   symbols: ['MNQ'],
   account: '',
   workdir: 'workspace',
-  cycleMinutes: 3,
+  timeframe: 3, // minutes per bar; a cycle runs after each closed bar
+  trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
+  bars: 300, // closed bars written to dataDir for the agents
+  dataDir: '/tmp/fth',
+  barDelaySeconds: 2, // wait after the scheduled close before polling
+  barPollSeconds: 2, // between polls while waiting for the closed bar
+  barTimeoutSeconds: 60, // give up on a bar (daily break, halt) and resync
   sessions: ['09:35-15:00@America/New_York'],
   premarketAt: '09:00@America/New_York',
   eodAt: '15:50@America/New_York',
@@ -65,9 +72,15 @@ function validateConfig(raw) {
   if (!Array.isArray(cfg.symbols) || cfg.symbols.length === 0 || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
   if (parseWindows((cfg.sessions || []).join(',')).errors.length || !Array.isArray(cfg.sessions)) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...]');
   for (const k of ['premarketAt', 'eodAt']) if (cfg[k] && !parseAt(cfg[k])) errors.push(`${k}: "HH:MM@Zone" or empty`);
-  for (const k of ['cycleMinutes', 'maxCyclesPerDay', 'cycleTimeoutMinutes', 'maxConsecutiveErrors']) {
+  for (const k of ['timeframe', 'bars', 'maxCyclesPerDay', 'cycleTimeoutMinutes', 'maxConsecutiveErrors', 'barPollSeconds', 'barTimeoutSeconds']) {
     if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive integer`);
   }
+  if (Number.isInteger(cfg.timeframe) && cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
+  if (!(Number.isInteger(cfg.barDelaySeconds) && cfg.barDelaySeconds >= 0)) errors.push('barDelaySeconds: 0 or more');
+  if (!['bar', 'signal'].includes(cfg.trigger)) errors.push('trigger: "bar" or "signal"');
+  if (cfg.trigger === 'signal' && !cfg.account) errors.push('account: required with trigger "signal" (to see open positions)');
+  if (!(typeof cfg.dataDir === 'string' && cfg.dataDir.startsWith('/'))) errors.push('dataDir: an absolute path');
+  if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (errors.length) throw new Error(`invalid autotrader config:\n- ${errors.join('\n- ')}`);
   return cfg;
@@ -79,7 +92,12 @@ function prompts(cfg, now, root = '') {
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}.`,
-    trade: symbol => `${head} Run the trade-session skill for ${symbol}${acct}${cfg.paper ? ' in paper mode (plan only, no orders)' : ''}.`,
+    trade: (symbol, bar) => {
+      const barInfo = bar
+        ? ` A ${cfg.timeframe}-minute ${symbol} bar just closed (open ${bar.t}, close ${bar.c}). Closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}): use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
+        : '';
+      return `${head}${barInfo} Run the trade-session skill for ${symbol}${acct}${cfg.paper ? ' in paper mode (plan only, no orders)' : ''}.`;
+    },
     eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
 }
@@ -128,9 +146,10 @@ function freshDay(key) {
 }
 
 /**
- * Decide the next action. Returns { action: 'premarket' | 'trade' | 'eod' | null, state }.
- * `killSwitch` true suppresses premarket and trade cycles; end of day still runs
- * because it only reduces risk.
+ * Decide the next clock action. Returns { action: 'premarket' | 'trade' | 'eod' | null, state }.
+ * 'trade' means trade cycles are allowed now (in session, under the cap); the
+ * bar clock decides when each one starts. `killSwitch` true suppresses
+ * premarket and trade cycles; end of day still runs because it only reduces risk.
  */
 function decide(cfg, state, now, { killSwitch = false } = {}) {
   const key = dayKey(now);
@@ -153,7 +172,6 @@ function decide(cfg, state, now, { killSwitch = false } = {}) {
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   if (!windows.some(w => inWindow(now, w))) return { action: null, state: s };
   if (s.cycles >= cfg.maxCyclesPerDay) return { action: null, state: s };
-  if (s.lastCycleAt && now.getTime() - Date.parse(s.lastCycleAt) < cfg.cycleMinutes * 60000) return { action: null, state: s };
   return { action: 'trade', state: s };
 }
 
@@ -167,6 +185,17 @@ function recordRun(state, action, now) {
     s.lastCycleAt = now.toISOString();
   }
   return s;
+}
+
+/**
+ * trigger "signal": run a cycle on this bar only when the position needs
+ * managing or a mechanical strategy is a candidate (from strategies.js scan).
+ * Manual strategies need the LLM, so they only run in trigger "bar" mode.
+ */
+function signalDecision(scanResults, netPosition) {
+  if (netPosition !== 0) return { run: true, reason: `position open (net ${netPosition})` };
+  const fired = (scanResults || []).filter(r => r.candidate && r.signal !== 'manual').map(r => `${r.name} ${r.direction}`);
+  return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
 
 /** Last "CYCLE RESULT: ..." line in a run's output, if any. */
@@ -188,4 +217,5 @@ module.exports = {
   decide,
   recordRun,
   cycleResult,
+  signalDecision,
 };

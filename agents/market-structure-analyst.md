@@ -16,6 +16,10 @@ current time. If no contractId, use `search_contracts` and take the
 
 ## Method
 
+If the caller gives you a bars file for a timeframe (the autonomous runner
+writes the bars that just closed), use it for that timeframe instead of
+calling `get_bars`.
+
 1. Load the skills `market-structure`, `multi-timeframe-analysis`,
    `liquidity-concepts`, `market-snapshot`, and `strategy-library`.
 2. Fetch closed bars: 1h (120), 15m (160), 3m (300). Stay within the rate

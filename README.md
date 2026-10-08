@@ -170,9 +170,33 @@ node scripts/autotrader.js --config autotrader.json                # run the sch
 touch ~/.futures-trading-harness/STOP                              # kill switch: no new entries
 ```
 
-The runner starts one headless run per cycle (premarket at 09:00 ET, a trade
-cycle every 3 minutes in session, end of day at 15:50 ET), logs everything to
-`~/.futures-trading-harness/logs/`, and never runs two cycles at once. Each run
+Premarket (09:00 ET) and end of day (15:50 ET) run on the clock. In session,
+**a trade cycle starts after every closed bar** of the configured `timeframe`
+(1 or 3 minutes, or any value up to 60):
+
+1. The runner sleeps until the forming bar's close, waits `barDelaySeconds`,
+   then polls ProjectX `retrieveBars` (closed bars only) every
+   `barPollSeconds` until the new bar is published. Alignment is learned from
+   the data, and after `barTimeoutSeconds` with no bar (daily break, halt) it
+   resyncs.
+2. It writes the closed bars to `<dataDir>/<SYMBOL>-<timeframe>m.json` and
+   starts one headless run whose prompt names the bar and the file, so the
+   agents start from fresh data without re-fetching it.
+3. With `"trigger": "bar"` every closed bar runs the full process (analysts,
+   strategy checks, risk, execution or management). With `"trigger": "signal"`
+   (needs `account`) a bar starts a cycle only when a mechanical strategy of
+   that timeframe fires or a position is open, which saves model calls.
+4. A bar that closes while a cycle is still running is skipped, never queued.
+
+Why polling and not a websocket: the ProjectX realtime hub streams quotes and
+trades, not bars, so a websocket would mean building candles from ticks that
+can disagree with the exchange's bars. Polling right after each close costs
+about one request per symbol per bar (the limit is 50 per 30 s) and returns
+the official candle.
+
+The runner needs `PROJECTX_USERNAME` and `PROJECTX_API_KEY` in its
+environment (read-only use: contracts, bars, positions). It logs everything to
+`~/.futures-trading-harness/logs/` and never runs two cycles at once. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the

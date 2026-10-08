@@ -68,8 +68,10 @@ Decisions go to `~/.futures-trading-harness/gate-log.jsonl`.
 
 `scripts/autotrader.js` holds an exclusive lock, keeps a per-day state
 (written atomically), and starts one headless run at a time in its own
-process group: premarket at `premarketAt`, a trade cycle every
-`cycleMinutes` inside `sessions`, end of day at `eodAt` (retried until it
+process group: premarket at `premarketAt`, a trade cycle after every closed
+`timeframe`-minute bar inside `sessions` (bar closes detected by polling
+`retrieveBars` right after each scheduled close, see `scripts/lib/bar-clock.js`;
+bars that close during a run are skipped), end of day at `eodAt` (retried until it
 succeeds, and run first thing if a previous day never finished). The kill
 switch stops new cycles but not end of day; after `maxConsecutiveErrors`
 failed runs the runner creates it. An unreadable state file turns trade

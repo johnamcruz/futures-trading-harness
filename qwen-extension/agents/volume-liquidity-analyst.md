@@ -20,6 +20,10 @@ must not try.
 
 ## Method
 
+If the caller gives you a bars file for a timeframe (the autonomous runner
+writes the bars that just closed), use it for that timeframe instead of
+calling `get_bars`.
+
 1. Load the skills `vwap-volume-profile`, `liquidity-concepts`,
    `session-timing`, and `market-snapshot`.
 2. Fetch closed 3m bars (300) and 15m bars (160), save each to

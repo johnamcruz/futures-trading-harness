@@ -1,12 +1,22 @@
 {
   "harness": "qwen",
   "model": "",
-  "symbols": ["MNQ"],
+  "symbols": [
+    "MNQ"
+  ],
   "account": "",
   "workdir": "workspace",
   "paper": true,
-  "cycleMinutes": 3,
-  "sessions": ["09:35-15:00@America/New_York"],
+  "timeframe": 3,
+  "trigger": "bar",
+  "bars": 300,
+  "dataDir": "/tmp/fth",
+  "barDelaySeconds": 2,
+  "barPollSeconds": 2,
+  "barTimeoutSeconds": 60,
+  "sessions": [
+    "09:35-15:00@America/New_York"
+  ],
   "premarketAt": "09:00@America/New_York",
   "eodAt": "15:50@America/New_York",
   "weekdaysOnly": true,

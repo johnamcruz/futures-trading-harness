@@ -5,8 +5,10 @@ description: One complete, harness-neutral trading cycle - risk gate, parallel a
 
 # Trade Session
 
-One decision cycle for a symbol (default MNQ). Run it again for the next
-cycle; never loop inside one run.
+One decision cycle for a symbol (default MNQ). In autonomous mode a cycle
+starts after every closed bar of the configured timeframe (1 or 3 minutes),
+so finish well inside one bar. Run it again for the next cycle; never loop
+inside one run.
 
 ## When to Use
 
@@ -26,6 +28,11 @@ cycle; never loop inside one run.
 - Daily stop or loss-streak cooldown in the briefing or journal → report and end.
 
 ### 2. Parallel read
+
+If the prompt names a bars file (the autonomous runner writes the bars that
+just closed, e.g. `/tmp/fth/MNQ-3m.json`), pass its path to every analyst:
+they run market-snapshot and `strategies.js scan` on it instead of fetching
+that timeframe again. Other timeframes are still fetched with `get_bars`.
 
 Run these roles at the same time with your harness's subagents (Claude Code:
 the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles),

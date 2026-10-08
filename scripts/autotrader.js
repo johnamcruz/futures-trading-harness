@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 /**
- * Autonomous runner: schedules premarket, trade cycles, and end of day, and
- * runs each as one headless harness invocation (Claude Code, Codex, Qwen Code,
- * or a custom CLI agent). One run at a time; never overlapping.
+ * Autonomous runner: premarket and end of day on the clock, and a trade cycle
+ * after every closed bar of the configured timeframe (1, 3, 5... minutes).
+ * Bar closes are detected by polling ProjectX retrieveBars right after each
+ * scheduled close; the closed bars are written to dataDir so the agents start
+ * from fresh data. Each cycle is one headless harness invocation (Claude Code,
+ * Codex, Qwen Code, or a custom CLI agent). One run at a time; a bar that
+ * closes while a cycle is still running is skipped, never queued.
  *
  *   node scripts/autotrader.js --config autotrader.json            run the schedule
  *   node scripts/autotrader.js --config autotrader.json --once trade [--symbol MNQ]
  *   node scripts/autotrader.js --config autotrader.json --dry-run  print the next command
+ *
+ * Needs PROJECTX_USERNAME and PROJECTX_API_KEY (read-only use: bars, contracts,
+ * positions) in its environment, like projectx-mcp.
  *
  * Safety: the kill switch file (~/.futures-trading-harness/STOP) stops new
  * cycles (end of day still runs); after maxConsecutiveErrors failed runs the
@@ -20,14 +27,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { validateConfig, prompts, buildCommand, childEnv, decide, recordRun, cycleResult, dayKey } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, recordRun, cycleResult, dayKey, signalDecision } = require('./lib/autotrader');
+const { barStep, sleepMs } = require('./lib/bar-clock');
+const { createClient } = require('./lib/projectx-rest');
+const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = path.join(os.homedir(), '.futures-trading-harness');
 const STATE_FILE = path.join(HOME_DIR, 'autotrader-state.json');
 const LOCK_FILE = path.join(HOME_DIR, 'autotrader.lock');
-const TICK_MS = 20000;
+const IDLE_MS = 5000;
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -128,25 +138,45 @@ function runOnce(cfg, argv, timeoutMs) {
   });
 }
 
-async function execute(cfg, action, symbols, opts) {
+async function runJob(cfg, action, prompt, opts) {
   const now = new Date();
-  const p = prompts(cfg, now, ROOT);
+  const argv = buildCommand(cfg, prompt, ROOT);
+  if (opts.dryRun) {
+    process.stdout.write(`${JSON.stringify(argv)}\n`);
+    return true;
+  }
+  process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
+  const res = await runOnce(cfg, argv, cfg.cycleTimeoutMinutes * 60000);
+  const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - exit ${res.code}`);
+  appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
+  process.stdout.write(`[autotrader] ${result}\n`);
+  return res.ok;
+}
+
+async function execute(cfg, action, symbols, opts) {
+  const p = prompts(cfg, new Date(), ROOT);
   const jobs = action === 'eod' ? [p.eod()] : symbols.map(sym => p[action](sym));
   let ok = true;
-  for (const prompt of jobs) {
-    const argv = buildCommand(cfg, prompt, ROOT);
-    if (opts.dryRun) {
-      process.stdout.write(`${JSON.stringify(argv)}\n`);
-      continue;
-    }
-    process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
-    const res = await runOnce(cfg, argv, cfg.cycleTimeoutMinutes * 60000);
-    const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - exit ${res.code}`);
-    appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
-    process.stdout.write(`[autotrader] ${result}\n`);
-    ok = ok && res.ok;
-  }
+  for (const prompt of jobs) ok = (await runJob(cfg, action, prompt, opts)) && ok;
   return ok;
+}
+
+function writeBars(cfg, sym, bars) {
+  fs.mkdirSync(cfg.dataDir, { recursive: true });
+  const file = path.join(cfg.dataDir, `${sym.symbol}-${cfg.timeframe}m.json`);
+  writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
+  return file;
+}
+
+/** Should this closed bar start a cycle? Always in trigger "bar"; on a signal or open position in "signal". */
+async function wantsCycle(cfg, sym, bars, client) {
+  if (cfg.trigger === 'bar') return { run: true, reason: 'bar closed' };
+  // Only strategies that trade this bar's timeframe can be judged from these bars.
+  const { strategies } = loadStrategies(ROOT, process.env);
+  const sameTf = strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
+  const results = scan(sameTf, { bars }, { symbol: sym.symbol, now: new Date() });
+  const net = await client.netPosition(cfg.account, sym.contractId);
+  return signalDecision(results, net);
 }
 
 async function main(argv) {
@@ -192,23 +222,76 @@ async function main(argv) {
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('exit', releaseLock);
   let errors = 0;
-  process.stdout.write(`[autotrader] ${cfg.harness} on ${cfg.symbols.join(',')}; kill switch: ${killSwitchFile}\n`);
+  const recordResult = (ok, now) => {
+    errors = ok ? 0 : errors + 1;
+    if (errors >= cfg.maxConsecutiveErrors && !fs.existsSync(killSwitchFile)) {
+      fs.writeFileSync(killSwitchFile, `created by autotrader after ${errors} failed runs at ${now.toISOString()}\n`);
+      process.stderr.write(`[autotrader] ${errors} failed runs in a row: kill switch created (${killSwitchFile}). Remove it to resume.\n`);
+    }
+  };
+  const client = createClient();
+  const barOpts = {
+    minutes: cfg.timeframe,
+    delayMs: cfg.barDelaySeconds * 1000,
+    timeoutMs: cfg.barTimeoutSeconds * 1000,
+    pollMs: cfg.barPollSeconds * 1000,
+  };
+  const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, clock: null, lastPollAt: 0 }));
+  process.stdout.write(`[autotrader] ${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger: ${cfg.trigger}); kill switch: ${killSwitchFile}\n`);
+
   for (;;) {
     const now = new Date();
     const { action, state: s } = decide(cfg, state, now, { killSwitch: fs.existsSync(killSwitchFile) });
     state = s;
-    if (action) {
+    if (action === 'premarket' || action === 'eod') {
       const ok = await execute(cfg, action, cfg.symbols, opts);
-      // A failed end of day is retried on the next tick: flattening matters most.
+      // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || action !== 'eod') state = recordRun(state, action, now);
       writeJsonAtomic(STATE_FILE, state);
-      errors = ok ? 0 : errors + 1;
-      if (errors >= cfg.maxConsecutiveErrors && !fs.existsSync(killSwitchFile)) {
-        fs.writeFileSync(killSwitchFile, `created by autotrader after ${errors} failed runs at ${now.toISOString()}\n`);
-        process.stderr.write(`[autotrader] ${errors} failed runs in a row: kill switch created (${killSwitchFile}). Remove it to resume.\n`);
+      recordResult(ok, now);
+      continue;
+    }
+    if (action !== 'trade') {
+      await new Promise(r => setTimeout(r, IDLE_MS));
+      continue;
+    }
+
+    for (let i = 0; i < syms.length; i += 1) {
+      const sym = syms[i];
+      try {
+        if (!sym.contractId) {
+          if (Date.now() - sym.lastPollAt < 10000) continue; // back off after a failed lookup
+          const c = await client.activeContract(sym.symbol);
+          syms[i] = { ...sym, contractId: c.id };
+          process.stdout.write(`[autotrader] ${sym.symbol} -> ${c.id}\n`);
+          continue; // next pass resyncs its bar schedule
+        }
+        const step = await barStep(sym, new Date(), barOpts, () => client.closedBars(sym.contractId, { minutes: cfg.timeframe, limit: cfg.bars }));
+        syms[i] = step.sym;
+        if (step.event === 'stale') {
+          const agoS = Math.round((Date.now() - Date.parse(step.bar.t)) / 1000 - cfg.timeframe * 60);
+          process.stdout.write(`[autotrader] ${sym.symbol} bar ${step.bar.t} skipped: closed ${agoS}s ago, too late to act on\n`);
+        }
+        if (step.event !== 'bar') continue;
+
+        const file = writeBars(cfg, sym, step.bars);
+        const want = await wantsCycle(cfg, syms[i], step.bars, client);
+        if (!want.run) {
+          process.stdout.write(`[autotrader] ${sym.symbol} bar ${step.bar.t}: no cycle (${want.reason})\n`);
+          continue;
+        }
+        const cycleNow = new Date();
+        const prompt = prompts(cfg, cycleNow, ROOT).trade(sym.symbol, { ...step.bar, file, contractId: sym.contractId });
+        const ok = await runJob(cfg, 'trade', prompt, opts);
+        state = recordRun(state, 'trade', cycleNow);
+        writeJsonAtomic(STATE_FILE, state);
+        recordResult(ok, cycleNow);
+      } catch (err) {
+        process.stderr.write(`[autotrader] ${sym.symbol}: ${err.message}\n`);
+        syms[i] = { ...syms[i], lastPollAt: Date.now() };
       }
     }
-    await new Promise(r => setTimeout(r, TICK_MS));
+    await new Promise(r => setTimeout(r, sleepMs(syms.map(x => x.clock), new Date(), { delayMs: barOpts.delayMs })));
   }
 }
 
