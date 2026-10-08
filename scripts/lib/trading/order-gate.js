@@ -77,6 +77,8 @@ function checkWindows(now, config) {
 
 function checkBlackouts(now, blackouts) {
   if (blackouts.error) return `Blackout file unreadable (${blackouts.error}); fix or remove it.`;
+  const bad = blackouts.items.find(b => !(b && Number.isFinite(Date.parse(b.start)) && Number.isFinite(Date.parse(b.end))));
+  if (bad) return `Blackout file unreadable (an entry without a valid start and end: ${JSON.stringify(bad).slice(0, 80)}); fix it with scripts/blackouts.js.`;
   const t = now.getTime();
   const hit = blackouts.items.find(b => {
     const s = Date.parse(b && b.start);

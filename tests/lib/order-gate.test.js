@@ -80,6 +80,11 @@ test('invalid window config blocks (fail closed)', () => {
   assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: none }).violations, []);
 });
 
+test('a blackout entry without a valid start and end blocks instead of being skipped', () => {
+  const r = evaluate(entryOrder(), [plan()], { blackouts: { items: [{ start: 'Oct 8 8:30 ET', end: 'later' }] } });
+  assert.deepStrictEqual(checks(r), ['blackout']);
+});
+
 test('news blackouts block entries; broken blackout file blocks too', () => {
   const items = [{ start: minutesAgo(5), end: minutesAgo(-10), reason: 'CPI' }];
   const r = evaluate(entryOrder(), [plan()], { blackouts: { items } });

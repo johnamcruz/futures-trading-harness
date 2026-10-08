@@ -26,6 +26,8 @@ const ROOT = (() => {
   return root;
 })();
 const ORDER = entryOrder({ rationale: 'setup:anytime long, stop 21480, target 21540, risk $40' });
+// Exits and protective stops go without brackets (the gate refuses them).
+const { stopLossBracket: _sl, ...EXIT_BASE } = ORDER;
 
 function runHook(hookId, script, profiles, payload, env = {}) {
   const res = spawnSync(process.execPath, [RUNNER, hookId, script, profiles], {
@@ -167,9 +169,9 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_bars', arguments: {} } });
   send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } });
   // Labelled [exit] but on the same side as the open long: would add exposure.
-  send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, rationale: '[exit] take profit' } } });
+  send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'place_order', arguments: { ...EXIT_BASE, rationale: '[exit] take profit' } } });
   // A real exit: sell 1 against the long 1.
-  send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, side: 'sell', rationale: '[exit] take profit' } } });
+  send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'place_order', arguments: { ...EXIT_BASE, side: 'sell', rationale: '[exit] take profit' } } });
   send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'modify_order', arguments: { orderId: 9, size: 3 } } });
   gw.stdin.end();
   const code = await new Promise(resolve => gw.on('close', resolve));
@@ -199,7 +201,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
   gw.stdout.on('data', c => { out += c; });
-  const exit = id => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'place_order', arguments: { ...ORDER, side: 'sell', rationale: '[exit] flatten' } } });
+  const exit = id => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'place_order', arguments: { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' } } });
   // Three exits written at once, as parallel tool calls would.
   gw.stdin.write(`${[exit(1), exit(2), exit(3)].map(m => JSON.stringify(m)).join('\n')}\n`);
   gw.stdin.end();
@@ -238,20 +240,20 @@ const LONG1 = JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1
 test('MCP gateway: an order call reusing an in-flight request id is refused', async () => {
   const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [
     call(7, 'get_bars', {}),
-    call(7, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }),
+    call(7, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
   ]);
   const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
   assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
   assert.ok(texts.includes('forwarded:tools/call:get_bars'));
   assert.ok(!texts.includes('forwarded:tools/call:place_order'), 'the order never reached the server');
-  const { byId: control } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [call(8, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' })]);
+  const { byId: control } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [call(8, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' })]);
   assert.strictEqual(control[8].result.content[0].text, 'forwarded:tools/call:place_order');
 });
 
 test('MCP gateway: no order calls while an earlier one has gone unanswered', async () => {
   const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
-    call(1, 'place_order', { ...ORDER, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
-    call(2, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }),
+    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+    call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
   ]);
   assert.strictEqual(byId[1].result.content[0].text, 'forwarded:tools/call:place_order');
   assert.match(byId[2].result.content[0].text, /\[order-pending\]/);
@@ -278,7 +280,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   let out = '';
   gw.stdout.on('data', c => { out += c; });
   gw.stdin.write(`${JSON.stringify(call(1, 'close_position', { accountId: 1, contractId: 'CON.F.US.MNQ.Z26' }))}\n`);
-  gw.stdin.write(`${JSON.stringify(call(2, 'place_order', { ...ORDER, side: 'sell', rationale: '[exit] flatten' }))}\n`);
+  gw.stdin.write(`${JSON.stringify(call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }))}\n`);
   gw.stdin.end();
   await new Promise(resolve => gw.on('close', resolve));
   const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
@@ -288,7 +290,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
 
 test('MCP gateway: no request may reuse the id of an order call whose reply is overdue', async () => {
   const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
-    call(1, 'place_order', { ...ORDER, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
     call(1, 'list_open_positions', { accountId: 1 }),
   ]);
   const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));

@@ -77,10 +77,14 @@ function openPositions(positions, contractId) {
  * was sent plus every entry's change. Returns { projected, pending }, where
  * pending is true while the observed net hasn't reached the projection.
  */
-function pendingState(ledger, contractId, observed, now, ttlMs = 30000, { exact = false } = {}) {
+const hasBracket = b => b !== undefined && b !== null && !(typeof b === 'object' && Object.keys(b).length === 0);
+
+function pendingState(ledger, contractId, observed, now, ttlMs = 30000, { exact = false, resting = new Set() } = {}) {
   const root = contractRoot(contractId);
   const live = (ledger || [])
     .filter(e => (exact ? e.contractId === contractId : contractRoot(e.contractId) === root) && now.getTime() - e.at < ttlMs)
+    // An order still resting hasn't changed the position (working-orders and restingSize count it).
+    .filter(e => !(e.orderId && resting.has(String(e.orderId))))
     .sort((a, b) => a.at - b.at);
   if (live.length === 0) return { projected: observed, pending: false };
   const anchor = exact ? live[0].netBefore : (live[0].rootNetBefore ?? live[0].netBefore);
@@ -144,12 +148,19 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   const sideSign = SIDE_SIGN[String(input.side || '').toLowerCase()];
   const size = Number(input.size);
   const root = contractRoot(input.contractId);
+  const resting = new Set((orders || []).map(o => String(o.id)));
 
   if (isRiskReducing(input.rationale)) {
+    // Bracket legs on an exit or a stop would rest on a flat account and
+    // could open a position no gate checked.
+    if (hasBracket(input.stopLossBracket) || hasBracket(input.takeProfitBracket)) {
+      add('exposure', '[exit]/[protect] orders take no stopLossBracket/takeProfitBracket: their legs could open a new position once the trade is flat. Send the exit or stop alone.');
+      return violations;
+    }
     // An exit reduces the position in its own contract month: the position
     // the account shows and the one it will show once recent orders fill.
     const observed = contractNet(positions, input.contractId);
-    const { projected } = pendingState(ledger, input.contractId, observed, now, undefined, { exact: true });
+    const { projected } = pendingState(ledger, input.contractId, observed, now, undefined, { exact: true, resting });
     const elsewhere = observed === 0 ? openPositions(positions, input.contractId).map(p => p.contractId) : [];
     for (const net of observed === projected ? [observed] : [observed, projected]) {
       const before = violations.length;
@@ -177,7 +188,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   // sent moments ago that hasn't shown up yet.
   const open = openPositions(positions, input.contractId);
   const rootNet = netPosition(positions, input.contractId);
-  const { projected } = pendingState(ledger, input.contractId, rootNet, now);
+  const { projected } = pendingState(ledger, input.contractId, rootNet, now, undefined, { resting });
   const busy = open.length > 0 || projected !== rootNet || projected !== 0;
   add('position-open', busy
     ? (open.length

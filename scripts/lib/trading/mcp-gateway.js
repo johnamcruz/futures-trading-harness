@@ -77,6 +77,13 @@ async function handleClientLine(line, check, log = () => {}) {
   };
 
   if (Array.isArray(msg)) {
+    // Order calls go one at a time, each checked against the account after
+    // the one before: a batch would check them all against one snapshot.
+    if (msg.some(isLaneCall)) {
+      const respond = msg.filter(m => m && m.id !== undefined).map(m => blockedResponse(m.id, 'Blocked by trading harness gateway: order calls (place, modify, cancel, close) are not accepted in a JSON-RPC batch. Send them one at a time.'));
+      log({ source: 'gateway', tool: 'batch', decision: 'blocked', violations: [{ check: 'batch', message: 'order call in a batch' }] });
+      return { forward: null, respond };
+    }
     const decisions = [];
     for (const item of msg) decisions.push(await decide(item));
     const passed = decisions.filter(d => d.item).map(d => d.item);

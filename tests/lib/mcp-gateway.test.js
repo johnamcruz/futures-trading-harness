@@ -39,13 +39,15 @@ test('a crashing check blocks the order (fail closed)', async () => {
   assert.match(r.respond[0].result.content[0].text, /could not run \(journal unreadable\)/);
 });
 
-test('batches forward the allowed subset and answer the blocked ones', async () => {
+test('a batch with an order call is refused whole; other batches pass', async () => {
+  const allow = async () => ({ allowed: true });
   const batch = [call(1, 'get_bars'), call(2, 'place_order')];
-  const r = await handleClientLine(JSON.stringify(batch), deny);
-  assert.deepStrictEqual(JSON.parse(r.forward), [batch[0]]);
-  assert.strictEqual(r.respond[0].id, 2);
-  const onlyOrders = await handleClientLine(JSON.stringify([call(5, 'place_order')]), deny);
-  assert.strictEqual(onlyOrders.forward, null);
+  const r = await handleClientLine(JSON.stringify(batch), allow);
+  assert.strictEqual(r.forward, null, 'order calls are checked one at a time, never as a batch');
+  assert.deepStrictEqual(r.respond.map(x => x.id), [1, 2]);
+  assert.match(r.respond[1].result.content[0].text, /batch/);
+  const reads = [call(3, 'get_bars'), call(4, 'list_open_orders')];
+  assert.deepStrictEqual(JSON.parse((await handleClientLine(JSON.stringify(reads), allow)).forward), reads);
 });
 
 test('a blocked notification is dropped without a response', async () => {

@@ -169,3 +169,24 @@ test('ledger: entries and exits anchor on the right net (root for entries, contr
   assert.strictEqual(pendingState(ledger, CONTRACT, 1, now, 30000, { exact: true }).projected, 0);
   assert.strictEqual(pendingState(ledger, 'CON.F.US.MNQ.H27', 0, now, 30000, { exact: true }).projected, 0, 'another month has no pending orders');
 });
+
+test('ledger: a marketable limit that filled counts until the account shows it; a resting one does not', () => {
+  const now = new Date();
+  const sent = { contractId: CONTRACT, sign: 1, size: 1, netBefore: 0, rootNetBefore: 0, at: now.getTime(), orderId: '77' };
+  const limit = order({ type: 'limit', limitPrice: 21010 });
+  // Filled but not shown yet: a second entry would double it.
+  assert.deepStrictEqual(checks(evaluateAccount({ input: limit, ledger: [sent], now, config })), ['position-open']);
+  // Still resting: working-orders counts it instead.
+  const resting = [{ id: 77, contractId: CONTRACT, side: 0, type: 1, size: 1, limitPrice: 21010 }];
+  assert.deepStrictEqual(checks(evaluateAccount({ input: limit, orders: resting, ledger: [sent], now, config })), ['working-orders']);
+  // An [exit] limit that filled: a second one would flip the long.
+  const exitSent = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), orderId: '78' };
+  const exit = order({ side: 'sell', type: 'limit', limitPrice: 20990, rationale: '[exit] flatten' });
+  assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, ledger: [exitSent], now, config })), ['exposure']);
+});
+
+test('[exit]/[protect] orders may not carry bracket legs', () => {
+  const exit = order({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: { ticks: 8, type: 'stop' } });
+  assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, config })), ['exposure']);
+  assert.deepStrictEqual(checks(evaluateAccount({ input: { ...exit, stopLossBracket: undefined }, positions: long1, config })), []);
+});

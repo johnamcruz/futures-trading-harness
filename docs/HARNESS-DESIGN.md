@@ -59,14 +59,15 @@ is the authoritative layer. A blocked call never reaches the server.
 | `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
 | `max-entries` | Under `FTH_MAX_ENTRIES_PER_DAY` | yes | yes |
-| `exposure` | `[exit]`/`[protect]` must be opposite the open position, within its size, without stacking resting stops or limits beyond it | no | yes |
-| `position-open` | No new entry while the contract has a position, or one about to show (a recent market order) | no | yes |
+| `exposure` | `[exit]`/`[protect]` must be opposite the open position, within its size, without stacking resting stops or limits beyond it, and without bracket legs | no | yes |
+| `position-open` | No new entry while the contract has a position, or one about to show (a recent order of any type that filled but isn't in the account yet) | no | yes |
 | `working-orders` | No new entry while orders are working in the contract and it is flat (leftovers, a pending entry) | no | yes |
 | `cancel-protection` | `cancel_order` may not remove the last protective stop of an open position | no | yes |
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
 | `modify-protection` | A protective stop may only move toward the market | no | yes |
 | `modify-entry` | Only orders working an open position (its stop or target) can be repriced; entries and leftovers are cancelled and re-placed through the gate | no | yes |
 | `order-pending` | No order call while an earlier one's result is unknown (no reply within 30 s) | no | yes |
+| `batch` | Order calls go one at a time: a JSON-RPC batch containing one is refused whole | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 
 Malformed or oversized input, unreadable state, invalid config, a failed

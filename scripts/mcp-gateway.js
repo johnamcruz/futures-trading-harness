@@ -84,6 +84,12 @@ async function accountFacts(args, caller, withTrades = true) {
 
 async function accountViolations(args, caller, now, ledger) {
   const { positions, orders, trades } = await accountFacts(args, caller);
+  // An order still resting keeps its ledger entry alive: when it fills later,
+  // the fill is counted until the account shows it.
+  if (Array.isArray(orders)) {
+    const resting = new Set(orders.map(o => String(o.id)));
+    for (const e of ledger) if (e.orderId && resting.has(e.orderId)) e.at = now.getTime();
+  }
   const config = loadConfig(process.env);
   const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger });
   const gated = regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies);
@@ -194,9 +200,12 @@ function main(argv) {
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
       recordEntryOrder(process.env, placed.orderId, args);
     }
-    if (String(args.type).toLowerCase() !== 'market' || observedNet === null) return; // resting orders show up in list_open_orders
+    if (observedNet === null) return;
+    // Every order type: a marketable limit or stop fills at once too. While
+    // it rests it shows in list_open_orders and the ledger skips it.
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now() });
+    const orderId = placed && placed.orderId !== undefined && placed.orderId !== null ? String(placed.orderId) : null;
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now(), orderId });
   };
   const log = e => logDecision(e, process.env);
 

@@ -35,7 +35,7 @@ function review(minAgo, result) {
 }
 
 function entryOrder(extra = {}) {
-  return {
+  const o = {
     accountId: 1,
     contractId: CONTRACT,
     side: 'buy',
@@ -45,6 +45,9 @@ function entryOrder(extra = {}) {
     rationale: 'setup:orb break above OR high 21500, stop 21480, target 21540, risk $40',
     ...extra,
   };
+  // Exits and protective stops carry no brackets (the gate refuses them).
+  if (/^\s*\[(exit|protect)\]/i.test(o.rationale) && !('stopLossBracket' in extra)) delete o.stopLossBracket;
+  return o;
 }
 
 module.exports = { NOW, CONTRACT, minutesAgo, tmpDir, writeJournal, plan, placed, review, entryOrder };
