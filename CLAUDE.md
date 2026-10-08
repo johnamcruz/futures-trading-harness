@@ -7,8 +7,8 @@ operator instructions.
 
 ## Project
 
-An LLM-agnostic futures trading harness on the ECC architecture: canonical
-agents, skills, commands, rules, and hooks, with generated adapters for Claude
+An LLM-agnostic futures trading harness: canonical agents, skills, commands,
+rules, and hooks, with generated adapters for Claude
 Code, Codex, and Qwen Code; strategies as `STRATEGY.md` documents; an order gate
 enforced by hooks and by an MCP gateway; and an autonomous runner.
 

@@ -2,8 +2,8 @@
 
 /**
  * Generate harness-specific files from the single source of truth
- * (agents/, commands/, rules/trading/, skills/), the way ECC keeps one canonical
- * tree and derives per-harness adapters. Generated files are committed and a
+ * (agents/, commands/, rules/trading/, skills/): one canonical tree, with
+ * per-harness adapters derived from it. Generated files are committed and a
  * test fails when they drift (`node scripts/sync-harness.js --check`).
  *
  *   workspace/AGENTS.md, CLAUDE.md, QWEN.md   operator instructions for any harness

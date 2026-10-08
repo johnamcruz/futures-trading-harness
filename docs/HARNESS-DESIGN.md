@@ -1,12 +1,12 @@
 # Harness Design
 
-How this repository uses the ECC harness architecture to run an LLM-agnostic,
-autonomous futures trader on TopstepX through
+How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX through
 [projectx-mcp](https://github.com/johnamcruz/projectx-mcp).
 
 ## Principles
 
-1. **One canonical tree, many harnesses** (ECC's model). `agents/`, `skills/`,
+1. **One canonical tree, many harnesses** (the [ECC](https://github.com/affaan-m/ECC)
+   architecture). `agents/`, `skills/`,
    `commands/`, `rules/`, `hooks/` are written once. Codex and Qwen adapters
    are generated (`scripts/sync-harness.js`) and checked for drift in CI.
 2. **Enforcement lives in code below the model.** Anything that protects the
@@ -16,7 +16,7 @@ autonomous futures trader on TopstepX through
    and by code (frontmatter). New strategies need no code unless they need a
    new mechanical detector.
 4. **Workflows are skills.** Every harness supports SKILL.md; commands are thin
-   shims. This mirrors ECC's move from commands to skills.
+   shims.
 5. **Autonomy is a scheduler, not a long-lived agent.** Each cycle is one
    short, headless run with a fresh context; state lives in the journal.
 
@@ -69,27 +69,6 @@ a trade cycle every `cycleMinutes` inside `sessions`, end of day at `eodAt`
 day. After `maxConsecutiveErrors` failed runs the runner creates the kill
 switch itself. Runs execute in `workspace/` with `FTH_ROOT` set, so every
 harness picks up the operator instructions.
-
-## Fork versus starting from scratch
-
-The repository began as a fork of ECC and was cut down to the parts that
-matter here. The result is the same as starting from scratch and copying the
-relevant ECC pieces: about 300 lines of ECC runtime (`run-with-flags.js`,
-`hook-flags.js`, `hook-input.js`), the plugin layout, the skill and agent
-formats, and the multi-harness adapter pattern. Everything trading-specific is
-new.
-
-| | Forked and stripped (current) | Fresh repo, copied pieces |
-|---|---|---|
-| Code today | Identical | Identical |
-| History | ECC's history sits below the cleanup commit | Clean |
-| GitHub | Shows "forked from affaan-m/ECC"; PRs default to the upstream unless retargeted | Independent |
-| Upstream fixes | `git cherry-pick` of runtime fixes is possible | Port by hand |
-
-Recommendation: keep the code as is. If the fork relationship or the inherited
-history gets in the way, create a new repository from the current tree. The
-runtime borrowed from ECC is small and stable, so losing the upstream link
-costs little.
 
 ## Known limits
 

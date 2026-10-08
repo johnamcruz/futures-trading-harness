@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Hook enable/disable controls (ported from the ECC hook runtime).
+ * Hook enable/disable controls.
  *
  * - FTH_HOOKS_ENABLED=true|false   (default true; plugin option hooks_enabled)
  * - FTH_HOOK_PROFILE=minimal|standard|strict (default standard; plugin option hook_profile)

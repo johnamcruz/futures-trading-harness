@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Runs a hook script only when enabled by the hook profile flags
- * (ported from the ECC hook runtime).
+ * Runs a hook script only when enabled by the hook profile flags.
  *
  * Usage: node run-with-flags.js <hookId> <scriptRelativePath> [profilesCsv]
  *

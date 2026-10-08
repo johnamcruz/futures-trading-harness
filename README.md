@@ -10,9 +10,9 @@ Strategies are Markdown documents: drop a `STRATEGY.md` into `strategies/` and
 the agents can trade it, and the order gate enforces its instruments, sessions,
 and status in code.
 
-The architecture follows [ECC](https://github.com/affaan-m/ECC): one canonical
-tree of agents, skills, commands, rules, and profile-gated hooks, with native
-adapters generated for each harness.
+The architecture is based on [ECC](https://github.com/affaan-m/ECC): one
+canonical tree of agents, skills, commands, rules, and profile-gated hooks, with
+native adapters generated for each harness.
 
 > [!WARNING]
 > This software lets an AI place real orders on your account. Futures trading
@@ -211,5 +211,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS
 
 ## License
 
-MIT. The hook runtime and plugin layout are derived from
-[ECC](https://github.com/affaan-m/ECC) by Affaan Mustafa (MIT).
+MIT. See [LICENSE](LICENSE).

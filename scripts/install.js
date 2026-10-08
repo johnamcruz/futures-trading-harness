@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Install the harness for one or more harnesses (ECC-style install targets).
+ * Install the harness for one or more harnesses (install targets).
  *
  *   node scripts/install.js --target claude|codex|qwen|all --projectx /abs/projectx-mcp/dist/index.js [--dry-run]
  *
