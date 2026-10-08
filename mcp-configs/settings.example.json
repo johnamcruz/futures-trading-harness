@@ -1,0 +1,37 @@
+{
+  "env": {
+    "FTH_HOOK_PROFILE": "standard",
+    "FTH_PLAN_MAX_AGE_MIN": "120",
+    "FTH_MAX_CONSECUTIVE_LOSSES": "2",
+    "FTH_LOSS_COOLDOWN_MIN": "30",
+    "FTH_MAX_DAILY_LOSSES": "3",
+    "FTH_MAX_ENTRIES_PER_DAY": "6",
+    "FTH_NO_ENTRY_WINDOWS": "09:30-09:35@America/New_York,15:45-16:00@America/New_York"
+  },
+  "permissions": {
+    "ask": [
+      "mcp__projectx__place_order",
+      "mcp__projectx__modify_order",
+      "mcp__projectx__cancel_order",
+      "mcp__projectx__close_position",
+      "mcp__projectx__partial_close_position"
+    ],
+    "allow": [
+      "mcp__projectx__get_server_config",
+      "mcp__projectx__list_accounts",
+      "mcp__projectx__get_account_snapshot",
+      "mcp__projectx__search_contracts",
+      "mcp__projectx__get_contract",
+      "mcp__projectx__list_available_contracts",
+      "mcp__projectx__get_bars",
+      "mcp__projectx__get_quote",
+      "mcp__projectx__list_open_orders",
+      "mcp__projectx__search_orders",
+      "mcp__projectx__list_open_positions",
+      "mcp__projectx__search_trades",
+      "mcp__projectx__get_performance",
+      "mcp__projectx__journal_read",
+      "mcp__projectx__journal_add"
+    ]
+  }
+}

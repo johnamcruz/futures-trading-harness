@@ -1,12 +1,12 @@
 {
-  "name": "ecc",
+  "name": "futures-trading-harness",
   "interface": {
-    "displayName": "ECC"
+    "displayName": "Futures Trading Harness"
   },
   "plugins": [
     {
-      "name": "ecc",
-      "version": "2.2.3",
+      "name": "futures-trading-harness",
+      "version": "0.2.0",
       "source": {
         "source": "local",
         "path": "./"

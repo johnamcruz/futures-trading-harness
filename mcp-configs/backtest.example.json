@@ -1,0 +1,23 @@
+{
+  "symbols": [
+    "MNQ"
+  ],
+  "timeframe": 3,
+  "data": {
+    "MNQ": "data/NQ_3min.parquet"
+  },
+  "start": "2025-01-01",
+  "end": "2025-04-01",
+  "strategies": null,
+  "gate": true,
+  "sessions": [
+    "18:00-15:50@America/New_York"
+  ],
+  "eodAt": "15:50@America/New_York",
+  "size": 1,
+  "riskPerTrade": null,
+  "maxContracts": 5,
+  "slippageTicks": 1,
+  "maxDailyLoss": 500,
+  "outDir": null
+}

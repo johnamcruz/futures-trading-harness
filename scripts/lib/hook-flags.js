@@ -1,20 +1,13 @@
-#!/usr/bin/env node
-/**
- * Shared hook enable/disable controls.
- *
- * Controls:
- * - ECC_HOOKS_ENABLED=true|false (default: true)
- * - ECC_HOOK_PROFILE=minimal|standard|strict (default: standard)
- * - ECC_DISABLED_HOOKS=comma,separated,hook,ids
- *
- * Claude plugin options are used when their corresponding ECC variable is
- * absent. A managed install can provide ecc/setup.json as the final fallback.
- */
-
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+/**
+ * Hook enable/disable controls.
+ *
+ * - FTH_HOOKS_ENABLED=true|false   (default true; plugin option hooks_enabled)
+ * - FTH_HOOK_PROFILE=minimal|standard|strict (default standard; plugin option hook_profile)
+ * - FTH_DISABLED_HOOKS=comma,separated,hook,ids
+ * - FTH_DRY_RUN=1                   log what would run, run nothing
+ */
 
 const VALID_PROFILES = new Set(['minimal', 'standard', 'strict']);
 
@@ -23,127 +16,65 @@ function normalizeId(value) {
 }
 
 function parseBoolean(value, fallback = true) {
-  if (value === undefined || value === null || String(value).trim() === '') {
-    return fallback;
-  }
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
 }
 
-function sanitizeDiagnostic(value) {
-  return String(value || '')
-    // eslint-disable-next-line no-control-regex
-    .replace(/\x1b(?:\[[0-9;?]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|\([A-Z]|[A-Z])/g, '')
-    .replace(/[^\x20-\x7E]/g, '?');
-}
-
-function readManagedHookConfig(env = process.env) {
-  const pluginRoot = String(
-    env.CLAUDE_PLUGIN_ROOT || env.ECC_PLUGIN_ROOT || ''
-  ).trim();
-  const configPath = String(env.ECC_HOOK_CONFIG || '').trim()
-    || (pluginRoot ? path.join(pluginRoot, 'ecc', 'setup.json') : '');
-  if (!configPath || !fs.existsSync(configPath)) return {};
-
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    return config?.hooks
-      && typeof config.hooks === 'object'
-      && !Array.isArray(config.hooks)
-      ? config.hooks
-      : {};
-  } catch (error) {
-    process.stderr.write(`${sanitizeDiagnostic(
-      `Warning: unable to read managed ECC hook config at ${configPath}: ${error.message}`
-    )}\n`);
-    return {};
-  }
-}
-
-function areHooksEnabled(env = process.env, managed = readManagedHookConfig(env)) {
-  const raw = env.ECC_HOOKS_ENABLED !== undefined
-    ? env.ECC_HOOKS_ENABLED
-    : (
-      env.CLAUDE_PLUGIN_OPTION_HOOKS_ENABLED !== undefined
-        ? env.CLAUDE_PLUGIN_OPTION_HOOKS_ENABLED
-        : managed.enabled
-    );
+function areHooksEnabled(env = process.env) {
+  const raw = env.FTH_HOOKS_ENABLED !== undefined
+    ? env.FTH_HOOKS_ENABLED
+    : env.CLAUDE_PLUGIN_OPTION_HOOKS_ENABLED;
   return parseBoolean(raw, true);
 }
 
-function getHookProfile(env = process.env, managed = readManagedHookConfig(env)) {
-  const selected = env.ECC_HOOK_PROFILE !== undefined
-    ? env.ECC_HOOK_PROFILE
-    : (
-      env.CLAUDE_PLUGIN_OPTION_HOOK_PROFILE !== undefined
-        ? env.CLAUDE_PLUGIN_OPTION_HOOK_PROFILE
-        : managed.profile
-    );
+function getHookProfile(env = process.env) {
+  const selected = env.FTH_HOOK_PROFILE !== undefined
+    ? env.FTH_HOOK_PROFILE
+    : env.CLAUDE_PLUGIN_OPTION_HOOK_PROFILE;
   const raw = String(selected ?? 'standard').trim().toLowerCase();
   return VALID_PROFILES.has(raw) ? raw : 'standard';
 }
 
 function getDisabledHookIds(env = process.env) {
-  const raw = String(env.ECC_DISABLED_HOOKS || '');
-  if (!raw.trim()) return new Set();
-
   return new Set(
-    raw
+    String(env.FTH_DISABLED_HOOKS || '')
       .split(',')
-      .map(v => normalizeId(v))
+      .map(normalizeId)
       .filter(Boolean)
   );
 }
 
 function parseProfiles(rawProfiles, fallback = ['standard', 'strict']) {
   if (!rawProfiles) return [...fallback];
-
-  if (Array.isArray(rawProfiles)) {
-    const parsed = rawProfiles
-      .map(v => String(v || '').trim().toLowerCase())
-      .filter(v => VALID_PROFILES.has(v));
-    return parsed.length > 0 ? parsed : [...fallback];
-  }
-
-  const parsed = String(rawProfiles)
-    .split(',')
-    .map(v => v.trim().toLowerCase())
+  const list = Array.isArray(rawProfiles) ? rawProfiles : String(rawProfiles).split(',');
+  const parsed = list
+    .map(v => String(v || '').trim().toLowerCase())
     .filter(v => VALID_PROFILES.has(v));
-
   return parsed.length > 0 ? parsed : [...fallback];
 }
 
 function isDryRun(env = process.env) {
-  return env.ECC_DRY_RUN === '1';
+  return env.FTH_DRY_RUN === '1';
 }
 
 function isHookEnabled(hookId, options = {}) {
   const env = options.env || process.env;
-  const managed = readManagedHookConfig(env);
-  if (!areHooksEnabled(env, managed)) {
-    return false;
-  }
+  if (!areHooksEnabled(env)) return false;
 
   const id = normalizeId(hookId);
   if (!id) return true;
+  if (getDisabledHookIds(env).has(id)) return false;
 
-  const disabled = getDisabledHookIds(env);
-  if (disabled.has(id)) {
-    return false;
-  }
-
-  const profile = getHookProfile(env, managed);
-  const allowedProfiles = parseProfiles(options.profiles);
-  return allowedProfiles.includes(profile);
+  return parseProfiles(options.profiles).includes(getHookProfile(env));
 }
 
 module.exports = {
   VALID_PROFILES,
   normalizeId,
   parseBoolean,
-  readManagedHookConfig,
   areHooksEnabled,
   getHookProfile,
   getDisabledHookIds,

@@ -11,13 +11,13 @@ function resolveMaxStdin(value, options = {}) {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     writeDiagnostic(
-      '[Hook] ECC_HOOK_INPUT_MAX_BYTES must be a positive safe integer; using the 1 MiB default\n'
+      '[Hook] FTH_HOOK_INPUT_MAX_BYTES must be a positive safe integer; using the 1 MiB default\n'
     );
     return DEFAULT_MAX_STDIN;
   }
   if (parsed > DEFAULT_MAX_STDIN) {
     writeDiagnostic(
-      '[Hook] ECC_HOOK_INPUT_MAX_BYTES exceeds the 1 MiB safety maximum; clamping to 1 MiB\n'
+      '[Hook] FTH_HOOK_INPUT_MAX_BYTES exceeds the 1 MiB safety maximum; clamping to 1 MiB\n'
     );
     return DEFAULT_MAX_STDIN;
   }

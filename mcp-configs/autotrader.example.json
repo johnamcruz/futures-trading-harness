@@ -1,0 +1,32 @@
+{
+  "harness": "qwen",
+  "model": "",
+  "symbols": [
+    "MNQ"
+  ],
+  "account": "",
+  "workdir": "workspace",
+  "paper": true,
+  "timeframe": 3,
+  "orderFlow": "auto",
+  "trigger": "bar",
+  "barDelaySeconds": 2,
+  "barPollSeconds": 2,
+  "barTimeoutSeconds": 60,
+  "sessions": [
+    "18:00-15:50@America/New_York"
+  ],
+  "premarketAt": "18:05@America/New_York",
+  "eodAt": "15:50@America/New_York",
+  "cycleTimeoutMinutes": 5,
+  "maxConsecutiveErrors": 3,
+  "extraArgs": [],
+  "earlyCloseDates": [
+    "2026-11-27",
+    "2026-12-24"
+  ],
+  "closedDates": [
+    "2026-11-26",
+    "2026-12-25"
+  ]
+}
