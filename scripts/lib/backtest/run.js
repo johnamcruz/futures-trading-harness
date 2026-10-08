@@ -1,243 +1,150 @@
 'use strict';
 
 /**
- * Backtest driver: replays historical bars through the real autonomous loop.
+ * Backtest driver: config -> bar data -> engine -> report files.
  *
- *   simulated broker (broker.js) behind a loopback ProjectX API (api.js)
- *     <- the runner's REST client      (bar clock, contracts, positions)
- *     <- projectx-mcp via mcp-gateway  (the agents' tools)
- *   simulated clock file               (hooks, gateway, projectx-mcp, CLIs)
- *
- * The runner (runner.js), prompts, harness command, gate, gateway and
- * projectx-mcp are the live ones; only the broker and the clock are
- * simulated. Between cycles the clock jumps straight to the next event.
- * During a harness run it advances with real elapsed time (latency "real"),
- * so the market moves while the agents think, as it would live; latency
- * "none" freezes it instead.
- *
- * All state (journal, gate log, kill switch, bar files, runner state) lives
- * in the run directory (FTH_HOME), never in the live ~/.futures-trading-harness.
+ * Config (JSON; an autotrader config works too, its symbols, timeframe,
+ * sessions, and eodAt are reused):
+ *   symbols      contract roots to trade, e.g. ["MNQ"]
+ *   timeframe    minutes per bar (1, 3, ...); finer data is aggregated
+ *   data         { "MNQ": "data/NQ_1min.parquet" } or { "MNQ": { file, sheet,
+ *                tickSize, tickValue, feesPerSide } }; Parquet, Excel, CSV, JSON
+ *   start, end   ISO dates or times (end exclusive); default: all the data
+ *   strategies   names in priority order (default: every non-disabled
+ *                mechanical strategy on this timeframe)
+ *   gate, sessions, eodAt, size, riskPerTrade, maxContracts, slippageTicks,
+ *   feesPerSide, maxDailyLoss, window: see engine.js DEFAULTS
+ *   outDir       where results go (default <FTH_HOME>/backtests/<run id>)
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const { validateConfig, buildCommand, childEnv, cycleResult, resolveDataDir } = require('../autotrader');
-const { createRunner } = require('../runner');
-const { createClient } = require('../projectx-rest');
-const { loadStrategies, scan } = require('../trading/strategies');
-const { readJournal } = require('../trading/journal');
-const { writeJsonAtomic, runHarness, entryOrderIds, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles } = require('../harness-run');
-const { qwenWorkspaceSettings } = require('../install');
-const { SimBroker } = require('./broker');
-const { createSimServer } = require('./api');
-const { loadBars, MINUTE } = require('./data');
-const { buildReport, toMarkdown } = require('./report');
+const { loadStrategies } = require('../trading/strategies');
+const { loadBars, barMinutes, aggregate } = require('./data');
+const { runEngine, DEFAULTS } = require('./engine');
+const { buildReport, toMarkdown, toCsv } = require('./report');
+const { writeJsonAtomic } = require('../harness-run');
 
-/** Tick specs for common CME index futures (overridable per instrument). */
+const WARMUP_BARS = 2000;
+
+/** Tick specs for common CME futures (overridable per symbol). */
 const CONTRACT_SPECS = {
   MNQ: { tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 },
   MES: { tickSize: 0.25, tickValue: 1.25, feesPerSide: 0.37 },
   MYM: { tickSize: 1, tickValue: 0.5, feesPerSide: 0.37 },
   M2K: { tickSize: 0.1, tickValue: 0.5, feesPerSide: 0.37 },
+  MGC: { tickSize: 0.1, tickValue: 1, feesPerSide: 0.37 },
   NQ: { tickSize: 0.25, tickValue: 5, feesPerSide: 1.4 },
   ES: { tickSize: 0.25, tickValue: 12.5, feesPerSide: 1.4 },
   YM: { tickSize: 1, tickValue: 5, feesPerSide: 1.4 },
   RTY: { tickSize: 0.1, tickValue: 5, feesPerSide: 1.4 },
+  GC: { tickSize: 0.1, tickValue: 10, feesPerSide: 1.4 },
 };
 
-const BT_DEFAULTS = {
-  startingBalance: 50000,
-  slippageTicks: 1,
-  dailyLossLimit: null,
-  maxLossLimit: null,
-  latency: 'real',
-  outDir: null,
-};
-
-function parseIso(value, name) {
-  const ms = Date.parse(String(value || ''));
-  if (!Number.isFinite(ms)) throw new Error(`backtest.${name}: an ISO date or time, e.g. "2025-03-10" or "2025-03-10T13:30:00Z"`);
+function parseTimeArg(value, name) {
+  if (value === undefined || value === null || value === '') return null;
+  const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T00:00:00Z` : String(value));
+  if (!Number.isFinite(ms)) throw new Error(`${name}: an ISO date or time, e.g. "2025-03-10"`);
   return ms;
 }
 
-/** Validate the `backtest` block and load data. Returns { bt, instruments }. */
-function loadBacktestConfig(raw, cfg, baseDir) {
-  const bt = { ...BT_DEFAULTS, ...(raw || {}) };
+/** Validate a backtest config. Returns the normalized settings. */
+function validateBacktestConfig(raw, baseDir) {
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, ...(raw || {}) };
   const errors = [];
-  let startMs;
-  let endMs;
-  try { startMs = parseIso(bt.start, 'start'); } catch (err) { errors.push(err.message); }
-  try { endMs = parseIso(bt.end, 'end'); } catch (err) { errors.push(err.message); }
-  if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs <= startMs) errors.push('backtest.end must be after backtest.start');
-  if (!['real', 'none'].includes(bt.latency)) errors.push('backtest.latency: "real" or "none"');
-  if (!(bt.startingBalance > 0)) errors.push('backtest.startingBalance: a positive number');
-  if (!(bt.slippageTicks >= 0)) errors.push('backtest.slippageTicks: 0 or more');
-  for (const k of ['dailyLossLimit', 'maxLossLimit']) if (bt[k] !== null && !(bt[k] > 0)) errors.push(`backtest.${k}: a positive number or null`);
-  if (bt.outDir !== null && !path.isAbsolute(String(bt.outDir))) errors.push('backtest.outDir: an absolute path');
-  const specs = bt.instruments && typeof bt.instruments === 'object' ? bt.instruments : {};
-  const instruments = [];
-  for (const symbol of cfg.symbols) {
-    const s = { ...(CONTRACT_SPECS[symbol] || {}), ...(specs[symbol] || {}) };
-    if (!s.data) { errors.push(`backtest.instruments.${symbol}.data: a 1-minute bar file (JSON or CSV)`); continue; }
-    if (!(s.tickSize > 0 && s.tickValue > 0)) { errors.push(`backtest.instruments.${symbol}: tickSize and tickValue (not a known contract)`); continue; }
-    const contractId = s.contractId || `CON.F.US.${symbol}.BT`;
-    if (String(contractId).split('.')[3] !== symbol) errors.push(`backtest.instruments.${symbol}.contractId: must look like CON.F.US.${symbol}.<month>`);
-    instruments.push({ symbol, contractId, tickSize: s.tickSize, tickValue: s.tickValue, feesPerSide: s.feesPerSide ?? 0.37, file: path.resolve(baseDir, s.data) });
+  if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
+  if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
+  if (!cfg.data || typeof cfg.data !== 'object') errors.push('data: { "<SYMBOL>": "<file>" } (Parquet, Excel, CSV, or JSON bars)');
+  if (cfg.strategies !== null && !(Array.isArray(cfg.strategies) && cfg.strategies.every(s => typeof s === 'string'))) errors.push('strategies: a list of strategy names');
+  for (const k of ['size', 'maxContracts']) if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive whole number`);
+  if (cfg.riskPerTrade !== null && !(cfg.riskPerTrade > 0)) errors.push('riskPerTrade: dollars per trade, or null for a fixed size');
+  if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
+  if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
+  if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
+  if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');
+  if (cfg.outDir !== null && typeof cfg.outDir !== 'string') errors.push('outDir: a directory');
+  let start = null;
+  let end = null;
+  try { start = parseTimeArg(cfg.start, 'start'); } catch (err) { errors.push(err.message); }
+  try { end = parseTimeArg(cfg.end, 'end'); } catch (err) { errors.push(err.message); }
+  if (start !== null && end !== null && end <= start) errors.push('end must be after start');
+  const markets = [];
+  for (const symbol of Array.isArray(cfg.symbols) ? cfg.symbols : []) {
+    const d = cfg.data && cfg.data[symbol];
+    const spec = { ...(CONTRACT_SPECS[symbol] || {}), ...(typeof d === 'object' && d ? d : {}) };
+    const file = typeof d === 'string' ? d : d && d.file;
+    if (!file) { errors.push(`data.${symbol}: a bar file`); continue; }
+    if (!(spec.tickSize > 0 && spec.tickValue > 0)) { errors.push(`data.${symbol}: tickSize and tickValue (not a known contract)`); continue; }
+    markets.push({
+      symbol, file: path.resolve(baseDir, file), sheet: spec.sheet || null, tickSize: spec.tickSize, tickValue: spec.tickValue,
+      feesPerSide: cfg.feesPerSide ?? spec.feesPerSide ?? 0.37,
+    });
   }
   if (errors.length) throw new Error(`invalid backtest config:\n- ${errors.join('\n- ')}`);
-  for (const ins of instruments) {
-    ins.bars = loadBars(ins.file);
-    const inRange = ins.bars.filter(b => b.ms >= startMs && b.ms < endMs).length;
-    if (inRange === 0) throw new Error(`${ins.file}: no 1-minute bars between ${bt.start} and ${bt.end}`);
+  return { ...cfg, start, end, markets };
+}
+
+/** Bars at the trading timeframe: as given, or aggregated from finer bars. */
+function barsAt(file, timeframe, sheet) {
+  const raw = loadBars(file, { sheet });
+  if (raw.length < 2) throw new Error(`${file}: not enough bars`);
+  const step = barMinutes(raw);
+  if (step === timeframe) return raw;
+  if (step > timeframe || timeframe % step !== 0) {
+    throw new Error(`${file}: ${step}-minute bars can't make ${timeframe}-minute bars (need ${timeframe}-minute data or a divisor of it)`);
   }
-  return { bt: { ...bt, startMs, endMs }, instruments };
+  const last = raw[raw.length - 1];
+  return aggregate(raw, { unit: 2, unitNumber: timeframe, nowMs: last.ms + step * 60000 });
 }
 
-/** Environment for every process in the replay: simulated broker, clock, and isolated state. */
-function backtestEnv(base, { url, home, clockFile }) {
-  const env = { ...base };
-  for (const k of Object.keys(env)) if (/^PROJECTX_/.test(k) && !/^PROJECTX_(MAX_|ALLOWED_SYMBOLS|MCP_ENTRY)/.test(k)) delete env[k];
-  return {
-    ...env,
-    FTH_HOME: home,
-    FTH_BACKTEST: '1',
-    FTH_SIM_API_URL: url,
-    FTH_SIM_CLOCK_FILE: clockFile,
-    PROJECTX_API_URL: url,
-    PROJECTX_MARKET_HUB_URL: `${url}/hubs/market`,
-    PROJECTX_USERNAME: 'backtest',
-    PROJECTX_API_KEY: 'backtest',
-    PROJECTX_TRADING_ENABLED: 'true',
-    PROJECTX_JOURNAL_PATH: path.join(home, 'journal.jsonl'),
-  };
+function pickStrategies(all, cfg) {
+  const tf = `${cfg.timeframe}m`;
+  if (cfg.strategies) {
+    return cfg.strategies.map(name => {
+      const s = all.find(x => x.name === name);
+      if (!s) throw new Error(`unknown strategy "${name}"`);
+      if (!s.valid) throw new Error(`strategy "${name}" is invalid: ${s.errors[0]}`);
+      if (s.timeframe !== tf) throw new Error(`strategy "${name}" trades ${s.timeframe}; this backtest runs ${tf} bars`);
+      return s;
+    });
+  }
+  return all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual');
 }
 
-/**
- * Run one backtest. `rawConfig` is an autotrader config plus a `backtest`
- * block. Returns { report, runDir }.
- */
-async function runBacktest(rawConfig, { root, baseDir = process.cwd(), log = () => {}, runId = null, defaultOutRoot }) {
-  const { backtest: rawBt, ...rest } = rawConfig || {};
-  const cfg = validateConfig({ ...rest, paper: false, dataDir: null });
-  const { bt, instruments } = loadBacktestConfig(rawBt, cfg, baseDir);
+/** Run a backtest. Returns { report, runDir }. */
+function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = process.env, runId = null, log = () => {} }) {
+  const cfg = validateBacktestConfig(raw, baseDir);
+  const strategies = pickStrategies(loadStrategies(root, env).strategies, cfg);
+  if (!strategies.length) throw new Error(`no mechanical strategy trades ${cfg.timeframe}m bars`);
+  // Keep the window plus a warm-up before `start`, and nothing after `end`:
+  // indicators settle well within that, and a long file stays fast.
+  const markets = cfg.markets.map(m => {
+    log(`loading ${m.symbol} from ${m.file}`);
+    let bars = barsAt(m.file, cfg.timeframe, m.sheet);
+    const from = cfg.start === null ? 0 : Math.max(0, bars.findIndex(b => b.ms >= cfg.start) - cfg.window - WARMUP_BARS);
+    const to = cfg.end === null ? bars.length : bars.findIndex(b => b.ms >= cfg.end);
+    bars = bars.slice(from, to === -1 ? bars.length : to);
+    if (bars.length < cfg.window) throw new Error(`${m.file}: only ${bars.length} bars in range; need at least ${cfg.window} (window) before the first trade`);
+    return { ...m, bars };
+  });
+  log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
+  const { trades, skipped } = runEngine(markets, strategies, cfg);
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
-  const runDir = bt.outDir || path.join(defaultOutRoot, id);
-  const home = path.join(runDir, 'home');
-  const clockFile = path.join(runDir, 'clock');
-  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-
-  const broker = new SimBroker({
-    instruments, startMs: bt.startMs, startingBalance: bt.startingBalance, slippageTicks: bt.slippageTicks,
-    dailyLossLimit: bt.dailyLossLimit, maxLossLimit: bt.maxLossLimit,
+  const first = markets.map(m => m.bars[0].t).sort()[0];
+  const last = markets.map(m => m.bars[m.bars.length - 1].t).sort().pop();
+  const report = buildReport(trades, {
+    runId: id, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: strategies.map(s => s.name), gate: cfg.gate,
+    start: cfg.start !== null ? new Date(cfg.start).toISOString() : first,
+    end: cfg.end !== null ? new Date(cfg.end).toISOString() : last,
+    size: cfg.riskPerTrade ? `risk $${cfg.riskPerTrade} (max ${cfg.maxContracts})` : cfg.size,
+    slippageTicks: cfg.slippageTicks, skipped,
   });
-  const writeClock = () => fs.writeFileSync(clockFile, `${new Date(broker.now).toISOString()}\n`);
-  const advance = ms => {
-    broker.advanceTo(Math.min(bt.endMs, Math.max(broker.now, ms)));
-    writeClock();
-  };
-  writeClock();
-
-  const server = createSimServer(broker);
-  const url = await server.listen();
-  const env = backtestEnv(process.env, { url, home, clockFile });
-  cfg.account = String(broker.account.id);
-  const dataDir = resolveDataDir(cfg, undefined, env);
-  // The run's own copy of the workspace: same instructions, with a Qwen
-  // allowlist for this run's bar and state directories. Live settings are
-  // never touched.
-  const workdir = path.join(runDir, 'workspace');
-  for (const f of TRUSTED_WORKSPACE_FILES) {
-    const src = path.join(path.resolve(root, cfg.workdir), f);
-    if (fs.existsSync(src)) {
-      fs.mkdirSync(path.dirname(path.join(workdir, f)), { recursive: true });
-      fs.copyFileSync(src, path.join(workdir, f));
-    }
-  }
-  fs.mkdirSync(path.join(workdir, '.qwen'), { recursive: true });
-  fs.writeFileSync(path.join(workdir, '.qwen', 'settings.json'), `${JSON.stringify(qwenWorkspaceSettings(root, os.homedir(), { dataDir, stateDir: home }), null, 2)}\n`);
-  cfg.workdir = workdir;
-  const baseline = workspaceFingerprint(workdir);
-  const killSwitchFile = path.join(home, 'STOP');
-  const cycles = { trade: 0, premarket: 0, eod: 0, manage: 0, failed: 0 };
-  const logFile = path.join(runDir, 'cycles.log');
-
-  const runCycle = async (action, prompt) => {
-    const changed = changedFiles(baseline, workspaceFingerprint(workdir));
-    if (changed.length) {
-      fs.writeFileSync(killSwitchFile, `workspace files changed during a run: ${changed.join(', ')}\n`);
-      return { ok: false, timedOut: false };
-    }
-    const startedSim = broker.now;
-    const startedReal = Date.now();
-    const argv = buildCommand(cfg, prompt, root, env);
-    const ticker = bt.latency === 'real' ? setInterval(() => advance(startedSim + (Date.now() - startedReal)), 200) : null;
-    let res;
-    try {
-      res = await runHarness(argv, { cwd: path.resolve(root, cfg.workdir), env: childEnv(cfg, root, env), timeoutMs: cfg.cycleTimeoutMinutes * 60000 });
-    } finally {
-      if (ticker) clearInterval(ticker);
-    }
-    if (bt.latency === 'real') advance(startedSim + (Date.now() - startedReal));
-    cycles[action] = (cycles[action] || 0) + 1;
-    if (!res.ok) cycles.failed += 1;
-    const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
-    fs.appendFileSync(logFile, `\n===== ${new Date(startedSim).toISOString()} ${action} (${Math.round((Date.now() - startedReal) / 1000)}s)\n${res.output}\n`);
-    log(`${new Date(startedSim).toISOString()} ${action}: ${result}`);
-    return { ok: res.ok, timedOut: res.timedOut };
-  };
-
-  const strategies = loadStrategies(root, env).strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
-  let state = null;
-  const runner = createRunner({
-    cfg,
-    root,
-    client: createClient({ env }),
-    clock: { now: () => new Date(broker.now) },
-    runCycle,
-    isKillSwitchOn: () => fs.existsSync(killSwitchFile),
-    createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
-    loadState: () => state,
-    saveState: s => { state = s; writeJsonAtomic(path.join(home, 'autotrader-state.json'), s); },
-    writeBars: (sym, bars) => {
-      const file = path.join(dataDir, `${sym.symbol}-${cfg.timeframe}m.json`);
-      writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
-      return file;
-    },
-    scanFor: (symbol, bars) => scan(strategies, { bars }, { symbol, now: new Date(broker.now) }),
-    log: msg => log(`${new Date(broker.now).toISOString()} ${msg}`),
-    entryOrderIds: () => entryOrderIds(home),
-  });
-
-  let stopped = null;
-  try {
-    while (broker.now < bt.endMs) {
-      if (fs.existsSync(killSwitchFile)) {
-        stopped = `kill switch: ${fs.readFileSync(killSwitchFile, 'utf8').trim()}`;
-        break;
-      }
-      const ms = await runner.step();
-      advance(broker.now + Math.max(ms, 1000));
-    }
-  } finally {
-    await server.close();
-  }
-  broker.flattenAll('end of backtest');
-
-  const journal = readJournal(path.join(home, 'journal.jsonl'));
-  const report = buildReport({
-    broker,
-    journal,
-    cycles,
-    meta: {
-      runId: id, harness: cfg.harness, symbols: cfg.symbols, timeframe: cfg.timeframe, trigger: cfg.trigger,
-      start: new Date(bt.startMs).toISOString(), end: new Date(bt.endMs).toISOString(), latency: bt.latency,
-      slippageTicks: bt.slippageTicks, stopped,
-    },
-  });
+  const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
+  fs.mkdirSync(runDir, { recursive: true });
   writeJsonAtomic(path.join(runDir, 'report.json'), report);
   fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report));
+  fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
   return { report, runDir };
 }
 
-module.exports = { CONTRACT_SPECS, loadBacktestConfig, backtestEnv, runBacktest, MINUTE };
+module.exports = { CONTRACT_SPECS, validateBacktestConfig, barsAt, pickStrategies, runBacktest };

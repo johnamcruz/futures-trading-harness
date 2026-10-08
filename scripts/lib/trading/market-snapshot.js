@@ -59,50 +59,72 @@ function levels(bars) {
   };
 }
 
-function snapshot(input, overrides = {}) {
+/**
+ * Indicators for a whole bar series, computed once, and the mechanical entry
+ * signals of every built-in detector at any bar. Every value at bar i uses
+ * bars 0..i only, so a backtest can walk the series bar by bar (no look-ahead)
+ * and live trading evaluates the last bar the same way.
+ */
+function signalSeries(bars, overrides = {}) {
   const p = { ...PARAMS, ...overrides };
+  const closes = bars.map(b => b.c);
+  const s = {
+    p,
+    closes,
+    emaFast: ind.ema(closes, p.emaFast),
+    emaSlow: ind.ema(closes, p.emaSlow),
+    adx: ind.adx(bars, p.adxPeriod),
+    atrStop: ind.atr(bars, p.atrStop),
+    st: ind.supertrend(bars, p.stPeriod, p.stMult),
+    kc: ind.keltner(bars, p.kcLen, p.kcMult, p.kcAtr),
+    sw: ind.swings(bars, p.swingK),
+    or: ind.openingRange(bars, p.orbMinutes),
+  };
+  const minuteEt = new Array(bars.length);
+  /** { ema_cross, keltner, supertrend, bos, orb } -> 'long' | 'short' | null at bar i. */
+  s.signalsAt = i => {
+    if (i < 1) return { ema_cross: null, keltner: null, supertrend: null, bos: null, orb: null };
+    const { emaFast, emaSlow, adx, st, kc, sw, or } = s;
+    const adxNow = at(adx, i);
+    const c0 = closes[i - 1]; const c1 = closes[i];
+    if (minuteEt[i] === undefined) minuteEt[i] = etDayMinute(bars[i].t).minute;
+    const dirOf = (up, down) => (up ? 'long' : down ? 'short' : null);
+    return {
+      ema_cross: adxNow !== null && adxNow >= p.adxGate
+        ? dirOf(crossUp(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)),
+          crossDown(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)))
+        : null,
+      keltner: adxNow !== null && adxNow >= p.kcAdx
+        ? dirOf(crossUp(c0, c1, at(kc.upper, i - 1), at(kc.upper, i)), crossDown(c0, c1, at(kc.lower, i - 1), at(kc.lower, i)))
+        : null,
+      supertrend: at(st.direction, i - 1) !== null && at(st.direction, i) !== st.direction[i - 1]
+        ? (st.direction[i] === 1 ? 'long' : 'short')
+        : null,
+      bos: dirOf(crossUp(c0, c1, at(sw.high, i - 1), at(sw.high, i)), crossDown(c0, c1, at(sw.low, i - 1), at(sw.low, i))),
+      orb: adxNow !== null && adxNow >= p.orbAdx && minuteEt[i] < p.orbCloseMin
+        ? dirOf(crossUp(c0, c1, at(or.high, i - 1), at(or.high, i)), crossDown(c0, c1, at(or.low, i - 1), at(or.low, i)))
+        : null,
+    };
+  };
+  return s;
+}
+
+function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
+  const series = signalSeries(bars, overrides);
+  const { p, closes, emaFast, emaSlow, adx, atrStop, st, kc, sw, or } = series;
   const i = bars.length - 1;
-  const closes = bars.map(b => b.c);
-
-  const emaFast = ind.ema(closes, p.emaFast);
-  const emaSlow = ind.ema(closes, p.emaSlow);
   const ema50 = ind.ema(closes, 50);
   const ema200 = ind.ema(closes, 200);
-  const adx = ind.adx(bars, p.adxPeriod);
   const atr14 = ind.atr(bars, 14);
-  const atrStop = ind.atr(bars, p.atrStop);
-  const st = ind.supertrend(bars, p.stPeriod, p.stMult);
-  const kc = ind.keltner(bars, p.kcLen, p.kcMult, p.kcAtr);
-  const sw = ind.swings(bars, p.swingK);
-  const or = ind.openingRange(bars, p.orbMinutes);
   const vwapSession = ind.anchoredVwap(bars, GLOBEX_OPEN);
   const vwapRth = ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE);
 
   const adxNow = at(adx, i);
   const adxSlope = adxNow !== null && at(adx, i - p.adxSlopeBars) !== null ? adxNow - adx[i - p.adxSlopeBars] : null;
-  const c0 = closes[i - 1]; const c1 = closes[i];
-  const minuteEt = etDayMinute(bars[i].t).minute;
   const stopDistance = at(atrStop, i) === null ? null : p.stopAtrMult * atrStop[i];
-
-  const dirOf = (up, down) => (up ? 'long' : down ? 'short' : null);
-  const signals = {
-    ema_cross: adxNow !== null && adxNow >= p.adxGate
-      ? dirOf(crossUp(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)),
-        crossDown(at(emaFast, i - 1), at(emaFast, i), at(emaSlow, i - 1), at(emaSlow, i)))
-      : null,
-    keltner: adxNow !== null && adxNow >= p.kcAdx
-      ? dirOf(crossUp(c0, c1, at(kc.upper, i - 1), at(kc.upper, i)), crossDown(c0, c1, at(kc.lower, i - 1), at(kc.lower, i)))
-      : null,
-    supertrend: at(st.direction, i - 1) !== null && at(st.direction, i) !== st.direction[i - 1]
-      ? (st.direction[i] === 1 ? 'long' : 'short')
-      : null,
-    bos: dirOf(crossUp(c0, c1, at(sw.high, i - 1), at(sw.high, i)), crossDown(c0, c1, at(sw.low, i - 1), at(sw.low, i))),
-    orb: adxNow !== null && adxNow >= p.orbAdx && minuteEt < p.orbCloseMin
-      ? dirOf(crossUp(c0, c1, at(or.high, i - 1), at(or.high, i)), crossDown(c0, c1, at(or.low, i - 1), at(or.low, i)))
-      : null,
-  };
+  const signals = series.signalsAt(i);
 
   const last = bars[i];
   return {
@@ -139,4 +161,4 @@ function snapshot(input, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, levels };
+module.exports = { PARAMS, snapshot, signalSeries, levels };

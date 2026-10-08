@@ -28,8 +28,8 @@ test('bundled strategies are all valid and cover every snapshot signal', () => {
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
   const signals = Object.keys(snapshot(Array.from({ length: 5 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 14, i)).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 }))).signals);
-  assert.deepStrictEqual([...BUILT_IN_SIGNALS].sort(), [...signals].sort());
-  for (const sig of signals) assert.ok(strategies.some(s => s.signal === sig), `no strategy uses signal ${sig}`);
+  assert.deepStrictEqual([...BUILT_IN_SIGNALS].sort(), [...signals, 'cisd_ote'].sort());
+  for (const sig of BUILT_IN_SIGNALS) assert.ok(strategies.some(s => s.signal === sig), `no strategy uses signal ${sig}`);
 });
 
 test('the template parses and only fails on its placeholder name', () => {
@@ -80,7 +80,8 @@ test('scan reports mechanical candidates with filters and sessions, and lists ma
   assert.strictEqual(orb.inSession, true);
   assert.strictEqual(orb.candidate, true);
   assert.ok(orb.stopDistance > 0);
-  assert.strictEqual(results.find(r => r.name === 'cisd_ote').signal, 'manual');
+  assert.strictEqual(results.find(r => r.name === 'cisd_ote').signal, 'cisd_ote');
+  assert.strictEqual(results.find(r => r.name === 'cisd_ote').direction, null);
   assert.deepStrictEqual(scan(loose, { bars }, { symbol: 'MCL' }), []);
   const strict = scan(strategies, { bars }, { symbol: 'MNQ' }).find(r => r.name === 'orb');
   assert.strictEqual(strict.candidate, false); // ADX gate fails on flat data
@@ -132,7 +133,8 @@ test('a rules strategy written only in Markdown validates and fires in scan', ()
 });
 
 test('scan marks strategies out of regime and never makes them candidates', () => {
-  const { strategies } = loadStrategies(ROOT, {});
+  const regimes = { bos: ['trend'], cisd_ote: ['range', 'transition'] };
+  const strategies = loadStrategies(ROOT, {}).strategies.map(s => (regimes[s.name] ? { ...s, regimes: regimes[s.name] } : s));
   const t = i => new Date(Date.UTC(2026, 9, 7, 13, 30) + i * 180000).toISOString();
   const ranging = Array.from({ length: 160 }, (_, k) => { const c = 100 + Math.sin(k / 2) * 2; return { t: t(k), o: c, h: c + 1, l: c - 1, c, v: 1 }; });
   const results = scan(strategies, { bars: ranging }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 9, 7, 15, 0)) });

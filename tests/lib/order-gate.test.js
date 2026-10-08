@@ -136,13 +136,15 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
 
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  const { strategies } = loadStrategies(require('path').resolve(__dirname, '..', '..'), {});
+  // The bundled orb has no session gate (as in algoTraderBot); give it one here.
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies
+    .map(s => (s.name === 'orb' ? { ...s, sessions: ['09:45-11:30@America/New_York'] } : s));
   const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
   const withReg = (input, iso) => evaluateOrder({ input, entries: [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], now: new Date(iso), config, strategies });
   // 10:00 ET Wednesday: inside orb's 09:45-11:30 session
   assert.deepStrictEqual(withReg(entryOrder(), '2026-10-07T14:00:00Z').violations, []);
   assert.deepStrictEqual(at('2026-10-07T14:00:00Z').violations, []);
-  // 12:00 ET: outside orb's sessions
+  // 12:00 ET: outside the session
   assert.deepStrictEqual(checks(withReg(entryOrder(), '2026-10-07T16:00:00Z')), ['strategy']);
   // unknown strategy and instrument not traded
   assert.match(withReg(entryOrder({ rationale: 'setup:mystery long stop 1' }), '2026-10-07T14:00:00Z').violations[0].message, /not a known strategy/);

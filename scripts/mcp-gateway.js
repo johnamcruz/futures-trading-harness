@@ -10,8 +10,6 @@
  *   PROJECTX_MCP_ENTRY=/abs/path/projectx-mcp/dist/index.js node scripts/mcp-gateway.js
  *
  * Register THIS command as the MCP server named "projectx" in your harness.
- * In a backtest (FTH_BACKTEST=1, set by scripts/backtest.js) the server is
- * pointed at the simulated broker instead; see serverEnv.
  * Credentials stay in the environment; the gateway passes it to the child
  * unchanged and never reads or logs them. Decisions are appended to
  * ~/.futures-trading-harness/gate-log.jsonl (FTH_GATE_LOG). stdout carries only
@@ -19,8 +17,6 @@
  */
 
 'use strict';
-
-require('./lib/sim-clock').installSimClock(process.env);
 
 const path = require('path');
 const { spawn } = require('child_process');
@@ -33,7 +29,7 @@ const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
-const { backtestMode, harnessHome } = require('./lib/paths');
+const { harnessHome } = require('./lib/paths');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
@@ -88,28 +84,6 @@ async function accountViolations(args, caller, now, ledger) {
   return { violations, observedNet: Array.isArray(positions) ? netPosition(positions, args.contractId) : null };
 }
 
-/**
- * Environment for projectx-mcp. In a backtest it is pointed at the simulated
- * broker, whatever the MCP client config says: real credentials and the live
- * API URL never reach it, trading is on (against the simulator only), its
- * journal is the backtest's own, and it runs on the simulated clock.
- */
-function serverEnv(env) {
-  if (!backtestMode(env)) return env;
-  const preload = path.join(__dirname, 'sim-clock-preload.js');
-  return {
-    ...env,
-    PROJECTX_API_URL: env.FTH_SIM_API_URL,
-    PROJECTX_MARKET_HUB_URL: `${env.FTH_SIM_API_URL.replace(/\/+$/, '')}/hubs/market`,
-    PROJECTX_USERNAME: 'backtest',
-    PROJECTX_API_KEY: 'backtest',
-    PROJECTX_TRADING_ENABLED: 'true',
-    PROJECTX_ALLOWED_ACCOUNT_IDS: '',
-    PROJECTX_JOURNAL_PATH: path.join(harnessHome(env), 'journal.jsonl'),
-    NODE_OPTIONS: `${env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ` : ''}--require ${JSON.stringify(preload)}`,
-  };
-}
-
 function main(argv) {
   const sep = argv.indexOf('--');
   let command = sep === -1 ? argv : argv.slice(sep + 1);
@@ -122,7 +96,7 @@ function main(argv) {
     process.exit(2);
   }
 
-  const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'inherit'], env: serverEnv(process.env) });
+  const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'inherit'], env: process.env });
   // EPIPE after the server exits must not crash the gateway; 'close' handles the exit.
   child.stdin.on('error', err => process.stderr.write(`[mcp-gateway] server stdin: ${err.message}\n`));
   const write = line => process.stdout.write(`${line}\n`);

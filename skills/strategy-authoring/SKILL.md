@@ -24,12 +24,13 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `instruments` | Contract roots, e.g. `[MNQ, MES]` |
    | `timeframe` | Trigger timeframe, e.g. `3m` |
    | `sessions` | Optional `"HH:MM-HH:MM@Zone"` windows; entries only inside |
-   | `signal` | `rules` (trigger written in `rules`, checked by code), `manual` (agents judge the body), or a built-in detector: `orb`, `ema_cross`, `keltner`, `supertrend`, `bos` |
+   | `signal` | `rules` (trigger written in `rules`, checked by code), `manual` (agents judge the body), or a built-in detector ported from algoTraderBot: `orb`, `ema_cross`, `keltner`, `supertrend`, `bos`, `cisd_ote` |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
    | `regime_gate` | Optional `true`: the MCP gateway also refuses entries when the live regime (from that strategy's timeframe bars) doesn't fit |
    | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |
    | `params` | Optional overrides of the snapshot and rules series (e.g. `orbMinutes: 30`); periods must be whole numbers |
    | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr`; checked by the scan only, not at order time |
+   | `exit` | Optional: `trail_activate_r` + `trail_giveback_r` (trail the stop from +NR, giving back MR; trend setups use 2 / 0.5), `target_r` (fixed target), `max_bars`. Without it the target is `risk.min_rr`. The backtester and the live runner apply it |
    | `risk` | `stop` (`atr:<k>`, `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists; `min_rr` and `max_risk_usd` are applied by the agents (risk-manager), not by code |
    | `source`, `version` | Where it came from; bump version on rule changes |
 
@@ -59,6 +60,10 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    entry. `validate` reports typos, unknown keys and series. Only a pattern the
    rules can't express (multi-bar zone logic like cisd_ote) needs `manual` or
    a new detector in code.
+8. Backtest it before paper trading:
+   `node <root>/scripts/backtest.js --data <bars.parquet|.xlsx|.csv> --symbol MNQ --strategy <name>`
+   (docs/BACKTESTING.md). Check that it fires where you expect (`trades.csv`)
+   and that its R statistics hold up with harness rules on.
 
 ## Examples
 

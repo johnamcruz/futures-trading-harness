@@ -254,16 +254,25 @@ bar closed, so none is starved.
 
 ### Backtesting
 
-`scripts/backtest.js` replays historical 1-minute bars through the same loop.
-It uses the same runner, agents, gate, gateway, and projectx-mcp, against a
-simulated ProjectX broker on loopback with a simulated clock. The harness
-can't tell the difference, so a backtest measures the system you run live. See
-[docs/BACKTESTING.md](docs/BACKTESTING.md).
+`scripts/backtest.js` replays historical bars from Parquet, Excel, CSV, or
+JSON files the way algoTraderBot backtests. After every closed bar it:
+
+1. settles the open trade against the bar;
+2. trails its stop;
+3. checks every strategy for an entry, using the same detectors the live
+   scan uses.
+
+By default it applies the harness's own rules (sessions, end of day,
+order-gate limits). `--no-gate` trades the way algoTraderBot does.
 
 ```bash
-node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.json
+node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
 node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.example.json
 ```
+
+Results are in R (as algoTraderBot reports them) and in dollars after fees,
+broken down by strategy, exit, and month. See
+[docs/BACKTESTING.md](docs/BACKTESTING.md).
 
 ### Order gate settings
 

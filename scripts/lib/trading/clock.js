@@ -8,9 +8,12 @@
 const TRADING_DAY_TZ = 'America/Chicago';
 const TRADING_DAY_START_HOUR = 17;
 
-function zonedParts(date, timeZone) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
+// Building an Intl.DateTimeFormat is slow; keep one per time zone.
+const FORMATTERS = new Map();
+function formatter(timeZone) {
+  let f = FORMATTERS.get(timeZone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
       timeZone,
       hourCycle: 'h23',
       year: 'numeric',
@@ -20,10 +23,14 @@ function zonedParts(date, timeZone) {
       minute: '2-digit',
       second: '2-digit',
       weekday: 'short',
-    })
-      .formatToParts(date)
-      .map(p => [p.type, p.value])
-  );
+    });
+    FORMATTERS.set(timeZone, f);
+  }
+  return f;
+}
+
+function zonedParts(date, timeZone) {
+  const parts = Object.fromEntries(formatter(timeZone).formatToParts(date).map(p => [p.type, p.value]));
   return {
     year: Number(parts.year),
     month: Number(parts.month),

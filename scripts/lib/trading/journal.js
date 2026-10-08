@@ -8,7 +8,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { backtestMode, harnessHome } = require('../paths');
 
 const DEFAULT_JOURNAL_PATH = path.join(os.homedir(), '.projectx-mcp', 'journal.jsonl');
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
@@ -20,9 +19,6 @@ function expandHome(p) {
 }
 
 function resolveJournalPath(env = process.env) {
-  // A backtest keeps its journal with the rest of its isolated state; the
-  // gateway points projectx-mcp at the same file.
-  if (backtestMode(env)) return path.join(harnessHome(env), 'journal.jsonl');
   const configured = String(env.PROJECTX_JOURNAL_PATH || '').trim();
   return configured ? expandHome(configured) : DEFAULT_JOURNAL_PATH;
 }

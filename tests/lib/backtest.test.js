@@ -4,180 +4,144 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { SimBroker, marketOpen } = require('../../scripts/lib/backtest/broker');
-const { aggregate, loadBars, parseCsv } = require('../../scripts/lib/backtest/data');
-const { roundTrips, stats } = require('../../scripts/lib/backtest/report');
-const { runBacktest, backtestEnv } = require('../../scripts/lib/backtest/run');
-const { installSimClock } = require('../../scripts/lib/sim-clock');
+const { loadBars, aggregate, barMinutes, epochMs, parseCsv } = require('../../scripts/lib/backtest/data');
+const { excelSerialToMs } = require('../../scripts/lib/backtest/xlsx');
+const { trailStep, snapStop } = require('../../scripts/lib/trading/trail');
+const { runEngine } = require('../../scripts/lib/backtest/engine');
+const { runBacktest, validateBacktestConfig } = require('../../scripts/lib/backtest/run');
+const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
+const { compileRules } = require('../../scripts/lib/trading/rules');
+const { loadConfig } = require('../../scripts/lib/trading/config');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const CONTRACT = 'CON.F.US.MNQ.H25';
-// Monday 2025-03-10 09:00 ET (EDT, UTC-4).
-const T0 = Date.parse('2025-03-10T13:00:00Z');
+const DATA = path.join(__dirname, '..', 'fixtures', 'data');
 
-/** 1-minute bars from a list of [o, h, l, c] starting at `start`. */
-function bars(rows, start = T0) {
-  return rows.map(([o, h, l, c], i) => ({ t: new Date(start + i * 60000).toISOString(), ms: start + i * 60000, o, h, l, c, v: 10 }));
-}
-
-function broker(rows, opts = {}) {
-  return new SimBroker({ instruments: [{ symbol: 'MNQ', contractId: CONTRACT, tickSize: 0.25, tickValue: 0.5, bars: bars(rows) }], startMs: T0 + 60000, slippageTicks: 0, feesPerSide: 0, ...opts });
-}
-
-const flat = (n, p = 100) => Array.from({ length: n }, () => [p, p, p, p]);
-
-test('aggregate builds closed N-minute bars and hides the forming one', () => {
-  const b = bars([[1, 2, 0, 1], [1, 3, 1, 2], [2, 2, 1, 1.5], [1.5, 4, 1, 3]]);
-  const three = aggregate(b, { unit: 2, unitNumber: 3, nowMs: T0 + 4 * 60000 });
-  assert.deepStrictEqual(three, [{ t: new Date(T0).toISOString(), o: 1, h: 3, l: 0, c: 1.5, v: 30 }]);
-  assert.strictEqual(aggregate(b, { unit: 2, unitNumber: 3, nowMs: T0 + 4 * 60000, includePartial: true }).length, 2);
-  assert.strictEqual(aggregate(b, { unit: 2, unitNumber: 1, nowMs: T0 + 2 * 60000 + 59999 }).length, 2, 'a 1-minute bar is visible only after it closes');
-  assert.throws(() => aggregate(b, { unit: 5, unitNumber: 1, nowMs: T0 + 1e7 }), /not available in a backtest/);
+test('Parquet (pyarrow, pandas, polars, fastparquet; every codec and encoding) and Excel load the same bars as CSV', () => {
+  const ref = loadBars(path.join(DATA, 'bars.csv'));
+  assert.strictEqual(ref.length, 300);
+  for (const f of fs.readdirSync(DATA).filter(x => x !== 'bars.csv')) {
+    const bars = loadBars(path.join(DATA, f));
+    if (f === 'pyarrow-nulls.parquet') {
+      assert.strictEqual(bars[5].v, 0, 'a missing volume reads as 0');
+      assert.deepStrictEqual({ ...bars[5], v: ref[5].v }, ref[5]);
+      continue;
+    }
+    assert.deepStrictEqual(bars, ref, f);
+  }
 });
 
-test('CSV loading accepts common headers and rejects non-minute data', () => {
-  const rows = parseCsv('timestamp,open,high,low,close,volume\n2025-03-10 13:00:00,1,2,0,1,5\n1741611660,1,2,0,1.5,6\n');
-  assert.deepStrictEqual(rows.map(r => r.t), ['2025-03-10T13:00:00.000Z', '2025-03-10T13:01:00.000Z']);
+test('times: ISO, naive UTC, epoch units, Excel serials; legacy .xls is refused', () => {
+  assert.strictEqual(epochMs(1741611600), 1741611600000);
+  assert.strictEqual(epochMs(1741611600000), 1741611600000);
+  assert.strictEqual(epochMs(1741611600000000), 1741611600000);
+  assert.strictEqual(epochMs(1741611600000000000), 1741611600000);
+  assert.strictEqual(new Date(excelSerialToMs(45726.5625)).toISOString(), '2025-03-10T13:30:00.000Z');
+  assert.strictEqual(parseCsv('Date,Open,High,Low,Close\n2025-03-10 13:30:00,1,2,0,1\n')[0].t, '2025-03-10T13:30:00.000Z');
   const dir = tmpDir();
-  fs.writeFileSync(path.join(dir, 'a.csv'), 'time,open,high,low,close\n2025-03-10T13:00:30Z,1,1,1,1\n');
-  assert.throws(() => loadBars(path.join(dir, 'a.csv')), /minute boundary/);
+  fs.writeFileSync(path.join(dir, 'old.xls'), 'x');
+  assert.throws(() => loadBars(path.join(dir, 'old.xls')), /save it as .xlsx/);
 });
 
-test('market orders fill at the last close plus slippage; brackets become an OCO pair', () => {
-  const b = broker([[100, 100, 100, 100], [100, 101, 99.5, 100.5], [100.5, 103, 100, 102.5], ...flat(3, 102.5)], { slippageTicks: 1 });
-  const r = b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1, stopLossBracket: { ticks: 8, type: 4 }, takeProfitBracket: { ticks: 8, type: 1 } });
-  assert.strictEqual(r.success, true);
-  assert.strictEqual(b.positionsView()[0].averagePrice, 100.25, 'close 100 + 1 tick');
-  b.advanceTo(T0 + 3 * 60000);
-  assert.deepStrictEqual(b.positionsView(), [], 'target 102.25 traded through on the third bar');
-  assert.strictEqual(b.trades[1].profitAndLoss, 4, '8 ticks x $0.50');
-  assert.ok(b.handle('/api/Order/searchOpen', { accountId: 1 }).orders.length === 0, 'the stop leg is cancelled');
+test('aggregate builds closed N-minute bars from finer bars', () => {
+  const t0 = Date.parse('2025-03-10T13:30:00Z');
+  const one = [[1, 2, 0, 1], [1, 3, 1, 2], [2, 2, 1, 1.5], [1.5, 4, 1, 3]].map(([o, h, l, c], i) => ({ t: new Date(t0 + i * 60000).toISOString(), ms: t0 + i * 60000, o, h, l, c, v: 10 }));
+  assert.strictEqual(barMinutes(one), 1);
+  const three = aggregate(one, { unit: 2, unitNumber: 3, nowMs: t0 + 4 * 60000 });
+  assert.deepStrictEqual(three, [{ t: new Date(t0).toISOString(), o: 1, h: 3, l: 0, c: 1.5, v: 30 }]);
 });
 
-test('a bar touching both bracket legs is scored as the stop (pessimistic)', () => {
-  const b = broker([[100, 100, 100, 100], [100, 103, 97, 100], ...flat(2)]);
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1, stopLossBracket: { ticks: 8, type: 4 }, takeProfitBracket: { ticks: 8, type: 1 } });
-  b.advanceTo(T0 + 2 * 60000);
-  assert.strictEqual(b.trades[1].price, 98);
-  assert.ok(b.trades[1].profitAndLoss < 0);
+test('trailing stop: holds until +2R, then 0.5R behind the best price, ratchet only, tick-snapped', () => {
+  const plan = { trailActivateR: 2, trailGivebackR: 0.5 };
+  const long = { sign: 1, entry: 100, risk: 2, stop: 98, peakR: 0 };
+  let r = trailStep(long, { h: 103.9, l: 101, c: 103 }, plan, 0.25);
+  assert.deepStrictEqual([r.stop, r.active, r.close], [98, false, null], '1.95R: not active yet');
+  r = trailStep({ ...long, peakR: r.peakR }, { h: 106, l: 105.2, c: 105.5 }, plan, 0.25);
+  assert.deepStrictEqual([r.stop, r.active, r.close], [105, true, null], 'peak 3R: stop at 2.5R = 105');
+  r = trailStep({ ...long, stop: 105, peakR: 3 }, { h: 105.5, l: 105.1, c: 105.2 }, plan, 0.25);
+  assert.strictEqual(r.stop, 105, 'never loosens');
+  r = trailStep({ ...long, stop: 105, peakR: 3 }, { h: 107, l: 104, c: 104.5 }, plan, 0.25);
+  assert.deepStrictEqual(r.close, { price: 104.5, reason: 'trail' }, 'the bar went through the new stop: out at its close');
+  const short = { sign: -1, entry: 100, risk: 2, stop: 102, peakR: 0 };
+  r = trailStep(short, { h: 99, l: 95.1, c: 95.5 }, plan, 0.25);
+  assert.strictEqual(r.stop, 96.25, 'short: 95.1 + 1 = 96.1, rounded up to the tick');
+  assert.strictEqual(snapStop(96.1, 1, 0.25), 96);
 });
 
-test('stops fill at the worse of the stop and the open; limits need a trade through', () => {
-  const b = broker([[100, 100, 100, 100], [95, 96, 94, 95], [95, 96, 94, 95], [94.5, 95, 93.5, 94], ...flat(2)]);
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1 });
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 4, side: 1, size: 1, stopPrice: 98 });
-  b.advanceTo(T0 + 2 * 60000);
-  assert.strictEqual(b.trades[1].price, 95, 'gap through the stop fills at the open');
-  const lim = b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 1, side: 0, size: 1, limitPrice: 94 });
-  assert.ok(lim.success);
-  b.advanceTo(T0 + 3 * 60000);
-  assert.strictEqual(b.positionsView().length, 0, 'low 94 touches the limit but does not trade through');
-  b.advanceTo(T0 + 4 * 60000);
-  assert.strictEqual(b.positionsView()[0].averagePrice, 94, 'low 93.5 trades through');
-});
-
-test('wrong-side stops, closed market, and unknown accounts are refused like the API', () => {
-  const b = broker(flat(5));
-  assert.match(b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 4, side: 0, size: 1, stopPrice: 99 }).errorMessage, /above the market/);
-  assert.strictEqual(b.handle('/api/Order/place', { accountId: 9, contractId: CONTRACT, type: 2, side: 0, size: 1 }).errorCode, 1);
-  assert.strictEqual(marketOpen(Date.parse('2025-03-10T21:30:00Z')), false, '17:30 ET');
-  assert.strictEqual(marketOpen(Date.parse('2025-03-09T21:59:00Z')), false, 'Sunday 17:59 ET');
-  assert.strictEqual(marketOpen(Date.parse('2025-03-09T22:00:00Z')), true, 'Sunday 18:00 ET');
-});
-
-test('flips realize P&L on the closed part and open the rest at the fill price', () => {
-  const b = broker([[100, 100, 100, 100], [110, 110, 110, 110], ...flat(2, 110)]);
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1 });
-  b.advanceTo(T0 + 2 * 60000);
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 1, size: 2 });
-  assert.strictEqual(b.trades[1].profitAndLoss, 20, '10 points x $2');
-  assert.deepStrictEqual(b.positionsView().map(p => [p.type, p.size, p.averagePrice]), [[2, 1, 110]]);
-});
-
-test('daily loss limit flattens and locks the account until the next trading day', () => {
-  const rows = [[100, 100, 100, 100], [100, 100, 80, 80], ...flat(3, 80)];
-  const b = broker(rows, { dailyLossLimit: 30 });
-  b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1 });
-  b.advanceTo(T0 + 3 * 60000);
-  assert.deepStrictEqual(b.positionsView(), []);
-  assert.strictEqual(b.accountView().canTrade, false);
-  assert.strictEqual(b.handle('/api/Order/place', { accountId: 1, contractId: CONTRACT, type: 2, side: 0, size: 1 }).errorCode, 4);
-});
-
-test('round trips attribute P&L to the setup that opened them', () => {
-  const trades = [
-    { contractId: 'C', side: 0, size: 1, price: 100, profitAndLoss: null, fees: 0.37, orderId: 1, creationTimestamp: 'a' },
-    { contractId: 'C', side: 1, size: 1, price: 104, profitAndLoss: 8, fees: 0.37, orderId: 2, creationTimestamp: 'b' },
-    { contractId: 'C', side: 1, size: 1, price: 104, profitAndLoss: null, fees: 0.37, orderId: 3, creationTimestamp: 'c' },
-    { contractId: 'C', side: 0, size: 1, price: 106, profitAndLoss: -4, fees: 0.37, orderId: 4, creationTimestamp: 'd' },
-  ];
-  const { closed } = roundTrips(trades, new Map([[1, 'orb'], [3, 'bos']]));
-  assert.deepStrictEqual(closed.map(r => [r.setup, r.direction, r.netPnL]), [['orb', 'long', 7.26], ['bos', 'short', -4.74]]);
-  assert.strictEqual(stats(closed).profitFactor, 1.53);
-});
-
-test('the simulated clock only installs in backtest mode with a loopback broker', () => {
-  assert.strictEqual(installSimClock({ FTH_SIM_CLOCK_FILE: '/x' }), false);
-  assert.strictEqual(installSimClock({ FTH_BACKTEST: '1', FTH_SIM_API_URL: 'https://api.topstepx.com', FTH_SIM_CLOCK_FILE: '/x' }), false);
-  const env = backtestEnv({ PROJECTX_API_KEY: 'secret', PROJECTX_USERNAME: 'me', PROJECTX_MAX_ORDER_SIZE: '1' }, { url: 'http://127.0.0.1:1', home: '/h', clockFile: '/c' });
-  assert.strictEqual(env.PROJECTX_API_KEY, 'backtest', 'real credentials never reach a backtest');
-  assert.strictEqual(env.PROJECTX_MAX_ORDER_SIZE, '1', 'guardrails carry over');
-});
-
-test('a full replay drives the real runner on simulated time and reports the result', { timeout: 120000 }, async () => {
-  const dir = tmpDir();
-  // 08:00-12:00 ET of gently rising prices with a dip every 15 minutes.
-  const start = Date.parse('2025-03-10T12:00:00Z');
-  const rows = Array.from({ length: 240 }, (_, i) => {
-    const c = 20000 + i * 0.5 - (i % 15 === 7 ? 6 : 0);
-    return [c - 0.25, c + 1, c - 1.5, c];
-  });
-  fs.writeFileSync(path.join(dir, 'mnq.json'), JSON.stringify(bars(rows, start).map(({ ms: _ms, ...b }) => b)));
-  const config = {
-    harness: 'custom',
-    command: ['node', path.join(ROOT, 'tests', 'fixtures', 'backtest-agent.js'), '{prompt}'],
-    symbols: ['MNQ'],
-    timeframe: 3,
-    sessions: ['10:00-11:00@America/New_York'],
-    premarketAt: '09:30@America/New_York',
-    eodAt: '11:30@America/New_York',
-    backtest: {
-      start: '2025-03-10T13:20:00Z', end: '2025-03-10T15:45:00Z', latency: 'none', outDir: path.join(dir, 'run'),
-      instruments: { MNQ: { data: 'mnq.json', contractId: CONTRACT } },
-    },
+/** A rules strategy that goes long when the close crosses above 100.5 (fires once on our bars). */
+function strategy(extra = {}) {
+  const rules = { long: ['close crosses_above 100.5'] };
+  return {
+    name: 'test', valid: true, status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules,
+    compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:1', min_rr: 2 }, ...extra,
   };
-  const { report, runDir } = await runBacktest(config, { root: ROOT, baseDir: dir });
-  const seen = fs.readFileSync(path.join(runDir, 'home', 'agent-seen.log'), 'utf8').trim().split('\n');
-  const trades = seen.filter(l => l.endsWith(' trade'));
-  assert.ok(trades.length >= 18 && trades.length <= 21, `one cycle per closed 3m bar in the hour, got ${trades.length}`);
-  assert.ok(seen.every(l => l.startsWith('2025-03-10T1')), 'the agent saw simulated time');
-  assert.match(trades[0], /^2025-03-10T14:00:0\d/, 'first cycle within seconds of the 10:00 ET open');
-  assert.ok(seen.some(l => l.endsWith(' eod')));
-  assert.ok(report.summary.trades > 0, 'the agent traded');
-  assert.strictEqual(report.summary.openAtEnd, 0);
-  assert.strictEqual(report.summary.cycles.failed, 0);
-  assert.ok(fs.existsSync(path.join(runDir, 'report.md')));
-  assert.deepStrictEqual(Object.keys(report.bySetup), ['fake']);
+}
+
+/** 3m bars from 09:00 ET (13:00Z, EDT): flat at 100 (ATR 1), then the scripted path. */
+function bars(path) {
+  const t0 = Date.parse('2025-03-10T13:00:00Z');
+  const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
+  return [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
+}
+
+const run = (path, s = strategy(), opts = {}) => runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], {
+  timeframe: 3, gate: false, ...opts,
+}).trades;
+
+test('engine: entry at the signal close, stop at 1R, fixed target at min_rr', () => {
+  const trades = run([[100, 101, 99.9, 101], [101, 101.5, 100.5, 101.2], [101.2, 103.5, 101, 103]]);
+  assert.strictEqual(trades.length, 1);
+  const t = trades[0];
+  assert.deepStrictEqual([t.entry, t.initialStop, t.reason, t.exit, t.r], [101, 100, 'target', 103, 2]);
+  assert.strictEqual(t.net, 4, '8 ticks x $0.50');
 });
 
-test('FTH_HOME moves all harness state; loopback detection', () => {
-  const { harnessHome, isLoopbackUrl, backtestMode } = require('../../scripts/lib/paths');
-  assert.strictEqual(harnessHome({}, '/h'), '/h/.futures-trading-harness');
-  assert.strictEqual(harnessHome({ FTH_HOME: '~/bt' }, '/h'), '/h/bt');
-  assert.strictEqual(isLoopbackUrl('http://127.0.0.1:5'), true);
-  assert.strictEqual(isLoopbackUrl('http://127.0.0.1.evil.com'), false);
-  assert.strictEqual(backtestMode({ FTH_BACKTEST: '1', FTH_SIM_API_URL: 'http://localhost:9' }), true);
-  const { loadConfig } = require('../../scripts/lib/trading/config');
-  assert.strictEqual(loadConfig({ FTH_HOME: '/tmp/x' }).killSwitchFile, '/tmp/x/STOP');
+test('engine: a bar touching both stop and target is a loss; a gap through the stop fills at the open', () => {
+  assert.deepStrictEqual(run([[100, 101, 99.9, 101], [101, 104, 99.5, 101]]).map(t => [t.reason, t.r]), [['stop', -1]]);
+  assert.deepStrictEqual(run([[100, 101, 99.9, 101], [99, 99.5, 98, 98.5]]).map(t => [t.reason, t.exit, t.r]), [['stop', 99, -2]]);
 });
 
-test('runHarness resolves when the run exits even if a detached process keeps its output open', { timeout: 20000 }, async () => {
-  const { runHarness } = require('../../scripts/lib/harness-run');
-  const t = Date.now();
-  const r = await runHarness(['sh', '-c', 'setsid sleep 8 & echo hi; exit 0'], { cwd: ROOT, env: process.env, timeoutMs: 5000 });
-  assert.strictEqual(r.ok, true);
-  assert.strictEqual(r.timedOut, false);
-  assert.ok(Date.now() - t < 4000, `took ${Date.now() - t} ms`);
-  assert.match(r.output, /hi/);
+test('engine: trend setups trail from +2R, giving back 0.5R', () => {
+  const s = strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } });
+  const trades = run([[100, 101, 99.9, 101], [101, 103.2, 102.8, 103], [103, 105, 104.6, 104.8], [104.8, 104.9, 104.4, 104.5]], s);
+  assert.strictEqual(trades.length, 1);
+  // Peak 105 (4R): stop 104.5 (3.5R), hit on the last bar.
+  assert.deepStrictEqual([trades[0].reason, trades[0].exit, trades[0].r, trades[0].mfeR], ['trail', 104.5, 3.5, 4]);
+});
+
+test('engine: with harness rules, no entries outside sessions and a flatten at end of day', () => {
+  const late = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101]], strategy(), { gate: true, sessions: ['10:00-15:00@America/New_York'], gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '' }) });
+  assert.deepStrictEqual(late, [], '09:03 ET is outside the session');
+  const eod = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1], [101.1, 101.2, 100.9, 101]], strategy(), {
+    gate: true, sessions: ['09:00-15:00@America/New_York'], eodAt: '09:06@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '' }),
+  });
+  assert.deepStrictEqual(eod.map(t => t.reason), ['eod']);
+});
+
+test('report: R stats as algoTraderBot reports them, plus dollars and drawdown', () => {
+  const trades = [{ r: 2, mfeR: 2.5, net: 40, fees: 0.74 }, { r: -1, mfeR: 0.5, net: -20, fees: 0.74 }, { r: -1, mfeR: 0.2, net: -20, fees: 0.74 }];
+  const s = stats(trades);
+  assert.deepStrictEqual([s.trades, s.winRate, s.meanR, s.sumR, s.profitFactorR, s.capture, s.netPnL], [3, 0.333, 0, 0, 1, 0, 0]);
+  assert.strictEqual(maxDrawdown(trades), 40);
+});
+
+test('config: data, symbols and limits are validated', () => {
+  assert.throws(() => validateBacktestConfig({ symbols: ['MNQ'] }, ROOT), /data:/);
+  assert.throws(() => validateBacktestConfig({ symbols: ['XYZ'], data: { XYZ: 'a.csv' } }, ROOT), /tickSize and tickValue/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, start: '2025-02-01', end: '2025-01-01' }, ROOT), /end must be after start/);
+  const ok = validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT);
+  assert.deepStrictEqual([ok.markets[0].tickSize, ok.markets[0].tickValue], [0.25, 0.5]);
+});
+
+test('a backtest run on the parity data writes a report; trades match the live evaluator', () => {
+  const dir = tmpDir();
+  const { report, runDir } = runBacktest({
+    symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') },
+    strategies: ['supertrend', 'bos'], gate: false, outDir: dir,
+  }, { root: ROOT, outRoot: dir });
+  assert.ok(report.summary.trades > 10);
+  assert.ok(report.trades.every(t => ['supertrend', 'bos'].includes(t.strategy)));
+  for (const f of ['report.md', 'report.json', 'trades.csv']) assert.ok(fs.existsSync(path.join(runDir, f)));
+  // Every trade's R is consistent with its prices.
+  for (const t of report.trades) assert.ok(Math.abs(t.r - (t.direction === 'long' ? 1 : -1) * (t.exit - t.entry) / t.risk) < 1e-3);
 });

@@ -9,7 +9,7 @@
   "paper": true,
   "timeframe": 3,
   "trigger": "bar",
-  "bars": 300,
+  "bars": 500,
   "barDelaySeconds": 2,
   "barPollSeconds": 2,
   "barTimeoutSeconds": 60,

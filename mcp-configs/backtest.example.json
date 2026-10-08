@@ -1,36 +1,23 @@
 {
-  "harness": "qwen",
-  "model": "",
   "symbols": [
     "MNQ"
   ],
-  "workdir": "workspace",
   "timeframe": 3,
-  "trigger": "bar",
-  "cycle": "lean",
+  "data": {
+    "MNQ": "data/NQ_3min.parquet"
+  },
+  "start": "2025-01-01",
+  "end": "2025-04-01",
+  "strategies": null,
+  "gate": true,
   "sessions": [
     "09:35-15:00@America/New_York"
   ],
-  "premarketAt": "09:00@America/New_York",
   "eodAt": "15:50@America/New_York",
-  "maxCyclesPerDay": 150,
-  "cycleTimeoutMinutes": 8,
-  "maxConsecutiveErrors": 3,
-  "extraArgs": [],
-  "backtest": {
-    "start": "2025-03-10T13:00:00Z",
-    "end": "2025-03-15T00:00:00Z",
-    "instruments": {
-      "MNQ": {
-        "data": "data/MNQ-1m.json",
-        "contractId": "CON.F.US.MNQ.H25"
-      }
-    },
-    "startingBalance": 50000,
-    "slippageTicks": 1,
-    "dailyLossLimit": 1000,
-    "maxLossLimit": 2000,
-    "latency": "real",
-    "outDir": null
-  }
+  "size": 1,
+  "riskPerTrade": null,
+  "maxContracts": 5,
+  "slippageTicks": 1,
+  "maxDailyLoss": 500,
+  "outDir": null
 }

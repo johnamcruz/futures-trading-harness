@@ -1,67 +1,112 @@
 'use strict';
 
 /**
- * Historical 1-minute bars for the simulated broker, and aggregation into the
- * bar sizes ProjectX serves. Input files:
- *   - JSON: an array of bars or { bars: [...] } with t/o/h/l/c/v (projectx-mcp
- *     get_bars output, or a file written by `backtest.js fetch`)
- *   - CSV: a header row naming time (or timestamp/datetime/t), open, high, low,
- *     close, and optionally volume; times are ISO 8601 (UTC unless an offset
- *     is given) or epoch seconds/milliseconds.
- * Bars are 1 minute, keyed by their open time, oldest first, deduplicated.
+ * Historical bars for the backtester, from the file formats bar data usually
+ * comes in, and aggregation into larger bars:
+ *   - Parquet (.parquet, .pq): pandas/pyarrow, polars, DuckDB, fastparquet
+ *   - Excel (.xlsx, .xlsm): the first sheet, or `sheet`
+ *   - CSV (.csv, .txt) and JSON ({t,o,h,l,c,v} bars or { bars: [...] })
+ * Tables need a header naming the time column (time, timestamp, datetime,
+ * date, ts, t) and open, high, low, close, optionally volume (any case).
+ * Times are ISO 8601 (UTC unless an offset is given), epoch s/ms/us/ns, a
+ * Parquet timestamp, or an Excel date. Bars are keyed by their open time,
+ * oldest first, deduplicated, and must sit on minute boundaries.
  */
 
 const fs = require('fs');
+const path = require('path');
 const { normalizeBars, sessionKey } = require('../trading/indicators');
+const { readParquet } = require('./parquet');
+const { readXlsx, excelSerialToMs } = require('./xlsx');
 
 const MINUTE = 60000;
 const GLOBEX_OPEN_MIN = 18 * 60;
+const TIME_NAMES = ['t', 'time', 'timestamp', 'datetime', 'date', 'ts', 'date_time', '__index_level_0__'];
+const FIELD_NAMES = { o: ['o', 'open'], h: ['h', 'high'], l: ['l', 'low'], c: ['c', 'close', 'last'], v: ['v', 'volume', 'vol'] };
 
-function parseTime(raw) {
+/** Epoch ms from a number whose unit is guessed by magnitude (s, ms, us, ns). */
+function epochMs(n) {
+  const a = Math.abs(n);
+  if (a >= 1e17) return Math.round(n / 1e6);
+  if (a >= 1e14) return Math.round(n / 1e3);
+  if (a >= 1e11) return Math.round(n);
+  return Math.round(n * 1000);
+}
+
+function parseTime(raw, { excel = false, date1904 = false } = {}) {
+  if (raw === null || raw === undefined || raw === '') return NaN;
+  if (typeof raw === 'number') return excel ? excelSerialToMs(raw, date1904) : epochMs(raw);
   const s = String(raw).trim();
-  if (/^\d{9,10}$/.test(s)) return Number(s) * 1000;
-  if (/^\d{12,13}$/.test(s)) return Number(s);
+  if (/^-?\d+(\.\d+)?$/.test(s)) return excel ? excelSerialToMs(Number(s), date1904) : epochMs(Number(s));
   // "2025-03-10 14:30:00" has no zone: treat it as UTC, like ProjectX.
-  const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
+  const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s.replace(' ', 'T');
   return Date.parse(iso);
+}
+
+/** Rows (arrays) with a header row, or objects keyed by column name, to raw bars. */
+function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
+  const names = header.map(h => String(h === null || h === undefined ? '' : h).trim().toLowerCase());
+  const find = list => names.findIndex(n => list.includes(n));
+  const idx = { t: find(TIME_NAMES) };
+  for (const [k, list] of Object.entries(FIELD_NAMES)) idx[k] = find(list);
+  for (const k of ['t', 'o', 'h', 'l', 'c']) {
+    if (idx[k] === -1) throw new Error(`the data needs time, open, high, low, close columns (got: ${names.join(', ')})`);
+  }
+  return rows.map((r, i) => {
+    const get = k => (Array.isArray(r) ? r[idx[k]] : r[header[idx[k]]]);
+    const t = parseTime(get('t'), { excel, date1904 });
+    if (!Number.isFinite(t)) throw new Error(`row ${i + 2}: unreadable time "${get('t')}"`);
+    return { t: new Date(t).toISOString(), o: get('o'), h: get('h'), l: get('l'), c: get('c'), v: idx.v === -1 ? 0 : get('v') };
+  });
 }
 
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length === 0) return [];
-  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const col = names => header.findIndex(h => names.includes(h));
-  const idx = {
-    t: col(['t', 'time', 'timestamp', 'datetime', 'date']),
-    o: col(['o', 'open']), h: col(['h', 'high']), l: col(['l', 'low']), c: col(['c', 'close']), v: col(['v', 'volume', 'vol']),
-  };
-  for (const k of ['t', 'o', 'h', 'l', 'c']) {
-    if (idx[k] === -1) throw new Error(`CSV header needs time, open, high, low, close columns (got: ${header.join(', ')})`);
-  }
-  return lines.slice(1).map((line, i) => {
-    const f = line.split(',');
-    const t = parseTime(f[idx.t]);
-    if (!Number.isFinite(t)) throw new Error(`CSV line ${i + 2}: unreadable time "${f[idx.t]}"`);
-    return { t: new Date(t).toISOString(), o: f[idx.o], h: f[idx.h], l: f[idx.l], c: f[idx.c], v: idx.v === -1 ? 0 : f[idx.v] };
-  });
+  return tableToBars(lines[0].split(','), lines.slice(1).map(l => l.split(',')));
 }
 
-/** Load and clean 1-minute bars from a JSON or CSV file. */
-function loadBars(file) {
+/** Raw bars from any supported file. */
+function readTable(file, { sheet = null } = {}) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.parquet' || ext === '.pq') {
+    const { columns, rows } = readParquet(file);
+    return tableToBars(columns, rows);
+  }
+  if (ext === '.xlsx' || ext === '.xlsm') {
+    const { rows, date1904 } = readXlsx(file, { sheet });
+    const start = rows.findIndex(r => r.some(x => x !== null));
+    if (start === -1) return [];
+    return tableToBars(rows[start], rows.slice(start + 1).filter(r => r.some(x => x !== null)), { excel: true, date1904 });
+  }
+  if (ext === '.xls') throw new Error(`${file}: legacy .xls is not supported; save it as .xlsx`);
   const text = fs.readFileSync(file, 'utf8');
   const trimmed = text.trimStart();
-  const raw = trimmed.startsWith('[') || trimmed.startsWith('{') ? JSON.parse(text) : parseCsv(text);
-  const bars = normalizeBars(raw).map(b => ({ ...b, ms: Date.parse(b.t) }));
+  return trimmed.startsWith('[') || trimmed.startsWith('{') ? normalizeBars(JSON.parse(text)) : parseCsv(text);
+}
+
+/** Load and clean bars from a Parquet, Excel, CSV, or JSON file. */
+function loadBars(file, opts = {}) {
+  const bars = normalizeBars(readTable(file, opts)).map(b => ({ ...b, ms: Date.parse(b.t) }));
   const out = [];
   for (const b of bars) {
-    if (b.ms % MINUTE !== 0) throw new Error(`${file}: bar ${b.t} is not on a minute boundary; the backtester needs 1-minute bars`);
+    if (b.ms % MINUTE !== 0) throw new Error(`${file}: bar ${b.t} is not on a minute boundary`);
     if (out.length && out[out.length - 1].ms === b.ms) out[out.length - 1] = b; // keep the last duplicate
     else out.push(b);
   }
-  for (let i = 1; i < out.length; i += 1) {
-    if (out[i].ms - out[i - 1].ms < MINUTE) throw new Error(`${file}: bars closer than 1 minute at ${out[i].t}; the backtester needs 1-minute bars`);
-  }
   return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+}
+
+/** The bar size of a series in minutes (the most common spacing). */
+function barMinutes(bars) {
+  const counts = new Map();
+  for (let i = 1; i < Math.min(bars.length, 5000); i += 1) {
+    const d = (bars[i].ms - bars[i - 1].ms) / MINUTE;
+    counts.set(d, (counts.get(d) || 0) + 1);
+  }
+  let best = null;
+  for (const [d, n] of counts) if (best === null || n > counts.get(best) || (n === counts.get(best) && d < best)) best = d;
+  return best;
 }
 
 /** Start (ms) of the bar of `unit`/`unitNumber` containing the 1-minute bar opening at `ms`. */
@@ -113,4 +158,4 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
   return out.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
 }
 
-module.exports = { MINUTE, parseTime, parseCsv, loadBars, aggregate, bucketStart };
+module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, barMinutes, aggregate, bucketStart, epochMs };

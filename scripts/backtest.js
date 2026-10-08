@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 /**
- * Backtest the autonomous harness on historical bars. The agents, skills,
- * strategies, order gate, MCP gateway, projectx-mcp, and runner are the live
- * ones; the broker is a simulated ProjectX API on loopback and the clock is
- * simulated, so the harness can't tell a replay from the market. See
- * docs/BACKTESTING.md.
+ * Backtest STRATEGY.md strategies on historical bars (Parquet, Excel, CSV, or
+ * JSON), the way algoTraderBot backtests: after every closed bar, settle the
+ * open trade, trail its stop, and check every strategy for an entry, with the
+ * same detectors the live scan uses. See docs/BACKTESTING.md.
  *
  *   node scripts/backtest.js --config backtest.json
- *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.json
+ *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
+ *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
+ *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--out dir]
+ *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
  *
- * `fetch` downloads 1-minute bars from the real ProjectX API
- * (PROJECTX_USERNAME / PROJECTX_API_KEY); the backtest itself never touches
- * the real API.
+ * `fetch` downloads 1-minute bars from ProjectX (PROJECTX_USERNAME /
+ * PROJECTX_API_KEY) to CSV or JSON; backtests themselves only read files.
  */
 
 'use strict';
@@ -36,28 +37,56 @@ async function fetchBars(argv) {
   const to = new Date(arg(argv, '--to') || '');
   const out = arg(argv, '--out');
   if (!contractId || !Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || !out) {
-    throw new Error('usage: backtest.js fetch --contract <id> --from <ISO> --to <ISO> --out <file.json>');
+    throw new Error('usage: backtest.js fetch --contract <id> --from <ISO> --to <ISO> --out <file.csv|file.json>');
   }
   const bars = await createClient().history(contractId, { start: from, end: to });
-  writeJsonAtomic(path.resolve(out), { contractId, barSize: '1 minute', count: bars.length, bars });
+  const file = path.resolve(out);
+  if (file.endsWith('.csv')) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `time,open,high,low,close,volume\n${bars.map(b => [b.t, b.o, b.h, b.l, b.c, b.v].join(',')).join('\n')}\n`);
+  } else {
+    writeJsonAtomic(file, { contractId, barSize: '1 minute', count: bars.length, bars });
+  }
   process.stdout.write(`[backtest] wrote ${bars.length} 1-minute bars for ${contractId} to ${out}\n`);
   return 0;
 }
 
+/** Build a config from command-line flags (or merge them over --config). */
+function configFrom(argv) {
+  const file = arg(argv, '--config');
+  const cfg = file ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+  const symbol = arg(argv, '--symbol');
+  const data = arg(argv, '--data');
+  if (symbol) cfg.symbols = [symbol];
+  if (data) cfg.data = { ...(cfg.data || {}), [(cfg.symbols || ['MNQ'])[0]]: data };
+  const num = name => (arg(argv, name) === undefined ? undefined : Number(arg(argv, name)));
+  if (num('--timeframe') !== undefined) cfg.timeframe = num('--timeframe');
+  if (arg(argv, '--start')) cfg.start = arg(argv, '--start');
+  if (arg(argv, '--end')) cfg.end = arg(argv, '--end');
+  if (arg(argv, '--strategy')) cfg.strategies = arg(argv, '--strategy').split(',').map(s => s.trim()).filter(Boolean);
+  if (argv.includes('--no-gate')) cfg.gate = false;
+  if (num('--size') !== undefined) cfg.size = num('--size');
+  if (num('--risk') !== undefined) cfg.riskPerTrade = num('--risk');
+  if (num('--slippage') !== undefined) cfg.slippageTicks = num('--slippage');
+  if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
+  return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };
+}
+
 async function main(argv) {
   if (argv[0] === 'fetch') return fetchBars(argv.slice(1));
-  const configPath = arg(argv, '--config');
-  if (!configPath) throw new Error('usage: backtest.js --config <backtest.json> | backtest.js fetch ...');
-  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  if (!arg(argv, '--config') && !arg(argv, '--data')) {
+    throw new Error('usage: backtest.js --config <backtest.json> | --data <bars file> --symbol MNQ [options] | fetch ...');
+  }
+  const { cfg, baseDir } = configFrom(argv);
   const log = msg => process.stdout.write(`[backtest] ${msg}\n`);
-  const { report, runDir } = await runBacktest(raw, {
-    root: ROOT,
-    baseDir: path.dirname(path.resolve(configPath)),
-    defaultOutRoot: path.join(harnessHome(), 'backtests'),
-    log,
-  });
+  const started = Date.now();
+  const { report, runDir } = runBacktest(cfg, { root: ROOT, baseDir, outRoot: path.join(harnessHome(), 'backtests'), log });
   const s = report.summary;
-  log(`done: ${s.trades} trades, net ${s.netPnL}, win rate ${s.winRate === null ? '-' : `${Math.round(s.winRate * 100)}%`}, PF ${s.profitFactor ?? '-'}, max DD ${s.maxDrawdown}${report.meta.stopped ? ` (stopped: ${report.meta.stopped})` : ''}`);
+  const pct = x => (x === null ? '-' : `${Math.round(x * 100)}%`);
+  log(`${s.trades} trades | win ${pct(s.winRate)} | mean ${s.meanR ?? '-'}R | sum ${s.sumR ?? '-'}R | PF ${s.profitFactorR ?? '-'} | net $${s.netPnL ?? 0} | max DD $${s.maxDrawdown} | ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  for (const [name, x] of Object.entries(report.byStrategy)) {
+    log(`  ${name.padEnd(12)} n=${String(x.trades).padEnd(4)} win=${pct(x.winRate).padEnd(4)} meanR=${x.meanR} sumR=${x.sumR}`);
+  }
   log(`report: ${path.join(runDir, 'report.md')}`);
   return 0;
 }

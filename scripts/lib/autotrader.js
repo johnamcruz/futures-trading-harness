@@ -22,7 +22,7 @@ const DEFAULTS = {
   workdir: 'workspace',
   timeframe: 3, // minutes per bar; a cycle runs after each closed bar
   trigger: 'bar', // 'bar': every closed bar; 'signal': only when a strategy fires or a position is open
-  bars: 300, // closed bars written to dataDir for the agents
+  bars: 500, // closed bars written to dataDir and scanned each bar (algoTraderBot's BARS_WINDOW)
   dataDir: null, // default ~/.futures-trading-harness/bars (runner-owned; agents can read it but not write it)
   barDelaySeconds: 2, // wait after the scheduled close before polling
   barPollSeconds: 2, // between polls while waiting for the closed bar

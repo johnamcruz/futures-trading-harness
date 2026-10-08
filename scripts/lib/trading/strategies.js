@@ -15,15 +15,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
-const { parseWindows, inWindow } = require('./clock');
-const { PARAMS, snapshot } = require('./market-snapshot');
+const { PARAMS } = require('./market-snapshot');
+const { parseWindows } = require('./clock');
 const { normalizeBars } = require('./indicators');
-const { compileRules, evaluateRules } = require('./rules');
-const { TAGS: REGIME_TAGS, classifyRegime, regimeFits } = require('./regime');
+const { compileRules } = require('./rules');
+const { TAGS: REGIME_TAGS } = require('./regime');
+const { createEvaluator, inSessions } = require('./evaluator');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // Built-in detectors, `rules` (declarative conditions in the frontmatter), or `manual` (the LLM judges the body).
-const SIGNALS = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'rules', 'manual'];
+const SIGNALS = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote', 'rules', 'manual'];
 const BUILT_IN_SIGNALS = SIGNALS.filter(s => s !== 'rules' && s !== 'manual');
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,
@@ -51,8 +52,9 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
-  'signal', 'rules', 'params', 'filters', 'risk', 'source'];
+  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'source'];
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
+const EXIT_KEYS = ['target_r', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -147,8 +149,40 @@ function validateStrategy(data, body, folderName) {
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
   }
+  if (data.exit !== undefined) {
+    const x = data.exit;
+    if (!x || typeof x !== 'object' || Array.isArray(x)) {
+      errors.push('exit: a map with target_r and/or trail_activate_r + trail_giveback_r');
+    } else {
+      for (const k of Object.keys(x)) if (!EXIT_KEYS.includes(k)) errors.push(`exit.${k}: unknown key${suggest(k, EXIT_KEYS)}`);
+      for (const k of ['target_r', 'trail_activate_r', 'trail_giveback_r']) {
+        if (x[k] !== undefined) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
+      }
+      if (x.max_bars !== undefined) req(Number.isInteger(x.max_bars) && x.max_bars > 0, 'exit.max_bars: a whole number of bars');
+      req((x.trail_activate_r === undefined) === (x.trail_giveback_r === undefined), 'exit: trail_activate_r and trail_giveback_r go together');
+      req(x.target_r !== undefined || x.trail_activate_r !== undefined, 'exit: needs target_r, or trail_activate_r and trail_giveback_r');
+      if (x.target_r !== undefined && x.trail_activate_r !== undefined) {
+        req(x.trail_activate_r < x.target_r, 'exit: with both, trail_activate_r must be below target_r (the target would fill first)');
+      }
+    }
+  }
   for (const h of REQUIRED_SECTIONS) req(body.includes(h), `body: missing section "${h}"`);
   return errors;
+}
+
+/**
+ * The exit plan for a trade in strategy `s`: fixed target and/or trailing
+ * stop, in R (1R = the initial stop distance). Without an exit block the
+ * target is risk.min_rr, as a bracket.
+ */
+function exitPlan(s) {
+  const x = s.exit || {};
+  return {
+    targetR: x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
+    trailActivateR: x.trail_activate_r ?? null,
+    trailGivebackR: x.trail_giveback_r ?? null,
+    maxBars: x.max_bars ?? null,
+  };
 }
 
 function loadStrategyFile(file) {
@@ -195,82 +229,23 @@ function loadStrategies(pluginRoot, env = process.env) {
   return { strategies: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)), problems };
 }
 
-function filterFailures(strategy, snap) {
-  const f = strategy.filters || {};
-  const fails = [];
-  const adx = snap.trend.adx;
-  if (f.adx_min !== undefined && !(adx !== null && adx >= f.adx_min)) fails.push(`ADX ${adx} < ${f.adx_min}`);
-  if (f.adx_max !== undefined && !(adx !== null && adx <= f.adx_max)) fails.push(`ADX ${adx} > ${f.adx_max}`);
-  if (f.adx_slope_min !== undefined && !(snap.trend.adxSlope !== null && snap.trend.adxSlope >= f.adx_slope_min)) {
-    fails.push(`ADX slope ${snap.trend.adxSlope} < ${f.adx_slope_min}`);
-  }
-  if (f.max_vwap_distance_atr !== undefined) {
-    const vwap = snap.levels.vwapRth ?? snap.levels.vwapSession;
-    const atr = snap.volatility.atr14;
-    const dist = vwap !== null && atr ? Math.abs(snap.last.c - vwap) / atr : null;
-    if (dist === null || dist > f.max_vwap_distance_atr) fails.push(`VWAP distance ${dist === null ? 'unknown' : dist.toFixed(2)} ATR > ${f.max_vwap_distance_atr}`);
-  }
-  return fails;
-}
-
-function inSessions(strategy, now) {
-  if (!Array.isArray(strategy.sessions) || strategy.sessions.length === 0) return true;
-  return parseWindows(strategy.sessions.join(',')).windows.some(w => inWindow(now, w));
-}
-
 /**
- * Evaluate every valid, non-disabled strategy for `symbol` against bars.
- * Mechanical strategies report fired/not fired with filter results; manual
- * strategies are listed for the LLM to evaluate from their Markdown body.
+ * Evaluate every valid, non-disabled strategy for `symbol` on the last closed
+ * bar. Mechanical strategies report fired/not fired with filter results;
+ * manual strategies are listed for the LLM to evaluate from their Markdown
+ * body. Sessions are checked at `now` (default: the last bar's close).
  */
 function scan(strategies, bars, { symbol, now = null } = {}) {
   const root = String(symbol || '').toUpperCase();
+  const norm = normalizeBars(bars);
+  if (norm.length < 3) throw new Error(`need at least 3 bars, got ${norm.length}`);
+  const ev = createEvaluator(norm);
   const results = [];
-  const regime = classifyRegime(normalizeBars(bars));
-  const scanOne = s => {
-    if (!s.valid || s.status === 'disabled') return;
-    if (root && !s.instruments.includes(root)) return;
-    const snap = snapshot(bars, s.params || {});
-    const at = now || new Date(snap.last.t);
-    const session = inSessions(s, at);
-    const inRegime = regimeFits(s.regimes, regime);
-    const base = {
-      name: s.name, status: s.status, timeframe: s.timeframe, inSession: session,
-      regime: regime ? regime.primary : null, regimes: s.regimes || null, inRegime,
-    };
-    if (s.signal === 'manual') {
-      results.push({ ...base, signal: 'manual', candidate: session && inRegime, note: 'evaluate the trigger from STRATEGY.md' });
-      return;
-    }
-    let direction;
-    let ruleDetail;
-    if (s.signal === 'rules') {
-      const norm = normalizeBars(bars);
-      const r = evaluateRules(s.compiledRules, norm, { ...PARAMS, ...(s.params || {}) });
-      direction = r.direction;
-      ruleDetail = { long: r.long, short: r.short };
-    } else {
-      direction = snap.signals[s.signal];
-    }
-    const fails = filterFailures(s, snap);
-    const atrMult = /^atr:(.+)$/.exec(s.risk.stop);
-    const atr20 = snap.volatility.atr20;
-    const stopDistance = atrMult && atr20 ? Number(atrMult[1]) * atr20 : null;
-    results.push({
-      ...base,
-      signal: s.signal,
-      direction: direction || null,
-      filtersFailed: fails,
-      candidate: Boolean(direction) && session && inRegime && fails.length === 0,
-      entryRef: snap.last.c,
-      stopDistance: stopDistance === null ? null : Math.round(stopDistance * 1e4) / 1e4,
-      minRR: s.risk.min_rr,
-      ...(ruleDetail ? { rules: ruleDetail } : {}),
-    });
-  };
   for (const s of strategies) {
+    if (!s.valid || s.status === 'disabled') continue;
+    if (root && !s.instruments.includes(root)) continue;
     try {
-      scanOne(s);
+      results.push(ev.at(s, norm.length - 1, { now, describe: true }));
     } catch (err) {
       // One broken strategy must not stop the others from being scanned.
       results.push({ name: s.name, status: s.status, error: err.message, candidate: false });
@@ -296,6 +271,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null)
 }
 
 module.exports = {
+  exitPlan,
   STATUSES,
   SIGNALS,
   BUILT_IN_SIGNALS,

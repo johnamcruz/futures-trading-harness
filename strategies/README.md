@@ -16,7 +16,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `keltner` | Keltner breakout | active |
 | `supertrend` | SuperTrend flip | active |
 | `bos` | break of structure | active |
-| `cisd_ote` | manual (12m CISD + fib zone) | active |
+| `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
 | `vwap_reclaim` | rules (written in Markdown) | paper |
 
 ## Add a strategy
@@ -33,9 +33,19 @@ No strategy needs code. A mechanical trigger is written as `signal: rules`
 with `long:`/`short:` condition lists in the frontmatter (see
 `vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
-`signal: manual` and is judged by the agents from the body. The five built-in
+`signal: manual` and is judged by the agents from the body. The six built-in
 detectors exist only because those strategies were ported verbatim from
 algoTraderBot.
+
+The ports trade exactly as algoTraderBot's detectors do:
+`tests/lib/parity.test.js` checks every signal and stop against algoTraderBot's
+own output on its data. Their frontmatter adds no extra gates: no
+`sessions`, `regimes`, or `filters`. The runner's sessions and end of day
+decide when they trade. To adapt one to a regime, add `regimes:` (or a
+filter) in a copy, and backtest both (`scripts/backtest.js`, see
+docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
+initial stop (0.5 × ATR(20)) until +2R, then trail 0.5R behind the best
+price (`exit:` block).
 
 ## Commands
 

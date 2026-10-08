@@ -327,9 +327,9 @@ function holds(cond, get, i) {
  * Evaluate compiled rules on the last bar. Returns { direction, long, short }
  * where long/short list each condition with its result (for explanations).
  */
-function evaluateRules(compiled, bars, params) {
-  const get = seriesSource(bars, params);
-  const i = bars.length - 1;
+function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: source = null } = {}) {
+  const get = source || seriesSource(bars, params);
+  const i = index;
   const missing = c => [c.left, c.right].some(e => valueAt(e, get, i) === null)
     || (c.op.startsWith('crosses_') && [c.left, c.right].some(e => valueAt(e, get, i - 1) === null));
   const side = conds => conds.map(c => {

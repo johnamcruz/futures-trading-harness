@@ -1,18 +1,17 @@
 ---
 name: orb
 description: Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from algoTraderBot. Use when price closes beyond the opening range or when planning the morning session.
-version: 1
+version: 2
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-sessions: ["09:45-11:30@America/New_York"]
-regimes: [trend, transition, high-vol]
 signal: orb
 params:
   orbMinutes: 15
   orbAdx: 18
-filters:
-  adx_min: 18
+exit:
+  trail_activate_r: 2
+  trail_giveback_r: 0.5
 risk:
   stop: atr:0.5
   min_rr: 2

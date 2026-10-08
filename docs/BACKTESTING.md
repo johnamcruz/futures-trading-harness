@@ -1,117 +1,155 @@
 # Backtesting
 
-The backtester replays historical bars through the real autonomous loop. The
-runner, prompts, agents, skills, strategies, order gate, MCP gateway, and
-projectx-mcp are the live ones. Only two pieces are simulated:
+`scripts/backtest.js` replays historical bars through the strategies the way
+algoTraderBot's backtester does. After every closed bar it does three things,
+in order:
 
-- **The broker.** A ProjectX Gateway API on `127.0.0.1` answers the same REST
-  endpoints as `api.topstepx.com` (accounts, contracts, bars, orders,
-  positions, trades) from historical 1-minute bars. The runner's REST client
-  and projectx-mcp talk to it exactly as they talk to TopstepX.
-- **The clock.** Every harness process (hooks, the gateway, projectx-mcp
-  behind it, the strategy and snapshot scripts) reads the simulated time, so
-  sessions, the trading day, journal timestamps, and the order gate's time
-  checks all follow the replay.
+1. **Settle.** A simulated broker settles the open trade against the bar.
+2. **Manage.** The stop is trailed, and the trade can time out or be closed
+   at end of day.
+3. **Look for an entry.** When flat, every strategy is checked for an entry
+   on that bar.
 
-So the harness can't tell a backtest from the market, and what you measure is
-the system you will run live.
+The entry check is the same code the live scan runs
+(`scripts/lib/trading/evaluator.js`). So a backtest trades exactly the
+entries the live harness would see, with no model or API in the loop.
 
 ## When to Use
 
-- Before promoting a strategy from `paper` to `active`.
-- After changing a strategy, a skill, or the model, to compare runs on the
-  same days.
-- To see how the agents behave on a specific day (trend, chop, news spike).
+- Before setting a strategy to `status: active`, and after any change to it.
+- To compare exit settings (fixed target vs trailing) or sizing on the same
+  data.
+- To check a new `rules` strategy fires where you expect.
 
 ## How It Works
 
 ```bash
-# 1. Get 1-minute bars (the backtest never calls the real API; fetch does)
-node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 \
-  --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.json
+# A quick run on one file
+node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
 
-# 2. Configure: an autotrader config plus a "backtest" block
+# A configured run
 cp mcp-configs/backtest.example.json backtest.json
-
-# 3. Run
 node scripts/backtest.js --config backtest.json
+
+# Optional: download 1-minute bars from ProjectX to a file first
+node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
 ```
 
-Data is a JSON array of `{t,o,h,l,c,v}` 1-minute bars (projectx `get_bars`
-format, or the output of `fetch`), or a CSV with `time,open,high,low,close`
-and optionally `volume` (ISO or epoch times, UTC unless an offset is given).
-Bars before `start` are visible as history, so include a few days of warm-up.
+### Data
 
-`backtest` settings:
+Bars come from files:
+
+- **Parquet** (`.parquet`, `.pq`) as written by pandas/pyarrow, polars,
+  fastparquet, DuckDB, and the like. Supported:
+  - codecs: snappy, gzip, zstd, brotli, LZ4, none
+  - dictionary and plain encodings
+  - data pages v1 and v2
+  - timestamps in ms, µs, ns, or INT96
+- **Excel** (`.xlsx`, `.xlsm`): the first sheet, or `sheet` in the config.
+- **CSV** and **JSON** (projectx `get_bars` output).
+
+The table needs a header with a time column (`time`, `timestamp`,
+`datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
+`high`, `low`, `close`, and optionally `volume`. Any letter case works.
+
+- **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
+  Excel dates.
+- **Time zone:** times with no zone are UTC.
+- **Bar times:** each bar is stamped with its open time.
+
+Use bars at the trading timeframe, or finer bars that divide it (1-minute
+data runs a 3-minute backtest). Micro contracts can use the full contract's
+bars (`MNQ` on `NQ` data), as algoTraderBot does.
+
+### Each bar
+
+| Step | What happens |
+|---|---|
+| Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
+| Manage | **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (with harness rules). |
+| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or cisd_ote's pivot) rounded to whole ticks. The target is set when the exit plan has one. |
+
+**Harness rules** (`gate: true`, the default) apply what the live harness
+enforces:
+
+- The runner's `sessions` and `eodAt`.
+- From the order gate:
+  - no-entry windows
+  - the loss-streak cooldown
+  - the daily losing-trade count
+  - the daily entry cap
+- projectx-mcp's daily dollar loss limit (`maxDailyLoss`).
+
+**`gate: false`** (`--no-gate`) trades around the clock without those
+limits, the way algoTraderBot trades. Use it to compare with algoTraderBot.
+
+### Exits
+
+A strategy's `exit` block sets how its trades end. 1R is the initial stop
+distance.
+
+```yaml
+exit:
+  trail_activate_r: 2     # hold the initial stop until the trade is up 2R
+  trail_giveback_r: 0.5   # then trail 0.5R behind the best price
+  # target_r: 3           # optional fixed target (above trail_activate_r)
+  # max_bars: 40          # optional time stop
+```
+
+The ported strategies use the 2R / 0.5R trail. Without an `exit` block, the
+target is `risk.min_rr` (a bracket). The live runner trails stops with the
+same rule (see the autonomous-trading skill).
+
+### Settings
 
 | Key | Default | Meaning |
 |---|---|---|
-| `start`, `end` | required | Replay window (ISO) |
-| `instruments.<SYMBOL>.data` | required | 1-minute bar file, relative to the config file |
-| `instruments.<SYMBOL>.contractId` | `CON.F.US.<SYMBOL>.BT` | Contract id the agents see |
-| `instruments.<SYMBOL>.tickSize`, `tickValue`, `feesPerSide` | known for MNQ MES MYM M2K NQ ES YM RTY | Contract specs |
-| `startingBalance` | 50000 | Account balance |
-| `slippageTicks` | 1 | Against you on market and stop fills |
-| `dailyLossLimit` | none | Flatten and lock until the next trading day (17:00 CT) |
-| `maxLossLimit` | none | Trailing from the end-of-day balance high, capped at the start balance; flatten and lock for good |
-| `latency` | `real` | `real`: the market moves while the agents think, as live. `none`: frozen during a cycle (optimistic) |
-| `outDir` | `~/.futures-trading-harness/backtests/<run>` | Results and isolated state |
-
-The rest of the config is the autotrader's (`harness`, `model`, `symbols`,
-`timeframe`, `trigger`, `cycle`, `sessions`, `premarketAt`, `eodAt`, ...).
-`paper` and `dataDir` are ignored; the account is the simulated one.
-
-### Fill model
-
-Conservative on purpose:
-
-- Only bars that have closed by the simulated time are visible.
-- Market orders fill at the last closed 1-minute close plus slippage.
-  Marketable limits fill at that close.
-- Resting stops trigger on a touch and fill at the worse of the stop and the
-  bar's open, plus slippage. Resting limits need the price to trade through
-  (or open beyond) them.
-- When one 1-minute bar touches both a stop and a target, the stop fills.
-- Brackets become an OCO pair at the entry fill. `close_position` leaves
-  resting orders, as on TopstepX.
-- Orders are refused while the market is closed (17:00-18:00 ET, weekends) or
-  when the data has no bar for 30 minutes (holidays).
-- `get_quote` has no simulated feed: it reports no quote and the agents use
-  bars.
-
-### Isolation
-
-Each run has its own state directory (`FTH_HOME`): journal, gate log, kill
-switch, bar files, runner state, and harness output (`cycles.log`). Real
-credentials are replaced before any process starts, and the gateway points
-projectx-mcp at the simulator whatever the MCP client config says. The
-simulated clock only switches on with `FTH_BACKTEST=1` and a loopback
-simulator URL, so a live process never has its clock moved.
+| `symbols`, `timeframe` | `["MNQ"]`, 3 | Contracts and bar size (minutes) |
+| `data` | required | `{ "MNQ": "file" }` or `{ "MNQ": { "file", "sheet", "tickSize", "tickValue", "feesPerSide" } }` |
+| `start`, `end` | all data | ISO date or time; `end` exclusive |
+| `strategies` | all mechanical ones on the timeframe | Names in priority order |
+| `gate` | true | Harness rules, as above |
+| `sessions`, `eodAt` | 09:35-15:00 ET, 15:50 ET | Runner schedule (with `gate`) |
+| `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk |
+| `slippageTicks` | 0 | Against you on entries and stop fills |
+| `feesPerSide` | per contract (micros $0.37) | Dollars per contract per side |
+| `maxDailyLoss` | 500 | Daily dollar loss that ends the day (0 = off) |
+| `window` | 500 | Bars of history per evaluation (algoTraderBot's BARS_WINDOW) |
+| `outDir` | `<FTH_HOME>/backtests/<run>` | Results |
 
 ### Results
 
-`report.md` and `report.json` in the run directory:
+Each run writes these files to the run directory:
 
-- **Summary:** net P&L after fees, trades, win rate, profit factor,
-  expectancy, max drawdown, harness cycles, and account locks.
-- **Breakdowns:** by setup (from the `setup:<name>` of the order that opened
-  each round trip) and by day.
-- **Trade list:** every round trip.
+- **`report.md` and `report.json`:**
+  - **R statistics**, as algoTraderBot reports them: trades, win rate, mean
+    and total R, profit factor, MFE, and capture (total R ÷ total MFE).
+  - **Dollar figures** after fees: net P&L, profit factor, and max drawdown.
+  - **Breakdowns** by strategy, exit reason, symbol, and month.
+- **`trades.csv`:** every trade.
+
+### Strategy correctness
+
+`tests/lib/parity.test.js` runs the harness's detectors over algoTraderBot's
+own NQ and RTY 3-minute data. It checks each of the six strategies against
+the signals algoTraderBot's Python detectors produced on the same bars: same
+bar, same direction, same stop.
+
+We also ran the same check over 17,500 bars on NQ, ES, RTY, YM, and GC. All
+3,623 signals matched.
 
 ## Examples
 
-A week of MNQ on 3-minute bars with the lean cycle at real latency runs about
-600 cycles, roughly one per bar. Each cycle is one model session, so the run
-takes as long as the market did during trading hours. Ways to make it
-cheaper:
-
-- `"trigger": "signal"` only starts a cycle when a mechanical strategy fires or
-  a position is open.
-- A shorter `sessions` window.
-- `"latency": "none"` for a first pass. It is optimistic because the market
-  waits for the model, so confirm with `real` before trusting a result.
-
 ```text
-[backtest] done: 14 trades, net 212.5, win rate 57%, PF 1.6, max DD 96.25
-[backtest] report: ~/.futures-trading-harness/backtests/2026-10-08T.../report.md
+$ node scripts/backtest.js --data ../algoTraderBot/data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01
+[backtest] bos, cisd_ote, ema_cross, keltner, orb, supertrend, vwap_reclaim on MNQ (2701 3m bars)
+[backtest] 85 trades | win 24% | mean -0.281R | sum -23.92R | PF 0.64 | net $-1707.4 | max DD $1967.24 | 5.1 s
+[backtest]   bos          n=42   win=24%  meanR=-0.215 sumR=-9.03
+...
 ```
+
+Without algoTraderBot's model filter (each signal graded by its Chronos +
+XGBoost model, proba ≥ floor), the raw mechanical entries are not
+profitable. That matches why algoTraderBot grades them. Here, the LLM's
+analysis plays that grading role, so use the backtest for strategy
+correctness and exit design. Judge the harness's edge from paper trading.

@@ -148,9 +148,19 @@ function swings(bars, k = 2) {
   return { high, low, highIdx, lowIdx };
 }
 
+// New York day/minute per timestamp, memoized: the same bars are seen again
+// on every closed bar (live) and in every window (backtests).
+const ET_CACHE = new Map();
 function etInfo(t) {
-  const p = zonedParts(new Date(t), ET);
-  return { day: `${p.year}-${p.month}-${p.day}`, minute: p.hour * 60 + p.minute };
+  const ms = typeof t === 'number' ? t : Date.parse(t);
+  let v = ET_CACHE.get(ms);
+  if (!v) {
+    const p = zonedParts(new Date(ms), ET);
+    v = { day: `${p.year}-${p.month}-${p.day}`, minute: p.hour * 60 + p.minute };
+    if (ET_CACHE.size > 500000) ET_CACHE.clear();
+    ET_CACHE.set(ms, v);
+  }
+  return v;
 }
 
 /**

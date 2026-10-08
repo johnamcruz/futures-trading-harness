@@ -10,8 +10,6 @@
 
 'use strict';
 
-require('./lib/sim-clock').installSimClock(process.env);
-
 const fs = require('fs');
 const path = require('path');
 const { loadStrategies, scan } = require('./lib/trading/strategies');

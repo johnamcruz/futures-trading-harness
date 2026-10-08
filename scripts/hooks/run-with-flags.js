@@ -14,8 +14,6 @@
 
 'use strict';
 
-require('../lib/sim-clock').installSimClock(process.env);
-
 const fs = require('fs');
 const path = require('path');
 const { isHookEnabled, isDryRun } = require('../lib/hook-flags');

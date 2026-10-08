@@ -1,16 +1,14 @@
 ---
 name: ema_cross
 description: 9/20 EMA crossover trend-continuation strategy gated by ADX >= 18 on 3-minute futures bars, ported from algoTraderBot. Use when the fast EMA crosses the slow EMA in a trending regime.
-version: 1
+version: 2
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-sessions: ["09:35-11:30@America/New_York", "13:30-15:55@America/New_York"]
-regimes: [trend, transition]
 signal: ema_cross
-filters:
-  adx_min: 18
-  max_vwap_distance_atr: 2
+exit:
+  trail_activate_r: 2
+  trail_giveback_r: 0.5
 risk:
   stop: atr:0.5
   min_rr: 2
