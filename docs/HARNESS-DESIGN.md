@@ -104,11 +104,19 @@ Further safeguards:
 - **Leftover orders.** Before each bar's cycle, the runner cancels working
   orders on a flat contract that are not pending entries recorded by the
   gateway.
+- **No cycles.** With the kill switch on or outside the sessions, after the
+  day has traded, the runner keeps housekeeping until end of day. It cancels
+  every working order on a flat contract, including pending entries, because
+  no cycle would manage their fill. It closes at market any position that
+  has no protective stop, and it keeps trailing protected positions.
+- **Workspace guard.** When a run changes the workspace's instructions or
+  settings, the runner appends the change to the kill-switch file, even if
+  the file is already there for another reason.
 - **No crash exits.** A pass that throws is logged and counted toward the
   kill switch, and the loop carries on.
 
-Backtests (`scripts/backtest.js`, see [BACKTESTING.md](BACKTESTING.md)) drive
-the same runner against a simulated broker with a simulated clock.
+Backtests (`scripts/backtest.js`, see [BACKTESTING.md](BACKTESTING.md)) replay
+bar files through the same strategy evaluator the live scan uses.
 
 ## Known limits
 

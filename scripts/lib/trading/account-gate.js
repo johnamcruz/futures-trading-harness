@@ -270,6 +270,15 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
     add('modify-entry', `Order ${order.id} doesn't work an open ${order.contractId} position (it is an entry or a leftover), so repricing it could open a trade without the entry checks. Cancel it and place a new order through the gate.`);
     return violations;
   }
+  // An order bigger (with its same-side siblings) than the position it works
+  // would, once moved to the market, close it and open the other way: cut the
+  // sizes to the position first, then move it.
+  const group = isStop ? STOP_TYPES : LIMIT_TYPES.has(Number(order.type)) ? LIMIT_TYPES : new Set([Number(order.type)]);
+  const sameSide = restingSize(orders, order.contractId, orderSign, group);
+  if (sameSide > Math.abs(net)) {
+    add('modify-protection', `Resting ${isStop ? 'stops' : 'limits'} on this side (${sameSide}) exceed the open ${root} position (${Math.abs(net)}); moving order ${order.id} could flip it. Cut the sizes to the position first (modify_order {size, reason: "[protect] ..."}), then move it.`);
+    return violations;
+  }
   if (!isStop) return violations;
   const old = order.stopPrice === null || order.stopPrice === undefined ? NaN : Number(order.stopPrice);
   for (const field of fields.filter(f => f !== 'limitPrice')) {

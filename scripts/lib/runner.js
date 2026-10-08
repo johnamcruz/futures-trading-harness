@@ -38,6 +38,7 @@ const MAX_POLL_MS = 10000;
 const LOOKUP_RETRY_MS = 30000;
 const MAX_RETRY_MS = 60000;
 const FILL_GRACE_MS = 30000;
+const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 
 function createRunner(deps) {
   const {
@@ -114,11 +115,13 @@ function createRunner(deps) {
   }
 
   /** Cancel leftover orders on a flat contract root (never pending entries). */
-  async function cleanupFlat(item, { positions, orders }) {
+  async function cleanupFlat(item, { positions, orders }, { noCycles = false } = {}) {
     const root = contractRoot(item.contractId);
     // Flat means no position in any month of the root (not months netting to zero).
     if (positions.some(p => contractRoot(p.contractId) === root && Number(p.size || 0) > 0)) return;
-    const entries = entryOrderIds();
+    // When no cycle may run (kill switch, outside the sessions), a pending
+    // entry that fills would have no one to manage it: cancel those too.
+    const entries = noCycles ? new Set() : entryOrderIds();
     for (const o of orders.filter(x => contractRoot(x.contractId) === root && !entries.has(Number(x.id)))) {
       await client.cancelOrder(cfg.account, o.id);
       log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
@@ -188,14 +191,16 @@ function createRunner(deps) {
     // counts that bar, as the backtest does) and hasn't been applied yet.
     const bars = item.bars.filter(b => Date.parse(b.t) >= t.since - FILL_GRACE_MS && (t.lastBarT === null || Date.parse(b.t) > Date.parse(t.lastBarT)));
     if (!bars.length) return;
-    const resting = stopOrder ? Number(stopOrder.stopPrice) : t.stop;
+    // With no working stop nothing rests: the planned stop is a level the
+    // price must not go through either.
+    const resting = stopOrder ? Number(stopOrder.stopPrice) : protective.length ? t.stop : null;
     let peakR = t.peakR;
-    let target = resting;
+    let target = resting ?? t.stop;
     let cross = null;
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
-      if (sign * (target - resting) > 0 && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
+      if ((resting === null || sign * (target - resting) > 0) && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
       const step = trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
       peakR = step.peakR;
       target = step.stop;
@@ -206,7 +211,7 @@ function createRunner(deps) {
       const level = cross.stop;
       await client.closePosition(cfg.account, item.contractId);
       save({ ...t, peakR, lastBarT });
-      log(`${item.symbol}: trail: price went through the new stop ${level} (resting ${resting}); closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
+      log(`${item.symbol}: trail: price went through the new stop ${level} (resting ${resting ?? 'none'}); closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
       for (const o of orders.filter(x => x.contractId === item.contractId)) {
         try {
           await client.cancelOrder(cfg.account, o.id);
@@ -217,9 +222,14 @@ function createRunner(deps) {
       return;
     }
     save({ ...t, peakR, lastBarT });
-    if (sign * (target - resting) < tick - 1e-9) return;
     if (!stopOrder) {
+      if (sign * (target - t.stop) < tick - 1e-9) return;
       log(`${item.symbol}: trail wants the stop at ${target} but there is no single working stop order to move`, 'error');
+      return;
+    }
+    if (sign * (target - resting) < tick - 1e-9) return;
+    if (Number(stopOrder.size) > Number(p.size)) {
+      log(`${item.symbol}: trail: stop ${stopOrder.id} (size ${stopOrder.size}) is bigger than the position (${p.size}); not moving it toward the market`, 'error');
       return;
     }
     await client.modifyStop(cfg.account, stopOrder.id, target);
@@ -228,11 +238,22 @@ function createRunner(deps) {
   }
 
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
-  async function housekeeping(item) {
+  async function housekeeping(item, { noCycles = false } = {}) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
       const account = await client.accountState(cfg.account);
-      await cleanupFlat(item, account);
+      await cleanupFlat(item, account, { noCycles });
+      // No cycle will come to protect a position with no stop: flatten it.
+      const p = account.positions.find(x => x.contractId === item.contractId && Number(x.size || 0) > 0);
+      if (noCycles && p) {
+        const sign = p.type === 1 ? 1 : -1;
+        const stops = account.orders.filter(o => o.contractId === item.contractId && STOP_ORDER_TYPES.has(Number(o.type)) && (Number(o.side) === 0 ? 1 : -1) === -sign);
+        if (!stops.length) {
+          await client.closePosition(cfg.account, item.contractId);
+          log(`${item.symbol}: open position with no protective stop while no cycle can run (kill switch or outside sessions); closed at market`, 'error');
+          return;
+        }
+      }
       await trailPosition(item, account);
     } catch (err) {
       log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');
@@ -307,7 +328,8 @@ function createRunner(deps) {
     }
     if (ready.length) {
       // Trailing stops and leftover orders first: they only ever reduce risk.
-      for (const item of ready) await housekeeping(item);
+      const noCycles = d.action === 'housekeep';
+      for (const item of ready) await housekeeping(item, { noCycles });
       if (state.trails) saveState(state);
       // Re-check: a symbol's poll may have taken a while, the kill switch may be on now.
       const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() });

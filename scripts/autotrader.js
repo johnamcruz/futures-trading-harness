@@ -123,12 +123,14 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   if (!changed.length) return true; // as at start (or restored)
   if (workspaceAcknowledged && !changedFiles(workspaceAcknowledged, current).length) return true; // already reported
   const reason = `workspace files changed ${when}: ${changed.join(', ')}. Review the change (git diff workspace/; node scripts/sync-harness.js restores generated files), then remove this file to resume.`;
-  try {
-    if (!fs.existsSync(killSwitchFile)) fs.writeFileSync(killSwitchFile, `${reason}\n`);
-  } catch (_err) {
-    // reported below either way
-  }
   process.stderr.write(`[autotrader] ${reason}\n`);
+  try {
+    // Appended, so a kill switch already on for another reason carries this
+    // alarm too: clearing that reason must not resume on changed files.
+    fs.appendFileSync(killSwitchFile, `${reason}\n`);
+  } catch (_err) {
+    return false; // not recorded anywhere the operator must clear: trip again next time
+  }
   // The kill switch now carries the alarm. Restoring the files, or removing
   // the kill switch after looking at them, resumes trading; any further
   // change trips the guard again.

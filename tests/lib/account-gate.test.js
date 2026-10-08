@@ -157,6 +157,9 @@ test('modify_order: sizes may only shrink; every price field must keep a protect
   assert.deepStrictEqual(run({ orderId: 99, size: 1 }), ['modify-protection'], 'unknown order: the change cannot be checked');
   const trailing = { ...stop, type: 5 };
   assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21490, trailPrice: 21000 }, positions: long2, orders: [trailing], config })), ['modify-protection']);
+  // After a scale-out, orders still sized for 2 would flip a 1-lot once moved to the market.
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 12, limitPrice: 21510 }, positions: long1, orders: [stop, target], config })), ['modify-protection'], 'oversized target: cut it first');
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21495 }, positions: long1, orders: [stop], config })), ['modify-protection'], 'oversized stop: cut it first');
 });
 
 test('ledger: entries and exits anchor on the right net (root for entries, contract for exits)', () => {
