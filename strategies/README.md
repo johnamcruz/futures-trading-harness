@@ -18,6 +18,13 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `bos` | break of structure | active |
 | `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
 | `vwap_reclaim` | rules (written in Markdown) | paper |
+| `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | paper |
+| `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
+
+The order-flow pair runs on 1-minute bars: set the runner's `timeframe: 1`
+(and backtest with 1-minute data that has a volume column). `ofi` trades
+real flow, where the imbalance moves price; `ofi_absorption` trades the
+reversal when it doesn't.
 
 ## Add a strategy
 

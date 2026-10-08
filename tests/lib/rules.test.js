@@ -80,6 +80,7 @@ test('overnight and prior levels are causal: each bar only sees earlier bars', (
   // 2026-10-06 RTH (ET = UTC-4): 13:30-20:00 UTC, then Globex from 22:00 UTC.
   const mk = (iso, h, l) => ({ t: iso, o: l, h, l, c: l, v: 1 });
   const b = normalizeBars([
+    mk('2026-10-06T13:00:00Z', 101, 100), // pre-market: the RTH open is seen
     mk('2026-10-06T13:30:00Z', 110, 100),
     mk('2026-10-06T19:57:00Z', 120, 105), // RTH high 120
     mk('2026-10-06T22:00:00Z', 115, 112), // Globex opens
@@ -88,16 +89,20 @@ test('overnight and prior levels are causal: each bar only sees earlier bars', (
     mk('2026-10-07T13:30:00Z', 126, 120), // RTH next day
   ]);
   const lv = causalLevels(b);
-  assert.ok(Number.isNaN(lv.prior_high[0]) && Number.isNaN(lv.prior_high[1]), 'no completed RTH day yet');
-  assert.strictEqual(lv.prior_high[2], 120);
-  assert.strictEqual(lv.prior_low[2], 100);
-  assert.ok(Number.isNaN(lv.overnight_high[2]), 'first Globex bar has no earlier overnight bars');
-  assert.strictEqual(lv.overnight_high[3], 115);
-  assert.strictEqual(lv.overnight_high[4], 118, 'the current bar is excluded so a break can cross it');
-  assert.strictEqual(lv.overnight_high[5], 125);
-  assert.strictEqual(lv.overnight_low[5], 111);
-  const r = evaluateRules(compileRules({ long: ['high > overnight_high'] }).compiled, b.slice(0, 5), { ...PARAMS });
+  assert.ok(Number.isNaN(lv.prior_high[1]) && Number.isNaN(lv.prior_high[2]), 'no completed RTH day yet');
+  assert.strictEqual(lv.prior_high[3], 120);
+  assert.strictEqual(lv.prior_low[3], 100);
+  assert.ok(Number.isNaN(lv.overnight_high[1]), 'the bars start mid-way through that overnight session');
+  assert.ok(Number.isNaN(lv.overnight_high[3]), 'first Globex bar has no earlier overnight bars');
+  assert.strictEqual(lv.overnight_high[4], 115);
+  assert.strictEqual(lv.overnight_high[5], 118, 'the current bar is excluded so a break can cross it');
+  assert.strictEqual(lv.overnight_high[6], 125);
+  assert.strictEqual(lv.overnight_low[6], 111);
+  const r = evaluateRules(compileRules({ long: ['high > overnight_high'] }).compiled, b.slice(0, 6), { ...PARAMS });
   assert.strictEqual(r.direction, 'long');
+  // Bars that start mid-way through an RTH session: that session is not a prior day.
+  const cut = causalLevels(b.slice(2));
+  assert.ok(Number.isNaN(cut.prior_high[1]), 'partial RTH session is not promoted to prior');
 });
 
 test('a break on the first bar after the opening range is a cross', () => {

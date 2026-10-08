@@ -192,3 +192,22 @@ test('the gate limits come from the environment, as live', () => {
   assert.ok(loose > capped.length);
   assert.ok([...perDay.values()].every(n => n <= 2), 'at most one entry per trading day (a calendar day spans two)');
 });
+
+test('engine: a fixed target is measured from the unrounded stop distance, as algoTraderBot', () => {
+  // Stop 0.9 x ATR ~ 0.9045: 4 ticks of stop, but the 2R target is round(1.809 / 0.25) = 7 ticks.
+  const trades = run([[100, 101, 99.9, 101], [101, 102.8, 100.8, 102.5]], strategy({ risk: { stop: 'atr:0.9', min_rr: 2 } }));
+  assert.deepStrictEqual(trades.map(t => [t.initialStop, t.reason, t.exit]), [[100, 'target', 102.75]]);
+});
+
+test('engine: losses are counted from P&L before fees, as the live gate counts them', () => {
+  const s = strategy({ exit: { target_r: 5, max_bars: 1 } });
+  const path = [[100, 101, 99.9, 101], [101, 101.3, 100.9, 101.25], [101.25, 101.3, 99.9, 100], [100, 101, 99.9, 101], [101, 101.1, 100.9, 101]];
+  const opts = { gate: true, sessions: ['00:00-23:59@America/New_York'], eodAt: null, gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_MAX_DAILY_LOSSES: '1' }) };
+  const trades = runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 }], [s], { timeframe: 3, ...opts }).trades;
+  assert.ok(trades[0].pnl > 0 && trades[0].net < 0, 'a 1-tick win that fees turn negative');
+  assert.strictEqual(trades.length, 2, 'it is not a loss: the second entry is allowed');
+});
+
+test('config: gate must be a boolean', () => {
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, gate: 'false' }, ROOT), /gate: true or false/);
+});

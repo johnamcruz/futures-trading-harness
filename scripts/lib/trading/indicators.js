@@ -229,7 +229,41 @@ function anchoredVwap(bars, anchorMin, untilMin = null) {
   return out;
 }
 
+/**
+ * Order flow from bars (no bid/ask split needed): each bar's volume signed by
+ * where it closed in its range, v * ((c - l) - (h - c)) / (h - l). A close
+ * at the high is all buying, at the low all selling, mid-range balanced. A
+ * bar with no range takes the sign of its close against the prior close.
+ */
+function barDelta(bars) {
+  return bars.map((b, i) => {
+    const v = Number(b.v) || 0;
+    const range = b.h - b.l;
+    if (range > 0) return (v * ((b.c - b.l) - (b.h - b.c))) / range;
+    const prev = i > 0 ? bars[i - 1].c : b.c;
+    return v * Math.sign(b.c - prev);
+  });
+}
+
+/**
+ * Order-flow imbalance over the last n bars: summed bar delta over summed
+ * volume, from -1 (all selling) to +1 (all buying). NaN until n bars exist
+ * or when they traded no volume.
+ */
+function ofi(bars, n) {
+  const d = barDelta(bars);
+  return bars.map((_, i) => {
+    if (i + 1 < n) return NaN;
+    let sd = 0;
+    let sv = 0;
+    for (let k = i + 1 - n; k <= i; k += 1) { sd += d[k]; sv += Number(bars[k].v) || 0; }
+    return sv > 0 ? sd / sv : NaN;
+  });
+}
+
 module.exports = {
+  barDelta,
+  ofi,
   normalizeBars,
   ema,
   rma,

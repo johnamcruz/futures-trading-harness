@@ -50,7 +50,9 @@ Bars come from files:
 
 The table needs a header with a time column (`time`, `timestamp`,
 `datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
-`high`, `low`, `close`, and optionally `volume`. Any letter case works.
+`high`, `low`, `close`, and optionally `volume` (needed for the order-flow
+strategies and the `ofi`, `delta`, and `vol_sma` series). Any letter case
+works.
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.
@@ -67,7 +69,7 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
 | Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (with harness rules). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or cisd_ote's pivot) rounded to whole ticks. The target is set when the exit plan has one. |
+| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or cisd_ote's pivot) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). |
 
 **Harness rules** (`gate: true`, the default) apply what the live harness
 enforces:
@@ -77,7 +79,8 @@ enforces:
   the environment):
   - entry hours (`FTH_ENTRY_HOURS`) and no-entry windows
   - the loss-streak cooldown
-  - the daily losing-trade count
+  - the daily losing-trade count (both count losses before fees, from
+    P&L as ProjectX reports it; a scratch neither adds to nor ends a streak)
   - the daily entry cap
 - projectx-mcp's daily dollar loss limit (`maxDailyLoss`).
 

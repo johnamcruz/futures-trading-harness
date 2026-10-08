@@ -70,6 +70,7 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.riskPerTrade !== null && raw && raw.size !== undefined) errors.push('size and riskPerTrade: use one (fixed contracts, or size from the stop and a dollar risk)');
   if (!Array.isArray(cfg.sessions) || parseWindows(cfg.sessions.join(',')).errors.length) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...] (e.g. "09:35-15:00@America/New_York")');
   if (cfg.eodAt !== null && cfg.eodAt !== '' && !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" (e.g. "15:50@America/New_York"), or null for no end-of-day flatten');
+  if (typeof cfg.gate !== 'boolean') errors.push('gate: true or false');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');

@@ -25,7 +25,7 @@ function stats(trades) {
     sumR: round(sum(r)),
     profitFactorR: lossR > 0 ? round(winsR / lossR) : null,
     meanMfeR: trades.length ? round(sum(mfe) / trades.length) : null,
-    maxMfeR: trades.length ? round(Math.max(...mfe)) : null,
+    maxMfeR: trades.length ? round(mfe.reduce((a, b) => Math.max(a, b), -Infinity)) : null,
     capture: sum(mfe) > 0 ? round(sum(r) / sum(mfe), 3) : null,
     netPnL: round(sum(net)),
     fees: round(sum(trades.map(t => t.fees))),

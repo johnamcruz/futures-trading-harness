@@ -25,7 +25,11 @@
  *             20-bar high as of the previous bar (n = 0..500).
  * Series (value at each bar):
  *   open high low close volume
- *   ema(n) sma(n) atr(n) adx(n) highest(n) lowest(n)   n = 1..500
+ *   ema(n) sma(n) atr(n) adx(n) highest(n) lowest(n)   n = 1..500 (adx 1..250)
+ *   ofi(n)      order-flow imbalance over n bars, -1 (selling) .. +1 (buying):
+ *               each bar's volume signed by where it closed in its range
+ *   delta(n)    that signed volume summed over n bars (contracts)
+ *   vol_sma(n)  average volume per bar over n bars
  *   supertrend supertrend_dir (1 up, -1 down)
  *   keltner_upper keltner_mid keltner_lower
  *   vwap_session vwap_rth or_high or_low swing_high swing_low
@@ -48,7 +52,7 @@ const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
-const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest']);
+const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma']);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
@@ -89,6 +93,8 @@ function parseFactor(tok) {
   if (tok.type === 'func') {
     if (!FUNCS.has(tok.name)) throw new Error(`unknown function "${tok.name}(...)"`);
     if (!(tok.arg >= 1 && tok.arg <= 500)) throw new Error(`${tok.name}(${tok.arg}): length must be 1-500`);
+    // ADX needs 2n bars; the live scan sees 500.
+    if (tok.name === 'adx' && tok.arg > 250) throw new Error(`adx(${tok.arg}): length must be 1-250 (ADX needs 2n bars; the live scan has 500)`);
     return { kind: 'series', key: `${tok.name}(${tok.arg})`, shift: tok.shift };
   }
   throw new Error(`unexpected "${tok.value}"`);
@@ -168,6 +174,8 @@ function compileRules(rules) {
 /**
  * Prior-RTH and overnight levels as they stood at each bar, so a rule
  * evaluated on bar i never sees later bars. Overnight excludes bar i itself.
+ * A session the bars start in the middle of is partial: its levels are
+ * missing (the live scan's 500 bars often start mid-session), never wrong.
  */
 function causalLevels(bars) {
   const n = bars.length;
@@ -181,19 +189,20 @@ function causalLevels(bars) {
   let onSession = null;
   let onHigh = NaN;
   let onLow = NaN;
+  let onComplete = false;
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
     const p = zonedParts(new Date(b.t), 'America/New_York');
     const day = `${p.year}-${p.month}-${p.day}`;
     const minute = p.hour * 60 + p.minute;
     const session = ind.sessionKey(b.t, GLOBEX_OPEN);
-    if (rth && (day !== rthDay || minute >= RTH_CLOSE)) { prior = rth; rth = null; rthDay = null; }
-    if (session !== onSession) { onSession = session; onHigh = NaN; onLow = NaN; }
+    if (rth && (day !== rthDay || minute >= RTH_CLOSE)) { prior = rth.complete ? rth : null; rth = null; rthDay = null; }
+    if (session !== onSession) { onSession = session; onHigh = NaN; onLow = NaN; onComplete = i > 0; }
     if (prior) { out.prior_high[i] = prior.high; out.prior_low[i] = prior.low; out.prior_close[i] = prior.close; }
-    out.overnight_high[i] = onHigh;
-    out.overnight_low[i] = onLow;
+    if (onComplete) { out.overnight_high[i] = onHigh; out.overnight_low[i] = onLow; }
     if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
-      if (!rth) { rth = { high: b.h, low: b.l, close: b.c }; rthDay = day; }
+      // Complete only when the bars before it were seen (not cut off mid-session).
+      if (!rth) { rth = { high: b.h, low: b.l, close: b.c, complete: i > 0 }; rthDay = day; }
       rth.high = Math.max(rth.high, b.h); rth.low = Math.min(rth.low, b.l); rth.close = b.c;
     } else if (!(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
       onHigh = Number.isNaN(onHigh) ? b.h : Math.max(onHigh, b.h);
@@ -212,7 +221,7 @@ function seriesSource(bars, params) {
   const field = f => bars.map(b => b[f]);
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
-    const fn = /^([a-z]+)\((\d+)\)$/.exec(key);
+    const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
     if (fn) {
       const len = Number(fn[2]);
       switch (fn[1]) {
@@ -222,6 +231,9 @@ function seriesSource(bars, params) {
         case 'adx': return ind.adx(bars, len);
         case 'highest': return rolling(field('h'), len, w => Math.max(...w));
         case 'lowest': return rolling(field('l'), len, w => Math.min(...w));
+        case 'ofi': return ind.ofi(bars, len);
+        case 'delta': return rolling(ind.barDelta(bars), len, w => w.reduce((a, b) => a + b, 0));
+        case 'vol_sma': return rolling(field('v'), len, w => w.reduce((a, b) => a + (Number(b) || 0), 0) / len);
         default: break;
       }
     }

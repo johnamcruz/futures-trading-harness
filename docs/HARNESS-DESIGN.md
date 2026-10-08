@@ -120,6 +120,15 @@ bar files through the same strategy evaluator the live scan uses.
 
 ## Known limits
 
+- Live trailing counts the fill bar only when the fill came within 30 s of
+  its open. A fill later in the bar skips the rest of that bar, which the
+  backtest counts toward the peak. Live can therefore arm the trail one bar
+  later than a backtest.
+- Rules are evaluated over the whole series in a backtest. Live, they see
+  the runner's last `bars`. Long EMAs, and `prior_*` levels on 1-minute
+  bars, can differ or be missing live unless `bars` covers them.
+- Order flow (`ofi`, `delta`) is estimated from each bar's shape and
+  volume, not from a bid/ask split.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.
 - projectx-mcp itself: a position flip skips its daily-loss check, resting stop

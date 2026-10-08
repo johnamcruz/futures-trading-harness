@@ -46,14 +46,21 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `<expr> <op> <expr>` with `>`, `>=`, `<`, `<=`, `crosses_above`,
    `crosses_below`. Expressions use series and numbers joined by `+`, `-`, and
    `number *`: `open high low close volume`, `ema(n) sma(n) atr(n) adx(n)
-   highest(n) lowest(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
+   highest(n) lowest(n)` (n up to 500; adx up to 250), order flow
+   `ofi(n) delta(n) vol_sma(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
    `prior_high prior_low prior_close overnight_high overnight_low`, `minute_et`.
    `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
    bar (without it the current bar is included, so a close can never cross
    above it). `minute_et` is the bar's open time in New York minutes (9:45 =
    585). `prior_*` is the last completed RTH day and `overnight_*` this Globex
-   session before 9:30 ET up to the previous bar, as each bar saw them. A value
+   session before 9:30 ET up to the previous bar, as each bar saw them; a
+   session the bars start mid-way through has none. The live scan sees the
+   runner's last `bars` (500), so on 1-minute bars `prior_*` stays missing
+   unless `bars` covers the prior RTH day. `ofi(n)` is order-flow imbalance
+   over n bars, from -1 (all selling) to +1 (all buying): each bar's volume
+   signed by where it closed in its range. `delta(n)` is that signed volume
+   summed, `vol_sma(n)` the average volume per bar. A value
    that doesn't exist yet (indicator warm-up, no opening range yet) makes the
    condition false and the scan marks it `missing`. At most 12 conditions per
    side. A rules strategy with only `long` rules can't be used to sell into an

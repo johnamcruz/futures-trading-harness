@@ -28,7 +28,7 @@
 
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
-const { trailStep, snapStop } = require('../trading/trail');
+const { trailStep } = require('../trading/trail');
 const { parseWindows, inWindow, tradingDayStart, minutesOfDay } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const { normalizeBars } = require('../trading/indicators');
@@ -109,7 +109,9 @@ function runEngine(markets, strategies, opts = {}) {
     trades.push(t);
     equity += net;
     curve.push({ t: t.exitTime, equity: round2(equity) });
-    closesToday.push({ pnl: net, ts: bar.ms + tfMs(book) });
+    // The live gate counts losses from ProjectX P&L, before fees; the daily
+    // dollar limit counts net.
+    closesToday.push({ pnl: gross, net, ts: bar.ms + tfMs(book) });
     book.pos = null;
   };
 
@@ -177,10 +179,12 @@ function runEngine(markets, strategies, opts = {}) {
       if (gateCfg.maxEntriesPerDay > 0 && entriesToday >= gateCfg.maxEntriesPerDay) continue;
       const losses = closesToday.filter(c => c.pnl < 0);
       if (losses.length >= gateCfg.maxDailyLosses) continue;
-      if (o.maxDailyLoss > 0 && closesToday.reduce((a, c) => a + c.pnl, 0) <= -o.maxDailyLoss) continue;
+      if (o.maxDailyLoss > 0 && closesToday.reduce((a, c) => a + c.net, 0) <= -o.maxDailyLoss) continue;
+      // As the live gate: a loss extends the streak, a win ends it, a scratch neither.
       let streak = 0;
-      for (let c = closesToday.length - 1; c >= 0 && closesToday[c].pnl < 0; c -= 1) streak += 1;
-      if (streak >= gateCfg.maxConsecutiveLosses && closeAt.getTime() - closesToday[closesToday.length - 1].ts < gateCfg.lossCooldownMin * 60000) continue;
+      for (let c = closesToday.length - 1; c >= 0 && closesToday[c].pnl <= 0; c -= 1) if (closesToday[c].pnl < 0) streak += 1;
+      const lastLoss = [...closesToday].reverse().find(c => c.pnl < 0);
+      if (streak >= gateCfg.maxConsecutiveLosses && closeAt.getTime() - lastLoss.ts < gateCfg.lossCooldownMin * 60000) continue;
     }
     let pick = null;
     for (const s of book.usable) {
@@ -199,7 +203,8 @@ function runEngine(markets, strategies, opts = {}) {
     book.pos = {
       strategy: pick.s.name, sign, entry, risk, size, plan,
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
-      target: plan.targetR ? onTick(snapStop(entry + sign * plan.targetR * risk, -sign, book.tickSize), book.tickSize) : null,
+      // As algoTraderBot: target ticks from the unrounded stop distance.
+      target: plan.targetR ? onTick(entry + sign * Math.max(1, Math.round((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
       entryIndex: i, entryTime: closeAt.toISOString(), peakR: 0, barsHeld: 0,
     };
     entriesToday += 1;
