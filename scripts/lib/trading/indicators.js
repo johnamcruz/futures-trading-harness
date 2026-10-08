@@ -263,7 +263,9 @@ function barDelta(bars) {
  * volume, from -1 (all selling) to +1 (all buying). NaN until n bars exist
  * or when they traded no volume.
  */
-const hasFlow = b => Number.isFinite(b.bv) && Number.isFinite(b.sv);
+// Real flow counts only when it accounts for most of the bar's volume (a
+// feed that missed prints must not read as a confident imbalance).
+const hasFlow = b => Number.isFinite(b.bv) && Number.isFinite(b.sv) && !(Number(b.v) > 0 && b.bv + b.sv < 0.5 * Number(b.v));
 
 function ofi(bars, n) {
   const d = barDelta(bars);

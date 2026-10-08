@@ -20,6 +20,12 @@
  */
 
 const MINUTE = 60000;
+// A connected feed with no prints for this long is treated as stale: quiet
+// minutes after it are unknown, not zero (algoTraderAI uses 5 minutes).
+const STALE_MINUTES = 5;
+// Minutes are written to disk only this long after they end, so late prints
+// land in memory and file alike.
+const FLUSH_GRACE_MS = 10000;
 
 function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
   const books = new Map(); // contractId -> state
@@ -108,8 +114,8 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
    * Finished, fully covered minutes for a contract: [{ t (ms), bv, sv }].
    * Minutes with no prints while connected are real zero-volume minutes.
    */
-  function finished(id, { since = -Infinity, now = Date.now() } = {}) {
-    return [...minuteMap(id, now).entries()]
+  function finished(id, { since = -Infinity, now = Date.now(), graceMs = FLUSH_GRACE_MS } = {}) {
+    return [...minuteMap(id, now - graceMs).entries()]
       .filter(([m]) => m >= since)
       .sort((x, y) => x[0] - y[0])
       .map(([t, c]) => ({ t, bv: c.bv, sv: c.sv }));
@@ -133,12 +139,16 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
     for (const [m, c] of b.minutes) {
       if (covered(b, m, now)) map.set(m, { bv: c.bv + c.uv / 2, sv: c.sv + c.uv / 2 });
     }
-    // A covered minute with no prints traded nothing: zero flow, not unknown.
+    // A covered minute with no prints traded nothing (zero flow), but only
+    // within STALE_MINUTES of a print: a feed silent longer is unknown.
     for (const [s, e] of b.runs) {
       const last = Math.min(e === null ? now : e, now) - MINUTE;
       const first = Math.max(Math.ceil(s / MINUTE) * MINUTE, Math.floor((now - keepMinutes * MINUTE) / MINUTE) * MINUTE);
+      let lastPrinted = null;
+      for (let m = first - STALE_MINUTES * MINUTE; m < first; m += MINUTE) if (b.minutes.has(m)) lastPrinted = m;
       for (let m = first; m <= last; m += MINUTE) {
-        if (!map.has(m)) map.set(m, { bv: 0, sv: 0 });
+        if (b.minutes.has(m)) { lastPrinted = m; continue; }
+        if (lastPrinted !== null && m - lastPrinted <= STALE_MINUTES * MINUTE) map.set(m, { bv: 0, sv: 0 });
       }
     }
     return map;
@@ -184,4 +194,4 @@ function parseFlowCsv(text) {
   return out;
 }
 
-module.exports = { createFlowBook, withFlow, flowCsv, parseFlowCsv, MINUTE };
+module.exports = { createFlowBook, withFlow, flowCsv, parseFlowCsv, MINUTE, STALE_MINUTES, FLUSH_GRACE_MS };

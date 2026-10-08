@@ -73,7 +73,9 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
         try { token = await getToken(); } catch (err) { reject(err); return; }
         const sock = new WebSocketImpl(hubUrl(url, token));
         ws = sock;
-        const hsTimer = setTimeout(() => { if (!handshaken) { reject(new Error('hub handshake timed out')); sock.close(); } }, HANDSHAKE_MS);
+        // On a failed handshake ws is cleared before rejecting, so the caller schedules the retry.
+        const fail = err => { if (ws === sock) ws = null; reject(err); sock.close(); };
+        const hsTimer = setTimeout(() => { if (!handshaken) fail(new Error('hub handshake timed out')); }, HANDSHAKE_MS);
         sock.onopen = () => sock.send(JSON.stringify({ protocol: 'json', version: 1 }) + RS);
         sock.onmessage = ev => {
           lastSeen = now();
@@ -87,7 +89,7 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
             if (!handshaken) {
               handshaken = true;
               clearTimeout(hsTimer);
-              if (msg.error) { reject(new Error(`hub handshake: ${msg.error}`)); sock.close(); return; }
+              if (msg.error) { fail(new Error(`hub handshake: ${msg.error}`)); return; }
               resolve();
               continue;
             }
@@ -101,7 +103,8 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
           clearTimers();
           failPending(new Error('hub connection closed'));
           if (!handshaken) { reject(new Error('hub connection closed before the handshake')); return; }
-          onDisconnected(now());
+          // Nothing arrived after the last message: coverage ends there, not at detection.
+          onDisconnected(Math.min(now(), lastSeen || now()));
           if (!closed) scheduleReconnect();
         };
       })();

@@ -27,7 +27,7 @@ test('prints without a type are classified against the quote: at/above the ask b
   ], T0 + 5000);
   b.quote(C, { bestBid: 100, bestAsk: 100.5 });
   b.trades(C, [{ price: 100.25, volume: 4, timestamp: at(0, 4) }], T0 + 6000); // at the mid: tick rule, down from 100.5
-  const m = b.finished(C, { now: T0 + M }).find(r => r.t === T0);
+  const m = b.finished(C, { now: T0 + M, graceMs: 0 }).find(r => r.t === T0);
   assert.deepStrictEqual(m, { t: T0, bv: 4, sv: 6 });
 });
 
@@ -36,10 +36,10 @@ test('the hub\'s trade type is the aggressor side (0 buy, 1 sell) and wins over 
   b.connected(C, T0 - M);
   b.quote(C, { bestBid: 100, bestAsk: 100.25 });
   b.trades(C, [{ price: 100, volume: 5, type: 0, timestamp: at(0, 1) }, { price: 100.25, volume: 2, type: 1, timestamp: at(0, 2) }], T0 + 3000);
-  assert.deepStrictEqual(b.finished(C, { now: T0 + M }).find(r => r.t === T0), { t: T0, bv: 5, sv: 2 });
+  assert.deepStrictEqual(b.finished(C, { now: T0 + M, graceMs: 0 }).find(r => r.t === T0), { t: T0, bv: 5, sv: 2 });
 });
 
-test('a minute counts only when the hub was connected for all of it; quiet covered minutes are zero', () => {
+test('a minute counts only when the hub was connected for all of it; quiet minutes are zero only near a print', () => {
   const b = createFlowBook();
   b.connected(C, T0 + 30000); // connected mid-minute 0
   b.quote(C, { bestBid: 100, bestAsk: 100.25 });
@@ -47,9 +47,16 @@ test('a minute counts only when the hub was connected for all of it; quiet cover
   b.disconnected(T0 + 2 * M + 30000); // drops mid-minute 2
   const rows = b.finished(C, { now: T0 + 5 * M });
   assert.deepStrictEqual(rows, [{ t: T0 + M, bv: 2, sv: 0 }], 'minute 0 started before the connection; minute 2 has a gap');
+  // Quiet minutes after a print are zero; a feed silent past the stale window is unknown.
   const quiet = createFlowBook();
   quiet.connected(C, T0);
-  assert.deepStrictEqual(quiet.finished(C, { now: T0 + 2 * M }), [{ t: T0, bv: 0, sv: 0 }, { t: T0 + M, bv: 0, sv: 0 }]);
+  quiet.trades(C, [{ price: 100, volume: 1, type: 0, timestamp: at(0, 5) }], T0 + 6000);
+  const got = quiet.finished(C, { now: T0 + 20 * M });
+  assert.deepStrictEqual(got.map(r => (r.t - T0) / M), [0, 1, 2, 3, 4, 5]);
+  assert.deepStrictEqual(got[1], { t: T0 + M, bv: 0, sv: 0 });
+  const silent = createFlowBook();
+  silent.connected(C, T0);
+  assert.deepStrictEqual(silent.finished(C, { now: T0 + 3 * M }), [], 'connected but no print yet: unknown');
 });
 
 test('bars get flow only when every minute is known; CSV round-trips', () => {
@@ -147,11 +154,36 @@ test('recorder: subscribes, writes finished minutes to the flow file, and annota
   handlers.GatewayQuote(C, { bestBid: 100, bestAsk: 100.25 });
   now = T0 + 10000;
   handlers.GatewayTrade(C, [{ price: 100.25, volume: 3, timestamp: at(0, 10) }, { price: 100, volume: 1, timestamp: at(0, 20) }]);
-  now = T0 + 3 * M + 1000;
+  now = T0 + 3 * M + 11000; // after the flush grace
   const bars = recorder.annotate(C, [{ t: at(0), o: 100, h: 100.25, l: 100, c: 100.25, v: 4 }], 3);
   assert.deepStrictEqual([bars[0].bv, bars[0].sv], [3, 1]);
   assert.deepStrictEqual(readFlow(home, C).map(r => [r.t, r.bv, r.sv]), [[T0, 3, 1], [T0 + M, 0, 0], [T0 + 2 * M, 0, 0]]);
   recorder.annotate(C, [], 3);
   assert.strictEqual(readFlow(home, C).length, 3, 'minutes are written once');
   recorder.close();
+});
+
+test('flow that misses most of a bar\'s volume is not used; the estimate is', () => {
+  const bars = normalizeBars([{ t: at(0), o: 10, h: 11, l: 9, c: 11, v: 2000, bv: 30, sv: 10 }]);
+  assert.deepStrictEqual(barDelta(bars), [2000], 'bar-shape estimate (close at the high), not the partial flow');
+});
+
+test('signalr: a failed handshake still schedules a reconnect; coverage ends at the last message', async () => {
+  const { FakeWS, sockets } = fakeSockets();
+  let fail = true;
+  class Flaky extends FakeWS {
+    send(text) {
+      if (fail && text.includes('"protocol"')) { this.push({ error: 'denied' }); return; }
+      super.send(text);
+    }
+  }
+  const drops = [];
+  const hub = createHub({ url: 'https://h.example.com/hubs/market', getToken: async () => 't', WebSocketImpl: Flaky, onDisconnected: at2 => drops.push(at2) });
+  await hub.start();
+  assert.strictEqual(hub.connected, false);
+  fail = false;
+  await new Promise(r => setTimeout(r, 1300));
+  assert.strictEqual(hub.connected, true, 'retried after the failed handshake');
+  assert.strictEqual(sockets.length, 2);
+  hub.close();
 });
