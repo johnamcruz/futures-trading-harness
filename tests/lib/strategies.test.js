@@ -307,3 +307,23 @@ test('scan: each strategy that fired lists the others firing with it and against
   assert.match(p, /MNQ fired on this bar .*: down_c short; against up_a, up_b \| up_a long with up_b; against down_c/);
   assert.match(p, /Strategies disagree on the side: stand aside/);
 });
+
+test('recent: what fired on each of the last bars, as the scan judged each at its close', () => {
+  const { recentSignals } = require('../../scripts/lib/trading/strategies');
+  const out = [];
+  run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--bars', '3'], { out: s => out.push(s) });
+  const rows = JSON.parse(out.join(''));
+  assert.strictEqual(rows.length, 3);
+  assert.deepStrictEqual(rows[1], { bar: '2026-04-28T04:09:00.000Z', fired: ['bos long', 'ema_cross long'] });
+  assert.ok(typeof recentSignals === 'function');
+  assert.throws(() => run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--bars', '99'], { out: () => {} }), /--bars: 1 to 50/);
+});
+
+test('snapshot context: the numbers the skip rules talk about', () => {
+  const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const c = snapshot(readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))).context;
+  for (const k of ['emaCrossesLast30', 'adxFallingBars', 'keltnerWidthVsAvg20', 'supertrendFlipsLast20', 'range5Atr', 'session', 'flow']) assert.ok(k in c, k);
+  assert.ok(Number.isInteger(c.emaCrossesLast30) && c.session.high >= c.session.low);
+  assert.strictEqual(c.flow.real, false, 'no buy/sell volume in this file: the flow is the bar-shape estimate');
+});

@@ -80,6 +80,14 @@ setup; the steps below are what the series computes.
   direction and there was no sweep.
 - Risk to the origin is above the position-sizing budget at size 1.
 
+**Known quirk (kept for parity with the source):** the detector runs on the
+trailing window at each closed 3-minute bar and executes only a touch on the
+first or second 3-minute bar of a 12-minute zone bin; touches on its third or
+fourth bar never trade, live or in a backtest (half the bins' bars). Offline
+statistics that scan the whole history see those touches and also read the
+12-minute bar's close, which ends after the touch: they overstate what this
+strategy trades. Judge it by the harness's own backtest.
+
 ## Examples
 
 ```text

@@ -43,7 +43,8 @@ function levels(bars) {
   for (const b of bars) {
     const { day, minute } = etDayMinute(b.t);
     if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
-      const d = rthDays.get(day) || { high: -Infinity, low: Infinity, close: null };
+      // A day whose 09:30 bar isn't in the data is partial: no levels from it (as the rules engine).
+      const d = rthDays.get(day) || { high: -Infinity, low: Infinity, close: null, whole: minute === RTH_OPEN };
       d.high = Math.max(d.high, b.h); d.low = Math.min(d.low, b.l); d.close = b.c;
       rthDays.set(day, d);
     } else if (ind.sessionKey(b.t, GLOBEX_OPEN) === session && !(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
@@ -51,11 +52,13 @@ function levels(bars) {
       onLow = onLow === null ? b.l : Math.min(onLow, b.l);
     }
   }
-  const priorDays = [...rthDays.keys()].filter(d => d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE)).sort();
+  const priorDays = [...rthDays.keys()].filter(d => rthDays.get(d).whole && (d < lastEt.day || (d === lastEt.day && lastEt.minute >= RTH_CLOSE))).sort();
+  // The overnight session counts only if the data starts before it (its 18:00 ET open is in the data).
+  const overnightWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
   const prior = priorDays.length ? rthDays.get(priorDays[priorDays.length - 1]) : null;
   return {
     priorRth: prior ? { day: priorDays[priorDays.length - 1], high: prior.high, low: prior.low, close: prior.close } : null,
-    overnight: onHigh === null ? null : { high: onHigh, low: onLow },
+    overnight: onHigh === null || !overnightWhole ? null : { high: onHigh, low: onLow },
   };
 }
 
@@ -174,6 +177,61 @@ function liquidity(bars, k, atrNow) {
   };
 }
 
+/**
+ * The numbers the strategies' context filters and skip rules talk about, so
+ * none has to be eyeballed: EMA crosses, ADX falling, the Keltner squeeze and
+ * band-close streak, SuperTrend flips, the last 5 bars' range, the session's
+ * high and low so far, and order flow (OFI over 1/3/5 bars, delta over 5,
+ * volume against its 60-bar average).
+ */
+function context(bars, series, atrNow) {
+  const { emaFast, emaSlow, adx, st, kc } = series;
+  const n = bars.length;
+  const i = n - 1;
+  const from = k => Math.max(1, n - k);
+  let crosses = 0;
+  for (let j = from(30); j < n; j += 1) {
+    const a = Math.sign(emaFast[j] - emaSlow[j]);
+    const b = Math.sign(emaFast[j - 1] - emaSlow[j - 1]);
+    if (a && b && a !== b) crosses += 1;
+  }
+  let falling = 0;
+  for (let j = i; j > 0 && Number.isFinite(adx[j]) && adx[j] < adx[j - 1]; j -= 1) falling += 1;
+  const width = j => kc.upper[j] - kc.lower[j];
+  const widths = [];
+  for (let j = Math.max(0, n - 20); j < n; j += 1) if (Number.isFinite(width(j))) widths.push(width(j));
+  const avgWidth = widths.length ? widths.reduce((a, b) => a + b, 0) / widths.length : null;
+  let streak = 0;
+  const outside = j => (bars[j].c > kc.upper[j] ? 1 : bars[j].c < kc.lower[j] ? -1 : 0);
+  const side = outside(i);
+  for (let j = i; j >= 0 && side !== 0 && outside(j) === side; j -= 1) streak += 1;
+  let flips = 0;
+  for (let j = from(20); j < n; j += 1) if (st.direction[j] && st.direction[j - 1] && st.direction[j] !== st.direction[j - 1]) flips += 1;
+  const last5 = bars.slice(-5);
+  const session = ind.sessionKey(bars[i].t, GLOBEX_OPEN);
+  const inSession = bars.filter(b => ind.sessionKey(b.t, GLOBEX_OPEN) === session);
+  const sessionWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
+  const ofiAt = k => { const v = ind.ofi(bars, k)[i]; return Number.isFinite(v) ? round(v, 3) : null; };
+  const delta = ind.barDelta(bars).slice(-5).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+  const vol = bars.slice(-60).map(b => Number(b.v) || 0);
+  const volAvg = vol.length && vol.some(v => v > 0) ? vol.reduce((a, b) => a + b, 0) / vol.length : null;
+  return {
+    emaCrossesLast30: crosses,
+    adxFallingBars: falling,
+    keltnerWidthVsAvg20: avgWidth ? round(width(i) / avgWidth, 2) : null,
+    bandCloseStreak: side ? { side: side > 0 ? 'above' : 'below', bars: streak } : null,
+    supertrendFlipsLast20: flips,
+    range5Atr: atrNow ? round((Math.max(...last5.map(b => b.h)) - Math.min(...last5.map(b => b.l))) / atrNow, 2) : null,
+    session: sessionWhole ? { high: Math.max(...inSession.map(b => b.h)), low: Math.min(...inSession.map(b => b.l)) } : null,
+    flow: {
+      real: bars.slice(-5).every(b => Number.isFinite(b.bv) && Number.isFinite(b.sv)),
+      ofi1: ofiAt(1), ofi3: ofiAt(3), ofi5: ofiAt(5),
+      delta5: round(delta, 2),
+      volVsAvg60: volAvg ? round((Number(bars[i].v) || 0) / volAvg, 2) : null,
+    },
+  };
+}
+
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
@@ -221,6 +279,7 @@ function snapshot(input, overrides = {}) {
       sessionCrossesLast30: vwapCrosses(bars, vwapSession),
     },
     participation: participation(bars, p.orbMinutes),
+    context: context(bars, series, at(atr14, i)),
     liquidity: liquidity(bars, p.swingK, at(atr14, i)),
     regime: classifyRegime(bars),
     referenceStop: stopDistance === null ? null : {

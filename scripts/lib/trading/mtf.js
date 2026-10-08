@@ -43,7 +43,12 @@ const { zonedParts } = require('./clock');
 
 // maxCandles: a read uses at most the last 300 completed candles (enough for EMA50 to settle),
 // so a per-bar series over a long backtest stays linear.
-const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: 14, swingK: 2, rangeLen: 20, maxCandles: 300 };
+// historyHours: every read uses only the candles of the last 240 hours (about 60 4-hour candles,
+// enough for EMA50), so the live read (the runner keeps 250 hours of bars, HISTORY_HOURS) and the
+// backtest's per-bar read see exactly the same candles.
+const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: 14, swingK: 2, rangeLen: 20, maxCandles: 300, historyHours: 240 };
+// What the live runner and bars.js keep: the read's window plus margin.
+const HISTORY_HOURS = 250;
 // The frames the trend rule reads, highest first.
 const RULE_FRAMES = [240, 60, 15];
 const STYLES = ['trend', 'reversal'];
@@ -248,8 +253,15 @@ function line(m, x) {
  * The full read. `bars`: the trigger bars (oldest first, closed). `daily`:
  * optional daily bars (get_bars day), read as the highest timeframe.
  */
+/** The completed candles that start inside the read's window, ending at `asOfMs`. */
+function inWindow(cs, asOfMs, opts = {}) {
+  const from = asOfMs - ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
+  return cs.filter(c => Date.parse(c.t) >= from);
+}
+
 function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } = {}) {
   const nb = ind.normalizeBars(bars);
+  const asOfMs = nb.length ? Date.parse(nb[nb.length - 1].t) : 0;
   if (nb.length < 3) throw new Error(`need bars to read, got ${nb.length}`);
   const tfs = [...new Set(timeframes)].sort((a, b) => b - a);
   for (const m of tfs) if (!(Number.isInteger(m) && m > 0 && 1440 % m === 0)) throw new Error(`timeframe ${m}: minutes that divide a day (15, 30, 60, 240, ...)`);
@@ -262,7 +274,7 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   for (const m of tfs) {
     if (daily && m === 1440) continue;
     const cs = candles(nb, m);
-    const done = cs.filter(c => c.complete);
+    const done = inWindow(cs.filter(c => c.complete), asOfMs, opts);
     const cur = cs.find(c => !c.complete) || null;
     frames.push({
       minutes: m, label: label(m), source: 'built from the trigger bars', read: readTimeframe(done, opts),
@@ -273,7 +285,7 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   const lastBar = last(nb);
   // The trend rule reads the frames built from the trigger bars (the daily is context only).
   const ruleBiases = Object.fromEntries(RULE_FRAMES.map(m => {
-    const cs = candles(nb, m).filter(c => c.complete);
+    const cs = inWindow(candles(nb, m).filter(c => c.complete), asOfMs, opts);
     return [m, cs.length >= 3 ? readTimeframe(cs, opts).bias : NaN];
   }));
   const rule = ruleSummary(ruleBiases);
@@ -309,21 +321,24 @@ function biasSeries(bars, minutes, opts = {}) {
   const out = new Array(n).fill(NaN);
   const h = ind.htfCandles(bars, minutes);
   const step = stepOf(bars);
+  const windowMs = ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
   const done = [];
+  let first = 0; // the oldest completed candle still inside the window
   let cur = null;
   let bias = NaN;
-  const finish = () => {
-    if (cur && !cur.cut) {
-      done.push(cur);
-      // Every completed candle, as mtfRead reads them: the rule and the read agree.
-      bias = done.length >= 3 ? readTimeframe(done, opts).bias : NaN;
-    }
+  const finish = asOfMs => {
+    if (cur && !cur.cut) done.push(cur);
     cur = null;
+    // The completed candles of the window, as mtfRead reads them: the rule and the read agree.
+    while (first < done.length && Date.parse(done[first].t) < asOfMs - windowMs) first += 1;
+    const win = done.slice(first);
+    bias = win.length >= 3 ? readTimeframe(win, opts).bias : NaN;
   };
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
+    const ms = Date.parse(b.t);
     if (!cur || cur.key !== h.key[i]) {
-      finish();
+      if (cur) finish(ms);
       cur = { key: h.key[i], t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, cut: i === 0 && !startsOnOpen(b, minutes) };
     } else {
       cur.h = Math.max(cur.h, b.h);
@@ -331,10 +346,10 @@ function biasSeries(bars, minutes, opts = {}) {
       cur.c = b.c;
     }
     // This bar closes its candle: it is complete now, not when the next bar opens.
-    if (closesCandle(b.t, step, minutes)) finish();
+    if (closesCandle(b.t, step, minutes)) finish(ms);
     out[i] = bias;
   }
   return out;
 }
 
-module.exports = { DEFAULTS, RULE_FRAMES, STYLES, candles, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };
+module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };

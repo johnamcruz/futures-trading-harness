@@ -114,7 +114,7 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.earlyCloseEodAt && !validAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone", no later than 13:00 ET');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(Number.isInteger(cfg.minConfluence) && cfg.minConfluence >= 1)) errors.push('minConfluence: strategies that must fire the same side, 1 or more');
-  if (!['priority', 'skip'].includes(cfg.conflict)) errors.push('conflict: "priority" (the first strategy in order trades) or "skip" (no entry when strategies disagree)');
+  if (!['reversal', 'priority', 'skip'].includes(cfg.conflict)) errors.push('conflict: "reversal" (as live: only a reversal strategy enters when strategies disagree), "skip", or "priority" (the first strategy in order trades)');
   if (!['next-open', 'close'].includes(cfg.fill)) errors.push('fill: "next-open" (entries fill at the next bar\'s open, as live after the cycle) or "close" (at the signal bar\'s close, as algoTraderBot)');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
@@ -268,6 +268,9 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
   for (const m of markets) {
     const flowUsers = strategies.filter(s => (s.connectors || []).includes('order_flow') && s.instruments.includes(m.symbol));
+    if (flowUsers.length && m.audit && m.audit.flowCoverage > 0 && m.audit.flowCoverage < 0.9) {
+      log(`warning: ${flowUsers.map(s => s.name).join(', ')} use order flow, but only ${Math.round(m.audit.flowCoverage * 100)}% of ${m.symbol}'s bars have real buy/sell volume; the rest use the bar-shape estimate, so results mix two kinds of data (live always has real flow)`);
+    }
     if (flowUsers.length && !m.bars.some(b => Number.isFinite(b.bv))) {
       log(`warning: ${flowUsers.map(s => s.name).join(', ')} declare the order_flow connector but ${m.file} has no buy/sell volume columns; ofi/delta fall back to the bar-shape estimate (record flow and export it: scripts/orderflow.js)`);
     }

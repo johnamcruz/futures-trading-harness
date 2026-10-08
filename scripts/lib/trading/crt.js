@@ -52,7 +52,8 @@ function crtSeries(bars, minutes, atr, opts = {}) {
     const c1l = h.prevL[i];
     if (b.h > st.hi) { st.hi = b.h; st.hiAt = i; }
     if (b.l < st.lo) { st.lo = b.l; st.loAt = i; }
-    const done = (reason, extra = {}) => { why[i] = reason; info[i] = { c1High: c1h, c1Low: c1l, high: st.hi, low: st.lo, ...extra }; };
+    // C1's open and close too: the skill rules read its body (one long body, closes mid-range).
+    const done = (reason, extra = {}) => { why[i] = reason; info[i] = { c1Open: h.prevO[i], c1High: c1h, c1Low: c1l, c1Close: h.prevC[i], high: st.hi, low: st.lo, ...extra }; };
     if (!Number.isFinite(c1h) || !Number.isFinite(c1l)) { done('no_previous_candle'); continue; }
     if (st.hi > c1h) st.high = true;
     if (st.lo < c1l) st.low = true;

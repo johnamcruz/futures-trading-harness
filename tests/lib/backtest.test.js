@@ -384,7 +384,9 @@ test('confluence: trades record how many strategies agreed; minConfluence and co
   assert.deepStrictEqual([t.strategy, t.confluence, t.conflict], ['a', 2, 0]);
   assert.strictEqual(go([a]).length, 1);
   assert.strictEqual(go([a], { minConfluence: 2 }).length, 0, 'one strategy alone is not enough');
-  const [mixed] = go([a, c]);
+  assert.strictEqual(go([a, c]).length, 0, 'the default, as the live gate: a trend strategy does not enter against another signal');
+  assert.strictEqual(go([{ ...a, mtf: 'reversal' }, c]).length, 1, 'a reversal strategy may');
+  const [mixed] = go([a, c], { conflict: 'priority' });
   assert.deepStrictEqual([mixed.strategy, mixed.confluence, mixed.conflict], ['a', 1, 1]);
   assert.strictEqual(go([a, c], { conflict: 'skip' }).length, 0, 'strategies disagree: no entry');
   const { buildReport } = require('../../scripts/lib/backtest/report');

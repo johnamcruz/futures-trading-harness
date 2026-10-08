@@ -146,3 +146,20 @@ test('readTimeframe reads at most the last 300 candles, so long series stay line
   assert.strictEqual(full.candles, cs.length);
   assert.deepStrictEqual([full.bias, full.emaFast, full.emaSlow], [tail.bias, tail.emaFast, tail.emaSlow]);
 });
+
+test('live and backtest read the same trend: the per-bar series over a long history equals the live read of the runner\'s bars', () => {
+  const { historyBars } = require('../../scripts/lib/autotrader');
+  const b = path3m(et(9, 0, 1), 26000, zigzag(-0.05, 40, 320)); // about 54 days of 3m bars
+  const ser = ruleSeries(b);
+  const keep = historyBars(3);
+  let checked = 0;
+  for (let i = keep + 500; i < b.length; i += 397) {
+    const live = mtfRead(b.slice(i + 1 - keep, i + 1));
+    for (const m of [240, 60, 15]) {
+      const want = biasesAt(ser, i)[m];
+      assert.ok(Object.is(live.biases[m], want) || live.biases[m] === want, `bar ${i} ${m}m: live ${live.biases[m]} vs backtest ${want}`);
+    }
+    checked += 1;
+  }
+  assert.ok(checked > 40);
+});

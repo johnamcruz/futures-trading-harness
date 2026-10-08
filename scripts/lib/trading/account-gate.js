@@ -344,7 +344,8 @@ function barsRequest(contractId, timeframe) {
   const m = /^(\d+)(m|h|d)$/.exec(String(timeframe || ''));
   if (!m) return null;
   const unit = { m: 'minute', h: 'hour', d: 'day' }[m[2]];
-  return { contractId, unit, unitNumber: Number(m[1]), limit: 300, includePartialBar: false };
+  // The scan classifies the regime on its trailing 500 bars (evaluator DEFAULT_WINDOW): the same window here.
+  return { contractId, unit, unitNumber: Number(m[1]), limit: 500, includePartialBar: false };
 }
 
 /**

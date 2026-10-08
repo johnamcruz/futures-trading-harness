@@ -35,7 +35,13 @@ node <root>/scripts/strategies.js list           # name, status, signal, instrum
 node <root>/scripts/strategies.js show orb       # the full STRATEGY.md
 node <root>/scripts/strategies.js scan /tmp/fth/MNQ-3m.json --symbol MNQ
 node <root>/scripts/strategies.js list --json    # machine-readable
+node <root>/scripts/strategies.js recent /tmp/fth/MNQ-3m.json --symbol MNQ --bars 5   # what fired on each of the last 5 bars
 ```
+
+`recent` answers the skip rules about recent signals ("fired the other way
+in the last 5 bars"). A scan result's `detail` carries the detectors' state:
+a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
+fire, and cisd_ote's `hadSweep` and displacement.
 
 `scan` judges sessions at the current time; pass `--now <ISO>` to judge them
 at another time (e.g. the bar's close when replaying a file). It reads the

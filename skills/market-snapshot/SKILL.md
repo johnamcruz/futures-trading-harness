@@ -50,6 +50,13 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      previous day (orb's skip rule reads `relVolLastVsOpeningRange`).
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
      0.1 x ATR), and open fair value gaps.
+   - `context`: the numbers the strategies' skip rules name: EMA 9/20
+     crosses in the last 30 bars, bars of falling ADX, Keltner width vs its
+     20-bar average (a squeeze is under 1), the band-close streak, SuperTrend
+     flips in the last 20 bars, the last 5 bars' range in ATR, the session's
+     high and low so far, and order flow (`real`: buy/sell volume recorded,
+     else the bar-shape estimate; OFI over 1/3/5 bars, 5-bar delta, volume vs
+     its 60-bar average). Read a skip rule's number here; never estimate it.
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, VWAP crosses in 30 bars, ATR vs its average).

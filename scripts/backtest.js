@@ -9,7 +9,7 @@
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
  *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
  *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--fill next-open|close] [--out dir]
- *       [--min-confluence 2] [--conflict priority|skip]   require agreeing strategies / skip disagreement
+ *       [--min-confluence 2] [--conflict reversal|skip|priority]   require agreeing strategies / skip disagreement
  *       [--prop <policy strategy> [--bundle <name>] [--every 5]]   prop challenge attempts
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
  *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv

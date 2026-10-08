@@ -73,3 +73,16 @@ test('snapshot: participation, VWAP crosses and distance, swings, equal highs, o
   assert.strictEqual(JSON.parse(cli(['--orbMinutes=20']).stdout).params.orbMinutes, 20);
   assert.match(cli(['--bogus', '1']).stderr, /unknown parameter --bogus/);
 });
+
+test('snapshot levels: a day or overnight session the data starts partway into gives no levels', () => {
+  const { levels } = require('../../scripts/lib/trading/market-snapshot');
+  const at = iso => ({ t: iso, o: 100, h: 101, l: 99, c: 100, v: 1 });
+  // Data starting at 12:00 ET on Tuesday: Tuesday's RTH is partial, the overnight too.
+  const bars = ['2026-10-06T16:00:00Z', '2026-10-06T19:00:00Z', '2026-10-06T22:30:00Z', '2026-10-07T12:00:00Z'].map(at);
+  bars[1].h = 150;
+  const l = levels(bars);
+  assert.strictEqual(l.priorRth, null, 'Tuesday began at noon in the data: not a whole day');
+  assert.deepStrictEqual(l.overnight, { high: 101, low: 99 }, 'the overnight session from 18:00 Tue is whole');
+  const late = levels(['2026-10-06T23:00:00Z', '2026-10-07T12:00:00Z'].map(at));
+  assert.strictEqual(late.overnight, null, 'data starting after 18:00 ET: the overnight is partial');
+});

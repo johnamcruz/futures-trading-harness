@@ -70,7 +70,9 @@ const DEFAULTS = {
   slippageTicks: 1, // per market fill (entries and stops), in ticks
   fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
   minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
-  conflict: 'priority', // strategies firing both sides: 'priority' (the first in order trades) or 'skip' (no entry)
+  // Strategies firing both sides on the bar: 'reversal' (as the live gate: only a reversal strategy, mtf: reversal,
+  // may enter), 'skip' (no entry), or 'priority' (the first in order trades, as algoTraderBot had no such rule).
+  conflict: 'reversal',
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
@@ -144,7 +146,8 @@ function prepare(markets, strategies, opts = {}) {
         if (pick) {
           const withIt = fired.filter(f => f.r.direction === pick.r.direction).length;
           const against = fired.length - withIt;
-          if (withIt < (o.minConfluence || 1) || (against > 0 && o.conflict === 'skip')) pick = null;
+          const conflicted = against > 0 && (o.conflict === 'skip' || (o.conflict === 'reversal' && pick.s.mtf !== 'reversal'));
+          if (withIt < (o.minConfluence || 1) || conflicted) pick = null;
           else pick = { ...pick, confluence: withIt, against };
         }
         memo.set(i, pick);

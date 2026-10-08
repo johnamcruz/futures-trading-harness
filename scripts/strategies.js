@@ -6,6 +6,7 @@
  *   node scripts/strategies.js show <name>
  *   node scripts/strategies.js validate
  *   node scripts/strategies.js scan <bars file|-> --symbol MNQ [--now ISO] [--record]
+ *   node scripts/strategies.js recent <bars file> --symbol MNQ [--bars 5]   what fired on each of the last bars
  *
  * scan --record also records which rules strategies fired on the last closed
  * bar (only those on the bars' timeframe), for the order gate's trigger check
@@ -18,7 +19,7 @@
 const fs = require('fs');
 const { readBarsArg } = require('./lib/backtest/data');
 const path = require('path');
-const { loadStrategies, scan } = require('./lib/trading/strategies');
+const { loadStrategies, scan, recentSignals } = require('./lib/trading/strategies');
 const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { timeframeMs } = require('./lib/trading/evaluator');
 const { normalizeBars } = require('./lib/trading/indicators');
@@ -88,7 +89,15 @@ function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {
     }
     return 0;
   }
-  throw new Error('usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record]');
+  if (cmd === 'recent') {
+    const o = options(args, ['--symbol', '--bars'], []);
+    if (!o._[0]) throw new Error('recent needs a bars file');
+    const count = o['--bars'] === undefined ? 5 : Number(o['--bars']);
+    if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error('--bars: 1 to 50');
+    out(`${JSON.stringify(recentSignals(strategies, readBarsArg(o._[0]), { symbol: o['--symbol'], count }), null, 2)}\n`);
+    return 0;
+  }
+  throw new Error('usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]');
 }
 
 if (require.main === module) {

@@ -150,6 +150,15 @@ test('order gate: with a Claude transcript, an entry needs the trading skills lo
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate: a trend strategy is refused when another strategy fired the other side on the bar', () => {
+  const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const fired = [{ name: 'crossing', direction: 'long', confluence: { with: [], against: ['other'] } }, { name: 'other', direction: 'short', confluence: { with: [], against: ['crossing'] } }];
+  const { env } = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired }) });
+  const r = gate(orderPayload({ ...ORDER, rationale: 'setup:crossing long, stop 21480, target 21540' }), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[trigger-fired\] setup:crossing long conflicts with other firing the other side on the same bar/);
+});
+
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);

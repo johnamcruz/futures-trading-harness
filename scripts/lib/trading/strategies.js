@@ -362,6 +362,33 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
 }
 
 /**
+ * What fired on each of the last `count` closed bars (oldest first): for skip
+ * rules about recent signals ("ofi_absorption fired the other way in the last
+ * 5 bars"). Each bar is judged as the live scan judged it at its close
+ * (causal: one evaluator, bar i sees bars 0..i).
+ */
+function recentSignals(strategies, bars, { symbol, count = 5 } = {}) {
+  const root = String(symbol || '').toUpperCase();
+  const norm = normalizeBars(bars);
+  const ev = createEvaluator(norm);
+  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || s.instruments.includes(root)));
+  const out = [];
+  for (let i = Math.max(0, norm.length - count); i < norm.length; i += 1) {
+    const fired = [];
+    for (const s of usable) {
+      try {
+        const r = ev.at(s, i, { describe: false });
+        if (r.candidate && r.direction) fired.push(`${s.name} ${r.direction}`);
+      } catch (_err) {
+        // one broken strategy doesn't hide the others
+      }
+    }
+    out.push({ bar: norm[i].t, fired });
+  }
+  return out;
+}
+
+/**
  * Confluence: for every strategy that fired, the other strategies on its
  * timeframe that fired the same way (`with`) and the other way (`against`)
  * on the same bar.
@@ -405,4 +432,4 @@ module.exports = {
   loadStrategies,
   scan,
   checkStrategyForOrder,
-};
+ recentSignals };

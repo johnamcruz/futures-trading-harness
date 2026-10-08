@@ -47,7 +47,7 @@ test('gateway regime gate: only gated entries, correct bars request, and a reada
   assert.strictEqual(regimeGatedStrategy({ rationale: 'setup:vwap_reclaim long' }, strategies), gated);
   assert.strictEqual(regimeGatedStrategy({ rationale: 'setup:orb long' }, strategies), null);
   assert.strictEqual(regimeGatedStrategy({ rationale: '[exit] flatten setup:vwap_reclaim' }, strategies), null);
-  assert.deepStrictEqual(barsRequest('C', '3m'), { contractId: 'C', unit: 'minute', unitNumber: 3, limit: 300, includePartialBar: false });
+  assert.deepStrictEqual(barsRequest('C', '3m'), { contractId: 'C', unit: 'minute', unitNumber: 3, limit: 500, includePartialBar: false });
   assert.deepStrictEqual(barsRequest('C', '1h').unit, 'hour');
   assert.strictEqual(barsRequest('C', 'weird'), null);
   const config = { skipChecks: new Set() };

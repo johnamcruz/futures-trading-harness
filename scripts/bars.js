@@ -4,7 +4,8 @@
  * (market-snapshot, mtf, strategies scan), without pasting them through a
  * tool reply. Credentials come from the user's .env (never printed).
  *
- *   node scripts/bars.js --symbol MNQ [--timeframe 3] [--count 2000] [--out /tmp/fth/MNQ-3m.json] [--record]
+ *   node scripts/bars.js --symbol MNQ [--timeframe 3] [--count N] [--out /tmp/fth/MNQ-3m.json] [--record]
+ *   (default count: what the runner keeps, 250 hours of bars, enough for the 4h trend: 5000 3m bars)
  *   node scripts/bars.js --symbol MNQ --daily [--count 60]          daily bars for mtf.js --daily
  *
  * --record also records the multi-timeframe read for the order gate (as
@@ -33,9 +34,8 @@ function parse(argv) {
     else if (flag === '--out') o.out = value();
     else if (flag === '--daily') o.daily = true;
     else if (flag === '--record') o.record = true;
-    else throw new Error(`unknown argument: ${argv[i]} (usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count 2000] [--out file] [--record])`);
+    else throw new Error(`unknown argument: ${argv[i]} (usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out file] [--record])`);
   }
-  if (o.count === null) o.count = o.daily ? 60 : 2000;
   return o;
 }
 

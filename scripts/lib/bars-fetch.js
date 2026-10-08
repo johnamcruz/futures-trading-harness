@@ -32,7 +32,9 @@ const defaultOut = (symbol, timeframe, daily) => path.join('/tmp/fth', `${symbol
  * { file, contractId, count, first, last, closedAt } after writing the bars.
  * `client`: projectx-rest (activeContract, closedBars).
  */
-async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = 2000, out = null, now = new Date() }) {
+async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, now = new Date() }) {
+  // By default as many bars as the runner keeps (the multi-timeframe read's whole window).
+  if (count === null) count = daily ? 60 : require('./autotrader').historyBars(timeframe);
   const errors = requestErrors({ symbol, timeframe, daily, count });
   if (errors.length) throw new Error(errors.join('; '));
   const contract = await client.activeContract(symbol);

@@ -255,7 +255,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
     // recent bar (signal-state.js): no relabelled setup tag, no stale signal.
     if (named.signal === 'rules') {
-      const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, timeframe: named.timeframe, now, maxAgeMin: config.signalMaxAgeMin });
+      const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, style: named.mtf || 'trend', timeframe: named.timeframe, now, maxAgeMin: config.signalMaxAgeMin, minConfluence: config.minConfluence });
       if (fired) violations.push({ check: 'trigger-fired', message: fired });
     }
   }

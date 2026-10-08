@@ -55,3 +55,13 @@ test('strategies.js scan --record writes the signal record; strict flags; refuse
   assert.match(run(['--record']).stderr, /--record needs --symbol/);
   assert.match(run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1' }).stderr, /the autonomous runner records every bar itself/);
 });
+
+test('checkTrigger: a trend strategy is refused on a conflicting bar; FTH_MIN_CONFLUENCE asks for agreement', () => {
+  const home = trendHome(tmpDir(), { fired: [{ name: 'orb', direction: 'long', confluence: { with: [], against: ['cisd_ote'] } }, { name: 'cisd_ote', direction: 'short', confluence: { with: [], against: ['orb'] } }] });
+  const check = extra => checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'orb', now, ...extra });
+  assert.match(check(), /conflicts with cisd_ote firing the other side on the same bar: stand aside/);
+  assert.strictEqual(checkTrigger(home, { root: 'MNQ', side: 'sell', strategy: 'cisd_ote', style: 'reversal', now }), null, 'a reversal may fade it');
+  const alone = trendHome(tmpDir(), { fired: [{ name: 'orb', direction: 'long', confluence: { with: [], against: [] } }] });
+  assert.match(checkTrigger(alone, { root: 'MNQ', side: 'buy', strategy: 'orb', now, minConfluence: 2 }), /fired alone \(1 of the 2 agreeing strategies/);
+  assert.strictEqual(checkTrigger(alone, { root: 'MNQ', side: 'buy', strategy: 'orb', now }), null);
+});

@@ -187,7 +187,10 @@ function usesOrderFlow(strategies, timeframe) {
 
 /** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
 function historyBars(timeframe) {
-  return Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe));
+  // At least 2000 bars and three trading days, and the multi-timeframe read's whole window
+  // (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. ProjectX caps a request at 20000.
+  const { HISTORY_HOURS } = require('./trading/mtf');
+  return Math.min(20000, Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
 
 function validateConfig(raw) {

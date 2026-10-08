@@ -165,7 +165,9 @@ function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
   if (missing) warnings.push(`${missing} bar(s) missing inside market hours in ${gaps.length} gap(s); largest ${gaps[0].bars} after ${gaps[0].after}`);
   if (jumps.length) warnings.push(`${jumps.length} open(s) jump more than ${jumpAtr} x ATR from the previous close (an unadjusted roll or a bad tick?); largest ${jumps[0].x} x ATR at ${jumps[0].t}`);
   if (invalid) warnings.push(`${invalid} malformed bar(s) (high below low, or open/close outside the range)`);
-  return { bars: bars.length, missing, gaps: gaps.slice(0, top), jumps: jumps.slice(0, top), invalid, warnings };
+  // Real order flow (buy/sell volume) is recorded live only; the rest is the bar-shape estimate.
+  const flowBars = bars.filter(b => Number.isFinite(b.bv) && Number.isFinite(b.sv)).length;
+  return { bars: bars.length, missing, gaps: gaps.slice(0, top), jumps: jumps.slice(0, top), invalid, flowCoverage: bars.length ? Math.round((flowBars / bars.length) * 1000) / 1000 : 0, warnings };
 }
 
 /** { bv, sv } when the bar carries real order flow, else nothing. */

@@ -33,7 +33,7 @@ function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source =
     recordedAt: now.toISOString(),
     source,
     candidates: (results || []).filter(r => r.candidate && r.direction && r.signal === 'rules')
-      .map(r => ({ name: r.name, direction: r.direction, stopDistance: r.stopDistance ?? null })),
+      .map(r => ({ name: r.name, direction: r.direction, stopDistance: r.stopDistance ?? null, ...(r.confluence ? { confluence: r.confluence } : {}) })),
   };
 }
 
@@ -59,7 +59,7 @@ function readSignals(home, root, timeframe) {
  * The gate's check for a rules strategy's entry: did `strategy` fire `side`
  * (buy/sell) on `root`'s last closed bar, recently? Returns a message, or null.
  */
-function checkTrigger(home, { root, side, strategy, timeframe = '3m', now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
+function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe = '3m', now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN, minConfluence = 1 }) {
   const fam = familyRoot(root);
   const how = `Fetch fresh ${timeframe} bars (node <root>/scripts/bars.js --symbol ${root} --timeframe ${parseInt(timeframe, 10) || '<minutes>'}), then scan and record them: node <root>/scripts/strategies.js scan <that file> --symbol ${root} --record. The autonomous runner records every bar.`;
   const rec = readSignals(home, root, timeframe);
@@ -72,7 +72,18 @@ function checkTrigger(home, { root, side, strategy, timeframe = '3m', now = new 
   }
   const dir = { buy: 'long', sell: 'short' }[String(side || '').toLowerCase()];
   const hit = rec.candidates.find(c => c.name === strategy && (!dir || c.direction === dir));
-  if (hit) return null;
+  if (hit) {
+    // Confluence, as the backtester's defaults: strategies firing the other side on the bar stop a
+    // trend strategy (a reversal may fade them), and FTH_MIN_CONFLUENCE strategies must agree.
+    const conf = hit.confluence || { with: [], against: [] };
+    if (conf.against.length && style !== 'reversal') {
+      return `setup:${strategy} ${dir} conflicts with ${conf.against.join(', ')} firing the other side on the same bar: stand aside (only a reversal strategy may fade other signals).`;
+    }
+    if (1 + conf.with.length < minConfluence) {
+      return `setup:${strategy} ${dir} fired alone (${1 + conf.with.length} of the ${minConfluence} agreeing strategies FTH_MIN_CONFLUENCE asks for).`;
+    }
+    return null;
+  }
   const fired = rec.candidates.length ? rec.candidates.map(c => `${c.name} ${c.direction}`).join(', ') : 'nothing';
   return `setup:${strategy} ${dir || ''} did not fire on the last closed ${fam} bar (closed ${rec.closedAt}; fired: ${fired}). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.`;
 }

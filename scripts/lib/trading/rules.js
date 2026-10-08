@@ -259,13 +259,15 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     const withMs = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));
     const dir = new Array(n).fill(0);
     const risk = new Array(n).fill(NaN);
+    const info = new Array(n).fill(null);
     for (let i = 0; i < n; i += 1) {
       const from = Math.max(0, i - window + 1);
       const sig = cisd.detect(withMs.slice(from, i + 1), atr.slice(from, i + 1));
-      if (sig) { dir[i] = sig.direction === 'long' ? 1 : -1; risk[i] = sig.risk; }
+      if (sig) { dir[i] = sig.direction === 'long' ? 1 : -1; risk[i] = sig.risk; info[i] = { direction: sig.direction, entry: sig.entry, stop: sig.stop, hadSweep: sig.hadSweep, disp: sig.disp }; }
     }
     cache.set('cisd_ote_dir', dir);
     cache.set('cisd_ote_risk', risk);
+    cache.set('cisd_ote_info', info);
   };
   const n = bars.length;
   let lv = null;
@@ -326,8 +328,8 @@ function seriesSource(bars, params, { window = 500 } = {}) {
       case 'keltner_lower': return ind.keltner(bars, params.kcLen, params.kcMult, params.kcAtr).lower;
       case 'vwap_session': return ind.anchoredVwap(bars, 18 * 60);
       case 'vwap_rth': return ind.anchoredVwap(bars, 9 * 60 + 30, 16 * 60);
-      case 'or_high': return completeRange(ind.openingRange(bars, params.orbMinutes).high);
-      case 'or_low': return completeRange(ind.openingRange(bars, params.orbMinutes).low);
+      case 'or_high': return completeRange(ind.openingRange(bars, params.orbMinutes).high, 'h');
+      case 'or_low': return completeRange(ind.openingRange(bars, params.orbMinutes).low, 'l');
       case 'swing_high': return ind.swings(bars, params.swingK).high;
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
@@ -341,11 +343,30 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     }
   };
   // The range is known when its last bar closes: give that bar the value too,
-  // so a break on the very next bar is a cross (causal: same bar's close).
-  const completeRange = s => {
+  // so a break on the very next bar is a cross. Causal: the bar whose close
+  // reaches the range's end gets the range of the bars up to and including
+  // it, without looking at the next bar (live, there is none yet).
+  const completeRange = (s, side) => {
     const out = s.slice();
+    let step = Infinity;
     for (let i = 1; i < n; i += 1) {
-      if (Number.isFinite(s[i]) && Number.isNaN(s[i - 1]) && etDay(i) === etDay(i - 1)) out[i - 1] = s[i];
+      const d = Date.parse(bars[i].t) - Date.parse(bars[i - 1].t);
+      if (d > 0 && d < step) step = d;
+    }
+    const stepMin = Number.isFinite(step) ? step / 60000 : 1;
+    const open = 9 * 60 + 30;
+    const end = open + params.orbMinutes;
+    let day = null;
+    let acc = NaN;
+    let whole = false;
+    for (let i = 0; i < n; i += 1) {
+      const p = zonedParts(new Date(bars[i].t), 'America/New_York');
+      const minute = p.hour * 60 + p.minute;
+      if (etDay(i) !== day) { day = etDay(i); acc = NaN; whole = false; }
+      if (minute < open || minute >= end) continue;
+      if (minute === open) whole = true; // the range's first bar is in the data
+      acc = Number.isNaN(acc) ? bars[i][side] : side === 'h' ? Math.max(acc, bars[i][side]) : Math.min(acc, bars[i][side]);
+      if (whole && minute + stepMin >= end) out[i] = acc;
     }
     return out;
   };
@@ -365,6 +386,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   get.explain = i => {
     const out = {};
     for (const [m, c] of crts) { const x = c.explain(i); if (x) out[`crt(${m})`] = x; }
+    if (cache.has('cisd_ote_info') && cache.get('cisd_ote_info')[i]) out.cisd_ote = cache.get('cisd_ote_info')[i];
     return out;
   };
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
