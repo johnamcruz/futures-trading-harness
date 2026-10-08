@@ -44,14 +44,37 @@ native adapters generated for each harness.
    trade-reviewer → journal reviews and lessons → next session's briefing
 ```
 
+## Trading hours
+
+Trading follows the Topstep session of CME futures: **18:00 ET to 16:00 ET
+the next day, Sunday evening to Friday afternoon** (about 22 hours a day).
+Nothing is traded from 16:00 to 18:00 ET or over the weekend, and every
+position is flat by end of day (`eodAt`, default 15:50 ET, never later than
+the 16:00 ET close). This is a hard rule: the order gate refuses entries
+outside the session whatever the settings say, and the runner closes any
+position it finds outside it. Exits are always allowed.
+
+A trading day runs from the 18:00 ET open to the 16:00 ET close (Sunday
+evening and Monday are Monday's trading day). Strategies narrow their own
+hours with `sessions`, using named sessions or explicit windows:
+
+| Session | New York time |
+|---|---|
+| `asia` | 18:00-03:00 |
+| `london` | 03:00-09:30 |
+| `ny` | 09:30-16:00 |
+
+A strategy without `sessions` trades the whole session; `orb` trades only
+`ny`, since its range forms at the 09:30 ET open.
+
 ## Layers of protection
 
 | Layer | Where | Enforces | Model can bypass? |
 |---|---|---|---|
-| Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT flatten | No |
+| Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
-| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane: each waits for the server's answer, and market orders not yet visible in positions are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
-| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
+| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
+| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
 | Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
@@ -101,7 +124,7 @@ status: active                     # paper | active | disabled
 regimes: [trend, transition, high-vol]   # regimes the strategy fits
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-sessions: ["09:45-11:30@America/New_York"]
+sessions: [ny]                     # asia, london, ny, or "HH:MM-HH:MM@Zone"; omit for the whole session
 signal: rules                      # rules (conditions below) or manual (agents judge the body)
 rules:
   long:
@@ -170,7 +193,7 @@ Generated files come from the canonical sources: `node scripts/sync-harness.js`
 
 ## Setup
 
-Requires Node.js 18+ and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
+Requires Node.js 18+ (22+ for the order-flow connector) and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
 (`npm install && npm run build`; note the path to `dist/index.js`).
 
 ```bash
@@ -214,8 +237,10 @@ node scripts/autotrader.js --config autotrader.json                # run the sch
 touch ~/.futures-trading-harness/STOP                              # kill switch: no new entries
 ```
 
-Premarket (09:00 ET) and end of day (15:50 ET) run on the clock. In session,
-**a trade cycle starts after every closed bar** of the configured `timeframe`
+The runner trades the session from the 18:00 ET open to end of day (15:50
+ET), runs a premarket briefing at 09:00 ET and end of day on the clock, and
+idles through the 16:00-18:00 ET break and the weekend. In session, **a
+trade cycle starts after every closed bar** of the configured `timeframe`
 (1 or 3 minutes, or any value up to 60):
 
 1. The runner sleeps until the forming bar's close, waits `barDelaySeconds`,
@@ -255,22 +280,23 @@ from your Claude settings (`mcp-configs/settings.example.json` has them for
 interactive use): "ask" can't be answered without a user, so the runner
 refuses to start while they're present.
 
-More runner settings: `"cycle": "lean"` skips the parallel analysts unless a
-strategy fires (use it for 1-minute bars so a cycle fits in one bar);
-`maxCyclesPerDay` (400) switches to manage-only cycles once reached;
-`cycleTimeoutMinutes` defaults to max(3, 2 x timeframe), and a cycle stopped
-by the timeout makes the next one start by checking protective stops;
-Trading hours are a hard rule: the market session is 18:00-16:00 ET (the Topstep session: about 22 hours a day, Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends).
-`sessions` (default `18:00-15:50 ET`, the whole session up to end of day)
-must lie inside it; named sessions `asia` (18:00-03:00 ET), `london`
-(03:00-09:30 ET), and `ny` (09:30-16:00 ET) work anywhere a window does.
-`eodAt` is required and no later than the 16:00 ET close: every position is
-flat by then. Outside the session the runner closes any position it finds
-(checked once a minute).
-`earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME early-close
-sessions; bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
-`dataDir` is set. With several `symbols`, one cycle covers every symbol whose
-bar closed, so none is starved.
+More runner settings:
+
+- `sessions` (default `18:00-15:50@America/New_York`, the whole session up
+  to end of day) must lie inside the 18:00-16:00 ET session; `asia`,
+  `london`, and `ny` work here too.
+- `eodAt` is required and no later than 16:00 ET. After it, and outside the
+  session, the runner checks the account once a minute and closes anything
+  open. `earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME
+  early-close days.
+- `"cycle": "lean"` skips the parallel analysts unless a strategy fires (use
+  it for 1-minute bars so a cycle fits in one bar).
+- `maxCyclesPerDay` (400) switches to manage-only cycles once reached.
+- `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe); a cycle stopped by
+  the timeout makes the next one start by checking protective stops.
+- Bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
+  `dataDir` is set. With several `symbols`, one cycle covers every symbol
+  whose bar closed, so none is starved.
 
 ### Backtesting
 
@@ -282,10 +308,10 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 3. checks every strategy for an entry, with the same rules evaluation the
    live scan uses.
 
-The market session is always enforced: entries only between 18:00 and
-16:00 ET (Sunday evening to Friday), and every trade closed at end of day. By default it also applies the
-harness's other rules (sessions, order-gate limits); `--no-gate` drops those
-to compare with algoTraderBot.
+The market session always applies, as it does live: entries only from
+18:00 to 16:00 ET (Sunday evening to Friday), and every trade closed at end
+of day. By default it also applies the harness's other rules (sessions,
+order-gate limits); `--no-gate` drops those to compare with algoTraderBot.
 
 ```bash
 node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
@@ -326,7 +352,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
 | `FTH_ENTRY_HOURS` | empty (the whole session) | New entries only inside these windows (`ny`, `london`, `asia`, or `HH:MM-HH:MM@Zone`); the 18:00-16:00 ET session is a hard limit either way |
-| `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:00-18:00@America/Chicago` | No new entries |
+| `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:45-16:00@America/New_York` | No new entries (the New York opening print, and into the close) |
 | `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
@@ -339,8 +365,9 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 
 `place_order` rationales start with `setup:<strategy> ...` for entries,
 `[exit] ...` to close or reduce, and `[protect] ...` for a protective stop or
-target. Exits and protective orders skip the journal checks (plan, reviews, limits), so risk can always be
-reduced; the gateway only checks that they really reduce the position.
+target. Exits and protective orders skip the journal checks (plan, reviews,
+limits) and the trading hours, so risk can always be reduced; the gateway
+only checks that they really reduce the position.
 
 ## Development
 
