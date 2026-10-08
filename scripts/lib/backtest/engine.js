@@ -64,6 +64,7 @@ function runEngine(markets, strategies, opts = {}) {
   const gateCfg = o.gateConfig || loadConfig({});
   const sessions = parseWindows((o.sessions || []).join(',')).windows;
   const noEntry = parseWindows(gateCfg.noEntryWindows).windows;
+  const entryHours = parseWindows(gateCfg.entryHours || '').windows;
   const eod = parseAt(o.eodAt);
   const trades = [];
   const skipped = new Map(); // strategy -> reason, for strategies that can't be traded mechanically
@@ -165,6 +166,7 @@ function runEngine(markets, strategies, opts = {}) {
       if (afterEod) continue;
       if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) continue;
       if (noEntry.some(w => inWindow(closeAt, w))) continue;
+      if (entryHours.length && !entryHours.some(w => inWindow(closeAt, w))) continue;
       if (gateCfg.maxEntriesPerDay > 0 && entriesToday >= gateCfg.maxEntriesPerDay) continue;
       const losses = closesToday.filter(c => c.pnl < 0);
       if (losses.length >= gateCfg.maxDailyLosses) continue;

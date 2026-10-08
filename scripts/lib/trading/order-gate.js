@@ -64,6 +64,11 @@ function checkPlan(input, dayEntries, now, config) {
 }
 
 function checkWindows(now, config) {
+  const hours = parseWindows(config.entryHours || '');
+  if (hours.errors.length > 0) return `FTH_ENTRY_HOURS has invalid entries (${hours.errors.join(', ')}); fix the config.`;
+  if (hours.windows.length && !hours.windows.some(w => inWindow(now, w))) {
+    return `New entries only during ${hours.windows.map(w => w.label).join(', ')} (FTH_ENTRY_HOURS).`;
+  }
   const { windows, errors } = parseWindows(config.noEntryWindows);
   if (errors.length > 0) return `FTH_NO_ENTRY_WINDOWS has invalid entries (${errors.join(', ')}); fix the config.`;
   const hit = windows.find(w => inWindow(now, w));
@@ -180,7 +185,9 @@ function evaluateModify({ input = {}, config }) {
   const violations = [];
   // A size change labelled [exit]/[protect] (cutting a protective order after
   // a partial exit) goes to the MCP gateway, which checks it is a decrease.
-  if (input.size !== undefined && input.size !== null && !skip.has('modify-size') && !isRiskReducing(input.reason)) {
+  const size = input.size;
+  const badSize = size !== undefined && size !== null && !(Number.isInteger(Number(size)) && Number(size) >= 1);
+  if (size !== undefined && size !== null && !skip.has('modify-size') && (badSize || !isRiskReducing(input.reason))) {
     violations.push({
       check: 'modify-size',
       message: 'modify_order may change prices only, unless the reason starts with [exit] or [protect] (cutting a '

@@ -224,12 +224,15 @@ function evaluateCancel({ input = {}, positions, orders, config }) {
 }
 
 /**
- * modify_order checks that need the account:
- * - size: only a decrease of a working order (never adds exposure; after a
- *   partial exit the protective stop is cut to the remaining size);
- * - price: a protective stop (a stop on the opposite side of an open
- *   position in its contract) may only move toward the market, checking
- *   every price field given (stopPrice and trailPrice).
+ * modify_order checks that need the account. An order "works" an open
+ * position when it sits on the opposite side of a position in its own
+ * contract month (a protective stop or a target).
+ * - size: only a decrease; a protective stop's cut must leave the stops
+ *   covering the position (cut it after a partial exit, not before);
+ * - price: only orders that work an open position may be repriced (moving
+ *   an entry or a leftover order would open a trade past the entry checks:
+ *   cancel it and place a new order through the gate), and a protective
+ *   stop only toward the market, checking every price field given.
  */
 function evaluateModifyAccount({ input = {}, positions, orders, config }) {
   for (const [name, v] of Object.entries({ positions, orders })) {
@@ -237,30 +240,46 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
   }
   const skip = (config && config.skipChecks) || new Set();
   const violations = [];
+  const add = (check, message) => { if (!skip.has(check)) violations.push({ check, message }); };
   const order = orders.find(o => Number(o.id) === Number(input.orderId));
-  const hasSize = input.size !== undefined && input.size !== null;
-  if (hasSize && !skip.has('modify-size')) {
-    const size = Number(input.size);
-    if (!order) violations.push({ check: 'modify-size', message: `Order ${input.orderId} is not working, so its size can't be checked; cancel and re-place instead.` });
-    else if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
-      violations.push({ check: 'modify-size', message: `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.` });
-    }
+  if (!order) {
+    add('modify-protection', `Order ${input.orderId} is not working, so the change can't be checked. Check list_open_orders; cancel and re-place through the gate if needed.`);
+    return violations;
   }
-  if (skip.has('modify-protection') || !order || !STOP_TYPES.has(Number(order.type))) return violations;
   const net = contractNet(positions, order.contractId);
   const orderSign = Number(order.side) === 0 ? 1 : -1;
-  if (net === 0 || orderSign !== -Math.sign(net)) return violations;
+  const works = net !== 0 && orderSign === -Math.sign(net);
+  const isStop = STOP_TYPES.has(Number(order.type));
   const root = contractRoot(order.contractId);
+
+  if (input.size !== undefined && input.size !== null) {
+    const size = Number(input.size);
+    if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
+      add('modify-size', `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.`);
+    } else if (works && isStop) {
+      const others = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
+      if (size + others < Math.abs(net)) {
+        add('modify-size', `Cutting stop ${order.id} to ${size} would leave ${Math.abs(net) - size - others} of the open ${root} position (net ${net}) without a stop. Reduce the position first ([exit] or partial_close_position), then cut the stop.`);
+      }
+    }
+  }
+
+  const fields = ['limitPrice', 'stopPrice', 'trailPrice'].filter(f => input[f] !== undefined && input[f] !== null);
+  if (!fields.length) return violations;
+  if (!works) {
+    add('modify-entry', `Order ${order.id} doesn't work an open ${order.contractId} position (it is an entry or a leftover), so repricing it could open a trade without the entry checks. Cancel it and place a new order through the gate.`);
+    return violations;
+  }
+  if (!isStop) return violations;
   const old = order.stopPrice === null || order.stopPrice === undefined ? NaN : Number(order.stopPrice);
-  for (const field of ['stopPrice', 'trailPrice']) {
-    if (input[field] === undefined || input[field] === null) continue;
+  for (const field of fields.filter(f => f !== 'limitPrice')) {
     const level = Number(input[field]);
     if (!Number.isFinite(level) || !Number.isFinite(old)) {
-      violations.push({ check: 'modify-protection', message: `Can't tell where the protective stop ${order.id} for the open ${root} position is; it can't be moved. Close the position ([exit]) instead.` });
+      add('modify-protection', `Can't tell where the protective stop ${order.id} for the open ${root} position is; it can't be moved. Close the position ([exit]) instead.`);
       break;
     }
     if (net > 0 ? level < old : level > old) {
-      violations.push({ check: 'modify-protection', message: `Order ${order.id} protects the open ${root} position (net ${net}); move it toward the market only (now ${old}, asked ${field} ${level}). To take more risk, don't; to get out, use an [exit] order.` });
+      add('modify-protection', `Order ${order.id} protects the open ${root} position (net ${net}); move it toward the market only (now ${old}, asked ${field} ${level}). To take more risk, don't; to get out, use an [exit] order.`);
       break;
     }
   }

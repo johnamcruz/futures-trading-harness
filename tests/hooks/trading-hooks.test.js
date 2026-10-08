@@ -46,7 +46,7 @@ function setup(entries, extraEnv = {}) {
     env: {
       PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
-      FTH_NO_ENTRY_WINDOWS: '',
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
       FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
       FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
       ...extraEnv,
@@ -156,7 +156,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]),
     PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
-    FTH_NO_ENTRY_WINDOWS: '',
+    FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
@@ -194,7 +194,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -217,7 +217,7 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
-    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', ...extraEnv,
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
   let out = '';
@@ -272,7 +272,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';

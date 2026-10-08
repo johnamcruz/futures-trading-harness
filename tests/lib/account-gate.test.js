@@ -122,7 +122,7 @@ test('a protective stop may move toward the market only', () => {
   const run = (input, positions = long1, orders = [sellStop]) => checks(evaluateModifyAccount({ input, positions, orders, config }));
   assert.deepStrictEqual(run({ orderId: 9, stopPrice: 0.25 }), ['modify-protection']);
   assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21490 }), []);
-  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21400 }, []), [], 'no position: not protective');
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21400 }, []), ['modify-entry'], 'no position: a leftover is re-placed, not repriced');
   const buyStop = { ...sellStop, side: 0, stopPrice: 21520 };
   assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21560 }, [{ contractId: CONTRACT, type: 2, size: 1 }], [buyStop]), ['modify-protection']);
   assert.deepStrictEqual(run({ orderId: 9, trailPrice: 21470 }, long1, [{ ...sellStop, type: 5, stopPrice: null }]), ['modify-protection'], 'unknown level: refuse');
@@ -145,9 +145,16 @@ test('modify_order: sizes may only shrink; every price field must keep a protect
   const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
   const stop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 2, stopPrice: 21480 };
   const run = input => checks(evaluateModifyAccount({ input, positions: long2, orders: [stop], config }));
-  assert.deepStrictEqual(run({ orderId: 9, size: 1 }), [], 'cut the stop to the remaining position after a partial exit');
+  assert.deepStrictEqual(run({ orderId: 9, size: 1 }), ['modify-size'], 'long 2: cutting the stop to 1 would leave 1 unprotected');
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, size: 1 }, positions: long1, orders: [stop], config })), [], 'after the partial exit, cut the stop to 1');
+  const entry = { id: 31, contractId: CONTRACT, side: 0, type: 1, size: 1, limitPrice: 21400 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 31, limitPrice: 21600 }, positions: [], orders: [entry], config })), ['modify-entry'], 'an entry is re-placed, not repriced');
+  const leftover = { id: 60, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 20900 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 60, stopPrice: 21050 }, positions: [], orders: [leftover], config })), ['modify-entry']);
+  const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 2, limitPrice: 21600 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 12, limitPrice: 21580 }, positions: long2, orders: [stop, target], config })), [], 'a target can move');
   assert.deepStrictEqual(run({ orderId: 9, size: 3 }), ['modify-size']);
-  assert.deepStrictEqual(run({ orderId: 99, size: 1 }), ['modify-size'], 'unknown order: size cannot be checked');
+  assert.deepStrictEqual(run({ orderId: 99, size: 1 }), ['modify-protection'], 'unknown order: the change cannot be checked');
   const trailing = { ...stop, type: 5 };
   assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21490, trailPrice: 21000 }, positions: long2, orders: [trailing], config })), ['modify-protection']);
 });

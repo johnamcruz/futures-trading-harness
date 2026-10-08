@@ -9,6 +9,7 @@
 const path = require('path');
 const { harnessHome } = require('../paths');
 
+const DEFAULT_ENTRY_HOURS = '09:35-15:00@America/New_York';
 const DEFAULT_NO_ENTRY_WINDOWS = [
   '09:30-09:35@America/New_York', // opening print: first 5 minutes of RTH
   '15:00-18:00@America/Chicago', // into Topstep's 15:10 CT flatten, through the daily break
@@ -23,6 +24,8 @@ const GATE_CHECKS = [
   'stop-defined',
   'plan-required',
   'time-window',
+  'modify-entry',
+  'modify-protection',
   'blackout',
   'loss-streak',
   'daily-loss-count',
@@ -53,6 +56,10 @@ function loadConfig(env = process.env) {
     lossCooldownMin: intEnv(env, 'FTH_LOSS_COOLDOWN_MIN', 30),
     maxDailyLosses: intEnv(env, 'FTH_MAX_DAILY_LOSSES', 3, { min: 1 }),
     maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', 6), // 0 = off
+    // Entries only inside these windows (empty = any time). Default: the
+    // runner's default session, so a strategy without its own sessions still
+    // can't open trades overnight.
+    entryHours: env.FTH_ENTRY_HOURS !== undefined ? String(env.FTH_ENTRY_HOURS) : DEFAULT_ENTRY_HOURS,
     noEntryWindows: env.FTH_NO_ENTRY_WINDOWS !== undefined
       ? String(env.FTH_NO_ENTRY_WINDOWS)
       : DEFAULT_NO_ENTRY_WINDOWS,
@@ -73,6 +80,7 @@ function loadConfig(env = process.env) {
 
 module.exports = {
   DEFAULT_NO_ENTRY_WINDOWS,
+  DEFAULT_ENTRY_HOURS,
   GATE_CHECKS,
   loadConfig,
 };

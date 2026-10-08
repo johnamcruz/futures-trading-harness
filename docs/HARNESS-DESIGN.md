@@ -55,7 +55,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
-| `time-window`, `blackout` | Outside no-entry windows and news blackouts | yes | yes |
+| `time-window`, `blackout` | Inside `FTH_ENTRY_HOURS` (default 09:35-15:00 ET), outside no-entry windows and news blackouts | yes | yes |
 | `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
 | `max-entries` | Under `FTH_MAX_ENTRIES_PER_DAY` | yes | yes |
@@ -65,6 +65,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `cancel-protection` | `cancel_order` may not remove the last protective stop of an open position | no | yes |
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
 | `modify-protection` | A protective stop may only move toward the market | no | yes |
+| `modify-entry` | Only orders working an open position (its stop or target) can be repriced; entries and leftovers are cancelled and re-placed through the gate | no | yes |
 | `order-pending` | No order call while an earlier one's result is unknown (no reply within 30 s) | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 

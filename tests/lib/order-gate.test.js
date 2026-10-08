@@ -178,3 +178,11 @@ test('modify_order size changes need an [exit]/[protect] reason (the gateway the
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1 }, config: cfg }).violations.map(v => v.check), ['modify-size']);
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1, reason: '[protect] cut the stop to 1 after scaling out' }, config: cfg }).violations, []);
 });
+
+test('entries only inside FTH_ENTRY_HOURS (default 09:35-15:00 ET)', () => {
+  const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
+  assert.ok(checks(at('2026-10-07T07:00:00Z')).includes('time-window'), '03:00 ET');
+  assert.ok(!checks(at('2026-10-07T14:00:00Z')).includes('time-window'), '10:00 ET');
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 50.5, reason: '[protect] x' }, config: loadConfig({}) }).violations.map(v => v.check), ['modify-size']);
+});

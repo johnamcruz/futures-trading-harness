@@ -56,8 +56,10 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
   (the gateway refuses). For a trailing strategy, leave the stop to the
   runner's trail unless the plan says to exit earlier.
 - After a partial exit, reduce the protective stop's size to the remaining
-  position with `modify_order {size}` (decreases are allowed; increases are
-  not).
+  position with `modify_order {size, reason: "[protect] ..."}` (only after
+  the exit: the stops must keep covering the position).
+- Only a working position's stop or target can be moved. To change a pending
+  entry's price, cancel it and place a new order (it goes through the gate).
 - Scale out with `partial_close_position` or flatten with `close_position`,
   and record it with `journal_add {kind:"exit", contractId, text}`. Exit orders
   sent through `place_order` start their rationale with `[exit]`.

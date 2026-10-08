@@ -110,10 +110,10 @@ test('engine: trend setups trail from +2R, giving back 0.5R', () => {
 });
 
 test('engine: with harness rules, no entries outside sessions and a flatten at end of day', () => {
-  const late = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101]], strategy(), { gate: true, sessions: ['10:00-15:00@America/New_York'], gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '' }) });
+  const late = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101]], strategy(), { gate: true, sessions: ['10:00-15:00@America/New_York'], gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }) });
   assert.deepStrictEqual(late, [], '09:03 ET is outside the session');
   const eod = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1], [101.1, 101.2, 100.9, 101]], strategy(), {
-    gate: true, sessions: ['09:00-15:00@America/New_York'], eodAt: '09:06@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '' }),
+    gate: true, sessions: ['09:00-15:00@America/New_York'], eodAt: '09:06@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }),
   });
   assert.deepStrictEqual(eod.map(t => t.reason), ['eod']);
 });
