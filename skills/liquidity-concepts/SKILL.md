@@ -29,9 +29,9 @@ description: Identify futures liquidity - prior day/overnight highs and lows, eq
 4. **Use.**
    - Targets: the next untested liquidity pool in the trade's direction.
    - Skip: don't buy just under prior-day high or sell just above
-     prior-day low unless the playbook is a breakout of that level.
-   - Reversal setups (playbook-cisd-ote) need a sweep first; continuation
-     setups (playbook-break-of-structure) need a break.
+     prior-day low unless the strategy is a breakout of that level.
+   - Reversal setups (cisd_ote strategy) need a sweep first; continuation
+     setups (bos strategy) need a break.
 
 ## Examples
 

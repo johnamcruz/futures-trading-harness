@@ -1,7 +1,7 @@
 {
   "name": "futures-trading-harness",
-  "version": "0.1.0",
-  "description": "Futures trading harness for Claude Code on TopstepX: parallel analyst, risk, executor, and reviewer agents, strategy playbook skills, and fail-closed order-gate hooks for the projectx-mcp server.",
+  "version": "0.2.0",
+  "description": "LLM-agnostic futures trading harness for TopstepX via projectx-mcp: strategies as Markdown, parallel analyst/risk/executor/reviewer roles, workflow skills, and a fail-closed order gate.",
   "author": {
     "name": "John Cruz",
     "url": "https://github.com/johnamcruz"

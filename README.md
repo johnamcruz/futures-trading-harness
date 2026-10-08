@@ -1,176 +1,210 @@
 # Futures Trading Harness
 
-A Claude Code plugin that turns Claude into a disciplined futures trading desk
-on **TopstepX**. Parallel analyst agents read the market, a risk manager
-approves or vetoes, a single executor places orders through the
-[projectx-mcp](https://github.com/johnamcruz/projectx-mcp) server, and
-fail-closed hooks enforce the trading rules in code.
+An LLM-agnostic agent harness that trades futures on **TopstepX** through the
+[projectx-mcp](https://github.com/johnamcruz/projectx-mcp) server. It runs on
+**Claude Code, Codex, or Qwen Code** (any model those harnesses can drive,
+including Qwen through DashScope, vLLM, or Ollama), and it can trade on its own
+on a schedule.
 
-It reuses the [ECC](https://github.com/affaan-m/ECC) harness architecture
-(agents, skills, commands, rules, profile-gated hooks), with the ECC
-engineering content removed and replaced with trading content.
+Strategies are Markdown documents: drop a `STRATEGY.md` into `strategies/` and
+the agents can trade it, and the order gate enforces its instruments, sessions,
+and status in code.
+
+The architecture follows [ECC](https://github.com/affaan-m/ECC): one canonical
+tree of agents, skills, commands, rules, and profile-gated hooks, with native
+adapters generated for each harness.
 
 > [!WARNING]
-> This software helps an AI place real orders on your account. Futures trading
+> This software lets an AI place real orders on your account. Futures trading
 > involves substantial risk of loss, and AI models make mistakes. Start with
-> `PROJECTX_TRADING_ENABLED=false`, then a practice or evaluation account,
-> micro contracts, size 1, and manual approval of every order. You are
-> responsible for every order placed.
+> `PROJECTX_TRADING_ENABLED=false` and `"paper": true`, then a practice or
+> evaluation account, micro contracts, and size 1. You are responsible for every
+> order placed.
 
 ## How it fits together
 
 ```text
-/premarket, /trade-session
+ scripts/autotrader.js  ──(schedule, kill switch)──▶  claude -p | codex exec | qwen -p
+        or you, interactively                                   │
+                                                                ▼
+ skills: trade-session / premarket / end-of-day / autonomous-trading
         │
-        ├─ parallel (one message) ─────────────────────────────────────┐
-        │  market-structure-analyst   trend-momentum-analyst           │
-        │  volume-liquidity-analyst   news-calendar-analyst            │
-        │  risk-manager (phase 1: account state and risk budget)       │
-        └───────────────────────────────────────────────────────────────┘
+        ├─ parallel subagents ─────────────────────────────────────────────┐
+        │  market-structure · trend-momentum · volume-liquidity · news      │
+        │  risk-manager (account state, budget)                             │
+        └───────────────────────────────────────────────────────────────────┘
         │
-   head trader (main session): synthesis → playbook check → journal plan
+   head trader: strategies.js scan + STRATEGY.md rules → journal plan
         │
-   risk-manager (phase 2): APPROVE / VETO
+   risk-manager verdict → trade-executor (the only role with order tools)
         │
-   trade-executor ── PreToolUse order gate (hook) ── projectx-mcp ── TopstepX
-        │                                              (server guardrails)
-   trade-reviewer → review / lesson entries → SessionStart briefing next time
+   order gate ── PreToolUse hook (Claude/Codex/Qwen)
+        │     └─ MCP gateway (every MCP client) ──▶ projectx-mcp ──▶ TopstepX
+        ▼
+   trade-reviewer → journal reviews and lessons → next session's briefing
 ```
 
-| Layer | Where | Enforces | Can the model bypass it? |
+## Layers of protection
+
+| Layer | Where | Enforces | Model can bypass? |
 |---|---|---|---|
 | Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT flatten | No |
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
-| Order gate | `hooks/` (this repo) | Plan first, stop defined, setup tag, time windows, news blackouts, loss streak, review before next entry, max entries | No (deterministic, fails closed) |
-| Permissions | Claude Code settings | Ask before each order tool | No |
-| Rules, skills, agents | This repo | Risk math, playbooks, process | Soft |
+| Order gate | `scripts/lib/trading/order-gate.js`, run by the hook **and** the MCP gateway | Kill switch, strategy (exists, `active`, instrument, session), setup tag, stop, plan first, no-entry windows, news blackouts, loss streak, daily losses, review before next entry, max entries | No (deterministic, fails closed) |
+| Runner | `scripts/autotrader.js` | Schedule, cycle caps, timeouts, auto kill switch after repeated errors | No |
+| Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
+
+The gateway exists because hooks differ between harnesses. Run as the
+`projectx` MCP server, it applies the same gate to any MCP client.
+
+## Strategies are Markdown
+
+```text
+strategies/
+  orb/STRATEGY.md          opening range breakout       (signal: orb)
+  ema_cross/STRATEGY.md    EMA 9/20 cross               (signal: ema_cross)
+  keltner/STRATEGY.md      Keltner breakout             (signal: keltner)
+  supertrend/STRATEGY.md   SuperTrend flip              (signal: supertrend)
+  bos/STRATEGY.md          break of structure           (signal: bos)
+  cisd_ote/STRATEGY.md     CISD + fib zone              (signal: manual)
+  _template/STRATEGY.md    copy this to add a strategy
+```
+
+Each file has code-checked frontmatter and a body the agents follow:
+
+```yaml
+---
+name: orb
+description: Opening range breakout for equity index futures ...
+status: active                     # paper | active | disabled
+instruments: [MNQ, MES, MYM, M2K]
+timeframe: 3m
+sessions: ["09:45-11:30@America/New_York"]
+signal: orb                        # built-in detector, or manual
+params:                           # optional market-snapshot overrides
+  orbMinutes: 15
+filters:
+  adx_min: 18
+risk:
+  stop: atr:0.5
+  min_rr: 2
+---
+## When to Use ... ## How It Works ... ## Examples ...
+```
+
+```bash
+node scripts/strategies.js list
+node scripts/strategies.js validate
+node scripts/strategies.js scan bars.json --symbol MNQ   # candidates on the latest closed bar
+```
+
+To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
+`/new-strategy`), keep `status: paper` until it has a record, validate, and
+promote it to `active`. Private strategies can live outside the repo:
+`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. The six bundled
+strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTraderBot).
 
 ## What's inside
 
 | Path | Contents |
 |---|---|
-| `agents/` | 8 agents: 4 analysts, risk manager, executor (the only one with order tools), reviewer, strategy researcher |
-| `skills/` | 19 skills: market structure, multi-timeframe, liquidity, VWAP/volume, indicators, session timing, sizing, prop pacing, review, expectancy, security, TopstepX reference, market snapshot, and 6 strategy playbooks |
-| `commands/` | `/premarket`, `/trade-session`, `/trade-plan`, `/trade-review`, `/eod`, `/setup-scorecard`, `/new-playbook` |
-| `rules/trading/` | Always-on rules: risk, prop firm, execution, journaling, agent conduct |
-| `hooks/hooks.json` | Order gate (PreToolUse), session briefing (SessionStart), review reminder (Stop) |
-| `scripts/` | Hook runtime, `market-snapshot.js` indicator CLI, rules installer |
-| `mcp-configs/` | Example projectx MCP config and Claude Code settings |
-| `docs/` | Design notes |
+| `agents/` | 8 roles: 4 analysts, risk manager, executor, reviewer, strategy researcher (canonical, Claude format) |
+| `skills/` | 19 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
+| `strategies/` | Strategy documents and the template |
+| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy` |
+| `rules/trading/` | Always-on rules |
+| `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins; Qwen via installer) |
+| `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy and snapshot CLIs, installer, harness sync |
+| `workspace/` | Generated `AGENTS.md` / `CLAUDE.md` / `QWEN.md`: the operator instructions every harness reads |
+| `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/`, `qwen-extension.json` | Native manifests |
+| `.codex/agents/`, `qwen/` | Generated Codex roles and Qwen agents and commands |
 
-### Strategy playbooks
-
-Ported from [algoTraderBot](https://github.com/johnamcruz/algoTraderBot) with
-its parameters. `scripts/market-snapshot.js` computes the mechanical triggers so
-agents never do indicator math by hand.
-
-| Skill | Tag | Trigger |
-|---|---|---|
-| `playbook-orb` | `setup:orb` | 3m close beyond the 15-min opening range, ADX ≥ 18 |
-| `playbook-ema-cross` | `setup:ema_cross` | EMA 9/20 cross, ADX ≥ 18 |
-| `playbook-keltner-breakout` | `setup:keltner` | Close outside Keltner(20, 1.5), ADX ≥ 20 |
-| `playbook-supertrend-flip` | `setup:supertrend` | SuperTrend(10, 3) flip |
-| `playbook-break-of-structure` | `setup:bos` | Close through the last confirmed swing |
-| `playbook-cisd-ote` | `setup:cisd_ote` | 12m CISD displacement, pullback into the fib zone |
+Generated files come from the canonical sources: `node scripts/sync-harness.js`
+(CI runs `--check`).
 
 ## Setup
 
-Requires Node.js 18+ (20+ for development tooling) and Claude Code.
-
-### 1. Install and configure projectx-mcp
-
-Follow the [projectx-mcp README](https://github.com/johnamcruz/projectx-mcp).
-Register it under the name **`projectx`**: the agents and hooks match
-`mcp__projectx__*` tool names.
+Requires Node.js 18+ and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
+(`npm install && npm run build`; note the path to `dist/index.js`).
 
 ```bash
-claude mcp add projectx --scope user \
-  --env PROJECTX_USERNAME=your-username \
-  --env PROJECTX_API_KEY=your-api-key \
-  --env PROJECTX_TRADING_ENABLED=false \
-  --env PROJECTX_ALLOWED_SYMBOLS=MNQ,MES \
-  --env PROJECTX_MAX_ORDER_SIZE=1 \
-  --env PROJECTX_MAX_POSITION_SIZE=1 \
-  --env PROJECTX_MAX_DAILY_LOSS=300 \
-  -- node /absolute/path/to/projectx-mcp/dist/index.js
+git clone https://github.com/johnamcruz/futures-trading-harness ~/futures-trading-harness
+cd ~/futures-trading-harness
+node scripts/install.js --target qwen,codex,claude --projectx /abs/path/projectx-mcp/dist/index.js
 ```
 
-See `mcp-configs/projectx.example.json` for the JSON form.
+The installer backs up and edits only what each harness can't get from its
+plugin. It prints the remaining native commands:
 
-### 2. Install the plugin
+| Harness | Installer writes | You run |
+|---|---|---|
+| Qwen Code | hooks + `projectx` MCP (via gateway) in `~/.qwen/settings.json` | `qwen extensions install <repo>` |
+| Codex | marked block in `~/.codex/config.toml`: `projectx` MCP (via gateway) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
+| Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the printed `claude mcp add` command |
 
-```text
-/plugin marketplace add johnamcruz/futures-trading-harness
-/plugin install futures-trading-harness@futures-trading-harness
-```
+Credentials (`PROJECTX_USERNAME`, `PROJECTX_API_KEY`) and guardrails
+(`PROJECTX_TRADING_ENABLED`, `PROJECTX_ALLOWED_SYMBOLS`, ...) go in the
+environment that launches the harness, or in Qwen's extension settings. See
+`mcp-configs/` for examples.
 
-### 3. Install the always-on rules
+## Running it
 
-Plugins can't ship always-on rules, so copy them once:
+Interactive, from `workspace/` so every harness reads the operator instructions:
 
 ```bash
-git clone https://github.com/johnamcruz/futures-trading-harness
-cd futures-trading-harness
-node scripts/install-rules.js          # → ~/.claude/rules/trading/
+cd workspace
+qwen      # or: codex, claude
+> /premarket MNQ
+> /trade-session MNQ paper
 ```
 
-### 4. Permissions and harness settings
+Autonomous:
 
-Merge `mcp-configs/settings.example.json` into `~/.claude/settings.json`. It keeps
-every order tool on **ask** and sets the order gate limits:
+```bash
+cp mcp-configs/autotrader.example.json autotrader.json   # pick harness, symbols, paper, schedule
+node scripts/autotrader.js --config autotrader.json --dry-run      # show the next action and command
+node scripts/autotrader.js --config autotrader.json                # run the schedule
+touch ~/.futures-trading-harness/STOP                              # kill switch: no new entries
+```
+
+The runner starts one headless run per cycle (premarket at 09:00 ET, a trade
+cycle every 3 minutes in session, end of day at 15:50 ET), logs everything to
+`~/.futures-trading-harness/logs/`, and never runs two cycles at once. Each run
+follows the `autonomous-trading` skill: one bounded cycle, positions first, no
+questions, stand aside when unsure. Run it in a container or under a dedicated
+user: headless harnesses auto-approve tool calls, so the order gate and server
+guardrails are what protect the account.
+
+### Order gate settings
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FTH_PLAN_MAX_AGE_MIN` | 120 | A journal plan for the contract must be this fresh |
-| `FTH_MAX_CONSECUTIVE_LOSSES` | 2 | Loss streak that starts a cooldown |
-| `FTH_LOSS_COOLDOWN_MIN` | 30 | Cooldown after the streak |
-| `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day before stopping |
+| `FTH_KILL_SWITCH_FILE` | `~/.futures-trading-harness/STOP` | If it exists, no new entries |
+| `FTH_STRATEGIES_DIRS` | (none) | Extra strategy folders |
+| `FTH_PLAN_MAX_AGE_MIN` | 120 | Plan freshness |
+| `FTH_MAX_CONSECUTIVE_LOSSES` / `FTH_LOSS_COOLDOWN_MIN` | 2 / 30 | Loss-streak cooldown |
+| `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:00-18:00@America/Chicago` | No new entries |
-| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts.json` | News blackouts written by `/premarket` |
-| `FTH_ORDER_GATE_SKIP` | (none) | Comma list of gate checks to turn off |
-| `FTH_HOOK_PROFILE` | `standard` | `minimal`, `standard`, or `strict` |
-| `FTH_DISABLED_HOOKS` | (none) | Hook ids to disable, e.g. `stop:trading:review-reminder` |
-| `PROJECTX_JOURNAL_PATH` | `~/.projectx-mcp/journal.jsonl` | Must match the MCP server's journal path |
-
-## Using it
-
-```text
-/premarket MNQ            read-only game plan, levels, blackouts, risk budget
-/trade-session MNQ        one cycle: analysts → plan → risk verdict → execution
-/trade-plan MNQ orb       plan and verdict only (paper)
-/trade-review             review closed trades (unblocks the next entry)
-/eod                      flatten, cancel leftovers, review, lessons
-/setup-scorecard month    expectancy per setup
-/new-playbook <name> <source>
-```
+| `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts.json` | News blackouts (written by premarket) |
+| `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
+| `FTH_GATE_LOG` | `~/.futures-trading-harness/gate-log.jsonl` | Gate decisions |
+| `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
+| `PROJECTX_JOURNAL_PATH` | `~/.projectx-mcp/journal.jsonl` | Must match the MCP server |
 
 ### The rationale convention
 
-The order gate classifies `place_order` calls by their `rationale`:
-
-- `setup:<name> ... stop <price> ...` is a new entry and goes through every check.
-- `[exit] ...` closes or reduces a position.
-- `[protect] ...` places a protective stop or target for an existing fill.
-
-Exits and protective orders are never gated, so the agent can always reduce
-risk. The projectx-mcp server still applies its own limits to every order.
-
-### Recommended rollout
-
-1. **Read-only.** `PROJECTX_TRADING_ENABLED=false`. Use `/premarket` and
-   `/trade-plan`, and review paper trades.
-2. **Practice account.** Enable trading on a practice or combine account only
-   (`PROJECTX_ALLOWED_ACCOUNT_IDS`), micros, size 1, approve every order.
-3. **Supervised autonomy.** Relax approvals only after `/setup-scorecard` shows
-   30+ reviewed trades with positive expectancy and few rule breaks.
+`place_order` rationales start with `setup:<strategy> ...` for entries,
+`[exit] ...` to close or reduce, and `[protect] ...` for a protective stop or
+target. Exits and protective orders are never gated, so risk can always be reduced.
 
 ## Development
 
 ```bash
 npm install
-npm test          # node:test suite: gate rules, hooks end to end, indicators, content checks
-npm run lint      # eslint + markdownlint
+npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content
+npm run lint                     # eslint + markdownlint
+node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after editing agents, commands, rules, skills
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).

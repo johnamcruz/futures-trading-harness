@@ -1,0 +1,21 @@
+{
+  "name": "futures-trading-harness",
+  "interface": {
+    "displayName": "Futures Trading Harness"
+  },
+  "plugins": [
+    {
+      "name": "futures-trading-harness",
+      "version": "0.2.0",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

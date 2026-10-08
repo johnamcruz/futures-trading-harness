@@ -1,0 +1,25 @@
+{
+  "name": "futures-trading-harness",
+  "version": "0.2.0",
+  "contextFileName": "workspace/QWEN.md",
+  "commands": "qwen/commands",
+  "skills": "skills",
+  "agents": "qwen/agents",
+  "mcpServers": {
+    "projectx": {
+      "command": "node",
+      "args": ["${extensionPath}${/}scripts${/}mcp-gateway.js"],
+      "cwd": "${extensionPath}",
+      "timeout": 60000
+    }
+  },
+  "settings": [
+    { "name": "projectx-mcp entry", "description": "Absolute path to projectx-mcp's built dist/index.js", "envVar": "PROJECTX_MCP_ENTRY", "sensitive": false },
+    { "name": "TopstepX username", "description": "Your TopstepX platform login username (not your email)", "envVar": "PROJECTX_USERNAME", "sensitive": false },
+    { "name": "TopstepX API key", "description": "API key from TopstepX Settings > API", "envVar": "PROJECTX_API_KEY", "sensitive": true },
+    { "name": "Trading enabled", "description": "true lets the model place orders; anything else is read-only", "envVar": "PROJECTX_TRADING_ENABLED", "sensitive": false },
+    { "name": "Allowed symbols", "description": "Comma-separated contract roots, e.g. MNQ,MES", "envVar": "PROJECTX_ALLOWED_SYMBOLS", "sensitive": false },
+    { "name": "Allowed account ids", "description": "Comma-separated account ids the model may trade (practice/combine first)", "envVar": "PROJECTX_ALLOWED_ACCOUNT_IDS", "sensitive": false },
+    { "name": "Max daily loss", "description": "Stop opening risk after this realized loss for the trading day (below your firm limit)", "envVar": "PROJECTX_MAX_DAILY_LOSS", "sensitive": false }
+  ]
+}

@@ -15,7 +15,9 @@ const DEFAULT_NO_ENTRY_WINDOWS = [
 ].join(',');
 
 const GATE_CHECKS = [
+  'kill-switch',
   'setup-tag',
+  'strategy',
   'stop-defined',
   'plan-required',
   'time-window',
@@ -54,6 +56,8 @@ function loadConfig(env = process.env) {
       : DEFAULT_NO_ENTRY_WINDOWS,
     blackoutsFile: String(env.FTH_BLACKOUTS_FILE || '').trim()
       || path.join(os.homedir(), '.futures-trading-harness', 'blackouts.json'),
+    killSwitchFile: String(env.FTH_KILL_SWITCH_FILE || '').trim()
+      || path.join(os.homedir(), '.futures-trading-harness', 'STOP'),
     skipChecks: listEnv(env, 'FTH_ORDER_GATE_SKIP'),
   };
 }

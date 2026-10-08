@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Summarise bars into the numbers the analyst agents and playbooks use:
- * trend/momentum values, key levels, and which mechanical playbook triggers
+ * Summarise bars into the numbers the analyst agents and strategies use:
+ * trend/momentum values, key levels, and which mechanical strategy triggers
  * fired on the last closed bar. Parameters follow algoTraderBot/config.py.
  */
 
@@ -131,7 +131,7 @@ function snapshot(input, overrides = {}) {
       distance: round(stopDistance),
       long: round(last.c - stopDistance),
       short: round(last.c + stopDistance),
-      note: `${p.stopAtrMult} x ATR(${p.atrStop}) as trained in algoTraderBot; round to tickSize and widen to structure if the playbook says so`,
+      note: `${p.stopAtrMult} x ATR(${p.atrStop}) as trained in algoTraderBot; round to tickSize and widen to structure if the strategy says so`,
     },
     params: p,
   };

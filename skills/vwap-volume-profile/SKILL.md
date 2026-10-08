@@ -38,8 +38,8 @@ description: Use session and RTH VWAP and volume to judge trend quality, fair va
 
 ```text
 09:52 ET: 3m close above OR high, v = 2,140 vs OR average 1,180 (1.8×), price
-0.6 ATR above rising RTH VWAP → participation confirmed for playbook-orb.
+0.6 ATR above rising RTH VWAP → participation confirmed for the orb strategy.
 
-11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation; trend playbooks
+11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation; trend strategies
 off until a range break.
 ```

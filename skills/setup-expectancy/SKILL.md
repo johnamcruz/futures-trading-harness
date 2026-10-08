@@ -32,7 +32,7 @@ description: Measure whether each futures setup has an edge - win rate, average 
    | n ≥ 20, E < 0 | Restricted: only in its best context, or cut |
    | Rule-break share > 20% | Fix execution before judging the setup |
 
-5. Compare live stats with the backtest numbers recorded in the playbook. Live
+5. Compare live stats with the backtest numbers recorded in the strategy. Live
    far worse than backtest usually means execution drift or regime change.
 6. Record the decision as a `lesson` tagged with the setup.
 

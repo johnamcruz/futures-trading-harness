@@ -23,3 +23,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run lint
+      - run: npm run sync:check
+      - run: node scripts/strategies.js validate

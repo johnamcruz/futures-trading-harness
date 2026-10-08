@@ -17,7 +17,7 @@ current time. If no contractId, use `search_contracts` and take the
 ## Method
 
 1. Load the skills `market-structure`, `multi-timeframe-analysis`,
-   `liquidity-concepts`, and `market-snapshot`.
+   `liquidity-concepts`, `market-snapshot`, and `strategy-library`.
 2. Fetch closed bars: 1h (120), 15m (160), 3m (300). Stay within the rate
    limit: one request per timeframe. Save each result to
    `/tmp/fth/structure-<SYMBOL>-<tf>.json` and run the market-snapshot script on it.
@@ -25,8 +25,10 @@ current time. If no contractId, use `search_contracts` and take the
    classification, the latest BOS or CHoCH, and the dealing range with its 50%.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
    formed, equal highs/lows, untested 1h swings.
-5. Which structure-based playbooks are live: `setup:bos`, `setup:cisd_ote`
-   (with the trigger condition and price that would fire them).
+5. Which structure strategies are live for this symbol (`strategies.js list`;
+   e.g. `setup:bos`, `setup:cisd_ote`), with the trigger condition and price
+   that would fire each. Manual strategies (`signal: manual`) are yours to
+   evaluate from their STRATEGY.md body.
 
 ## Output (keep it under 250 words)
 

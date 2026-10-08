@@ -1,29 +1,29 @@
 # Contributing
 
-## Adding a playbook
+## Adding a strategy
 
-1. Use `/new-playbook <name> <source>` or copy an existing
-   `skills/playbook-*/SKILL.md`.
-2. Keep the structure: context filter, trigger, entry, stop, targets and
-   management, skip rules, an example with tick-correct math and a sample
-   rationale, and the source parameters.
-3. If the trigger is computable from bars, add it to `signals` in
-   `scripts/lib/trading/market-snapshot.js` with a test. The content test
-   checks that every snapshot signal has a playbook with the same tag.
+1. Copy `strategies/_template/` to `strategies/<name>/` (or use the
+   `strategy-authoring` skill / `/new-strategy`).
+2. Fill in the frontmatter and every body section; keep `status: paper`.
+3. `node scripts/strategies.js validate`
+4. For a new mechanical trigger, add a detector to `signals` in
+   `scripts/lib/trading/market-snapshot.js` and to `SIGNALS` in
+   `scripts/lib/trading/strategies.js`, with tests. Otherwise use `signal: manual`.
 
-## Adding an agent
+## Adding a skill, agent, or command
 
-- Frontmatter `name` (matches the file), `description`, `tools`, `model`.
-- Give it the fewest tools that work. MCP tools are named
-  `mcp__projectx__<tool>`.
-- Analysts are read-only. Order tools belong to `trade-executor` only.
+- Skills: `skills/<name>/SKILL.md` with `name`, `description`, and the three sections.
+- Agents: `agents/<name>.md` with `name`, `description`, `tools`, `model`; fewest
+  tools that work; order tools belong to `trade-executor` only.
+- Commands: a shim that says "Use the `<skill>` skill for: $ARGUMENTS".
+- Then run `node scripts/sync-harness.js` to regenerate the Codex, Qwen, and
+  workspace files, and commit them.
 
-## Changing hooks or gate rules
+## Changing the order gate, hooks, gateway, or runner
 
-- Logic goes in `scripts/lib/trading/` as pure functions; hook scripts parse
-  input and call them.
-- Add unit tests (`tests/lib/`) and an end-to-end hook test
-  (`tests/hooks/`) that runs through `run-with-flags.js`.
+- Logic lives in `scripts/lib/`; entry points stay thin.
+- Unit tests in `tests/lib/`, end-to-end tests in `tests/hooks/` (hooks through
+  `run-with-flags.js`, the gateway against a fake MCP server).
 - Order gating fails closed. Don't change that.
 
 ## Checks
@@ -32,6 +32,7 @@
 npm install
 npm test
 npm run lint
+node scripts/sync-harness.js --check
 ```
 
 Use conventional commit messages.

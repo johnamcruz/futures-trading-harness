@@ -1,101 +1,105 @@
 # Harness Design
 
-How this repository uses the ECC harness architecture to run a disciplined,
-self-reviewing futures trader on TopstepX through
+How this repository uses the ECC harness architecture to run an LLM-agnostic,
+autonomous futures trader on TopstepX through
 [projectx-mcp](https://github.com/johnamcruz/projectx-mcp).
 
-## Core idea
+## Principles
 
-> projectx-mcp is the hands and the hard limits. This harness is the desk:
-> who analyses, who approves, who executes, and which rules are enforced in
-> code rather than left to the model.
+1. **One canonical tree, many harnesses** (ECC's model). `agents/`, `skills/`,
+   `commands/`, `rules/`, `hooks/` are written once. Codex and Qwen adapters
+   are generated (`scripts/sync-harness.js`) and checked for drift in CI.
+2. **Enforcement lives in code below the model.** Anything that protects the
+   account is deterministic and fails closed: the order gate runs as a hook
+   where the harness supports hooks, and as an MCP gateway everywhere.
+3. **Strategies are documents.** A `STRATEGY.md` is read by the agents (body)
+   and by code (frontmatter). New strategies need no code unless they need a
+   new mechanical detector.
+4. **Workflows are skills.** Every harness supports SKILL.md; commands are thin
+   shims. This mirrors ECC's move from commands to skills.
+5. **Autonomy is a scheduler, not a long-lived agent.** Each cycle is one
+   short, headless run with a fresh context; state lives in the journal.
 
-The projectx-mcp guide states several soft rules (plan before trading, stop
-after 2 losses, no entries in the first 5 minutes). Most of them depend only on
-the journal and the clock, which are local, so a PreToolUse hook can enforce
-them without a network call.
+## Harness support
 
-## What was kept from ECC
+| Capability | Claude Code | Codex | Qwen Code | Other MCP clients |
+|---|---|---|---|---|
+| Package | `.claude-plugin/` | `.codex-plugin/` + `.agents/plugins/marketplace.json` | `qwen-extension.json` | n/a |
+| Skills | plugin `skills/` | plugin `skills/` | extension `skills/` | read `skills/*/SKILL.md` |
+| Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen/agents/*.md` (tool ids translated) | play roles from `agents/*.md` |
+| Commands | `commands/` | (use skills) | `qwen/commands/` (`{{args}}`) | n/a |
+| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md` | `workspace/AGENTS.md` |
+| Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (CLAUDE_PLUGIN_ROOT and exit 2 are compatible) | `~/.qwen/settings.json` (installer) | none |
+| Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
+| Headless | `claude -p --plugin-dir` | `codex exec` | `qwen -p` | custom argv |
 
-| ECC piece | Here |
-|---|---|
-| Plugin layout (`.claude-plugin/`, `agents/`, `skills/`, `commands/`, `hooks/`) | Same layout, trading content |
-| `run-with-flags.js` + `hook-flags.js` profile gating | Ported, env vars renamed `FTH_*`, plus a fail-closed list for order gating |
-| Hook stdin bounding (`hook-input.js`) | Kept |
-| Rules folder | `rules/trading/`, installed by `scripts/install-rules.js` |
-| Skill format (When to Use / How It Works / Examples) | Kept; enforced by a test |
+## Order gate
 
-Everything else in ECC (about 4,200 files: engineering agents and skills, other
-harness adapters, installers, dashboards, translations) was removed.
+`scripts/lib/trading/order-gate.js` (pure) is called through
+`scripts/lib/trading/check-order.js` by both the PreToolUse hook and the MCP
+gateway (`scripts/mcp-gateway.js`, a newline-delimited JSON-RPC proxy in front of
+projectx-mcp). A blocked `place_order` never reaches the server.
 
-## Desk roles
-
-| Role | Agent | Tools | Runs |
-|---|---|---|---|
-| Market structure | `market-structure-analyst` | bars, contracts, snapshot script | Parallel |
-| Trend and momentum | `trend-momentum-analyst` | bars, contracts, snapshot script | Parallel |
-| Volume and liquidity | `volume-liquidity-analyst` | bars, quote, snapshot script | Parallel |
-| Event risk | `news-calendar-analyst` | web only | Parallel |
-| Risk | `risk-manager` | account, positions, orders, performance, journal (read) | Parallel (state), then sequential (verdict) |
-| Head trader | main session | everything, via the commands | Synthesis and plan |
-| Execution | `trade-executor` | the only agent with order tools | After APPROVE |
-| Review | `trade-reviewer` | trades, orders, performance, journal | After exits, end of day |
-| Research | `strategy-researcher` | repo files | New playbooks |
-
-Separation of duties: the agent that finds a trade never approves it, and
-neither of them can place it.
-
-## The order gate
-
-`scripts/hooks/trading-order-gate.js` → `scripts/lib/trading/order-gate.js`.
-It matches `mcp__.*projectx.*__place_order`, so plugin-scoped server names
-still match.
-
-Classification by the start of `rationale`: `[exit]` and `[protect]` orders
-pass (risk-reducing; the MCP still applies its limits). Everything else is an
-entry and must pass:
+Orders are classified by `rationale`: `[exit]` and `[protect]` pass (the MCP
+still applies its limits). Entries must pass:
 
 | Check | Rule |
 |---|---|
-| `setup-tag` | Rationale names `setup:<name>` |
-| `stop-defined` | `stopLossBracket`, or a stop price stated in the rationale |
-| `plan-required` | A `plan` journal entry for the contract within `FTH_PLAN_MAX_AGE_MIN`, this trading day |
-| `time-window` | Not inside `FTH_NO_ENTRY_WINDOWS` (default 09:30–09:35 ET and 15:00–18:00 CT) |
-| `blackout` | Not inside a window in the blackouts file |
-| `loss-streak` | After `FTH_MAX_CONSECUTIVE_LOSSES` losing reviews in a row, wait `FTH_LOSS_COOLDOWN_MIN` |
-| `daily-loss-count` | Fewer than `FTH_MAX_DAILY_LOSSES` losing reviews this trading day |
-| `review-before-next-entry` | Every earlier successful entry today has a review |
+| `kill-switch` | No `~/.futures-trading-harness/STOP` |
+| `setup-tag` | Rationale names `setup:<strategy>` |
+| `strategy` | The strategy exists, is valid, `status: active`, trades this contract, and it is inside its `sessions` |
+| `stop-defined` | `stopLossBracket`, or a stop price in the rationale |
+| `plan-required` | A journal `plan` for the contract within `FTH_PLAN_MAX_AGE_MIN`, this trading day |
+| `time-window` | Outside `FTH_NO_ENTRY_WINDOWS` |
+| `blackout` | Outside news blackouts |
+| `loss-streak` | Cooldown after consecutive losing reviews |
+| `daily-loss-count` | Fewer than `FTH_MAX_DAILY_LOSSES` losses this trading day |
+| `review-before-next-entry` | Every earlier entry today has a review |
 | `max-entries` | Fewer than `FTH_MAX_ENTRIES_PER_DAY` entries |
 
-Trading day = since 17:00 America/Chicago. Reviews tagged `paper` never count
-toward live state.
+Malformed or oversized input, unreadable state, invalid config, or a crash
+blocks the order. Decisions go to `~/.futures-trading-harness/gate-log.jsonl`.
 
-Failure behaviour: malformed input, oversized input, an unreadable journal or
-blackout file, an invalid window spec, or a crash all block the order (exit 2).
-A user can still disable the hook explicitly (`FTH_DISABLED_HOOKS`,
-`hooks_enabled=false`); that is their decision, not the model's.
+## Autonomous runner
+
+`scripts/autotrader.js` keeps a per-day state (premarket done, cycles, end of
+day done) and starts one headless run at a time: premarket at `premarketAt`,
+a trade cycle every `cycleMinutes` inside `sessions`, end of day at `eodAt`
+(retried until it succeeds). The kill switch stops new cycles but not end of
+day. After `maxConsecutiveErrors` failed runs the runner creates the kill
+switch itself. Runs execute in `workspace/` with `FTH_ROOT` set, so every
+harness picks up the operator instructions.
+
+## Fork versus starting from scratch
+
+The repository began as a fork of ECC and was cut down to the parts that
+matter here. The result is the same as starting from scratch and copying the
+relevant ECC pieces: about 300 lines of ECC runtime (`run-with-flags.js`,
+`hook-flags.js`, `hook-input.js`), the plugin layout, the skill and agent
+formats, and the multi-harness adapter pattern. Everything trading-specific is
+new.
+
+| | Forked and stripped (current) | Fresh repo, copied pieces |
+|---|---|---|
+| Code today | Identical | Identical |
+| History | ECC's history sits below the cleanup commit | Clean |
+| GitHub | Shows "forked from affaan-m/ECC"; PRs default to the upstream unless retargeted | Independent |
+| Upstream fixes | `git cherry-pick` of runtime fixes is possible | Port by hand |
+
+Recommendation: keep the code as is. If the fork relationship or the inherited
+history gets in the way, create a new repository from the current tree. The
+runtime borrowed from ECC is small and stable, so losing the upstream link
+costs little.
 
 ## Known limits
 
-- Hooks can't see live prices or positions, so price-side checks (stop on the
-  correct side of the market, size vs. open position) stay in projectx-mcp's
-  `risk.ts` and the risk-manager agent.
-- The `[exit]`/`[protect]` labels are self-declared. A mislabelled entry
-  passes the gate (the MCP's position and loss limits still apply) and is
-  graded `mistake:rule-break` by the reviewer. Closing this hole needs
-  position awareness in the server; a good projectx-mcp follow-up is to let
-  `place_order` reject an `[exit]`/`[protect]` order that increases exposure.
-- Analysts move bars through a temp file to run `market-snapshot.js`. A
-  `get_indicators` tool in projectx-mcp would remove that round trip.
-- The CISD+OTE playbook mirrors algoTraderBot's zone math, which differs from
-  textbook OTE: longs enter at the 50% retracement, shorts at the 29.5%
-  retracement. It is ported as written; confirm whether it's intended.
-
-## Roadmap
-
-1. Read-only use with `/premarket` and `/trade-plan` (trading disabled).
-2. Practice account, micros, size 1, every order approved by hand.
-3. Upstream to projectx-mcp: exposure check for `[exit]`/`[protect]`, a
-   `get_indicators` tool, and per-setup stats in `get_performance`.
-4. Backtest replay: run the playbooks over historical bars with the same
-   snapshot code to record the baseline stats in each playbook.
+- Hooks and the gateway can't see live prices or positions. Price-side checks
+  (a stop on the correct side, an `[exit]` that actually reduces exposure) stay
+  in projectx-mcp and the risk-manager role. Upstreaming an exposure check for
+  `[exit]`/`[protect]` to projectx-mcp would close the self-labelling gap.
+- Codex agent roles can't be restricted to specific MCP tools in config; the
+  executor-only rule is an instruction there. The order gate still applies.
+- Headless harnesses auto-approve tool calls. Run the autonomous runner in a
+  container or as a user that can't modify the harness files.
+- The cisd_ote strategy mirrors algoTraderBot's zone math (shorts enter at the
+  29.5% retracement), which differs from textbook OTE. Confirm it's intended.

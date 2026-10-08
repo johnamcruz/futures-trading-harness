@@ -13,9 +13,11 @@
 
 const { tradingDayStart, parseWindows, inWindow } = require('./clock');
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
+const fs = require('fs');
+const { checkStrategyForOrder } = require('./strategies');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
-const SETUP_TAG = /\bsetup:[a-z0-9][a-z0-9_-]*/i;
+const SETUP_TAG = /\bsetup:([a-z0-9][a-z0-9_-]*)/i;
 const STOP_IN_TEXT = /\bstop\b[^\d\n]{0,25}\d/i;
 
 function isRiskReducing(rationale) {
@@ -94,7 +96,12 @@ function lossState(dayEntries) {
   return { streak, losses, lastLoss };
 }
 
-function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] } }) {
+/**
+ * `strategies` is the registry from strategies.js (loadStrategies). When it is
+ * null the strategy check is skipped (tests of other checks); the hook and the
+ * MCP gateway always pass it.
+ */
+function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null }) {
   if (isRiskReducing(input.rationale)) return { intent: 'risk-reducing', violations: [] };
 
   const rationale = String(input.rationale || '');
@@ -105,9 +112,16 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     if (message && !skip.has(check)) violations.push({ check, message });
   };
 
-  add('setup-tag', SETUP_TAG.test(rationale) ? null
-    : 'Rationale must name the playbook as setup:<name> (e.g. setup:orb). '
+  const setup = SETUP_TAG.exec(rationale);
+  add('kill-switch', config.killSwitchFile && fs.existsSync(config.killSwitchFile)
+    ? `Kill switch is on (${config.killSwitchFile}). No new entries until the user removes it.`
+    : null);
+  add('setup-tag', setup ? null
+    : 'Rationale must name the strategy as setup:<name> (e.g. setup:orb). '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
+  if (setup && strategies) {
+    add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now));
+  }
 
   const bracket = input.stopLossBracket && Number(input.stopLossBracket.ticks) > 0;
   add('stop-defined', bracket || STOP_IN_TEXT.test(rationale) ? null

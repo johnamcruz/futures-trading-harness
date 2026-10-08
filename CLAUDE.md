@@ -1,49 +1,52 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working on this repository.
+Guidance for coding agents working on this repository (Claude Code reads this
+file; Codex and others read `AGENTS.md`, which points here). Trading sessions
+run from `workspace/`, whose generated `AGENTS.md`/`CLAUDE.md`/`QWEN.md` hold the
+operator instructions.
 
 ## Project
 
-A Claude Code plugin for trading futures on TopstepX through the
-[projectx-mcp](https://github.com/johnamcruz/projectx-mcp) server. It uses the
-ECC harness architecture (agents, skills, commands, rules, profile-gated
-hooks) with trading content only. See `README.md` and `docs/HARNESS-DESIGN.md`.
+An LLM-agnostic futures trading harness on the ECC architecture: canonical
+agents, skills, commands, rules, and hooks, with generated adapters for Claude
+Code, Codex, and Qwen Code; strategies as `STRATEGY.md` documents; an order gate
+enforced by hooks and by an MCP gateway; and an autonomous runner.
 
 ## Layout
 
-- `agents/`: subagents (Markdown, frontmatter `name`, `description`, `tools`, `model`).
+- `agents/` (canonical roles, Claude format: `name`, `description`, `tools`, `model`).
   Only `trade-executor` may hold order-writing MCP tools; a test enforces it.
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
-  `## When to Use`, `## How It Works`, `## Examples`. Playbook descriptions end
-  with `Journal tag setup:<tag>`.
-- `commands/`: slash commands (frontmatter `description`, optional `argument-hint`).
-- `rules/trading/`: always-on rules, installed with `scripts/install-rules.js`.
+  `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
+  `commands/` are thin shims that say "Use the `<skill>` skill".
+- `strategies/<name>/STRATEGY.md`: schema in `scripts/lib/trading/strategies.js`.
+- `rules/trading/`: always-on rules (installed for Claude, embedded in workspace/AGENTS.md).
 - `hooks/hooks.json`: every hook runs through `scripts/hooks/run-with-flags.js`.
-- `scripts/lib/trading/`: pure logic (clock, journal, config, order gate,
-  indicators, market snapshot). Hook scripts stay thin.
-- `tests/`: `node:test` files named `*.test.js`, mirroring `scripts/`.
+- `scripts/lib/`: pure logic (frontmatter, harness-sync, install, autotrader,
+  trading/*). CLIs and hooks stay thin.
+- Generated, never edit by hand: `workspace/*.md`, `.codex/agents/*.toml`,
+  `qwen/agents/*`, `qwen/commands/*`. Run `node scripts/sync-harness.js`.
+- `tests/`: `node:test` files named `*.test.js`.
 
 ## Commands
 
 ```bash
-npm test              # node tests/run-all.js
-npm run lint          # eslint + markdownlint-cli2
-node scripts/market-snapshot.js bars.json
+npm test                         # node tests/run-all.js
+npm run lint                     # eslint + markdownlint-cli2
+node scripts/sync-harness.js     # after editing agents, commands, rules, or skills
+node scripts/strategies.js validate
 ```
 
 ## Rules for changes
 
-- CommonJS, Node 18+, no runtime dependencies, no TypeScript.
-- Hooks must not make network calls; read only local state (journal, clock,
-  config files). Keep hook scripts under 200 lines.
-- `pre:trading:order-gate` is fail-closed (`FAIL_CLOSED_HOOKS` in
-  `run-with-flags.js`): crashes, unreadable journals, truncated input, and bad
-  config block the order. Other hooks fail open (exit 0).
-- Never weaken a gate default without the user asking. Every gate change needs a
-  test in `tests/lib/order-gate.test.js` and, for hook wiring, in
-  `tests/hooks/trading-hooks.test.js`.
-- New `scripts/lib/` modules need a matching test in `tests/lib/`.
-- Example arithmetic in skills must be tick-correct (MNQ/MES tick 0.25; MNQ
-  $0.50/tick, MES $1.25/tick).
-- Never commit credentials. `PROJECTX_API_KEY` belongs in the MCP server env only.
+- CommonJS, Node 18+, no runtime dependencies (plugin installs don't run npm install).
+- Hooks and the gateway read only local state; no network. Hook scripts stay under 200 lines.
+- The order gate fails closed in both the hook (`FAIL_CLOSED_HOOKS` in
+  `run-with-flags.js`) and the gateway. Keep it that way.
+- Never weaken a gate default without the user asking. Gate changes need tests in
+  `tests/lib/order-gate.test.js` and wiring tests in `tests/hooks/trading-hooks.test.js`.
+- New `scripts/lib/` modules need tests in `tests/lib/`.
+- Strategies are ported faithfully from their source; flag suspected bugs.
+- Example arithmetic must be tick-correct (MNQ/MES tick 0.25; MNQ $0.50/tick, MES $1.25/tick).
+- Never commit credentials.
 - Conventional commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).

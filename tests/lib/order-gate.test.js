@@ -6,7 +6,7 @@ const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/li
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder } = require('../helpers');
 
-const config = loadConfig({});
+const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP' };
 const checks = r => r.violations.map(v => v.check).sort();
 const evaluate = (input, entries, opts = {}) =>
   evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
@@ -114,6 +114,35 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
   const skipping = loadConfig({ FTH_ORDER_GATE_SKIP: 'plan-required, setup-tag' });
   const r = evaluate(entryOrder({ rationale: 'long, stop 21480 because reasons' }), [], { config: skipping });
   assert.deepStrictEqual(r.violations, []);
+});
+
+test('strategy check: known, active, instrument, and session', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { strategies } = loadStrategies(require('path').resolve(__dirname, '..', '..'), {});
+  const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
+  const withReg = (input, iso) => evaluateOrder({ input, entries: [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], now: new Date(iso), config, strategies });
+  // 10:00 ET Wednesday: inside orb's 09:45-11:30 session
+  assert.deepStrictEqual(withReg(entryOrder(), '2026-10-07T14:00:00Z').violations, []);
+  assert.deepStrictEqual(at('2026-10-07T14:00:00Z').violations, []);
+  // 12:00 ET: outside orb's sessions
+  assert.deepStrictEqual(checks(withReg(entryOrder(), '2026-10-07T16:00:00Z')), ['strategy']);
+  // unknown strategy and instrument not traded
+  assert.match(withReg(entryOrder({ rationale: 'setup:mystery long stop 1' }), '2026-10-07T14:00:00Z').violations[0].message, /not a known strategy/);
+  assert.match(withReg(entryOrder({ contractId: 'CON.F.US.MCL.Z26' }), '2026-10-07T14:00:00Z').violations.map(v => v.message).join(), /does not trade MCL/);
+  // paper strategies cannot place live entries
+  const paper = strategies.map(s => (s.name === 'orb' ? { ...s, status: 'paper' } : s));
+  const r = evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config, strategies: paper });
+  assert.match(r.violations[0].message, /status "paper"/);
+});
+
+test('kill switch blocks entries but not exits', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(require('../helpers').tmpDir(), 'STOP');
+  fs.writeFileSync(file, '');
+  const on = { ...config, killSwitchFile: file };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: on })), ['kill-switch']);
+  assert.deepStrictEqual(evaluate(entryOrder({ rationale: '[exit] flatten' }), [], { config: on }).violations, []);
 });
 
 test('formatBlock lists every violation', () => {

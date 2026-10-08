@@ -25,7 +25,7 @@ description: Top-down futures analysis across timeframes (daily/4h for context, 
 2. **Run market-snapshot on each** and record trend direction (EMA 20 vs 50,
    SuperTrend), ADX, and the nearest levels.
 3. **Align.**
-   - All aligned → full playbook size and target.
+   - All aligned → full strategy size and target.
    - Context against bias → trade only at strong levels, reduce target to the
      next opposing level.
    - Trigger against bias → it's a pullback; wait for the trigger timeframe to
@@ -40,7 +40,7 @@ description: Top-down futures analysis across timeframes (daily/4h for context, 
 
 ```text
 Daily up, 1h up (ADX 28), 15m pulling back into session VWAP, 3m EMA cross up
-with ADX 19 → aligned long; playbook-ema-cross applies, target 1h swing high.
+with ADX 19 → aligned long; the ema_cross strategy applies, target 1h swing high.
 
 Daily down, 1h range, 3m ORB long → counter-context. Skip, or half target to
 the overnight high.

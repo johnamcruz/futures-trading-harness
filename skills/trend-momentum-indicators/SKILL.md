@@ -1,15 +1,15 @@
 ---
 name: trend-momentum-indicators
-description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings for futures - trend presence, strength, volatility regime, and when each signal is unreliable. Use when a playbook gates on an indicator or when classifying the regime.
+description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings for futures - trend presence, strength, volatility regime, and when each signal is unreliable. Use when a strategy gates on an indicator or when classifying the regime.
 ---
 
 # Trend and Momentum Indicators
 
 ## When to Use
 
-- A playbook gate depends on ADX, an EMA relationship, SuperTrend, or Keltner.
+- A strategy gate depends on ADX, an EMA relationship, SuperTrend, or Keltner.
 - Classifying the regime (trend, range, high or low volatility) for sizing and
-  playbook choice.
+  strategy choice.
 
 ## How It Works
 
@@ -27,9 +27,9 @@ Get every value from market-snapshot. Never estimate.
 Regime map:
 
 - **Trend:** ADX > 20 and rising, price on one side of EMA 20, SuperTrend
-  stable → breakout and pullback playbooks.
+  stable → breakout and pullback strategies.
 - **Range:** ADX < 18, EMA 9/20 tangled, repeated VWAP crosses → no trend
-  playbooks; trade the range edges or stand aside.
+  strategies; trade the range edges or stand aside.
 - **Volatility expansion:** ATR > 1.5 × its average → halve size (keep the $
   risk constant), widen stops to structure.
 
@@ -37,8 +37,8 @@ Regime map:
 
 ```text
 3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. EMA-cross
-and Keltner playbooks are gated off (their ADX gate fails anyway).
+and Keltner strategies are gated off (their ADX gate fails anyway).
 
 3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → keltner
-signal "long" is valid; check playbook-keltner-breakout skip rules.
+signal "long" is valid; check the keltner strategy skip rules.
 ```

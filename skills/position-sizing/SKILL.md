@@ -29,7 +29,7 @@ description: Size futures trades from the stop distance, tick value, and the rem
 2. **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
    fees from the account, if known).
 3. **Risk budget** = the smallest of:
-   - the playbook / plan $ risk,
+   - the strategy / plan $ risk,
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`,
    - 10% of the trailing-drawdown cushion (balance − loss floor).
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too

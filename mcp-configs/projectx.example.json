@@ -2,7 +2,12 @@
   "mcpServers": {
     "projectx": {
       "command": "node",
-      "args": ["/absolute/path/to/projectx-mcp/dist/index.js"],
+      "args": [
+        "/absolute/path/to/futures-trading-harness/scripts/mcp-gateway.js",
+        "--",
+        "node",
+        "/absolute/path/to/projectx-mcp/dist/index.js"
+      ],
       "env": {
         "PROJECTX_USERNAME": "your-topstepx-username",
         "PROJECTX_API_KEY": "your-api-key",

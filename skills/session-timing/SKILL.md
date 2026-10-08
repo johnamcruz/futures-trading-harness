@@ -1,13 +1,13 @@
 ---
 name: session-timing
-description: Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, Topstep cut-offs, and scheduled news. Use when timing an entry, choosing playbooks for the time of day, or setting news blackouts.
+description: Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, Topstep cut-offs, and scheduled news. Use when timing an entry, choosing strategies for the time of day, or setting news blackouts.
 ---
 
 # Session Timing
 
 ## When to Use
 
-- Before any entry: is this a good time for this playbook?
+- Before any entry: is this a good time for this strategy?
 - Premarket: build today's news blackout list.
 
 ## How It Works

@@ -1,0 +1,17 @@
+{
+  "harness": "qwen",
+  "model": "",
+  "symbols": ["MNQ"],
+  "account": "",
+  "workdir": "workspace",
+  "paper": true,
+  "cycleMinutes": 3,
+  "sessions": ["09:35-15:00@America/New_York"],
+  "premarketAt": "09:00@America/New_York",
+  "eodAt": "15:50@America/New_York",
+  "weekdaysOnly": true,
+  "maxCyclesPerDay": 150,
+  "cycleTimeoutMinutes": 8,
+  "maxConsecutiveErrors": 3,
+  "extraArgs": []
+}

@@ -1,14 +1,10 @@
 # AGENTS.md
 
-Instructions for coding agents working on this repository. The trading
-agents themselves live in `agents/` and follow `rules/trading/`.
+Instructions for coding agents (Codex, Qwen Code, Claude Code, others) working
+on this repository. Read `CLAUDE.md`; it applies to every coding agent.
 
-Read `CLAUDE.md` first; it applies to every coding agent. In short:
+To trade rather than develop, run your harness from `workspace/`, which has
+its own generated `AGENTS.md` with the operator instructions.
 
-- Run `npm test` and `npm run lint` before committing.
-- Keep the order gate fail-closed and covered by tests.
-- Only `agents/trade-executor.md` may list order-writing tools
-  (`place_order`, `modify_order`, `cancel_order`, `close_position`,
-  `partial_close_position`).
-- Strategy playbooks are ported from source code faithfully; flag suspected
-  source bugs instead of silently fixing them.
+Before committing: `npm test`, `npm run lint`, and `node scripts/sync-harness.js`
+if you changed agents, commands, rules, or skills.

@@ -8,8 +8,24 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
 
-const ROOT = path.resolve(__dirname, '..', '..');
-const RUNNER = path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js');
+const REPO = path.resolve(__dirname, '..', '..');
+const RUNNER = path.join(REPO, 'scripts', 'hooks', 'run-with-flags.js');
+
+// A plugin root whose only strategy trades MNQ at any time, so these tests
+// don't depend on the wall clock falling inside a real strategy's sessions.
+const ROOT = (() => {
+  const root = tmpDir();
+  fs.symlinkSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'));
+  const dir = path.join(root, 'strategies', 'anytime');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), [
+    '---', 'name: anytime', 'description: Test strategy that is valid at any time of day for MNQ only.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1', '---',
+    '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  return root;
+})();
+const ORDER = entryOrder({ rationale: 'setup:anytime long, stop 21480, target 21540, risk $40' });
 
 function runHook(hookId, script, profiles, payload, env = {}) {
   const res = spawnSync(process.execPath, [RUNNER, hookId, script, profiles], {
@@ -31,12 +47,14 @@ function setup(entries, extraEnv = {}) {
       PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '',
+      FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
+      FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
       ...extraEnv,
     },
   };
 }
 
-const orderPayload = (input = entryOrder()) => ({ tool_name: 'mcp__projectx__place_order', tool_input: input });
+const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__projectx__place_order', tool_input: input });
 
 test('order gate blocks an unplanned entry with exit code 2', () => {
   const { env } = setup([]);
@@ -54,7 +72,16 @@ test('order gate allows a planned entry', () => {
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);
-  assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_projectx__place_order', tool_input: entryOrder() }, env).code, 2);
+  assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_projectx__place_order', tool_input: ORDER }, env).code, 2);
+});
+
+test('order gate blocks unknown strategies and instruments the strategy does not trade', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date()), kind: 'plan', contractId: 'CON.F.US.MES.Z26', text: 'plan' }]);
+  const unknown = gate(orderPayload({ ...ORDER, rationale: 'setup:nosuch long, stop 1' }), env);
+  assert.strictEqual(unknown.code, 2);
+  assert.match(unknown.stderr, /\[strategy\] setup:nosuch is not a known strategy/);
+  const mes = gate(orderPayload({ ...ORDER, contractId: 'CON.F.US.MES.Z26' }), env);
+  assert.match(mes.stderr, /does not trade MES/);
 });
 
 test('order gate fails closed on malformed input', () => {
@@ -72,7 +99,7 @@ test('order gate fails closed when the journal is unreadable', () => {
 
 test('order gate fails closed on oversized input', () => {
   const { env } = setup([]);
-  const r = gate(orderPayload(entryOrder({ rationale: `setup:orb ${'x'.repeat(5000)}` })), { ...env, FTH_HOOK_INPUT_MAX_BYTES: '1000' });
+  const r = gate(orderPayload({ ...ORDER, rationale: `setup:anytime ${'x'.repeat(5000)}` }), { ...env, FTH_HOOK_INPUT_MAX_BYTES: '1000' });
   assert.strictEqual(r.code, 2);
 });
 
@@ -101,6 +128,7 @@ test('session-start briefing lists lessons and day state', () => {
   assert.strictEqual(r.code, 0);
   assert.match(r.stdout, /Trading harness briefing/);
   assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
+  assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
 });
 
 test('stop hook asks once for a review of unreviewed entries', () => {
@@ -113,4 +141,36 @@ test('stop hook asks once for a review of unreviewed entries', () => {
   assert.strictEqual(run({ stop_hook_active: true }).code, 0);
   assert.strictEqual(runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict',
     {}, { ...env, FTH_HOOK_PROFILE: 'minimal' }).code, 0);
+});
+
+test('MCP gateway blocks a bad order end to end and forwards everything else', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const strategiesDir = path.join(ROOT, 'strategies');
+  const env = {
+    PATH: process.env.PATH,
+    HOME: dir,
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_STRATEGIES_DIRS: strategiesDir,
+    FTH_NO_ENTRY_WINDOWS: '',
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const send = m => gw.stdin.write(`${JSON.stringify(m)}\n`);
+  send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_bars', arguments: {} } });
+  send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } });
+  gw.stdin.end();
+  const code = await new Promise(resolve => gw.on('close', resolve));
+  assert.strictEqual(code, 0);
+  const responses = out.trim().split('\n').map(l => JSON.parse(l));
+  const byId = Object.fromEntries(responses.map(r => [r.id, r]));
+  assert.strictEqual(byId[1].result.content[0].text, 'forwarded:initialize');
+  assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:get_bars');
+  assert.strictEqual(byId[3].result.isError, true);
+  assert.match(byId[3].result.content[0].text, /\[plan-required\]/);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.strictEqual(log[0].decision, 'blocked');
 });

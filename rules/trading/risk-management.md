@@ -13,7 +13,7 @@
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
-- Minimum planned reward-to-risk is 1.5R unless the playbook says otherwise.
+- Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise.
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
 - Skip the trade when unsure. Standing aside is a position.
