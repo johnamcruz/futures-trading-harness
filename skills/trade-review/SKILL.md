@@ -17,14 +17,28 @@ description: Review closed futures trades against their plan - R multiple, plan 
    fees are separate), `search_orders` for what was placed and modified, and
    `journal_read {kind:"plan"}` / `{kind:"order_placed"}` for the plan and
    rationale.
-2. **Compute.** Planned risk $ = |entry − stop| ÷ tickSize × tickValue × size.
+2. **Look back before grading** (this is how the desk learns):
+   - **What you saw when you entered.** Autonomous: the cycle that placed
+     the entry in `<FTH_HOME>/logs/cycles-<day>.jsonl` (match its time and
+     `orders`), then its record in `logs/cycles/<day>/`: the prompt (the last
+     10 bars, what fired and its confluence, the trend rule, your last 10
+     decisions) and what you did. Interactive: the plan entry. Then the bars
+     after the entry (`bars.js`, or the runner's file): was the read wrong,
+     or the execution?
+   - **Your last 10 trades.** `node <root>/scripts/lessons.js` (it starts
+     with the form of the last 10: record, expectancy, repeated mistakes)
+     and `journal_read {kind:"review", tag:"setup:<name>"}` for this
+     setup's last reviews. Is this a mistake you already made? If the same
+     `mistake:*` tag appears twice in the last 10 trades, write the lesson
+     **now** (with the trades as evidence), not at end of day.
+3. **Compute.** Planned risk $ = |entry − stop| ÷ tickSize × tickValue × size.
    R = net P&L ÷ planned risk. MAE/MFE from `get_bars` over the hold, if useful.
-3. **Grade the process (A–F)** independently of the result:
+4. **Grade the process (A–F)** independently of the result:
    - Was the trigger real (the plan's condition actually happened)?
    - Entry at the planned price ± slippage? Stop placed at the exchange at once?
    - Managed per the plan (no widened stop, no early panic exit, no moved target)?
    - Size per the position-sizing rules?
-4. **Write the review** with `journal_add {kind:"review", contractId, text, tags}`:
+5. **Write the review** with `journal_add {kind:"review", contractId, text, tags}`:
    - text: plan vs. actual, R, grade, what to repeat or change.
    - tags: exactly one of `result:win | result:loss | result:scratch (|R| < 0.2) |
      result:nofill`; `setup:<name>`; `regime:<primary>` (from the plan); the
@@ -35,10 +49,10 @@ description: Review closed futures trades against their plan - R multiple, plan 
    turns them into instincts (each setup's record by regime, recurring
    mistakes) that every later cycle sees. A review without them teaches
    nothing.
-5. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
+6. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
    one rule, the evidence count, and the condition. Don't write a lesson from a
    single trade unless it's a rule break.
-6. Also review blocked orders: the server's (`order_blocked` journal
+7. Also review blocked orders: the server's (`order_blocked` journal
    entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, FTH_HOME defaulting to `~/.futures-trading-harness`, with the
    checks that refused each). A block means the plan or sizing was wrong
    before a guardrail had to say so.

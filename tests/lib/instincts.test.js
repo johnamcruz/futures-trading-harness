@@ -29,8 +29,8 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
   assert.ok(list.some(x => x.kind === 'lesson' && x.evidence === 4));
   assert.ok(!list.some(x => /orb in range/.test(x.text)), 'paper reviews are not evidence');
   for (let k = 1; k < list.length; k += 1) assert.ok(list[k - 1].confidence >= list[k].confidence, 'strongest first');
-  assert.strictEqual(digest(journal, 2).length, 2);
-  assert.match(digest(journal, 1)[0], /^\(0\.\d\) /);
+  assert.strictEqual(digest(journal, 2).length, 3, 'the form of the recent trades, then the top 2');
+  assert.match(digest(journal, 1)[1], /^\(0\.\d\) /);
   assert.deepStrictEqual([reviewR({ tags: ['r:-1.11'] }), reviewR({ text: 'R = 2.5' }), reviewR({ text: 'none' })], [-1.11, 2.5, null]);
   assert.deepStrictEqual([confidenceFor(1), confidenceFor(30)], [0.3, 0.9]);
 });
@@ -50,4 +50,18 @@ test('the trade prompt carries the top instincts as notes, not rules', () => {
   const p = prompts(validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' }), new Date(), '/r')
     .trade([{ symbol: 'MNQ' }], { lessons: ['(0.6) orb in trend-up: 7 trades -> favour'] });
   assert.match(p, /Instincts from your reviewed trades \(confidence; notes from your own past, not rules\): \(0\.6\) orb in trend-up: 7 trades -> favour\./);
+});
+
+test('recent form and the last 10 trades: record, expectancy, and the mistakes that repeat', () => {
+  const { recentTrades, recentForm } = require('../../scripts/lib/trading/instincts');
+  const j = [
+    ...Array.from({ length: 12 }, (_, k) => review(k % 3 ? 'loss' : 'win', ['setup:orb', 'regime:range', `r:${k % 3 ? -1 : 2}`, ...(k >= 8 && k % 3 ? ['mistake:chased'] : [])], `orb long #${k}`)),
+  ];
+  const trades = recentTrades(j);
+  assert.strictEqual(trades.length, 10);
+  assert.strictEqual(trades[0], 'orb long loss -1R in range');
+  assert.match(trades.at(-1), /orb long loss -1R in range \[mistake:chased\]/);
+  assert.match(recentForm(j), /^last 10 trades: 3W\/7L, E -0\.1R; repeating: mistake:chased x3$/);
+  assert.match(digest(j)[0], /^\(form\) last 10 trades/);
+  assert.strictEqual(recentForm([]), null);
 });

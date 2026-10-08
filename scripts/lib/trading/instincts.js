@@ -101,9 +101,36 @@ function instincts(entries) {
   return out.filter(x => x.confidence >= 0.3).sort((a, b) => b.confidence - a.confidence || b.evidence - a.evidence);
 }
 
-/** The top `n` instincts as lines for a prompt or briefing. */
-function digest(entries, n = 6) {
-  return instincts(entries).slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`);
+/**
+ * The last `n` reviewed trades, oldest first, one line each: what was traded,
+ * how it ended, and what went wrong ("orb long loss -1.11R [mistake:chased]").
+ */
+function recentTrades(entries, n = 10) {
+  return entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n).map(r => {
+    const dir = (/\b(long|short)\b/i.exec(String(r.text || '')) || [])[1];
+    const rr = reviewR(r);
+    const mistakes = (r.tags || []).filter(t => String(t).toLowerCase().startsWith('mistake:'));
+    return `${tagValue(r, 'setup') || '?'}${dir ? ` ${dir.toLowerCase()}` : ''} ${reviewResult(r)}${rr === null ? '' : ` ${rr >= 0 ? '+' : ''}${rr}R`}${tagValue(r, 'regime') ? ` in ${tagValue(r, 'regime')}` : ''}${mistakes.length ? ` [${mistakes.join(', ')}]` : ''}`;
+  });
 }
 
-module.exports = { instincts, digest, reviewR, confidenceFor };
+/** The form of the last `n` reviewed trades: record, expectancy, and the mistakes that repeat. */
+function recentForm(entries, n = 10) {
+  const list = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n);
+  if (!list.length) return null;
+  const wins = list.filter(r => reviewResult(r) === 'win').length;
+  const losses = list.filter(r => reviewResult(r) === 'loss').length;
+  const rs = list.map(reviewR).filter(Number.isFinite);
+  const counts = {};
+  for (const r of list) for (const t of (r.tags || []).filter(x => String(x).toLowerCase().startsWith('mistake:'))) counts[t] = (counts[t] || 0) + 1;
+  const repeats = Object.entries(counts).filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t} x${c}`);
+  return `last ${list.length} trades: ${wins}W/${losses}L${rs.length ? `, E ${(rs.reduce((a, b) => a + b, 0) / rs.length) >= 0 ? '+' : ''}${round(rs.reduce((a, b) => a + b, 0) / rs.length)}R` : ''}${repeats.length ? `; repeating: ${repeats.join(', ')}` : '; no repeated mistake'}`;
+}
+
+/** The top `n` instincts as lines for a prompt or briefing, the recent form first. */
+function digest(entries, n = 6) {
+  const form = recentForm(entries);
+  return [...(form ? [`(form) ${form}`] : []), ...instincts(entries).slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
+}
+
+module.exports = { instincts, digest, recentTrades, recentForm, reviewR, confidenceFor };

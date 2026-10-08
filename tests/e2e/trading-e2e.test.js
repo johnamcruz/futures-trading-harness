@@ -25,6 +25,8 @@ const { scanRecord, appendJsonl } = require('../../scripts/lib/trading/scan-log'
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { tmpDir, writeJournal } = require('../helpers');
+const { digest, recentTrades } = require('../../scripts/lib/trading/instincts');
+const { readJournal } = require('../../scripts/lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
@@ -74,6 +76,8 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     record.decisions.push({ what: 'relabelled as a reversal', ...gate(order('cisd_ote', side)) });
     record.decisions.push({ what: 'counter-trend', ...gate(order(name, side === 'long' ? 'short' : 'long')) });
     record.decisions.push({ what: 'after the signal expired', ...gate(order(name, side), new Date(clockRef.t + 15 * 60000)) });
+    // The trade closes at a loss and the reviewer writes it up (trade-review skill tags).
+    fs.appendFileSync(journal, `${JSON.stringify({ ts: now.toISOString(), kind: 'review', contractId: CONTRACT, text: `${name} ${side} stopped out, R = -1.05`, tags: ['result:loss', `setup:${name}`, 'MNQ', 'regime:trend-up', 'r:-1.05', 'mistake:chased'] })}\n`);
     return { ok: true, timedOut: false, result: `CYCLE RESULT: executed - ${name} ${side}` };
   }
 
@@ -92,7 +96,8 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: STEP })),
     scanFor: (symbol, bars) => scan(strategies3m, { bars }, { symbol, now: new Date(clockRef.t) }),
     scanLog: rec => appendJsonl(path.join(home, 'logs', 'scans.jsonl'), scanRecord(rec)),
-    lessons: () => ['(0.5) bos in trend-up: 5 trades, win 60%, E +0.4R -> favour'],
+    lessons: () => digest(readJournal(journal), 5),
+    recentTrades: () => recentTrades(readJournal(journal), 10),
   });
   for (let guard = 0; clockRef.t < Date.parse('2026-04-28T04:15:30Z') && guard < 5000; guard += 1) {
     const ms = await runner.step();
@@ -104,7 +109,6 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   for (const c of cycles) {
     assert.match(c.prompt, /MNQ last 10 closed 3m bars \(ET open time, oldest first\)/);
     assert.match(c.prompt, /MNQ Trend rule: prevailing trend/);
-    assert.match(c.prompt, /Instincts from your reviewed trades/);
     assert.match(c.prompt, /Load the skills trade-session, multi-timeframe-analysis, and strategy-library/);
   }
   assert.ok(cycles.some(c => /Your last \d cycle\(s\)/.test(c.prompt)), 'later cycles see the earlier results');
@@ -117,6 +121,13 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   assert.deepStrictEqual(d['relabelled as a reversal'].violations.map(v => v.check), ['trigger-fired']);
   assert.ok(d['counter-trend'].violations.some(v => v.check === 'mtf-trend'), JSON.stringify(d['counter-trend'].violations));
   assert.ok(d['after the signal expired'].violations.some(v => v.check === 'trigger-fired' && /expired/.test(v.message)));
+  // The loop closes: the review of that trade is in every later prompt, with the form of the last trades.
+  const after = cycles.filter(c => Date.parse(c.at) > Date.parse(traded.at));
+  assert.ok(after.length >= 1, 'a cycle after the trade');
+  for (const c of after) {
+    assert.match(c.prompt, /Your last 1 reviewed trade\(s\), oldest first: bos long loss -1\.05R in trend-up \[mistake:chased\]/);
+    assert.match(c.prompt, /Instincts from your reviewed trades .*\(form\) last 1 trades: 0W\/1L, E -1\.05R/);
+  }
   // The records and logs the gate and the reviews read.
   assert.ok(fs.existsSync(path.join(home, 'mtf', 'MNQ.json')));
   assert.ok(Array.isArray(readSignals(home, 'MNQ', '3m').candidates), 'the signal record of the last closed bar');
