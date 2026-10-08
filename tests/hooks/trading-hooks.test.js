@@ -27,6 +27,21 @@ const ROOT = (() => {
     'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1', '---',
     '## When to Use', '## How It Works', '## Examples', '',
   ].join('\n'));
+  const prop = path.join(root, 'strategies', 'propped');
+  fs.mkdirSync(prop, { recursive: true });
+  fs.writeFileSync(path.join(prop, 'STRATEGY.md'), [
+    '---', 'name: propped', 'description: Test policy strategy that trades the topstep_50k combine in MNQ micros, any time.',
+    'status: active', 'instruments: [MNQ, NQ]', 'timeframe: 3m', 'signal: policy', 'strategies: [crossing]', 'account: topstep_50k', 'contracts: micro',
+    'exit:', '  trail_activate_r: 2', '  trail_giveback_r: 0.5', 'risk:', '  stop: strategy', '  min_rr: 2', '---',
+    '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  const rules = path.join(root, 'strategies', 'crossing');
+  fs.mkdirSync(rules, { recursive: true });
+  fs.writeFileSync(path.join(rules, 'STRATEGY.md'), [
+    '---', 'name: crossing', 'description: Test rules strategy, an EMA cross on MNQ, traded only through the propped policy strategy.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - ema(9) crosses_above ema(20)',
+    'risk:', '  stop: atr:0.5', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
   return root;
 })();
 const ORDER = entryOrder({ rationale: 'setup:anytime long, stop 21480, target 21540, risk $40' });
@@ -309,4 +324,71 @@ test('MCP gateway: no request may reuse the id of an order call whose reply is o
   ]);
   const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
   assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
+});
+
+test('order gate: a strategy that trades an account is gated on the attempt and its size budget, even with the checks skipped', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const { dir, env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], {
+    FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_ORDER_GATE_SKIP: 'combine,policy',
+  });
+  let r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[combine\] topstep_50k: no topstep_50k attempt is started/);
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  prop.startAttempt(env.FTH_HOME, account);
+  prop.snapshot(env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
+  r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[policy\] setup:propped: no verdict for MNQ/);
+  prop.appendVerdict(env.FTH_HOME, {
+    strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+    policy: null, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+  });
+  r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+  // The verdict permits one entry: once the journal shows it placed, a re-entry waits for the next setup.
+  const used = setup([
+    { ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: order.contractId, text: 'plan' },
+    { ts: minutesAgo(0.5, new Date(TEST_NOW)), kind: 'order_placed', contractId: order.contractId, text: 'setup:propped long', data: { result: { success: true } } },
+    { ts: minutesAgo(0.2, new Date(TEST_NOW)), kind: 'review', contractId: order.contractId, text: 'stopped', tags: ['result:loss', 'setup:propped'] },
+  ], { FTH_HOME: env.FTH_HOME, FTH_ACCOUNTS_DIRS: env.FTH_ACCOUNTS_DIRS });
+  r = gate(orderPayload(order), used.env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /already used for an entry/);
+  // While the attempt runs, a strategy that doesn't trade it can't enter.
+  r = gate(orderPayload(entryOrder({ rationale: 'setup:anytime long, stop 21480, target 21540' })), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /topstep_50k attempt is running/);
+  // 0.2 x $2,000 cushion = $400; 40 ticks = $20.74 a contract: at most 19.
+  r = gate(orderPayload({ ...order, size: 20 }), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /20 MNQ is not within the account's size budget/);
+  assert.ok(fs.existsSync(dir));
+});
+
+test('MCP gateway: while a prop attempt runs, no entry while any position is open on the account', async () => {
+  const { spawn } = require('child_process');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const dir = tmpDir();
+  const home = tmpDir();
+  prop.startAttempt(home, accountNamed(REPO, 'topstep_50k', {}));
+  const env = {
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
+    FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 1 }]),
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } })}\n`);
+  gw.stdin.end();
+  assert.strictEqual(await new Promise(resolve => gw.on('close', resolve)), 0);
+  const r = JSON.parse(out.trim().split('\n')[0]);
+  assert.strictEqual(r.result.isError, true);
+  assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: CON.F.US.MES.Z26 is open/);
 });

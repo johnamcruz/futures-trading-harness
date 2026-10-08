@@ -14,6 +14,34 @@ The architecture is based on [ECC](https://github.com/affaan-m/ECC): one
 canonical tree of agents, skills, commands, rules, and profile-gated hooks, with
 native adapters generated for each harness.
 
+It also trains a reinforcement-learning policy to **pass prop-firm combines**
+(Topstep 100K by default: $6,000 target, $3,000 trailing max loss, $2,000
+daily limit) across all the strategies, in micros or minis; see
+[Passing prop challenges](#passing-prop-challenges).
+
+## ECC in brief
+
+ECC keeps everything an agent needs as plain documents in one tree, and
+generates each harness's own format from it:
+
+| Slot | What it is | Here |
+|---|---|---|
+| `agents/` | Roles: a name, a description, the tools it may use | analysts, risk manager, executor (the only role with order tools), reviewer |
+| `skills/<name>/SKILL.md` | Workflows and know-how: When to Use, How It Works, Examples | trade-session, premarket, end-of-day, prop-challenge-pacing, policy-training, ... |
+| `commands/` | Thin shims that start a skill | `/trade-session`, `/combine-status`, `/train-policy`, ... |
+| `rules/` | Always-on rules | risk, the order rationale, market hours |
+| `hooks/` | Code that runs on harness events | the order gate (PreToolUse), briefings, review reminders |
+| Domain documents | The harness's own documents in the same style | `strategies/<name>/STRATEGY.md`, `accounts/<name>/ACCOUNT.md` |
+
+Code reads each document's frontmatter; agents read its body. Adapters for
+Codex, Qwen Code, and the shared workspace are generated
+(`node scripts/sync-harness.js`) and never edited by hand. Logic lives in
+`scripts/lib/` (pure, tested), CLIs and hooks stay thin, and anything that
+must hold (the gate, the account rules, a policy's promotion gate) is
+enforced in code, not left to the prompt. The RL fits the same way: the prop
+challenge is a strategy document (`signal: policy`), its account is an
+account document, and its workflows are skills.
+
 > [!WARNING]
 > This software lets an AI place real orders on your account. Futures trading
 > involves substantial risk of loss, and AI models make mistakes. Start with
@@ -74,7 +102,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 | Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
 | Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
-| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
+| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
 | Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
@@ -177,9 +205,12 @@ strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTra
 | Path | Contents |
 |---|---|
 | `agents/` | 8 roles: 4 analysts, risk manager, executor, reviewer, strategy researcher (canonical, Claude format) |
-| `skills/` | 19 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
+| `skills/` | 20 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
 | `strategies/` | Strategy documents and the template |
-| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy` |
+| `accounts/` | Prop account profiles (`ACCOUNT.md`): Topstep 50K, 100K, 150K combines |
+| `models/` | Promoted policy bundles (trained prop-challenge policies) |
+| `rl/` | Python trainer for prop-challenge policies: MaskablePPO on the harness's own backtester, Optuna sweep → retrain → ship with JSON config families |
+| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/train-policy` |
 | `rules/trading/` | Always-on rules |
 | `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
 | `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
@@ -193,7 +224,7 @@ Generated files come from the canonical sources: `node scripts/sync-harness.js`
 
 ## Setup
 
-Requires Node.js 18+ (22+ for the order-flow connector) and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
+Requires Node.js 22+ and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
 (`npm install && npm run build`; note the path to `dist/index.js`).
 
 ```bash
@@ -330,6 +361,59 @@ Results are in R (as algoTraderBot reports them) and in dollars after fees,
 broken down by strategy, exit, and month. See
 [docs/BACKTESTING.md](docs/BACKTESTING.md).
 
+### Passing prop challenges
+
+A trained policy learns to pass prop-firm combines with a **high pass rate
+and a high win rate**, never blowing the account. It plays thousands of
+simulated combines from random start days on the harness's own backtester,
+rewarded for passing (more for passing sooner) and for winning trades,
+penalized far more for a blow, and lightly for losing trades and for running
+out of time.
+
+The prop challenge is a strategy: a **policy strategy** (`signal: policy`)
+trades the setups of every rules strategy it lists on a prop account, and a
+trained policy learns which to take, at what size, and when to bank a trade
+(`strategies/prop_portfolio_3m/STRATEGY.md`):
+
+```yaml
+signal: policy
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim]   # every 3-minute strategy
+account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
+sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
+contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)
+policy: { bundle: prop_portfolio_3m_topstep_100k }   # models/<bundle>.json, once one passes the gate
+```
+
+- `node scripts/combine.js start --account topstep_100k` starts an attempt;
+  `status` shows balance, floor, cushion, progress, and the size budget. The
+  runner snapshots the balance every bar and records each day's close; the
+  order gate refuses that strategy's entries without a started attempt, a
+  fresh snapshot, or room under the daily limits and the size budget.
+- The policy sees which strategy fired, the account, the setup's risk (micro
+  or mini), and the market; it decides at each setup (skip, half, or full
+  size) and, past the ratchet, whether to bank the trade. It never picks the
+  side. It is trained
+  in Python (`pip install -r rl/requirements.txt`) with MaskablePPO on the
+  harness's own backtester, so training, backtests, and live trading run the
+  same rules. Each config family is JSON:
+
+  ```bash
+  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_3m_topstep_100k_v1.json --dry-run
+  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_3m_topstep_100k_v1.json     # Optuna over the search space
+  python rl/retrain.py --config rl/configs/retrain/prop_portfolio_3m_topstep_100k_v1.json   # best trial, more seeds
+  python rl/ship.py    --config rl/configs/ship/prop_portfolio_3m_topstep_100k_v1.json      # out of sample, gate, promote
+  ```
+
+- The sweep ranks recipes by pass rate plus win rate (any blow is
+  infeasible). A policy is promoted only when every retrained seed is
+  blow-free on the selection window and, out of sample, it has zero blows in
+  every month and a pass rate of at least 40% over 20+ attempts (and a win
+  rate floor, if `min_win_rate` is set); live trading refuses any other.
+- `node scripts/backtest.js --config <file> --prop prop_portfolio_3m [--bundle <name>]`
+  runs combine attempts from every start day: pass, blow, and timeout rates.
+
+See [docs/RL-DESIGN.md](docs/RL-DESIGN.md).
+
 ### Order flow from TopstepX
 
 The `ofi` and `ofi_absorption` strategies are plain STRATEGY.md rules that
@@ -355,6 +439,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 |---|---|---|
 | `FTH_KILL_SWITCH_FILE` | `~/.futures-trading-harness/STOP` | If it exists, no new entries |
 | `FTH_STRATEGIES_DIRS` | (none) | Extra strategy folders |
+| `FTH_ACCOUNTS_DIRS` / `FTH_MODELS_DIRS` | (none) | Extra account-profile and policy-bundle folders |
 | `FTH_PLAN_MAX_AGE_MIN` | 120 | Plan freshness |
 | `FTH_MAX_CONSECUTIVE_LOSSES` / `FTH_LOSS_COOLDOWN_MIN` | 2 / 30 | Loss-streak cooldown |
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
@@ -381,7 +466,7 @@ only checks that they really reduce the position.
 
 ```bash
 npm install
-npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content
+npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content (+ rl/tests when Python has numpy)
 npm run lint                     # eslint + markdownlint
 node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after editing agents, commands, rules, skills
 ```

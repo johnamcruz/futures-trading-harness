@@ -48,3 +48,8 @@ temp/
 
 # Generated per machine by scripts/install.js
 /workspace/.qwen/
+
+# Python (rl/ trainer)
+__pycache__/
+*.pyc
+.venv/

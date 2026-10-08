@@ -29,6 +29,8 @@ risk:
   stop: atr:0.5               # atr:<multiple of ATR(20)> | a distance expression (0.5 * atr(20)) | structure | swing | manual
   min_rr: 2                   # minimum planned reward:risk (the agents plan to it; not checked at order time)
   max_risk_usd: 50            # optional per-trade cap the risk-manager applies (not checked at order time)
+# To trade a prop account (account, sizing, contracts, policy), list this strategy
+# in a policy strategy (signal: policy, e.g. strategies/prop_portfolio_3m) instead.
 source: where the rules came from (code path, backtest, book, idea)
 ---
 

@@ -1,0 +1,125 @@
+{
+  "name": "prop_portfolio_3m_topstep_100k_v1",
+  "strategy": "prop_portfolio_3m",
+  "symbol": "MNQ",
+  "data": {
+    "MNQ": "../../../data/MNQ_1min.csv"
+  },
+  "windows": {
+    "train": [
+      "2021-01-01",
+      "2023-07-01"
+    ],
+    "select": [
+      "2023-07-01",
+      "2024-07-01"
+    ],
+    "oos": [
+      "2024-07-01",
+      "2025-07-01"
+    ]
+  },
+  "eval_every": 2,
+  "seeds": [
+    1
+  ],
+  "total_timesteps": 150000,
+  "n_envs": 4,
+  "hidden": [
+    64,
+    64
+  ],
+  "normalize_reward": true,
+  "ppo": {
+    "n_steps": 1024,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5
+  },
+  "reward": {
+    "pass": 10,
+    "speed": 3,
+    "timeout": 1,
+    "dense": 1,
+    "win": 0.5,
+    "loss": 0.5
+  },
+  "study": {
+    "n_trials": 40,
+    "n_jobs": 1,
+    "sampler": "tpe",
+    "seed": 0,
+    "pruner": "median",
+    "checkpoints": 4,
+    "warmup_checkpoints": 1,
+    "min_trades_per_attempt": 3,
+    "win_rate_weight": 0.5
+  },
+  "search_space": {
+    "searched": {
+      "ppo.learning_rate": {
+        "type": "float",
+        "low": 3e-05,
+        "high": 0.001,
+        "log": true
+      },
+      "ppo.ent_coef": {
+        "type": "float",
+        "low": 0.001,
+        "high": 0.05,
+        "log": true
+      },
+      "reward.blow": {
+        "type": "categorical",
+        "choices": [
+          20,
+          30,
+          50
+        ]
+      },
+      "sizing.cushion_frac": {
+        "type": "float",
+        "low": 0.15,
+        "high": 0.35
+      },
+      "contracts": {
+        "type": "categorical",
+        "choices": [
+          "micro",
+          "auto"
+        ]
+      },
+      "hidden": {
+        "type": "categorical",
+        "choices": [
+          [
+            64,
+            64
+          ],
+          [
+            128,
+            128
+          ]
+        ]
+      },
+      "reward.win": {
+        "type": "categorical",
+        "choices": [
+          0.25,
+          0.5,
+          1.0
+        ]
+      }
+    },
+    "anchored": {
+      "ppo.gamma": 0.999,
+      "reward.pass": 10,
+      "sizing.cap_usd": 1000,
+      "sizing.drawdown_halve_usd": 1500,
+      "sizing.min_size_guard": 1.5
+    }
+  }
+}

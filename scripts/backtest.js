@@ -9,6 +9,7 @@
  *   node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ [--timeframe 3]
  *       [--start 2025-01-01] [--end 2025-04-01] [--strategy orb,supertrend]
  *       [--no-gate] [--size 1 | --risk 200] [--slippage 1] [--out dir]
+ *       [--prop <policy strategy> [--bundle <name>] [--every 5]]   prop challenge attempts
  *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
  *
  * `fetch` downloads 1-minute bars from ProjectX (PROJECTX_USERNAME /
@@ -70,6 +71,9 @@ function configFrom(argv) {
   if (num('--risk') !== undefined) { cfg.riskPerTrade = num('--risk'); delete cfg.size; }
   if (num('--slippage') !== undefined) cfg.slippageTicks = num('--slippage');
   if (arg(argv, '--out')) cfg.outDir = path.resolve(arg(argv, '--out'));
+  if (arg(argv, '--prop')) cfg.prop = arg(argv, '--prop');
+  if (arg(argv, '--bundle')) cfg.bundle = arg(argv, '--bundle');
+  if (num('--every') !== undefined) cfg.every = num('--every');
   return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };
 }
 
@@ -82,6 +86,14 @@ async function main(argv) {
   const log = msg => process.stdout.write(`[backtest] ${msg}\n`);
   const started = Date.now();
   const { report, runDir } = runBacktest(cfg, { root: ROOT, baseDir, outRoot: path.join(harnessHome(), 'backtests'), log });
+  if (report.baseline) {
+    const pct = x => (x === null ? '-' : `${Math.round(x * 100)}%`);
+    const line = (label, x) => log(`${label}: ${x.attempts} attempts | pass ${pct(x.passRate)} | win rate ${pct(x.winRate)} | blow ${pct(x.blowRate)} | timeout ${x.timeout} | median days to pass ${x.medianDaysToPass ?? '-'} | avg profit $${x.avgProfit}`);
+    line(`${report.prop} on ${report.account}, rules only`, report.baseline);
+    if (report.withPolicy) line(`${report.account} policy ${report.policy}`, report.withPolicy);
+    log(`report: ${path.join(runDir, 'combine.md')}`);
+    return 0;
+  }
   const s = report.summary;
   const pct = x => (x === null ? '-' : `${Math.round(x * 100)}%`);
   log(`${s.trades} trades | win ${pct(s.winRate)} | mean ${s.meanR ?? '-'}R | sum ${s.sumR ?? '-'}R | PF ${s.profitFactorR ?? '-'} | net $${s.netPnL ?? 0} | max DD $${s.maxDrawdown} | ${((Date.now() - started) / 1000).toFixed(1)} s`);

@@ -30,6 +30,7 @@ const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig, gateNow } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 const { harnessHome } = require('./lib/paths');
+const { runningAttempts } = require('./lib/trading/prop-state');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
@@ -91,7 +92,8 @@ async function accountViolations(args, caller, now, ledger) {
     for (const e of ledger) if (e.orderId && resting.has(e.orderId)) e.at = now.getTime();
   }
   const config = loadConfig(process.env);
-  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger });
+  const running = runningAttempts(config.home);
+  const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null });
   const gated = regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies);
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);

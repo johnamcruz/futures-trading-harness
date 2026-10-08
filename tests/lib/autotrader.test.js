@@ -224,3 +224,19 @@ test('the default cycle cap covers the whole 22-hour session; the runner passes 
   const closed = validateConfig({ harness: 'qwen', premarketAt: '', closedDates: ['2026-12-25'] });
   assert.strictEqual(decide(closed, null, new Date('2026-12-25T15:00:00Z')).action, null, 'no cycles on a holiday');
 });
+
+test('a policy strategy\'s verdicts go into the cycle prompt as the only allowed entry', () => {
+  const p = prompts(validateConfig({ account: '123' }), et(10, 0));
+  const verdicts = [
+    { strategy: 'prop_portfolio_3m', component: 'supertrend', direction: 'long', action: 'full', contract: 'NQ', maxSize: 3, stopTicks: 40 },
+    { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the policy' },
+  ];
+  const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'CON.F.US.MNQ.Z26' }, verdicts }]);
+  assert.match(text, /prop_portfolio_3m: long setup from supertrend, verdict full: enter only as setup:prop_portfolio_3m, NQ buy, at most 3, stopLossBracket.ticks 40/);
+  assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the policy\); no entry/);
+});
+
+test('the runner polls one contract per micro/mini index', () => {
+  assert.throws(() => validateConfig({ symbols: ['MNQ', 'NQ'] }), /one contract per index/);
+  assert.doesNotThrow(() => validateConfig({ symbols: ['MNQ', 'MES'] }));
+});

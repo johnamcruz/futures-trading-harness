@@ -169,7 +169,7 @@ function qwenExtensionJson(root) {
 }
 
 /** Shared directories the Qwen extension links to instead of copying. */
-const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'rules'];
+const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'rules', 'accounts', 'models'];
 
 /** Map of relative path -> expected file content. */
 function expectedFiles(root) {

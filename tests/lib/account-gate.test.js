@@ -190,3 +190,16 @@ test('[exit]/[protect] orders may not carry bracket legs', () => {
   assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, config })), ['exposure']);
   assert.deepStrictEqual(checks(evaluateAccount({ input: { ...exit, stopLossBracket: undefined }, positions: long1, config })), []);
 });
+
+test('micros and minis are one root: an MNQ entry waits while an NQ position is open, and a prop attempt holds one position across the account', () => {
+  const nq = [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 1 }];
+  assert.ok(checks(evaluateAccount({ input: order(), positions: nq, now: NOW, config })).includes('position-open'));
+  const mes = [{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 2 }];
+  assert.ok(!checks(evaluateAccount({ input: order(), positions: mes, now: NOW, config })).includes('prop-one-position'));
+  const v = evaluateAccount({ input: order(), positions: mes, now: NOW, config: { ...config, skipChecks: new Set(['prop-one-position']) }, propAttempt: 'topstep_100k' });
+  assert.match(v.find(x => x.check === 'prop-one-position').message, /topstep_100k attempt trades one position at a time: CON.F.US.MES.Z26 is open/);
+  // An order sent moments ago (not on the account yet) counts too.
+  const ledger = [{ contractId: 'CON.F.US.MES.Z26', sign: 1, size: 1, netBefore: 0, at: NOW.getTime() - 5000 }];
+  assert.ok(checks(evaluateAccount({ input: order(), now: NOW, config, ledger, propAttempt: 'topstep_100k' })).includes('prop-one-position'));
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), now: NOW, config, propAttempt: 'topstep_100k' })), []);
+});

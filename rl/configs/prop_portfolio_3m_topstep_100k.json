@@ -1,0 +1,51 @@
+{
+  "name": "prop_portfolio_3m_topstep_100k",
+  "strategy": "prop_portfolio_3m",
+  "symbol": "MNQ",
+  "data": {
+    "MNQ": "../../data/MNQ_1min.csv"
+  },
+  "windows": {
+    "train": [
+      "2021-01-01",
+      "2023-07-01"
+    ],
+    "select": [
+      "2023-07-01",
+      "2024-07-01"
+    ],
+    "oos": [
+      "2024-07-01",
+      "2025-07-01"
+    ]
+  },
+  "eval_every": 1,
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "total_timesteps": 300000,
+  "n_envs": 4,
+  "hidden": [
+    64,
+    64
+  ],
+  "min_pass_rate": 0.4,
+  "ppo": {
+    "learning_rate": 0.0003,
+    "n_steps": 1024,
+    "batch_size": 256,
+    "ent_coef": 0.01
+  },
+  "reward": {
+    "pass": 10,
+    "speed": 3,
+    "blow": 30,
+    "timeout": 1,
+    "dense": 1,
+    "win": 0.5,
+    "loss": 0.5
+  },
+  "min_win_rate": 0
+}

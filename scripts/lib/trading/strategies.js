@@ -24,7 +24,7 @@ const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
-const SIGNALS = ['rules', 'manual'];
+const SIGNALS = ['rules', 'manual', 'policy'];
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,
   adx_max: v => typeof v === 'number' && v >= 0,
@@ -34,7 +34,7 @@ const FILTERS = {
 const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const TIMEFRAME = /^[1-9]\d*(m|h|d)$/;
-const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual)$/;
+const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual|strategy)$/;
 
 function expandHome(p) {
   return p === '~' ? os.homedir() : p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
@@ -51,7 +51,12 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
-  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'source'];
+  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'policy', 'source'];
+/** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
+const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts', 'policy'];
+const CONTRACT_MODES = ['micro', 'mini', 'auto'];
+const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd'];
+const POLICY_KEYS = ['bundle'];
 /**
  * Data connectors a strategy can declare, like a skill declares its tools.
  * The runner turns on every connector an active strategy needs.
@@ -103,11 +108,40 @@ function validateStrategy(data, body, folderName) {
   const legacy = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote'].includes(data.signal);
   req(SIGNALS.includes(data.signal), legacy
     ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (copy the rules block from strategies/${data.signal}/STRATEGY.md)`
-    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body)`);
+    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a trained policy trades other strategies' setups on a prop account)`);
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
   } else if (data.rules !== undefined) {
     errors.push('rules: only used with signal: rules');
+  }
+  // A policy strategy: the prop challenge as a strategy. It trades the setups
+  // of other (rules) strategies on an account, sized from the cushion, with a
+  // trained policy deciding which to take and when to bank a trade.
+  if (data.signal === 'policy') {
+    const list = data.strategies;
+    req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
+      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [ema_cross, keltner])');
+    req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md), e.g. topstep_100k');
+    if (data.sizing !== undefined) {
+      const z = data.sizing;
+      req(z && typeof z === 'object' && !Array.isArray(z) && Object.entries(z).every(([k, v]) => SIZING_KEYS.includes(k) && typeof v === 'number' && v >= 0),
+        `sizing: a map of ${SIZING_KEYS.join(', ')} (numbers, 0 or more)`);
+      req(!(z && z.cushion_frac > 1), 'sizing.cushion_frac: at most 1 (a trade never risks more than the whole cushion)');
+    }
+    req(data.contracts === undefined || CONTRACT_MODES.includes(data.contracts), `contracts: ${CONTRACT_MODES.join(' | ')} (auto: minis once the size reaches one mini)`);
+    if (data.policy !== undefined) {
+      const p = data.policy;
+      req(p && typeof p === 'object' && !Array.isArray(p) && Object.keys(p).every(k => POLICY_KEYS.includes(k)) && typeof p.bundle === 'string' && /^[a-z0-9][a-z0-9_.-]*$/.test(p.bundle),
+        'policy: { bundle: <name> } (models/<name>.json, shipped by rl/ship.py); without it the setups are taken as sized');
+    }
+    req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");
+    req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (past the ratchet the policy may bank the trade)');
+    req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
+  } else {
+    for (const k of POLICY_STRATEGY_KEYS) {
+      if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio_3m)`);
+    }
+    if (data.risk && data.risk.stop === 'strategy') errors.push('risk.stop: strategy is only for a policy strategy');
   }
   const connectors = data.connectors === undefined ? [] : data.connectors;
   if (!Array.isArray(connectors) || !connectors.every(c => Object.keys(CONNECTORS).includes(c))) {
@@ -237,6 +271,26 @@ function loadStrategies(pluginRoot, env = process.env) {
       byName.set(s.name, s);
     }
   }
+  // A policy strategy is valid only with valid rules strategies on its timeframe.
+  for (const s of byName.values()) {
+    if (!s.valid || s.signal !== 'policy') continue;
+    const errs = [];
+    for (const n of s.strategies) {
+      const c = byName.get(n);
+      if (!c) errs.push(`strategies: ${n} is not a strategy`);
+      else if (!c.valid) errs.push(`strategies: ${n} is invalid (${c.errors[0]})`);
+      else if (c.signal !== 'rules') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies only`);
+      else if (c.timeframe !== s.timeframe) errs.push(`strategies: ${n} trades ${c.timeframe} bars, not ${s.timeframe}`);
+      else if (c.status === 'disabled') errs.push(`strategies: ${n} is disabled; remove it from the list (the policy was trained on the list as it is)`);
+    }
+    // Every index the policy strategy trades must be scanned by at least one of its strategies (on the micro's bars).
+    const { familyRoot } = require('./contracts');
+    for (const r of s.instruments) {
+      const ok = s.strategies.some(n => byName.get(n) && (byName.get(n).instruments || []).some(x => familyRoot(x) === familyRoot(r)));
+      if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro in their instruments)`);
+    }
+    if (errs.length) Object.assign(s, { valid: false, errors: errs });
+  }
   return { strategies: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)), problems };
 }
 
@@ -255,6 +309,10 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
   for (const s of strategies) {
     if (!s.valid || s.status === 'disabled') continue;
     if (root && !s.instruments.includes(root)) continue;
+    if (s.signal === 'policy') {
+      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` });
+      continue;
+    }
     try {
       results.push(ev.at(s, norm.length - 1, { now, describe: true }));
     } catch (err) {

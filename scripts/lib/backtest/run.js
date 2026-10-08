@@ -15,6 +15,13 @@
  *   gate, sessions, eodAt, size, riskPerTrade, maxContracts, slippageTicks,
  *   feesPerSide, maxDailyLoss, window: see engine.js DEFAULTS
  *   outDir       where results go (default <FTH_HOME>/backtests/<run id>)
+ *   account      an account profile (accounts/<name>/ACCOUNT.md): run prop
+ *                challenge attempts from every `every`-th trading day instead
+ *                of one long run (pass / blow / timeout rates by month)
+ *   policy       a policy bundle (models/<name>.json) deciding which setups to
+ *                take and when to close; needs an account. The rules-only
+ *                baseline is always reported next to it.
+ *   sizing       combine sizing (combine.js DEFAULT_SIZING keys)
  */
 
 const fs = require('fs');
@@ -26,23 +33,13 @@ const { buildReport, toMarkdown, toCsv } = require('./report');
 const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
+const { CONTRACT_SPECS } = require('../trading/contracts');
+const { accountNamed } = require('../trading/accounts');
+const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
 const { marketHoursErrors } = require('../autotrader');
 
 const WARMUP_BARS = 2000;
 
-/** Tick specs for common CME futures (overridable per symbol). */
-const CONTRACT_SPECS = {
-  MNQ: { tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 },
-  MES: { tickSize: 0.25, tickValue: 1.25, feesPerSide: 0.37 },
-  MYM: { tickSize: 1, tickValue: 0.5, feesPerSide: 0.37 },
-  M2K: { tickSize: 0.1, tickValue: 0.5, feesPerSide: 0.37 },
-  MGC: { tickSize: 0.1, tickValue: 1, feesPerSide: 0.37 },
-  NQ: { tickSize: 0.25, tickValue: 5, feesPerSide: 1.4 },
-  ES: { tickSize: 0.25, tickValue: 12.5, feesPerSide: 1.4 },
-  YM: { tickSize: 1, tickValue: 5, feesPerSide: 1.4 },
-  RTY: { tickSize: 0.1, tickValue: 5, feesPerSide: 1.4 },
-  GC: { tickSize: 0.1, tickValue: 10, feesPerSide: 1.4 },
-};
 
 /** "HH:MM@Zone" with a real time and time zone. */
 function validAt(spec) {
@@ -60,7 +57,12 @@ function parseTimeArg(value, name) {
 
 /** Validate a backtest config. Returns the normalized settings. */
 function validateBacktestConfig(raw, baseDir) {
-  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, ...(raw || {}) };
+  for (const k of ['account', 'policy', 'sizing']) {
+    if (raw && raw[k] !== undefined && raw[k] !== null) {
+      throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy now; name it with "prop": "<policy strategy>" (signal: policy)`);
+    }
+  }
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, ...(raw || {}) };
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
@@ -82,6 +84,9 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
   if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');
   if (cfg.outDir !== null && typeof cfg.outDir !== 'string') errors.push('outDir: a directory');
+  if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio_3m"');
+  if (cfg.bundle !== null && !(typeof cfg.bundle === 'string' && cfg.prop !== null)) errors.push('bundle: a policy bundle (models/<name>.json) to try in place of the policy strategy\'s own; needs prop');
+  if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
   let start = null;
   let end = null;
   try { start = parseTimeArg(cfg.start, 'start'); } catch (err) { errors.push(err.message); }
@@ -134,7 +139,22 @@ function pickStrategies(all, cfg) {
 /** Run a backtest. Returns { report, runDir }. */
 function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = process.env, runId = null, log = () => {} }) {
   const cfg = validateBacktestConfig(raw, baseDir);
-  const strategies = pickStrategies(loadStrategies(root, env).strategies, cfg);
+  let strategies;
+  let prop = null;
+  if (cfg.prop) {
+    // A policy strategy: its strategies, account, sizing, contracts, and exit come from its STRATEGY.md.
+    const { policyStrategy } = require('../rl/env-config');
+    const p = policyStrategy(root, cfg.prop, env);
+    if (Number.parseInt(p.strategy.timeframe, 10) !== cfg.timeframe) throw new Error(`timeframe: ${cfg.prop} trades ${p.strategy.timeframe} bars, not ${cfg.timeframe}m`);
+    prop = p.strategy;
+    strategies = p.components;
+    const { familyRoot } = require('../trading/contracts');
+    for (const sym of cfg.symbols) {
+      if (!prop.instruments.some(r => familyRoot(r) === familyRoot(sym))) throw new Error(`symbols: ${cfg.prop} trades ${prop.instruments.join(', ')}, not ${sym}`);
+    }
+  } else {
+    strategies = pickStrategies(loadStrategies(root, env).strategies, cfg);
+  }
   if (!strategies.length) throw new Error(`no mechanical strategy trades ${cfg.timeframe}m bars`);
   // Keep the window plus a warm-up before `start`, and nothing after `end`:
   // indicators settle well within that, and a long file stays fast.
@@ -160,7 +180,8 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
       log(`warning: no selected strategy lists ${m.symbol} in its instruments, so it can't trade (micros: MNQ, MES, MYM, M2K; use the micro symbol with full-size data)`);
     }
   }
-  const { trades, skipped } = runEngine(markets, strategies, { ...cfg, gateConfig: loadConfig(env) });
+  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log });
+  const { trades, skipped } = runEngine(markets, strategies, { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
     if (!strategies.some(s => s.instruments.includes(m.symbol))) skipped[m.symbol] = 'no selected strategy trades this symbol';
   }
@@ -180,6 +201,58 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report));
   fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
   return { report, runDir };
+}
+
+/** Prop challenge attempts: the rules-only baseline, and the policy when one is named. */
+function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log }) {
+  const { createEnv, evaluate } = require('../rl/challenge-env');
+  const { loadBundle, bundleMismatch } = require('../rl/policy-bundle');
+  const account = accountNamed(root, prop.account, env);
+  const contracts = prop.contracts || 'auto';
+  const e = createEnv({
+    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: prop.strategies, contracts },
+    engine: { ...cfg, account: null, policy: null, prop: null, gateConfig: loadConfig(env) },
+  });
+  const from = cfg.start ?? e.days[0];
+  const to = cfg.end ?? Infinity;
+  const starts = e.starts(from, to, { every: cfg.every });
+  if (!starts.length) throw new Error(`no ${account.sessions}-session attempt fits in the data${cfg.start !== null || cfg.end !== null ? ' between start and end' : ''}`);
+  log(`${prop.name}: ${starts.length} ${account.name} attempts (${account.sessions} sessions each), every ${cfg.every} trading day(s); ${strategies.map(s => s.name).join(', ')}; contracts ${contracts}`);
+  const baseline = evaluate(e, starts, to, null);
+  let policy = null;
+  const bundleName = cfg.bundle || (prop.policy && prop.policy.bundle) || null;
+  if (bundleName) {
+    const bundle = loadBundle(root, bundleName, env, { requireValidated: false });
+    if (!bundle.meta.validated) log(`warning: ${bundleName} is not validated (research only; live trading refuses it)`);
+    const why = bundleMismatch(bundle.meta, prop, cfg.symbols[0]);
+    if (why) throw new Error(`bundle ${bundleName} ${why}`);
+    policy = evaluate(e, starts, to, { decide: bundle.decide });
+  }
+  const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
+  const report = {
+    runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: strategies.map(s => s.name),
+    gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, policy: bundleName, baseline, withPolicy: policy,
+  };
+  const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
+  fs.mkdirSync(runDir, { recursive: true });
+  writeJsonAtomic(path.join(runDir, 'combine.json'), report);
+  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report));
+  return { report, runDir };
+}
+
+function combineMarkdown(r) {
+  const pct = x => (x === null || x === undefined ? '-' : `${Math.round(x * 1000) / 10}%`);
+  const row = (label, x) => `| ${label} | ${x.attempts} | ${pct(x.passRate)} | ${pct(x.winRate)} | ${pct(x.blowRate)} | ${pct(x.attempts ? x.timeout / x.attempts : null)} | ${x.medianDaysToPass ?? '-'} | ${x.avgProfit} | ${x.tradesPerAttempt} |`;
+  const lines = [
+    `# Prop challenge backtest ${r.runId}`, '',
+    `${r.prop} on account ${r.account}: ${r.strategies.join(', ')} on ${r.symbols.join(', ')} ${r.timeframe}m; harness rules ${r.gate ? 'on' : 'off'}; sizing ${JSON.stringify(r.sizing)}; contracts ${r.contracts}.`, '',
+    '| | Attempts | Pass | Win rate | Blow | Timeout | Median days to pass | Avg profit $ | Trades/attempt |', '|---|---|---|---|---|---|---|---|---|',
+    row('Rules only', r.baseline), ...(r.withPolicy ? [row(`Policy ${r.policy}`, r.withPolicy)] : []), '',
+    '## By month (attempt start)', '', `| Month | Rules-only pass | Rules-only blow |${r.withPolicy ? ' Policy pass | Policy blow |' : ''}`,
+    `|---|---|---|${r.withPolicy ? '---|---|' : ''}`,
+    ...Object.entries(r.baseline.months).map(([m, x]) => `| ${m} | ${pct(x.passRate)} | ${pct(x.blowRate)} |${r.withPolicy ? ` ${pct(r.withPolicy.months[m].passRate)} | ${pct(r.withPolicy.months[m].blowRate)} |` : ''}`),
+  ];
+  return `${lines.join('\n')}\n`;
 }
 
 module.exports = { CONTRACT_SPECS, validateBacktestConfig, barsAt, pickStrategies, runBacktest };

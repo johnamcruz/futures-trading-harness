@@ -15,6 +15,7 @@ const { loadConfig } = require('./config');
 const { resolveJournalPath, readJournalWindow } = require('./journal');
 const { evaluateOrder, evaluateModify, formatBlock } = require('./order-gate');
 const { loadStrategies } = require('./strategies');
+const { loadAccounts } = require('./accounts');
 
 function readBlackouts(file) {
   let text;
@@ -54,6 +55,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
     config,
     blackouts: readBlackouts(config.blackoutsFile),
     strategies: loadStrategies(pluginRoot, env).strategies,
+    accounts: loadAccounts(pluginRoot, env).accounts,
   });
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations) };

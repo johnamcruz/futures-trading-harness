@@ -29,7 +29,23 @@ function formatter(timeZone) {
   return f;
 }
 
+// Wall-clock parts are pure functions of (zone, second): cache them, since
+// backtests and the challenge env ask for the same bar times over and over.
+const PARTS = new Map();
+const PARTS_MAX = 400000;
+
 function zonedParts(date, timeZone) {
+  const ms = date.getTime();
+  const key = `${timeZone}|${Math.floor(ms / 1000)}`;
+  const hit = PARTS.get(key);
+  if (hit) return { ...hit };
+  const p = computeParts(date, timeZone);
+  if (PARTS.size >= PARTS_MAX) PARTS.clear();
+  PARTS.set(key, p);
+  return { ...p };
+}
+
+function computeParts(date, timeZone) {
   const parts = Object.fromEntries(formatter(timeZone).formatToParts(date).map(p => [p.type, p.value]));
   return {
     year: Number(parts.year),

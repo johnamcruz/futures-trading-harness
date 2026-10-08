@@ -74,6 +74,8 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, 'Read(//tmp/fth/**)',
     'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
+    // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
+    `Bash(node ${root}/scripts/combine.js status:*)`,
   ];
 }
 
@@ -188,6 +190,12 @@ function validateConfig(raw) {
     errors.push('command: for harness "custom", an argv array containing "{prompt}"');
   }
   if (!Array.isArray(cfg.symbols) || cfg.symbols.length === 0 || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
+  else {
+    // Micros and minis of one index share bars and positions: poll one of them.
+    const { familyRoot } = require('./trading/contracts');
+    const fams = cfg.symbols.map(familyRoot);
+    if (new Set(fams).size !== fams.length) errors.push('symbols: one contract per index (MNQ or NQ, not both): a policy strategy trades either from the one\'s bars');
+  }
   if (parseWindows((cfg.sessions || []).join(',')).errors.length || !Array.isArray(cfg.sessions)) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...]');
   for (const k of ['premarketAt', 'eodAt']) if (cfg[k] && !parseAt(cfg[k])) errors.push(`${k}: "HH:MM@Zone" or empty`);
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
@@ -245,7 +253,11 @@ function prompts(cfg, now, root = '') {
         manageOnly ? 'manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries)' : '',
       ].filter(Boolean).join('; ');
       const recover = recovered ? ' The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.' : '';
-      return `${head}${recover}${bars.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      // A policy strategy's verdicts: the only entries the gate will accept (prop-challenge-pacing skill).
+      const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
+        ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
+        : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
+      return `${head}${recover}${bars.join('')}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };

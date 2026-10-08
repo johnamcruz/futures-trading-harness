@@ -1,6 +1,6 @@
 ---
 name: prop-challenge-pacing
-description: Pace a Topstep-style prop evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Use at the start of each day and after big wins or losses.
+description: Pace a Topstep-style prop evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md, scripts/combine.js) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal: policy) is trading.
 ---
 
 # Prop Challenge Pacing
@@ -11,6 +11,39 @@ description: Pace a Topstep-style prop evaluation or funded account - profit tar
 - After a large win (protect it) or a drawdown (de-risk).
 
 ## How It Works
+
+### Harness-tracked attempts (a policy strategy)
+
+A policy strategy (`signal: policy`, e.g. `prop_portfolio_3m`) is the prop
+challenge as a strategy: it trades the setups of the rules strategies it
+lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
+`topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
+sized from the cushion in micros or minis (`contracts: micro | mini | auto`),
+with a trained policy (`policy: { bundle }`) deciding which setups to take.
+The harness tracks the attempt and enforces it:
+
+- `node <root>/scripts/combine.js status` (`<root>`: the harness root, FTH_ROOT) shows the balance, floor, cushion,
+  profit, sessions left, the size budget in dollars, whether entries are
+  blocked, and each policy strategy's live verdict. Read it before planning;
+  quote it in the `plan` entry.
+- At each setup the runner records a verdict: the strategy that fired, the
+  side, `skip` / `half` / `full`, the contract (MNQ or NQ, ...), the largest
+  size, and the stop in ticks. **Place exactly the verdict**: rationale
+  `setup:<policy strategy> ...`, that contract and side, at most that size,
+  `stopLossBracket.ticks` equal to its stop ticks. A verdict permits one
+  entry: after a stop-out, wait for the next setup's verdict. Never argue with
+  it or route around it. Past the ratchet the runner may close the trade on the policy's
+  word.
+- The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;
+  none can be skipped): no started attempt
+  (`node scripts/combine.js start --account <name>`, the user's call); a
+  snapshot older than 10 minutes; a missed close (record it:
+  `combine.js record-day`); a passed or finished attempt; the soft or firm
+  daily limit; a size over the budget; any entry that doesn't match the
+  verdict; any position already open on the account; and, while an attempt
+  runs, any entry from a strategy that isn't its policy strategy.
+
+### Pacing by judgment### Pacing by judgment (no account profile)
 
 Ask the user for the account's current rules; don't assume them. Track these
 numbers each morning (from `get_account_snapshot` and the user):
@@ -38,6 +71,20 @@ Rules of thumb (the PropEvolve objective: pass without blowing the account):
 Write the day's numbers into the `plan` entry so reviews can grade pacing.
 
 ## Examples
+
+```text
+$ node scripts/combine.js status
+topstep_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
+day $250, 4 sessions done, 26 left; size budget $650; entries allowed
+
+prop_portfolio_3m: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
+
+Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
+prop_portfolio_3m's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
+drawdown from the peak). A 40-tick stop risks $20 + $0.74 fees = $20.74 a
+micro: 47 micros ($975 / $20.74), traded as 4 NQ (contracts: auto; NQ: $200 +
+$2.80 fees = $202.80 each, $811.20 in all). A `half` verdict: 23 micros, 2 NQ.
+```
 
 ```text
 Target $3,000, profit $1,150 → remaining $1,850. Cushion $1,400.

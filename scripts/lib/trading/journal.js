@@ -5,6 +5,7 @@
  * The MCP server is the only writer; hooks only read it.
  */
 
+const { rootOfIdSymbol } = require('./contracts');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -89,9 +90,10 @@ function reviewResult(entry) {
  * Root symbol from a ProjectX contract id: CON.F.US.MNQ.Z25 -> MNQ.
  * Returns the input upper-cased when it doesn't look like a contract id.
  */
+/** The contract root of a ProjectX contract id: CON.F.US.MNQ.Z26 -> MNQ, CON.F.US.ENQ.Z26 -> NQ. */
 function contractRoot(contractId) {
   const parts = String(contractId || '').split('.');
-  return (parts.length >= 5 ? parts[parts.length - 2] : String(contractId || '')).toUpperCase();
+  return parts.length >= 5 ? rootOfIdSymbol(parts[parts.length - 2]) : String(contractId || '').toUpperCase();
 }
 
 module.exports = {

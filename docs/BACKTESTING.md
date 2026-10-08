@@ -152,6 +152,21 @@ Each run writes these files to the run directory:
   - **Breakdowns** by strategy, exit reason, symbol, and month.
 - **`trades.csv`:** every trade.
 
+### Prop challenges
+
+With `--prop <policy strategy>` (config `prop`), the run is a set of
+prop-challenge attempts of that policy strategy instead of one long backtest:
+its strategies' setups, on its account, sized by its `sizing` in micros or
+minis (`contracts`). An attempt starts every `--every N` trading days (config
+`every`, default 1), runs for the account's `sessions`, and ends on pass,
+blow, or timeout. A stop that would reach the floor or the daily limit is
+sized down, and equity at the floor inside a bar is a blow, liquidated there.
+The policy strategy's own bundle adds its decisions; `--bundle <name>` (config
+`bundle`) tries another, and a bundle that hasn't passed the gate can be
+loaded here for research. The run writes
+`combine.json` and `combine.md`: pass, blow, and timeout rates, median days to
+pass, and the same by month, for the rules alone and with the policy.
+
 ### Strategy correctness
 
 `tests/lib/parity.test.js` runs the shipped strategies' rules over algoTraderBot's

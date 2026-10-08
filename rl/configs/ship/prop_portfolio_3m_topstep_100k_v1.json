@@ -1,0 +1,6 @@
+{
+  "retrain": "../retrain/prop_portfolio_3m_topstep_100k_v1.json",
+  "bundle": "prop_portfolio_3m_topstep_100k",
+  "min_pass_rate": 0.4,
+  "min_win_rate": 0
+}

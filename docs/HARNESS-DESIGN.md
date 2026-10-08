@@ -152,7 +152,7 @@ bar files through the same strategy evaluator the live scan uses.
   `scripts/orderflow.js record`). The hub keeps no history, and minutes
   while it was disconnected have none; those bars use an estimate from the
   bar's shape and volume. Each print's side is the hub's trade `type`
-  (0 buy-, 1 sell-initiated, as algoTraderAI uses it); a print without one
+  (0 buy-, 1 sell-initiated); a print without one
   is judged against the quote.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.

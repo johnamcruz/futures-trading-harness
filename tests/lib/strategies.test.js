@@ -27,7 +27,13 @@ test('bundled strategies are all valid Markdown rules, the algoTraderBot ports i
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
-  for (const s of strategies) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
+  // Every strategy is rules, except the policy strategies, which trade the rules strategies' setups.
+  for (const s of strategies.filter(x => x.signal !== 'policy')) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
+  const portfolio = strategies.find(s => s.name === 'prop_portfolio_3m');
+  const threeMinute = strategies.filter(s => s.signal === 'rules' && s.timeframe === '3m').map(s => s.name).sort();
+  assert.deepStrictEqual([...portfolio.strategies].sort(), threeMinute, 'prop_portfolio_3m trades every 3-minute rules strategy');
+  assert.deepStrictEqual(strategies.find(s => s.name === 'prop_flow_1m').strategies.sort(), strategies.filter(s => s.signal === 'rules' && s.timeframe === '1m').map(s => s.name).sort());
+  assert.strictEqual(portfolio.account, 'topstep_100k');
   for (const port of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
   const old = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'orb', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
   assert.ok(old.some(e => /no longer a code detector/.test(e)));
@@ -197,4 +203,40 @@ test('timeframes, empty sessions, and zero ATR stops are rejected', () => {
   assert.ok(errors.some(e => /^timeframe/.test(e)), errors.join('; '));
   assert.ok(errors.some(e => /^sessions/.test(e)), errors.join('; '));
   assert.ok(errors.some(e => /^risk\.stop/.test(e)), errors.join('; '));
+});
+
+test('policy strategies: the prop keys live only on them, and their strategies must be valid rules on the same timeframe', () => {
+  const base = { name: 'p', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ', 'NQ'], timeframe: '3m', signal: 'policy', strategies: ['ema_cross'], account: 'topstep_100k', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, risk: { stop: 'strategy', min_rr: 2 } };
+  const body = '## When to Use\n## How It Works\n## Examples';
+  assert.deepStrictEqual(validateStrategy(base, body, 'p'), []);
+  assert.ok(validateStrategy({ ...base, contracts: 'nano' }, body, 'p').some(e => /contracts: micro \| mini \| auto/.test(e)));
+  assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:1', min_rr: 2 } }, body, 'p').some(e => /risk.stop: strategy/.test(e)));
+  assert.ok(validateStrategy({ ...base, exit: { target_r: 3 } }, body, 'p').some(e => /trail_activate_r/.test(e)));
+  assert.ok(validateStrategy({ ...base, account: undefined }, body, 'p').some(e => /account:/.test(e)));
+  assert.ok(validateStrategy({ ...base, sizing: { cushion_frac: 1.5 } }, body, 'p').some(e => /at most 1/.test(e)));
+  const rules = { name: 'r', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules: { long: ['close > 1'] }, risk: { stop: 'atr:1', min_rr: 2 } };
+  for (const k of ['account', 'sizing', 'policy', 'strategies', 'contracts']) {
+    assert.ok(validateStrategy({ ...rules, [k]: k === 'sizing' ? { cushion_frac: 0.2 } : k === 'policy' ? { bundle: 'b' } : k === 'strategies' ? ['x'] : k === 'contracts' ? 'auto' : 'topstep_100k' }, body, 'r').some(e => e.startsWith(`${k}: only a policy strategy`)), k);
+  }
+  // Cross-checks against the other strategies, at load time.
+  const dir = tmpDir();
+  const write = (name, fm) => {
+    fs.mkdirSync(path.join(dir, name), { recursive: true });
+    fs.writeFileSync(path.join(dir, name, 'STRATEGY.md'), `---\n${fm}\n---\n${body}\n`);
+  };
+  const head = n => [`name: ${n}`, `description: ${'x'.repeat(40)}`, 'status: paper', 'instruments: [MNQ, NQ]', 'signal: policy', 'account: topstep_100k',
+    'exit:', '  trail_activate_r: 2', '  trail_giveback_r: 0.5', 'risk:', '  stop: strategy', '  min_rr: 2'];
+  write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [ema_cross, keltner]'].join('\n'));
+  write('p_tf', [...head('p_tf'), 'timeframe: 3m', 'strategies: [ofi]'].join('\n'));
+  write('p_none', [...head('p_none'), 'timeframe: 3m', 'strategies: [nope]'].join('\n'));
+  write('p_es', [...head('p_es'), 'timeframe: 3m', 'strategies: [vwap_reclaim]'].join('\n').replace('instruments: [MNQ, NQ]', 'instruments: [MYM, YM]'));
+  write('off_rules', ['name: off_rules', `description: ${'x'.repeat(40)}`, 'status: disabled', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - close > 1', 'risk:', '  stop: atr:1', '  min_rr: 2'].join('\n'));
+  write('p_off', [...head('p_off'), 'timeframe: 3m', 'strategies: [off_rules]'].join('\n'));
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir });
+  const by = n => strategies.find(s => s.name === n);
+  assert.strictEqual(by('p_ok').valid, true, by('p_ok').errors.join());
+  assert.match(by('p_tf').errors.join(), /ofi trades 1m bars, not 3m/);
+  assert.match(by('p_none').errors.join(), /nope is not a strategy/);
+  assert.match(by('p_es').errors.join(), /none of its strategies trades MYM's index/);
+  assert.match(by('p_off').errors.join(), /off_rules is disabled/);
 });

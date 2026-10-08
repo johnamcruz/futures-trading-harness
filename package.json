@@ -10,7 +10,7 @@
     "url": "git+https://github.com/johnamcruz/futures-trading-harness.git"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "test": "node tests/run-all.js",

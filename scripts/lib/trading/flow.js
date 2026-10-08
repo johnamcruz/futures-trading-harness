@@ -7,7 +7,7 @@
  * bar-shape estimate.
  *
  * Classification: the hub's trade `type` is the aggressor side (0 buy-,
- * 1 sell-initiated), as algoTraderAI uses it. A print without a type falls
+ * 1 sell-initiated). A print without a type falls
  * back to the quote (Lee-Ready: at or above the ask a buy, at or below the
  * bid a sell, else the side of the mid), then the tick rule.
  *
@@ -21,7 +21,7 @@
 
 const MINUTE = 60000;
 // A connected feed with no prints for this long is treated as stale: quiet
-// minutes after it are unknown, not zero (algoTraderAI uses 5 minutes).
+// minutes after it are unknown, not zero.
 const STALE_MINUTES = 5;
 // Minutes are written to disk only this long after they end, so late prints
 // land in memory and file alike.
@@ -63,8 +63,7 @@ function createFlowBook({ keepMinutes = 5 * 24 * 60 } = {}) {
   }
 
   function sideOf(b, price, type) {
-    // The hub's GatewayTrade type is the aggressor side: 0 buy, 1 sell (as
-    // algoTraderAI trades on it).
+    // The hub's GatewayTrade type is the aggressor side: 0 buy, 1 sell.
     const t = type === null || type === undefined || type === '' ? NaN : Number(type);
     if (t === 0) return 1;
     if (t === 1) return -1;
