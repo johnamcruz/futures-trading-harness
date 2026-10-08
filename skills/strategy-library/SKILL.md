@@ -47,7 +47,11 @@ bar is fresh (no older than one bar plus a minute).
 `scan` runs market-snapshot with each strategy's `params` and reports, per
 strategy: `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`), `candidate`, and `stopDistance`. `signal: rules`
+`inRegime` (fits the strategy's `regimes`), `mtf` (the trend rule: the 4h,
+1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
+this strategy's style), `candidate`, and `stopDistance`. A trend strategy
+that fires against the prevailing trend is never a candidate (`filtersFailed`
+says `mtf: ...`); only `mtf: reversal` strategies may fade it. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
 one did or didn't fire. Strategies with `signal: manual` are listed with
 `candidate: true` when in session; you evaluate their trigger from the body.
@@ -79,6 +83,8 @@ own rationale (`order-consistency`): write the side right after the tag
 (`setup:orb long ...`), the stop and target as prices on the tick, and
 brackets the same distance as those prices.
 While a prop attempt runs, only its policy strategy's verdict can enter.
+The trend rule is a hard gate check (`mtf-trend`): a trend strategy's entry
+against the recorded prevailing trend, or without a fresh record, is refused.
 
 ## Examples
 

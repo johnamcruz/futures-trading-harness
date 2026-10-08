@@ -11,6 +11,7 @@
 'use strict';
 
 const fs = require('fs');
+const { readBarsArg } = require('./lib/backtest/data');
 const path = require('path');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 
@@ -51,7 +52,7 @@ function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {
   }
   if (cmd === 'scan') {
     if (!args[0]) throw new Error('scan needs a bars file (get_bars JSON) or -');
-    const bars = JSON.parse(fs.readFileSync(args[0] === '-' ? 0 : args[0], 'utf8'));
+    const bars = readBarsArg(args[0]);
     const nowArg = option(args, '--now');
     const results = scan(strategies, bars, { symbol: option(args, '--symbol'), now: nowArg ? new Date(nowArg) : new Date() });
     out(`${JSON.stringify(results, null, 2)}\n`);

@@ -276,7 +276,8 @@ function prompts(cfg, now, root = '') {
     trade: (items, { manageOnly = false, recovered = false, state = null } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
-        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
+        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
+        + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',

@@ -54,21 +54,25 @@ Check, in order, and stop at the first failure:
    quotes the trigger on closed bars and you can see it in the bars), or, for
    a policy strategy, a live verdict matches the plan. Otherwise VETO: the
    order gate does not check triggers.
-1. Account tradable and flat or within the plan's intent; no unprotected position.
-2. Symbol and size within server limits.
-3. Entry, stop, and target are on the correct sides; prices are multiples of
+1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
+   on the side the prevailing trend allows (the plan quotes the `Trend rule:`
+   line of `mtf.js`, or the scan's `mtf`). Against it, VETO: the gate refuses
+   it anyway. A reversal strategy fading it: at most half size, nearest target.
+2. Account tradable and flat or within the plan's intent; no unprotected position.
+3. Symbol and size within server limits.
+4. Entry, stop, and target are on the correct sides; prices are multiples of
    `tickSize` (from `get_contract`).
-4. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
+5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
    budget. Recompute; don't trust the plan's arithmetic.
-5. The strategy (`strategies.js show <name>`) is `active`, trades this symbol,
+6. The strategy (`strategies.js show <name>`) is `active`, trades this symbol,
    is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
    trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);
    risk ≤ its `risk.max_risk_usd` if set. Size within position-sizing, or
    within the verdict for a policy strategy; a `mixed` multi-timeframe read
    halves it (`floor(size / 2)`, VETO if 0).
-6. Setup not restricted by a lesson; not in a blackout or no-entry window;
+7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
-7. The analysts' red flags are addressed in the plan.
+8. The analysts' red flags are addressed in the plan.
 
 Output exactly one of:
 

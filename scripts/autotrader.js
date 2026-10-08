@@ -44,6 +44,7 @@ const { loadConfig } = require('./lib/trading/config');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
+const { writeMtfRecord } = require('./lib/trading/mtf-state');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -297,6 +298,7 @@ async function main(argv) {
       writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
       return file;
     },
+    recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.
       const { strategies } = loadStrategies(ROOT, process.env);

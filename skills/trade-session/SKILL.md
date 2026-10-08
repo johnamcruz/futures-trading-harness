@@ -69,11 +69,18 @@ inside one run.
 
 **Every cycle, first:** the multi-timeframe read on the bars file
 (`node <root>/scripts/mtf.js <bars file>`, the `multi-timeframe-analysis`
-skill). For the candidate's side: `aligned` → the strategy's normal size;
+skill). **The trend rule is enforced:** a trend strategy never enters
+against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
+only a strategy with `mtf: reversal` may fade it. The scan already drops
+such candidates and the order gate refuses them. In autonomous runs the
+prompt states the recorded rule; interactively, record it before any entry
+with `node <root>/scripts/mtf.js <bars file> --record --symbol <SYMBOL>` (the
+gate refuses trend entries without a read less than 15 minutes old). Never
+argue a trend strategy into a counter-trend trade. For the candidate's side: `aligned` → the strategy's normal size;
 `pullback` → no entry until the trigger timeframe turns back; `mixed` → half
 size, `floor(size / 2)`, and skip if that is 0 (a 1-contract plan in a mixed
-read is a skip); `counter` → skip, unless it is a reversal strategy judged as
-the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
+read is a skip); `counter` → skip (a trend strategy can't take it), unless it is a
+reversal strategy judged as the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
 A policy verdict (below) is already sized: don't halve it.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle

@@ -39,7 +39,7 @@ function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null })
   };
 }
 
-async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt = null, positions, timeoutAt = null }) {
+async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt = null, positions, timeoutAt = null, deps = {} }) {
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', ...rawCfg });
   const clockRef = { t: from };
   const cycles = [];
@@ -62,6 +62,7 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
     saveState: () => {},
     writeBars: sym => `/bars/${sym.symbol}.json`,
     scanFor: () => [],
+    ...deps,
   });
   let guard = 0;
   while (clockRef.t < to) {
@@ -678,4 +679,25 @@ test('a prop attempt state that cannot be built leaves the account line in the p
   const prompt = r.prompts.find(x => /trade-session/.test(x));
   assert.match(prompt, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./);
   assert.doesNotMatch(prompt, /attempt/);
+});
+
+test('every closed bar records the multi-timeframe read for the gate, and the cycle prompt carries its trend rule', async () => {
+  const recorded = [];
+  const line = 'Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.';
+  const ok = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { recordMtf: (sym, bars) => { recorded.push([sym.symbol, bars.length]); return line; } },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
+  assert.ok(ok.cycles.length >= 3);
+  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
+  // A failed record never stops the cycle; the prompt says the gate will refuse trend entries.
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market: fakeMarket({ minutes: 3 }),
+    deps: { recordMtf: () => { throw new Error('disk full'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  assert.ok(failed.cycles.length >= 1);
+  assert.match(failed.cycles[0].prompt, /MNQ: no multi-timeframe record this bar, so the gate refuses trend strategies' entries/);
+  assert.ok(logs.some(l => /error MNQ: could not record the multi-timeframe read \(disk full\)/.test(l)), logs.join('\n'));
 });

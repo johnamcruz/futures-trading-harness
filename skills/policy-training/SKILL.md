@@ -21,7 +21,9 @@ description: Train, sweep, validate, and ship the policy of a policy strategy (s
 One policy learns across all the strategies its policy strategy lists: it
 sees which one fired (one observation field per strategy), the account, the
 setup's risk and whether it trades micros or minis, and the market. The
-policy never picks the side; the strategy's rules do. At each setup it picks
+policy never picks the side; the strategy's rules do. Its setups are the
+scan's candidates, so the multi-timeframe trend rule already applies: a
+trend strategy's counter-trend signal is never a setup, in training or live. At each setup it picks
 skip, half, or full size (full = the account's size budget for the stop, in
 micros or minis by `contracts`); in a trade past the ratchet
 (`exit.trail_activate_r`) it picks hold or close. It is scored on passing the

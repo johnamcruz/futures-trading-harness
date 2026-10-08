@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
+const { tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
 
 // The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
 // market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
@@ -62,9 +62,13 @@ const gate = (payload, env) =>
 
 function setup(entries, extraEnv = {}) {
   const dir = tmpDir();
+  // A home of its own with a fresh up-trend read (closed 3 min before TEST_NOW), unless a test brings one.
+  const home = extraEnv.FTH_HOME || path.join(dir, 'home');
+  if (!fs.existsSync(path.join(home, 'mtf', 'MNQ.json'))) trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z' });
   return {
     dir,
     env: {
+      FTH_HOME: home,
       PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
@@ -105,6 +109,20 @@ test('order gate: an order that contradicts its rationale is refused with what d
   const off = gate(orderPayload(entryOrder({ rationale: 'setup:orb long, stop 21480.10' })), env);
   assert.strictEqual(off.code, 2);
   assert.match(off.stderr, /\[order-consistency\].*not on the 0\.25 tick/);
+});
+
+test('order gate: a trend strategy entry against the recorded prevailing trend is refused', () => {
+  const home = trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', biases: { 240: -1, 60: -1, 15: 0 } });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_HOME: home });
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the prevailing 4h down trend/);
+  const short = gate(orderPayload({ ...ORDER, side: 'sell', rationale: 'setup:anytime short, stop 21520, target 21460' }), env);
+  assert.strictEqual(short.code, 0, short.stderr);
+  // No record at all: refused, with how to make one.
+  const none = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  fs.rmSync(path.join(none.env.FTH_HOME, 'mtf'), { recursive: true });
+  assert.match(gate(orderPayload(), none.env).stderr, /\[mtf-trend\] No multi-timeframe read for MNQ/);
 });
 
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {

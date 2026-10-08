@@ -60,6 +60,8 @@ function createRunner(deps) {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
+    // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
+    recordMtf = () => null,
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
@@ -163,7 +165,14 @@ function createRunner(deps) {
         log(`${sym.symbol}: could not write the bars file (${err.message}); housekeeping only`, 'error');
         record(false, false, now);
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      let trend = null;
+      try {
+        trend = recordMtf(sym, bars);
+      } catch (err) {
+        // Without a fresh record the gate refuses trend strategies' entries (fail closed).
+        log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
+      }
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');

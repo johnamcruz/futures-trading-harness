@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { candles, readTimeframe, alignment, mtfRead, biasSeries } = require('../../scripts/lib/trading/mtf');
+const { candles, readTimeframe, alignment, mtfRead, biasSeries, trendRule, ruleSeries, biasesAt } = require('../../scripts/lib/trading/mtf');
 const { normalizeBars } = require('../../scripts/lib/trading/indicators');
 const { compileCondition, evaluateRules, seriesSource } = require('../../scripts/lib/trading/rules');
 
@@ -66,7 +66,8 @@ test('mtfRead on real NQ: one line per timeframe, highest first, and the alignme
   });
   const r = mtfRead(bars);
   assert.deepStrictEqual(r.frames.map(f => f.label), ['4h', '1h', '15m']);
-  assert.strictEqual(r.lines.length, 4);
+  assert.strictEqual(r.lines.length, 5);
+  assert.match(r.lines[4], /^Trend rule: /);
   assert.match(r.lines[3], /^Alignment: long (aligned|pullback|counter|mixed), short (aligned|pullback|counter|mixed); bias (long|short|neutral)/);
   assert.ok(r.frames.every(f => f.forming && f.read.candles > 0));
   const daily = Array.from({ length: 60 }, (_, k) => ({ t: new Date(Date.UTC(2026, 1, 1) + k * 86400000).toISOString(), o: 20000 + 20 * k, h: 20040 + 20 * k, l: 19970 + 20 * k, c: 20030 + 20 * k, v: 1 }));
@@ -102,4 +103,42 @@ test('scripts/mtf.js prints the read for a bars file, as lines or JSON', () => {
   const bad = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'mtf.js'), NQ, '--bogus'], { encoding: 'utf8' });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr, /unknown argument: --bogus/);
+});
+
+test('trendRule: a trend strategy never goes against the highest frame that has a trend; a reversal may', () => {
+  const b = (h4, h1, m15) => ({ 240: h4, 60: h1, 15: m15 });
+  const allowed = (biases, side, style) => trendRule(biases, side, style).allowed;
+  // 4h up: shorts are against it, whatever the lower frames say; longs are fine even in a 15m pullback.
+  assert.strictEqual(allowed(b(1, -1, -1), 'short'), false);
+  assert.strictEqual(allowed(b(1, 1, -1), 'long'), true);
+  assert.match(trendRule(b(1, 0, 0), 'short').reason, /against the prevailing 4h up trend/);
+  // 4h range: the 1h trend prevails; all range: both sides open.
+  assert.deepStrictEqual([allowed(b(0, -1, 1), 'long'), allowed(b(0, -1, 1), 'short')], [false, true]);
+  assert.strictEqual(trendRule(b(0, 0, 1), 'short').prevailing.label, '15m');
+  assert.deepStrictEqual([allowed(b(0, 0, 0), 'long'), allowed(b(0, 0, 0), 'short')], [true, true]);
+  // No 4h read yet: trend strategies wait; reversal strategies are never held by the rule.
+  assert.match(trendRule(b(NaN, 1, 1), 'long').reason, /no 4h trend read yet/);
+  assert.strictEqual(allowed(b(NaN, 1, 1), 'long'), false);
+  assert.strictEqual(allowed(b(1, 1, 1), 'short', 'reversal'), true);
+  assert.strictEqual(allowed(b(NaN, NaN, NaN), 'short', 'reversal'), true);
+});
+
+test('ruleSeries: causal per bar, and on the last bar the same biases as the live read (mtfRead)', () => {
+  const b = path3m(et(9, 0, 1), 6000, zigzag(-0.3, 40, 320));
+  const ser = ruleSeries(b);
+  assert.deepStrictEqual(ruleSeries(b.slice(0, 3000))[240], ser[240].slice(0, 3000), 'a prefix gives the same values');
+  const live = mtfRead(b);
+  for (const m of [240, 60, 15]) assert.strictEqual(biasesAt(ser, b.length - 1)[m], live.biases[m], `${m}m`);
+  assert.strictEqual(live.rule.prevailing, '4h down');
+  assert.deepStrictEqual([live.rule.longAllowed, live.rule.shortAllowed], [false, true]);
+  assert.match(live.lines[live.lines.length - 1], /prevailing trend 4h down; trend strategies may not go long/);
+});
+
+test('readTimeframe reads at most the last 300 candles, so long series stay linear', () => {
+  const cs = candles(path3m(et(9, 0, 1), 30000, zigzag(0.2, 30, 80)), 15).filter(c => c.complete);
+  assert.ok(cs.length > 300);
+  const full = readTimeframe(cs);
+  const tail = readTimeframe(cs.slice(-300));
+  assert.strictEqual(full.candles, cs.length);
+  assert.deepStrictEqual([full.bias, full.emaFast, full.emaSlow], [tail.bias, tail.emaFast, tail.emaSlow]);
 });

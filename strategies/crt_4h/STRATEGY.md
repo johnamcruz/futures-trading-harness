@@ -7,6 +7,7 @@ instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["06:00-14:00@America/New_York"]
 signal: rules
+mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
 rules:
   long:
     - crt_dir(240) > 0

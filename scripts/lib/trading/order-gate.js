@@ -15,7 +15,8 @@ const { tradingDayStart, parseWindows, inWindow, inMarketHours, tradingDayKey, E
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
-const { propViolations, runningAttempts } = require('./prop-state');
+const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
+const { checkTrend } = require('./mtf-state');
 const { specFor } = require('./contracts');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -237,6 +238,19 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   }
   // Hard rules, outside the skippable checks: the prop challenge's account and policy.
   const named = setup && strategies ? strategies.find(x => x.name === setup[1].toLowerCase()) : null;
+  // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
+  // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
+  // by the strategy whose setup its verdict trades.
+  if (named && named.valid !== false) {
+    const root = contractRoot(input.contractId);
+    let judge = named;
+    if (named.signal === 'policy') {
+      const v = latestVerdict(config.home, named.name, root);
+      judge = (v && strategies.find(x => x.name === v.component)) || { name: named.name, mtf: 'trend' };
+    }
+    const msg = checkTrend(config.home, { root, side: input.side, style: judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
+    if (msg) violations.push({ check: 'mtf-trend', message: msg });
+  }
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries }));
   } else {

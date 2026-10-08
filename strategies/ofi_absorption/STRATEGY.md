@@ -6,6 +6,7 @@ status: paper
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
+mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
 connectors: [order_flow]
 rules:
   long:

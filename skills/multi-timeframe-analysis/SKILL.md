@@ -1,6 +1,6 @@
 ---
 name: multi-timeframe-analysis
-description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed; strategies can require it in rules with mtf_bias(m). Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
+description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (mtf: reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
 ---
 
 # Multi-Timeframe Analysis
@@ -63,7 +63,41 @@ Two votes the same way, and none against, set the trend (UP or DOWN);
 anything else is RANGE. Each line also gives ADX, ATR, where the close sits
 in the last 20 candles' range, and the swing high and low.
 
-### 3. Read the alignment
+### 3. The trend rule (enforced, not advice)
+
+The prevailing trend is the highest of 4h, 1h, and 15m (built from the
+trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
+
+- **Trend strategies** (every strategy unless its STRATEGY.md says
+  `mtf: reversal`): never enter against the prevailing trend, and wait while
+  the 4h has fewer than 3 completed candles. With no trend on any of the three,
+  both sides are open.
+- **Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`, `cisd_ote`,
+  `ofi_absorption`): may fade it. That is their setup, a raid at a
+  higher-timeframe level; plan them at half size and the nearest target when
+  they do (the table below).
+
+Where it is enforced:
+
+- `strategies.js scan`: a trend strategy that fires against it is not a
+  `candidate`; `filtersFailed` says `mtf: against the prevailing 4h down
+  trend ...`. Every result has `mtf` (frames, `prevailing`, `longAllowed`,
+  `shortAllowed`).
+- The backtester and RL training use the same scan, so their trades obey it.
+- The order gate (`mtf-trend`, hard: nothing switches it off) refuses a trend
+  strategy's entry against the trend recorded in
+  `<FTH_HOME>/mtf/<ROOT>.json`, or with no record or one more than 15 minutes
+  (`FTH_MTF_MAX_AGE_MIN`) past its last bar's close. The autonomous runner
+  records it every bar and puts its line in the cycle prompt. Interactively,
+  record it yourself before any entry:
+  `node <root>/scripts/mtf.js <bars> --record --symbol MNQ`.
+
+The last line of `mtf.js` states it: `Trend rule: prevailing trend 4h up;
+trend strategies may not go short, reversal strategies (mtf: reversal) may.`
+The daily (`--daily`) is context for your judgment; the rule reads the
+intraday frames.
+
+### 4. Read the alignment
 
 From the highest timeframe down, for each side:
 
@@ -81,18 +115,19 @@ The `bias` (long, short, or neutral) weights the higher timeframes more
 (score out of ±max): use it for the game plan's headline.
 
 Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `cisd_ote`) trade
-against the lower timeframes by design: judge them against the timeframe
-above their range candle (for `crt_1h`, the 4-hour trend; for `crt_4h`,
-the daily).
+against the lower timeframes by design, and the trend rule lets them fade
+the prevailing trend. Judge the setup against the timeframe above its range
+candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against
+that one too, it is a `counter` reversal (half size, nearest target).
 
-### 4. Levels flow down
+### 5. Levels flow down
 
 Take levels from the higher timeframes (the daily and 4-hour swing highs and
 lows, the previous candle's high and low on each, the prior day's high and
 low) and treat them as targets on the trigger timeframe, or as reasons to
 skip a setup that runs straight into one.
 
-### 5. Write it down
+### 6. Write it down
 
 One line per timeframe and the verdict, in the plan entry and the premarket
 note, so reviews can grade it:
@@ -102,7 +137,7 @@ Daily UP (HH/HL). 4h UP. 1h UP, ADX 26. 15m DOWN (pullback to the 1h EMA20).
 Long: pullback (wait for a 3m shift up). Short: counter.
 ```
 
-### 6. In rules (mechanical strategies)
+### 7. In rules (mechanical strategies)
 
 `mtf_bias(m)` is the same trend per bar, causal (each bar sees only candles
 completed before it): 1 up, -1 down, 0 range. Add it to a strategy's rules
@@ -129,15 +164,18 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
 15m: DOWN (close 21652.25 vs EMA20 21661, EMA20 vs EMA50 21664.5, structure LH/LL), ADX 18.2, ...
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
+Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
 
 -> Longs are a pullback: wait for a 3m shift up (ema_cross or bos long), target the 1h swing high.
-   Shorts are counter: skip, including a 3m keltner short.
+   Shorts are counter: a 3m keltner short is refused (scan and gate); only a
+   crt_1h raid of the 1h high could short, at half size.
 
 $ node scripts/mtf.js tests/fixtures/parity/NQ-3m.csv
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.49, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
+Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
 
--> Longs: mixed (half size or nearest target). Shorts: against the 4-hour trend, skip.
+-> Longs: mixed (half size or nearest target). Shorts: against the 4-hour trend, refused for trend strategies.
 ```

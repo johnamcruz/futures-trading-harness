@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 signal: rules
+mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
 rules:
   long:
     - cisd_ote_dir > 0

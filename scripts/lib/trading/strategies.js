@@ -50,10 +50,11 @@ function strategyDirs(pluginRoot, env = process.env) {
 }
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
-const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
+const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
   'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'policy', 'source'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts', 'policy'];
+const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd'];
 const POLICY_KEYS = ['bundle'];
@@ -166,6 +167,12 @@ function validateStrategy(data, body, folderName) {
     req(Array.isArray(data.regimes) && data.regimes.length > 0 && data.regimes.every(r => REGIME_TAGS.includes(r)),
       `regimes: a list of ${REGIME_TAGS.join(', ')}`);
   }
+  // The multi-timeframe trend rule (mtf.js): trend strategies (the default) never enter against
+  // the prevailing higher-timeframe trend; a reversal strategy may fade it.
+  if (data.mtf !== undefined) {
+    req(MTF_STYLES.includes(data.mtf), `mtf: ${MTF_STYLES.join(' | ')} (trend, the default: never against the prevailing 4h/1h/15m trend; reversal: may fade it)`);
+    req(data.signal !== 'policy', 'mtf: a policy strategy takes it from each setup\'s own strategy');
+  }
   if (data.regime_gate !== undefined) {
     req(typeof data.regime_gate === 'boolean', 'regime_gate: true or false');
     req(data.regime_gate !== true || Array.isArray(data.regimes), 'regime_gate: needs a regimes list');
@@ -275,7 +282,7 @@ function loadStrategyFile(file) {
   const tgt = ok && parsed.data.exit ? parsed.data.exit.target : undefined;
   const compiledTarget = tgt === undefined ? null
     : typeof tgt === 'string' ? compileExpression(tgt) : { long: compileExpression(tgt.long), short: compileExpression(tgt.short) };
-  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
+  return { ...parsed.data, mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'), name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */

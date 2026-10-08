@@ -115,6 +115,15 @@ function loadBars(file, opts = {}) {
   return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, ...flowOf(b) }));
 }
 
+/**
+ * Bars named on a command line: '-' is JSON on stdin (a get_bars reply or an
+ * array); anything else is a file loadBars reads (JSON, CSV, Parquet, Excel).
+ */
+function readBarsArg(file) {
+  if (file === '-') return normalizeBars(JSON.parse(fs.readFileSync(0, 'utf8')));
+  return loadBars(path.resolve(file));
+}
+
 /** { bv, sv } when the bar carries real order flow, else nothing. */
 function flowOf(b) {
   return Number.isFinite(b.bv) && Number.isFinite(b.sv) ? { bv: b.bv, sv: b.sv } : {};
@@ -184,4 +193,4 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
   return out.map(({ t, o, h, l, c, v, bv, sv }) => ({ t, o, h, l, c, v, ...flowOf({ bv, sv }) }));
 }
 
-module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, barMinutes, aggregate, bucketStart, epochMs };
+module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, readBarsArg, barMinutes, aggregate, bucketStart, epochMs };

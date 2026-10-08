@@ -4,9 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder } = require('../helpers');
+const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome } = require('../helpers');
 
-const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP' };
+// Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
+const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9 };
 const checks = r => r.violations.map(v => v.check).sort();
 const evaluate = (input, entries, opts = {}) =>
   evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
@@ -248,7 +249,7 @@ const propStrategy = (extra = {}) => ({
   strategies: ['ema_cross'], account: 'mini', contracts: 'micro', ...extra,
 });
 function propSetup({ balance = 50000, policy = false, verdict = policy ? null : {}, account = MINI, days = [] } = {}) {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, account, new Date(NOW.getTime() - (days.length + 1) * 86400000));
   for (const [day, close] of days) prop.recordEndOfDay(home, account, close, day);
   if (balance !== null) prop.snapshot(home, account, balance, new Date(NOW.getTime() - 60000));
@@ -264,7 +265,7 @@ function propSetup({ balance = 50000, policy = false, verdict = policy ? null : 
 }
 
 test('combine: a strategy that trades an account needs a started attempt and a fresh snapshot (hard, unskippable)', () => {
-  const none = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: tmpDir() }, strategies: [propStrategy()], accounts: [MINI] });
+  const none = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: trendHome() }, strategies: [propStrategy()], accounts: [MINI] });
   assert.match(none.violations.find(v => v.check === 'combine').message, /no mini attempt is started/);
   const noSnapshot = propSetup({ balance: null });
   assert.match(noSnapshot(entryOrder()).violations[0].message, /snapshot is missing or older/);
@@ -309,7 +310,7 @@ test('combine: a live attempt never times out on its sessions, and a finished on
 });
 
 test('combine: every missed close is flagged, not only the first, so the floor is never left stale', () => {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date('2026-10-04T14:00:00Z'));
   prop.snapshot(home, MINI, 50500, new Date('2026-10-05T19:00:00Z')); // Mon, close never recorded
   prop.snapshot(home, MINI, 52500, new Date('2026-10-06T19:00:00Z')); // Tue, close never recorded
@@ -332,7 +333,7 @@ test('policy: an entry needs a fresh verdict for this contract and side, at no m
   assert.deepStrictEqual(ok(entryOrder({ size: 3 })).violations, []);
   assert.match(ok(entryOrder({ size: 4 })).violations[0].message, /size 4 is over the verdict's 3 MNQ/);
   assert.match(ok(entryOrder({ stopLossBracket: { ticks: 60, type: 'stop' } })).violations.map(v => v.message).join(), /the stop is 60 ticks; the verdict was sized for 40/);
-  assert.match(ok(entryOrder({ side: 'sell' })).violations[0].message, /for a long entry, not sell/);
+  assert.match(ok(entryOrder({ side: 'sell' })).violations.find(v => v.check === 'policy').message, /for a long entry, not sell/);
   assert.match(ok(entryOrder(), { now: new Date(NOW.getTime() + 3 * 60000) }).violations.find(v => v.check === 'policy').message, /expired/);
   assert.match(propSetup({ policy: true, verdict: { action: 'skip', maxSize: 0, reason: 'cushion' } })(entryOrder()).violations[0].message, /the setup was skipped \(cushion\)/);
   // A verdict to trade the mini refuses a micro order, and the other way around.
@@ -344,12 +345,12 @@ test('policy: an entry needs a fresh verdict for this contract and side, at no m
 });
 
 test('combine: while an attempt runs every entry needs a strategy that trades it; an invalid one still gets the checks', () => {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   const other = { name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'rules', compiledRules: null };
   const run = strategies => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies, accounts: [MINI] });
   assert.match(run([other]).violations.find(v => v.check === 'combine').message, /mini attempt is running: only a policy strategy that trades it/);
-  assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: tmpDir() }, strategies: [other], accounts: [MINI] }).violations, [], 'no attempt: nothing changes');
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: trendHome() }, strategies: [other], accounts: [MINI] }).violations, [], 'no attempt: nothing changes');
   const invalid = run([propStrategy({ valid: false, errors: ['bad'] })]);
   assert.ok(invalid.violations.some(v => v.check === 'combine'), 'an invalid STRATEGY.md that names an account is still checked');
   prop.endAttempt(home, 'mini');
@@ -357,7 +358,7 @@ test('combine: while an attempt runs every entry needs a strategy that trades it
 });
 
 test('combine: a close the runner missed stops entries until it is recorded', () => {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date('2026-10-05T14:00:00Z'));
   prop.snapshot(home, MINI, 50300, new Date('2026-10-06T19:00:00Z')); // Tuesday's trading day, never closed
   prop.snapshot(home, MINI, 50300, new Date(NOW.getTime() - 60000)); // Wednesday
@@ -380,7 +381,7 @@ test('combine: a close the runner missed stops entries until it is recorded', ()
 test('combine: a size never risks the room to the daily limit, whatever the budget or guard', () => {
   // Down $900 of a $1,000 daily limit (soft limit off): $100 of room. Budget 0.2 x $1,100 cushion = $220.
   // A 40-tick stop risks $20.74 a contract: 4 fit in the room ($82.96), not the budget's 10.
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, { ...MINI, daily_loss_soft: 0 }, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, { ...MINI, daily_loss_soft: 0 }, 49100, new Date(NOW.getTime() - 60000));
   const acct = { ...MINI, daily_loss_soft: 0 };
@@ -396,7 +397,7 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const NQ = 'CON.F.US.ENQ.Z26';
   const run = (contracts, input, verdict) => {
-    const home = tmpDir();
+    const home = trendHome();
     prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
     prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
     prop.appendVerdict(home, { strategy: 'orb', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString(), ...verdict });
@@ -411,7 +412,7 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
 });
 
 test('combine: an untagged entry is refused while an attempt runs, even with the setup-tag check skipped', () => {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   const r = evaluateOrder({ input: entryOrder({ rationale: 'going long, stop 21480' }), entries: [plan()], now: NOW, config: { ...config, home, skipChecks: new Set(['setup-tag', 'strategy']) }, strategies: [propStrategy()], accounts: [MINI] });
   assert.deepStrictEqual(checks(r), ['combine']);
@@ -421,7 +422,7 @@ test('policy: a half verdict is checked at half size, even when full size is min
   // $600 budget (0.2 x $3,000 cushion on a $3,000 max loss), auto. 60-tick stop:
   // a micro risks $30 + $0.74 = $30.74 (19 fit: 1 NQ at $302.80); half: 9 micros, under one mini.
   const acct = { ...MINI, max_loss: 3000, daily_loss_soft: 0, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
   prop.appendVerdict(home, { strategy: 'orb', contractId: CONTRACT, direction: 'long', action: 'half', contract: 'MNQ', maxSize: 9, stopTicks: 60, policy: 'p1', at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
@@ -433,7 +434,7 @@ test('policy: a half verdict is checked at half size, even when full size is min
 test('policy: a verdict permits one entry; a re-entry waits for the next setup\'s verdict', () => {
   const ev = propSetup({ policy: true, verdict: { at: new Date(NOW.getTime() - 120000).toISOString() } });
   assert.deepStrictEqual(ev(entryOrder()).violations, []);
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 3, policy: 'p1', at: new Date(NOW.getTime() - 120000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
@@ -444,7 +445,7 @@ test('policy: a verdict permits one entry; a re-entry waits for the next setup\'
 });
 
 test('policy: only this strategy\'s entries on this index use its verdict', () => {
-  const home = tmpDir();
+  const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 3, policy: null, at: new Date(NOW.getTime() - 120000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
@@ -513,4 +514,46 @@ test('order-consistency: everyday rationale wording is not misread as prices', (
     'setup:orb long, stop 0.5 ATR, target 3 R', // multiples
     'setup:orb long, stop 21480 below OR low, target 21540 prior high',
   ]) assert.deepStrictEqual(evaluate(mkt(r), [plan()]).violations, [], r);
+});
+
+// --- The multi-timeframe trend rule (mtf-state.js): hard, read from the recorded read. ---
+const trendStrategy = (extra = {}) => ({ name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'manual', mtf: 'trend', ...extra });
+const trendEval = (home, input = entryOrder(), strategies = [trendStrategy()], extra = {}) =>
+  evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, mtfMaxAgeMin: 15, ...extra }, strategies });
+
+test('mtf-trend: a trend strategy may not enter against the prevailing trend; a reversal strategy may', () => {
+  const down = trendHome(undefined, { biases: { 240: -1, 60: -1, 15: 1 } });
+  const r = trendEval(down);
+  assert.deepStrictEqual(checks(r), ['mtf-trend']);
+  assert.match(r.violations[0].message, /setup:orb long is against the prevailing 4h down trend/);
+  assert.deepStrictEqual(trendEval(down, entryOrder({ side: 'sell', rationale: 'setup:orb short, stop 21520' })).violations, []);
+  assert.deepStrictEqual(trendEval(down, entryOrder(), [trendStrategy({ mtf: 'reversal' })]).violations, []);
+});
+
+test('mtf-trend: hard - FTH_SKIP_CHECKS can not switch it off, and a missing or stale read refuses trend entries', () => {
+  const down = trendHome(undefined, { biases: { 240: -1, 60: 0, 15: 0 } });
+  assert.deepStrictEqual(checks(trendEval(down, entryOrder(), undefined, { skipChecks: new Set(['mtf-trend', 'strategy']) })), ['mtf-trend']);
+  assert.match(trendEval(tmpDir()).violations[0].message, /No multi-timeframe read for MNQ/);
+  const stale = trendHome(undefined, { closedAt: '2026-10-07T13:00:00.000Z' });
+  assert.match(trendEval(stale).violations[0].message, /60 min old/);
+  // Exits and protective orders are never held by it.
+  assert.deepStrictEqual(trendEval(down, entryOrder({ side: 'sell', rationale: '[exit] trend turned' })).violations, []);
+});
+
+test('mtf-trend: a policy strategy entry is judged by the strategy whose setup its verdict trades', () => {
+  const run = (component, biases) => {
+    const home = trendHome(undefined, { biases });
+    prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, {
+      strategy: 'orb', component, contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40,
+      maxSize: 50, policy: null, bar: '2026-10-07T13:57:00Z', at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(),
+    });
+    const strategies = [propStrategy({ strategies: ['ema_cross', 'crt_1h'] }), trendStrategy({ name: 'ema_cross' }), trendStrategy({ name: 'crt_1h', mtf: 'reversal' })];
+    return evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home, mtfMaxAgeMin: 15 }, strategies, accounts: [MINI] });
+  };
+  const down = { 240: -1, 60: -1, 15: -1 };
+  assert.match(run('ema_cross', down).violations.find(v => v.check === 'mtf-trend').message, /setup:ema_cross long is against the prevailing 4h down trend/);
+  assert.ok(!run('crt_1h', down).violations.some(v => v.check === 'mtf-trend'), 'a reversal component may fade it');
+  assert.ok(!run('ema_cross', { 240: 1, 60: 1, 15: 1 }).violations.some(v => v.check === 'mtf-trend'));
 });

@@ -12,7 +12,7 @@
 
 'use strict';
 
-const fs = require('fs');
+const { readBarsArg } = require('./lib/backtest/data');
 const { PARAMS, snapshot } = require('./lib/trading/market-snapshot');
 
 function parseArgs(argv) {
@@ -38,8 +38,7 @@ function parseArgs(argv) {
 function main() {
   try {
     const { file, overrides } = parseArgs(process.argv.slice(2));
-    const text = fs.readFileSync(file === '-' ? 0 : file, 'utf8');
-    process.stdout.write(`${JSON.stringify(snapshot(JSON.parse(text), overrides), null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(snapshot(readBarsArg(file), overrides), null, 2)}\n`);
   } catch (err) {
     process.stderr.write(`[market-snapshot] ${err.message}\n`);
     process.exit(1);
