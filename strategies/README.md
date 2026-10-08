@@ -20,8 +20,8 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `vwap_reclaim` | rules (written in Markdown) | paper |
 | `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | paper |
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
-| `crt_1h` | rules: Candle Range Theory, a sweep of the previous 1-hour high or low that closes back inside, 3m shift | paper |
-| `crt_4h` | rules: the same on the 4-hour candle (06:00 and 10:00 ET sweeps) | paper |
+| `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | paper |
+| `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | paper |
 
 The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`)
 and declares `connectors: [order_flow]`, so the runner records real

@@ -47,15 +47,22 @@
  *   htfc_open(m) htfc_high(m) htfc_low(m)
  *               the m-minute candle in progress, up to and including this bar
  *               (htfc_low(60) < htf_low(60): this hour swept the last hour's low)
+ *   crt_dir(m)  1 / -1 on the bar a Candle Range Theory sweep of the previous
+ *               m-minute candle confirms (scripts/lib/trading/crt.js), else 0;
+ *               one per candle
+ *   crt_risk(m) that setup's stop distance (to the sweep extreme plus a buffer)
+ *   crt_target(m) its distance to the far side of the previous candle (the CRT target)
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
  * Strategy `params` (orbMinutes, swingK, stPeriod, stMult, kcLen, kcMult,
- * kcAtr) tune the series that use them.
+ * kcAtr, and crtSweepBars, crtShiftBars, crtMaxDepth, crtMinRangeAtr,
+ * crtBufferAtr, crtMinRR for crt_*) tune the series that use them.
  */
 
 const ind = require('./indicators');
 const cisd = require('./cisd-ote');
+const crt = require('./crt');
 const { zonedParts } = require('./clock');
 
 const RTH_OPEN = 9 * 60 + 30;
@@ -63,7 +70,7 @@ const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
-const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low']);
+const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target']);
 const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
@@ -261,6 +268,16 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   const field = f => bars.map(b => b[f]);
   const htfs = new Map();
   const htf = m => { if (!htfs.has(m)) htfs.set(m, ind.htfCandles(bars, m)); return htfs.get(m); };
+  const crts = new Map();
+  const crtOf = m => {
+    if (!crts.has(m)) {
+      crts.set(m, crt.crtSeries(bars, m, ind.atr(bars, params.atrStop || 20), {
+        sweepBars: params.crtSweepBars, shiftBars: params.crtShiftBars, maxDepth: params.crtMaxDepth,
+        minRangeAtr: params.crtMinRangeAtr, bufferAtr: params.crtBufferAtr, minRR: params.crtMinRR,
+      }));
+    }
+    return crts.get(m);
+  };
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
     const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
@@ -284,6 +301,9 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'htfc_open': return htf(len).curO;
         case 'htfc_high': return htf(len).curH;
         case 'htfc_low': return htf(len).curL;
+        case 'crt_dir': return crtOf(len).dir;
+        case 'crt_risk': return crtOf(len).risk;
+        case 'crt_target': return crtOf(len).target;
         default: break;
       }
     }
@@ -341,7 +361,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
-    if (h && HTF.has(h[1])) { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
+    if (h && HTF.has(h[1]) && !h[1].startsWith('crt_')) { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
     if (LEVELS.has(key)) {
       const s = get(key);
       return Number.isFinite(s[i - 1]) && Number.isFinite(s[i]) && s[i - 1] !== s[i];

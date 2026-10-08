@@ -216,13 +216,17 @@ function createRunner(deps) {
       if (rec && rec.stopTicks && tick) risk = rec.stopTicks * tick;
       else if (stopOrder && sign * (entry - Number(stopOrder.stopPrice)) > 0) risk = sign * (entry - Number(stopOrder.stopPrice));
       else if (rec && rec.stopPrice && sign * (entry - rec.stopPrice) > 0) risk = sign * (entry - rec.stopPrice);
-      const ok = plan && plan.trailActivateR !== null && tick > 0 && risk >= 4 * tick - 1e-9;
+      // Managed: a trailing exit, or a time stop (max_bars), or both.
+      const managed = plan && (plan.trailActivateR !== null || plan.maxBars);
+      const ok = managed && tick > 0 && risk >= 4 * tick - 1e-9;
       t = ok
         ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, since: fillAt, lastBarT: null }
         : { key, skip: true };
       save(t);
-      if (ok) log(`${item.symbol}: trailing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R)`);
-      else if (plan && plan.trailActivateR !== null) log(`${item.symbol}: ${rec.setup} position not trailed: no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
+      if (ok) {
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.maxBars ? `time stop ${plan.maxBars} bars` : ''].filter(Boolean).join('; ');
+        log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
+      } else if (managed) log(`${item.symbol}: ${rec.setup} position not trailed: no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
     // Every bar that opened after the fill (a market fill seconds into a bar
@@ -263,6 +267,11 @@ function createRunner(deps) {
     };
     if (cross) {
       await closeOut(`trail: price went through the new stop ${cross.stop} (resting ${resting ?? 'none'})`);
+      return;
+    }
+    // The strategy's time stop (exit.max_bars), as the backtester applies it.
+    if (t.plan.maxBars && barsHeld >= t.plan.maxBars) {
+      await closeOut(`time stop: ${barsHeld} bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
     // Past the ratchet, a strategy's policy may bank the trade (as in training).

@@ -38,7 +38,9 @@ function timeframeMs(tf) {
 function exitPlan(s) {
   const x = s.exit || {};
   return {
-    targetR: x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
+    // exit.target is a distance per setup (targetDistance on the scan result), not R.
+    targetR: x.target !== undefined ? null : x.target_r ?? (x.trail_activate_r === undefined ? s.risk.min_rr : null),
+    target: x.target ?? null,
     trailActivateR: x.trail_activate_r ?? null,
     trailGivebackR: x.trail_giveback_r ?? null,
     maxBars: x.max_bars ?? null,
@@ -148,7 +150,14 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       const d = terms ? valueAt(terms, rulesSource(s), i) : null;
       stopDistance = d !== null && d > 0 ? d : null;
     }
+    let targetDistance = null;
+    if (s.compiledTarget && direction) {
+      const terms = Array.isArray(s.compiledTarget) ? s.compiledTarget : s.compiledTarget[direction];
+      const d = valueAt(terms, rulesSource(s), i);
+      targetDistance = d !== null && d > 0 ? d : null;
+    }
     const fails = filterFailures(s, ser, i);
+    if (direction && s.compiledTarget && !(targetDistance > 0)) fails.push('target: no positive distance on this bar');
     // A mechanical stop (atr:k or an expression) that has no positive
     // distance on this bar can't be placed: no candidate.
     const mechanicalStop = Boolean(atrMult || s.compiledStop);
@@ -162,6 +171,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       candidate: Boolean(direction) && session && base.inRegime === true && fails.length === 0,
       entryRef: bars[i].c,
       stopDistance: stopDistance === null ? null : Math.round(stopDistance * 1e4) / 1e4,
+      ...(s.compiledTarget ? { targetDistance: targetDistance === null ? null : Math.round(targetDistance * 1e4) / 1e4 } : {}),
       minRR: s.risk.min_rr,
       exit: exitPlan(s),
       ...(ruleDetail ? { rules: ruleDetail } : {}),

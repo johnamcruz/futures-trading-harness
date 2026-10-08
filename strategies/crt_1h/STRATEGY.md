@@ -1,7 +1,7 @@
 ---
 name: crt_1h
-description: Candle Range Theory liquidity sweep on the 1-hour candle - the hour sweeps the previous hour's high or low, closes back inside its range, and a 3-minute shift confirms; trade back toward the other side of that range. Reversal setup for MNQ, MES, MYM, M2K.
-version: 1
+description: Candle Range Theory liquidity sweep on the 1-hour candle - the hour raids the previous hour's high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous hour's range. One setup per hour. Reversal setup for MNQ, MES, MYM, M2K.
+version: 2
 status: paper
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
@@ -9,120 +9,142 @@ sessions: ["08:00-15:30@America/New_York"]
 signal: rules
 rules:
   long:
-    - htfc_low(60) < htf_low(60)
-    - htfc_high(60) <= htf_high(60)
-    - lowest(10) < htf_low(60)
-    - close > htf_low(60)
-    - close crosses_above highest(5)[1]
-    - htf_low(60) - htfc_low(60) <= 0.5 * htf_high(60) - 0.5 * htf_low(60)
-    - htf_high(60) + 2 * htfc_low(60) >= 3 * close + 0.5 * atr(20)
+    - crt_dir(60) > 0
   short:
-    - htfc_high(60) > htf_high(60)
-    - htfc_low(60) >= htf_low(60)
-    - highest(10) > htf_high(60)
-    - close < htf_high(60)
-    - close crosses_below lowest(5)[1]
-    - htfc_high(60) - htf_high(60) <= 0.5 * htf_high(60) - 0.5 * htf_low(60)
-    - 3 * close - 0.5 * atr(20) >= htf_low(60) + 2 * htfc_high(60)
+    - crt_dir(60) < 0
+params:
+  crtSweepBars: 10      # the sweep extreme is at most 10 bars (30 minutes) old at the shift
+  crtShiftBars: 5       # the shift closes beyond the extreme of the 5 bars before it
+  crtMaxDepth: 0.5      # the sweep goes at most half the previous hour's range past it
+  crtMinRangeAtr: 3     # the previous hour's range is at least 3 x ATR(20) of 3-minute bars
+  crtBufferAtr: 0.25    # the stop sits 0.25 x ATR(20) beyond the sweep extreme
+  crtMinRR: 2           # the far side of the range is at least 2R away
 risk:
-  stop:
-    long: close - htfc_low(60) + 0.25 * atr(20)
-    short: htfc_high(60) - close + 0.25 * atr(20)
+  stop: crt_risk(60)
   min_rr: 2
-source: Candle Range Theory (CRT) / turtle-soup sweep of the previous candle's high or low, as described in community CRT guides (no published backtest); rules fixed here so it can be backtested. Starting values, not yet tested on real data.
+exit:
+  target: crt_target(60)   # the far side of the previous hour's range (the CRT target)
+  max_bars: 40             # time stop: 2 hours; the distribution should come within the next candle
+source: Candle Range Theory (CRT) / turtle-soup raid of the previous candle's high or low, as taught in community CRT material (no published backtest); fixed here as a mechanical detector (scripts/lib/trading/crt.js) so it can be backtested. Parameters are starting values, not fitted on real data.
 ---
 
 # Strategy: CRT 1-hour sweep (`setup:crt_1h`)
 
-Candle Range Theory treats the previous higher-timeframe candle as a range
-(the CRT high and low). Stops rest just beyond it. When the next candle
-runs those stops (the sweep, or "turtle soup") and then closes back inside,
-the move beyond was liquidity being taken, not a breakout, and price tends
-to travel back toward the other side of the range. This version uses the
-1-hour candle as the range and 3-minute bars to time the entry, inside the
-candle that made the sweep.
+## The idea
 
-The 1-hour candles open on the hour (ET). The rules read them with
-`htf_high(60)` / `htf_low(60)` (the previous hour) and `htfc_high(60)` /
-`htfc_low(60)` (this hour so far).
+Every candle on a higher timeframe leaves a range: its high and its low.
+Stops and breakout orders rest just beyond both. Candle Range Theory reads the
+next candle as a sequence: accumulation (the previous candle's range),
+manipulation (a raid beyond one side that runs those orders), and
+distribution (the move back through the range to the other side). When price
+pushes past the previous hour's low, takes the sell stops, and can't stay
+there, the move beyond was liquidity being collected, not a breakout, and
+the resting buy-side liquidity above the range is the draw.
+
+The edge, if there is one, is order flow: the raid fills large passive orders
+against trapped breakout traders. The detector only trades when the raid
+fails on the lower timeframe too, and only when the far side of the range
+pays at least 2R.
 
 ## When to Use
 
-- New York hours (08:00-15:30 ET, the `sessions` window), when 1-hour ranges
-  are wide enough to give room to the other side.
-- After an hour that built a clear range, when the next hour pokes past one
-  side and fails.
-- Not on trend days that keep breaking range after range (see Skip when).
+- New York hours, 08:00-15:30 ET (`sessions`), when hourly ranges are wide
+  enough to give room to the far side.
+- After an hour that built a clear two-sided range (C1), when the next hour
+  (C2) pokes past one side and fails.
+- Best when the swept level is also an obvious pool: the prior day's or the
+  overnight high or low, equal highs or lows, a round number.
+- Not on trend days (see Skip when).
 
 ## How It Works
 
+The detector (`crt_dir(60)`, `crt_risk(60)`, `crt_target(60)`,
+`scripts/lib/trading/crt.js`) runs on every closed 3-minute bar. 1-hour
+candles open on the hour (ET).
+
 ### Context filter (harness judgment)
 
-- Note the 4-hour and daily direction. A sweep of a low inside a higher-
-  timeframe uptrend (a sweep into discount) is the cleaner long, and the
-  mirror for shorts. The rules don't require it; record it in the plan.
-- Prefer sweeps of levels that also matter on their own: the prior day's
-  high or low, the overnight high or low, an equal-highs or equal-lows pool.
+- **Draw on liquidity.** Ask where price is going on the 4-hour and daily
+  chart. A raid of the hourly low while the 4-hour trend is up, or while
+  price sits in the lower half (discount) of the day's range, is the A
+  setup: the raid is the pullback, and the target is with the trend. A raid
+  against a strong 4-hour trend is the B setup; take it at half size or skip
+  it.
+- **Which side was raided?** A raid of a level that is also a higher-
+  timeframe pool (the prior day's low, the overnight low) is worth more than
+  a raid of an arbitrary hourly low.
+- **The C1 candle.** A balanced C1 (both wicks, closes mid-range) makes the
+  best range. A C1 that is one long trend bar (a displacement candle) is not
+  a range: price is more likely to continue than to reverse.
 
-### Trigger (the `rules` block, on each closed 3-minute bar)
+### Trigger (all mechanical, on the closed 3-minute bar)
 
-Long (a sweep of the previous hour's low):
+Long, a raid of the previous hour's low (short is the mirror image):
 
-1. This hour has traded below the previous hour's low (`htfc_low(60) <
-   htf_low(60)`), and not above its high (only one side swept; an outside
-   candle isn't a CRT).
-2. The sweep is fresh: the low of the last 10 bars (30 minutes) is below the
-   previous hour's low.
-3. The 3-minute close is back inside the range (above the previous hour's
-   low).
-4. A 3-minute shift: the close crosses above the high of the 5 bars before
-   it.
-5. The sweep is no deeper than half the previous hour's range (deeper looks
-   like a breakout, not a raid).
-6. The previous hour's high is at least 2R away, with the risk measured to
-   the sweep low plus a 0.25 × ATR(20) buffer. The other side of the range is
-   the CRT target, so the room has to be there before entering.
-
-Short is the mirror: a sweep of the previous hour's high, a close back below
-it, and a close below the low of the 5 bars before.
+1. **Sweep.** This hour (C2) has traded below the previous hour's (C1) low,
+   and not above its high. If C2 takes both sides, it's an outside candle
+   (expansion), and the hour is void.
+2. **Depth.** The sweep goes no more than half of C1's range past the low
+   (`crtMaxDepth`). A deeper move is acceptance: price is trading there, not
+   raiding it.
+3. **Range.** C1's range is at least 3 × ATR(20) on 3-minute bars
+   (`crtMinRangeAtr`). A narrow hour has no room to the far side.
+4. **Fresh.** The sweep low was made within the last 10 bars, 30 minutes
+   (`crtSweepBars`). A new, deeper low restarts the clock.
+5. **Reclaim and shift.** The 3-minute bar closes back above C1's low and
+   above the high of the 5 bars before it (`crtShiftBars`). This is the
+   lower-timeframe market structure shift: sellers who pushed through the
+   low can't hold it.
+6. **Room.** C1's high is at least 2R away (`crtMinRR`), with R measured to
+   the sweep low plus the buffer.
+7. **Once per hour.** After the setup fires, that hour is done. A second
+   attempt after a stop-out is the raid failing, not a new raid.
 
 ### Entry, stop, targets
 
-- **Entry:** at market on the close of the trigger bar.
-- **Stop:** beyond the sweep extreme plus 0.25 × ATR(20)
-  (`risk.stop.long` / `risk.stop.short`). A new extreme past the sweep means
-  the raid became a breakout, so the idea is wrong.
-- **Target:** a 2R bracket (`min_rr: 2`, no `exit` block). Rule 6 keeps it
-  at or inside the far side of the previous hour's range, the CRT target.
-  When the plan has room, the far side itself (the CRT high for a long, the
-  CRT low for a short) is the stretch target for a runner.
+- **Entry:** at market on the close of the shift bar.
+- **Stop:** below the sweep low by 0.25 × ATR(20) (`crt_risk`). A new low
+  below the sweep means the raid became a breakout: the idea is wrong.
+- **Target:** C1's high, the far side of the range (`crt_target`, a level,
+  not an R multiple). By rule 6 it is always at least 2R.
+- **Time stop:** close at market after 40 bars (2 hours) if neither the stop
+  nor the target has filled (`max_bars`). CRT distribution should come in
+  C2 or C3. The backtester applies it; live, the trade-session agent closes
+  the trade at the time stop.
+- **Management:** no trailing. Optionally take a third off at C1's midpoint
+  (the equilibrium) and move the stop to breakeven. That's a judgment call,
+  not part of the backtested rule.
 
 ### Skip when
 
-- The sweep candle is the first hour after a big news release (CPI, FOMC,
-  NFP): those hours break ranges.
-- Price has already broken and held beyond several hourly ranges in the same
-  direction today (a trend day: sweeps there are continuation).
-- The previous hour's range is tiny (under about 1 × the 1-hour ATR), so the
-  2R target sits in noise. Rule 6 catches most of these.
-- The sweep runs into a higher-timeframe level that's still intact a few
-  ticks further (the real liquidity is there; wait for it).
+- A tier-1 release (CPI, NFP, FOMC, GDP) is inside the C2 hour, or C2 is the
+  09:30 open hour and the raid comes in the first 5 minutes of the cash open.
+- It's a trend day: price has already broken and held beyond two or more
+  hourly ranges in the same direction today. Sweeps on trend days are
+  continuation, not reversal.
+- The sweep stops a few ticks short of a more obvious pool (the prior day's
+  low a few points lower). The real liquidity is there; wait for it.
+- The stop at size 1 is over the position-sizing budget.
+- The account is at a daily limit or in a loss-streak cooldown (the order
+  gate refuses these anyway).
 
 ## Examples
 
 ```text
-MNQ long, 1-hour CRT. The 10:00-11:00 ET hour: high 21540.00, low 21480.00.
-At 11:12 the 11:00 hour sweeps to 21472.25 (7.75 points below the low,
-under half the 60-point range). The 11:18 bar closes at 21486.50, back above
-21480.00 and above the high of the five bars before it. ATR(20) on 3 minutes
-is 8.00, so the buffer is 2.00.
+MNQ long, 1-hour CRT.
+C1 (10:00-11:00 ET): high 21540.00, low 21480.00, range 60.00. ATR(20) on
+3 minutes is 8.00, so the range is 7.5 ATR (>= 3 ATR).
+C2: at 11:12 price sweeps to 21472.25, 7.75 points below C1's low (under the
+30.00 half-range limit). The 11:18 bar closes at 21486.50, back above 21480.00
+and above the high of the five bars before it, 2 bars after the sweep low.
 
-Stop distance: 21486.50 - 21472.25 + 2.00 = 16.25 points = 65 ticks
+Stop distance: 21486.50 - 21472.25 + 0.25 x 8.00 = 16.25 points = 65 ticks
 Stop: 21486.50 - 16.25 = 21470.25
-Room to the CRT high: 21540.00 - 21486.50 = 53.50 >= 2 x 16.25 = 32.50, so it fires.
-Target (2R): 21486.50 + 32.50 = 21519.00
-Risk per MNQ: 65 ticks x $0.50 = $32.50 (plus $0.74 fees per round turn)
+Target: C1's high 21540.00, 53.50 points = 214 ticks away (3.3R; >= 2R, so it fires)
+Risk per MNQ: 65 ticks x $0.50 = $32.50; reward 214 x $0.50 = $107.00
+(plus $0.74 fees per round turn)
+Time stop: 13:18 ET (40 bars) if neither fills.
 
-place_order rationale: "setup:crt_1h long, swept 1h low 21480.00 to 21472.25,
-3m shift close 21486.50, stop 21470.25, target 21519.00, risk $32.50"
+place_order rationale: "setup:crt_1h long, C1 21480.00-21540.00 swept to
+21472.25, 3m shift close 21486.50, stop 21470.25, target 21540.00, risk $32.50"
 ```

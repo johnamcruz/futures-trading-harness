@@ -7,6 +7,9 @@ const { htfCandles, normalizeBars } = require('../../scripts/lib/trading/indicat
 const { compileCondition, compileExpression, evaluateRules, seriesSource } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
+const { crtSeries } = require('../../scripts/lib/trading/crt');
+const { runEngine } = require('../../scripts/lib/backtest/engine');
+const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // 2026-10-07 is EDT (UTC-4): 09:00 ET = 13:00 UTC.
@@ -85,28 +88,71 @@ test('a per-side stop: a map of long and short distance expressions', () => {
 });
 
 /**
- * The crt_1h example: the 10:00 hour ranges 21480-21540; at 11:12 the 11:00
- * hour sweeps to 21472.25, and the 11:18 bar closes at 21486.50, back inside
- * and above the five bars before it.
+ * The crt_1h example: C1, the 10:00 hour, ranges 21480-21540; at 11:12 C2 (the
+ * 11:00 hour) sweeps to 21472.25, and the 11:18 bar closes at 21486.50, back
+ * inside and above the five bars before it.
  */
-function crtSweep() {
-  const rows = [...flat(et(9, 0), et(10, 0), 21510)];
+function c1Rows() {
+  const rows = [];
   for (let t = et(10, 0); t < et(11, 0); t += 180000) rows.push([t, 21510, 21515, 21505, 21510]);
-  rows[22] = [et(10, 6), 21510, 21540, 21505, 21512]; // the 10:00 hour's high
-  rows[30] = [et(10, 30), 21510, 21512, 21480, 21500]; // and its low
-  rows.push(
-    [et(11, 0), 21490, 21486, 21484, 21485],
-    [et(11, 3), 21485, 21486, 21483, 21484],
-    [et(11, 6), 21484, 21485, 21482, 21483],
-    [et(11, 9), 21483, 21484, 21481, 21482],
-    [et(11, 12), 21482, 21483, 21472.25, 21476], // the sweep
-    [et(11, 15), 21476, 21479, 21474, 21478],
-    [et(11, 18), 21478, 21487, 21477, 21486.5], // the shift
-  );
-  return mk(rows);
+  rows[2] = [et(10, 6), 21510, 21540, 21505, 21512]; // C1's high
+  rows[10] = [et(10, 30), 21510, 21512, 21480, 21500]; // C1's low
+  return rows;
 }
+const C2 = [
+  [et(11, 0), 21490, 21486, 21484, 21485],
+  [et(11, 3), 21485, 21486, 21483, 21484],
+  [et(11, 6), 21484, 21485, 21482, 21483],
+  [et(11, 9), 21483, 21484, 21481, 21482],
+  [et(11, 12), 21482, 21483, 21472.25, 21476], // the sweep
+  [et(11, 15), 21476, 21479, 21474, 21478],
+  [et(11, 18), 21478, 21487, 21477, 21486.5], // the shift
+];
+const crtSweep = (extra = []) => mk([...c1Rows(), ...C2, ...extra]);
+const ATR8 = n => new Array(n).fill(8);
+const OPTS = { sweepBars: 10, shiftBars: 5, maxDepth: 0.5, minRangeAtr: 3, bufferAtr: 0.25, minRR: 2 };
+const fires = (b, opts = {}, atr = ATR8(b.length)) => {
+  const s = crtSeries(b, 60, atr, { ...OPTS, ...opts });
+  return s.dir.map((d, i) => [i, d]).filter(([, d]) => d !== 0).map(([i, d]) => ({ at: new Date(b[i].t).toISOString(), dir: d, risk: s.risk[i], target: s.target[i], depth: s.depth[i] }));
+};
 
-test('crt_1h fires on a sweep of the previous hour\'s low with the stop beyond the sweep', () => {
+test('CRT detector: a raid of the previous hour\'s low, reclaimed with a shift, fires once with its stop and target', () => {
+  const b = crtSweep();
+  // Stop: 21486.50 - 21472.25 + 0.25 x 8 = 16.25 (65 ticks). Target: C1's high 21540.00, 53.50 away (3.3R).
+  assert.deepStrictEqual(fires(b), [{ at: new Date(et(11, 18)).toISOString(), dir: 1, risk: 16.25, target: 53.5, depth: 7.75 }]);
+  // Once per candle: a second shift later in the same hour does not fire again.
+  const again = crtSweep([[et(11, 21), 21486, 21488, 21470, 21471], [et(11, 24), 21471, 21474, 21470.5, 21473], [et(11, 27), 21473, 21495, 21472, 21494]]);
+  assert.strictEqual(fires(again).length, 1);
+  // Causal: the series up to a bar never changes when later bars arrive.
+  const full = crtSeries(again, 60, ATR8(again.length), OPTS);
+  for (let k = 20; k <= again.length; k += 1) assert.deepStrictEqual(crtSeries(again.slice(0, k), 60, ATR8(k), OPTS).dir, full.dir.slice(0, k));
+});
+
+test('CRT detector: no setup without a valid raid, room, or a fresh sweep', () => {
+  const b = crtSweep();
+  const at = t => b.findIndex(x => Date.parse(x.t) === t);
+  const edit = (t, row) => mk(b.map(x => [Date.parse(x.t), x.o, x.h, x.l, x.c]).map(r => (r[0] === t ? row : r)));
+  // Both sides taken (an outside hour): void.
+  assert.deepStrictEqual(fires(edit(et(11, 3), [et(11, 3), 21485, 21545, 21483, 21484])), []);
+  // Too deep: 40.00 past the low, over half the 60.00 range (acceptance, not a raid).
+  assert.deepStrictEqual(fires(edit(et(11, 12), [et(11, 12), 21482, 21483, 21440, 21476])), []);
+  // C1 too narrow: ATR 25 needs a 75-point range.
+  assert.deepStrictEqual(fires(b, {}, new Array(b.length).fill(25)), []);
+  // No room: 4R would need 65 points to C1's high; it is 53.50.
+  assert.deepStrictEqual(fires(b, { minRR: 4 }), []);
+  // Stale: with a 1-bar freshness limit, the sweep 2 bars back is too old.
+  assert.deepStrictEqual(fires(b, { sweepBars: 1 }), []);
+  // Not reclaimed yet / no shift: the bar before the shift does not fire.
+  assert.deepStrictEqual(fires(mk(b.slice(0, at(et(11, 18))).map(x => [Date.parse(x.t), x.o, x.h, x.l, x.c]))), []);
+});
+
+test('CRT detector: a raid of the previous high is the mirror image (short)', () => {
+  const M = 21510;
+  const mirror = mk([...c1Rows(), ...C2].map(([t, o, h, l, c]) => [t, 2 * M - o, 2 * M - l, 2 * M - h, 2 * M - c]));
+  assert.deepStrictEqual(fires(mirror), [{ at: new Date(et(11, 18)).toISOString(), dir: -1, risk: 16.25, target: 53.5, depth: 7.75 }]);
+});
+
+test('crt_1h: the strategy fires on the raid with crt_risk as its stop and the far side of C1 as its target', () => {
   const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
   assert.ok(s && s.valid, s && s.errors.join('; '));
   const b = crtSweep();
@@ -116,15 +162,50 @@ test('crt_1h fires on a sweep of the previous hour\'s low with the stop beyond t
   assert.strictEqual(r.candidate, true);
   const atr = seriesSource(b, {})('atr(20)')[i];
   assert.ok(Math.abs(r.stopDistance - (21486.5 - 21472.25 + 0.25 * atr)) < 1e-3);
-  // One bar earlier (no shift yet), and with the far side too close for 2R, it does not fire.
+  assert.strictEqual(r.targetDistance, 53.5);
+  assert.deepStrictEqual([r.exit.targetR, r.exit.target, r.exit.maxBars], [null, 'crt_target(60)', 40]);
   assert.strictEqual(createEvaluator(b).at(s, i - 1).direction, null);
-  const near = b.map((x, k) => (k === 22 ? { ...x, h: 21500 } : x));
-  assert.strictEqual(createEvaluator(near).at(s, i).direction, null, 'the CRT high is under 2R away');
-  // A sweep of both sides (an outside hour) is not a CRT.
-  const both = b.map((x, k) => (k === b.length - 3 ? { ...x, h: 21545 } : x));
-  assert.strictEqual(createEvaluator(both).at(s, i).direction, null);
-  // crt_4h reads the same series on 4-hour candles: one candle (06:00-10:00) isn't in the data, so it doesn't fire.
   const four = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_4h');
-  assert.ok(four.valid);
-  assert.strictEqual(createEvaluator(b).at(four, i).direction, null);
+  assert.ok(four.valid, four.errors.join('; '));
+  assert.strictEqual(createEvaluator(b).at(four, i).direction, null, 'no complete previous 4-hour candle in the data');
+});
+
+test('backtest: a CRT trade exits at the far side of the range (exit.target is a level), or by its time stop', () => {
+  const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
+  const warm = [];
+  for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
+  const up = [];
+  for (let k = 1; k <= 8; k += 1) up.push([et(11, 18) + k * 180000, 21486 + 7 * (k - 1), 21486 + 7 * k, 21485 + 7 * (k - 1), 21486 + 7 * k]);
+  const run = rows => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2, ...rows]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, slippageTicks: 1 }).trades;
+  const [t] = run(up);
+  assert.strictEqual(t.strategy, 'crt_1h');
+  assert.strictEqual(t.entry, 21486.75, 'the close plus one tick of slippage');
+  assert.strictEqual(t.reason, 'target');
+  assert.strictEqual(t.exit, 21540, 'C1\'s high, not entry + R');
+  // Going nowhere: closed by the 40-bar time stop.
+  const drift = [];
+  for (let k = 1; k <= 45; k += 1) drift.push([et(11, 18) + k * 180000, 21490, 21492, 21488, 21490]);
+  const [d] = run(drift);
+  assert.strictEqual(d.reason, 'max_bars');
+});
+
+test('exit.target validation: a distance expression or a long/short map, never with target_r', () => {
+  const base = {
+    name: 'x', description: 'a test strategy with a target at a level, not an R multiple', version: 1, status: 'paper',
+    instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules: { long: ['close > open'] }, risk: { stop: 'atr:1', min_rr: 2 }, source: 'test',
+  };
+  const body = '## When to Use\n## How It Works\n## Examples';
+  const v = exit => validateStrategy({ ...base, exit }, body, 'x').join(' ');
+  assert.strictEqual(v({ target: 'crt_target(60)' }), '');
+  assert.strictEqual(v({ target: { long: 'htf_high(60) - close', short: 'close - htf_low(60)' }, max_bars: 10 }), '');
+  assert.match(v({ target: 'crt_target(60)', target_r: 2 }), /target_r or target, not both/);
+  assert.match(v({ target: 'banana' }), /exit.target/);
+  assert.match(v({ target: { long: 'close' } }), /exactly long and short/);
+  assert.match(v({ target: 3 }), /a distance expression/);
+});
+
+test('backtest CLI: an unknown flag is an error, not a silent run of every strategy', () => {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', 'none.csv', '--symbol', 'MNQ', '--strategies', 'crt_1h'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /unknown arguments: --strategies crt_1h/);
 });

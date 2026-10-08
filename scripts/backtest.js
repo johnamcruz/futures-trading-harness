@@ -77,8 +77,23 @@ function configFrom(argv) {
   return { cfg, baseDir: file ? path.dirname(path.resolve(file)) : process.cwd() };
 }
 
+// Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
+const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--out', '--prop', '--bundle', '--every'];
+const BOOL_FLAGS = ['--no-gate'];
+
+function unknownFlags(argv) {
+  const bad = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (VALUE_FLAGS.includes(argv[i])) i += 1;
+    else if (!BOOL_FLAGS.includes(argv[i])) bad.push(argv[i]);
+  }
+  return bad;
+}
+
 async function main(argv) {
   if (argv[0] === 'fetch') return fetchBars(argv.slice(1));
+  const bad = unknownFlags(argv);
+  if (bad.length) throw new Error(`unknown argument${bad.length > 1 ? 's' : ''}: ${bad.join(' ')} (flags: ${[...VALUE_FLAGS, ...BOOL_FLAGS].join(' ')})`);
   if (!arg(argv, '--config') && !arg(argv, '--data')) {
     throw new Error('usage: backtest.js --config <backtest.json> | --data <bars file> --symbol MNQ [options] | fetch ...');
   }

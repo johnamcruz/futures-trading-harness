@@ -377,7 +377,13 @@ function runEngine(markets, strategies, opts = {}) {
       sign, entry, risk, size, plan,
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
       // As algoTraderBot: target ticks from the unrounded stop distance.
-      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
+      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize)
+        // exit.target: a level, the signal bar's close plus the distance (e.g. the far side of a CRT range),
+        // never on the wrong side of the fill.
+        : plan.target && pick.r.targetDistance > 0
+          ? onTick(sign > 0 ? Math.max(entry + book.tickSize, bar.c + roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize)
+            : Math.min(entry - book.tickSize, bar.c - roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize), book.tickSize)
+          : null,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
     };
     entriesToday += 1;
