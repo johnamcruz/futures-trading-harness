@@ -44,7 +44,6 @@ function createRunner(deps) {
   const {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
-    flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -106,16 +105,8 @@ function createRunner(deps) {
       // still feed the trailing stop and the leftover-order check.
       const stale = step.event === 'stale' && !recover;
       if (stale) log(`${sym.symbol}: bar ${step.bar.t} closed too long ago to start a cycle; housekeeping only`);
-      let bars = step.bars;
-      if (flow) {
-        try {
-          bars = flow.annotate(sym.contractId, step.bars, minutes);
-        } catch (err) {
-          log(`${sym.symbol}: order flow unavailable this bar (${err.message})`, 'error');
-        }
-      }
-      const file = writeBars(sym, bars);
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      const file = writeBars(sym, step.bars);
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars: step.bars, stale, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');

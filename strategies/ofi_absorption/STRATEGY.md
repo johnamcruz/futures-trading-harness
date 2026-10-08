@@ -35,9 +35,9 @@ Here it doesn't: sellers hit the market hard for 5 minutes on heavy volume,
 yet price barely gives ground, because a passive buyer is taking
 everything. When the next 1-minute bar turns up, the sellers are trapped.
 
-Order flow is real buy and sell volume from the TopstepX market hub's trade
-prints, recorded by the runner (see `ofi` for the data). `ofi(n)` runs
-from -1 (all selling) to +1 (all buying).
+Order flow is read from 1-minute bars (see `ofi`): each bar's volume is
+signed by where it closed in its range, and `ofi(n)` runs from -1 (all
+selling) to +1 (all buying).
 
 ## When to Use
 

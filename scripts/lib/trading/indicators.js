@@ -12,13 +12,6 @@ const { zonedParts } = require('./clock');
 const ET = 'America/New_York';
 
 /** Accept a projectx-mcp get_bars result ({bars:[{t,o,h,l,c,v}]}) or a bare array. */
-/** Real order flow on a bar (aggressive buy and sell volume), when it has it. */
-function flowFields(b) {
-  const bv = Number(b.bv ?? b.buy_volume);
-  const sv = Number(b.sv ?? b.sell_volume);
-  return b.bv !== undefined || b.buy_volume !== undefined ? (Number.isFinite(bv) && Number.isFinite(sv) ? { bv, sv } : {}) : {};
-}
-
 function normalizeBars(input) {
   const raw = Array.isArray(input) ? input : input && Array.isArray(input.bars) ? input.bars : null;
   if (!raw) throw new Error('expected get_bars output ({ bars: [...] }) or an array of bars');
@@ -30,7 +23,6 @@ function normalizeBars(input) {
       l: Number(b.l ?? b.low),
       c: Number(b.c ?? b.close),
       v: Number(b.v ?? b.volume ?? 0),
-      ...flowFields(b),
     }))
     .filter(b => Number.isFinite(Date.parse(b.t)) && [b.o, b.h, b.l, b.c].every(Number.isFinite))
     .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
@@ -240,16 +232,13 @@ function anchoredVwap(bars, anchorMin, untilMin = null) {
 }
 
 /**
- * Order flow per bar. With real flow (bv/sv: aggressive buy and sell volume,
- * recorded from the TopstepX market hub or in the data file) it is bv - sv.
- * Otherwise it is estimated from the bar (no bid/ask split needed): volume signed by
+ * Order flow from bars (no bid/ask split needed): each bar's volume signed by
  * where it closed in its range, v * ((c - l) - (h - c)) / (h - l). A close
  * at the high is all buying, at the low all selling, mid-range balanced. A
  * bar with no range takes the sign of its close against the prior close.
  */
 function barDelta(bars) {
   return bars.map((b, i) => {
-    if (hasFlow(b)) return b.bv - b.sv;
     const v = Number(b.v) || 0;
     const range = b.h - b.l;
     if (range > 0) return (v * ((b.c - b.l) - (b.h - b.c))) / range;
@@ -263,15 +252,13 @@ function barDelta(bars) {
  * volume, from -1 (all selling) to +1 (all buying). NaN until n bars exist
  * or when they traded no volume.
  */
-const hasFlow = b => Number.isFinite(b.bv) && Number.isFinite(b.sv);
-
 function ofi(bars, n) {
   const d = barDelta(bars);
   return bars.map((_, i) => {
     if (i + 1 < n) return NaN;
     let sd = 0;
     let sv = 0;
-    for (let k = i + 1 - n; k <= i; k += 1) { sd += d[k]; sv += hasFlow(bars[k]) ? bars[k].bv + bars[k].sv : Number(bars[k].v) || 0; }
+    for (let k = i + 1 - n; k <= i; k += 1) { sd += d[k]; sv += Number(bars[k].v) || 0; }
     return sv > 0 ? sd / sv : NaN;
   });
 }

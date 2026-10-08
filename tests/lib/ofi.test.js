@@ -76,11 +76,3 @@ test('the runner keeps three trading days of bars (at least 2000) for the scan',
   assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3 }).bars, 2000);
   assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, bars: 800 }).bars, 800);
 });
-
-test('orderFlow auto: on when a strategy on the timeframe uses ofi or delta', () => {
-  const { usesOrderFlow, validateConfig } = require('../../scripts/lib/autotrader');
-  const all = loadStrategies(ROOT, {}).strategies;
-  assert.strictEqual(usesOrderFlow(all, 1), true);
-  assert.strictEqual(usesOrderFlow(all, 3), false);
-  assert.throws(() => validateConfig({ harness: 'qwen', premarketAt: '', orderFlow: 'yes' }), /orderFlow/);
-});

@@ -76,8 +76,6 @@ function createClient({ env = process.env, fetchFn = globalThis.fetch, sleep = m
   }
 
   return {
-    /** Bearer token for the realtime hubs (never logged). */
-    getToken,
     /** Active contract id for a root symbol such as MNQ. */
     async activeContract(symbol) {
       const res = await post('/api/Contract/search', { searchText: symbol, live: false });
