@@ -10,6 +10,7 @@ const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { tmpDir } = require('../helpers');
+const { inMarketHours } = require('../../scripts/lib/trading/clock');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -35,7 +36,31 @@ function fakeProjectX() {
   return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve({ server, calls, url: `http://127.0.0.1:${server.address().port}` })));
 }
 
-test('runner starts a cycle on a fresh closed bar and hands the agent the bar file', { timeout: 30000 }, async () => {
+function runAutotrader(config, home, url) {
+  const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config], {
+    env: { PATH: process.env.PATH, HOME: home, PROJECTX_USERNAME: 'u', PROJECTX_API_KEY: 'k', PROJECTX_API_URL: url, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP') },
+  });
+  const done = new Promise(r => runner.on('close', r));
+  const io = { out: '' };
+  runner.stdout.on('data', c => { io.out += c; });
+  runner.stderr.on('data', c => { io.out += c; });
+  return { runner, done, io };
+}
+
+test('a runner config that trades outside market hours is refused', { timeout: 30000 }, async () => {
+  const home = tmpDir();
+  const config = path.join(home, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: ['true'], sessions: ['00:00-24:00@UTC'], eodAt: '', premarketAt: '' }));
+  const { done, io } = runAutotrader(config, home, 'http://127.0.0.1:9');
+  const code = await done;
+  assert.notStrictEqual(code, 0);
+  assert.match(io.out, /market hours|eodAt: required/);
+});
+
+// The runner runs on the real clock: during market hours a fresh bar starts a
+// cycle; outside them it must stay idle.
+test('runner starts a cycle on a fresh closed bar during market hours, and none outside them', { timeout: 30000 }, async () => {
+  const open = inMarketHours(new Date()) && inMarketHours(new Date(Date.now() + 25000));
   const { server, calls, url } = await fakeProjectX();
   const home = tmpDir();
   const dataDir = path.join(home, 'fth');
@@ -45,30 +70,33 @@ test('runner starts a cycle on a fresh closed bar and hands the agent the bar fi
     command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'],
     timeframe: 1,
     dataDir,
-    sessions: ['00:00-24:00@UTC'],
+    sessions: ['09:30-16:00@America/New_York'],
     premarketAt: '',
-    eodAt: '',
+    eodAt: '16:00@America/New_York',
     weekdaysOnly: false,
     barDelaySeconds: 0,
   }));
-  const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config], {
-    env: { PATH: process.env.PATH, HOME: home, PROJECTX_USERNAME: 'u', PROJECTX_API_KEY: 'k', PROJECTX_API_URL: url, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP') },
-  });
-  let out = '';
-  runner.stdout.on('data', c => { out += c; });
-  runner.stderr.on('data', c => { out += c; });
+  const { runner, done, io } = runAutotrader(config, home, url);
   try {
+    if (!open) {
+      await new Promise(r => setTimeout(r, 5000));
+      assert.ok(runner.exitCode === null, `the runner keeps running:\n${io.out}`);
+      assert.ok(!io.out.includes('CYCLE RESULT'), 'no cycle outside market hours');
+      return;
+    }
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`no cycle within 20s:\n${out}`)), 20000);
+      const timer = setTimeout(() => reject(new Error(`no cycle within 20s:\n${io.out}`)), 20000);
       const check = setInterval(() => {
-        if (out.includes('CYCLE RESULT')) { clearTimeout(timer); clearInterval(check); resolve(); }
+        if (io.out.includes('CYCLE RESULT')) { clearTimeout(timer); clearInterval(check); resolve(); }
+        else if (runner.exitCode !== null) { clearTimeout(timer); clearInterval(check); reject(new Error(`runner exited:\n${io.out}`)); }
       }, 100);
     });
   } finally {
-    runner.kill('SIGTERM');
-    await new Promise(r => runner.on('close', r));
+    if (runner.exitCode === null) runner.kill('SIGTERM');
+    await done;
     server.close();
   }
+  const out = io.out;
   assert.match(out, /MNQ: active contract CON\.F\.US\.MNQ\.Z26/);
   assert.match(out, /CYCLE RESULT: no-trade - fake harness/);
   const file = path.join(dataDir, 'MNQ-1m.json');

@@ -11,7 +11,7 @@
  * The MCP server still enforces its own size and loss limits on all of them.
  */
 
-const { tradingDayStart, parseWindows, inWindow } = require('./clock');
+const { tradingDayStart, parseWindows, inWindow, inMarketHours, MARKET_HOURS_LABEL } = require('./clock');
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
@@ -147,6 +147,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       + 'and place a [protect] stop order right after the fill.');
 
   add('plan-required', checkPlan(input, dayEntries, now, config));
+  // Hard rule, outside the skippable checks: entries only during market hours.
+  if (!inMarketHours(now)) violations.push({ check: 'market-hours', message: `New entries only during market hours (${MARKET_HOURS_LABEL}); no position may be held outside them.` });
   add('time-window', checkWindows(now, config));
   add('blackout', checkBlackouts(now, blackouts));
 

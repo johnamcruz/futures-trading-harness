@@ -13,11 +13,13 @@
  *        code the live scan runs) and the first candidate, in strategy order,
  *        enters at the bar's close with its stop (and target).
  *
- * The harness's own entry rules apply as they do live (`gate: true`): the
- * runner's sessions and end of day, the order gate's no-entry windows, loss
- * streak cooldown, daily loss count, and daily entry cap. Set `gate: false`
- * to trade the strategies the way algoTraderBot does (around the clock, no
- * limits) when comparing with it.
+ * Market hours are a hard rule, always applied: entries only 09:30-16:00 ET
+ * on weekdays and before end of day (`eodAt`), and every trade is closed at
+ * end of day; none is held overnight. The harness's other entry rules apply
+ * as they do live (`gate: true`): the runner's sessions, the order gate's
+ * no-entry windows, loss streak cooldown, daily loss count, and daily entry
+ * cap. `gate: false` drops those (not the market hours) when comparing with
+ * algoTraderBot.
  *
  * Fills: market entries at the bar close plus `slippageTicks`; stops at the
  * stop price (or the bar's open when it gapped through) minus slippage;
@@ -29,7 +31,7 @@
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
 const { trailStep } = require('../trading/trail');
-const { parseWindows, inWindow, tradingDayStart, minutesOfDay } = require('../trading/clock');
+const { parseWindows, inWindow, tradingDayStart, minutesOfDay, inMarketHours, zonedParts, MARKET_TZ } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const { normalizeBars } = require('../trading/indicators');
 
@@ -134,6 +136,13 @@ function runEngine(markets, strategies, opts = {}) {
     }
 
     // 1. Broker: the resting stop and target against this bar.
+    // Hard rule: no trade is held overnight. If the data has no bar between
+    // end of day and this one, close at the previous bar's close.
+    const nyDay = t => { const z = zonedParts(t, MARKET_TZ); return `${z.year}-${z.month}-${z.day}`; };
+    if (book.pos && i > book.pos.entryIndex && nyDay(closeAt) !== book.pos.nyDay) {
+      const prev = book.bars[i - 1];
+      closeTrade(book, prev, prev.c, 'eod');
+    }
     const p = book.pos;
     if (p && i > p.entryIndex) {
       const slip = o.slippageTicks * book.tickSize;
@@ -153,7 +162,7 @@ function runEngine(markets, strategies, opts = {}) {
     // 2. Manage an open trade at the bar's close. Like algoTraderBot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    const afterEod = eod && o.gate && minutesOfDay(closeAt, eod.timeZone) >= eod.minute;
+    const afterEod = (eod && minutesOfDay(closeAt, eod.timeZone) >= eod.minute) || !inMarketHours(closeAt);
     let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
@@ -171,8 +180,10 @@ function runEngine(markets, strategies, opts = {}) {
 
     // 3. Flat: look for an entry, as the live loop does after each closed bar.
     if (managed || book.pos || !book.usable.length) continue;
+    // Entries at the bar's close need market hours and time before end of day,
+    // and the bar itself must lie in market hours.
+    if (afterEod || !inMarketHours(new Date(bar.ms))) continue;
     if (o.gate) {
-      if (afterEod) continue;
       if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) continue;
       if (noEntry.some(w => inWindow(closeAt, w))) continue;
       if (entryHours.length && !entryHours.some(w => inWindow(closeAt, w))) continue;
@@ -205,7 +216,7 @@ function runEngine(markets, strategies, opts = {}) {
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
       // As algoTraderBot: target ticks from the unrounded stop distance.
       target: plan.targetR ? onTick(entry + sign * Math.max(1, Math.round((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize) : null,
-      entryIndex: i, entryTime: closeAt.toISOString(), peakR: 0, barsHeld: 0,
+      entryIndex: i, entryTime: closeAt.toISOString(), nyDay: nyDay(closeAt), peakR: 0, barsHeld: 0,
     };
     entriesToday += 1;
   }

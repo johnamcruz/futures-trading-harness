@@ -77,9 +77,9 @@ function strategy(extra = {}) {
   };
 }
 
-/** 3m bars from 09:00 ET (13:00Z, EDT): flat at 100 (ATR 1), then the scripted path. */
+/** 3m bars from 10:00 ET (14:00Z, EDT): flat at 100 (ATR 1), then the scripted path. */
 function bars(path) {
-  const t0 = Date.parse('2025-03-10T13:00:00Z');
+  const t0 = Date.parse('2025-03-10T14:00:00Z');
   const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
   return [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
 }
@@ -110,10 +110,10 @@ test('engine: trend setups trail from +2R, giving back 0.5R', () => {
 });
 
 test('engine: with harness rules, no entries outside sessions and a flatten at end of day', () => {
-  const late = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101]], strategy(), { gate: true, sessions: ['10:00-15:00@America/New_York'], gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }) });
-  assert.deepStrictEqual(late, [], '09:03 ET is outside the session');
+  const late = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101]], strategy(), { gate: true, sessions: ['11:00-15:00@America/New_York'], gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }) });
+  assert.deepStrictEqual(late, [], '10:03 ET is outside the session');
   const eod = run([[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1], [101.1, 101.2, 100.9, 101]], strategy(), {
-    gate: true, sessions: ['09:00-15:00@America/New_York'], eodAt: '09:06@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }),
+    gate: true, sessions: ['10:00-15:00@America/New_York'], eodAt: '10:06@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '' }),
   });
   assert.deepStrictEqual(eod.map(t => t.reason), ['eod']);
 });
@@ -156,7 +156,7 @@ test('engine: a trade closed by the trail is not followed by an entry on the sam
 });
 
 test('engine: stops and targets on a 0.1 tick are exact (no float misses)', () => {
-  const t0 = Date.parse('2025-03-10T13:00:00Z');
+  const t0 = Date.parse('2025-03-10T14:00:00Z');
   const flat = Array.from({ length: 520 }, () => [2045, 2045.2, 2044.8, 2045]);
   const path = [[2045, 2045.2, 2044.9, 2045.1], [2045.1, 2045.2, 2044.9, 2045.0]];
   const bars = [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
@@ -184,7 +184,7 @@ test('data: empty price cells drop the row instead of reading as 0; epoch number
 
 test('the gate limits come from the environment, as live', () => {
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['bos'], outDir: dir, sessions: ['00:00-23:59@America/New_York'], eodAt: null };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['bos'], outDir: dir };
   const loose = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' } }).report.summary.trades;
   const capped = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_MAX_ENTRIES_PER_DAY: '1' } }).report.trades;
   const perDay = new Map();
@@ -202,7 +202,7 @@ test('engine: a fixed target is measured from the unrounded stop distance, as al
 test('engine: losses are counted from P&L before fees, as the live gate counts them', () => {
   const s = strategy({ exit: { target_r: 5, max_bars: 1 } });
   const path = [[100, 101, 99.9, 101], [101, 101.3, 100.9, 101.25], [101.25, 101.3, 99.9, 100], [100, 101, 99.9, 101], [101, 101.1, 100.9, 101]];
-  const opts = { gate: true, sessions: ['00:00-23:59@America/New_York'], eodAt: null, gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_MAX_DAILY_LOSSES: '1' }) };
+  const opts = { gate: true, sessions: ['09:30-16:00@America/New_York'], eodAt: '16:00@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_MAX_DAILY_LOSSES: '1' }) };
   const trades = runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 }], [s], { timeframe: 3, ...opts }).trades;
   assert.ok(trades[0].pnl > 0 && trades[0].net < 0, 'a 1-tick win that fees turn negative');
   assert.strictEqual(trades.length, 2, 'it is not a loss: the second entry is allowed');
@@ -210,4 +210,22 @@ test('engine: losses are counted from P&L before fees, as the live gate counts t
 
 test('config: gate must be a boolean', () => {
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, gate: 'false' }, ROOT), /gate: true or false/);
+});
+
+test('market hours are a hard rule in backtests too: no entries outside them, no trade held overnight', () => {
+  // gate: false drops the order-gate limits, never the market hours.
+  const t0 = Date.parse('2025-03-10T19:57:00Z'); // 15:57 ET
+  const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
+  const path = [[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1]];
+  const mk = (rows, start) => rows.map(([o, h, l, c], i) => ({ t: new Date(start + i * 180000).toISOString(), o, h, l, c, v: 1 }));
+  const late = runEngine([{ symbol: 'MNQ', bars: mk([...flat, ...path], t0 - 520 * 180000), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy()], { timeframe: 3, gate: false }).trades;
+  assert.deepStrictEqual(late, [], 'a 16:00 ET close is after end of day: no entry');
+  // An entry at 10:03 with no more bars until the next morning: closed at that day's last bar.
+  const day = Date.parse('2025-03-10T14:00:00Z');
+  const rows = mk([...flat, [100, 101, 99.9, 101]], day - 520 * 180000);
+  rows.push({ t: new Date(Date.parse('2025-03-11T14:00:00Z')).toISOString(), o: 90, h: 91, l: 89, c: 90, v: 1 });
+  const held = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } })], { timeframe: 3, gate: false }).trades;
+  assert.deepStrictEqual(held.map(t => [t.reason, t.exit]), [['eod', 101]], 'not carried into the next day');
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: null }, ROOT), /eodAt/);
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market hours/);
 });

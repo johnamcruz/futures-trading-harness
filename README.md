@@ -260,6 +260,9 @@ strategy fires (use it for 1-minute bars so a cycle fits in one bar);
 `maxCyclesPerDay` (400) switches to manage-only cycles once reached;
 `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe), and a cycle stopped
 by the timeout makes the next one start by checking protective stops;
+Trading hours are a hard rule: `sessions` must lie inside 09:30-16:00 ET,
+`eodAt` is required and no later than 16:00 ET, and outside market hours
+the runner closes any position it finds (checked once a minute).
 `earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME early-close
 sessions; bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
 `dataDir` is set. With several `symbols`, one cycle covers every symbol whose
@@ -275,8 +278,10 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 3. checks every strategy for an entry, with the same rules evaluation the
    live scan uses.
 
-By default it applies the harness's own rules (sessions, end of day,
-order-gate limits). `--no-gate` trades the way algoTraderBot does.
+Market hours are always enforced: entries only 09:30-16:00 ET on weekdays,
+and every trade closed at end of day. By default it also applies the
+harness's other rules (sessions, order-gate limits); `--no-gate` drops those
+to compare with algoTraderBot.
 
 ```bash
 node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01

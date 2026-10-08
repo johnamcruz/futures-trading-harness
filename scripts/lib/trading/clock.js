@@ -119,7 +119,31 @@ function inWindow(now, window) {
   return t >= window.start || t < window.end;
 }
 
+/**
+ * Hard trading hours: the regular session of US index futures, 09:30-16:00
+ * New York time, Monday to Friday. No entry outside them and no position held
+ * outside them, whatever the configuration says.
+ */
+const MARKET_TZ = 'America/New_York';
+const MARKET_OPEN_MIN = 9 * 60 + 30;
+const MARKET_CLOSE_MIN = 16 * 60;
+const MARKET_HOURS_LABEL = '09:30-16:00 ET, Monday to Friday';
+
+/** Is `now` inside market hours (and, with `until`, before that New York minute)? */
+function inMarketHours(now, { until = MARKET_CLOSE_MIN } = {}) {
+  const p = zonedParts(now, MARKET_TZ);
+  const weekday = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  const m = p.hour * 60 + p.minute;
+  return m >= MARKET_OPEN_MIN && m < Math.min(until, MARKET_CLOSE_MIN);
+}
+
 module.exports = {
+  MARKET_TZ,
+  MARKET_OPEN_MIN,
+  MARKET_CLOSE_MIN,
+  MARKET_HOURS_LABEL,
+  inMarketHours,
   TRADING_DAY_TZ,
   zonedParts,
   zonedTimeToUtc,

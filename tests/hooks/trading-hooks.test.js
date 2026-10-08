@@ -8,6 +8,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
 
+// The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
+// market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
+const TEST_NOW = '2026-10-07T14:30:00.000Z';
+
 const REPO = path.resolve(__dirname, '..', '..');
 const RUNNER = path.join(REPO, 'scripts', 'hooks', 'run-with-flags.js');
 
@@ -48,7 +52,7 @@ function setup(entries, extraEnv = {}) {
     env: {
       PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
-      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW,
       FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
       FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
       ...extraEnv,
@@ -66,7 +70,7 @@ test('order gate blocks an unplanned entry with exit code 2', () => {
 });
 
 test('order gate allows a planned entry', () => {
-  const { env } = setup([{ ts: minutesAgo(5, new Date()), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 0, r.stderr);
 });
@@ -78,7 +82,7 @@ test('order gate ignores other tools and plugin-scoped tool names still match', 
 });
 
 test('order gate blocks unknown strategies and instruments the strategy does not trade', () => {
-  const { env } = setup([{ ts: minutesAgo(5, new Date()), kind: 'plan', contractId: 'CON.F.US.MES.Z26', text: 'plan' }]);
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'CON.F.US.MES.Z26', text: 'plan' }]);
   const unknown = gate(orderPayload({ ...ORDER, rationale: 'setup:nosuch long, stop 1' }), env);
   assert.strictEqual(unknown.code, 2);
   assert.match(unknown.stderr, /\[strategy\] setup:nosuch is not a known strategy/);
@@ -114,8 +118,8 @@ test('order gate honours an explicit disable, but not in autonomous runs, and ne
 });
 
 test('order gate reads the blackout file', () => {
-  const { dir, env } = setup([{ ts: minutesAgo(5, new Date()), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
-  const now = Date.now();
+  const { dir, env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const now = Date.parse(TEST_NOW);
   fs.writeFileSync(path.join(dir, 'blackouts.json'), JSON.stringify([
     { start: new Date(now - 60000).toISOString(), end: new Date(now + 600000).toISOString(), reason: 'FOMC' },
   ]));
@@ -126,14 +130,24 @@ test('order gate reads the blackout file', () => {
 
 test('session-start briefing lists lessons and day state', () => {
   const { env } = setup([
-    { ts: minutesAgo(60 * 24 * 3, new Date()), kind: 'lesson', text: 'Skip ORB before 09:45 ET', tags: ['setup:orb'] },
-    { ts: minutesAgo(1, new Date()), kind: 'note', text: 'n' },
+    { ts: minutesAgo(60 * 24 * 3, new Date(TEST_NOW)), kind: 'lesson', text: 'Skip ORB before 09:45 ET', tags: ['setup:orb'] },
+    { ts: minutesAgo(1, new Date(TEST_NOW)), kind: 'note', text: 'n' },
   ]);
   const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
   assert.strictEqual(r.code, 0);
   assert.match(r.stdout, /Trading harness briefing/);
   assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
+});
+
+test('market hours are a hard rule: no entry at night even with FTH_ENTRY_HOURS empty and the check skipped', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date('2026-10-08T00:30:00Z')), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_TEST_NOW: '2026-10-08T00:30:00Z', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
+  const r = gate(orderPayload(entryOrder()), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /market-hours/);
+  const exit = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[exit] flatten before the close' })), env);
+  assert.strictEqual(exit.code, 0, 'exits are always allowed');
 });
 
 test('stop hook asks once for a review of unreviewed entries', () => {
@@ -158,7 +172,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]),
     PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
-    FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
+    FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW,
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
@@ -196,7 +210,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -219,7 +233,7 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
-    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', ...extraEnv,
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
   let out = '';
@@ -274,7 +288,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';

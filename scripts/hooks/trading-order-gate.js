@@ -11,6 +11,7 @@
 
 const path = require('path');
 const { checkOrder, logDecision } = require('../lib/trading/check-order');
+const { gateNow } = require('../lib/trading/config');
 
 const ORDER_TOOL = /^mcp__.*projectx.*__(place_order|modify_order)$/i;
 
@@ -24,7 +25,7 @@ function run(rawInput, ctx = {}, deps = {}) {
   const result = checkOrder(input, {
     env,
     pluginRoot: ctx.pluginRoot || path.resolve(__dirname, '..', '..'),
-    now: deps.now || new Date(),
+    now: deps.now || gateNow(env),
     tool: match[1].toLowerCase(),
   });
   if (result.allowed) return '';

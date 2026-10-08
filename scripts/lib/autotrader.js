@@ -12,7 +12,7 @@ const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
 const { loadConfig: loadGateConfig } = require('./trading/config');
-const { parseWindows, inWindow, minutesOfDay, zonedParts } = require('./trading/clock');
+const { parseWindows, inWindow, minutesOfDay, zonedParts, zonedTimeToUtc, MARKET_TZ, MARKET_OPEN_MIN, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -120,6 +120,39 @@ function parseAt(spec) {
   return { minute: Number(m[1]) * 60 + Number(m[2]), timeZone: m[3] };
 }
 
+/**
+ * Hard trading hours (not configurable away): sessions inside 09:30-16:00
+ * ET, and an end of day at or before 16:00 ET. Checked on a winter and a
+ * summer weekday, so other time zones are handled across DST.
+ */
+function marketHoursErrors(cfg) {
+  const errors = [];
+  const windows = parseWindows((cfg.sessions || []).join(',')).windows;
+  const nyMinute = t => minutesOfDay(t, MARKET_TZ);
+  for (const day of [Date.UTC(2026, 0, 7), Date.UTC(2026, 6, 8)]) {
+    for (let m = 0; m < 1440; m += 1) {
+      const t = new Date(day + m * 60000);
+      const ny = nyMinute(t);
+      if ((ny < MARKET_OPEN_MIN || ny >= MARKET_CLOSE_MIN) && windows.some(w => inWindow(t, w))) {
+        errors.push(`sessions: must lie inside market hours (${MARKET_HOURS_LABEL}); trading outside them is not allowed`);
+        return errors;
+      }
+    }
+    for (const k of ['eodAt', 'earlyCloseEodAt']) {
+      const at = parseAt(cfg[k]);
+      if (!at) continue;
+      const p = zonedParts(new Date(day + 12 * 3600000), at.timeZone);
+      const instant = zonedTimeToUtc({ year: p.year, month: p.month, day: p.day, hour: Math.floor(at.minute / 60), minute: at.minute % 60 }, at.timeZone);
+      const ny = nyMinute(instant);
+      if (ny <= MARKET_OPEN_MIN || ny > MARKET_CLOSE_MIN) {
+        errors.push(`${k}: end of day must be after 09:30 and no later than 16:00 ET; no position may be held past the close`);
+        return errors;
+      }
+    }
+  }
+  return errors;
+}
+
 /** True if any session minute falls at or after eodAt (checked on a winter and a summer day). */
 function sessionPastEod(cfg) {
   const eod = parseAt(cfg.eodAt);
@@ -170,6 +203,8 @@ function validateConfig(raw) {
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (![true, false, 'auto'].includes(cfg.orderFlow)) errors.push('orderFlow: true, false, or "auto"');
+  if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
+  if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {
     errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until midnight. End sessions before eodAt.');
   }
@@ -318,6 +353,7 @@ function cycleResult(output) {
 }
 
 module.exports = {
+  marketHoursErrors,
   historyBars,
   usesOrderFlow,
   DEFAULTS,

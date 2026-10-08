@@ -29,7 +29,7 @@ const { decide, recordRun, prompts, signalDecision, dayKey } = require('./autotr
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot } = require('./trading/journal');
 const { trailStep } = require('./trading/trail');
-const { tradingDayStart } = require('./trading/clock');
+const { tradingDayStart, inMarketHours } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
 
 const IDLE_MS = 5000;
@@ -339,8 +339,12 @@ function createRunner(deps) {
     }
   }
 
-  /** After end of day: close every position left in the traded roots and cancel their orders. */
-  async function eodBackstop() {
+  /**
+   * Close every position in the traded roots and cancel their orders: after
+   * the end-of-day run, and whenever one turns up outside market hours (hard
+   * rule: no position is held outside 09:30-16:00 ET).
+   */
+  async function flattenAll(why) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return true;
     try {
       const { positions, orders } = await client.accountState(cfg.account);
@@ -348,15 +352,17 @@ function createRunner(deps) {
       const open = positions.filter(p => roots.has(contractRoot(p.contractId)) && Number(p.size || 0) > 0);
       for (const p of open) {
         await client.closePosition(cfg.account, p.contractId);
-        log(`end of day: ${p.contractId} still open after the end-of-day run; closed at market`, 'error');
+        log(`${why}: ${p.contractId} was open; closed at market`, 'error');
       }
       for (const o of orders.filter(x => roots.has(contractRoot(x.contractId)))) await client.cancelOrder(cfg.account, o.id);
       return true;
     } catch (err) {
-      log(`end of day: could not check the account (${err.message}); retrying`, 'error');
+      log(`${why}: could not check the account (${err.message}); retrying`, 'error');
       return false;
     }
   }
+  const eodBackstop = () => flattenAll('end of day');
+  let lastHoursCheck = 0;
 
   async function stepOnce() {
     const now = clock.now();
@@ -380,6 +386,15 @@ function createRunner(deps) {
       saveState(state);
       // A failed end of day is retried, with a growing pause (5 s .. 60 s).
       return ok ? 0 : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
+    }
+    if (d.action === null && (!inMarketHours(now) || state.eodDone)) {
+      // Outside market hours (or after today's end of day) nothing may be
+      // open: check once a minute and flatten whatever is.
+      if (now.getTime() - lastHoursCheck >= 60000) {
+        lastHoursCheck = now.getTime();
+        await flattenAll('outside market hours');
+      }
+      return IDLE_MS;
     }
     if (d.action !== 'trade' && d.action !== 'manage' && d.action !== 'housekeep') return IDLE_MS;
 

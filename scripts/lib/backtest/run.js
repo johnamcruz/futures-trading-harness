@@ -26,6 +26,7 @@ const { buildReport, toMarkdown, toCsv } = require('./report');
 const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
+const { marketHoursErrors } = require('../autotrader');
 
 const WARMUP_BARS = 2000;
 
@@ -69,7 +70,8 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.riskPerTrade !== null && !(cfg.riskPerTrade > 0)) errors.push('riskPerTrade: dollars per trade, or null for a fixed size');
   if (cfg.riskPerTrade !== null && raw && raw.size !== undefined) errors.push('size and riskPerTrade: use one (fixed contracts, or size from the stop and a dollar risk)');
   if (!Array.isArray(cfg.sessions) || parseWindows(cfg.sessions.join(',')).errors.length) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...] (e.g. "09:35-15:00@America/New_York")');
-  if (cfg.eodAt !== null && cfg.eodAt !== '' && !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" (e.g. "15:50@America/New_York"), or null for no end-of-day flatten');
+  if (!cfg.eodAt || !validAt(cfg.eodAt)) errors.push('eodAt: "HH:MM@Zone" no later than 16:00 ET (e.g. "15:50@America/New_York"); no trade is held overnight');
+  else if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (typeof cfg.gate !== 'boolean') errors.push('gate: true or false');
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');

@@ -55,6 +55,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `strategy` | Strategy exists, valid, `active`, trades this contract, inside its `sessions` | yes | yes |
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
+| `market-hours` | Entries only 09:30-16:00 ET, Monday to Friday. A hard rule: no setting widens it and it can't be skipped | yes | yes |
 | `time-window`, `blackout` | Inside `FTH_ENTRY_HOURS` (default 09:35-15:00 ET), outside no-entry windows and news blackouts | yes | yes |
 | `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
@@ -112,6 +113,10 @@ Further safeguards:
   any month of the root, whose stops don't add up to its size (none, too
   few, or enough to flip it), then cancels the orders left behind. It keeps
   trailing protected positions.
+- **Market hours.** Sessions must lie inside 09:30-16:00 ET and `eodAt`
+  (required) can't be later than 16:00 ET. Outside market hours, or after
+  the day's end of day, the runner reads the account once a minute and
+  closes any position in its symbols. No position is held overnight.
 - **End-of-day backstop.** After the end-of-day run, the runner reads the
   account and closes any position still open in its symbols, cancelling
   their orders, so a run that exits cleanly without flattening can't leave

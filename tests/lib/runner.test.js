@@ -145,10 +145,10 @@ test('an outage resyncs with back-off, then cycles resume', async () => {
 
 test('contract roll: the new front month is picked up on the next trading day', async () => {
   const market = fakeMarket({ minutes: 3, rollAt: et(12, 0) });
-  const { cycles } = await simulate({ cfg: { timeframe: 3, sessions: ['00:00-24:00@America/New_York'], weekdaysOnly: false, eodAt: '' }, from: et(11, 0), to: et(11, 0) + 26 * 3600000, market });
+  const { cycles } = await simulate({ cfg: { timeframe: 3, weekdaysOnly: false }, from: et(11, 0), to: et(11, 0) + 26 * 3600000, market });
   const trade = cycles.filter(c => c.action === 'trade');
   assert.ok(trade.some(c => /H27/.test(c.prompt)), 'trades the new contract after the roll');
-  assert.ok(trade.filter(c => c.start > et(12, 0) && c.start < et(18, 0) + 3600000).length >= 1, 'resyncs re-resolve the contract within the day too');
+  assert.ok(trade.filter(c => c.start > et(12, 0) && c.start < et(15, 0)).length >= 1, 'resyncs re-resolve the contract within the day too');
 });
 
 test('after a timed-out cycle the next cycle is told to check protective stops first', async () => {
@@ -230,8 +230,25 @@ test('an exception inside a pass is logged and the loop carries on', async () =>
   assert.ok(saves > 2, 'later passes still run');
 });
 
+test('hard market hours: sessions outside 09:30-16:00 ET, a missing end of day, or one after 16:00 ET are rejected', () => {
+  assert.throws(() => validateConfig({ sessions: ['18:00-16:00@America/New_York'] }), /market hours/);
+  assert.throws(() => validateConfig({ sessions: ['09:00-11:00@America/New_York'] }), /market hours/);
+  assert.throws(() => validateConfig({ eodAt: '' }), /eodAt: required/);
+  assert.throws(() => validateConfig({ eodAt: '16:30@America/New_York' }), /no later than 16:00/);
+  assert.throws(() => validateConfig({ eodAt: '15:30@America/Chicago' }), /no later than 16:00/, '15:30 CT is 16:30 ET');
+  assert.ok(validateConfig({ sessions: ['08:35-14:00@America/Chicago'], eodAt: '14:50@America/Chicago' }));
+});
+
+test('outside market hours the runner flattens anything open, once a minute', async () => {
+  const r = await trailSim({ tape: {}, until: et(16, 5) });
+  assert.ok(r.cycles.includes('eod'));
+  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26'], 'closed at end of day');
+  const night = await trailSim({ tape: {}, startAt: et(20, 0), until: et(20, 3) });
+  assert.deepStrictEqual(night.closedIds, ['CON.F.US.MNQ.Z26'], 'a position found at night is closed');
+});
+
 test('a session that runs past end of day is rejected', () => {
-  assert.throws(() => validateConfig({ sessions: ['18:00-16:00@America/New_York'], eodAt: '15:50@America/New_York' }), /past eodAt/);
+  assert.throws(() => validateConfig({ sessions: ['10:00-15:55@America/New_York'], eodAt: '15:50@America/New_York' }), /past eodAt/);
   assert.ok(validateConfig({ sessions: ['09:35-15:00@America/New_York'] }));
 });
 
@@ -314,8 +331,8 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false }) {
-  const clockRef = { t: et(10, 0) + 2000 };
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000 }) {
+  const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [] };
   let stopPrice = stopAt;

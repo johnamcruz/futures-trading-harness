@@ -27,7 +27,7 @@ const { isRiskReducing } = require('./lib/trading/order-gate');
 const { writeJsonAtomic, readJson } = require('./lib/harness-run');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
-const { loadConfig } = require('./lib/trading/config');
+const { loadConfig, gateNow } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 const { harnessHome } = require('./lib/paths');
 
@@ -55,7 +55,7 @@ function recordEntryOrder(env, orderId, args) {
     const entry = {
       orderId, contractId: args.contractId, side: String(args.side || '').toLowerCase(), setup: setup ? setup[1].toLowerCase() : null,
       stopTicks: args.stopLossBracket && Number(args.stopLossBracket.ticks) > 0 ? Number(args.stopLossBracket.ticks) : null,
-      stopPrice: stop ? Number(stop[1]) : null, at: new Date().toISOString(),
+      stopPrice: stop ? Number(stop[1]) : null, at: gateNow().toISOString(),
     };
     const next = [...(Array.isArray(list) ? list : []), entry].slice(-ENTRY_ORDERS_KEPT);
     writeJsonAtomic(file, next);
@@ -133,7 +133,7 @@ function main(argv) {
   const blocked = violations => ({ allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' });
 
   const check = async (args, tool, id) => {
-    const now = new Date();
+    const now = gateNow();
     if (unanswered.size) {
       return blocked([{ check: 'order-pending', message: `An earlier order call (request ${[...unanswered].join(', ')}) has had no reply for over ${LANE_TIMEOUT_MS / 1000} s, so the account state is unknown. Wait for it, then check positions and orders.` }]);
     }
@@ -193,7 +193,7 @@ function main(argv) {
       // A close is a market order the account may not show yet, like one sent through place_order.
       if (!observedNet) return;
       const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
-      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now() });
+      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime() });
       return;
     }
     const placed = resultJson(response);
@@ -205,7 +205,7 @@ function main(argv) {
     // it rests it shows in list_open_orders and the ledger skips it.
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
     const orderId = placed && placed.orderId !== undefined && placed.orderId !== null ? String(placed.orderId) : null;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: Date.now(), orderId });
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), orderId });
   };
   const log = e => logDecision(e, process.env);
 
