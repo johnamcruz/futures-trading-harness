@@ -47,6 +47,11 @@ const MAX_POLL_MS = 10000;
 const LOOKUP_RETRY_MS = 30000;
 const MAX_RETRY_MS = 60000;
 const FILL_GRACE_MS = 30000;
+// The account read for a run's prompt never holds a run up longer than this.
+const ACCOUNT_READ_MS = 5000;
+// A closing balance that couldn't be recorded is retried this often, this many times.
+const CLOSE_RETRY_MS = 60000;
+const CLOSE_TRIES = 5;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 
 function createRunner(deps) {
@@ -55,11 +60,13 @@ function createRunner(deps) {
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
+    accountReadMs = ACCOUNT_READ_MS,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
+  let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
   const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
   const minutes = cfg.timeframe;
   const delayMs = cfg.barDelaySeconds * 1000;
@@ -427,6 +434,48 @@ function createRunner(deps) {
   const eodBackstop = () => flattenAll('end of day');
   let lastHoursCheck = 0;
 
+  /**
+   * The account for a run's prompt: balance, open positions, working orders,
+   * and each running prop attempt's state (null without an account). A failed
+   * or slow read (over accountReadMs) is reported in the prompt, never hidden,
+   * and never holds the run up.
+   */
+  async function accountSnapshot(now) {
+    const hasState = typeof client.accountState === 'function';
+    const hasBalance = typeof client.accountBalance === 'function';
+    if (!cfg.account || (!hasState && !hasBalance)) return null;
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`no answer within ${accountReadMs / 1000} s`)), accountReadMs);
+    });
+    try {
+      const [state, balance] = await Promise.race([Promise.all([
+        hasState ? client.accountState(cfg.account) : null,
+        hasBalance ? client.accountBalance(cfg.account) : NaN,
+      ]), deadline]);
+      let attempts = [];
+      if (prop && typeof prop.summaries === 'function') {
+        try {
+          attempts = prop.summaries(now, balance);
+        } catch (err) {
+          log(`prop attempt state unavailable for the prompt (${err.message})`, 'error');
+        }
+      }
+      return {
+        id: cfg.account, at: now.toISOString(), balance,
+        // Without a state read, positions and orders are unknown, not flat.
+        positions: state ? state.positions.filter(p => Number(p.size || 0) > 0) : null,
+        workingOrders: state ? state.orders.length : null,
+        attempts,
+      };
+    } catch (err) {
+      log(`account state for the prompt unavailable (${err.message})`, 'error');
+      return { id: cfg.account, error: err.message };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Milliseconds from `now` to today's end of day (Infinity if none). */
   function msToEod(now) {
     const eod = endOfDayAt(cfg, now);
@@ -444,10 +493,34 @@ function createRunner(deps) {
     return Math.max(0, Math.min(base, until));
   }
 
+  /**
+   * Record the closing balance of the day end of day just closed. Retried at
+   * most CLOSE_TRIES times, a minute apart; an error a retry can't fix (the
+   * day already recorded with another balance) stops at once. Either way the
+   * gate's missed-close check keeps prop entries refused until it is recorded.
+   */
+  async function recordClose(now) {
+    if (!pendingClose || now.getTime() - pendingClose.lastTry < CLOSE_RETRY_MS) return;
+    const { day } = pendingClose;
+    pendingClose.tries += 1;
+    pendingClose.lastTry = now.getTime();
+    try {
+      await prop.endOfDay(now, day);
+      if (pendingClose.tries > 1) log(`end of day: the close of ${day} is recorded`);
+      pendingClose = null;
+    } catch (err) {
+      const final = /already recorded/.test(err.message) || pendingClose.tries >= CLOSE_TRIES;
+      log(`end of day: could not record the close of ${day} (${err.message}); `
+        + (final ? `giving up: prop entries stay refused until it is recorded (node scripts/combine.js record-day --account <name> --day ${day} --balance <dollars>)` : 'retrying in a minute'), 'error');
+      if (final) pendingClose = null;
+    }
+  }
+
   async function stepOnce() {
     const now = clock.now();
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
     state = d.state;
+    if (pendingClose && d.action !== 'eod') await recordClose(now);
 
     if (d.action === 'premarket' || d.action === 'eod') {
       const p = prompts(cfg, now, root);
@@ -455,27 +528,32 @@ function createRunner(deps) {
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
       if (d.action === 'eod') ok = await eodBackstop();
-      const jobs = d.action === 'eod' ? [p.eod()] : cfg.symbols.map(s => p.premarket(s));
+      // Each job is built with the account as it is when that run starts.
+      const jobs = d.action === 'eod' ? [acct => p.eod({ state: acct })] : cfg.symbols.map(s => acct => p.premarket(s, { state: acct }));
+      const noTime = () => log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`);
       for (const prompt of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
         if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
-        const timeoutMs = limitFor(d.action, at);
-        if (timeoutMs < 30000) { log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`); continue; }
-        const r = await runCycle(d.action, prompt, { timeoutMs });
+        if (limitFor(d.action, at) < 30000) { noTime(); continue; }
+        const acct = await accountSnapshot(at);
+        // The time limit counts from after the account read.
+        const timeoutMs = limitFor(d.action, clock.now());
+        if (timeoutMs < 30000) { noTime(); continue; }
+        const r = await runCycle(d.action, prompt(acct), { timeoutMs });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
       // Then check again: flatten whatever the run left open.
       if (d.action === 'eod') ok = (await eodBackstop()) && ok;
       // The day's closing balance, once flat (the trailing floor moves on it).
+      // A failed record never holds end of day open (the flatten is what can't
+      // wait): it is retried on its own, and until it is recorded the gate
+      // refuses prop entries (a missed close).
       if (d.action === 'eod' && ok && prop && !cfg.paper) {
-        try {
-          // The trading day being closed: a catch-up end of day runs on a later day.
-          await prop.endOfDay(now, d.state.day);
-        } catch (err) {
-          log(`end of day: could not record the account balance (${err.message})`, 'error');
-          ok = false;
-        }
+        // The trading day being closed: a catch-up end of day runs on a later day.
+        if (pendingClose && pendingClose.day !== d.state.day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
+        pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
+        await recordClose(now);
       }
       // A failed end of day is retried on the next pass: flattening matters most.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
@@ -526,11 +604,18 @@ function createRunner(deps) {
           if (w.run) run.push(item);
           else log(`${item.symbol} bar ${item.bar.t}: no cycle (${w.reason})`);
         }
-        const cycleNow = clock.now();
-        const timeoutMs = limitFor(again.action, cycleNow);
+        let cycleNow = clock.now();
+        let timeoutMs = limitFor(again.action, cycleNow);
+        let acct = null;
+        if (run.length && timeoutMs >= 30000) {
+          acct = await accountSnapshot(cycleNow);
+          // The time limit counts from after the account read.
+          cycleNow = clock.now();
+          timeoutMs = limitFor(again.action, cycleNow);
+        }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover });
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
           recover = false;
           const r = await runCycle(again.action, prompt, { timeoutMs });
           state = recordRun(state, 'trade', cycleNow);
@@ -545,4 +630,4 @@ function createRunner(deps) {
   return { step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); } };
 }
 
-module.exports = { createRunner, IDLE_MS };
+module.exports = { createRunner, IDLE_MS, ACCOUNT_READ_MS };

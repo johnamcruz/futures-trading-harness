@@ -245,10 +245,11 @@ const propStrategy = (extra = {}) => ({
   name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'policy', compiledRules: null,
   strategies: ['ema_cross'], account: 'mini', contracts: 'micro', ...extra,
 });
-function propSetup({ balance = 50000, policy = false, verdict = policy ? null : {} } = {}) {
+function propSetup({ balance = 50000, policy = false, verdict = policy ? null : {}, account = MINI, days = [] } = {}) {
   const home = tmpDir();
-  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
-  if (balance !== null) prop.snapshot(home, MINI, balance, new Date(NOW.getTime() - 60000));
+  prop.startAttempt(home, account, new Date(NOW.getTime() - (days.length + 1) * 86400000));
+  for (const [day, close] of days) prop.recordEndOfDay(home, account, close, day);
+  if (balance !== null) prop.snapshot(home, account, balance, new Date(NOW.getTime() - 60000));
   // The verdict the runner records at the setup (without a bundle: the sizing's own).
   if (verdict) {
     prop.appendVerdict(home, {
@@ -257,7 +258,7 @@ function propSetup({ balance = 50000, policy = false, verdict = policy ? null : 
     });
   }
   const strategies = [propStrategy(policy ? { policy: { bundle: 'p1' } } : {})];
-  return (input, opts = {}) => evaluateOrder({ input, entries: [plan()], now: opts.now || NOW, config: { ...config, home, skipChecks: new Set(['combine', 'policy', 'strategy']) }, strategies, accounts: opts.accounts || [MINI] });
+  return (input, opts = {}) => evaluateOrder({ input, entries: [plan()], now: opts.now || NOW, config: { ...config, home, skipChecks: new Set(['combine', 'policy', 'strategy']) }, strategies, accounts: opts.accounts || [account] });
 }
 
 test('combine: a strategy that trades an account needs a started attempt and a fresh snapshot (hard, unskippable)', () => {
@@ -280,6 +281,46 @@ test('combine: the account blocks entries at the soft daily limit and sizes from
   assert.deepStrictEqual(ev(entryOrder({ size: 19 })).violations, []);
   assert.match(ev(entryOrder({ size: 20 })).violations[0].message, /20 MNQ is not within the account's size budget for a 40-tick stop \(19 MNQ at \$20.74/);
   assert.match(ev(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480' })).violations[0].message, /needs stopLossBracket.ticks/);
+});
+
+test('combine: at the profit target the gate stops entries only once today\'s close would pass (consistency)', () => {
+  const consistent = { ...MINI, consistency_pct: 50 };
+  // $2,500 yesterday, +$600 today: $3,100 profit, but the best day is over 50% of it. Entries go on.
+  const lopsided = propSetup({ account: consistent, days: [['2026-10-06', 52500]], balance: 53100 });
+  assert.deepStrictEqual(lopsided(entryOrder()).violations, []);
+  // $1,000, $1,000, then +$1,100 today: the close passes, so entries stop.
+  const spread = propSetup({ account: consistent, days: [['2026-10-05', 51000], ['2026-10-06', 52000]], balance: 53100 });
+  assert.match(spread(entryOrder()).violations[0].message, /at the profit target: no new entries/);
+  // $1,000 yesterday, +$2,100 today: today is the best day, so more today can't meet consistency.
+  const record = propSetup({ account: consistent, days: [['2026-10-06', 51000]], balance: 53100 });
+  assert.match(record(entryOrder()).violations[0].message, /today the best day \(\$2100\).*entries resume next session/);
+});
+
+test('combine: a live attempt never times out on its sessions, and a finished one says how to end it', () => {
+  // `sessions` (2 here) bounds training attempts, not the firm's: day 3 still trades.
+  const short = { ...MINI, sessions: 2 };
+  const days = [['2026-10-04', 50100], ['2026-10-05', 50200], ['2026-10-06', 50300]];
+  assert.deepStrictEqual(propSetup({ account: short, days, balance: 50300 })(entryOrder()).violations, []);
+  // Passed ($3,100 profit, no consistency rule): refused, with the command that ends the attempt.
+  const passed = propSetup({ days: [['2026-10-06', 53100]], balance: 53100 });
+  assert.match(passed(entryOrder()).violations[0].message, /the challenge is passed.*node scripts\/combine.js stop --account mini/);
+});
+
+test('combine: every missed close is flagged, not only the first, so the floor is never left stale', () => {
+  const home = tmpDir();
+  prop.startAttempt(home, MINI, new Date('2026-10-04T14:00:00Z'));
+  prop.snapshot(home, MINI, 50500, new Date('2026-10-05T19:00:00Z')); // Mon, close never recorded
+  prop.snapshot(home, MINI, 52500, new Date('2026-10-06T19:00:00Z')); // Tue, close never recorded
+  prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000)); // Wed
+  const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
+  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: record each\)/);
+  prop.recordEndOfDay(home, MINI, 50500, '2026-10-05');
+  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded/, 'recording the first one alone does not clear the block');
+  prop.recordEndOfDay(home, MINI, 52500, '2026-10-06');
+  prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000));
+  assert.ok(!ev().violations.some(v => /never recorded/.test(v.message)));
+  // The floor now trails Tue's $52,500 close: $50,500 (locked at the start: $50,000).
+  assert.strictEqual(prop.readAttempt(home, MINI.name).snapshot.state.floor, 50000);
 });
 
 test('policy: an entry needs a fresh verdict for this contract and side, at no more than its size', () => {

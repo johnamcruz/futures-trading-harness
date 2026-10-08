@@ -22,6 +22,9 @@ sized from the cushion in micros or minis (`contracts: micro | mini | auto`),
 with a trained policy (`policy: { bundle }`) deciding which setups to take.
 The harness tracks the attempt and enforces it:
 
+- In autonomous runs the cycle prompt carries each running attempt's state
+  (balance, floor, cushion, profit, the day, sessions left, the size budget,
+  any entry block) and the live verdicts, from the runner's latest snapshot.
 - `node <root>/scripts/combine.js status` (`<root>`: the harness root, FTH_ROOT) shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;
@@ -62,7 +65,10 @@ Rules of thumb (the PropEvolve objective: pass without blowing the account):
    day at +1.5× the daily pace; protecting a green day is worth more than
    stretching it.
 3. **Consistency.** If one day would exceed the firm's best-day share,
-   stop for the day.
+   stop for the day. Past the target, the gate stops entries once today's
+   close would pass; while the best day is still too large a share, the
+   attempt keeps trading (at normal size) on days smaller than the best one,
+   and stops for the day once today is the best day (more can't help).
 4. **After a red day,** the next day's budget is half until a green day.
 5. **Near the target,** cut size: the last 10% isn't worth risking the account.
 6. **Funded accounts,** scale only per the firm's scaling plan and the

@@ -153,6 +153,39 @@ test('session-start briefing lists lessons and day state', () => {
   assert.match(r.stdout, /Trading harness briefing/);
   assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
+  assert.match(r.stdout, /Know the account before every decision: get_account_snapshot/);
+  assert.doesNotMatch(r.stdout, /Prop attempts/);
+});
+
+test('session-start briefing states each running prop attempt from its last snapshot', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const home = tmpDir();
+  const account = accountNamed(REPO, 'topstep_100k', {});
+  prop.startAttempt(home, account, new Date('2026-10-05T14:00:00Z'));
+  prop.snapshot(home, account, 101250, new Date());
+  const { env } = setup([], { FTH_HOME: home });
+  const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
+  assert.strictEqual(r.code, 0);
+  assert.match(r.stdout, /### Prop attempts \(the order gate enforces these\)/);
+  assert.match(r.stdout, /- topstep_100k \(active\) as of .* \(0 min ago\): balance \$101,250, floor \$97,000, cushion \$4,250, profit \+\$1,250 of \$6,000/);
+  assert.doesNotMatch(r.stdout, /entries blocked/);
+});
+
+test('session-start briefing shows the block the gate applies now: a missing or old snapshot, a missed close', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const fresh = tmpDir();
+  const account = accountNamed(REPO, 'topstep_100k', {});
+  prop.startAttempt(fresh, account, new Date('2026-10-05T14:00:00Z'));
+  const a = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, setup([], { FTH_HOME: fresh }).env);
+  assert.strictEqual(a.code, 0);
+  assert.match(a.stdout, /- topstep_100k: attempt started .*, no balance snapshot yet .*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
+  const old = tmpDir();
+  prop.startAttempt(old, account, new Date('2026-10-05T14:00:00Z'));
+  prop.snapshot(old, account, 99000, new Date(Date.now() - 3 * 3600000));
+  const b = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, setup([], { FTH_HOME: old }).env);
+  assert.match(b.stdout, /- topstep_100k \(active\) as of .* \(180 min ago\): balance \$99,000, .*profit -\$1,000 of \$6,000.*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
 });
 
 test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {
@@ -324,6 +357,59 @@ test('MCP gateway: no request may reuse the id of an order call whose reply is o
   ]);
   const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
   assert.ok(texts.some(t => /already in use/.test(t)), texts.join(' | '));
+});
+
+test('order gate: at the profit target a prop entry is refused only once today\'s close would pass', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {}); // $3,000 target, 50% consistency
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const run = days => {
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
+    prop.startAttempt(env.FTH_HOME, account, new Date('2026-10-02T14:00:00Z'));
+    for (const [day, close] of days) prop.recordEndOfDay(env.FTH_HOME, account, close, day);
+    prop.snapshot(env.FTH_HOME, account, 53100, new Date(Date.parse(TEST_NOW) - 60000));
+    prop.appendVerdict(env.FTH_HOME, {
+      strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+      policy: null, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    return gate(orderPayload(order), env);
+  };
+  // $2,500 yesterday is over 50% of the $3,100 profit: the attempt keeps trading.
+  const lopsided = run([['2026-10-06', 52500]]);
+  assert.strictEqual(lopsided.code, 0, lopsided.stderr);
+  // $1,000, $1,000, +$1,100 today: today's close passes, so no new entries.
+  const spread = run([['2026-10-05', 51000], ['2026-10-06', 52000]]);
+  assert.strictEqual(spread.code, 2);
+  assert.match(spread.stderr, /\[combine\] topstep_50k: at the profit target: no new entries/);
+});
+
+test('order gate: a live attempt past its sessions still trades (sessions bound training, not the firm)', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {}); // sessions: 30
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
+  prop.startAttempt(env.FTH_HOME, account, new Date('2026-08-01T14:00:00Z'));
+  for (let d = 0; d < 32; d += 1) {
+    const day = new Date(Date.UTC(2026, 7, 3) + d * 86400000).toISOString().slice(0, 10);
+    prop.recordEndOfDay(env.FTH_HOME, account, 50000 + 10 * (d + 1), day);
+  }
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date(Date.parse(TEST_NOW) - 60000));
+  prop.appendVerdict(env.FTH_HOME, {
+    strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+    policy: null, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+  });
+  const r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+  // Two closes missed in a row: recording only the first still refuses entries.
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date('2026-10-05T19:00:00Z'));
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date('2026-10-06T19:00:00Z'));
+  prop.snapshot(env.FTH_HOME, account, 50320, new Date(Date.parse(TEST_NOW) - 60000));
+  prop.recordEndOfDay(env.FTH_HOME, account, 50320, '2026-10-05');
+  const missed = gate(orderPayload(order), env);
+  assert.strictEqual(missed.code, 2);
+  assert.match(missed.stderr, /close of 2026-10-06 was never recorded/);
 });
 
 test('order gate: a strategy that trades an account is gated on the attempt and its size budget, even with the checks skipped', () => {

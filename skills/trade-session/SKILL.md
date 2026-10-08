@@ -20,6 +20,14 @@ inside one run.
 ### 1. State first
 
 - `get_server_config`. Trading disabled → plan-only mode.
+- **Know the account before deciding anything**: balance, today's realized
+  P&L and room to the daily limits, open positions, working orders, and, if a
+  prop attempt is running, its floor, cushion, progress to the target,
+  sessions left, and size budget. In autonomous runs the cycle prompt states
+  them (as read just before the run); otherwise, or when the prompt says
+  they're unavailable, read `get_account_snapshot` (and
+  `node <root>/scripts/combine.js status` for an attempt). Every decision
+  below (take, skip, size, manage, stand down) is made with these numbers.
 - `get_account_snapshot`. **If a position is open, manage it and end the
   cycle**: confirm the protective stop is working (`list_open_orders`), apply
   the plan's management (breakeven, trail, scale-out) through the
@@ -87,7 +95,9 @@ and the current time.
 
 `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>", "regime:<primary>"]}`:
 thesis, trigger (what happened, price, time), entry, stop, exit, size
-(position-sizing), $ risk, skip rules checked, analyst agreement. Add the
+(position-sizing), $ risk, the account it was sized from (balance, today's
+P&L, and for a prop attempt the cushion and size budget), skip rules checked,
+analyst agreement. Add the
 tag `paper` in plan-only mode.
 
 The exit follows the strategy's `exit` (shown in the scan):

@@ -57,13 +57,50 @@ test('pass at end of day: target and consistency; timeout after the sessions', (
   s = c.endDay(c.applyClose(s, 4000));
   s = c.endDay(c.applyClose(s, 2100)); // profit 6100, best day 4000 > 50%
   assert.strictEqual(s.status, 'active', 'consistency not met yet');
-  assert.match(c.entryBlock(s), /profit target/);
+  assert.strictEqual(c.entryBlock(s), null, 'over the target but short of consistency: keep trading, or the attempt can only time out');
   s = c.endDay(c.applyClose(s, 2000)); // profit 8100, best 4000 <= 4050
   assert.strictEqual(s.status, 'passed');
   assert.match(c.entryBlock(s), /passed/);
   let t = c.start(acct({ sessions: 2 }));
   t = c.endDay(c.endDay(t));
   assert.strictEqual(t.status, 'timeout');
+});
+
+test('at the profit target, entries stop only once today\'s close would pass', () => {
+  // One big day: $6,100 today is all the profit, over 50%. More today can't help
+  // (today is the best day), so entries stop for the day, and resume next session.
+  const big = c.applyClose(c.start(acct()), 6100);
+  assert.match(c.entryBlock(big), /today the best day \(\$6100\).*entries resume next session/);
+  const next = c.endDay(big);
+  assert.strictEqual(next.status, 'active', 'consistency not met');
+  assert.strictEqual(c.entryBlock(next), null, 'the next session trades on');
+  assert.ok(c.budget(next) > 0, 'with a size budget');
+  // Past the target, a day smaller than the best one helps: it trades on.
+  let lop = c.endDay(c.applyClose(c.endDay(c.applyClose(c.start(acct()), 1000)), 4500)); // $5,500
+  lop = c.applyClose(lop, 1000); // $6,500, best $4,500 > $3,250; today $1,000
+  assert.strictEqual(c.entryBlock(lop), null);
+  // The record day past the target, after smaller days: +$1,000, +$1,000, then +$4,500 today.
+  let rec = c.endDay(c.applyClose(c.endDay(c.applyClose(c.start(acct()), 1000)), 1000));
+  rec = c.applyClose(rec, 4500);
+  assert.match(c.entryBlock(rec), /today the best day/);
+  assert.strictEqual(c.budget(rec), 0);
+  // Every day stays tradable until a pass: no state blocks the attempt for good.
+  let s2 = next;
+  for (let d = 0; d < 3 && s2.status === 'active'; d += 1) {
+    assert.strictEqual(c.entryBlock(s2), null, `session ${d + 2} opens for entries`);
+    s2 = c.endDay(c.applyClose(s2, 2100));
+  }
+  assert.strictEqual(s2.status, 'passed', '$6,100 + 3 x $2,100 = $12,400; best $6,100 <= $6,200');
+  // Spread out: $2,000, $2,000, then $2,100 today; best day $2,100 <= 50% of $6,100.
+  let s = c.start(acct());
+  s = c.endDay(c.applyClose(s, 2000));
+  s = c.endDay(c.applyClose(s, 2000));
+  s = c.applyClose(s, 2100);
+  assert.match(c.entryBlock(s), /profit target/);
+  assert.strictEqual(c.budget(s), 0);
+  assert.strictEqual(c.endDay(s).status, 'passed');
+  // Without a consistency rule the target alone stops entries.
+  assert.match(c.entryBlock(c.applyClose(c.start(acct({ consistency_pct: 0 })), 6100)), /profit target/);
 });
 
 test('daily limits: the soft one stops entries, the firm one stops the day; both reset at end of day', () => {
@@ -85,6 +122,12 @@ test('size budget: a share of the cushion, capped, clock-limited, never past the
   assert.strictEqual(c.budget(s, { cap_usd: 400 }), 400);
   // clock: need 6000 over 5 sessions at 0.3R/session, k 0.1 -> 0.1 x 6000 / 1.5 = 400
   assert.strictEqual(c.budget(s, { clock_k: 0.1 }), 400);
+  // Past the target but short of consistency, the clock still sizes for what a pass needs:
+  // days $4,000, $2,100 -> profit $6,100, needs $8,000 (best $4,000 at 50%): $1,900 over 3 sessions.
+  const past = c.endDay(c.applyClose(c.endDay(c.applyClose(s, 4000)), 2100));
+  assert.strictEqual(c.profitNeeded(past), 8000);
+  assert.strictEqual(c.budget(past, { clock_k: 0.1 }), 211.11, '0.1 x 1900 / (3 x 0.3)');
+  assert.strictEqual(c.profitNeeded(c.start(acct())), 6000);
   const down = c.applyClose(s, -1900); // firm limit 2000: 100 left today (also the soft limit is hit)
   assert.strictEqual(c.budget(down), 0, 'soft limit reached');
   assert.strictEqual(c.budget(c.applyClose(s, -900), { cushion_frac: 1 }), 1100, 'room to the daily limit');

@@ -72,8 +72,15 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
   harness's: no new entries for the day once reached).
 - `max_contracts` per symbol.
 - `consistency_pct`: the best day may be at most this share of the total
-  profit for a pass (0 = no rule).
-- `sessions`: attempt length for training and evaluation.
+  profit for a pass (0 = no rule). At the target, new entries stop once
+  today's close would pass; while consistency isn't met, trading goes on
+  (or the attempt could only time out), except on a day that is already
+  the best one, where more profit can't help. Clock sizing sizes for the
+  profit consistency needs, not only the target.
+- `sessions`: attempt length for training and evaluation. A live attempt
+  is not ended by it: it runs until it passes or blows, or you stop it.
+  Past it, the prompt says so, and the policy sees 0 sessions left, a state
+  it never trained in.
 
 ## The env
 
@@ -166,8 +173,10 @@ Rules:
 - `node scripts/combine.js start --account <name>` starts an attempt (the
   user's call). The runner snapshots the account balance and open positions
   every bar and records each day's closing balance after the end-of-day
-  flatten, once flat. A missed close stops entries until it is recorded
-  (`combine.js record-day`).
+  flatten, once flat. A close that can't be recorded is retried on its own
+  (five times, a minute apart); end of day itself is never held open by it.
+  Each missed close (every one, not only the first) stops entries until it
+  is recorded (`combine.js record-day`).
 - At each setup of a policy strategy's strategies, while flat, the runner
   records a verdict: the strategy that fired, the side, `skip` / `half` /
   `full` (the trained policy's, or `full` without a bundle), the contract
@@ -184,5 +193,6 @@ Rules:
   refuses any entry while a position is open anywhere on the account, and
   while an attempt runs, any entry that isn't its policy strategy's. These
   checks fail closed and can't be skipped.
-- The agents see the account state and the live verdicts (`/combine-status`)
-  and follow the `prop-challenge-pacing` skill.
+- The agents see the account state and the live verdicts in every cycle
+  prompt (and with `/combine-status`), and follow the `prop-challenge-pacing`
+  skill.

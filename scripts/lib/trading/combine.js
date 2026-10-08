@@ -84,6 +84,15 @@ function dailyBreached(s, openPnl = 0) {
   return s.dailyLimit > 0 && s.dayPnl + openPnl <= -s.dailyLimit;
 }
 
+/**
+ * The profit a pass needs: the target, or more while the consistency rule
+ * isn't met (the best day must be at most consistency% of the profit).
+ */
+function profitNeeded(s, days = s.days) {
+  if (!s.consistency) return s.target;
+  return Math.max(s.target, Math.max(0, ...days) / (s.consistency / 100));
+}
+
 function passes(s) {
   const p = profit(s);
   if (p < s.target) return false;
@@ -110,7 +119,15 @@ function entryBlock(s) {
   if (s.status !== 'active') return `the attempt is over (${s.status})`;
   if (s.dayStopped) return `the daily loss limit ($${s.dailyLimit}) was hit: no trading until the next session`;
   if (s.dailySoft > 0 && s.dayPnl <= -s.dailySoft) return `down $${-s.dayPnl} today, at the soft daily limit ($${s.dailySoft}): no new entries until the next session`;
-  if (profit(s) >= s.target) return 'at the profit target: no new entries (the pass is checked at end of day)';
+  // At the target, stop once today's close would pass. When the best day is
+  // still too large a share of the profit (consistency), the attempt has to
+  // keep trading to pass at all: blocking it there would only run out the clock.
+  if (profit(s) >= s.target && passes({ ...s, days: [...s.days, s.dayPnl] })) return 'at the profit target: no new entries (the pass is checked at end of day)';
+  // Past the target with today the best day, each dollar more today raises the
+  // best day by a dollar but what consistency allows by less: today can't help.
+  if (s.consistency && profit(s) >= s.target && s.dayPnl > 0 && s.dayPnl >= Math.max(0, ...s.days)) {
+    return `past the profit target with today the best day ($${round2(s.dayPnl)}): more today can't meet consistency (${s.consistency}% best day); entries resume next session`;
+  }
   return null;
 }
 
@@ -128,7 +145,8 @@ function budget(s, sizing = {}) {
   if (z.drawdown_halve_usd > 0 && (s.peak ?? s.start) - s.balance >= z.drawdown_halve_usd) b /= 2;
   if (z.clock_k > 0) {
     const left = Math.max(1, sessionsLeft(s));
-    const need = Math.max(0, s.target - profit(s));
+    // What a pass still needs, consistency included (0 would stop the attempt at the target).
+    const need = Math.max(0, profitNeeded(s, [...s.days, s.dayPnl]) - profit(s));
     b = Math.min(b, (z.clock_k * need) / (left * z.r_per_session));
   }
   if (s.dailyLimit > 0) b = Math.min(b, s.dailyLimit + s.dayPnl);
@@ -197,7 +215,12 @@ function summary(s) {
   };
 }
 
+/** A summary's sessions left; a live attempt past its training length (`sessions`) says so rather than "0 left". */
+const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
+  ? `${m.sessionsLeft} session${m.sessionsLeft === 1 ? '' : 's'} left`
+  : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
+
 module.exports = {
   DEFAULT_SIZING, CONTRACT_MODES, start, applyClose, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, room, summary,
-  profit, cushion, sessionsLeft,
+  profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

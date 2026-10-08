@@ -30,7 +30,7 @@ function hubUrl(url, token) {
  * @param onConnected async (hub) => void, after every (re)connect
  * @param onDisconnected (at ms) => void, when the connection drops
  */
-function createHub({ url, getToken, onConnected = async () => {}, onDisconnected = () => {}, log = () => {}, WebSocketImpl = globalThis.WebSocket, now = () => Date.now() }) {
+function createHub({ url, getToken, onConnected = async () => {}, onDisconnected = () => {}, log = () => {}, WebSocketImpl = globalThis.WebSocket, now = () => Date.now(), invokeTimeoutMs = 10000 }) {
   if (typeof WebSocketImpl !== 'function') throw new Error('order flow needs a WebSocket (Node 22 or later)');
   const handlers = new Map();
   const pending = new Map();
@@ -155,7 +155,14 @@ function createHub({ url, getToken, onConnected = async () => {}, onDisconnected
       if (!ws || ws.readyState !== 1) return Promise.reject(new Error('hub not connected'));
       const id = String(nextId++);
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        // A hub that never answers must not leave the caller waiting forever.
+        const timer = setTimeout(() => {
+          if (!pending.delete(id)) return;
+          reject(new Error(`${target}: no answer within ${invokeTimeoutMs / 1000} s`));
+        }, invokeTimeoutMs);
+        if (timer.unref) timer.unref();
+        const done = fn => x => { clearTimeout(timer); fn(x); };
+        pending.set(id, { resolve: done(resolve), reject: done(reject) });
         send({ type: 1, invocationId: id, target, arguments: args });
       });
     },

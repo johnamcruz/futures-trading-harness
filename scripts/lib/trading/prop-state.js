@@ -42,6 +42,10 @@ function readAttempt(home, account) {
 }
 
 /** Start (or restart) an attempt for an account profile. */
+/** The days whose close was never recorded (records from before the list kept one). */
+const missedOf = record => [...new Set([...(record.missedCloses || []), ...(record.missedClose ? [record.missedClose] : [])])]
+  .filter(d => !record.days.some(x => x.day === d)).sort();
+
 function startAttempt(home, account, now = new Date()) {
   const r = { account: account.name, startedAt: now.toISOString(), startDay: tradingDayKey(now), days: [], snapshot: null, missedClose: null };
   writeJson(combineFile(home, account.name), r);
@@ -73,6 +77,9 @@ function stateFrom(account, record, balance) {
   let cs = combine.start(account);
   for (const d of record.days) {
     cs = combine.endDay({ ...cs, balance: d.balance, dayPnl: d.pnl });
+    // `sessions` bounds training and evaluation attempts, not the firm's: a
+    // live attempt runs on (with its trailing floor) until it passes or blows.
+    if (cs.status === 'timeout') cs = { ...cs, status: 'active' };
     if (cs.status !== 'active') return cs;
   }
   const lastEod = record.days.length ? record.days[record.days.length - 1].balance : account.starting_balance;
@@ -91,17 +98,21 @@ function stateFrom(account, record, balance) {
  * snapshot's day has no recorded close marks that close as missed: the
  * trailing floor can't be known until it is recorded, so entries stop.
  */
-function snapshot(home, account, balance, now = new Date(), { open = 0 } = {}) {
+function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [] } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
   const day = tradingDayKey(now);
   const prev = record.snapshot && record.snapshot.day;
-  let missedClose = record.missedClose || null;
-  if (!missedClose && prev && prev !== day && !record.days.some(d => d.day === prev)) missedClose = prev;
+  // Every trading day whose close was never recorded, not just the first:
+  // each one moves the trailing floor, so each must be recorded.
+  const missed = missedOf(record);
+  if (prev && prev !== day && !record.days.some(d => d.day === prev) && !missed.includes(prev)) missed.push(prev);
+  missed.sort();
+  const missedClose = missed[0] || null;
   const cs = stateFrom(account, record, balance);
   writeJson(combineFile(home, account.name), {
-    ...record, missedClose, peak: cs.peak,
-    snapshot: { at: now.toISOString(), day, balance, open, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
+    ...record, missedClose, missedCloses: missed, peak: cs.peak,
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
   });
   return cs;
 }
@@ -129,7 +140,8 @@ function recordEndOfDay(home, account, balance, dayKey) {
     prev = d.balance;
     return out;
   });
-  const next = { ...record, missedClose: record.missedClose === dayKey ? null : record.missedClose || null, days };
+  const missed = missedOf(record).filter(d => d !== dayKey);
+  const next = { ...record, missedClose: missed[0] || null, missedCloses: missed, days };
   writeJson(combineFile(home, account.name), next);
   return next;
 }
@@ -143,12 +155,21 @@ function combineBlock(home, accountName, now = new Date()) {
   const r = readAttempt(home, accountName);
   if (!r) return `no ${accountName} attempt is started (node scripts/combine.js start --account ${accountName})`;
   if (r.missedClose) {
-    return `the close of ${r.missedClose} was never recorded, so the trailing floor is unknown; record the account's closing balance that day `
-      + `(node scripts/combine.js record-day --account ${accountName} --day ${r.missedClose} --balance <dollars>)`;
+    const missed = missedOf(r);
+    const day = missed[0] || r.missedClose;
+    const more = missed.length > 1 ? ` (also ${missed.slice(1).join(', ')}: record each)` : '';
+    return `the close of ${day} was never recorded, so the trailing floor is unknown; record the account's closing balance that day `
+      + `(node scripts/combine.js record-day --account ${accountName} --day ${day} --balance <dollars>)${more}`;
   }
   const s = r.snapshot;
   if (!s || !(now.getTime() - Date.parse(s.at) <= SNAPSHOT_MAX_AGE_MS)) return `the ${accountName} account snapshot is missing or older than ${SNAPSHOT_MAX_AGE_MS / 60000} minutes (the runner updates it each bar)`;
-  if (s.open > 0) return `a position is open on the account; a prop attempt trades one position at a time (as the backtester and the policy do)`;
+  if (s.open > 0) {
+    const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
+    return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
+  }
+  if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
+    return `${s.block}; end it with node scripts/combine.js stop --account ${accountName}, and start a new one when you choose`;
+  }
   return s.block || null;
 }
 

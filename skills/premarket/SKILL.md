@@ -15,7 +15,10 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
 ## How It Works
 
 1. `get_server_config`; `search_contracts` for the symbol (active contract,
-   tickSize, tickValue).
+   tickSize, tickValue); the account (the cycle prompt's account line, else
+   `get_account_snapshot`, and `node <root>/scripts/combine.js status` for a
+   running prop attempt): today's game plan is sized from its balance, the
+   room to the daily limits, and for an attempt the cushion and budget.
 2. Run in parallel (as in trade-session step 2): the three market analysts,
    `news-calendar-analyst` for the trading day's date (the date it ends on,
    as the prompt says), and `risk-manager` phase 1.

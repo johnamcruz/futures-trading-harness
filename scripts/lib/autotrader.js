@@ -11,6 +11,7 @@
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 
@@ -232,17 +233,43 @@ function validateConfig(raw) {
   return cfg;
 }
 
+const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
+const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
+
+/**
+ * The account as the runner read it just before the run (accountState in
+ * runner.js): balance, open positions, working orders, and each running prop
+ * attempt's state. Every decision is made with these numbers in view; when
+ * they couldn't be read, the prompt says so and asks for a fresh read first.
+ */
+function accountText(state) {
+  if (!state) return '';
+  if (state.error) return ` Account ${state.id}: state unavailable (${state.error}); read get_account_snapshot before deciding anything.`;
+  const known = Array.isArray(state.positions);
+  const positions = (state.positions || []).map(p => `${p.contractId} ${p.type === 1 ? 'long' : p.type === 2 ? 'short' : '?'} ${p.size} @ ${p.averagePrice}`);
+  const book = !known ? 'positions and working orders unknown (read get_account_snapshot)'
+    : `${positions.length ? `open: ${positions.join(', ')}` : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}`;
+  const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; ${book}.`;
+  const blocked = a => (a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : '');
+  const attempts = (state.attempts || []).map(a => (a.noBalance
+    ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
+    : ` ${a.account} attempt (${a.status}) as of ${a.asOf}: balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
+    + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}`
+    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
+  return head + attempts.join('');
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
-    premarket: symbol => `${head} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
+    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
@@ -257,9 +284,9 @@ function prompts(cfg, now, root = '') {
       const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
-    eod: () => `${head} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
+    eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
 }
 
@@ -391,6 +418,7 @@ function cycleResult(output) {
 }
 
 module.exports = {
+  accountText,
   endOfDayAt,
   marketHoursErrors,
   historyBars,
