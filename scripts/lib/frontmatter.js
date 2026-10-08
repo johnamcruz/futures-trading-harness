@@ -59,8 +59,13 @@ function parseScalar(raw, lineNo) {
     return splitInline(text.slice(1, -1)).map(item => parseScalar(item, lineNo));
   }
   if (text.startsWith('{')) throw new Error(`line ${lineNo}: inline maps are not supported; use indentation`);
-  if ((text.startsWith('"') && text.endsWith('"') && text.length >= 2)) {
-    return JSON.parse(text);
+  if (text.startsWith('"')) {
+    if (!(text.endsWith('"') && text.length >= 2)) throw new Error(`line ${lineNo}: unterminated or trailing text after a quoted value`);
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error(`line ${lineNo}: invalid quoted value ${text.slice(0, 40)}`, { cause: err });
+    }
   }
   if (text.startsWith("'") && text.endsWith("'") && text.length >= 2) {
     return text.slice(1, -1).replace(/''/g, "'");
@@ -86,10 +91,13 @@ function parseBlock(lines, start, indent) {
   return parseMap(lines, start, indent);
 }
 
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function keyValue(line) {
   const m = /^([A-Za-z0-9_.-]+|"[^"]*"|'[^']*'):(?:\s+(.*))?$/.exec(line.text);
   if (!m) throw new Error(`line ${line.lineNo}: expected "key: value", got "${line.text}"`);
   const key = m[1].replace(/^["']|["']$/g, '');
+  if (RESERVED_KEYS.has(key)) throw new Error(`line ${line.lineNo}: "${key}" is not allowed as a key`);
   return { key, rest: m[2] === undefined ? '' : m[2] };
 }
 
@@ -104,6 +112,11 @@ function parseMap(lines, start, indent) {
     i += 1;
     if (rest !== '') {
       out[key] = parseScalar(rest, line.lineNo);
+    } else if (i < lines.length && lines[i].indent === indent && (lines[i].text.startsWith('- ') || lines[i].text === '-')) {
+      // Compact list style: "key:" followed by "- item" at the same indent.
+      const [value, next] = parseList(lines, i, indent);
+      out[key] = value;
+      i = next;
     } else if (i < lines.length && lines[i].indent > indent) {
       const [value, next] = parseBlock(lines, i, lines[i].indent);
       out[key] = value;
@@ -163,7 +176,7 @@ function parseYaml(source) {
  * frontmatter block or the block is invalid.
  */
 function parseFrontmatter(text) {
-  const normalized = String(text).replace(/\r\n/g, '\n');
+  const normalized = String(text).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const m = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(normalized);
   if (!m) throw new Error('missing YAML frontmatter (--- ... ---) at the top of the file');
   return { data: parseYaml(m[1]), body: normalized.slice(m[0].length) };

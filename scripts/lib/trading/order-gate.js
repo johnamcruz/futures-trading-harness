@@ -131,7 +131,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     : 'Rationale must name the strategy as setup:<name> (e.g. setup:orb). '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
   if (setup && strategies) {
-    add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now));
+    add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now, input.side));
   }
 
   const bracket = input.stopLossBracket && Number(input.stopLossBracket.ticks) > 0;

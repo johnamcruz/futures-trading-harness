@@ -2,8 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { compileCondition, compileRules, evaluateRules } = require('../../scripts/lib/trading/rules');
-const { PARAMS, levels } = require('../../scripts/lib/trading/market-snapshot');
+const { compileCondition, compileRules, evaluateRules, seriesSource, causalLevels } = require('../../scripts/lib/trading/rules');
+const { PARAMS } = require('../../scripts/lib/trading/market-snapshot');
 const { normalizeBars } = require('../../scripts/lib/trading/indicators');
 
 const T0 = Date.UTC(2026, 9, 7, 14, 0);
@@ -47,15 +47,55 @@ test('compileRules validates the block shape', () => {
 test('evaluateRules fires a direction when every condition holds', () => {
   const b = bars([100, 100, 100, 100, 102]);
   const p = { ...PARAMS };
-  const lv = levels(b);
   const up = compileRules({ long: ['close crosses_above sma(3)', 'close > 101'], short: ['close < 90'] }).compiled;
-  const r = evaluateRules(up, b, p, lv);
+  const r = evaluateRules(up, b, p);
   assert.strictEqual(r.direction, 'long');
   assert.deepStrictEqual(r.long.map(x => x.ok), [true, true]);
   const notYet = compileRules({ long: ['close crosses_above sma(3)', 'close > 103'] }).compiled;
-  assert.strictEqual(evaluateRules(notYet, b, p, lv).direction, null);
+  assert.strictEqual(evaluateRules(notYet, b, p).direction, null);
   const both = compileRules({ long: ['close > 1'], short: ['close > 1'] }).compiled;
-  assert.strictEqual(evaluateRules(both, b, p, lv).direction, null, 'conflicting sides fire nothing');
+  assert.strictEqual(evaluateRules(both, b, p).direction, null, 'conflicting sides fire nothing');
   const warmup = compileRules({ long: ['close > ema(3)', 'adx(14) >= 0'] }).compiled;
-  assert.strictEqual(evaluateRules(warmup, b, p, lv).direction, null, 'NaN warm-up values never satisfy a rule');
+  assert.strictEqual(evaluateRules(warmup, b, p).direction, null, 'NaN warm-up values never satisfy a rule');
+});
+
+test('compile errors name the rule even when the text cannot be tokenized', () => {
+  assert.throws(() => compileCondition('close > $5'), /"close > \$5": cannot read/);
+  assert.throws(() => compileCondition('close'), /"close": needs a comparison/);
+});
+
+test('ema(n) has no value for the first n-1 bars', () => {
+  const get = seriesSource(bars([1, 2, 3, 4, 5]), { ...PARAMS });
+  const e = get('ema(3)');
+  assert.ok(Number.isNaN(e[0]) && Number.isNaN(e[1]));
+  assert.ok(Number.isFinite(e[2]));
+});
+
+test('rules mark conditions with no value yet as missing', () => {
+  const r = evaluateRules(compileRules({ long: ['close > sma(50)', 'close > 0'] }).compiled, bars([1, 2, 3]), { ...PARAMS });
+  assert.deepStrictEqual(r.long, [{ rule: 'close > sma(50)', ok: false, missing: true }, { rule: 'close > 0', ok: true }]);
+});
+
+test('overnight and prior levels are causal: each bar only sees earlier bars', () => {
+  // 2026-10-06 RTH (ET = UTC-4): 13:30-20:00 UTC, then Globex from 22:00 UTC.
+  const mk = (iso, h, l) => ({ t: iso, o: l, h, l, c: l, v: 1 });
+  const b = normalizeBars([
+    mk('2026-10-06T13:30:00Z', 110, 100),
+    mk('2026-10-06T19:57:00Z', 120, 105), // RTH high 120
+    mk('2026-10-06T22:00:00Z', 115, 112), // Globex opens
+    mk('2026-10-07T02:00:00Z', 118, 111),
+    mk('2026-10-07T06:00:00Z', 125, 113), // breaks the overnight high so far
+    mk('2026-10-07T13:30:00Z', 126, 120), // RTH next day
+  ]);
+  const lv = causalLevels(b);
+  assert.ok(Number.isNaN(lv.prior_high[0]) && Number.isNaN(lv.prior_high[1]), 'no completed RTH day yet');
+  assert.strictEqual(lv.prior_high[2], 120);
+  assert.strictEqual(lv.prior_low[2], 100);
+  assert.ok(Number.isNaN(lv.overnight_high[2]), 'first Globex bar has no earlier overnight bars');
+  assert.strictEqual(lv.overnight_high[3], 115);
+  assert.strictEqual(lv.overnight_high[4], 118, 'the current bar is excluded so a break can cross it');
+  assert.strictEqual(lv.overnight_high[5], 125);
+  assert.strictEqual(lv.overnight_low[5], 111);
+  const r = evaluateRules(compileRules({ long: ['high > overnight_high'] }).compiled, b.slice(0, 5), { ...PARAMS });
+  assert.strictEqual(r.direction, 'long');
 });

@@ -29,14 +29,23 @@
  *   supertrend supertrend_dir (1 up, -1 down)
  *   keltner_upper keltner_mid keltner_lower
  *   vwap_session vwap_rth or_high or_low swing_high swing_low
- *   prior_high prior_low prior_close overnight_high overnight_low
- *   minute_et (minutes since midnight New York time, e.g. 9:45 = 585)
+ *   prior_high prior_low prior_close   last completed RTH day (9:30-16:00 ET)
+ *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
+ *                                      the previous bar (so a break can cross it)
+ *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
+ * A value that doesn't exist yet (indicator warm-up, no opening range or
+ * overnight yet, look-back before the first bar) makes its condition false;
+ * the result marks it `missing` so a short bar history is visible.
  * Strategy `params` (orbMinutes, swingK, stPeriod, stMult, kcLen, kcMult,
  * kcAtr) tune the series that use them.
  */
 
 const ind = require('./indicators');
 const { zonedParts } = require('./clock');
+
+const RTH_OPEN = 9 * 60 + 30;
+const RTH_CLOSE = 16 * 60;
+const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
 const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest']);
@@ -117,11 +126,11 @@ function parseExpr(tokens) {
 /** Compile one condition string into { left, op, right, text }. Throws with a readable message. */
 function compileCondition(text) {
   if (typeof text !== 'string' || !text.trim()) throw new Error('a rule must be a non-empty string');
-  const tokens = tokenize(text);
-  const opIdx = tokens.findIndex(t => t.type === 'op');
-  if (opIdx === -1) throw new Error(`"${text}": needs a comparison (${OPS.join(', ')})`);
-  if (tokens.slice(opIdx + 1).some(t => t.type === 'op')) throw new Error(`"${text}": only one comparison per rule`);
   try {
+    const tokens = tokenize(text);
+    const opIdx = tokens.findIndex(t => t.type === 'op');
+    if (opIdx === -1) throw new Error(`needs a comparison (${OPS.join(', ')})`);
+    if (tokens.slice(opIdx + 1).some(t => t.type === 'op')) throw new Error('only one comparison per rule');
     return { left: parseExpr(tokens.slice(0, opIdx)), op: tokens[opIdx].value, right: parseExpr(tokens.slice(opIdx + 1)), text };
   } catch (err) {
     throw new Error(`"${text}": ${err.message}`, { cause: err });
@@ -156,11 +165,49 @@ function compileRules(rules) {
   return { compiled, errors };
 }
 
-/** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
-function seriesSource(bars, params, levels) {
-  const cache = new Map();
+/**
+ * Prior-RTH and overnight levels as they stood at each bar, so a rule
+ * evaluated on bar i never sees later bars. Overnight excludes bar i itself.
+ */
+function causalLevels(bars) {
   const n = bars.length;
-  const constant = v => new Array(n).fill(v === null || v === undefined ? NaN : v);
+  const out = {
+    prior_high: new Array(n).fill(NaN), prior_low: new Array(n).fill(NaN), prior_close: new Array(n).fill(NaN),
+    overnight_high: new Array(n).fill(NaN), overnight_low: new Array(n).fill(NaN),
+  };
+  let rthDay = null; // RTH day in progress
+  let rth = null;
+  let prior = null; // last completed RTH day
+  let onSession = null;
+  let onHigh = NaN;
+  let onLow = NaN;
+  for (let i = 0; i < n; i += 1) {
+    const b = bars[i];
+    const p = zonedParts(new Date(b.t), 'America/New_York');
+    const day = `${p.year}-${p.month}-${p.day}`;
+    const minute = p.hour * 60 + p.minute;
+    const session = ind.sessionKey(b.t, GLOBEX_OPEN);
+    if (rth && (day !== rthDay || minute >= RTH_CLOSE)) { prior = rth; rth = null; rthDay = null; }
+    if (session !== onSession) { onSession = session; onHigh = NaN; onLow = NaN; }
+    if (prior) { out.prior_high[i] = prior.high; out.prior_low[i] = prior.low; out.prior_close[i] = prior.close; }
+    out.overnight_high[i] = onHigh;
+    out.overnight_low[i] = onLow;
+    if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
+      if (!rth) { rth = { high: b.h, low: b.l, close: b.c }; rthDay = day; }
+      rth.high = Math.max(rth.high, b.h); rth.low = Math.min(rth.low, b.l); rth.close = b.c;
+    } else if (!(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
+      onHigh = Number.isNaN(onHigh) ? b.h : Math.max(onHigh, b.h);
+      onLow = Number.isNaN(onLow) ? b.l : Math.min(onLow, b.l);
+    }
+  }
+  return out;
+}
+
+/** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
+function seriesSource(bars, params) {
+  const cache = new Map();
+  let lv = null;
+  const level = k => { lv = lv || causalLevels(bars); return lv[k]; };
   const field = f => bars.map(b => b[f]);
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
@@ -168,7 +215,7 @@ function seriesSource(bars, params, levels) {
     if (fn) {
       const len = Number(fn[2]);
       switch (fn[1]) {
-        case 'ema': return ind.ema(field('c'), len);
+        case 'ema': return ind.ema(field('c'), len).map((v, i) => (i + 1 < len ? NaN : v));
         case 'sma': return rolling(field('c'), len, w => w.reduce((a, b) => a + b, 0) / len);
         case 'atr': return ind.atr(bars, len);
         case 'adx': return ind.adx(bars, len);
@@ -194,11 +241,8 @@ function seriesSource(bars, params, levels) {
       case 'or_low': return ind.openingRange(bars, params.orbMinutes).low;
       case 'swing_high': return ind.swings(bars, params.swingK).high;
       case 'swing_low': return ind.swings(bars, params.swingK).low;
-      case 'prior_high': return constant(levels.priorRth && levels.priorRth.high);
-      case 'prior_low': return constant(levels.priorRth && levels.priorRth.low);
-      case 'prior_close': return constant(levels.priorRth && levels.priorRth.close);
-      case 'overnight_high': return constant(levels.overnight && levels.overnight.high);
-      case 'overnight_low': return constant(levels.overnight && levels.overnight.low);
+      case 'prior_high': case 'prior_low': case 'prior_close':
+      case 'overnight_high': case 'overnight_low': return level(key);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;
@@ -248,10 +292,15 @@ function holds(cond, get, i) {
  * Evaluate compiled rules on the last bar. Returns { direction, long, short }
  * where long/short list each condition with its result (for explanations).
  */
-function evaluateRules(compiled, bars, params, levels) {
-  const get = seriesSource(bars, params, levels);
+function evaluateRules(compiled, bars, params) {
+  const get = seriesSource(bars, params);
   const i = bars.length - 1;
-  const side = conds => conds.map(c => ({ rule: c.text, ok: holds(c, get, i) }));
+  const missing = c => [c.left, c.right].some(e => valueAt(e, get, i) === null)
+    || (c.op.startsWith('crosses_') && [c.left, c.right].some(e => valueAt(e, get, i - 1) === null));
+  const side = conds => conds.map(c => {
+    const ok = holds(c, get, i);
+    return ok || !missing(c) ? { rule: c.text, ok } : { rule: c.text, ok, missing: true };
+  });
   const long = side(compiled.long);
   const short = side(compiled.short);
   const longFires = long.length > 0 && long.every(r => r.ok);
@@ -259,4 +308,4 @@ function evaluateRules(compiled, bars, params, levels) {
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, compileCondition, compileRules, evaluateRules, seriesSource };
+module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileRules, evaluateRules, seriesSource, causalLevels };

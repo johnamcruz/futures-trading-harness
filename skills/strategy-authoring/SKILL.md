@@ -28,9 +28,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
    | `regime_gate` | Optional `true`: the MCP gateway also refuses entries when the live regime (from that strategy's timeframe bars) doesn't fit |
    | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |
-   | `params` | Optional market-snapshot overrides (e.g. `orbMinutes: 30`) |
-   | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr` |
-   | `risk` | `stop` (`atr:<k>`, `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd` |
+   | `params` | Optional overrides of the snapshot and rules series (e.g. `orbMinutes: 30`); periods must be whole numbers |
+   | `filters` | Optional `adx_min`, `adx_max`, `adx_slope_min`, `max_vwap_distance_atr`; checked by the scan only, not at order time |
+   | `risk` | `stop` (`atr:<k>`, `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists; `min_rr` and `max_risk_usd` are applied by the agents (risk-manager), not by code |
    | `source`, `version` | Where it came from; bump version on rule changes |
 
 3. Body (read by the agents): `## When to Use`, `## How It Works` (context
@@ -50,7 +50,13 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `prior_high prior_low prior_close overnight_high overnight_low`, `minute_et`.
    `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
    bar (without it the current bar is included, so a close can never cross
-   above it). `validate` reports typos and unknown series. Only a pattern the
+   above it). `minute_et` is the bar's open time in New York minutes (9:45 =
+   585). `prior_*` is the last completed RTH day and `overnight_*` this Globex
+   session before 9:30 ET up to the previous bar, as each bar saw them. A value
+   that doesn't exist yet (indicator warm-up, no opening range yet) makes the
+   condition false and the scan marks it `missing`. At most 12 conditions per
+   side. A rules strategy with only `long` rules can't be used to sell into an
+   entry. `validate` reports typos, unknown keys and series. Only a pattern the
    rules can't express (multi-bar zone logic like cisd_ote) needs `manual` or
    a new detector in code.
 

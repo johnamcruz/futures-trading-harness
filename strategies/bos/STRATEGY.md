@@ -8,10 +8,8 @@ timeframe: 3m
 sessions: ["09:35-15:30@America/New_York"]
 regimes: [trend]
 signal: bos
-filters:
-  adx_min: 15
 risk:
-  stop: structure
+  stop: atr:0.5
   min_rr: 1.5
 source: algoTraderBot/strategies/bos.py
 ---

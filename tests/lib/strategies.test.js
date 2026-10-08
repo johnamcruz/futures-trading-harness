@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies, validateStrategy, scan, strategyDirs, BUILT_IN_SIGNALS } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, BUILT_IN_SIGNALS } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { run } = require('../../scripts/strategies');
@@ -141,4 +141,45 @@ test('scan marks strategies out of regime and never makes them candidates', () =
   assert.strictEqual(bos.inRegime, false);
   assert.strictEqual(bos.candidate, false);
   assert.strictEqual(results.find(r => r.name === 'cisd_ote').inRegime, true);
+});
+
+test('unknown keys, risk keys, and out-of-range params are rejected with hints', () => {
+  const { data, body } = parseFrontmatter(`---\n${VALID}\nsesions: [rth]\nparams:\n  swingK: 0\n  orbMinutes: 2.5\n  stMult: -1\n  constructor_x: 1\n---\n${BODY}`);
+  data.risk.minrr = 2;
+  const errors = validateStrategy(data, body, 'extra');
+  assert.ok(errors.some(e => /unknown key "sesions" \(did you mean sessions\?\)/.test(e)), errors.join('; '));
+  assert.ok(errors.some(e => /risk\.minrr: unknown key \(did you mean min_rr\?\)/.test(e)), errors.join('; '));
+  assert.ok(errors.some(e => /params\.swingK: a whole number/.test(e)));
+  assert.ok(errors.some(e => /params\.orbMinutes: a whole number/.test(e)));
+  assert.ok(errors.some(e => /params\.stMult: a number above 0/.test(e)));
+  assert.ok(errors.some(e => /params\.constructor_x: unknown/.test(e)));
+});
+
+test('oversized files are refused and symlinked strategy folders are followed', () => {
+  const dir = tmpDir();
+  const real = tmpDir();
+  writeStrategy(real, 'linked', VALID.replace('name: extra', 'name: linked'));
+  fs.symlinkSync(path.join(real, 'linked'), path.join(dir, 'linked'));
+  writeStrategy(dir, 'huge', VALID.replace('name: extra', 'name: huge'), BODY + 'x'.repeat(300 * 1024));
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir });
+  const linked = strategies.find(s => s.name === 'linked');
+  assert.ok(linked && linked.valid, 'symlinked folder loads');
+  const huge = strategies.find(s => s.name === 'huge');
+  assert.ok(huge && !huge.valid && /larger than/.test(huge.errors[0]));
+});
+
+test('one strategy that throws during a scan does not stop the others', () => {
+  const b = Array.from({ length: 80 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 14, i * 3)).toISOString(), o: 100 + i, h: 101 + i, l: 99 + i, c: 100 + i, v: 10 }));
+  const good = { name: 'good', valid: true, status: 'active', instruments: ['MNQ'], sessions: [], signal: 'manual', risk: { stop: 'manual' } };
+  const bad = { ...good, name: 'bad', signal: 'rules', compiledRules: null };
+  const res = scan([bad, good], b, { symbol: 'MNQ' });
+  assert.ok(res.find(r => r.name === 'bad').error);
+  assert.ok(res.find(r => r.name === 'good'));
+});
+
+test('a rules strategy with no short rules cannot be used to sell into an entry', () => {
+  const s = { name: 'longonly', valid: true, status: 'active', instruments: ['MNQ'], sessions: [], compiledRules: { long: [{}], short: [] } };
+  const now = new Date(Date.UTC(2026, 9, 7, 15, 0));
+  assert.match(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'sell'), /no short rules/);
+  assert.strictEqual(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'buy'), null);
 });

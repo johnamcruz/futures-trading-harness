@@ -16,7 +16,7 @@ const os = require('os');
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
 const { parseWindows, inWindow } = require('./clock');
-const { PARAMS, snapshot, levels } = require('./market-snapshot');
+const { PARAMS, snapshot } = require('./market-snapshot');
 const { normalizeBars } = require('./indicators');
 const { compileRules, evaluateRules } = require('./rules');
 const { TAGS: REGIME_TAGS, classifyRegime, regimeFits } = require('./regime');
@@ -50,9 +50,41 @@ function strategyDirs(pluginRoot, env = process.env) {
 }
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
+const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
+  'signal', 'rules', 'params', 'filters', 'risk', 'source'];
+const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
+const MAX_FILE_BYTES = 256 * 1024;
+const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
+
+/** Allowed range for each market-snapshot parameter a strategy may override. */
+const PARAM_RULES = {
+  emaFast: 'int', emaSlow: 'int', adxPeriod: 'int', adxSlopeBars: 'int', stPeriod: 'int', kcLen: 'int', kcAtr: 'int',
+  swingK: 'int', orbMinutes: 'int', atrStop: 'int',
+  stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
+  adxGate: 'nonneg', kcAdx: 'nonneg', orbAdx: 'nonneg', orbCloseMin: 'minute',
+};
+
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j += 1) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+function suggest(key, known) {
+  const close = known.find(k => editDistance(key.toLowerCase(), k.toLowerCase()) <= 2);
+  return close ? ` (did you mean ${close}?)` : '';
+}
+
 function validateStrategy(data, body, folderName) {
   const errors = [];
   const req = (cond, msg) => { if (!cond) errors.push(msg); };
+  for (const k of Object.keys(data)) {
+    if (!TOP_KEYS.includes(k)) errors.push(`unknown key "${k}"${suggest(k, TOP_KEYS)}`);
+  }
 
   req(typeof data.name === 'string' && NAME.test(data.name), 'name: lowercase letters, digits, _ or - (it is the journal tag setup:<name>)');
   req(data.name === folderName, `name "${data.name}" must match its folder "${folderName}"`);
@@ -87,7 +119,7 @@ function validateStrategy(data, body, folderName) {
       errors.push('filters: a map');
     } else {
       for (const [k, v] of Object.entries(data.filters)) {
-        if (!FILTERS[k]) errors.push(`filters.${k}: unknown filter (known: ${Object.keys(FILTERS).join(', ')})`);
+        if (!has(FILTERS, k)) errors.push(`filters.${k}: unknown filter (known: ${Object.keys(FILTERS).join(', ')})`);
         else if (!FILTERS[k](v)) errors.push(`filters.${k}: invalid value ${JSON.stringify(v)}`);
       }
     }
@@ -97,8 +129,12 @@ function validateStrategy(data, body, folderName) {
       errors.push('params: a map of market-snapshot parameters');
     } else {
       for (const [k, v] of Object.entries(data.params)) {
-        if (!(k in PARAMS)) errors.push(`params.${k}: unknown snapshot parameter`);
-        else if (typeof v !== 'number') errors.push(`params.${k}: must be a number`);
+        const rule = has(PARAM_RULES, k) && has(PARAMS, k) ? PARAM_RULES[k] : null;
+        if (!rule) errors.push(`params.${k}: unknown snapshot parameter${suggest(k, Object.keys(PARAM_RULES))}`);
+        else if (rule === 'int' && !(Number.isInteger(v) && v >= 1 && v <= 500)) errors.push(`params.${k}: a whole number from 1 to 500`);
+        else if (rule === 'pos' && !(typeof v === 'number' && v > 0 && v <= 100)) errors.push(`params.${k}: a number above 0`);
+        else if (rule === 'nonneg' && !(typeof v === 'number' && v >= 0 && v <= 100)) errors.push(`params.${k}: a number from 0 to 100`);
+        else if (rule === 'minute' && !(Number.isInteger(v) && v >= 0 && v <= 1440)) errors.push(`params.${k}: minutes after midnight, 0 to 1440`);
       }
     }
   }
@@ -106,6 +142,7 @@ function validateStrategy(data, body, folderName) {
   if (!risk || typeof risk !== 'object' || Array.isArray(risk)) {
     errors.push('risk: a map with stop and min_rr');
   } else {
+    for (const k of Object.keys(risk)) if (!RISK_KEYS.includes(k)) errors.push(`risk.${k}: unknown key${suggest(k, RISK_KEYS)}`);
     req(typeof risk.stop === 'string' && STOP.test(risk.stop), 'risk.stop: atr:<multiple> | structure | swing | manual');
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
@@ -116,6 +153,9 @@ function validateStrategy(data, body, folderName) {
 
 function loadStrategyFile(file) {
   const folderName = path.basename(path.dirname(file));
+  if (fs.statSync(file).size > MAX_FILE_BYTES) {
+    return { name: folderName, file, valid: false, errors: [`file is larger than ${MAX_FILE_BYTES / 1024} KB`] };
+  }
   const text = fs.readFileSync(file, 'utf8');
   let parsed;
   try {
@@ -140,7 +180,8 @@ function loadStrategies(pluginRoot, env = process.env) {
       if (err.code !== 'ENOENT') problems.push({ dir, error: err.message });
       continue;
     }
-    for (const d of entries.filter(e => e.isDirectory() && !e.name.startsWith('_') && !e.name.startsWith('.'))) {
+    const isDir = e => e.isDirectory() || (e.isSymbolicLink() && (() => { try { return fs.statSync(path.join(dir, e.name)).isDirectory(); } catch (_err) { return false; } })());
+    for (const d of entries.filter(e => isDir(e) && !e.name.startsWith('_') && !e.name.startsWith('.'))) {
       const file = path.join(dir, d.name, 'STRATEGY.md');
       if (!fs.existsSync(file)) continue;
       const s = loadStrategyFile(file);
@@ -186,9 +227,9 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
   const root = String(symbol || '').toUpperCase();
   const results = [];
   const regime = classifyRegime(normalizeBars(bars));
-  for (const s of strategies) {
-    if (!s.valid || s.status === 'disabled') continue;
-    if (root && !s.instruments.includes(root)) continue;
+  const scanOne = s => {
+    if (!s.valid || s.status === 'disabled') return;
+    if (root && !s.instruments.includes(root)) return;
     const snap = snapshot(bars, s.params || {});
     const at = now || new Date(snap.last.t);
     const session = inSessions(s, at);
@@ -199,13 +240,13 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
     };
     if (s.signal === 'manual') {
       results.push({ ...base, signal: 'manual', candidate: session && inRegime, note: 'evaluate the trigger from STRATEGY.md' });
-      continue;
+      return;
     }
     let direction;
     let ruleDetail;
     if (s.signal === 'rules') {
       const norm = normalizeBars(bars);
-      const r = evaluateRules(s.compiledRules, norm, { ...PARAMS, ...(s.params || {}) }, levels(norm));
+      const r = evaluateRules(s.compiledRules, norm, { ...PARAMS, ...(s.params || {}) });
       direction = r.direction;
       ruleDetail = { long: r.long, short: r.short };
     } else {
@@ -226,18 +267,31 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       minRR: s.risk.min_rr,
       ...(ruleDetail ? { rules: ruleDetail } : {}),
     });
+  };
+  for (const s of strategies) {
+    try {
+      scanOne(s);
+    } catch (err) {
+      // One broken strategy must not stop the others from being scanned.
+      results.push({ name: s.name, status: s.status, error: err.message, candidate: false });
+    }
   }
   return results;
 }
 
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */
-function checkStrategyForOrder(strategies, name, contractRoot, now) {
+function checkStrategyForOrder(strategies, name, contractRoot, now, side = null) {
   const s = strategies.find(x => x.name === name);
   if (!s) return `setup:${name} is not a known strategy. Add strategies/${name}/STRATEGY.md or use an existing setup tag.`;
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
   if (!s.instruments.includes(contractRoot)) return `setup:${name} does not trade ${contractRoot} (instruments: ${s.instruments.join(', ')}).`;
   if (!inSessions(s, now)) return `setup:${name} is outside its sessions (${s.sessions.join(', ')}).`;
+  const sideName = String(side === null || side === undefined ? '' : side).toLowerCase();
+  if (s.compiledRules && (sideName === 'buy' || sideName === 'sell')) {
+    const dir = sideName === 'buy' ? 'long' : 'short';
+    if (!s.compiledRules[dir].length) return `setup:${name} has no ${dir} rules, so it can't ${sideName} to enter.`;
+  }
   return null;
 }
 

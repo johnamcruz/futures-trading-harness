@@ -50,3 +50,10 @@ test('parseFrontmatter splits data and body', () => {
   assert.throws(() => parseFrontmatter('# no frontmatter'), /missing YAML frontmatter/);
   assert.deepStrictEqual(parseFrontmatter('---\r\nname: y\r\n---\r\n').data, { name: 'y' });
 });
+
+test('compact lists, a leading BOM, and reserved keys', () => {
+  assert.deepStrictEqual(parseYaml('instruments:\n- MNQ\n- MES\nname: x'), { instruments: ['MNQ', 'MES'], name: 'x' });
+  assert.deepStrictEqual(parseFrontmatter('﻿---\nname: z\n---\n').data, { name: 'z' });
+  assert.throws(() => parseYaml('__proto__:\n  polluted: 1'), /line 1: "__proto__" is not allowed/);
+  assert.throws(() => parseYaml('a: 1\nb: "open'), /line 2:/);
+});

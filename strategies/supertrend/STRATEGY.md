@@ -8,8 +8,6 @@ timeframe: 3m
 sessions: ["09:35-15:30@America/New_York"]
 regimes: [trend]
 signal: supertrend
-filters:
-  adx_min: 15
 risk:
   stop: atr:0.5
   min_rr: 2

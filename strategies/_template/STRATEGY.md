@@ -16,14 +16,14 @@ rules:                        # with signal: rules - every condition in a side m
   short:
     - close crosses_below lowest(20)[1]
     - adx(14) >= 18
-params:                       # optional market-snapshot overrides (see scripts/lib/trading/market-snapshot.js PARAMS)
-  adxGate: 18
-filters:                      # optional numeric gates checked by code
+params:                       # optional overrides (see scripts/lib/trading/market-snapshot.js PARAMS), e.g. opening-range length
+  orbMinutes: 15
+filters:                      # optional numeric gates checked by the scan (not by the order gate)
   adx_min: 18                 # adx_min | adx_max | adx_slope_min | max_vwap_distance_atr
 risk:
   stop: atr:0.5               # atr:<multiple of ATR(20)> | structure | swing | manual
-  min_rr: 2                   # minimum planned reward:risk
-  max_risk_usd: 50            # optional per-trade cap for this strategy
+  min_rr: 2                   # minimum planned reward:risk (the agents plan to it; not checked at order time)
+  max_risk_usd: 50            # optional per-trade cap the risk-manager applies (not checked at order time)
 source: where the rules came from (code path, backtest, book, idea)
 ---
 
