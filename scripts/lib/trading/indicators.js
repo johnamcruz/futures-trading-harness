@@ -339,4 +339,5 @@ module.exports = {
   openingRange,
   sessionKey,
   anchoredVwap,
+  etInfo,
 };

@@ -276,4 +276,21 @@ test('observation: market context is causal and identical live and in training (
   const body1 = (bars[i].c - bars[i].o) / full.feats.atr20[i] * -1 / 2;
   assert.ok(Math.abs(o[at('bar1_body')] - Math.max(-1.5, Math.min(1.5, body1))) < 1e-12);
   assert.ok(OBS_FIELDS.includes(`bar${RECENT_BARS}_range`) && OBS_FIELDS.includes('mtf_4h') && OBS_FIELDS.includes('vwap_dist'));
+  // The prior RTH day's volume profile: where price is against its value area and POC, signed by the side.
+  const pf = full.feats.profile;
+  assert.ok(Number.isFinite(pf.vah[i]), 'a complete RTH day before bar 1100');
+  const where = bars[i].c > pf.vah[i] ? 1 : bars[i].c < pf.val[i] ? -1 : 0;
+  assert.strictEqual(o[at('value_area')], where ? -where : 0);
+  assert.ok(Math.abs(o[at('poc_dist')] - Math.max(-1.5, Math.min(1.5, (bars[i].c - pf.poc[i]) / full.feats.atr20[i] * -1 / 5))) < 1e-12);
+});
+
+test('a bundle is bound to the volume profile settings its observation was trained with', () => {
+  const { bundleMismatch } = require('../../scripts/lib/rl/policy-bundle');
+  const { optionsFromParams } = require('../../scripts/lib/trading/volume-profile');
+  const strategy = { name: 'p', strategies: ['a'], account: 'acct', timeframe: '3m', sizing: null, contracts: 'micro', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } };
+  const meta = { strategy: 'p', components: ['a'], account: 'acct', timeframe: 3, sizing: null, contracts: 'micro', exit: strategy.exit, profile: optionsFromParams({}) };
+  assert.strictEqual(bundleMismatch(meta, strategy), null);
+  assert.match(bundleMismatch(meta, { ...strategy, params: { vpRowSize: 0.25 } }), /volume profile/);
+  assert.match(bundleMismatch({ ...meta, profile: undefined }, strategy), /volume profile null/, 'a bundle from before the profile existed');
+  assert.strictEqual(bundleMismatch({ ...meta, profile: optionsFromParams({ vpRowSize: 0.25 }) }, { ...strategy, params: { vpRowSize: 0.25 } }), null);
 });

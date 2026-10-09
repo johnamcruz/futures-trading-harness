@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, swings, opening range, prior-day or overnight levels.
+description: Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
 ---
 
 # Market Snapshot
@@ -33,7 +33,11 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    node <root>/scripts/market-snapshot.js /tmp/fth/MNQ-3m.json
    ```
 
-   Override parameters with flags, e.g. `--orbMinutes=30 --emaSlow=50`.
+   Override parameters with flags, e.g. `--orbMinutes=30 --emaSlow=50`, or
+   the volume profile's: `--vpRowSize 0.25` (one-tick rows on the price grid,
+   so levels are tick prices), `--vpRows`, `--vpValueArea`, `--vpLookback`
+   (bars in the rolling profile). Use the same settings as the strategy you
+   are judging (its `params`).
 4. Read the JSON:
    - `trend`: emaFast(9), emaSlow(20), ema50, ema200, adx(14) and its 5-bar slope,
      supertrend(10,3) direction and line, keltner(20, 1.5×ATR20).
@@ -48,6 +52,14 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    - `participation`: relative volume of the last bar and the last 3 vs the
      opening-range average, the 20 bars before, and the same time the
      previous day (orb's skip rule reads `relVolLastVsOpeningRange`).
+   - `volumeProfile`: computed from the bars, never estimate it.
+     `priorRth` (the last complete RTH day, the day's reference), `session`
+     (this Globex session, developing), `rolling` (the last `vpLookback`
+     bars). Each: `poc`, `vah`, `val`, `price` (above, inside, or below
+     value), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low
+     volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of
+     them (`hvn`, `lvn`). With the default 100 rows levels fall between ticks:
+     round to `tickSize` before using one as an order price. Bar-based: say so.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
      0.1 x ATR), and open fair value gaps.
    - `context`: the numbers the strategies' skip rules name: EMA 9/20

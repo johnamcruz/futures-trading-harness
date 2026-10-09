@@ -22,12 +22,24 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
 | `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | paper |
 | `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | paper |
+| `value_area` | rules: a rejection of, or breakout through, the prior day's POC, confirmed by order flow or a range expansion on volume; target the edge of value | paper |
+| `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | paper |
+| `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | paper |
+
+The value area strategies read the prior RTH day's volume profile
+(`prior_poc prior_vah prior_val`, `scripts/lib/trading/volume-profile.js`):
+a bar-based profile any strategy can use, also as a developing session
+profile (`session_*`), a rolling one (`vp_*(n)`), and its high and low volume
+nodes.
 
 The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`)
 and declares `connectors: [order_flow]`, so the runner records real
 aggressor buy and sell volume from the TopstepX market hub for it. `ofi`
 trades real flow, where the imbalance moves price; `ofi_absorption` trades
-the reversal when it doesn't.
+the reversal when it doesn't. `value_area` (3-minute) declares it too, for
+its order-flow confirmation, so a 3-minute runner records flow as well
+(`orderFlow: "auto"`; set `orderFlow: false` in the runner config to turn it
+off, and the confirmation falls back to the bar-shape estimate).
 
 ## Add a strategy
 
@@ -65,7 +77,8 @@ trained policy decides which to take, at what size (in micros or minis), and
 when to bank a trade.
 
 - `prop_portfolio_3m`: every 3-minute strategy (ema_cross, supertrend,
-  keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h) on `topstep_100k`.
+  keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area,
+  value_area_reentry, value_area_breakout) on `topstep_100k`.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
   A policy trades one timeframe.
 

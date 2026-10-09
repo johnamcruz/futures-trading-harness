@@ -16,7 +16,8 @@
  *
  * Market context (marketFeatures, computed once per series, causal: bar i uses
  * bars 0..i only): the multi-timeframe trend (the trend rule's 4h, 1h, 15m
- * biases), the distance to VWAP, and the last RECENT_BARS candles (body and
+ * biases), the distance to VWAP, where price is in the prior RTH day's volume
+ * profile (value area and POC), and the last RECENT_BARS candles (body and
  * range in ATRs). Signed fields are multiplied by the side, so +1 always
  * means "with the setup or trade". Confluence: how many of the policy
  * strategy's strategies fire with (and against) the setup on this bar.
@@ -25,6 +26,7 @@
 const { sessionMinute } = require('../trading/clock');
 const ind = require('../trading/indicators');
 const { ruleSeries } = require('../trading/mtf');
+const { profileSeries, optionsFromParams } = require('../trading/volume-profile');
 
 const RECENT_BARS = 10;
 const RTH_OPEN = 9 * 60 + 30;
@@ -55,6 +57,8 @@ const OBS_FIELDS = [
   'confluence_with', // other strategies of the policy firing the same side on this bar / strategies
   'confluence_against', // ... firing the other side
   'vwap_dist', // (close - VWAP) / ATR(20) x side / 3 (RTH VWAP in RTH, else the session's)
+  'value_area', // the prior RTH day's profile: +1 above VAH, -1 below VAL, 0 inside, x side
+  'poc_dist', // (close - that profile's POC) / ATR(20) x side / 5
   ...Array.from({ length: RECENT_BARS }, (_, k) => `bar${k + 1}_body`), // (close - open) / ATR(20) x side / 2; bar1 = the last closed bar
   ...Array.from({ length: RECENT_BARS }, (_, k) => `bar${k + 1}_range`), // (high - low) / ATR(20) / 3
 ];
@@ -63,10 +67,11 @@ const OBS_DIM = OBS_FIELDS.length;
 /**
  * The market features the observation reads, for a whole series (each value at
  * bar i from bars 0..i): ATR(20), ATR(100), ADX(14), the trend rule's
- * frames, and the RTH and session VWAPs. The engine (training and backtests)
- * and the live runner both build them here.
+ * frames, the RTH and session VWAPs, and the prior RTH day's volume profile,
+ * set by `params` (the policy strategy's: vpRows, vpRowSize, ...). The engine
+ * (training and backtests) and the live runner both build them here.
  */
-function marketFeatures(bars) {
+function marketFeatures(bars, params = {}) {
   return {
     atr20: ind.atr(bars, 20),
     atr100: ind.atr(bars, 100),
@@ -74,6 +79,8 @@ function marketFeatures(bars) {
     mtf: ruleSeries(bars),
     vwapRth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE),
     vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN),
+    // The policy strategy's params set the profile (vpRows, vpRowSize, ...), as for its strategies' rules.
+    profile: profileSeries(bars, 'prior_rth', { options: optionsFromParams(params || {}) }),
   };
 }
 
@@ -100,6 +107,10 @@ function buildObservation({ cs, account, book, i, closeAt, components = [], setu
   const dir = side || 1; // flat with no setup: raw values
   const trend = m => (f.mtf && Number.isFinite(f.mtf[m][i]) ? f.mtf[m][i] * dir : 0);
   const vwap = f.vwapRth && Number.isFinite(f.vwapRth[i]) ? f.vwapRth[i] : f.vwapSession && Number.isFinite(f.vwapSession[i]) ? f.vwapSession[i] : NaN;
+  const pf = f.profile;
+  const vah = pf ? pf.vah[i] : NaN;
+  const val = pf ? pf.val[i] : NaN;
+  const poc = pf ? pf.poc[i] : NaN;
   const conf = (!inPos && setup && setup.confluence) || { with: 0, against: 0 };
   const n = Math.max(1, components.length);
   const recent = k => book.bars[i - k];
@@ -129,6 +140,8 @@ function buildObservation({ cs, account, book, i, closeAt, components = [], setu
     clamp(conf.with / n, 0, 1),
     clamp(conf.against / n, 0, 1),
     Number.isFinite(vwap) && atr20 > 0 ? clamp(((bar.c - vwap) / atr20) * dir / 3, -1.5, 1.5) : 0,
+    Number.isFinite(vah) ? (bar.c > vah ? dir : bar.c < val ? -dir : 0) : 0,
+    Number.isFinite(poc) && atr20 > 0 ? clamp(((bar.c - poc) / atr20) * dir / 5, -1.5, 1.5) : 0,
     ...Array.from({ length: RECENT_BARS }, (_, k) => body(k)),
     ...Array.from({ length: RECENT_BARS }, (_, k) => range(k)),
     ...components.map(c => (c === which ? 1 : 0)),

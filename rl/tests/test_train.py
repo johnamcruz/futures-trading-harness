@@ -40,8 +40,8 @@ class TrainTest(unittest.TestCase):
         bundle_file = d / "out" / "synthetic_policy.json"
         bundle = json.loads(bundle_file.read_text())
         self.assertFalse(bundle["validated"])
-        # The policy learned with the market context: the trend frames, confluence, VWAP, and the last 10 candles.
-        for field in ("mtf_4h", "mtf_1h", "mtf_15m", "confluence_with", "confluence_against", "vwap_dist", "bar1_body", "bar10_range"):
+        # The policy learned with the market context: the trend frames, confluence, VWAP, the volume profile, and the last 10 candles.
+        for field in ("mtf_4h", "mtf_1h", "mtf_15m", "confluence_with", "confluence_against", "vwap_dist", "value_area", "poc_dist", "bar1_body", "bar10_range"):
             self.assertIn(field, bundle["obsFields"])
         self.assertEqual(bundle["network"]["obsDim"] if "obsDim" in bundle.get("network", {}) else len(bundle["obsFields"]), len(bundle["obsFields"]))
         self.assertEqual(code, 2)

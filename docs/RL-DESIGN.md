@@ -101,12 +101,17 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
   a timeout, + for each winning trade and − for each losing one (after
   fees), and a dense term: the balance change between decisions over the max
   loss. The blow penalty must exceed pass + speed.
-- **Observation** (`observation.js`, 17 fields plus one per strategy):
+- **Observation** (`observation.js`, 45 fields plus one per strategy):
   account (cushion / max loss, progress to target, drawdown, day P&L, sessions
   left), the setup's risk as a share of the cushion and the room to the soft
   daily limit, whether it trades minis, trade (side, R now, best and worst R,
-  bars held), market (session clock, ATR ratio, ADX), and which strategy the
-  setup or trade came from. Built by one function for training and live.
+  bars held), market (session clock, ATR ratio, ADX, the 4h/1h/15m trend,
+  confluence with and against, the distance to VWAP, where price is against
+  the prior RTH day's value area and its POC, the last 10 candles), and which
+  strategy the setup or trade came from. Built by one function for training
+  and live. The volume profile it reads uses the policy strategy's own
+  `params` (vpRows, vpRowSize, ...), not its strategies'; the bundle records
+  those settings and refuses to load when they change.
 
 ## Training and promotion
 

@@ -73,7 +73,7 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
   the 4h has fewer than 3 completed candles. With no trend on any of the three,
   both sides are open.
 - **Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`, `cisd_ote`,
-  `ofi_absorption`): may fade it. That is their setup, a raid at a
+  `ofi_absorption`, `value_area_reentry`): may fade it. That is their setup, a raid at a
   higher-timeframe level; plan them at half size and the nearest target when
   they do (the table below).
 
@@ -114,7 +114,8 @@ the plan, but it doesn't halve the verdict.
 The `bias` (long, short, or neutral) weights the higher timeframes more
 (score out of ±max): use it for the game plan's headline.
 
-Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `cisd_ote`) trade
+Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `cisd_ote`,
+`value_area_reentry`) trade
 against the lower timeframes by design, and the trend rule lets them fade
 the prevailing trend. Judge the setup against the timeframe above its range
 candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against

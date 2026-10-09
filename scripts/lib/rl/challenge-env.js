@@ -37,7 +37,7 @@ const DAY_MS = 86400000;
  * calendar). Reusable for many episodes.
  */
 function createEnv({ markets, strategies, account, sizing = null, prop = null, engine = {}, reward = {} }) {
-  const prepared = prepare(markets, strategies, engine);
+  const prepared = prepare(markets, strategies, { ...engine, prop });
   const book = prepared.books[0];
   const days = [];
   for (const b of book.bars) {

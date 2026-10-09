@@ -135,6 +135,11 @@ strategies/
   vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
   ofi/STRATEGY.md            1m order-flow imbalance, paper
   ofi_absorption/STRATEGY.md 1m absorption reversal, paper
+  crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, paper
+  crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, paper
+  value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, paper
+  value_area_reentry/        volume profile 80% rule, paper
+  value_area_breakout/       acceptance beyond the value area, paper
   _template/STRATEGY.md      copy this to add a strategy
 ```
 
@@ -438,7 +443,7 @@ trained policy learns which to take, at what size, and when to bank a trade
 
 ```yaml
 signal: policy
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h]   # every 3-minute strategy
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
 contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)

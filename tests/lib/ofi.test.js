@@ -82,7 +82,9 @@ test('orderFlow auto: on when a strategy on the timeframe uses ofi or delta', ()
   const { usesOrderFlow, validateConfig } = require('../../scripts/lib/autotrader');
   const all = loadStrategies(ROOT, {}).strategies;
   assert.strictEqual(usesOrderFlow(all, 1), true);
-  assert.strictEqual(usesOrderFlow(all, 3), false);
+  // value_area confirms with ofi(3), so a 3-minute runner records flow too; without it, none does.
+  assert.strictEqual(usesOrderFlow(all, 3), true);
+  assert.strictEqual(usesOrderFlow(all.filter(s => s.name !== 'value_area'), 3), false);
   assert.throws(() => validateConfig({ harness: 'qwen', premarketAt: '', orderFlow: 'yes' }), /orderFlow/);
 });
 
