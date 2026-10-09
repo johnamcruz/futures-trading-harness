@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * End to end, on real data: the runner polls a fake ProjectX serving the
+ * End to end, on real data: the runner polls a fake broker serving the
  * parity NQ bars as they close, writes the bars file and the gate's records
  * (multi-timeframe and signals) with the production functions, scans with the
  * real strategies, and builds the real prompt. A stand-in for the LLM follows

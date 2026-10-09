@@ -1,6 +1,6 @@
 # Prop-challenge RL
 
-A policy that learns to pass prop-firm challenges (Topstep combines), trained
+A policy that learns to pass prop-firm challenges (combines), trained
 and run inside the harness, built on the harness's own pieces: Markdown
 strategies, the backtester's broker logic, and the order gate.
 

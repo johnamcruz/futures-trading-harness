@@ -119,7 +119,7 @@ test('the adapter opens the configured broker: reads straight to it, a stop move
   } finally {
     client.close();
   }
-  assert.throws(() => openAdapter({ root: ROOT, env: { ...env, FTH_BROKER: 'tradovate' } }), /unknown broker "tradovate"/);
+  assert.throws(() => openAdapter({ root: ROOT, env: { ...env, FTH_BROKER: 'other-broker' } }), /unknown broker "other-broker"/);
   const { PROJECTX_MCP_ENTRY: _entry, ...noEntry } = env;
   assert.throws(() => openAdapter({ root: ROOT, env: noEntry }), /broker topstepx: no MCP server configured \(set PROJECTX_MCP_ENTRY/);
 });
@@ -172,7 +172,7 @@ test('tradingBlocked: the server must trade, on the runner\'s account', () => {
   assert.match(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [5, 6] }, 7), /account 7 is not among the server's allowed accounts \(5, 6\)/);
   assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [7] }, '7'), null);
   assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [] }, 7), null);
-  assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: 'any' }, 7), null, 'projectx-mcp says "any"');
+  assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: 'any' }, 7), null, 'a server may say "any"');
 });
 
 test('the MCP client: a server that never finishes the handshake is stopped and started afresh on the next call', async () => {

@@ -35,7 +35,6 @@ function parseArgs(argv) {
   };
   const target = get('--target');
   const entry = get('--entry');
-  if (argv.includes('--projectx')) throw new Error('--projectx is gone: pass the broker MCP server\'s entry with --entry (and --broker <name> for a broker other than the default)');
   const targets = target === 'all' ? Object.keys(TARGETS) : String(target || '').split(',').filter(Boolean);
   if (targets.length === 0 || targets.some(t => !TARGETS[t])) {
     throw new Error(`--target must be one of ${Object.keys(TARGETS).join(', ')}, or all`);

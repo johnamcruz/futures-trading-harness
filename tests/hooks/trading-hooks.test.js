@@ -164,7 +164,7 @@ test('order gate ignores other tools and plugin-scoped tool names still match', 
   assert.strictEqual(gate({ tool_name: 'mcp__broker__get_bars', tool_input: {} }, env).code, 0);
   assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_broker__place_order', tool_input: ORDER }, env).code, 2);
   // A server registered under an older name is still gated.
-  assert.strictEqual(gate({ tool_name: 'mcp__projectx__place_order', tool_input: ORDER }, env).code, 2);
+  assert.strictEqual(gate({ tool_name: 'mcp__oldname__place_order', tool_input: ORDER }, env).code, 2);
 });
 
 test('order gate: a broken broker config blocks every order (fails closed) and says close_position still flattens', () => {

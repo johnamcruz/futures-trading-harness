@@ -1,8 +1,7 @@
 # Futures Trading Harness
 
 An LLM-agnostic agent harness that trades futures through a broker MCP
-server: **TopstepX** through [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
-by default, or any broker whose server implements the same interface
+server: any broker or prop firm whose server implements one interface
 ([Brokers](#brokers)). It runs on
 **Claude Code, Codex, or Qwen Code** (any model those harnesses can drive,
 including Qwen through DashScope, vLLM, or Ollama), and it can trade on its own
@@ -70,7 +69,6 @@ account document, and its workflows are skills.
         │
    order gate ── PreToolUse hook (Claude/Codex/Qwen)
         │     └─ MCP gateway (every MCP client) ──▶ broker MCP server ──▶ broker
-        │                                           (projectx-mcp ──▶ TopstepX)
         ▼
    trade-reviewer → journal reviews and lessons → next session's briefing
 ```
@@ -102,7 +100,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 
 | Layer | Where | Enforces | Model can bypass? |
 |---|---|---|---|
-| Firm rules | The prop firm (Topstep by default) | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
+| Firm rules | The prop firm (its account profile) | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
 | Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |

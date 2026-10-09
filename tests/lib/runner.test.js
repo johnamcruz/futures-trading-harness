@@ -236,7 +236,7 @@ test('hard market hours: sessions in the 16:00-18:00 ET break, a missing end of 
   assert.throws(() => validateConfig({ sessions: ['16:30-17:30@America/New_York'] }), /market session/);
   assert.throws(() => validateConfig({ sessions: ['00:00-24:00@UTC'] }), /America\/New_York or America\/Chicago/);
   assert.throws(() => validateConfig({ sessions: ['23:00-20:50@Europe/London'], eodAt: '20:50@Europe/London' }), /America\/New_York or America\/Chicago/, 'zones whose clocks change on other dates');
-  assert.ok(validateConfig({ sessions: ['18:00-15:50@America/New_York'] }), 'the full Topstep session');
+  assert.ok(validateConfig({ sessions: ['18:00-15:50@America/New_York'] }), 'the full CME Globex session');
   assert.ok(validateConfig({ sessions: ['asia', 'london', 'ny'], eodAt: '16:00@America/New_York' }), 'named sessions');
   assert.throws(() => validateConfig({ eodAt: '' }), /eodAt: required/);
   assert.throws(() => validateConfig({ eodAt: '16:30@America/New_York' }), /no later than 16:00/);

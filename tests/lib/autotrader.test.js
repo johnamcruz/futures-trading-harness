@@ -47,7 +47,7 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.ok(claudeDenied('/r', { home: '/h', stateDir: '/srv/fth' }).includes('Read(//srv/fth/.env)'));
   assert.ok(claudeDenied('/r', { home: '/h' }).includes('Read(//h/.futures-trading-harness/.env)'));
   // The broker server's journal folder can't be edited (the order gate reads the journal).
-  assert.ok(claudeDenied('/r', { home: '/h', journal: '/h/.projectx-mcp/journal.jsonl' }).includes('Edit(//h/.projectx-mcp/journal.jsonl)'));
+  assert.ok(claudeDenied('/r', { home: '/h', journal: '/h/.broker-mcp/journal.jsonl' }).includes('Edit(//h/.broker-mcp/journal.jsonl)'));
   assert.ok(claudeTools('/r', { home: '/h' }).includes('mcp__broker'));
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);

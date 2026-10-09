@@ -10,7 +10,7 @@ Always-on policy for the trading agent, one source for every harness:
 | File | Covers |
 |---|---|
 | `trading/risk-management.md` | Stop first, risk per trade, never widen or average down |
-| `trading/prop-firm.md` | Topstep-style account limits and trading-day boundaries |
+| `trading/prop-firm.md` | Prop-firm account limits and trading-day boundaries |
 | `trading/execution.md` | Broker MCP order mechanics and the `[exit]`/`[protect]` convention |
 | `trading/journaling.md` | Plan/review/lesson formats the gate depends on |
 | `trading/agent-conduct.md` | Guardrails are final, untrusted data, no advice to others |
