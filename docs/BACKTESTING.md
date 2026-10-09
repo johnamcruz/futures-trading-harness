@@ -159,7 +159,8 @@ Each run writes these files to the run directory:
   - **R statistics**, as algoTraderBot reports them: trades, win rate, mean
     and total R, profit factor, MFE, and capture (total R ÷ total MFE).
   - **Dollar figures** after fees: net P&L, profit factor, and max drawdown.
-  - **Breakdowns** by strategy, exit reason, symbol, and month.
+  - **Breakdowns** by strategy, exit reason, symbol, month, hour (ET),
+    weekday, confluence, and regime (on the signal bar, as the scan read it).
 - **`trades.csv`:** every trade.
 - **`trades.jsonl`:** every trade with its target level and the setup behind
   it: the stop and target distances and its detectors' state on the signal
@@ -177,6 +178,21 @@ Each run writes these files to the run directory:
   node scripts/backtest.js --data NQ_3min.csv --symbol MNQ --strategy crt_1h --debug crt_1h
   grep '"reason":"fired"' ~/.futures-trading-harness/backtests/<run>/decisions-crt_1h.jsonl
   ```
+
+### Track records for the cycle prompt
+
+`--record` writes each strategy's track record to
+`<FTH_HOME>/track-record/<strategy>.json`: its trades, win rate, mean R with
+its 95% interval, the edge verdict, and the same by regime and by hour. Each
+strategy is backtested on its own for it (in a joint run they compete for one
+position). The autonomous runner shows the record, with the journal's
+reviewed live trades, next to every strategy that fires, so the model weighs
+the signal by evidence. Re-record after changing a strategy or adding data;
+plain runs only (not with `--prop` or `--walk-forward`).
+
+```bash
+node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy orb,value_area --record
+```
 
 ### Prop challenges
 

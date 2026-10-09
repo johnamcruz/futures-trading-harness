@@ -40,6 +40,8 @@ const { loadBars, barMinutes, aggregate, auditBars } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
 const { buildReport, toMarkdown, toCsv } = require('./report');
+const trackRecord = require('../trading/track-record');
+const { harnessHome } = require('../paths');
 const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
@@ -95,7 +97,7 @@ function validateBacktestConfig(raw, baseDir) {
       throw new Error(`invalid backtest config:\n- ${k}: comes from a policy strategy now; name it with "prop": "<policy strategy>" (signal: policy)`);
     }
   }
-  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, debug: null, walkForward: null, ...(raw || {}) };
+  const cfg = { ...DEFAULTS, timeframe: 3, symbols: ['MNQ'], strategies: null, outDir: null, every: 1, prop: null, bundle: null, debug: null, walkForward: null, record: false, ...(raw || {}) };
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
@@ -123,6 +125,8 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio_3m"');
   if (cfg.bundle !== null && !(typeof cfg.bundle === 'string' && cfg.prop !== null)) errors.push('bundle: a policy bundle (models/<name>.json) to try in place of the policy strategy\'s own; needs prop');
   if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
+  if (typeof cfg.record !== 'boolean') errors.push('record: true or false (record each strategy\'s track record for the cycle prompt)');
+  if (cfg.record === true && (cfg.prop !== null || cfg.walkForward)) errors.push('record: plain runs only (not with prop or walkForward)');
   if (cfg.debug !== null && !(typeof cfg.debug === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.debug))) errors.push('debug: a strategy name, to log its verdict on every bar');
   if (cfg.walkForward !== null) {
     const w = cfg.walkForward;
@@ -303,6 +307,18 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report));
   fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
   fs.writeFileSync(path.join(runDir, 'trades.jsonl'), report.trades.map(t => JSON.stringify(t)).join('\n') + (report.trades.length ? '\n' : ''));
+  if (cfg.record) {
+    // The track record the cycle prompt shows next to each strategy that fires (trading/track-record.js).
+    const home = harnessHome(env);
+    for (const s of strategies) {
+      // Its own record: the strategy alone (in a joint run strategies compete for one position).
+      const alone = strategies.length === 1 ? report
+        : buildReport(runEngine(markets, [s], { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) }).trades, report.meta);
+      const rec = trackRecord.fromReport(alone, s.name);
+      const file = trackRecord.writeRecord(home, rec);
+      log(`track record: ${s.name} ${rec.summary.trades} trades, E ${rec.summary.meanR === null ? '?' : rec.summary.meanR}R (${rec.summary.edge}) -> ${file}`);
+    }
+  }
   if (cfg.debug) {
     const file = path.join(runDir, `decisions-${cfg.debug}.jsonl`);
     const n = writeDecisions(file, markets, strategies.find(s => s.name === cfg.debug), cfg);

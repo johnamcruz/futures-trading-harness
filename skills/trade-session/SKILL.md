@@ -155,6 +155,32 @@ and the current time.
   skip. Never plan the component strategy (e.g. `orb`) yourself; the gate
   refuses it. The rest of this step still decides whether the market permits
   it (events, red flags).
+- **The day so far** (the prompt's "day:" line, market-snapshot `day`):
+  the open against the prior day, the opening type, the initial balance
+  (IB) and how far the day has extended past it, the day type, and how much
+  of the average daily range (ADR) is used. Read it before choosing a setup:
+  an open outside the prior range with an open-drive and one-sided IB
+  extension is a trend day (trade with it; fading needs a reversal setup at a
+  higher-timeframe level); an open inside the prior value area that stays
+  inside the IB is balance (fade the edges, small targets, stand aside in
+  the middle); a neutral day (both sides extended) is two-sided. With 80% or
+  more of the ADR used, the room left for a target is small: say so, and
+  prefer the nearest target.
+- **Track record.** Each strategy that fired carries its record: the
+  recorded backtest (overall, in this regime, at this hour, when there are
+  enough trades) and your reviewed live trades. Weigh the signal by it: a
+  strategy with no recorded edge, a negative slice for this regime or hour,
+  or live results well under its backtest is a smaller trade or no trade;
+  say which in the plan. Under 30 trades is anecdotal, not evidence. No
+  record ("no backtest recorded") is the weakest case, not a neutral one.
+- **An open trade** (the prompt's "Open trade" line) is managed before any
+  new entry: its setup, initial stop and risk, the working stop and target in
+  R, where it stands now, its best and worst so far, and bars held. "NO
+  working stop" is the first thing to fix. Manage it by its strategy's exit
+  (`exit` in its STRATEGY.md: trail, target, time stop); never loosen the
+  stop. A trade that gave back most of a large best (e.g. best +2R, now
+  +0.3R) or is past its time stop is the case to act on; say what you did and
+  why in the cycle result.
 - **Confluence.** Several strategies firing the same side on the bar (the
   scan's `confluence.with`, the prompt's "fired on this bar" line) is a
   stronger setup: say so in the plan, and prefer it over a lone signal. Strategies firing

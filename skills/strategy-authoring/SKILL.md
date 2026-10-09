@@ -59,7 +59,9 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
    `prior_high prior_low prior_close overnight_high overnight_low`, `rth_open`
    (today's 09:30 ET open, until 16:00 ET), `rth_high rth_low` (today's RTH
-   high and low so far), `minute_et`,
+   high and low so far), `ib_high ib_low` (today's initial balance, the
+   first hour, from the bar that completes it), `adr(n)` (the average RTH
+   range of the last n complete days), `minute_et`,
    `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector), and
    higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
    (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`

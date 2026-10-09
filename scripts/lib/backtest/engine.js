@@ -113,7 +113,7 @@ const onTick = (x, tick) => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
 function setupOf(book, pick, i) {
   const why = book.ev.at(pick.s, i, { describe: true });
   return {
-    signalBar: book.bars[i].t, close: book.bars[i].c, stopDistance: pick.r.stopDistance,
+    signalBar: book.bars[i].t, close: book.bars[i].c, stopDistance: pick.r.stopDistance, regime: why.regime || null,
     ...(why.targetDistance ? { targetDistance: why.targetDistance } : {}),
     ...(why.detail ? { detail: why.detail } : {}),
   };

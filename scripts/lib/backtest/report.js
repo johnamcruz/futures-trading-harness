@@ -110,6 +110,8 @@ function buildReport(trades, meta) {
     bySymbol: groupBy(sorted, t => t.symbol),
     byMonth: groupBy(sorted, t => t.exitTime.slice(0, 7)),
     byHour: groupBy(sorted, hourOf),
+    // The regime on the signal bar (regime.js), as the scan and the order gate read it.
+    byRegime: groupBy(sorted, t => (t.setup && t.setup.regime) || 'unknown'),
     // Does agreement help? Trades by how many strategies fired their side on the signal bar.
     byConfluence: groupBy(sorted, t => `${t.confluence || 1} agreeing${t.conflict ? `, ${t.conflict} against` : ''}`),
     byWeekday: groupBy(sorted, weekdayOf),
@@ -180,4 +182,4 @@ function toCsv(trades) {
   return [cols.join(','), ...trades.map(t => cols.map(c => t[c]).join(','))].join('\n') + '\n';
 }
 
-module.exports = { stats, maxDrawdown, sharpe, buildReport, toMarkdown, toCsv };
+module.exports = { stats, maxDrawdown, sharpe, buildReport, toMarkdown, toCsv, hourOf };

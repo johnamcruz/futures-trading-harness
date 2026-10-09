@@ -85,6 +85,8 @@ function configFrom(argv) {
   if (arg(argv, '--bundle')) cfg.bundle = arg(argv, '--bundle');
   if (num('--every') !== undefined) cfg.every = num('--every');
   if (arg(argv, '--debug')) cfg.debug = arg(argv, '--debug');
+  // Record each strategy's track record from this run for the cycle prompt (trading/track-record.js).
+  if (argv.includes('--record')) cfg.record = true;
   if (argv.includes('--walk-forward')) {
     // --grid name=v1,v2 (repeatable), --train-months, --test-months, --min-trades
     const grid = {};
@@ -104,7 +106,7 @@ function configFrom(argv) {
 
 // Every flag the backtest takes: a misspelt one (--strategies) must not run everything silently.
 const VALUE_FLAGS = ['--config', '--symbol', '--data', '--timeframe', '--start', '--end', '--strategy', '--size', '--risk', '--slippage', '--fill', '--min-confluence', '--conflict', '--out', '--prop', '--bundle', '--every', '--debug', '--grid', '--train-months', '--test-months', '--min-trades'];
-const BOOL_FLAGS = ['--no-gate', '--walk-forward'];
+const BOOL_FLAGS = ['--no-gate', '--walk-forward', '--record'];
 
 function unknownFlags(argv) {
   const bad = [];
