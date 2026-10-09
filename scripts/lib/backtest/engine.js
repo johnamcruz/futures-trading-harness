@@ -304,7 +304,9 @@ function runEngine(markets, strategies, opts = {}) {
       const entry = onTick(bar.o + q.sign * o.slippageTicks * book.tickSize, book.tickSize);
       const stop = onTick(entry - q.sign * q.risk, book.tickSize);
       const target = q.targetFrom === 'entry' ? onTick(entry + q.sign * q.targetTicks * book.tickSize, book.tickSize) : q.target;
-      const gapped = q.sign * (entry - q.signalStop) <= 0 || (q.targetFrom === 'level' && q.sign * (target - entry) < book.tickSize - 1e-9);
+      // A target level the fill reached leaves no reward; one closer than the strategy's min_rr (risk.min_rr) isn't its trade either.
+      const gapped = q.sign * (entry - q.signalStop) <= 0 || (q.targetFrom === 'level'
+        && (q.sign * (target - entry) < book.tickSize - 1e-9 || (q.minRR > 0 && q.sign * (target - entry) < q.minRR * q.risk - 1e-9)));
       if (gapped || afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) {
         book.pos = null;
         expired += 1;
@@ -438,12 +440,14 @@ function runEngine(markets, strategies, opts = {}) {
         : plan.target && pick.r.targetDistance > 0
           ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize)
           : null,
+      minRR: plan.target && !plan.targetR ? pick.s.risk.min_rr || 0 : 0,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
       confluence: pick.confluence || 1, conflict: pick.against || 0,
       setup: setupOf(book, pick, i),
     };
-    // A target level the fill already reached (slippage past it) leaves no reward: no trade.
-    if (plan.target && !plan.targetR && (book.pos.target === null || sign * (book.pos.target - entry) < book.tickSize - 1e-9)) {
+    // A target level the fill already reached (slippage past it) leaves no reward: no trade; nor one under min_rr.
+    if (plan.target && !plan.targetR && (book.pos.target === null || sign * (book.pos.target - entry) < book.tickSize - 1e-9
+      || (book.pos.minRR > 0 && sign * (book.pos.target - entry) < book.pos.minRR * risk - 1e-9))) {
       book.pos = null;
       continue;
     }

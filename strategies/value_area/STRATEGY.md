@@ -18,6 +18,9 @@ rules:
             - low <= prior_poc + 0.1 * atr(20)
             - close > prior_poc
             - 2 * close >= high + low     # closed in the upper half of its range
+            - any:                        # a fresh rejection: the bar before wasn't one already
+                - low[1] > prior_poc + 0.1 * atr(20)
+                - 2 * close[1] < high[1] + low[1]
         - all:                            # breakout: a decisive close up through the POC
             - close crosses_above prior_poc
             - close > open
@@ -37,6 +40,9 @@ rules:
             - high >= prior_poc - 0.1 * atr(20)
             - close < prior_poc
             - 2 * close <= high + low
+            - any:
+                - high[1] < prior_poc - 0.1 * atr(20)
+                - 2 * close[1] > high[1] + low[1]
         - all:
             - close crosses_below prior_poc
             - close < open
@@ -47,7 +53,7 @@ rules:
             - high - low >= 1.5 * atr(20)
             - volume >= 1.5 * vol_sma(20)
     - close - prior_val >= 2 * highest(3) - 2 * close + 0.5 * atr(20)
-params:                       # the volume profile (scripts/lib/trading/volume-profile.js); edit here to tune
+params:                       # this strategy's volume profile, pinned so its backtests reproduce (defaults: PARAM_DEFAULTS in scripts/lib/trading/volume-profile.js)
   vpRows: 100                 # rows over the prior day's range ...
   vpRowSize: 0                # ... or rows of this many points instead (0.25 = one MNQ/MES tick, 1 = four ticks); 0 = use vpRows
   vpValueArea: 70             # % of the volume in the value area
@@ -133,7 +139,9 @@ Long (short is the mirror image), every line must hold:
 2. **Setup, one of:**
    - *Rejection:* the previous bar closed above the POC; this bar's low
      reached the POC (within 0.1 × ATR(20)); it closed above the POC, in the
-     upper half of its range.
+     upper half of its range; and the previous bar wasn't already a
+     rejection (it stayed clear of the POC, or closed in its lower half), so
+     price sitting on the POC fires once, not on every bar.
    - *Breakout:* this bar closed up through the POC (the previous close was at
      or below it), as an up bar, at least 0.25 × ATR(20) beyond it.
 3. **Confirmation, one of:** `ofi(3) >= 0.2`, or a range of 1.5 × ATR(20) on
@@ -142,7 +150,9 @@ Long (short is the mirror image), every line must hold:
 
 ### Entry, stop, target
 
-- **Entry:** market on the trigger bar's close.
+- **Entry:** at market as the trigger bar closes (the backtester fills at
+  the next bar's open plus a tick of slippage, and skips the trade if that
+  fill leaves the target under 2R).
 - **Stop:** 0.25 × ATR(20) below the lowest low of the last 3 bars (the POC
   test, or the breakout's base). Back through there, the reaction failed.
 - **Target:** the prior day's value area high (VAL for a short), a level; at
@@ -157,6 +167,22 @@ Long (short is the mirror image), every line must hold:
   has become noise, not a level.
 - A tier-1 release is due within 30 minutes.
 - The stop at size 1 is over the risk budget.
+
+### Order flow: live vs backtest
+
+Live, with the `order_flow` connector, `ofi(3)` is real aggressor buy minus
+sell volume over the last 3 bars. A backtest without recorded flow uses the
+bar-shape estimate (volume signed by where each bar closed in its range),
+which overlaps the rejection's own close-in-range rule. So a backtest tests
+the estimate, not real flow, and ±0.2 is a starting value for both: record
+flow (`scripts/orderflow.js`), backtest on it, and calibrate before trusting
+the flow branch live.
+
+### Traded through a policy strategy
+
+Listed in `prop_portfolio_3m`, a value_area setup exits by the policy
+strategy's own trail (2R / 0.5R), not by the value-area target and time stop
+above, as in training.
 
 ### Debugging a setup
 

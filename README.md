@@ -135,6 +135,11 @@ strategies/
   vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
   ofi/STRATEGY.md            1m order-flow imbalance, paper
   ofi_absorption/STRATEGY.md 1m absorption reversal, paper
+  crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, paper
+  crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, paper
+  value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, paper
+  value_area_reentry/        volume profile 80% rule, paper
+  value_area_breakout/       acceptance beyond the value area, paper
   _template/STRATEGY.md      copy this to add a strategy
 ```
 

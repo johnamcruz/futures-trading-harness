@@ -5,7 +5,7 @@ version: 1
 status: paper
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
-sessions: ["09:30-15:00@America/New_York"]
+sessions: ["10:00-15:00@America/New_York"]
 signal: rules
 rules:
   long:
@@ -22,7 +22,7 @@ rules:
     - close[1] < prior_val
     - close[2] >= prior_val
     - volume > vol_sma(20)
-params:                       # the volume profile (scripts/lib/trading/volume-profile.js); edit here to tune
+params:                       # this strategy's volume profile, pinned so its backtests reproduce (defaults: PARAM_DEFAULTS in scripts/lib/trading/volume-profile.js)
   vpRows: 100                 # rows over the prior day's range ...
   vpRowSize: 0                # ... or rows of this many points instead (0.25 = one MNQ/MES tick, 1 = four ticks); 0 = use vpRows
   vpValueArea: 70             # % of the volume in the value area
@@ -84,7 +84,8 @@ Long (short is the mirror image):
 
 ### Entry, stop, exit
 
-- **Entry:** market on the close of the second bar above value.
+- **Entry:** at market as the second bar above value closes (the backtester
+  fills at the next bar's open plus a tick).
 - **Stop:** half an ATR(20) back inside value (below VAH). Back inside means
   the break failed.
 - **Exit:** hold the initial stop until +2R, then trail 0.5R behind the best

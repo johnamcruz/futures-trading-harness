@@ -27,7 +27,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped single-setup strategy, the algoTraderBot ports included, is `rules`; the prop strategies (`prop_*`) are `policy` (below) |
    | `connectors` | Optional data the strategy needs beyond bars, like a skill's tools: `order_flow` (aggressor buy/sell volume from the TopstepX market hub, for `ofi`/`delta`). Required when the rules use that data; the runner turns on every connector an active strategy declares |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
-   | `mtf` | `trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester and RL env skip it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design (`crt_1h`, `crt_4h`, `cisd_ote`, `ofi_absorption`); say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's |
+   | `mtf` | `trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester and RL env skip it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design (`crt_1h`, `crt_4h`, `cisd_ote`, `ofi_absorption`, `value_area_reentry`); say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's |
    | `regime_gate` | Optional `true`: the MCP gateway also refuses entries when the live regime (from that strategy's timeframe bars) doesn't fit |
    | `rules` | With `signal: rules`: `long:` and/or `short:` lists of conditions, all of which must hold on the closed bar |
    | `params` | Optional overrides of the snapshot and rules series (e.g. `orbMinutes: 30`); periods must be whole numbers |
@@ -47,7 +47,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    setup-expectancy, and set `status: active` only with the user's approval.
 7. Write mechanical triggers as `rules`, not code. Every item in a side
    must hold (AND); an item can be a group, `any: [...]` (one of them holds,
-   OR) or `all: [...]` (every one), nested two deep, so one strategy can take
+   OR) or `all: [...]` (every one), nested three deep, so one strategy can take
    two setups or two confirmations (see `value_area`: a POC rejection or
    breakout, confirmed by order flow or expansion). The scan shows each
    group's `parts`, so you can see which branch held. A condition is
@@ -58,7 +58,8 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    `ofi(n) delta(n) vol_sma(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
    `prior_high prior_low prior_close overnight_high overnight_low`, `rth_open`
-   (today's 09:30 ET open, until 16:00 ET), `minute_et`,
+   (today's 09:30 ET open, until 16:00 ET), `rth_high rth_low` (today's RTH
+   high and low so far), `minute_et`,
    `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector), and
    higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
    (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`

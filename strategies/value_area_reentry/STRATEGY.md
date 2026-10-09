@@ -10,24 +10,28 @@ signal: rules
 mtf: reversal                 # trades back into value against the open's move, so it may fade the prevailing trend
 rules:
   long:
-    - minute_et >= 576                  # the opening bar is not judged
+    - minute_et >= 573                  # from the second RTH bar (09:33 ET)
     - minute_et < 900                   # no new entries after 15:00 ET
     - rth_open < prior_val              # opened below value
     - close > prior_val                 # second close back inside...
     - close[1] > prior_val
-    - close[2] <= prior_val             # ...after a close outside: fires once per acceptance
+    - any:                              # ...completed on this bar: once per acceptance
+        - close[2] <= prior_val         # the close before those was outside
+        - minute_et <= 573              # or those are the first two bars of the session
     - close < prior_vah
-    - prior_vah - close >= 2 * close - 2 * lowest(10) + 0.5 * atr(20)   # the far side is at least 2R away
+    - prior_vah - close >= 2 * close - 2 * rth_low + 0.5 * atr(20)   # the far side is at least 2R away
   short:
-    - minute_et >= 576
+    - minute_et >= 573
     - minute_et < 900
     - rth_open > prior_vah              # opened above value
     - close < prior_vah
     - close[1] < prior_vah
-    - close[2] >= prior_vah
+    - any:
+        - close[2] >= prior_vah
+        - minute_et <= 573
     - close > prior_val
-    - close - prior_val >= 2 * highest(10) - 2 * close + 0.5 * atr(20)
-params:                       # the volume profile (scripts/lib/trading/volume-profile.js); edit here to tune
+    - close - prior_val >= 2 * rth_high - 2 * close + 0.5 * atr(20)
+params:                       # this strategy's volume profile, pinned so its backtests reproduce (defaults: PARAM_DEFAULTS in scripts/lib/trading/volume-profile.js)
   vpRows: 100                 # rows over the prior day's range ...
   vpRowSize: 0                # ... or rows of this many points instead (0.25 = one MNQ/MES tick, 1 = four ticks); 0 = use vpRows
   vpValueArea: 70             # % of the volume in the value area
@@ -36,8 +40,8 @@ params:                       # the volume profile (scripts/lib/trading/volume-p
   vpThreshold: 1              # ignore rows under this % of the POC's volume
 risk:
   stop:
-    long: close - lowest(10) + 0.25 * atr(20)     # below the excursion outside value
-    short: highest(10) - close + 0.25 * atr(20)
+    long: close - rth_low + 0.25 * atr(20)        # below the whole excursion outside value: today's RTH low
+    short: rth_high - close + 0.25 * atr(20)
   min_rr: 2
 exit:
   target:
@@ -62,7 +66,7 @@ trust the number; the backtest decides.
 
 ## When to Use
 
-- RTH, 09:36-15:00 ET, on MNQ, MES, MYM, M2K, after an open outside the prior
+- RTH, 09:33-15:00 ET, on MNQ, MES, MYM, M2K, after an open outside the prior
   day's value area (`rth_open < prior_val` or `rth_open > prior_vah`).
 - `scan` reports `value_area_reentry` with `candidate: true` and a direction
   (the `rules` block above).
@@ -95,25 +99,39 @@ Long (short is the mirror image):
 
 1. The session opened below the prior day's value area low (`rth_open < prior_val`).
 2. This bar and the one before closed back inside value, and the bar before
-   those closed outside (`close[2] <= prior_val`): acceptance, counted once.
+   those closed outside (`close[2] <= prior_val`), or they are the session's
+   first two bars (the 09:30 bar opened outside and closed inside):
+   acceptance, counted once.
 3. Price is still below the value area high.
 4. Room: the distance to the value area high is at least 2R, with R as the
    stop below.
 
 ### Entry, stop, target
 
-- **Entry:** market on the close of the second bar inside value.
-- **Stop:** below the lowest low of the last 10 bars (the excursion outside
-  value) by 0.25 × ATR(20). A new low there means value was rejected again.
+- **Entry:** at market as the second bar inside value closes (the
+  backtester fills at the next bar's open plus a tick, and skips the trade
+  if that fill leaves the target under 2R).
+- **Stop:** below today's RTH low so far (`rth_low`: the whole excursion
+  outside value) by 0.25 × ATR(20). A new low there means value was
+  rejected again.
 - **Target:** the prior day's value area high (a level; at least 2R by rule 4).
 - **Time stop:** 40 bars (2 hours) if neither fills.
 - **Management:** the POC is the halfway mark; taking a third off there and
   moving the stop to breakeven is a judgment call, not part of the
   backtested rule.
 
+### Traded through a policy strategy
+
+Listed in `prop_portfolio_3m`, a re-entry exits by the policy strategy's own
+trail (2R / 0.5R), not by the value-area target and time stop above, as in
+training.
+
 ### Skip when
 
 - A tier-1 release (CPI, NFP, FOMC) is due within 30 minutes.
+- An earlier 80% attempt today already failed (stopped out, or price fell
+  back outside value). The rules fire again on a second acceptance; the
+  first one is the setup, so take a second only with a reason in the plan.
 - The open is outside value and the market is building a new value area out
   there (several 30-minute periods trading outside, overlapping): that is
   acceptance outside, the opposite of this setup (see `value_area_breakout`).
@@ -126,7 +144,7 @@ MNQ long, 80% rule. Prior RTH day's profile: VAL 21480.00, POC 21522.00,
 VAH 21560.00 (levels rounded to the tick).
 RTH open 21462.50, below VAL. The 10:06 bar closes 21486.00 (inside), the
 10:09 bar closes 21490.25 (second close inside; the 10:03 bar closed 21478.75,
-outside). Lowest low of the last 10 bars 21458.75; ATR(20) 8.00.
+outside). Today's RTH low so far (rth_low) 21458.75; ATR(20) 8.00.
 
 Stop distance: 21490.25 - 21458.75 + 0.25 x 8.00 = 33.50 points = 134 ticks
 Stop: 21490.25 - 33.50 = 21456.75

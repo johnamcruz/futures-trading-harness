@@ -27,7 +27,7 @@ function bundle(action) {
   b[action] = 10;
   return {
     format: BUNDLE_FORMAT, version: BUNDLE_VERSION, name: `always_${action}`, strategy: 'prop_x', components: COMPONENTS, strategies: COMPONENTS,
-    account: 'topstep_50k', symbol: 'MNQ', timeframe: 3, sizing: null, contracts: 'micro', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, obsFields: FIELDS, actions: ACTIONS,
+    account: 'topstep_50k', symbol: 'MNQ', timeframe: 3, sizing: null, contracts: 'micro', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, obsFields: FIELDS, profile: require('../../scripts/lib/trading/volume-profile').DEFAULTS, actions: ACTIONS,
     network: { obsDim: DIM, actionN: 3, hidden: [], actor: { sizes, layers: [{ W: new Array(3 * DIM).fill(0), b }] }, normalizer: { mean: new Array(DIM).fill(0), var: new Array(DIM).fill(1), count: 1, clip: 5 } },
     gate: { minPassRate: 0.4, maxBlows: 0 }, validated: true, oos: { attempts: 20, passed: 10, blown: 0, passRate: 0.5, months: { '2026-01': { attempts: 10, blown: 0 }, '2026-02': { attempts: 10, blown: 0 } } },
   };

@@ -21,6 +21,7 @@ const { familyOf } = require('../trading/contracts');
 const { CONTRACT_MODES } = require('../trading/combine');
 const { createEnv } = require('./challenge-env');
 const { observationFields } = require('./observation');
+const { optionsFromParams } = require('../trading/volume-profile');
 
 const NAME = /^[a-z0-9][a-z0-9_.-]*$/;
 const ENGINE_KEYS = ['sessions', 'eodAt', 'slippageTicks', 'earlyCloseDates', 'closedDates', 'earlyCloseEodAt', 'window'];
@@ -79,6 +80,8 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
   const meta = {
     strategy: strategy.name, components: names, strategies: names, account: account.name, symbol: cfg.symbol, timeframe: bt.timeframe,
     sizing, contracts, exit: strategy.exit, obsFields: observationFields(names),
+    // The volume profile its observation reads (value_area, poc_dist), from the policy strategy's params.
+    profile: optionsFromParams(strategy.params || {}),
     // The simulator it was trained and validated in.
     engine: { gate: true, sessions: bt.sessions, eodAt: bt.eodAt, slippageTicks: bt.slippageTicks, earlyCloseDates: bt.earlyCloseDates, closedDates: bt.closedDates },
     data: markets.map(m => ({ symbol: m.symbol, file: path.basename(m.file), sha256: hashData ? fileHash(m.file) : null })),

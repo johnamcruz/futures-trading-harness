@@ -20,10 +20,8 @@ const PARAMS = {
   atrStop: 20, stopAtrMult: 0.5,
   // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
   crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
-  // Volume profile (scripts/lib/trading/volume-profile.js): 100 rows, 70% value area,
-  // nodes against 9% (peaks) / 7% (troughs) of the rows each side, ignoring rows under 1%.
-  // vpRowSize > 0: rows of that many points on a grid (levels land on prices; 0.25 = one MNQ/MES tick) instead of vpRows.
-  vpRows: 100, vpRowSize: 0, vpValueArea: 70, vpNodePct: 9, vpTroughPct: 7, vpThreshold: 1,
+  // Volume profile settings (vpRows, vpRowSize, ...): defaults and meaning in volume-profile.js.
+  ...vp.PARAM_DEFAULTS,
   vpLookback: 360, // bars in the snapshot's rolling profile
 };
 

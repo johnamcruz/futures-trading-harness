@@ -159,6 +159,8 @@ test('volume profile series: compile, read the profile module, and are causal', 
   }
   assert.throws(() => compileCondition('close > vp_poc(600)'), /length must be 1-500/);
   assert.throws(() => compileCondition('close > rth_poc'), /unknown series/);
+  assert.throws(() => compileCondition('close crosses_above prior_hvn_above'), /don't cross it/);
+  assert.doesNotThrow(() => compileCondition('close crosses_above prior_poc'));
   const get = seriesSource(nq, { ...PARAMS });
   const prior = profileSeries(nq, 'prior_rth');
   const roll = profileSeries(nq, 'rolling', { length: 120 });
@@ -175,10 +177,16 @@ test('volume profile series: compile, read the profile module, and are causal', 
   // So is the 18:00 ET restart of the session profile.
   const { sessionKey } = require('../../scripts/lib/trading/indicators');
   const open = nq.findIndex((b, i) => i > 0 && sessionKey(b.t, 18 * 60) !== sessionKey(nq[i - 1].t, 18 * 60));
-  assert.ok(open > 0 && get.resets('session_poc', open) && !get.resets('session_poc', open + 1));
+  assert.ok(open > 0 && get.resets('session_poc', open));
+  // A developing POC that moves between two bars is a reset (no cross through it); one that stays put is not.
+  const sp = get('session_poc');
+  const moved = sp.findIndex((v, i) => i > open && Number.isFinite(sp[i - 1]) && v !== sp[i - 1]);
+  const still = sp.findIndex((v, i) => i > open && Number.isFinite(sp[i - 1]) && v === sp[i - 1]);
+  assert.ok(moved > 0 && get.resets('session_poc', moved));
+  assert.ok(still > 0 && !get.resets('session_poc', still));
 });
 
-test('any/all groups: OR of branches, nested two deep, with each part in the result', () => {
+test('any/all groups: OR of branches, nested three deep, with each part in the result', () => {
   const { compiled, errors } = compileRules({
     long: [
       'close > 0',
@@ -195,11 +203,14 @@ test('any/all groups: OR of branches, nested two deep, with each part in the res
   assert.deepStrictEqual(r.long[1].parts[0].parts.map(x => x.ok), [false, false]); // these bars open at their close
   // Neither branch: the group fails, and so does the side.
   assert.strictEqual(evaluateRules(compiled, bars([100, 101, 102, 102.5]), { ...PARAMS }).direction, null);
+  // A group that fails with a part that has no value yet is marked missing, like a single condition.
+  const m = evaluateRules(compileRules({ long: [{ any: ['close > prior_vah', 'close < prior_val'] }] }).compiled, bars([100, 101, 102]), { ...PARAMS });
+  assert.strictEqual(m.long[0].missing, true);
   for (const [rules, msg] of [
     [{ long: [{ any: ['close > 1'] }] }, /2 to 8 items/],
     [{ long: [{ either: ['close > 1', 'close > 2'] }] }, /a condition, or a group/],
     [{ long: [{ any: ['close > 1', 'close > 2'], all: ['close > 1', 'close > 2'] }] }, /a condition, or a group/],
-    [{ long: [{ any: [{ all: [{ any: ['close > 1', 'close > 2'] }, 'close > 3'] }, 'close > 4'] }] }, /nest at most 2 deep/],
+    [{ long: [{ any: [{ all: [{ any: [{ all: ['close > 1', 'close > 2'] }, 'close > 2'] }, 'close > 3'] }, 'close > 4'] }] }, /nest at most 3 deep/],
     [{ long: [{ any: ['close > 1', 'close > banana'] }] }, /unknown series/],
     [{ long: Array.from({ length: 4 }, () => ({ any: Array.from({ length: 8 }, (_, k) => `close > ${k}`) })) }, /at most 24 conditions/],
   ]) assert.match(compileRules(rules).errors.join('; '), msg);

@@ -17,6 +17,7 @@ const os = require('os');
 const path = require('path');
 const { loadPolicy } = require('./policy-net');
 const { observationFields } = require('./observation');
+const { optionsFromParams } = require('../trading/volume-profile');
 const { familyOf } = require('../trading/contracts');
 const { timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
@@ -93,6 +94,9 @@ function bundleMismatch(meta, strategy, symbolRoot = null) {
   if (strategy.timeframe && meta.timeframe && timeframeMs(strategy.timeframe) !== meta.timeframe * 60000) return `was trained on ${meta.timeframe}m bars, not ${strategy.timeframe}`;
   if (sizingOf(meta.sizing) !== sizingOf(strategy.sizing)) return `was trained with sizing ${sizingOf(meta.sizing)}, not the strategy's ${sizingOf(strategy.sizing)}`;
   if ((meta.contracts || 'auto') !== (strategy.contracts || 'auto')) return `was trained with contracts: ${meta.contracts || 'auto'}, not ${strategy.contracts || 'auto'}`;
+  // Its observation reads the volume profile with the policy strategy's settings: edited ones are inputs it never saw.
+  const profile = JSON.stringify(optionsFromParams(strategy.params || {}));
+  if (JSON.stringify(meta.profile || null) !== profile) return `was trained with volume profile ${JSON.stringify(meta.profile || null)}, not the strategy's ${profile} (params vp*)`;
   // The ratchet decides when the policy is asked in a trade: an edited exit is a state it never saw.
   if (JSON.stringify(exitPlan({ exit: meta.exit })) !== JSON.stringify(exitPlan(strategy))) return `was trained with exit ${JSON.stringify(meta.exit || null)}, not the strategy's ${JSON.stringify(strategy.exit || null)}`;
   return null;

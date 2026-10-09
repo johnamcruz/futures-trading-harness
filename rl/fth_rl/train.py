@@ -356,6 +356,7 @@ def build_bundle(name, cfg, info, best, seeds_report, oos, baseline, fails, extr
         "sizing": info["sizing"],
         "data": info["data"],
         "obsFields": info["obsFields"],
+        "profile": info.get("profile"),
         "actions": info["actions"],
         "network": best["network"],
         "gate": {"minPassRate": max(MIN_PASS_RATE, cfg["min_pass_rate"]), "maxBlows": 0, "minWinRate": cfg["min_win_rate"]},

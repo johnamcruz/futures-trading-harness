@@ -26,7 +26,7 @@ source: docs/RL-DESIGN.md; trained by rl/ (sweep -> retrain -> ship, rl/configs/
 
 # Strategy: Prop Portfolio 3m (`setup:prop_portfolio_3m`)
 
-A prop-challenge strategy. It trades the setups of the nine 3-minute rules
+A prop-challenge strategy. It trades the setups of the twelve 3-minute rules
 strategies on the Topstep 100K combine, and a trained policy decides what to
 do with each one. Without a `policy` bundle it takes every setup at the
 account's size budget (the rules-only baseline the policy is measured
@@ -41,7 +41,7 @@ against).
 
 ## How It Works
 
-1. On every closed 3-minute bar the runner scans the nine strategies in the
+1. On every closed 3-minute bar the runner scans the twelve strategies in the
    order listed. The first one with a setup (its own rules and stop) is this
    strategy's setup. The strategies don't trade on their own while the
    attempt runs.

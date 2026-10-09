@@ -16,7 +16,7 @@
  * Every condition in a side must hold on the last closed bar (AND). A side
  * whose conditions all hold fires that direction; if both fire, nothing fires.
  * An item can also be a group: `any: [...]` holds when one of its items does
- * (OR), `all: [...]` when every one does; groups nest two deep:
+ * (OR), `all: [...]` when every one does; groups nest three deep:
  *
  *       - any:                                  # a setup: rejection or breakout
  *           - all: [low <= prior_poc, close > prior_poc, close[1] > prior_poc]
@@ -42,6 +42,7 @@
  *   vwap_session vwap_rth or_high or_low swing_high swing_low
  *   prior_high prior_low prior_close   last completed RTH day (9:30-16:00 ET)
  *   rth_open    today's 09:30 ET open, from that bar until 16:00 ET
+ *   rth_high rth_low   today's RTH high and low so far, this bar included
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
@@ -107,12 +108,12 @@ const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
-  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'minute_et',
+  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'minute_et',
   'cisd_ote_dir', 'cisd_ote_risk', ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
 const MAX_GROUP_ITEMS = 8;
-const MAX_GROUP_DEPTH = 2;
+const MAX_GROUP_DEPTH = 3;
 const MAX_CONDITIONS_PER_SIDE = 24;
 
 function tokenize(text) {
@@ -204,7 +205,11 @@ function compileCondition(text) {
     const opIdx = tokens.findIndex(t => t.type === 'op');
     if (opIdx === -1) throw new Error(`needs a comparison (${OPS.join(', ')})`);
     if (tokens.slice(opIdx + 1).some(t => t.type === 'op')) throw new Error('only one comparison per rule');
-    return { left: parseExpr(tokens.slice(0, opIdx)), op: tokens[opIdx].value, right: parseExpr(tokens.slice(opIdx + 1)), text };
+    const cond = { left: parseExpr(tokens.slice(0, opIdx)), op: tokens[opIdx].value, right: parseExpr(tokens.slice(opIdx + 1)), text };
+    // The nearest node above/below the close moves whenever price passes one: a cross of it is meaningless.
+    const node = [...cond.left, ...cond.right].flatMap(t => t.factors).find(f => f.kind === 'series' && /(hvn|lvn)_(above|below)/.test(f.key));
+    if (node && cond.op.startsWith('crosses_')) throw new Error(`${node.key} moves as price passes a node; compare it (>, <), don't cross it`);
+    return cond;
   } catch (err) {
     throw new Error(`"${text}": ${err.message}`, { cause: err });
   }
@@ -266,6 +271,7 @@ function causalLevels(bars) {
   const out = {
     prior_high: new Array(n).fill(NaN), prior_low: new Array(n).fill(NaN), prior_close: new Array(n).fill(NaN),
     overnight_high: new Array(n).fill(NaN), overnight_low: new Array(n).fill(NaN), rth_open: new Array(n).fill(NaN),
+    rth_high: new Array(n).fill(NaN), rth_low: new Array(n).fill(NaN),
   };
   let rthDay = null; // RTH day in progress
   let rth = null;
@@ -288,7 +294,7 @@ function causalLevels(bars) {
       // Complete only when the bars before it were seen (not cut off mid-session).
       if (!rth) { rth = { open: b.o, high: b.h, low: b.l, close: b.c, complete: i > 0 }; rthDay = day; }
       rth.high = Math.max(rth.high, b.h); rth.low = Math.min(rth.low, b.l); rth.close = b.c;
-      if (rth.complete) out.rth_open[i] = rth.open;
+      if (rth.complete) { out.rth_open[i] = rth.open; out.rth_high[i] = rth.high; out.rth_low[i] = rth.low; }
     } else if (!(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
       onHigh = Number.isNaN(onHigh) ? b.h : Math.max(onHigh, b.h);
       onLow = Number.isNaN(onLow) ? b.l : Math.min(onLow, b.l);
@@ -388,7 +394,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
       case 'swing_high': return ind.swings(bars, params.swingK).high;
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
-      case 'overnight_high': case 'overnight_low': case 'rth_open': return level(key);
+      case 'overnight_high': case 'overnight_low': case 'rth_open': case 'rth_high': case 'rth_low': return level(key);
       case 'cisd_ote_dir': case 'cisd_ote_risk': cisdSeries(); return cache.get(key);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
@@ -451,7 +457,13 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
   get.resets = (key, i) => {
     if (i < 1) return false;
-    if (key === 'vwap_session' || key.startsWith('session_')) return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    // A developing profile level (session_poc, vp_vah(n), ...) that moves jumps past price: a cross
+    // counts only through a level that stayed put.
+    if (/^session_(poc|vah|val)$/.test(key) || /^vp_(poc|vah|val)\(\d+\)$/.test(key)) {
+      const s = get(key);
+      return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN) || !(s[i - 1] === s[i]);
+    }
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
     if (h && HTF.has(h[1]) && !h[1].startsWith('crt_') && h[1] !== 'mtf_bias') { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
@@ -516,7 +528,8 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
     if (c.group) {
       const parts = c.items.map(result);
       const ok = c.group === 'any' ? parts.some(x => x.ok) : parts.every(x => x.ok);
-      return { rule: c.text, ok, parts };
+      // Failing with a part that has no value yet: say so, as for a single condition.
+      return !ok && parts.some(x => x.missing) ? { rule: c.text, ok, missing: true, parts } : { rule: c.text, ok, parts };
     }
     const ok = holds(c, get, i);
     return ok || !missing(c) ? { rule: c.text, ok } : { rule: c.text, ok, missing: true };

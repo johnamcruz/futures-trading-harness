@@ -43,8 +43,12 @@ the last bar closed); never paste a long `get_bars` reply into a file.
    below (prior-day/overnight highs/lows, `equalHighs` / `equalLows`, round
    numbers), recent sweeps (wick through, close back inside), and
    `openFvgs` on 3m/15m.
-6. Approximate value area for the session from bar volume (state that it's an
-   approximation).
+6. Volume profile (snapshot `volumeProfile`, computed; never estimate it by
+   hand): the prior RTH day's POC, VAH and VAL (`priorRth`), where price is
+   (`price`: above, inside, or below value), the developing session's
+   (`session`), and the nearest high and low volume nodes above and below
+   (`hvnAbove`, `lvnBelow`, ...). Round levels to the tick. Say it is
+   bar-based.
 
 ## Output (keep it under 250 words)
 
@@ -55,6 +59,7 @@ Participation: <rel-vol numbers>, climax: yes/no
 Liquidity above: <price - type>, nearest first
 Liquidity below: <price - type>, nearest first
 Recent sweeps / FVGs: <price, time, status>
+Value: prior POC <p>, VA <val>-<vah>, price <above|inside|below>; session POC <p>; next HVN/LVN <prices>
 Implication: <which direction has room, which levels are targets or traps>
 ```
 

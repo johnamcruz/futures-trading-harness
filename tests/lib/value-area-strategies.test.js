@@ -130,3 +130,51 @@ test('value_area: a POC breakout confirmed by range expansion on volume fires sh
   bars[bars.length - 1] = { ...bars.at(-1), v: 120 };
   assert.strictEqual(fires(STRATS.value_area, bars).length, 0);
 });
+
+test('value_area: price sitting on the POC fires one rejection, not one per bar', () => {
+  const { bars, p } = history(0);
+  const poc = p.poc;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc + 4, poc + 4)));
+  // 10:00 closes above the POC, then six bars in a row dip to it and close near their highs.
+  day2(bars, poc + 4, 10, [{ o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3 }, ...Array.from({ length: 6 }, () => ({ o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4 }))]);
+  const f = fires(STRATS.value_area, bars);
+  assert.ok(f.length >= 1 && f.length <= 3, `fired on ${f.length} of 6 bars`);
+  assert.strictEqual(f[0].i, bars.length - 6, 'the first rejection');
+  for (let k = 1; k < f.length; k += 1) assert.ok(f[k].i - f[k - 1].i >= 2, 'never on two bars in a row');
+});
+
+test('value_area_reentry: the opening bar closing back inside counts, and the stop is below the whole excursion', () => {
+  const { bars, p } = history(0);
+  const v = p.val;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, v - 3, v - 3)));
+  // 09:30 opens at VAL - 2 and closes inside; 09:33 closes inside too: the acceptance.
+  const open = bars.slice();
+  open.push(bar(DAY2, v - 2, v + 1), bar(DAY2 + S, v + 1, v + 2));
+  const f = fires(STRATS.value_area_reentry, open);
+  assert.strictEqual(f.length, 1);
+  assert.strictEqual(open[f[0].i].t, new Date(DAY2 + S).toISOString(), '09:33 ET');
+  // A long excursion: the low (VAL - 7) comes 15 bars before the acceptance; the stop goes below it.
+  const long = bars.slice();
+  long.push(bar(DAY2, v - 2, v - 6));
+  for (let k = 1; k < 15; k += 1) long.push(bar(DAY2 + k * S, v - 3, v - 2.5));
+  long.push(bar(DAY2 + 15 * S, v - 2.5, v + 1), bar(DAY2 + 16 * S, v + 1, v + 2));
+  const g = fires(STRATS.value_area_reentry, long);
+  assert.strictEqual(g.length, 1);
+  const close = long[g[0].i].c;
+  assert.ok(g[0].r.stopDistance > close - (v - 6.5), `stop ${close - g[0].r.stopDistance} must be under the excursion low ${v - 6.5}`);
+});
+
+test('backtest: a level target the fill leaves under min_rr is not traded', () => {
+  const { runEngine } = require('../../scripts/lib/backtest/engine');
+  const { bars, p } = history(0);
+  const v = p.val;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, v - 3, v - 3)));
+  bars.push(bar(DAY2, v - 2, v + 1), bar(DAY2 + S, v + 1, v + 2));
+  const s = STRATS.value_area_reentry;
+  const r = fires(s, bars)[0].r;
+  // The next bar opens so far up that the value area high is under 2R from the fill.
+  const gapTo = p.vah - 1.5 * r.stopDistance;
+  const run = extra => runEngine([{ symbol: 'MNQ', bars: [...bars, ...extra], tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, window: 100 }).trades; // a short warm-up: these bars start a day before
+  assert.strictEqual(run([bar(DAY2 + 2 * S, gapTo, gapTo)]).length, 0, 'gapped under 2R: skipped');
+  assert.strictEqual(run([bar(DAY2 + 2 * S, v + 2, v + 2.5), bar(DAY2 + 3 * S, v + 2.5, p.vah + 1)]).length, 1, 'a normal fill trades');
+});
