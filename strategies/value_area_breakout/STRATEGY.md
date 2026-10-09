@@ -22,6 +22,13 @@ rules:
     - close[1] < prior_val
     - close[2] >= prior_val
     - volume > vol_sma(20)
+params:                       # the volume profile (scripts/lib/trading/volume-profile.js); edit here to tune
+  vpRows: 100                 # rows over the prior day's range ...
+  vpRowSize: 0                # ... or rows of this many points instead (0.25 = one MNQ/MES tick, 1 = four ticks); 0 = use vpRows
+  vpValueArea: 70             # % of the volume in the value area
+  vpNodePct: 9                # a high volume node beats this % of the rows on each side
+  vpTroughPct: 7              # a low volume node is under this % of the rows on each side
+  vpThreshold: 1              # ignore rows under this % of the POC's volume
 risk:
   stop:
     long: close - prior_vah + 0.5 * atr(20)       # back inside value by half an ATR: the breakout failed

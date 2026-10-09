@@ -14,9 +14,9 @@ const { roundHalfEven } = require('../backtest/engine');
 const state = require('../trading/prop-state');
 
 /** The bars as the env sees them: normalized, with the policy's market features. */
-function liveBook(rawBars, spec) {
+function liveBook(rawBars, spec, params = {}) {
   const bars = ind.normalizeBars(rawBars);
-  return { bars, tickSize: spec.tickSize, tickValue: spec.tickValue, feats: marketFeatures(bars) };
+  return { bars, tickSize: spec.tickSize, tickValue: spec.tickValue, feats: marketFeatures(bars, params) };
 }
 
 /**
@@ -27,7 +27,7 @@ function liveBook(rawBars, spec) {
  * or null to take every setup as sized. The order gate checks the verdict.
  */
 function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date() }) {
-  const book = liveBook(rawBars, spec);
+  const book = liveBook(rawBars, spec, strategy.params);
   const i = book.bars.length - 1;
   const tf = timeframeMs(strategy.timeframe) || 60000;
   const closeAt = new Date(Date.parse(book.bars[i].t) + tf);
@@ -61,7 +61,7 @@ function decideSetup({ bundle, account, cs, strategy, component, symbol, contrac
  * (price), size, contract, component, peakR, troughR, barsHeld }.
  */
 function decidePosition({ bundle, account, cs, strategy, rawBars, spec, pos }) {
-  const book = liveBook(rawBars, spec);
+  const book = liveBook(rawBars, spec, strategy.params);
   const i = book.bars.length - 1;
   const closeAt = new Date(Date.parse(book.bars[i].t) + (timeframeMs(strategy.timeframe) || 60000));
   const leg = state.legOf(account, pos.contract);

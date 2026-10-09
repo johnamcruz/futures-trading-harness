@@ -20,7 +20,8 @@ test('volume is spread over the rows a bar covers, in proportion to the overlap,
   assert.deepStrictEqual(p.rows.map(r => r.volume), [100, 200, 100, 100]); // 101-102 gets the second bar's 100
   assert.deepStrictEqual(p.rows.map(r => r.up), [100, 100, 100, 100]); // only the first bar closed up
   assert.strictEqual(p.total, 500);
-  assert.strictEqual(p.poc, 101.5);
+  assert.strictEqual(p.poc, 101, 'on a grid, the row\'s grid price');
+  assert.strictEqual(buildProfile(bars, 0, 1, { rows: 4 }).poc, 101.5, 'with rows, the row\'s middle');
 });
 
 test('a bar with no range puts all its volume in its row (the source divides by zero there)', () => {
@@ -32,7 +33,7 @@ test('a bar with no range puts all its volume in its row (the source divides by 
 
 test('POC, then the value area grows toward the bigger neighbour (up on a tie) until it holds 70%', () => {
   const p = buildProfile(rowBars([5, 10, 20, 40, 20, 3, 2]), 0, 6, { rowSize: 1 });
-  assert.strictEqual(p.poc, 103.5);
+  assert.strictEqual(p.poc, 103);
   // 40, then +20 above (tie goes up), +20 below = 80 of 100: VAL 102, VAH 105.
   assert.strictEqual(p.val, 102);
   assert.strictEqual(p.vah, 105);
@@ -48,13 +49,13 @@ test('peaks and troughs: above (below) each of the N rows on both sides, ignorin
   const vols = [1, 5, 9, 5, 1, 2, 8, 30, 8, 2, 0.1, 4];
   const p = buildProfile(rowBars(vols), 0, vols.length - 1, { rowSize: 1, nodePct: 2 / 12 + 1e-9, troughPct: 1 / 12 + 1e-9, threshold: 0.01 });
   // 9 and 30 beat two rows each side; the top row's 4 too (beyond the profile counts as 0).
-  assert.deepStrictEqual(p.hvn, [102.5, 107.5, 111.5]);
+  assert.deepStrictEqual(p.hvn, [102, 107, 111]);
   // 1 at row 4 is a trough, and the bottom row's 1 (beyond counts as the POC's 30);
   // 0.1 at row 10 is under 1% of the POC's volume, so ignored.
-  assert.deepStrictEqual(p.lvn, [100.5, 104.5]);
-  assert.strictEqual(nearest(p.hvn, 104, 1), 107.5);
-  assert.strictEqual(nearest(p.hvn, 104, -1), 102.5);
-  assert.ok(Number.isNaN(nearest(p.lvn, 104.5, 1)));
+  assert.deepStrictEqual(p.lvn, [100, 104]);
+  assert.strictEqual(nearest(p.hvn, 104, 1), 107);
+  assert.strictEqual(nearest(p.hvn, 104, -1), 102);
+  assert.ok(Number.isNaN(nearest(p.lvn, 104, 1)));
 });
 
 test('no look-ahead: every window gives bar i the same levels from bars 0..i as from the whole series', () => {
@@ -108,7 +109,7 @@ test('options from strategy params, and the summary for a snapshot', () => {
   const p = buildProfile(rowBars([5, 10, 20, 40, 20, 3, 2]), 0, 6, { rowSize: 1 });
   const d = describe(p, 106.2, 2, x => Math.round(x * 100) / 100);
   assert.strictEqual(d.price, 'above value');
-  assert.strictEqual(d.fromPocAtr, 1.35);
+  assert.strictEqual(d.fromPocAtr, 1.6); // (106.2 - POC 103) / 2
   assert.strictEqual(describe(p, 103, 2).price, 'inside value');
   assert.strictEqual(describe(null, 1, 1), null);
 });

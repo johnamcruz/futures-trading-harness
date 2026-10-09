@@ -77,7 +77,7 @@ const PARAM_RULES = {
   stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
   crtSweepBars: 'int', crtShiftBars: 'int', crtMaxDepth: 'pos', crtMinRangeAtr: 'nonneg', crtBufferAtr: 'nonneg', crtMinRR: 'pos',
   // Volume profile (prior_*, session_*, vp_*(n) series): rows or a row size in points, value area %, node detection %.
-  vpRows: 'int', vpLookback: 'int', vpRowSize: 'pos', vpValueArea: 'pos', vpNodePct: 'nonneg', vpTroughPct: 'nonneg', vpThreshold: 'nonneg',
+  vpRows: 'int', vpLookback: 'int', vpRowSize: 'nonneg', vpValueArea: 'pos', vpNodePct: 'nonneg', vpTroughPct: 'nonneg', vpThreshold: 'nonneg',
 };
 
 function editDistance(a, b) {

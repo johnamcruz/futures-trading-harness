@@ -9,7 +9,8 @@
  * Profile with Node Detection", re-implemented here, not copied):
  *   rows        the window's low..high split into `rows` equal rows (or rows of
  *               `rowSize` points on a grid anchored at 0, so levels sit on prices;
- *               a high on a row's lower edge belongs to the row below)
+ *               a high on a row's lower edge belongs to the row below; there a row's
+ *               level, the POC's and the nodes', is its grid price)
  *   volume      each bar's volume spread over the rows its low..high covers, in
  *               proportion to the overlap; up volume is a bar closing above its open
  *   POC         the row with the most volume (the lowest such row on a tie)
@@ -49,7 +50,7 @@ const DEFAULTS = { rows: 100, rowSize: 0, valueArea: 0.7, nodePct: 0.09, troughP
 function optionsFromParams(p = {}) {
   const o = { ...DEFAULTS };
   if (Number.isFinite(p.vpRows)) o.rows = p.vpRows;
-  if (Number.isFinite(p.vpRowSize)) o.rowSize = p.vpRowSize;
+  if (Number.isFinite(p.vpRowSize)) o.rowSize = p.vpRowSize; // 0 = use rows
   if (Number.isFinite(p.vpValueArea)) o.valueArea = p.vpValueArea / 100;
   if (Number.isFinite(p.vpNodePct)) o.nodePct = p.vpNodePct / 100;
   if (Number.isFinite(p.vpTroughPct)) o.troughPct = p.vpTroughPct / 100;
@@ -75,7 +76,8 @@ function nodes(vol, n, peak, threshold) {
 /**
  * The profile of bars[from..to] (inclusive), or null (no range or no volume).
  * { from, to, low, high, step, rows: [{ low, high, volume, up }], poc, vah, val,
- *   pocVolume, total, hvn: [price], lvn: [price] } (node prices are row middles).
+ *   pocVolume, total, hvn: [price], lvn: [price] } (POC and node prices are row
+ *   middles, or grid prices with rowSize).
  */
 function buildProfile(bars, from, to, options = {}) {
   const o = { ...DEFAULTS, ...options };
@@ -121,7 +123,8 @@ function buildProfile(bars, from, to, options = {}) {
     if (above === 0 && below === 0) break;
     if (above >= below) { inside += above; vah += 1; } else { inside += below; val -= 1; }
   }
-  const mid = k => low + (k + 0.5) * step;
+  // A row's level: its middle, or on a price grid (rowSize) its grid price, so levels are tradable prices.
+  const mid = k => (o.rowSize > 0 ? low + k * step : low + (k + 0.5) * step);
   return {
     from, to, low, high: low + n * step, step,
     rows: vol.map((volume, k) => ({ low: low + k * step, high: low + (k + 1) * step, volume, up: up[k] })),

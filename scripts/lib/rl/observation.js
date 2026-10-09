@@ -26,7 +26,7 @@
 const { sessionMinute } = require('../trading/clock');
 const ind = require('../trading/indicators');
 const { ruleSeries } = require('../trading/mtf');
-const { profileSeries } = require('../trading/volume-profile');
+const { profileSeries, optionsFromParams } = require('../trading/volume-profile');
 
 const RECENT_BARS = 10;
 const RTH_OPEN = 9 * 60 + 30;
@@ -67,10 +67,11 @@ const OBS_DIM = OBS_FIELDS.length;
 /**
  * The market features the observation reads, for a whole series (each value at
  * bar i from bars 0..i): ATR(20), ATR(100), ADX(14), the trend rule's
- * frames, and the RTH and session VWAPs. The engine (training and backtests)
- * and the live runner both build them here.
+ * frames, the RTH and session VWAPs, and the prior RTH day's volume profile,
+ * set by `params` (the policy strategy's: vpRows, vpRowSize, ...). The engine
+ * (training and backtests) and the live runner both build them here.
  */
-function marketFeatures(bars) {
+function marketFeatures(bars, params = {}) {
   return {
     atr20: ind.atr(bars, 20),
     atr100: ind.atr(bars, 100),
@@ -78,7 +79,8 @@ function marketFeatures(bars) {
     mtf: ruleSeries(bars),
     vwapRth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE),
     vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN),
-    profile: profileSeries(bars, 'prior_rth'),
+    // The policy strategy's params set the profile (vpRows, vpRowSize, ...), as for its strategies' rules.
+    profile: profileSeries(bars, 'prior_rth', { options: optionsFromParams(params || {}) }),
   };
 }
 

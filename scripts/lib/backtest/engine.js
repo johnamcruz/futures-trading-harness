@@ -155,7 +155,7 @@ function prepare(markets, strategies, opts = {}) {
       return memo.get(i);
     };
     // The policy's market features (rl/observation.js), the same function live uses.
-    const feats = marketFeatures(bars);
+    const feats = marketFeatures(bars, o.prop && o.prop.strategy ? o.prop.strategy.params : {});
     return { ...m, bars, ev, usable, setupAt, feats };
   });
   return { books, skipped };
