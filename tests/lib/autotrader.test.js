@@ -394,7 +394,7 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   // A failed policy screen: no verdict, no entry.
   const scan = [{ name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } }];
   // A failed screen is named once (in the unavailable line); the fired line only marks them as not entries.
-  const failedScreen = p.trade([{ symbol: 'MNQ', bar, scan, notEntries: ['orb'] }], { unavailable: ['MNQ policy screen (bundle missing): no verdict, so no entry this bar'] });
+  const failedScreen = p.trade([{ symbol: 'MNQ', bar, scan, notEntries: ['orb'] }], { unavailable: ['MNQ policy screen (bundle missing): no verdict, so no entry for orb this bar'] });
   assert.match(failedScreen, /orb long \(its policy has no verdict this bar: not an entry\)\./);
   assert.strictEqual(failedScreen.match(/no verdict, so no entry/g).length, 1, 'the reason, once');
   assert.doesNotMatch(failedScreen, /The policy screen failed this bar/);

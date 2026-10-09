@@ -794,7 +794,7 @@ function createRunner(deps) {
             if (x.dayError) unavailable.push(`${x.symbol} day context (${x.dayError})`);
             else if (dayContext && !x.bar.day) unavailable.push(`${x.symbol} day context (the bars don't hold today's open or a whole prior day)`);
             if (x.scanError && !manageOnly) unavailable.push(`${x.symbol} strategy scan (${x.scanError}): what fired is unknown`);
-            if (x.screenError) unavailable.push(`${x.symbol} policy screen (${x.screenError}): no verdict, so no entry this bar`);
+            if (x.screenError) unavailable.push(`${x.symbol} policy screen (${x.screenError}): no verdict, so no entry for ${(x.notEntries || []).join(', ') || 'its strategies'} this bar`);
           }
           // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
           let tradeObjs = [];

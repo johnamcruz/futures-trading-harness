@@ -762,7 +762,7 @@ test('under a policy, a failed account check means no verdict: named, and the co
   const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp(), until: et(10, 10), trigger: 'signal', accountFails: true });
   const p = r.prompts.find(x => /trade-session/.test(x));
   assert.ok(p, 'the cycle still runs, to manage anything open');
-  assert.match(p, /MNQ policy screen \(account check failed: HTTP 502\): no verdict, so no entry this bar/);
+  assert.match(p, /MNQ policy screen \(account check failed: HTTP 502\): no verdict, so no entry for trendy this bar/);
   assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
   assert.doesNotMatch(p, /These are .*'s components/);
   assert.ok(r.logs.some(l => /^ERROR MNQ: account check failed \(HTTP 502\)/.test(l)), r.logs.filter(l => /^ERROR/.test(l)).join(' / '));
