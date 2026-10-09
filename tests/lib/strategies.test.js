@@ -117,7 +117,7 @@ test('CLI list, show, validate, and errors', () => {
 test('a rules strategy written only in Markdown validates and fires in scan', () => {
   const dir = tmpDir();
   writeStrategy(dir, 'md_breakout', [
-    'name: md_breakout', 'description: Markdown-only breakout test strategy: close crosses above the prior 5-bar high.',
+    'name: md_breakout', 'description: Markdown-only breakout test strategy, long when close crosses above the prior 5-bar high.',
     'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules',
     'rules:', '  long:', '    - close crosses_above highest(5)[1]', '    - volume > 0',
     'risk:', '  stop: atr:1', '  min_rr: 2',

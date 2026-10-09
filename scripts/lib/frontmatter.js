@@ -77,6 +77,11 @@ function parseScalar(raw, lineNo) {
     if (!(text.endsWith("'") && text.length >= 2)) throw new Error(`line ${lineNo}: unterminated or trailing text after a quoted value`);
     return text.slice(1, -1).replace(/''/g, "'");
   }
+  // As YAML: an unquoted value can't contain ": " (or end in ":"), which Claude Code's and Qwen's
+  // parsers read as a nested mapping and reject. Quote the value or rephrase it.
+  if (/:(\s|$)/.test(text)) {
+    throw new Error(`line ${lineNo}: an unquoted value can't contain ": " (YAML reads it as a mapping); quote the whole value or rephrase it: "${text.slice(0, 60)}"`);
+  }
   if (text === 'true') return true;
   if (text === 'false') return false;
   if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);

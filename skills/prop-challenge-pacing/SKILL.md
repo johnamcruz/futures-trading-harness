@@ -1,6 +1,6 @@
 ---
 name: prop-challenge-pacing
-description: Pace a Topstep-style prop evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md, scripts/combine.js) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal: policy) is trading.
+description: Pace a Topstep-style prop evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md, scripts/combine.js) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
 ---
 
 # Prop Challenge Pacing

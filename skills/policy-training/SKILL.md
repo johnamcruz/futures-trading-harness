@@ -1,6 +1,6 @@
 ---
 name: policy-training
-description: Train, sweep, validate, and ship the policy of a policy strategy (signal: policy) - MaskablePPO in Python on the harness's own backtester, Optuna sweep -> retrain -> ship from JSON config families - that learns which of its strategies' setups to take, at what size in micros or minis, and when to bank a trade past the ratchet. Use when the user wants a strategy to pass combines with a trained policy, wants a hyperparameter sweep, or asks how a policy was validated.
+description: Train, sweep, validate, and ship the policy of a policy strategy (a strategy with signal policy) - MaskablePPO in Python on the harness's own backtester, Optuna sweep -> retrain -> ship from JSON config families - that learns which of its strategies' setups to take, at what size in micros or minis, and when to bank a trade past the ratchet. Use when the user wants a strategy to pass combines with a trained policy, wants a hyperparameter sweep, or asks how a policy was validated.
 ---
 
 # Policy Training
