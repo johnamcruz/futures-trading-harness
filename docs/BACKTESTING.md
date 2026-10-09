@@ -31,7 +31,7 @@ node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-0
 cp mcp-configs/backtest.example.json backtest.json
 node scripts/backtest.js --config backtest.json
 
-# Optional: download 1-minute bars from ProjectX to a file first
+# Optional: download 1-minute bars from the broker (through the broker adapter) to a file first
 node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
 ```
 
@@ -46,7 +46,7 @@ Bars come from files:
   - data pages v1 and v2
   - timestamps in ms, µs, ns, or INT96
 - **Excel** (`.xlsx`, `.xlsm`): the first sheet, or `sheet` in the config.
-- **CSV** and **JSON** (projectx `get_bars` output).
+- **CSV** and **JSON** (the broker's `get_bars` output).
 
 The table needs a header with a time column (`time`, `timestamp`,
 `datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
@@ -57,11 +57,11 @@ comes as `buy_volume` and `sell_volume` columns (aggressive buys and sells;
 bar without them falls back to the bar-shape estimate. Any letter case
 works.
 
-TopstepX keeps no trade history, so record order flow first and export it
-with the bars:
+Live order flow is not part of the broker MCP interface, so the harness
+doesn't record it. Flow files recorded earlier (`<FTH_HOME>/flow/`) can be
+exported with the bars:
 
 ```bash
-node scripts/orderflow.js record --symbols MNQ        # or let the runner record while it trades
 node scripts/orderflow.js status
 node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
 node scripts/backtest.js --data data/MNQ-1m-flow.csv --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
@@ -100,9 +100,9 @@ enforces:
   - entry hours (`FTH_ENTRY_HOURS`) and no-entry windows
   - the loss-streak cooldown
   - the daily losing-trade count (both count losses before fees, from
-    P&L as ProjectX reports it; a scratch neither adds to nor ends a streak)
+    P&L as the broker reports it; a scratch neither adds to nor ends a streak)
   - the daily entry cap
-- projectx-mcp's daily dollar loss limit (`maxDailyLoss`).
+- The broker MCP server's daily dollar loss limit (`maxDailyLoss`).
 
 **`gate: false`** (`--no-gate`) drops those limits (not the market session).
 Use it to compare with algoTraderBot.

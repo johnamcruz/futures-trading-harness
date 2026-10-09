@@ -13,7 +13,7 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 ## How It Works
 
 All times America/New_York (ET) unless marked CT. The harness trades the
-Topstep session, 18:00 ET to 16:00 ET, Sunday evening to Friday afternoon
+CME Globex session, 18:00 ET to 16:00 ET, Sunday evening to Friday afternoon
 (a hard rule in the order gate): nothing from 16:00 to 18:00 ET or on
 weekends, and every position flat by end of day (`eodAt`, by 16:00 ET).
 Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,

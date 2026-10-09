@@ -1,7 +1,8 @@
 # Harness Design
 
-How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX through
-[projectx-mcp](https://github.com/johnamcruz/projectx-mcp).
+How this repository runs an LLM-agnostic, autonomous futures trader through a
+broker MCP server that implements the broker MCP interface
+(`docs/BROKER-MCP-INTERFACE.md`).
 
 ## Principles
 
@@ -23,6 +24,29 @@ How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX 
    lineup adapts over time.
 6. **Autonomy is a scheduler, not a long-lived agent.** Each cycle is one
    short, headless run with a fresh context; state lives in the journal.
+7. **No broker code.** Every broker or prop firm runs its own MCP server (its
+   own repo) implementing one interface, [BROKER-MCP-INTERFACE.md](BROKER-MCP-INTERFACE.md).
+
+## Brokers
+
+Which server is config: `mcp-configs/brokers.json` (default `topstepx`),
+overridden by `~/.futures-trading-harness/brokers.json` (`FTH_BROKERS_FILE`),
+chosen by `FTH_BROKER` (`scripts/lib/broker/config.js`). A broker entry names
+the server's entry point (`entryEnv`), its journal (`journalEnv`), the
+variables it reads (`env`, which Codex forwards), and the variables paper
+mode sets (`paperEnv`).
+
+Every harness registers the MCP server `broker` as the gateway alone
+(`node <repo>/scripts/mcp-gateway.js`); the gateway starts the configured
+server, loading its settings from `~/.futures-trading-harness/.env`. Agents
+see `mcp__broker__<tool>` whatever the firm.
+
+Harness code reaches the broker only through the adapter
+(`scripts/lib/broker/adapter.js`): the runner, `bars.js`, `backtest.js fetch`,
+and `orderflow.js export`. Reads go straight to the server over MCP; order
+calls go through the gateway, so they are gated and journaled.
+`scripts/check-broker-mcp.js` checks a server against the interface with
+read-only calls.
 
 ## Harness support
 
@@ -35,14 +59,14 @@ How this repository runs an LLM-agnostic, autonomous futures trader on TopstepX 
 | Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md`, extension `QWEN.md` | `workspace/AGENTS.md` |
 | Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (Codex sets CLAUDE_PLUGIN_ROOT; exit 2 blocks) | extension `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}` substituted) | none |
 | Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
-| Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, projectx tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
+| Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
 
 ## Order gate
 
 `scripts/lib/trading/order-gate.js` (pure) is called through
 `scripts/lib/trading/check-order.js` by both the PreToolUse hook and the MCP
 gateway. The gateway (`scripts/mcp-gateway.js`, a newline-delimited JSON-RPC
-proxy in front of projectx-mcp) also calls the server itself for positions,
+proxy in front of the broker MCP server) also calls the server itself for positions,
 working orders, and today's fills (`scripts/lib/trading/account-gate.js`), so it
 is the authoritative layer. A blocked call never reaches the server.
 
@@ -86,14 +110,16 @@ Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`.
 (written atomically), and starts one headless run at a time in its own
 process group: premarket at `premarketAt`, a trade cycle after every closed
 `timeframe`-minute bar inside `sessions` (bar closes detected by polling
-`retrieveBars` right after each scheduled close, see `scripts/lib/bar-clock.js`;
+`get_bars` through the broker adapter right after each scheduled close, see `scripts/lib/bar-clock.js`;
 bars that close during a run are skipped), end of day at `eodAt` (retried until it
 succeeds, and run first thing if a previous day never finished). The kill
 switch stops new cycles but not end of day; after `maxConsecutiveErrors`
 failed runs the runner creates it. An unreadable state file turns trade
 cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,
-`FTH_AUTONOMOUS=1`, and, in paper mode, `FTH_PAPER=1` and
-`PROJECTX_TRADING_ENABLED=false`.
+`FTH_AUTONOMOUS=1`, and, in paper mode, `FTH_PAPER=1` and the broker's
+`paperEnv` (the server's trading switch off). A live runner
+refuses to start unless the server lists every interface tool, has trading
+enabled, and allows the account.
 
 Further safeguards:
 
@@ -151,19 +177,17 @@ bar files through the same strategy evaluator the live scan uses.
   the backtest. A level or VWAP for a session the bars start in the middle
   of is missing rather than wrong. A manual scan on fewer bars (e.g. a
   500-bar `get_bars`) can show those as missing.
-- Order flow (`ofi`, `delta`) is real only where it was recorded from the
-  TopstepX market hub (the runner with `orderFlow`, or
-  `scripts/orderflow.js record`). The hub keeps no history, and minutes
-  while it was disconnected have none; those bars use an estimate from the
-  bar's shape and volume. Each print's side is the hub's trade `type`
-  (0 buy-, 1 sell-initiated); a print without one
-  is judged against the quote.
+- Order flow (`ofi`, `delta`) is real only where a recorded flow file in
+  `<FTH_HOME>/flow/` covers the bar. Live flow is not part of the broker MCP
+  interface, so the harness doesn't record it; other bars use an estimate
+  from the bar's shape and volume. A future optional interface tool could
+  serve live flow.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.
-- projectx-mcp itself: a position flip skips its daily-loss check, resting stop
-  orders aren't counted toward its position limit, and `modify_order` only
-  checks order size. The gateway covers these for harness traffic; fixing them
-  in projectx-mcp would protect direct callers too.
+- A broker MCP server's own guardrails may have gaps (a position flip that
+  skips its daily-loss check, resting stops not counted toward its position
+  limit, `modify_order` checking only size). The gateway covers these for
+  harness traffic; fixing them in the server protects direct callers too.
 - Journal reviews are self-graded. The gateway counts losses from real fills;
   the journal-based checks remain a second, softer layer.
 - Codex agent roles can't be restricted to specific MCP tools in config; the

@@ -45,7 +45,7 @@ The harness tracks the attempt and enforces it:
   start`. Until then every verdict entry is refused (`[strategy] ... status
   "paper"`): report it and stand aside.
 - **A verdict for the mini** (`NQ` while the bars are MNQ's): find the NQ
-  contractId with `search_contracts` (the active contract; ProjectX names NQ
+  contractId with `search_contracts` (the active contract; contract ids name NQ
   `ENQ`, ES `EP`), and write the plan **and** the order with that
   contractId; a plan for the MNQ contract doesn't count for an NQ order.
 - The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;

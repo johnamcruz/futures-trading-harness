@@ -1,11 +1,9 @@
 # Broker MCP Interface
 
-One MCP interface that every prop firm and broker follows. It is extracted
-from the TopstepX server, [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
-(v0.1.0, `src/server.ts`), as it works today: the same tools, inputs, results,
-errors, journal, and guardrails. projectx-mcp is the reference implementation
-and conforms unchanged. Another firm (Apex, Tradovate, ...) is supported when
-its MCP server implements the same thing.
+One MCP interface that every prop firm and broker follows: the tools, inputs,
+results, errors, journal, and guardrails below. A firm is supported when its
+MCP server (its own repo: the firm's adapter) implements them. The harness has
+no code for any firm.
 
 The harness codes against this interface only: the agents, skills, order gate,
 and gateway call these tools, whoever is behind them.
@@ -17,25 +15,25 @@ harness (agents, skills, order gate, runner, CLIs)
         |  interface tools only (mcp__broker__<tool>)
    gateway + broker adapter   (scripts/mcp-gateway.js, scripts/lib/broker/)
         |  MCP stdio, the server named in the broker config
-   <broker>-mcp               (its own GitHub repo: projectx-mcp, tradovate-mcp, ...)
+   <firm>-mcp                 (its own repo, one per broker or prop firm)
 ```
 
 - **One repo per broker.** Each MCP server lives in its own GitHub repo and
   implements this interface. The harness holds no broker code.
-- **Chosen in config.** `mcp-configs/brokers.json` holds the defaults (TopstepX);
+- **Chosen in config.** `mcp-configs/brokers.json` holds the defaults;
   `~/.futures-trading-harness/brokers.json` adds brokers or overrides fields
   (`FTH_BROKERS_FILE` names another file); `FTH_BROKER` picks one:
 
   ```json
   {
-    "broker": "topstepx",
+    "broker": "<name>",
     "brokers": {
-      "topstepx": {
-        "repo": "https://github.com/johnamcruz/projectx-mcp",
-        "entryEnv": "PROJECTX_MCP_ENTRY",
-        "journal": "~/.projectx-mcp/journal.jsonl", "journalEnv": "PROJECTX_JOURNAL_PATH",
-        "env": ["PROJECTX_USERNAME", "PROJECTX_API_KEY", "..."],
-        "paperEnv": { "PROJECTX_TRADING_ENABLED": "false" }
+      "<name>": {
+        "repo": "https://github.com/<owner>/<name>-mcp",
+        "entryEnv": "<NAME>_MCP_ENTRY",
+        "journal": "~/.<name>-mcp/journal.jsonl", "journalEnv": "<NAME>_JOURNAL_PATH",
+        "env": ["<NAME>_USERNAME", "<NAME>_API_KEY", "..."],
+        "paperEnv": { "<NAME>_TRADING_ENABLED": "false" }
       }
     }
   }
@@ -300,15 +298,11 @@ Orders that reduce exposure pass the position and daily loss checks.
   6 pending.
 - Bar units: second, minute, hour, day, week, month.
 
-## Configuration (projectx-mcp)
+## Server settings
 
-Each server has its own credentials and settings. projectx-mcp reads
-`PROJECTX_USERNAME`, `PROJECTX_API_KEY`, `PROJECTX_API_URL`,
-`PROJECTX_MARKET_HUB_URL`, `PROJECTX_TRADING_ENABLED`,
-`PROJECTX_ALLOWED_ACCOUNT_IDS`, `PROJECTX_ALLOWED_SYMBOLS`,
-`PROJECTX_MAX_ORDER_SIZE`, `PROJECTX_MAX_POSITION_SIZE`,
-`PROJECTX_MAX_DAILY_LOSS`, and `PROJECTX_JOURNAL_PATH`
-(default `~/.projectx-mcp/journal.jsonl`).
+Each server has its own credentials and settings (its `env` in the broker
+config): at least the trading switch, allowed accounts and symbols, the size
+and position limits, the daily loss limit, and the journal path.
 
 ## Checking a server
 

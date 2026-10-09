@@ -1,6 +1,7 @@
 # Journaling
 
-The projectx-mcp journal is the only trade memory. The hooks read it, so
+The broker MCP server's journal (`journal_add` / `journal_read`) is the only
+trade memory. The hooks read it, so
 formats matter.
 
 - **plan** (before every entry): `contractId` set, text covers thesis, setup,

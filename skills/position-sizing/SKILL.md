@@ -24,8 +24,8 @@ description: Size futures trades from the stop distance, tick value, and the rem
    | MGC | GC | 0.10 | 1.00 | 10.00 |
    | MCL | CL | 0.01 | 1.00 | 10.00 |
 
-   ProjectX contract roots can differ from exchange symbols (E-mini NQ is `ENQ`,
-   ES is `EP`). Confirm with `search_contracts`.
+   Contract ids can name a root by another symbol than the exchange's
+   (E-mini NQ is `CON.F.US.ENQ.Z26`, ES is `EP`). Confirm with `search_contracts`.
 2. **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
    fees from the account, if known).
 3. **Risk budget** = the smallest of:
@@ -35,8 +35,8 @@ description: Size futures trades from the stop distance, tick value, and the rem
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
    wide for the budget: skip, or find a tighter, structure-based stop. Never
    shrink the stop to make the size work.
-5. **Caps:** the server's `PROJECTX_MAX_ORDER_SIZE` and
-   `PROJECTX_MAX_POSITION_SIZE`; size 1 on micros until the setup has 30+
+5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
+   (`get_server_config`); size 1 on micros until the setup has 30+
    reviewed trades with positive expectancy.
 6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
    policy strategy, the verdict's contract (micro or mini), size, and stop

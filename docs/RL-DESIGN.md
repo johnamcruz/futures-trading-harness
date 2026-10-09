@@ -38,7 +38,7 @@ how big to be, and when a winner has run far enough.
 |---|---|---|
 | `accounts/<name>/ACCOUNT.md` | Account profile | The challenge as a document: starting balance, target, max loss (trailing to the end-of-day high, locking at the start balance), daily limits, contract limits, consistency, attempt length. Code reads the frontmatter; agents read the body |
 | `strategies/<name>/STRATEGY.md`, `signal: policy` | Policy strategy | The prop challenge as a strategy: its rules strategies (`strategies`), `account`, `sizing`, `contracts`, `exit`, and `policy: { bundle }`. Training, backtests, and live trading all read it; only policy strategies have these keys |
-| `scripts/lib/trading/contracts.js` | Micro/mini families | MNQ/NQ, MES/ES, MYM/YM, M2K/RTY, MGC/GC: specs, the 10:1 ratio, ProjectX id symbols (NQ trades as ENQ, ES as EP, GC as GCE) |
+| `scripts/lib/trading/contracts.js` | Micro/mini families | MNQ/NQ, MES/ES, MYM/YM, M2K/RTY, MGC/GC: specs, the 10:1 ratio, contract id symbols per the broker MCP interface (NQ trades as ENQ, ES as EP, GC as GCE) |
 | `scripts/lib/trading/combine.js` | Combine state and sizing | Pure logic shared by the env, the backtester, the runner, and the gate: the budget, the room to the floor and daily limit, and `contractPlan` (micros or minis) |
 | `scripts/lib/trading/prop-state.js` | Live attempt state | The attempt, balance snapshots, end-of-day balances, policy verdicts, and the gate's `combine` / `policy` checks |
 | `scripts/lib/rl/challenge-env.js` | Challenge env | Episodes of N real sessions from random starts, on the backtester's broker logic |

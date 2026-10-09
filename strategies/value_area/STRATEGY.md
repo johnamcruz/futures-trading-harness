@@ -7,7 +7,7 @@ instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
 signal: rules
-connectors: [order_flow]      # ofi(3): real aggressor buy/sell volume from the TopstepX market hub when recorded
+connectors: [order_flow]      # ofi(3): real aggressor buy/sell volume from recorded flow files, else the bar-shape estimate
 rules:
   long:
     - minute_et >= 600                    # after the first 30 minutes of RTH
@@ -70,7 +70,7 @@ exit:
     long: prior_vah - close                       # the edge of value
     short: close - prior_val
   max_bars: 40                                    # time stop: 2 hours
-source: Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); order flow from the TopstepX market hub. Mechanical form and thresholds are starting values, not fitted on real data.
+source: Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); recorded order flow. Mechanical form and thresholds are starting values, not fitted on real data.
 ---
 
 # Strategy: Value Area POC reaction (`setup:value_area`)
@@ -93,7 +93,7 @@ proof that someone is acting there:
 
 - **Order flow:** aggressive buyers (sellers) dominate the last 3 bars, `ofi(3)`
   beyond ±0.2. With the `order_flow` connector this is real aggressor volume
-  from the market hub; without it, an estimate from where each bar closed in
+  where recorded flow files cover the bar; without it, an estimate from where each bar closed in
   its range.
 - **Expansion:** the bar's range is at least 1.5 × ATR(20) on at least 1.5 ×
   the 20-bar average volume: the market moved hard, with participation.
@@ -170,13 +170,14 @@ Long (short is the mirror image), every line must hold:
 
 ### Order flow: live vs backtest
 
-Live, with the `order_flow` connector, `ofi(3)` is real aggressor buy minus
-sell volume over the last 3 bars. A backtest without recorded flow uses the
+With recorded flow, `ofi(3)` is real aggressor buy minus sell volume over
+the last 3 bars. Live order flow is not part of the broker MCP interface, so
+live bars, and a backtest without recorded flow, use the
 bar-shape estimate (volume signed by where each bar closed in its range),
 which overlaps the rejection's own close-in-range rule. So a backtest tests
-the estimate, not real flow, and ±0.2 is a starting value for both: record
-flow (`scripts/orderflow.js`), backtest on it, and calibrate before trusting
-the flow branch live.
+the estimate, not real flow, and ±0.2 is a starting value for both:
+backtest on recorded flow (`scripts/orderflow.js export`) and calibrate
+before trusting the flow branch.
 
 ### Traded through a policy strategy
 

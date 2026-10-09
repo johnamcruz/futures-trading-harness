@@ -18,7 +18,7 @@ exit:
 risk:
   stop: strategy
   min_rr: 2
-source: docs/RL-DESIGN.md; needs 1-minute bars with TopstepX buy/sell volume (scripts/orderflow.js) to train
+source: docs/RL-DESIGN.md; needs 1-minute bars with recorded buy/sell volume (scripts/orderflow.js export) to train
 ---
 
 # Strategy: Prop Flow 1m (`setup:prop_flow_1m`)
@@ -29,10 +29,11 @@ trades one timeframe, so the flow strategies get their own policy strategy.
 
 ## When to Use
 
-- A `topstep_100k` attempt is running and the order-flow connector is on
-  (the runner turns it on for `ofi` and `ofi_absorption`).
-- Training needs 1-minute bars with real buy/sell volume (recorded with
-  `scripts/orderflow.js`); bars without it fall back to an estimate.
+- A `topstep_100k` attempt is running on 1-minute bars (`ofi` and
+  `ofi_absorption` declare the order-flow connector).
+- Training needs 1-minute bars with real buy/sell volume (recorded flow
+  files, exported with `scripts/orderflow.js export`); bars without it fall
+  back to an estimate.
 
 ## How It Works
 

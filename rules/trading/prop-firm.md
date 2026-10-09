@@ -1,12 +1,13 @@
-# Prop Firm Constraints (TopstepX)
+# Prop Firm Constraints
 
 Firm rules end accounts. Check the current rules for the account type with the
 user; numbers here are the harness defaults, not Topstep's official limits.
 
 - **Trading day:** 17:00 → 17:00 America/Chicago. Daily loss and P&L reset at
   17:00 CT.
-- **Daily loss limit:** stop well before it. The MCP's `PROJECTX_MAX_DAILY_LOSS`
-  should sit below the firm's limit.
+- **Daily loss limit:** stop well before it. The broker MCP server's daily
+  loss guardrail (`get_server_config`: `maxDailyLoss`) should sit below the
+  firm's limit.
 - **Maximum loss limit (trailing drawdown):** the floor trails the account's
   high-water mark (end-of-day on Topstep combines). Know the cushion
   (balance − floor) before every session; size so one bad day can't breach it.

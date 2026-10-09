@@ -1,6 +1,6 @@
 ---
 name: broker-mcp
-description: Reference for trading through the broker MCP server (any prop firm or broker that implements the broker MCP interface; TopstepX by default) - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__broker__ tool or when an order behaves unexpectedly.
+description: Reference for trading through the broker MCP server (any prop firm or broker that implements the broker MCP interface) - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__broker__ tool or when an order behaves unexpectedly.
 ---
 
 # Trading through the broker MCP server
@@ -16,7 +16,7 @@ Every broker or prop firm runs its own MCP server (its own repo) that
 implements the broker MCP interface (`<root>/docs/BROKER-MCP-INTERFACE.md`);
 the broker config picks which one. It is registered under the name `broker`,
 so tools are `mcp__broker__<tool>` whatever the firm. Read the server's own
-guide resource once per session if it has one (projectx-mcp: `projectx://guide`).
+guide resource once per session if it has one.
 
 ### Session loop
 
@@ -38,7 +38,7 @@ guide resource once per session if it has one (projectx-mcp: `projectx://guide`)
 |---|---|
 | Session | `get_server_config`, `list_accounts`, `get_account_snapshot` |
 | Contracts | `search_contracts`, `get_contract`, `list_available_contracts` |
-| Market data | `get_bars` (50 req / 30 s), `get_quote` (SignalR) |
+| Market data | `get_bars` (50 req / 30 s), `get_quote` (latest quote; `quote: null` when the market is closed) |
 | Orders | `place_order`, `modify_order`, `cancel_order`, `close_position`, `partial_close_position` |
 | History | `list_open_orders`, `search_orders`, `list_open_positions`, `search_trades`, `get_performance` |
 | Memory | `journal_add`, `journal_read` |
@@ -82,8 +82,7 @@ guide resource once per session if it has one (projectx-mcp: `projectx://guide`)
 ### Journal
 
 `journal_add` / `journal_read` keep the journal the gate reads, a JSON-lines
-file at the broker's journal path in the broker config (TopstepX:
-`PROJECTX_JOURNAL_PATH`, default `~/.projectx-mcp/journal.jsonl`):
+file at the broker's journal path in the broker config (`get_server_config`: `journalPath`):
 one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds: `plan`, `note`,
 `review`, `lesson`; every `place_order` writes an `order_placed` entry by
 itself. Write through the tools only; never edit the file. The gate reads

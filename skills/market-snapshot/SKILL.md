@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
+description: Compute indicators, key levels, and the market regime from the broker MCP server's get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
 ---
 
 # Market Snapshot
@@ -25,7 +25,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    the regime) read their own trailing 500 bars, as their source did.
    3-minute bars match the strategy parameters (1-minute for the flow
    strategies).
-2. (The file is projectx get_bars JSON; CSV and Parquet files work too.)
+2. (The file is the broker's `get_bars` JSON; CSV and Parquet files work too.)
 3. Run the script from the harness root (`<root>`, an absolute path; see the
    `strategy-library` skill for how to find it):
 

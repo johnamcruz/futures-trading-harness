@@ -35,16 +35,15 @@ source: harness original (order flow from 1-minute bars); thresholds are startin
 
 # Strategy: Order-Flow Imbalance (`setup:ofi`)
 
-Real order flow from TopstepX. The runner subscribes to the ProjectX market
-hub's trade prints and quotes, classifies every print as buyer- or
-seller-initiated (the hub's trade type), and sums them into
-1-minute buy and sell volume. `ofi(n)` is buy minus sell volume over the
+Order flow is 1-minute aggressive buy and sell volume: every trade print
+classified as buyer- or seller-initiated and summed per minute. `ofi(n)` is
+buy minus sell volume over the
 last n bars divided by their volume, from -1 (all selling) to +1 (all
 buying).
 
-**Data.** `connectors: [order_flow]` tells the runner this strategy needs
-real order flow: it connects to the TopstepX market hub and adds each
-bar's aggressor buy and sell volume, which `ofi(n)` and `delta(n)` use.
+**Data.** `connectors: [order_flow]` declares that this strategy reads
+order flow: `ofi(n)` and `delta(n)` use each bar's aggressor buy and sell
+volume from recorded flow files, or the bar-shape estimate without them.
 
 **Real flow vs absorption.** Aggressive buying that is real moves price.
 Buying that runs into a passive seller is absorbed: heavy volume, little
@@ -97,15 +96,14 @@ Long, on a 1-minute close (short is the mirror):
 
 ### Data
 
-- **Live:** the runner records flow while it runs (`orderFlow: auto` turns
-  it on for this 1-minute strategy). `node scripts/orderflow.js record
-  --symbols MNQ` collects it without the runner.
-- **History:** the market hub has none, so flow exists from when recording
-  started. `node scripts/orderflow.js export` writes 1-minute bars with the
-  recorded buy and sell volume for backtests.
-- **Gaps:** a bar without recorded flow (before recording started, or a
-  minute the hub was disconnected) falls back to an estimate from the bar's
-  shape: volume signed by where it closed in its range.
+- **Live:** live order flow is not part of the broker MCP interface, so
+  the harness doesn't record it; live bars use the estimate below until a
+  broker server serves flow.
+- **History:** flow files recorded earlier sit in `<FTH_HOME>/flow/`.
+  `node scripts/orderflow.js export` writes 1-minute bars with that buy and
+  sell volume for backtests.
+- **Gaps:** a bar without recorded flow falls back to an estimate from the
+  bar's shape: volume signed by where it closed in its range.
 
 Keep this in `paper` until the scorecard and a backtest on recorded flow
 support it.
