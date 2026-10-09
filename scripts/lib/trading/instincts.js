@@ -128,9 +128,26 @@ function recentForm(entries, n = 10) {
 }
 
 /** The top `n` instincts as lines for a prompt or briefing, the recent form first. */
-function digest(entries, n = 6) {
-  const form = recentForm(entries);
-  return [...(form ? [`(form) ${form}`] : []), ...instincts(entries).slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
+/**
+ * The top `n` instincts as lines, the recent form first. Options for the cycle
+ * prompt, which shows each fact once: `kinds` keeps only those kinds (the
+ * prompt: mistakes and lessons; a strategy's live results are in its track
+ * record), `form: false` leaves out the form line (the prompt's reviewed-trades
+ * line carries it).
+ */
+function digest(entries, n = 6, { kinds = null, form = true } = {}) {
+  const f = form ? recentForm(entries) : null;
+  const list = instincts(entries).filter(x => !kinds || kinds.includes(x.kind));
+  return [...(f ? [`(form) ${f}`] : []), ...list.slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
 }
 
-module.exports = { instincts, digest, recentTrades, recentForm, reviewR, confidenceFor };
+/** The record of the last `n` reviewed trades: "4W/6L, E -0.12R", or null. */
+function formSummary(entries, n = 10) {
+  const list = entries.filter(e => e.kind === 'review' && reviewResult(e) !== null && !hasTag(e, 'paper')).slice(-n);
+  if (!list.length) return null;
+  const rs = list.map(reviewR).filter(Number.isFinite);
+  const e = rs.length ? round(rs.reduce((a, b) => a + b, 0) / rs.length) : null;
+  return `${list.filter(r => reviewResult(r) === 'win').length}W/${list.filter(r => reviewResult(r) === 'loss').length}L${e === null ? '' : `, E ${e >= 0 ? '+' : ''}${e}R`}`;
+}
+
+module.exports = { instincts, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor };

@@ -60,7 +60,9 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
     const risk = initialStop !== null ? Math.abs(entry - initialStop) : null;
     const opened = Date.parse(p.creationTimestamp);
     // Bars that opened at or after the fill (the fill's own bar is partly before it).
-    const bars = (barsFor(p) || []).filter(b => !Number.isFinite(opened) || Date.parse(b.t) >= opened);
+    // No bars at all (its contract had no bar this cycle) is not the same as no bar since the fill.
+    const raw = barsFor(p);
+    const bars = (raw || []).filter(b => !Number.isFinite(opened) || Date.parse(b.t) >= opened);
     const R = x => (risk > 0 ? Math.round(((sign * (x - entry)) / risk) * 100) / 100 : null);
     const last = bars.length ? bars[bars.length - 1].c : null;
     return {
@@ -70,7 +72,7 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
       rNow: last !== null ? R(last) : null,
       mfeR: bars.length ? R(sign > 0 ? Math.max(...bars.map(b => b.h)) : Math.min(...bars.map(b => b.l))) : null,
       maeR: bars.length ? R(sign > 0 ? Math.min(...bars.map(b => b.l)) : Math.max(...bars.map(b => b.h))) : null,
-      barsHeld: Number.isFinite(opened) ? bars.length : null, stepMs, notes,
+      barsHeld: raw && Number.isFinite(opened) ? bars.length : null, noBars: !raw, stepMs, notes,
     };
   });
 }
@@ -82,13 +84,17 @@ function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize
   const R = x => (t.risk > 0 && x !== null ? Math.round(((t.sign * (x - t.entry)) / t.risk) * 100) / 100 : null);
   const since = t.openedAt ? ` since ${et ? et(t.openedAt) : t.openedAt}` : '';
   const held = t.barsHeld !== null ? `, ${t.barsHeld} bar${t.barsHeld === 1 ? '' : 's'} closed since` : '';
-  const risk = t.risk !== null ? `initial stop ${r(t.initialStop)}: risk ${r(t.risk)} points${tickSize ? ` = ${Math.round(t.risk / tickSize)} ticks` : ''}` : 'initial risk unknown';
+  const fromWorking = t.notes.includes('initial stop unknown: risk from the working stop');
+  const pts = t.risk !== null ? `${r(t.risk)} points${tickSize ? ` = ${Math.round(t.risk / tickSize)} ticks` : ''}` : null;
+  const risk = t.risk === null ? 'initial risk unknown'
+    : fromWorking ? `risk ${pts}, measured to the working stop (the initial stop is unknown)` : `initial stop ${r(t.initialStop)}: risk ${pts}`;
   const stop = t.stop !== null ? `working stop ${r(t.stop)} (${sR(R(t.stop))})` : 'NO working stop';
   const target = t.target !== null ? `, target ${r(t.target)} (${sR(R(t.target))})` : ', no target order';
-  const now = t.last === null ? '; no closed bar since the fill yet'
+  const now = t.noBars ? '; no bars for this contract this cycle, so no R now, best, or worst (read get_bars or the quote)'
+    : t.last === null ? '; no closed bar since the fill yet'
     : t.rNow === null ? `; last close ${r(t.last)} (no R without an initial risk)`
       : `; now ${sR(t.rNow)} at ${r(t.last)}, best ${sR(t.mfeR)}, worst ${sR(t.maeR)}`;
-  const notes = t.notes.filter(n => n !== 'NO working stop');
+  const notes = t.notes.filter(n => n !== 'NO working stop' && n !== 'initial stop unknown: risk from the working stop');
   // `history`: how the strategy's past trades moved (track-record.js excursionNote), to judge this one by.
   return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.${history ? ` ${history}.` : ''}`;
 }

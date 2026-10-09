@@ -155,6 +155,11 @@ and the current time.
   skip. Never plan the component strategy (e.g. `orb`) yourself; the gate
   refuses it. The rest of this step still decides whether the market permits
   it (events, red flags).
+- **Today's premarket plan and the news** (the prompt's "premarket plan"
+  and blackout lines): start from the plan's bias and levels, and say in the
+  plan if the day so far has invalidated it. A blackout in force means no
+  entries; one coming soon means a trade entered now must have room to work
+  before it, or be skipped.
 - **The day so far** (the prompt's "day:" line, market-snapshot `day`):
   the open against the prior day, the opening type, the initial balance
   (IB) and how far the day has extended past it, the day type, and how much

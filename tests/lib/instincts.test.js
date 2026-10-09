@@ -31,6 +31,14 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
   for (let k = 1; k < list.length; k += 1) assert.ok(list[k - 1].confidence >= list[k].confidence, 'strongest first');
   assert.strictEqual(digest(journal, 2).length, 3, 'the form of the recent trades, then the top 2');
   assert.match(digest(journal, 1)[1], /^\(0\.\d\) /);
+  // The cycle prompt's view: mistakes and lessons only (live results are in the track records), no form line.
+  const { formSummary } = require('../../scripts/lib/trading/instincts');
+  const prompt = digest(journal, 10, { kinds: ['mistake', 'lesson'], form: false });
+  assert.ok(prompt.length > 0 && prompt.every(x => !/\d+ trades, win \d+%/.test(x) && !/^\(form\)/.test(x)), prompt.join(' | '));
+  assert.ok(prompt.some(x => /mistake:chased-entry/.test(x)));
+  assert.ok(digest(journal, 10).some(x => /keltner/.test(x)), 'the full digest (briefings, lessons.js) keeps them all');
+  assert.match(formSummary(journal), /^\d+W\/\d+L, E [+-][0-9.]+R$/);
+  assert.strictEqual(formSummary([]), null);
   assert.deepStrictEqual([reviewR({ tags: ['r:-1.11'] }), reviewR({ text: 'R = 2.5' }), reviewR({ text: 'none' })], [-1.11, 2.5, null]);
   assert.deepStrictEqual([confidenceFor(1), confidenceFor(30)], [0.3, 0.9]);
 });
@@ -45,11 +53,11 @@ test('scripts/lessons.js prints the instincts from the journal', () => {
   assert.match(empty.stdout, /No instincts yet/);
 });
 
-test('the trade prompt carries the top instincts as notes, not rules', () => {
+test('the trade prompt carries your mistakes and lessons as notes, not rules', () => {
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const p = prompts(validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' }), new Date(), '/r')
-    .trade([{ symbol: 'MNQ' }], { lessons: ['(0.6) orb in trend-up: 7 trades -> favour'] });
-  assert.match(p, /Instincts from your reviewed trades \(confidence; notes from your own past, not rules\): \(0\.6\) orb in trend-up: 7 trades -> favour\./);
+    .trade([{ symbol: 'MNQ' }], { lessons: ['(0.6) mistake:chased in 3 of the last 10 reviewed trades'] });
+  assert.match(p, /Your recurring mistakes and lessons \(confidence; notes from your own past, not rules\): \(0\.6\) mistake:chased in 3 of the last 10 reviewed trades\./);
 });
 
 test('recent form and the last 10 trades: record, expectancy, and the mistakes that repeat', () => {

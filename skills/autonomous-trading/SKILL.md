@@ -36,10 +36,15 @@ description: Rules for running the trading harness unattended (headless, schedul
    `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate's
    decisions in `logs/gate-log.jsonl`). The prompt also carries the last 10
    closed bars and your last 10 cycle results: read them, and don't reverse a
-   recent decision without saying what changed. It carries the day so far
-   (the "day:" line), each fired strategy's track record, and each open
-   trade's state (setup, initial risk, stop, target, R now, best and worst):
-   the `trade-session` skill says how to weigh them.
+   recent decision without saying what changed. It carries today's premarket
+   plan, the news blackouts (in force, or the next one), the day so far (the
+   "day:" line; outside RTH the "overnight" line), each fired strategy's track
+   record (a `paper` one is marked: plan it only), and each open trade's state
+   (setup, initial risk, stop, target, R now, best and worst): the
+   `trade-session` skill says how to weigh them. Times are New York time. A
+   "Context unavailable" line names what couldn't be read this cycle: that is
+   unknown, not "none" (read it yourself, or trade smaller). The cycle's log
+   (`logs/cycles/<day>/`) holds the prompt and what it was built from.
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
    the server ends the entry attempt. Fix what the block names when it is
    yours to fix (for example, review a closed trade, cancel a leftover order),
@@ -57,8 +62,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    one plan, at most one entry. A tool that fails twice ends the cycle as
    `error` (after confirming any open position has its stop).
 8. **Allowed scripts.** Only these run, by absolute path:
-   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`, and
-   `combine.js status`. Starting, stopping, or recording a prop attempt,
+   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`,
+   `bars.js`, `reconcile.js`, `lessons.js`, and `combine.js status`.
+   Starting, stopping, or recording a prop attempt,
    backtests, and training are the user's.
 
 ## Examples

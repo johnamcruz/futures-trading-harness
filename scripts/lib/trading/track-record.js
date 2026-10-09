@@ -30,6 +30,7 @@ const { reviewR } = require('./instincts');
 const { zonedParts } = require('./clock');
 
 const MIN_SLICE = 10; // a regime or hour with fewer trades is not shown
+const LIVE_SLICE = 5; // nor a live regime slice with fewer reviewed trades
 
 /** The value at quantile q (0..1) of `xs`, nearest rank; null when empty. */
 function quantile(xs, q) {
@@ -134,8 +135,8 @@ function describeRecord({ backtest = null, live = null, regime = null, at = null
   if (stale) parts.push('STALE: the STRATEGY.md changed since this backtest was recorded; re-record it');
   if (backtest) {
     const s = backtest.summary;
-    const span = [backtest.symbols && backtest.symbols.join(','), backtest.timeframe && `${backtest.timeframe}m`, backtest.start && backtest.end && `${String(backtest.start).slice(0, 10)}..${String(backtest.end).slice(0, 10)}`].filter(Boolean).join(' ');
-    parts.push(`backtest ${s.trades} trades (${span}): win ${pct(s.winRate)}, E ${sR(s.meanR)}${s.meanRCI95 ? ` [95% CI ${sR(s.meanRCI95[0])}, ${sR(s.meanRCI95[1])}]` : ''}, edge ${s.edge}`);
+    // The edge verdict already says what the 95% interval says.
+    parts.push(`backtest ${s.trades} trades: win ${pct(s.winRate)}, E ${sR(s.meanR)}, edge ${s.edge}`);
     const reg = regime && backtest.byRegime && backtest.byRegime[regime];
     if (reg && reg.trades >= MIN_SLICE) parts.push(`in ${regime}: ${reg.trades} trades, E ${sR(reg.meanR)}`);
     if (at) {
@@ -147,7 +148,7 @@ function describeRecord({ backtest = null, live = null, regime = null, at = null
     parts.push('no backtest recorded (backtest.js --record)');
   }
   if (live && live.trades) {
-    parts.push(`live: ${live.trades} reviewed, ${live.wins}W/${live.losses}L, E ${sR(live.meanR)}${live.inRegime && live.inRegime.trades ? ` (in ${regime}: ${live.inRegime.trades}, E ${sR(live.inRegime.meanR)})` : ''}`);
+    parts.push(`live: ${live.trades} reviewed, ${live.wins}W/${live.losses}L, E ${sR(live.meanR)}${live.inRegime && live.inRegime.trades >= LIVE_SLICE ? ` (in ${regime}: ${live.inRegime.trades}, E ${sR(live.inRegime.meanR)})` : ''}`);
   } else {
     parts.push('live: no reviewed trades yet');
   }

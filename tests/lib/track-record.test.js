@@ -34,7 +34,7 @@ test('a backtest report becomes a track record: overall, by regime, by hour', ()
 
   // The prompt line: the regime and hour slices only with enough trades.
   const line = describeRecord({ backtest: rec, regime: 'trend-up', at: '2026-10-08T14:30:00.000Z' });
-  assert.match(line, /^track record: backtest 16 trades \(MNQ 3m 2025-01-02\.\.2025-04-01\): win 50%, E \+0\.25R \[95% CI [^\]]+\], edge anecdotal \(under 30 trades\); in trend-up: 12 trades, E \+0\.67R; at 10:00 ET: 12 trades, E \+0\.67R; live: no reviewed trades yet$/);
+  assert.strictEqual(line, 'track record: backtest 16 trades: win 50%, E +0.25R, edge anecdotal (under 30 trades); in trend-up: 12 trades, E +0.67R; at 10:00 ET: 12 trades, E +0.67R; live: no reviewed trades yet');
   assert.ok(MIN_SLICE > 4);
   assert.doesNotMatch(describeRecord({ backtest: rec, regime: 'range', at: '2026-10-08T18:30:00.000Z' }), /in range|at 14:00/, 'under MIN_SLICE trades: not shown');
   assert.match(describeRecord({}), /no backtest recorded \(backtest\.js --record\); live: no reviewed trades yet/);
@@ -51,7 +51,9 @@ test('live record: the journal\'s reviewed trades of the setup, paper excluded, 
   const l = liveRecord(entries, 'orb', 'trend-up');
   assert.deepStrictEqual({ trades: l.trades, wins: l.wins, losses: l.losses, meanR: l.meanR }, { trades: 2, wins: 1, losses: 1, meanR: 0.48 });
   assert.deepStrictEqual(l.inRegime, { trades: 1, wins: 1, losses: 0, meanR: 2 });
-  assert.match(describeRecord({ live: l, regime: 'trend-up' }), /live: 2 reviewed, 1W\/1L, E \+0\.48R \(in trend-up: 1, E \+2R\)/);
+  assert.match(describeRecord({ live: l, regime: 'trend-up' }), /live: 2 reviewed, 1W\/1L, E \+0\.48R$/, 'one live trade in the regime is not a slice worth showing');
+  const many = Array.from({ length: 5 }, () => review(['result:win', 'setup:orb', 'regime:trend-up', 'r:1'], 'orb long'));
+  assert.match(describeRecord({ live: liveRecord(many, 'orb', 'trend-up'), regime: 'trend-up' }), /live: 5 reviewed, 5W\/0L, E \+1R \(in trend-up: 5, E \+1R\)$/);
 });
 
 test('backtest --record writes each strategy\'s own record (run alone), and only on plain runs', () => {
@@ -104,7 +106,7 @@ test('a record from another version of the strategy is flagged stale', () => {
   assert.strictEqual(rec.definition, definitionHash(file));
   assert.doesNotMatch(describeRecord({ backtest: rec, file }), /STALE/);
   fs.writeFileSync(file, '---\nname: x\n---\nv2');
-  assert.match(describeRecord({ backtest: rec, file }), /^track record: STALE: the STRATEGY\.md changed since this backtest was recorded; re-record it; backtest 0 trades/);
+  assert.match(describeRecord({ backtest: rec, file }), /^track record: STALE: the STRATEGY\.md changed since this backtest was recorded; re-record it; backtest 0 trades:/);
 });
 
 test('--record with min-confluence still records each strategy alone, with its trades', () => {

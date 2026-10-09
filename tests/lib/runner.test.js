@@ -49,10 +49,10 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
     root: '/r',
     client: market.client(clockRef, positions),
     clock: { now: () => new Date(clockRef.t) },
-    runCycle: async (action, prompt) => {
+    runCycle: async (action, prompt, limits = {}) => {
       const start = clockRef.t;
       const timedOut = timeoutAt !== null && start >= timeoutAt && !cycles.some(c => c.timedOut);
-      cycles.push({ action, prompt, start, timedOut });
+      cycles.push({ action, prompt, context: limits.context || null, start, timedOut });
       clockRef.t += cycleMs;
       return { ok: !timedOut, timedOut };
     },
@@ -74,18 +74,19 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
   return { cycles, runner };
 }
 
-const barOpens = prompt => [...prompt.matchAll(/(\w+): a \d+-minute bar just closed \(open ([^,]+),/g)].map(m => `${m[1]}@${m[2]}`);
+// Each symbol's bar in a cycle, from the context the cycle log records (the prompt shows ET times).
+const barOpens = c => (c.context ? c.context.symbols.map(x => `${x.symbol}@${x.bar.t}`) : []);
 
 test('3m, full session: exactly one cycle per closed bar, each started within seconds of the close', async () => {
   const market = fakeMarket({ minutes: 3 });
   const { cycles } = await simulate({ cfg: { timeframe: 3, sessions: ['09:35-15:00@America/New_York'] }, from: et(9, 30), to: et(15, 0), market });
   const trade = cycles.filter(c => c.action === 'trade');
-  const seen = trade.flatMap(c => barOpens(c.prompt));
+  const seen = trade.flatMap(c => barOpens(c));
   assert.strictEqual(new Set(seen).size, seen.length, 'no bar is processed twice');
   // Bars closing 09:36 ... 15:00 inside the 09:35-15:00 session: 109 closes.
   assert.ok(trade.length >= 107 && trade.length <= 109, `cycles: ${trade.length}`);
   for (const c of trade) {
-    const open = Date.parse(barOpens(c.prompt)[0].split('@')[1]);
+    const open = Date.parse(barOpens(c)[0].split('@')[1]);
     const lag = c.start - (open + 3 * 60000);
     assert.ok(lag >= 0 && lag <= 6000, `cycle started ${lag} ms after the close`);
   }
@@ -104,7 +105,7 @@ test('two symbols are served in the same cycle, so neither starves', async () =>
   const { cycles } = await simulate({ cfg: { timeframe: 3, symbols: ['MNQ', 'MES'] }, from: et(10, 0), to: et(11, 0), cycleMs: 100000, market });
   const trade = cycles.filter(c => c.action === 'trade');
   assert.ok(trade.length >= 19);
-  for (const c of trade) assert.deepStrictEqual(barOpens(c.prompt).map(x => x.split('@')[0]), ['MNQ', 'MES']);
+  for (const c of trade) assert.deepStrictEqual(barOpens(c).map(x => x.split('@')[0]), ['MNQ', 'MES']);
 });
 
 test('cycles longer than a bar skip bars instead of queueing them', async () => {
@@ -114,7 +115,7 @@ test('cycles longer than a bar skip bars instead of queueing them', async () => 
   for (let i = 1; i < trade.length; i += 1) assert.ok(trade[i].start >= trade[i - 1].start + 200000, 'never overlapping');
   assert.ok(trade.length >= 15 && trade.length <= 18, `cycles: ${trade.length}`); // back to back, each on a bar under half a bar old
   for (const c of trade) {
-    const open = Date.parse(barOpens(c.prompt)[0].split('@')[1]);
+    const open = Date.parse(barOpens(c)[0].split('@')[1]);
     assert.ok(c.start - (open + 180000) <= 90000, 'never acts on a stale bar');
   }
 });
@@ -335,7 +336,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false }) {
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [], scans: [], logs: [], events: [] };
@@ -359,6 +360,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         return out;
       },
       async accountState() {
+        if (accountFails) throw new Error('HTTP 502');
         return {
           positions: [
             ...(flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
@@ -557,10 +559,11 @@ test('after the session, with trades today, the runner keeps housekeeping until 
 });
 
 /** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
-function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503' } = {}) {
+function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503', owners = undefined } = {}) {
   const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
   return {
     calls,
+    ...(owners ? { owners } : {}),
     async snapshot(now) { calls.snapshots.push(now.getTime()); },
     async endOfDay(now, day) {
       calls.eod.push(now.getTime());
@@ -639,8 +642,8 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   // Each trade cycle's prompt carries the attempt's state.
   assert.ok(take.calls.summaries >= 1);
   const tradePrompt = b.prompts.find(x => /trade-session/.test(x));
-  assert.match(tradePrompt, /Account 7 at [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100; flat; 0 working orders\./);
-  assert.match(tradePrompt, /mini attempt \(active\) as of [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100, floor \$48,000, cushion \$2,100/);
+  assert.match(tradePrompt, /Account 7 at \d\d:\d\d ET: balance \$50,100; flat; 0 working orders\./);
+  assert.match(tradePrompt, /mini attempt \(active\)(?: as of \d\d:\d\d ET, balance \$50,100)?: floor \$48,000, cushion \$2,100/);
   assert.ok(take.calls.summaryBalances.every(x => x === 50100), 'the attempt is built from the balance just read');
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
@@ -653,7 +656,8 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52) });
   const eod = r.prompts.find(x => /end-of-day skill/.test(x));
   assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./, 'the end-of-day run sees the account after the flatten');
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; open: CON.F.US.MNQ.Z26 long 1 @ 21500; 2 working orders\./);
+  // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade CON\.F\.US\.MNQ\.Z26 long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });
@@ -690,7 +694,7 @@ test('every closed bar records the multi-timeframe read for the gate, and the cy
   });
   assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
   assert.ok(ok.cycles.length >= 3);
-  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
+  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line.replace(/\.$/, '')} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
   // A failed record never stops the cycle; the prompt says the gate will refuse trend entries.
   const logs = [];
   const failed = await simulate({
@@ -727,4 +731,57 @@ test('the trade prompt carries the last closed bars and the model\'s own last cy
   const p = prompts(cfg, new Date(et(10, 6)), '/r').trade([{ symbol: 'MNQ', bar: { t: bars[11].t, c: 111.5, file: '/f', contractId: 'C', recent: bars.slice(-10) } }], { history: r.runner.state.history });
   assert.match(p, /MNQ last 10 closed 3m bars \(ET open time, oldest first\): 09:36 O 102 H 103 L 101 C 102\.5 V 12 \(\+0\.5\);/);
   assert.match(p, /Your last \d cycle\(s\), oldest first: .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
+});
+
+test('a failed strategy scan is named in the prompt; end-of-day and premarket cycles log their context', async () => {
+  const logs = [];
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => { throw new Error('rules engine down'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 1, 'the bar still gets its cycle');
+  for (const c of trade) {
+    assert.match(c.prompt, /Context unavailable this cycle \(not "none"\): MNQ strategy scan \(rules engine down\): what fired is unknown\./);
+    assert.doesNotMatch(c.prompt, /no rules strategy fired/, 'not "nothing fired"');
+    assert.deepStrictEqual(c.context.unavailable, ['MNQ strategy scan (rules engine down): what fired is unknown']);
+  }
+  assert.ok(logs.some(l => /^error MNQ: strategy scan failed \(rules engine down\)/.test(l)));
+  // End of day: the prompt and its logged context name the trading day.
+  const e = await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(15, 48), to: et(15, 55), market: fakeMarket({ minutes: 3 }) });
+  const eod = e.cycles.find(c => c.action === 'eod');
+  assert.ok(eod, 'an end-of-day cycle');
+  assert.match(eod.prompt, /for the trading day ending \d{4}-\d\d-\d\d, on 3-minute bars/);
+  assert.strictEqual(eod.context.action, 'eod');
+  assert.match(eod.context.day, /^\d{4}-\d\d-\d\d$/);
+  assert.ok(eod.prompt.includes(eod.context.day));
+});
+
+test('under a policy, a failed account check means no verdict: named, and the components are not entries', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp(), until: et(10, 10), trigger: 'signal', accountFails: true });
+  const p = r.prompts.find(x => /trade-session/.test(x));
+  assert.ok(p, 'the cycle still runs, to manage anything open');
+  assert.match(p, /MNQ policy screen \(account check failed: HTTP 502\): no verdict, so no entry for trendy this bar/);
+  assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
+  assert.doesNotMatch(p, /These are .*'s components/);
+  assert.ok(r.logs.some(l => /^ERROR MNQ: account check failed \(HTTP 502\)/.test(l)), r.logs.filter(l => /^ERROR/.test(l)).join(' / '));
+});
+
+test('a prop account with no active policy: a failed account check leaves plain strategies tradable', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  for (const trigger of ['signal', 'bar']) {
+    // owners: no active policy owns anything on this contract (e.g. prop_portfolio_3m is paper).
+    const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp({ owners: () => new Map() }), until: et(10, 10), trigger, accountFails: true });
+    const p = r.prompts.find(x => /trade-session/.test(x));
+    assert.ok(p, trigger);
+    assert.match(p, /fired on this bar[^:]*: trendy long[.\s]/, trigger);
+    assert.doesNotMatch(p, /no verdict|not an entry/, `${trigger}: no policy is involved, so nothing about verdicts`);
+  }
+  // Owned by an active policy: marked, and only that one.
+  const two = [...candidate, { name: 'plain', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const r = await trailSim({ tape: {}, startFlat: true, scan: two, prop: fakeProp({ owners: () => new Map([['trendy', 'prop_x']]) }), until: et(10, 10), trigger: 'signal', accountFails: true });
+  const p = r.prompts.find(x => /trade-session/.test(x));
+  assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
+  assert.match(p, /plain long(?! \(its policy)/);
 });
