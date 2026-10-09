@@ -12,6 +12,37 @@ its MCP server implements the same thing.
 The harness codes against this interface only: the agents, skills, order gate,
 and gateway call these tools, whoever is behind them.
 
+## Architecture
+
+```text
+harness (agents, skills, order gate, runner)
+        |  interface tools only
+   broker adapter  (scripts/lib/broker-adapter.js + the gateway)
+        |  MCP stdio, the server named in config
+   <broker>-mcp    (its own GitHub repo: projectx-mcp, tradovate-mcp, ...)
+```
+
+- **One repo per broker.** Each MCP server lives in its own GitHub repo and
+  implements this interface. The harness holds no broker code.
+- **Chosen in config.** The harness config names the servers and picks one;
+  TopstepX is the default:
+
+  ```json
+  {
+    "broker": "topstepx",
+    "brokers": {
+      "topstepx": { "repo": "https://github.com/johnamcruz/projectx-mcp", "entry": "/abs/projectx-mcp/dist/index.js", "envFile": "~/.projectx-mcp/.env" }
+    }
+  }
+  ```
+
+  Switching brokers is a config change.
+- **One adapter.** The harness reaches the chosen server only through the
+  broker adapter, which complies with this design: it starts the configured
+  server behind the gateway (every order call is checked), confirms at startup
+  that the server lists every interface tool, and returns results in the shapes
+  below. Nothing outside the adapter knows which broker is behind it.
+
 ## Transport
 
 - MCP over stdio (newline-delimited JSON-RPC). Log to stderr only.
@@ -266,9 +297,16 @@ Each server has its own credentials and settings. projectx-mcp reads
 ## What the implementation adds
 
 1. `scripts/lib/broker-interface.js`: this document as data.
-2. `scripts/check-broker-mcp.js`: starts a server, lists its tools, makes
-   read-only calls, and reports what doesn't match. It never places an order.
-3. Tests: a fake server built from the interface passes; one missing a tool or
-   field fails; this document names every tool and field in the data.
+2. Config: the `broker` and `brokers` settings (default `topstepx`), read by
+   the installer and the gateway to start the chosen server.
+3. `scripts/lib/broker-adapter.js`: the adapter. It opens the configured server
+   through the gateway, checks its tool list against the interface, and exposes
+   the interface tools to harness code.
+4. `scripts/check-broker-mcp.js`: checks a server before it is configured:
+   lists its tools, makes read-only calls, reports what doesn't match. It never
+   places an order.
+5. Tests: a fake server built from the interface passes; one missing a tool or
+   field fails; switching `broker` in config starts the other server; this
+   document names every tool and field in the data.
 
-Nothing else in the harness changes.
+Behaviour on TopstepX stays as it is today.
