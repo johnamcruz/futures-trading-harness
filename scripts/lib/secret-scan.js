@@ -4,8 +4,8 @@
  * A guard against committing credentials. It flags:
  * - an env file (.env, .env.local, prod.env, ...; .env.example and other
  *   *.example / *.sample / *.template files are fine);
- * - a credential variable set to a real-looking value (PROJECTX_API_KEY=...,
- *   "PROJECTX_API_KEY": "...", API_KEY / SECRET / TOKEN / PASSWORD names),
+ * - a credential variable set to a real-looking value (BROKER_API_KEY=...,
+ *   "BROKER_API_KEY": "...", *_USERNAME / API_KEY / SECRET / TOKEN / PASSWORD names),
  *   unless the value is an obvious placeholder (your-..., <...>, ${...},
  *   changeme, xxx, empty);
  * - a private key block.
@@ -20,7 +20,7 @@ const path = require('path');
 
 const ENV_FILE = /(^|\/)(\.env(\.[^/]+)?|[^/]+\.env)$/;
 const TEMPLATE = /\.(example|sample|template|dist)$/;
-const CRED_NAME = /(PROJECTX_USERNAME|PROJECTX_API_KEY|PROJECTX_AUTH_TOKEN|[A-Z0-9_]*(API_KEY|SECRET|TOKEN|PASSWORD|PASSWD))/;
+const CRED_NAME = /([A-Z0-9]+_USERNAME|[A-Z0-9_]*(API_KEY|SECRET|TOKEN|PASSWORD|PASSWD))/;
 // NAME=value, NAME: value, "NAME": "value" (quotes optional).
 const ASSIGN = new RegExp(`["']?\\b${CRED_NAME.source}\\b["']?\\s*[:=]\\s*["']?([^"'\\s,}#]*)`, 'g');
 const PLACEHOLDER = /^(|your[-_].*|<.*>|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|changeme|change-me|xxx+|\.\.\.|none|null|false|true|test|u|k|redacted|\*+|example.*|dummy.*|fake.*|placeholder.*)$/i;

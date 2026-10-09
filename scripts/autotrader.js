@@ -2,7 +2,7 @@
 /**
  * Autonomous runner: premarket and end of day on the clock, and a trade cycle
  * after every closed bar of the configured timeframe (1, 3, 5... minutes).
- * Bar closes are detected by polling ProjectX retrieveBars right after each
+ * Bar closes are detected by polling get_bars (through the broker adapter) right after each
  * scheduled close; the closed bars are written to dataDir so the agents start
  * from fresh data. Each cycle is one headless harness invocation (Claude Code,
  * Codex, Qwen Code, or a custom CLI agent) covering every symbol whose bar
@@ -18,14 +18,17 @@
  * <FTH_HOME>/logs/alerts-<day>.jsonl and, when configured, to alertWebhook /
  * alertCommand (scripts/lib/alerts.js).
  *
- * Needs PROJECTX_USERNAME and PROJECTX_API_KEY (read-only use: contracts, bars,
- * positions, working orders) in its environment, like projectx-mcp.
+ * Reads contracts, bars, positions, working orders, and the balance, and does
+ * its housekeeping, through the broker adapter (scripts/lib/broker/adapter.js):
+ * the broker MCP server named in the broker config, with that server's
+ * settings in the environment. A live run refuses to start when the server
+ * lacks an interface tool, has trading disabled, or doesn't allow the account.
  *
  * Safety: the kill switch file (<FTH_HOME>/STOP, default
  * ~/.futures-trading-harness/STOP) stops new
  * cycles (end of day still runs); after maxConsecutiveErrors failed runs the
  * runner creates the kill switch itself. Orders always pass the order gate and
- * the projectx-mcp guardrails.
+ * the broker MCP server's guardrails.
  */
 
 'use strict';
@@ -42,11 +45,10 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./lib/trad
 const { premarketPlan, newsLine } = require('./lib/trading/session-context');
 const { readBlackouts } = require('./lib/trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./lib/trading/track-record');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, usesOrderFlow } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
-const { createClient } = require('./lib/projectx-rest');
+const { openAdapter, tradingBlocked } = require('./lib/broker/adapter');
 const { createPropHooks } = require('./lib/rl/live-runner');
-const { createRecorder } = require('./lib/orderflow-recorder');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { scanRecord, appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
@@ -307,10 +309,20 @@ async function main(argv) {
     // Every error is an alert (throttled); a human hears about trouble while it matters.
     if (level === 'error') alert(msg);
   };
-  const client = createClient();
-  const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
-  const flow = wantFlow && !opts.dryRun ? createRecorder({ home: HOME_DIR, getToken: client.getToken, log }) : null;
-  if (wantFlow && !flow) log('order flow: off in a dry run');
+  // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
+  let client;
+  try {
+    client = openAdapter({ root: ROOT, env: process.env });
+    await client.verify();
+    // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those.
+    const why = !cfg.paper && cfg.account ? tradingBlocked(await client.serverConfig(), cfg.account) : null;
+    if (why) throw new Error(why);
+  } catch (err) {
+    if (client) client.close();
+    log(`broker: can't start (${err.message})`, 'error');
+    return 1;
+  }
+  process.on('exit', () => client.close());
   const strategiesNow = () => loadStrategies(ROOT, process.env).strategies;
   const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: strategiesNow, paper: cfg.paper, log });
   if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policies screen setups)`);
@@ -319,7 +331,6 @@ async function main(argv) {
     prop: prop.accounts().length ? prop : null,
     root: ROOT,
     client,
-    flow,
     clock: { now: () => new Date() },
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     isKillSwitchOn: () => fs.existsSync(killSwitchFile),

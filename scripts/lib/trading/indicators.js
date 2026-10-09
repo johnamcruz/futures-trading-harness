@@ -11,7 +11,7 @@ const { zonedParts } = require('./clock');
 
 const ET = 'America/New_York';
 
-/** Accept a projectx-mcp get_bars result ({bars:[{t,o,h,l,c,v}]}) or a bare array. */
+/** Accept a get_bars result ({bars:[{t,o,h,l,c,v}]}) or a bare array. */
 /** Real order flow on a bar (aggressive buy and sell volume), when it has it. */
 function flowFields(b) {
   const bv = Number(b.bv ?? b.buy_volume);
@@ -241,7 +241,7 @@ function anchoredVwap(bars, anchorMin, untilMin = null) {
 
 /**
  * Order flow per bar. With real flow (bv/sv: aggressive buy and sell volume,
- * recorded from the TopstepX market hub or in the data file) it is bv - sv.
+ * recorded flow files or in the data file) it is bv - sv.
  * Otherwise it is estimated from the bar (no bid/ask split needed): volume signed by
  * where it closed in its range, v * ((c - l) - (h - c)) / (h - l). A close
  * at the high is all buying, at the low all selling, mid-range balanced. A

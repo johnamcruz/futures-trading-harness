@@ -2,7 +2,7 @@
 
 /**
  * Time-zone math without dependencies. The futures trading day starts at
- * 17:00 America/Chicago (CME Globex reopen; Topstep's daily loss reset).
+ * 17:00 America/Chicago (CME Globex reopen; prop firms' daily loss reset).
  */
 
 const TRADING_DAY_TZ = 'America/Chicago';
@@ -139,7 +139,7 @@ function inWindow(now, window) {
 }
 
 /**
- * Hard trading hours: the Topstep session of CME futures, 18:00 ET to 16:00
+ * Hard trading hours: the CME Globex session of the futures, 18:00 ET to 16:00
  * ET the next day (22 hours), Sunday evening to Friday afternoon. Closed
  * 16:00-18:00 ET and over the weekend: no entry then, and every position is
  * flat by 16:00 ET. Strategies narrow it with `sessions` (e.g. [ny]).
@@ -147,7 +147,7 @@ function inWindow(now, window) {
 const MARKET_TZ = 'America/New_York';
 const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
-const MARKET_HOURS_LABEL = '18:00-16:00 ET, Sunday evening to Friday afternoon (the Topstep session; closed 16:00-18:00 ET)';
+const MARKET_HOURS_LABEL = '18:00-16:00 ET, Sunday evening to Friday afternoon (the CME Globex session; closed 16:00-18:00 ET)';
 
 /**
  * Named sessions inside the trading day, in New York time:

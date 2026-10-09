@@ -34,7 +34,7 @@ function readBlackouts(file) {
 }
 
 /**
- * Returns { allowed, intent, violations, message }. `tool` is the projectx tool
+ * Returns { allowed, intent, violations, message }. `tool` is the broker tool
  * being called: place_order (default) or modify_order.
  */
 function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order', transcriptPath = null } = {}) {
@@ -46,7 +46,15 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
     const ok = r.violations.length === 0;
     return { allowed: ok, intent: r.intent, violations: r.violations, message: ok ? '' : formatBlock(r.violations) };
   }
-  const journal = readJournalWindow(resolveJournalPath(env));
+  let journalPath;
+  try {
+    journalPath = resolveJournalPath(env);
+  } catch (err) {
+    // A broken broker config: no journal to read, so no order (fails closed), but say how to get flat.
+    const violations = [{ check: 'broker-config', message: `${err.message}. Fix the broker config; meanwhile close_position still flattens a position.` }];
+    return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations) };
+  }
+  const journal = readJournalWindow(journalPath);
   const result = evaluateOrder({
     input: input || {},
     entries: journal.entries,

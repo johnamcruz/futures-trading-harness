@@ -47,7 +47,7 @@ function parseTime(raw, { excel = false, date1904 = false } = {}) {
   if (typeof raw === 'number') return inRange(fromNumber(raw));
   const s = String(raw).trim();
   if (/^-?\d+(\.\d+)?$/.test(s)) return inRange(fromNumber(Number(s)));
-  // "2025-03-10 14:30:00" has no zone: treat it as UTC, like ProjectX.
+  // "2025-03-10 14:30:00" has no zone: treat it as UTC, like get_bars.
   const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s) ? `${s.replace(' ', 'T')}Z` : s.replace(' ', 'T');
   return Date.parse(iso);
 }

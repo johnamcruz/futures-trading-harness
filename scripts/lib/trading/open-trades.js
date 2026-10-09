@@ -7,7 +7,7 @@
  * best and worst excursion so far (MFE / MAE), and how long it has been held.
  *
  * Sources, all local or already read by the runner: the broker's open
- * positions and working orders (ProjectX: position type 1 long / 2 short,
+ * positions and working orders (broker MCP interface: position type 1 long / 2 short,
  * averagePrice, creationTimestamp; order type 1 limit, 3 stop-limit, 4 stop,
  * 5 trailing stop, side 0 buy / 1 sell, limitPrice, stopPrice), the journal's
  * order_placed entry for the entry (its rationale names the setup and the

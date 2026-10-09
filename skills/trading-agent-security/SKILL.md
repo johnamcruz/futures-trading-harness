@@ -16,8 +16,8 @@ An injection or a bad tool path turns directly into money lost.
 ## How It Works
 
 1. **Layers, each independent:**
-   - Firm rules (Topstep): daily loss, trailing drawdown, auto-flatten.
-   - projectx-mcp guardrails: `PROJECTX_TRADING_ENABLED`, allowed accounts and
+   - Firm rules (the prop firm): daily loss, trailing drawdown, auto-flatten.
+   - Broker MCP server guardrails (`get_server_config`): trading enabled, allowed accounts and
      symbols, max order and position size, max daily loss. Enforced in the
      server before the API.
    - Harness order gate (PreToolUse hook): plan, stop, setup tag, time
@@ -25,14 +25,14 @@ An injection or a bad tool path turns directly into money lost.
      the kill switch, and a prop attempt's limits and policy verdict. Fails
      closed.
    - The harness MCP gateway (`scripts/mcp-gateway.js`, registered as
-     `projectx` in front of projectx-mcp): the same gate on the
+     `broker` in front of the broker MCP server): the same gate on the
      order tools for any harness, hook or not. It is authoritative.
    - Autonomous lockdown (`FTH_AUTONOMOUS=1`): the gate can't be switched off
      from inside the session; only the allowlisted scripts run; `.env` files
      can't be read.
    - Harness permissions: interactive sessions keep `place_order`,
      `modify_order`, `close_position` on "ask" until trust is earned.
-     Autonomous runs pre-approve the projectx tools for the whole session (the
+     Autonomous runs pre-approve the broker tools for the whole session (the
      head trader included); the rule that only the trade-executor places
      orders is the agents' discipline, and the gates check every order
      whoever sends it.
@@ -49,8 +49,9 @@ An injection or a bad tool path turns directly into money lost.
    access (news-calendar-analyst) have no order tools.
 3. **Separation of duties.** Analysts read. The risk manager approves. Only the
    executor places orders, and only from an approved plan.
-4. **Credentials.** `PROJECTX_API_KEY` and the HTTP auth token live in the MCP
-   server's env. Never read `.env`, print keys, or put them in the journal.
+4. **Credentials.** The broker's keys and the
+   HTTP auth token live in the broker MCP server's env
+   (`~/.futures-trading-harness/.env`). Never read `.env`, print keys, or put them in the journal.
 5. **No workarounds.** Never split orders, switch accounts or symbols, mislabel
    an entry as `[exit]`/`[protect]`, edit config or hooks, or touch the journal
    file to get past a block.

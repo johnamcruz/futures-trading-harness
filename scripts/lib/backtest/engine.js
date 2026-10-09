@@ -75,7 +75,7 @@ const DEFAULTS = {
   conflict: 'reversal',
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
-  maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
+  maxDailyLoss: 500, // $ realized loss that ends the trading day, like the broker MCP server's max daily loss (0 = off)
   sessions: ['18:00-15:50@America/New_York'],
   eodAt: '15:50@America/New_York',
   earlyCloseDates: [], // trading days (YYYY-MM-DD they end on) closing at 13:00 ET: end of day at earlyCloseEodAt
@@ -226,7 +226,7 @@ function runEngine(markets, strategies, opts = {}) {
     else if (net < 0) losses += 1;
     equity += net;
     curve.push({ t: t.exitTime, equity: round2(equity) });
-    // The live gate counts losses from ProjectX P&L, before fees; the daily
+    // The live gate counts losses from the broker's P&L (search_trades), before fees; the daily
     // dollar limit counts net.
     closesToday.push({ pnl: gross, net, ts: bar.ms + tfMs(book) });
     if (cs) cs = combine.applyClose(cs, net);

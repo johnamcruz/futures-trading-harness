@@ -1,9 +1,9 @@
 {
-  "description": "Futures trading harness hooks: deterministic order discipline for projectx-mcp (TopstepX).",
+  "description": "Futures trading harness hooks: deterministic order discipline for the broker MCP server.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*projectx.*__(place_order|modify_order)",
+        "matcher": "mcp__.*__(place_order|modify_order)",
         "hooks": [
           {
             "type": "command",

@@ -2,7 +2,7 @@
   "name": "futures-trading-harness",
   "version": "0.2.0",
   "private": true,
-  "description": "LLM-agnostic futures trading harness (Claude Code, Codex, Qwen Code) for TopstepX via projectx-mcp: strategies as Markdown, parallel agent roles, an enforced order gate, and an autonomous runner.",
+  "description": "LLM-agnostic futures trading harness (Claude Code, Codex, Qwen Code) through any broker MCP server: strategies as Markdown, parallel agent roles, an enforced order gate, and an autonomous runner.",
   "license": "MIT",
   "author": "John Cruz",
   "repository": {

@@ -1,7 +1,7 @@
 {
   "name": "futures-trading-harness",
   "version": "0.2.0",
-  "description": "LLM-agnostic futures trading harness for TopstepX via projectx-mcp: strategy library, analyst/risk/executor roles, and a fail-closed order gate.",
+  "description": "LLM-agnostic futures trading harness through any broker MCP server: strategy library, analyst/risk/executor roles, and a fail-closed order gate.",
   "author": {
     "name": "John Cruz",
     "url": "https://github.com/johnamcruz"
@@ -9,12 +9,12 @@
   "homepage": "https://github.com/johnamcruz/futures-trading-harness",
   "repository": "https://github.com/johnamcruz/futures-trading-harness",
   "license": "MIT",
-  "keywords": ["codex", "trading", "futures", "topstepx", "projectx", "skills", "hooks"],
+  "keywords": ["codex", "trading", "futures", "broker", "mcp", "skills", "hooks"],
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Futures Trading Harness",
-    "shortDescription": "Trade TopstepX futures with strategy skills and an enforced order gate.",
+    "shortDescription": "Trade futures through a broker MCP server with strategy skills and an enforced order gate.",
     "developerName": "John Cruz",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read", "Write"],

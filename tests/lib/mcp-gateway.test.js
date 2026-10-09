@@ -10,10 +10,10 @@ const deny = () => ({ allowed: false, message: 'Blocked by trading harness: no p
 
 test('only place_order tool calls are order calls', () => {
   assert.strictEqual(isOrderCall(call(1, 'place_order')), true);
-  assert.strictEqual(isOrderCall(call(1, 'mcp__projectx__place_order')), true);
+  assert.strictEqual(isOrderCall(call(1, 'mcp__broker__place_order')), true);
   assert.strictEqual(isOrderCall(call(1, 'get_bars')), false);
   assert.strictEqual(isOrderCall(call(1, 'replace_order')), false);
-  assert.strictEqual(orderTool(call(1, 'mcp__projectx__modify_order')), 'modify_order');
+  assert.strictEqual(orderTool(call(1, 'mcp__broker__modify_order')), 'modify_order');
   assert.strictEqual(isOrderCall({ method: 'tools/list' }), false);
 });
 

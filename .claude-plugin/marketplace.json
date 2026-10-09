@@ -8,7 +8,7 @@
     {
       "name": "futures-trading-harness",
       "source": "./",
-      "description": "Futures trading harness for Claude Code on TopstepX via projectx-mcp.",
+      "description": "Futures trading harness for Claude Code through any broker MCP server.",
       "version": "0.2.0"
     }
   ]

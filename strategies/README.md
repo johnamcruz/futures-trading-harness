@@ -33,13 +33,13 @@ profile (`session_*`), a rolling one (`vp_*(n)`), and its high and low volume
 nodes.
 
 The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`)
-and declares `connectors: [order_flow]`, so the runner records real
-aggressor buy and sell volume from the TopstepX market hub for it. `ofi`
-trades real flow, where the imbalance moves price; `ofi_absorption` trades
-the reversal when it doesn't. `value_area` (3-minute) declares it too, for
-its order-flow confirmation, so a 3-minute runner records flow as well
-(`orderFlow: "auto"`; set `orderFlow: false` in the runner config to turn it
-off, and the confirmation falls back to the bar-shape estimate).
+and declares `connectors: [order_flow]`: `ofi` and `delta` read aggressor
+buy and sell volume from recorded flow files (`<FTH_HOME>/flow/`) where
+they cover the bar, else an estimate from where each bar closed in its
+range. Live flow is not part of the broker MCP interface, so live these run
+on the estimate. `ofi` trades real flow, where the imbalance moves price;
+`ofi_absorption` trades the reversal when it doesn't. `value_area`
+(3-minute) declares it too, for its order-flow confirmation.
 
 ## Add a strategy
 

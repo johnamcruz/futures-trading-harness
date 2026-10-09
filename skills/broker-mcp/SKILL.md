@@ -1,9 +1,9 @@
 ---
-name: topstepx-mcp
-description: Reference for trading TopstepX through the projectx-mcp server - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__projectx__ tool or when an order behaves unexpectedly.
+name: broker-mcp
+description: Reference for trading through the broker MCP server (any prop firm or broker that implements the broker MCP interface) - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__broker__ tool or when an order behaves unexpectedly.
 ---
 
-# TopstepX via projectx-mcp
+# Trading through the broker MCP server
 
 ## When to Use
 
@@ -12,8 +12,11 @@ description: Reference for trading TopstepX through the projectx-mcp server - to
 
 ## How It Works
 
-The server must be registered under the name `projectx`, so tools are
-`mcp__projectx__<tool>`. Read `projectx://guide` once per session.
+Every broker or prop firm runs its own MCP server (its own repo) that
+implements the broker MCP interface (`<root>/docs/BROKER-MCP-INTERFACE.md`);
+the broker config picks which one. It is registered under the name `broker`,
+so tools are `mcp__broker__<tool>` whatever the firm. Read the server's own
+guide resource once per session if it has one.
 
 ### Session loop
 
@@ -35,7 +38,7 @@ The server must be registered under the name `projectx`, so tools are
 |---|---|
 | Session | `get_server_config`, `list_accounts`, `get_account_snapshot` |
 | Contracts | `search_contracts`, `get_contract`, `list_available_contracts` |
-| Market data | `get_bars` (50 req / 30 s), `get_quote` (SignalR) |
+| Market data | `get_bars` (50 req / 30 s), `get_quote` (latest quote; `quote: null` when the market is closed) |
 | Orders | `place_order`, `modify_order`, `cancel_order`, `close_position`, `partial_close_position` |
 | History | `list_open_orders`, `search_orders`, `list_open_positions`, `search_trades`, `get_performance` |
 | Memory | `journal_add`, `journal_read` |
@@ -79,7 +82,7 @@ The server must be registered under the name `projectx`, so tools are
 ### Journal
 
 `journal_add` / `journal_read` keep the journal the gate reads, a JSON-lines
-file at `PROJECTX_JOURNAL_PATH` (default `~/.projectx-mcp/journal.jsonl`):
+file at the broker's journal path in the broker config (`get_server_config`: `journalPath`):
 one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds: `plan`, `note`,
 `review`, `lesson`; every `place_order` writes an `order_placed` entry by
 itself. Write through the tools only; never edit the file. The gate reads
@@ -110,7 +113,7 @@ filters, `journal_add {orderId}` links a review to its order, and
 | `Blocked by trading harness` | Order gate hook | Fix the listed cause or stand aside. |
 | errorCode 4 `AccountViolation` / `canTrade=false` | Firm locked the account | Stop. Tell the user. |
 | errorCode 5 `OutsideTradingHours` | Market closed | Don't retry in a loop. |
-| "Live accounts not supported" on cancel/close | Endpoint limited to sim/eval | Tell the user. |
+| "Live accounts not supported" on cancel/close | The broker limits the endpoint to sim/eval | Tell the user. |
 
 ## Examples
 

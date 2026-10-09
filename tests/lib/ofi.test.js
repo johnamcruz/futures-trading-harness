@@ -78,16 +78,6 @@ test('the runner keeps the multi-timeframe window (250 hours), three trading day
   assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, bars: 800 }).bars, 800);
 });
 
-test('orderFlow auto: on when a strategy on the timeframe uses ofi or delta', () => {
-  const { usesOrderFlow, validateConfig } = require('../../scripts/lib/autotrader');
-  const all = loadStrategies(ROOT, {}).strategies;
-  assert.strictEqual(usesOrderFlow(all, 1), true);
-  // value_area confirms with ofi(3), so a 3-minute runner records flow too; without it, none does.
-  assert.strictEqual(usesOrderFlow(all, 3), true);
-  assert.strictEqual(usesOrderFlow(all.filter(s => s.name !== 'value_area'), 3), false);
-  assert.throws(() => validateConfig({ harness: 'qwen', premarketAt: '', orderFlow: 'yes' }), /orderFlow/);
-});
-
 test('a strategy declares the connectors its rules need, like a skill declares tools', () => {
   const { validateStrategy } = require('../../scripts/lib/trading/strategies');
   const base = { name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '1m', signal: 'rules', rules: { long: ['ofi(3) >= 0.3'] }, risk: { stop: 'atr:1', min_rr: 2 } };

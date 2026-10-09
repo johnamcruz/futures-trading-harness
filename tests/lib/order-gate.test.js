@@ -570,3 +570,15 @@ test('trigger-fired: a rules strategy enters only on its own fired trigger, on t
   assert.deepStrictEqual(ev(tmpDir(), entryOrder(), {}).violations.filter(v => v.check === 'trigger-fired').length, 1);
   assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: trendHome(undefined, { fired: [] }), mtfMaxAgeMin: 15 }, strategies: [trendStrategy()] }).violations, []);
 });
+
+test('checkOrder: an unreadable broker config is a broker-config block, even for an exit', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const path = require('path');
+  const fs = require('fs');
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'brokers.json'), '{ broken');
+  const r = checkOrder({ ...entryOrder({ rationale: '[exit] flatten' }), side: 'sell' }, { env: { FTH_HOME: dir }, pluginRoot: path.resolve(__dirname, '..', '..') });
+  assert.strictEqual(r.allowed, false);
+  assert.deepStrictEqual(r.violations.map(v => v.check), ['broker-config']);
+  assert.match(r.message, /close_position still flattens/);
+});

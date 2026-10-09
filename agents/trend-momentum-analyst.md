@@ -1,7 +1,7 @@
 ---
 name: trend-momentum-analyst
 description: Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy-library scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes only scratch bar files under /tmp/fth.
-tools: Read, Write, Bash, Skill, mcp__projectx__search_contracts, mcp__projectx__get_contract, mcp__projectx__get_bars
+tools: Read, Write, Bash, Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_bars
 model: inherit
 ---
 

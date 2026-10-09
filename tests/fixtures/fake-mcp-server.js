@@ -1,6 +1,6 @@
 'use strict';
 
-// Minimal stand-in for projectx-mcp. Account tools answer with JSON from
+// Minimal stand-in broker MCP server. Account tools answer with JSON from
 // FAKE_POSITIONS / FAKE_ORDERS / FAKE_TRADES (default []); every other request
 // is answered with the method and tool name it received, so tests can see what
 // the gateway forwarded. FAKE_DELAY_MS delays those other replies.

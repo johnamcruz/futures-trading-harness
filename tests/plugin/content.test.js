@@ -12,7 +12,7 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const list = rel => fs.readdirSync(path.join(ROOT, rel));
 const fm = rel => parseFrontmatter(read(rel)).data;
 
-const PROJECTX_TOOLS = new Set([
+const BROKER_TOOLS = new Set([
   'get_server_config', 'list_accounts', 'get_account_snapshot', 'search_contracts', 'get_contract',
   'list_available_contracts', 'get_bars', 'get_quote', 'place_order', 'modify_order', 'cancel_order',
   'close_position', 'partial_close_position', 'list_open_orders', 'search_orders', 'list_open_positions',
@@ -44,11 +44,11 @@ test('agents declare name, description, tools, model; only the executor can writ
     for (const k of ['description', 'tools', 'model']) assert.ok(data[k], `${file}: missing ${k}`);
     const tools = String(data.tools).split(',').map(t => t.trim());
     for (const t of tools.filter(x => x.startsWith('mcp__'))) {
-      const m = /^mcp__projectx__(\w+)$/.exec(t);
-      assert.ok(m && PROJECTX_TOOLS.has(m[1]), `${file}: unknown MCP tool ${t}`);
+      const m = /^mcp__broker__(\w+)$/.exec(t);
+      assert.ok(m && BROKER_TOOLS.has(m[1]), `${file}: unknown MCP tool ${t}`);
     }
-    const writes = tools.filter(t => WRITE_TOOLS.some(w => t === `mcp__projectx__${w}`));
-    if (name === 'trade-executor') assert.ok(writes.includes('mcp__projectx__place_order'));
+    const writes = tools.filter(t => WRITE_TOOLS.some(w => t === `mcp__broker__${w}`));
+    if (name === 'trade-executor') assert.ok(writes.includes('mcp__broker__place_order'));
     else assert.deepStrictEqual(writes, [], `${file}: only trade-executor may hold order tools`);
   }
 });
@@ -57,7 +57,7 @@ test('backticked skill and agent references point at files that exist', () => {
   const { TAGS: REGIME_TAGS } = require('../../scripts/lib/trading/regime');
   const known = new Set([...skills, ...agents, ...REGIME_TAGS]);
   const candidates = /`([a-z]+(?:-[a-z]+)+)`/g;
-  const roleOrSkill = /-(analyst|manager|executor|reviewer|researcher)$|^(trade|strategy|market|premarket|end|autonomous|setup|position|prop|session|liquidity|vwap|trend|multi|topstepx)-/;
+  const roleOrSkill = /-(analyst|manager|executor|reviewer|researcher)$|^(trade|strategy|market|premarket|end|autonomous|setup|position|prop|session|liquidity|vwap|trend|multi|broker)-/;
   const files = [
     ...agents.map(a => `agents/${a}.md`),
     ...skills.map(s => `skills/${s}/SKILL.md`),
@@ -95,7 +95,7 @@ test('hooks.json points at existing scripts through run-with-flags', () => {
   }
   assert.ok(count >= 3);
   const gate = hooks.PreToolUse.find(g => /place_order/.test(g.matcher));
-  assert.ok(new RegExp(gate.matcher).test('mcp__projectx__place_order'));
+  assert.ok(new RegExp(gate.matcher).test('mcp__broker__place_order'));
 });
 
 test('every harness manifest agrees on name and version, and its paths exist', () => {

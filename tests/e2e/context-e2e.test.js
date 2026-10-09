@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The decision context end to end: the runner polls a fake ProjectX serving
+ * The decision context end to end: the runner polls a fake broker serving
  * real NQ bars, with an open long on the account and its entry in the
  * journal, and a recorded backtest track record. The 13:15 ET bar of
  * 2026-04-27 closes (value_area fires short on it). The cycle prompt the

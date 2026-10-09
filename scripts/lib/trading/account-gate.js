@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Account-aware order checks, run by the MCP gateway, which can ask projectx-mcp
+ * Account-aware order checks, run by the MCP gateway, which can ask the broker MCP server
  * for the live account state. These checks don't trust the model's labels
  * or its self-graded reviews:
  *
@@ -139,7 +139,7 @@ function restingSize(orders, contractId, sideSign, types) {
 
 /**
  * Returns violations [{check, message}] for a place_order given live facts
- * { positions, orders, trades } from projectx-mcp.
+ * { positions, orders, trades } from the broker MCP server.
  */
 function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger = [], propAttempt = null }) {
   // Missing or malformed account data must block, never read as "flat".
@@ -249,7 +249,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
  * cancel_order may not remove the last protective stop of an open position
  * (move it with modify_order instead, or close the position first).
  */
-function evaluateCancel({ input = {}, positions, orders, config }) {
+function evaluateCancel({ input = {}, positions, orders, config, ledger = [], now = new Date() }) {
   for (const [name, v] of Object.entries({ positions, orders })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
@@ -257,7 +257,8 @@ function evaluateCancel({ input = {}, positions, orders, config }) {
   if (skip.has('cancel-protection')) return [];
   const order = orders.find(o => Number(o.id) === Number(input.orderId));
   if (!order || !STOP_TYPES.has(Number(order.type))) return [];
-  const net = contractNet(positions, order.contractId);
+  // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet.
+  const net = pendingState(ledger, order.contractId, contractNet(positions, order.contractId), now, undefined, { exact: true }).projected;
   const orderSign = Number(order.side) === 0 ? 1 : -1;
   if (net === 0 || orderSign !== -Math.sign(net)) return [];
   const otherStops = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);

@@ -1,6 +1,6 @@
 ---
 name: session-timing
-description: Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, Topstep cut-offs, and scheduled news. Use when timing an entry, choosing strategies for the time of day, or setting news blackouts.
+description: Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, prop-firm cut-offs, and scheduled news. Use when timing an entry, choosing strategies for the time of day, or setting news blackouts.
 ---
 
 # Session Timing
@@ -13,7 +13,7 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 ## How It Works
 
 All times America/New_York (ET) unless marked CT. The harness trades the
-Topstep session, 18:00 ET to 16:00 ET, Sunday evening to Friday afternoon
+CME Globex session, 18:00 ET to 16:00 ET, Sunday evening to Friday afternoon
 (a hard rule in the order gate): nothing from 16:00 to 18:00 ET or on
 weekends, and every position flat by end of day (`eodAt`, by 16:00 ET).
 Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
@@ -32,7 +32,7 @@ Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
 | 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |
-| 16:10 ET / 15:10 CT | Topstep's own flatten | The harness is flat by 16:00 ET |
+| 16:10 ET / 15:10 CT | A typical prop firm's own flatten | The harness is flat by 16:00 ET |
 
 **Holidays and early closes.** CME closes on some US holidays and closes
 equity index futures early (13:00 ET) on others (the days around

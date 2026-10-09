@@ -3,7 +3,7 @@
 /**
  * Harness discipline settings, read from the hook environment. Set them in the
  * `env` block of ~/.claude/settings.json (or the project's .claude/settings.json).
- * These sit on top of the projectx-mcp server guardrails; they never loosen them.
+ * These sit on top of the broker MCP server's guardrails; they never loosen them.
  */
 
 const path = require('path');

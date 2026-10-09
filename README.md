@@ -1,7 +1,8 @@
 # Futures Trading Harness
 
-An LLM-agnostic agent harness that trades futures on **TopstepX** through the
-[projectx-mcp](https://github.com/johnamcruz/projectx-mcp) server. It runs on
+An LLM-agnostic agent harness that trades futures through a broker MCP
+server: any broker or prop firm whose server implements one interface
+([Brokers](#brokers)). It runs on
 **Claude Code, Codex, or Qwen Code** (any model those harnesses can drive,
 including Qwen through DashScope, vLLM, or Ollama), and it can trade on its own
 on a schedule.
@@ -45,7 +46,7 @@ account document, and its workflows are skills.
 > [!WARNING]
 > This software lets an AI place real orders on your account. Futures trading
 > involves substantial risk of loss, and AI models make mistakes. Start with
-> `PROJECTX_TRADING_ENABLED=false` and `"paper": true`, then a practice or
+> trading disabled on the broker server and `"paper": true`, then a practice or
 > evaluation account, micro contracts, and size 1. You are responsible for every
 > order placed.
 
@@ -67,14 +68,14 @@ account document, and its workflows are skills.
    risk-manager verdict → trade-executor (the only role with order tools)
         │
    order gate ── PreToolUse hook (Claude/Codex/Qwen)
-        │     └─ MCP gateway (every MCP client) ──▶ projectx-mcp ──▶ TopstepX
+        │     └─ MCP gateway (every MCP client) ──▶ broker MCP server ──▶ broker
         ▼
    trade-reviewer → journal reviews and lessons → next session's briefing
 ```
 
 ## Trading hours
 
-Trading follows the Topstep session of CME futures: **18:00 ET to 16:00 ET
+Trading follows the CME Globex session: **18:00 ET to 16:00 ET
 the next day, Sunday evening to Friday afternoon** (about 22 hours a day).
 Nothing is traded from 16:00 to 18:00 ET or over the weekend, and every
 position is flat by end of day (`eodAt`, default 15:50 ET, never later than
@@ -99,15 +100,46 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 
 | Layer | Where | Enforces | Model can bypass? |
 |---|---|---|---|
-| Firm rules | Topstep | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
-| Server guardrails | projectx-mcp | Trading enabled, accounts, symbols, size, daily $ loss | No |
-| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of projectx-mcp | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
+| Firm rules | The prop firm (its account profile) | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
+| Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
+| **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
-| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (projectx, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
-Always register projectx **through the gateway** (the installer does): it is
-the one layer that works the same on every harness and sees the real account.
+Always register the `broker` server **through the gateway** (the installer
+does): it is the one layer that works the same on every harness and sees the
+real account.
+
+## Brokers
+
+The harness holds no broker code. Every broker or prop firm runs its own MCP
+server, in its own repo, implementing one interface:
+[docs/BROKER-MCP-INTERFACE.md](docs/BROKER-MCP-INTERFACE.md) (as data:
+`scripts/lib/broker/interface.js`). projectx-mcp (TopstepX) is the default
+and the reference.
+
+- `mcp-configs/brokers.json` lists the servers and picks the default
+  (`topstepx`): its entry point (`PROJECTX_MCP_ENTRY`), journal, and the
+  variables it reads. `~/.futures-trading-harness/brokers.json` (or
+  `FTH_BROKERS_FILE`) overrides or adds brokers; `FTH_BROKER` picks one.
+- Every harness registers it as the MCP server `broker` (tools
+  `mcp__broker__<tool>`), always as the gateway alone:
+  `node <repo>/scripts/mcp-gateway.js`. The gateway starts the configured
+  server.
+- The runner, `bars.js`, `backtest.js fetch`, and `orderflow.js export`
+  reach it only through the broker adapter (`scripts/lib/broker/adapter.js`):
+  reads straight to the server, order calls through the gateway.
+- Switching brokers is config: add the server to `brokers.json` and set
+  `FTH_BROKER`.
+
+Check a server against the interface before using it. The check is read-only
+(no orders, no journal writes):
+
+```bash
+node scripts/check-broker-mcp.js [--account <id>] [--symbol MNQ] -- <server command>
+node scripts/check-broker-mcp.js --account 123456 -- node /abs/path/projectx-mcp/dist/index.js
+```
 
 ## Adapting to the market regime
 
@@ -218,7 +250,7 @@ strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTra
 | `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/train-policy`, `/mtf` |
 | `rules/trading/` | Always-on rules |
 | `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
-| `scripts/` | Hook runtime, MCP gateway, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
+| `scripts/` | Hook runtime, MCP gateway, broker adapter and conformance check, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
 | `workspace/` | Generated `AGENTS.md` / `CLAUDE.md` / `QWEN.md`: the operator instructions every harness reads |
 | `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/` | Claude Code and Codex plugin manifests |
 | `qwen-extension/` | Qwen Code extension: generated manifest, `QWEN.md`, Qwen-format agents and commands, symlinks to the shared skills, scripts, strategies, hooks |
@@ -229,32 +261,36 @@ Generated files come from the canonical sources: `node scripts/sync-harness.js`
 
 ## Setup
 
-Requires Node.js 22+ and a built [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
+Requires Node.js 22+ and a built broker MCP server. For TopstepX, build
+[projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
 (`npm install && npm run build`; note the path to `dist/index.js`).
 
 ```bash
 git clone https://github.com/johnamcruz/futures-trading-harness ~/futures-trading-harness
 cd ~/futures-trading-harness
-node scripts/install.js --target qwen,codex,claude --projectx /abs/path/projectx-mcp/dist/index.js
+node scripts/install.js --target qwen,codex,claude --entry /abs/path/projectx-mcp/dist/index.js
 ```
+
+`--broker <name>` picks a broker other than the default (`topstepx`);
+`--entry` is written to `~/.futures-trading-harness/brokers.json`, and
+`--dry-run` shows the plan without writing.
 
 The installer backs up and edits only what each harness can't get from its
 plugin. It prints the remaining native commands:
 
 | Harness | Installer writes | You run |
 |---|---|---|
-| Qwen Code | `projectx` MCP (via gateway) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
-| Codex | marked block in `~/.codex/config.toml`: `projectx` MCP (via gateway, tools pre-approved so `codex exec` can use them) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
+| Qwen Code | `broker` MCP (via gateway) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
+| Codex | marked block in `~/.codex/config.toml`: `broker` MCP (via gateway, tools pre-approved so `codex exec` can use them, the broker's variables forwarded) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
 | Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the printed `claude mcp add` command |
 
-Credentials (`PROJECTX_USERNAME`, `PROJECTX_API_KEY`) and guardrails
-(`PROJECTX_TRADING_ENABLED`, `PROJECTX_ALLOWED_SYMBOLS`, ...) go in the
-environment that launches the harness (Qwen's extension settings don't reach
-MCP servers), or in a `.env` file. See
-`mcp-configs/` for examples.
+The broker server's credentials and guardrails (its `env` in the broker
+config) go in `~/.futures-trading-harness/.env`,
+which the gateway loads (Qwen's extension settings don't reach MCP servers).
+See `mcp-configs/` for examples.
 
-**`.env` files.** The autotrader, the MCP gateway, `backtest.js fetch`, and
-`orderflow.js` read, in order: `$FTH_ENV_FILE` (if set),
+**`.env` files.** The autotrader, the MCP gateway, `bars.js`,
+`backtest.js`, `orderflow.js`, and `check-broker-mcp.js` read, in order: `$FTH_ENV_FILE` (if set),
 `~/.futures-trading-harness/.env` (preferred: outside the repo), and a
 `.env` in the repo root. The first value found wins, a variable already set
 in the environment wins over all of them, and only key names are logged.
@@ -297,7 +333,7 @@ trade cycle starts after every closed bar** of the configured `timeframe`
 (1 or 3 minutes, or any value up to 60):
 
 1. The runner sleeps until the forming bar's close, waits `barDelaySeconds`,
-   then polls ProjectX `retrieveBars` (closed bars only) every
+   then polls `get_bars` (closed bars only) through the broker adapter every
    `barPollSeconds` until the new bar is published. Alignment is learned from
    the data, and after `barTimeoutSeconds` with no bar (daily break, halt) it
    resyncs.
@@ -310,14 +346,15 @@ trade cycle starts after every closed bar** of the configured `timeframe`
    that timeframe fires or a position is open, which saves model calls.
 4. A bar that closes while a cycle is still running is skipped, never queued.
 
-Why polling and not a websocket: the ProjectX realtime hub streams quotes and
-trades, not bars, so a websocket would mean building candles from ticks that
-can disagree with the exchange's bars. Polling right after each close costs
-about one request per symbol per bar (the limit is 50 per 30 s) and returns
-the official candle.
+Why polling: `get_bars` is the interface's one bar source, and it returns
+the broker's official candle. Polling right after each close costs about one
+request per symbol per bar (mind the broker's rate limit).
 
-The runner needs `PROJECTX_USERNAME` and `PROJECTX_API_KEY` in its
-environment (read-only use: contracts, bars, positions). It logs everything to
+The runner starts the broker server with its credentials (from the `.env`).
+A live runner refuses to start unless the server lists every interface tool,
+has trading enabled, and allows
+the account; it needs trading for its exits, stop moves, and cancels. Paper
+mode sets the broker's `paperEnv` (its trading switch off). It logs everything to
 `~/.futures-trading-harness/logs/` and never runs two cycles at once:
 `autotrader-<day>.log` holds every runner line (timestamped, `INFO` or
 `ERROR`: each bar's close and whether a cycle ran and why, stops trailed,
@@ -348,14 +385,14 @@ which checkpoint, or failed with its traceback), and a run manifest
 Each sweep trial also writes `trial_NNN/train.log` and `summary.json`. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
-Code gets an explicit tool allowlist (projectx, reading, `/tmp/fth`, and the
+Code gets an explicit tool allowlist (broker tools, reading, `/tmp/fth`, and the
 harness scripts by absolute path), Qwen Code runs in default approval mode
 with the allowlist in `workspace/.qwen/settings.json`, and Codex runs in its
 `workspace-write` sandbox. Start with `"paper": true` and tight server limits
-(`PROJECTX_MAX_POSITION_SIZE=1`, a small `PROJECTX_MAX_DAILY_LOSS`, a practice
-account in `PROJECTX_ALLOWED_ACCOUNT_IDS`).
+(max position 1, a small daily loss limit, a practice account as the only
+allowed account).
 
-For unattended Claude runs, remove any `ask` rules on projectx order tools
+For unattended Claude runs, remove any `ask` rules on broker order tools
 from your Claude settings (`mcp-configs/settings.example.json` has them for
 interactive use): "ask" can't be answered without a user, so the runner
 refuses to start while they're present.
@@ -417,8 +454,8 @@ rules strategy in sample and reports only its out-of-sample trades. See
 ### Operating it
 
 - `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: 2000 closed
-  bars to `/tmp/fth/MNQ-3m.json` (credentials from your `.env`, never
-  printed) and the multi-timeframe read recorded for the gate. Interactive
+  bars to `/tmp/fth/MNQ-3m.json` (through the broker adapter; credentials
+  from your `.env`, never printed) and the multi-timeframe read recorded for the gate. Interactive
   sessions use it in place of pasting `get_bars` replies.
 - `node scripts/autotrader.js --status`: a watchdog for cron or launchd;
   exits 1 when the runner is silent or the kill switch is on. Runner errors
@@ -480,22 +517,19 @@ policy: { bundle: prop_portfolio_3m_topstep_100k }   # models/<bundle>.json, onc
 
 See [docs/RL-DESIGN.md](docs/RL-DESIGN.md).
 
-### Order flow from TopstepX
+### Order flow
 
 The `ofi` and `ofi_absorption` strategies are plain STRATEGY.md rules that
-declare the data they need: `connectors: [order_flow]`. For them the runner
-subscribes to the ProjectX market hub's trade prints (SignalR over the
-built-in WebSocket, Node 22+), takes each print's aggressor side (the hub's
-trade `type`: 0 buy, 1 sell), and sums 1-minute buy and sell volume into
-the bars it scans, where `ofi(n)` and `delta(n)` read it. `orderFlow:
-"auto"` (the default) turns the connector on when a strategy on the
-runner's timeframe declares it. Recorded minutes go to
-`<FTH_HOME>/flow/`, and `scripts/orderflow.js` records without the runner
-and exports bars with flow for backtests. The hub keeps no history: flow
-exists from when recording started.
+declare the data they need: `connectors: [order_flow]`. `ofi(n)` and
+`delta(n)` read 1-minute aggressor buy and sell volume from recorded flow
+files in `<FTH_HOME>/flow/` when they cover the bar, else an estimate from
+where each bar closed in its range. Live order flow is not part of the
+broker MCP interface, so the harness doesn't record it; a future optional
+interface tool could serve it. `scripts/orderflow.js` lists previously
+recorded files and exports bars with their flow for backtests:
 
 ```bash
-node scripts/orderflow.js record --symbols MNQ,MES
+node scripts/orderflow.js status
 node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
 ```
 
@@ -518,7 +552,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
 | `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
-| `PROJECTX_JOURNAL_PATH` | `~/.projectx-mcp/journal.jsonl` | Must match the MCP server |
+| `FTH_BROKER` / `FTH_BROKERS_FILE` | `topstepx` / `~/.futures-trading-harness/brokers.json` | The broker MCP server ([Brokers](#brokers)) |
 
 ### The rationale convention
 

@@ -5,11 +5,13 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, applyPlan } = require('../../scripts/lib/install');
+const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, applyPlan, planBrokerEntry } = require('../../scripts/lib/install');
+const { activeBroker } = require('../../scripts/lib/broker/config');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const ENTRY = '/opt/projectx-mcp/dist/index.js';
+const ENTRY = '/opt/broker-mcp/dist/index.js';
+const BROKER = activeBroker({ FTH_HOME: tmpDir() });
 
 test('upsertBlock appends once and replaces in place', () => {
   const once = upsertBlock('model = "x"\n', 'a = 1');
@@ -23,51 +25,58 @@ test('upsertBlock appends once and replaces in place', () => {
 });
 
 test('codex block wires the gateway and every agent role', () => {
-  const block = codexConfigBlock(ROOT, ENTRY);
-  assert.match(block, /\[mcp_servers\.projectx\]/);
-  assert.ok(block.includes(JSON.stringify(path.join(ROOT, 'scripts', 'mcp-gateway.js'))));
-  assert.ok(block.includes(`"--", "node", "${ENTRY}"`));
+  const block = codexConfigBlock(ROOT, BROKER);
+  assert.match(block, /\[mcp_servers\.broker\]/);
+  // The gateway alone: it starts the server named in the broker config.
+  assert.ok(block.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'mcp-gateway.js'))}]`));
+  // The broker server's variables (from the broker config) and the harness's are forwarded.
+  assert.match(block, /"PROJECTX_API_KEY"/);
+  assert.match(block, /"PROJECTX_MCP_ENTRY"/);
+  assert.match(block, /"FTH_BROKER"/);
   assert.match(block, /\[agents\.trade_executor\]/);
   assert.match(block, /^default_tools_approval_mode = "approve"$/m);
   assert.match(block, /"FTH_KILL_SWITCH_FILE"/);
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 
-test('codex refuses to clobber a user-defined projectx server', () => {
+test('codex refuses to clobber a user-defined broker server', () => {
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.codex'));
-  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.projectx]\ncommand = "node"\n');
-  assert.throws(() => planCodex({ root: ROOT, home, projectxEntry: ENTRY }), /already defines/);
+  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.broker]\ncommand = "node"\n');
+  assert.throws(() => planCodex({ root: ROOT, home, broker: BROKER }), /already defines/);
 });
 
-test('qwen settings merge is idempotent, keeps user entries, and removes old harness hooks', () => {
-  const oldHarnessHook = { matcher: 'mcp__.*projectx.*__place_order', hooks: [{ type: 'command', command: 'node "/x/scripts/hooks/run-with-flags.js" pre:trading:order-gate scripts/hooks/trading-order-gate.js minimal' }] };
+test('qwen settings merge is idempotent, keeps user entries, and removes old harness hooks and a gateway registered under an older name', () => {
+  const oldHarnessHook = { matcher: 'mcp__.*oldname.*__place_order', hooks: [{ type: 'command', command: 'node "/x/scripts/hooks/run-with-flags.js" pre:trading:order-gate scripts/hooks/trading-order-gate.js minimal' }] };
   const user = {
     hooks: { PreToolUse: [{ matcher: 'write_file', hooks: [{ type: 'command', command: 'echo user' }] }, oldHarnessHook] },
-    mcpServers: { other: { command: 'x' } },
+    mcpServers: { other: { command: 'x' }, oldname: { command: 'node', args: ['/x/scripts/mcp-gateway.js', '--', 'node', ENTRY] } },
   };
-  const once = mergeQwenSettings(user, ROOT, ENTRY);
-  const twice = mergeQwenSettings(once, ROOT, ENTRY);
+  const once = mergeQwenSettings(user, ROOT);
+  const twice = mergeQwenSettings(once, ROOT);
   assert.deepStrictEqual(twice, once);
   assert.deepStrictEqual(once.hooks.PreToolUse.map(g => g.hooks[0].command), ['echo user']);
   assert.deepStrictEqual(once.mcpServers.other, { command: 'x' });
-  assert.ok(once.mcpServers.projectx.args[0].endsWith('mcp-gateway.js'));
-  assert.throws(() => mergeQwenSettings({ mcpServers: { projectx: { command: 'node', args: ['/x/index.js'] } } }, ROOT, ENTRY), /does not use the harness gateway/);
+  assert.ok(once.mcpServers.broker.args[0].endsWith('mcp-gateway.js'));
+  assert.strictEqual(once.mcpServers.oldname, undefined, 'the old gateway entry is replaced');
+  assert.throws(() => mergeQwenSettings({ mcpServers: { broker: { command: 'node', args: ['/x/index.js'] } } }, ROOT), /does not use the harness gateway/);
+  // A server of the user's own (not the harness gateway) is kept.
+  assert.ok(mergeQwenSettings({ mcpServers: { oldname: { command: 'node', args: ['/x/index.js'] } } }, ROOT).mcpServers.oldname);
 });
 
 test('qwen workspace permissions allow harness scripts and deny edits to the harness and its state', () => {
-  const p = qwenWorkspaceSettings('/fth', '/home/u').permissions;
+  const p = qwenWorkspaceSettings('/fth', '/home/u', { journal: '/home/u/.broker-mcp/journal.jsonl' }).permissions;
   // The skills' scripts (multi-timeframe read, prop status) and the runner's logs are allowed; credentials are not.
   assert.ok(p.allow.includes('Bash(node /fth/scripts/mtf.js *)') && p.allow.includes('Bash(node /fth/scripts/combine.js status *)'));
   assert.ok(p.allow.includes('Read(//home/u/.futures-trading-harness/logs/**)'));
   assert.ok(p.deny.includes('Read(//home/u/.futures-trading-harness/.env)'));
-  assert.ok(p.allow.includes('mcp__projectx'));
+  assert.ok(p.allow.includes('mcp__broker'));
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
   assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
   assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
   assert.ok(p.allow.includes('WebFetch(bls.gov)'));
   assert.ok(!p.allow.some(r => ['Bash', 'Edit', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
-  for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/**)', 'Edit(//home/u/.qwen/**)',
+  for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.broker-mcp/journal.jsonl)', 'Edit(//home/u/.qwen/**)',
     'Read(//proc/**)', 'Read(//home/u/.claude.json)', 'Read(//fth/**/.env)']) assert.ok(p.deny.includes(rule), rule);
 });
 
@@ -75,30 +84,51 @@ test('plans write to the right files and backups are made', () => {
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.qwen'));
   fs.writeFileSync(path.join(home, '.qwen', 'settings.json'), '{"theme":"dark"}');
-  const qwenPlan = planQwen({ root: ROOT, home, projectxEntry: ENTRY });
+  const qwenPlan = planQwen({ root: ROOT, home, broker: BROKER });
   qwenPlan.writes = qwenPlan.writes.filter(w => w.file.startsWith(home)); // don't write into the repo
   applyPlan(qwenPlan);
   applyPlan(qwenPlan);
   const settings = JSON.parse(fs.readFileSync(path.join(home, '.qwen', 'settings.json'), 'utf8'));
   assert.strictEqual(settings.theme, 'dark');
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.qwen', 'settings.json.fth-backup'), 'utf8')), { theme: 'dark' }, 'first backup is kept');
-  applyPlan(planClaude({ root: ROOT, home, projectxEntry: ENTRY }));
+  applyPlan(planClaude({ root: ROOT, home, broker: BROKER }));
   assert.ok(fs.existsSync(path.join(home, '.claude', 'rules', 'trading', 'risk-management.md')));
-  applyPlan(planCodex({ root: ROOT, home, projectxEntry: ENTRY }));
-  assert.match(fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8'), /mcp_servers\.projectx/);
+  applyPlan(planCodex({ root: ROOT, home, broker: BROKER }));
+  assert.match(fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8'), /mcp_servers\.broker/);
   fs.writeFileSync(path.join(home, '.qwen', 'settings.json'), '{bad');
-  assert.throws(() => planQwen({ root: ROOT, home, projectxEntry: ENTRY }), /not valid JSON/);
+  assert.throws(() => planQwen({ root: ROOT, home, broker: BROKER }), /not valid JSON/);
 });
 
 test('CLI validates arguments and supports --dry-run', () => {
   const cli = path.join(ROOT, 'scripts', 'install.js');
   const home = tmpDir();
-  const bad = spawnSync(process.execPath, [cli, '--target', 'cursor', '--projectx', ENTRY], { encoding: 'utf8' });
+  const bad = spawnSync(process.execPath, [cli, '--target', 'cursor', '--entry', ENTRY], { encoding: 'utf8' });
   assert.strictEqual(bad.status, 1);
-  const dry = spawnSync(process.execPath, [cli, '--target', 'all', '--projectx', ENTRY, '--dry-run', '--home', home], { encoding: 'utf8' });
+  const dry = spawnSync(process.execPath, [cli, '--target', 'all', '--entry', ENTRY, '--dry-run', '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home } });
   assert.strictEqual(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, /would write .*brokers\.json \(broker \w+: \/opt\/broker-mcp\/dist\/index\.js\)/);
   assert.match(dry.stdout, /would write .*config\.toml/);
   assert.deepStrictEqual(fs.readdirSync(home), []);
+  // --entry goes where the harness reads it: <FTH_HOME>/brokers.json.
+  const state = path.join(home, 'state');
+  const wrote = spawnSync(process.execPath, [cli, '--target', 'claude', '--entry', ENTRY, '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: state } });
+  assert.strictEqual(wrote.status, 0, wrote.stderr);
+  assert.ok(Object.values(JSON.parse(fs.readFileSync(path.join(state, 'brokers.json'), 'utf8')).brokers).some(b => b.entry === ENTRY));
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.mkdirSync(home);
+  const unknown = spawnSync(process.execPath, [cli, '--target', 'all', '--broker', 'nope', '--dry-run', '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home } });
+  assert.strictEqual(unknown.status, 1);
+  assert.match(unknown.stderr, /unknown broker "nope"/);
+});
+
+test('--entry records the server in your brokers.json and keeps the rest of it', () => {
+  const home = tmpDir();
+  assert.strictEqual(planBrokerEntry({ home, brokerName: 'mine', entry: null }), null);
+  const dir = path.join(home, '.futures-trading-harness');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'other', brokers: { other: { command: ['o'] } } }));
+  const w = planBrokerEntry({ home, brokerName: 'mine', entry: ENTRY });
+  assert.deepStrictEqual(JSON.parse(w.content), { broker: 'other', brokers: { other: { command: ['o'] }, mine: { entry: ENTRY } } });
 });
 
 test('Qwen settings with comments are read; a file the installer created is not later backed up as the original', () => {

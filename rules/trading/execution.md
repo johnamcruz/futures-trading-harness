@@ -1,6 +1,6 @@
 # Execution
 
-- **Hard rule: trade only in the market session, 18:00 ET to 16:00 ET
+- **Hard rule: trade only in the CME Globex session, 18:00 ET to 16:00 ET
   (Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends),
   and never carry a position past the 16:00 ET close.** Every position is
   flat by end of day (`eodAt`, no later than 16:00 ET). The order gate

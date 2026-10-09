@@ -19,7 +19,8 @@
 require('./lib/env-file').loadEnvForCli('bars');
 
 const { fetchBarsToFile } = require('./lib/bars-fetch');
-const { createClient } = require('./lib/projectx-rest');
+const path = require('path');
+const { withAdapter } = require('./lib/broker/adapter');
 const { writeMtfRecord, recordFile } = require('./lib/trading/mtf-state');
 const { harnessHome } = require('./lib/paths');
 
@@ -43,7 +44,7 @@ async function main(argv) {
   const o = parse(argv);
   if (o.record && o.daily) throw new Error('--record reads trigger bars (minutes), not daily bars');
   if (o.record && process.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
-  const r = await fetchBarsToFile({ client: createClient(), ...o });
+  const r = await withAdapter({ root: path.resolve(__dirname, '..'), env: process.env }, broker => fetchBarsToFile({ client: broker, ...o }));
   process.stdout.write(`wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`);
   if (o.record) {
     const rec = writeMtfRecord(harnessHome(), o.symbol, r.bars, { source: r.file });

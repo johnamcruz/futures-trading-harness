@@ -1,8 +1,9 @@
 'use strict';
 
-// Stateful stand-in for projectx-mcp: place_order is acknowledged at once and
+// Stateful stand-in broker MCP server: place_order is acknowledged at once and
 // the market fill lands FILL_DELAY_MS later, like a real exchange round trip.
-// Starts with net position START_NET in CONTRACT.
+// Starts with net position START_NET in CONTRACT. STOP_ORDER=1: a resting
+// protective stop (id 9) on the other side; CLOSE_FAIL=1: close_position is refused (success: false).
 const CONTRACT = process.env.CONTRACT || 'CON.F.US.MNQ.Z26';
 const DELAY = Number(process.env.FILL_DELAY_MS || 300);
 let net = Number(process.env.START_NET || 0);
@@ -22,13 +23,15 @@ process.stdin.on('data', chunk => {
     const name = msg.params && msg.params.name;
     const args = (msg.params && msg.params.arguments) || {};
     if (name === 'list_open_positions') text(msg.id, net === 0 ? [] : [{ contractId: CONTRACT, type: net > 0 ? 1 : 2, size: Math.abs(net) }]);
-    else if (name === 'list_open_orders' || name === 'search_trades') text(msg.id, []);
+    else if (name === 'list_open_orders') text(msg.id, process.env.STOP_ORDER && net !== 0 ? [{ id: 9, contractId: CONTRACT, type: 4, side: net > 0 ? 1 : 0, size: Math.abs(net), stopPrice: 21480 }] : []);
+    else if (name === 'search_trades') text(msg.id, []);
     else if (name === 'place_order') {
       orderId += 1;
       const delta = (args.side === 'buy' ? 1 : -1) * Number(args.size);
       setTimeout(() => { net += delta; }, DELAY);
       text(msg.id, { orderId, success: true });
-    } else if (name === 'close_position') {
+    } else if (name === 'close_position' && process.env.CLOSE_FAIL) text(msg.id, { success: false, errorCode: 2 });
+    else if (name === 'close_position') {
       const before = net;
       setTimeout(() => { net -= before; }, DELAY);
       text(msg.id, { success: true });

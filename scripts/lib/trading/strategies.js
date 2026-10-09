@@ -60,9 +60,8 @@ const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min
 const POLICY_KEYS = ['bundle'];
 /**
  * Data connectors a strategy can declare, like a skill declares its tools.
- * The runner turns on every connector an active strategy needs.
- *   order_flow: aggressor buy/sell volume per bar from the TopstepX market
- *               hub (series ofi, delta)
+ *   order_flow: aggressor buy/sell volume per bar (series ofi, delta), from
+ *               recorded flow files; without them, a bar-shape estimate
  */
 const CONNECTORS = { order_flow: /\b(ofi|delta)\(/ };
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
@@ -125,7 +124,7 @@ function validateStrategy(data, body, folderName) {
     const list = data.strategies;
     req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
       'strategies: the rules strategies whose setups it trades, in priority order (e.g. [ema_cross, keltner])');
-    req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md), e.g. topstep_100k');
+    req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md)');
     if (data.sizing !== undefined) {
       const z = data.sizing;
       req(z && typeof z === 'object' && !Array.isArray(z) && Object.entries(z).every(([k, v]) => SIZING_KEYS.includes(k) && typeof v === 'number' && v >= 0),

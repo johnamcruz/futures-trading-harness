@@ -2,7 +2,7 @@
 
 /**
  * Pure order-gate rules. Given a place_order request, the journal, the clock,
- * and the config, decide whether the harness lets the order reach projectx-mcp.
+ * and the config, decide whether the harness lets the order reach the broker MCP server.
  *
  * Orders are classified by the first token of `rationale`:
  *   [exit] ...     closes or reduces a position          -> never gated

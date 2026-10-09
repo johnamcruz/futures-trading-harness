@@ -96,6 +96,19 @@ test('cancel_order may not remove the last protective stop of an open position',
   assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, { ...stop, id: 13 }], config }), []);
 });
 
+test('cancel_order: a close the gateway sent and the server confirmed counts before the account shows it', () => {
+  const now = new Date('2026-10-07T14:00:00Z');
+  const stop = { id: 11, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice: 21480 };
+  const long1 = [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }];
+  const closed = [{ contractId: 'CON.F.US.MNQ.Z26', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime() - 1000 }];
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: closed, now }), []);
+  // A stale entry, or one on another contract, doesn't count.
+  const stale = [{ ...closed[0], at: now.getTime() - 60000 }];
+  assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: stale, now })[0].message, /protective stop/);
+  const other = [{ ...closed[0], contractId: 'CON.F.US.MNQ.H27' }];
+  assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: other, now })[0].message, /protective stop/);
+});
+
 test('ledger: exits must hold against the position once every recent order fills', () => {
   const now = new Date();
   const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];

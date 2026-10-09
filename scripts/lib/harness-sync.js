@@ -48,10 +48,10 @@ function tomlString(text) {
 
 function codexAgentToml(agent) {
   const writes = agent.tools.some(t => ['Write', 'Edit', 'Bash'].includes(t));
-  const mcp = agent.tools.filter(t => t.startsWith('mcp__projectx__')).map(t => t.replace('mcp__projectx__', ''));
+  const mcp = agent.tools.filter(t => t.startsWith('mcp__broker__')).map(t => t.replace('mcp__broker__', ''));
   const instructions = [
     `You are the ${agent.name} role of the futures trading harness. ${agent.description}`,
-    mcp.length ? `projectx MCP tools you may use: ${mcp.join(', ')}. Do not call any other projectx tool.` : 'Do not call any projectx MCP tool.',
+    mcp.length ? `broker MCP tools you may use: ${mcp.join(', ')}. Do not call any other broker tool.` : 'Do not call any broker MCP tool.',
     '',
     agent.body,
   ].join('\n');
@@ -122,8 +122,8 @@ function workspaceAgentsMd(root) {
     '',
     '# Futures Trading Harness: Operator Instructions',
     '',
-    'You are the head trader of an automated futures desk trading TopstepX',
-    'through the `projectx` MCP server. These instructions apply to every',
+    'You are the head trader of an automated futures desk trading a prop firm or',
+    'broker account through the `broker` MCP server. These instructions apply to every',
     'harness (Claude Code, Codex, Qwen Code, or any agent that reads AGENTS.md).',
     '',
     '## Start here',
@@ -160,10 +160,10 @@ function qwenExtensionJson(root) {
     version,
     contextFileName: 'QWEN.md',
     mcpServers: {
-      // The gateway starts projectx-mcp from PROJECTX_MCP_ENTRY (export it, with the
-      // PROJECTX_* credentials, in the shell that launches qwen). A settings.json
-      // entry named "projectx" (written by scripts/install.js) takes precedence.
-      projectx: { command: 'node', args: ['${extensionPath}${/}scripts${/}mcp-gateway.js'], cwd: '${extensionPath}', timeout: 60000 },
+      // The gateway starts the broker MCP server named in the broker config
+      // (mcp-configs/brokers.json, ~/.futures-trading-harness/brokers.json). A settings.json
+      // entry named "broker" (written by scripts/install.js) takes precedence.
+      broker: { command: 'node', args: ['${extensionPath}${/}scripts${/}mcp-gateway.js'], cwd: '${extensionPath}', timeout: 60000 },
     },
   }, null, 2)}\n`;
 }

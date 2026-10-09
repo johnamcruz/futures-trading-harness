@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * PreToolUse hook for projectx-mcp place_order and modify_order (Claude Code,
+ * PreToolUse hook for the broker MCP server's place_order and modify_order (Claude Code,
  * Codex, Qwen Code). Blocks new entries and order resizes (exit 2) that break the rules in
  * scripts/lib/trading/order-gate.js. Runs fail-closed through run-with-flags.js:
  * a crash blocks the order. Reads only local state; no network.
@@ -13,7 +13,8 @@ const path = require('path');
 const { checkOrder, logDecision } = require('../lib/trading/check-order');
 const { gateNow } = require('../lib/trading/config');
 
-const ORDER_TOOL = /^mcp__.*projectx.*__(place_order|modify_order)$/i;
+// Any MCP server's order tools (the broker server, under whatever name an older install registered it).
+const ORDER_TOOL = /^mcp__.+__(place_order|modify_order)$/i;
 
 function run(rawInput, ctx = {}, deps = {}) {
   const payload = JSON.parse(rawInput);

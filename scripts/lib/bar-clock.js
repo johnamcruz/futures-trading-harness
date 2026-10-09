@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Bar-close clock for the autonomous runner. ProjectX bars are timestamped by
+ * Bar-close clock for the autonomous runner. Bars (get_bars) are timestamped by
  * their open time (`t`); a bar of `minutes` closes at t + minutes. The runner
- * sleeps until the forming bar's close, then polls retrieveBars (closed bars
+ * sleeps until the forming bar's close, then polls get_bars (closed bars
  * only) until that bar appears. Bar alignment is learned from the data, not
  * assumed, so 1-, 3-, or 5-minute bars work whatever their anchor.
  *
