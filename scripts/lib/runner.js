@@ -742,7 +742,7 @@ function createRunner(deps) {
               const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
               const trades = openTrades({ positions: acct.positions, orders: acct.orders || [], entries, barsFor: p => (item(p) ? item(p).bars : null) });
               const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (_err) { return null; } };
-              acct = { ...acct, openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
+              acct = { ...acct, openTradeSetups: trades.map(t => t.setup).filter(Boolean), openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
             } catch (err) {
               log(`open trades unavailable for the prompt (${err.message})`, 'error');
             }
@@ -757,7 +757,12 @@ function createRunner(deps) {
               return r;
             }
           }) : x.scan);
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: withRecords(x) })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons(); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
+          // The setups in play: what fired and what is open. The instincts shown are about these.
+          const inPlay = [...new Set([
+            ...run.flatMap(x => (Array.isArray(x.scan) ? x.scan.filter(r => r.candidate && r.direction).map(r => r.name) : [])),
+            ...((acct && acct.openTradeSetups) || []),
+          ])];
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: withRecords(x) })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons({ setups: inPlay }); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });

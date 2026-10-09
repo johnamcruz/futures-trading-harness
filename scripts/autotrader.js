@@ -337,7 +337,7 @@ async function main(argv) {
       const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
       return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round: x => Number((Math.round(x / tick) * tick).toFixed(6)) });
     },
-    lessons: () => digest(readJournal(resolveJournalPath(process.env)), 5),
+    lessons: ({ setups } = {}) => digest(readJournal(resolveJournalPath(process.env)), 5, { setups }),
     recentTrades: () => recentTrades(readJournal(resolveJournalPath(process.env)), 10),
     journalEntries: () => readJournal(resolveJournalPath(process.env)),
     tradeHistory: t => excursionNote(readRecord(HOME_DIR, t.setup), t),

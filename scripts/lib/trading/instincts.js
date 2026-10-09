@@ -128,9 +128,13 @@ function recentForm(entries, n = 10) {
 }
 
 /** The top `n` instincts as lines for a prompt or briefing, the recent form first. */
-function digest(entries, n = 6) {
+function digest(entries, n = 6, { setups = null } = {}) {
   const form = recentForm(entries);
-  return [...(form ? [`(form) ${form}`] : []), ...instincts(entries).slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
+  // With `setups` (the strategies in play this cycle), a setup instinct about another strategy is noise:
+  // only theirs are kept. Mistakes and lessons are about how you trade, so they always stay.
+  const focus = setups ? new Set(setups.map(s => `setup:${s}`.toLowerCase())) : null;
+  const relevant = instincts(entries).filter(x => !focus || x.kind !== 'setup' || focus.has(x.key.split(' ')[0].toLowerCase()));
+  return [...(form ? [`(form) ${form}`] : []), ...relevant.slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
 }
 
 module.exports = { instincts, digest, recentTrades, recentForm, reviewR, confidenceFor };

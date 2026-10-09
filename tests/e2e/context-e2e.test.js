@@ -82,9 +82,11 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.strictEqual(prompts.length, 1, 'one cycle on the closed bar');
   const p = prompts[0];
   // 1. The day so far.
-  assert.match(p, /MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close; opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5 \(no 10-day average yet\)\./);
+  assert.match(p, /MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close; opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5\./);
   // 2. value_area fired short, with its track record (backtest, the 13:00 ET slice, the live review).
-  assert.match(p, /value_area short[^|]*\[value_area track record: backtest 120 trades \(MNQ 3m 2025-01-02\.\.2025-04-01\): win 42%, E \+0\.21R \[95% CI \+0\.02R, \+0\.4R\], edge positive; at 13:00 ET: 14 trades, E \+0\.35R; live: 1 reviewed, 0W\/1L, E -1R \(in range: 1, E -1R\)\]/);
+  assert.match(p, /value_area short[^|]*\[value_area track record: backtest 120 trades: win 42%, E \+0\.21R, edge positive; at 13:00 ET: 14 trades, E \+0\.35R; live: 1 reviewed, 0W\/1L, E -1R\]/);
+  // The open position is described once, as a trade, not listed again in the account line.
+  assert.match(p, /balance \$50,000; 1 open position \(below\); 1 working order\./);
   // 3. The open NQ trade, on the MNQ bars: entered on orb with a 20.50-point risk (the "27,390.00" stop read
   // as a price), stop trailed to 27399, six bars since the fill, its worst against orb's winners.
   assert.match(p, new RegExp(`Open trade ${NQ.replace(/\./g, '\\.')} long 1 @ 27410\\.5 since 12:58 ET, 6 bars closed since \\(setup:orb\\): initial stop 27390: risk 20\\.5 points = 82 ticks; working stop 27399 \\(-0\\.56R\\), no target order; now -0\\.79R at 27394\\.25, best \\+0\\.38R, worst -0\\.95R\\. orb winners in its backtest: median best \\+2\\.4R, 80% never went below -0\\.6R; this trade's worst -0\\.95R is deeper than 80% of its winners went\\.`));

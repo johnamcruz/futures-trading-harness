@@ -653,7 +653,8 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52) });
   const eod = r.prompts.find(x => /end-of-day skill/.test(x));
   assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./, 'the end-of-day run sees the account after the flatten');
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; open: CON.F.US.MNQ.Z26 long 1 @ 21500; 2 working orders\./);
+  // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade CON\.F\.US\.MNQ\.Z26 long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });

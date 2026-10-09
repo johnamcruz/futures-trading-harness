@@ -147,13 +147,10 @@ function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100 } 
   const r = x => (x === null || x === undefined ? '?' : round(x));
   const adr = x => (d.adr ? `, ${(x / d.adr).toFixed(2)} ADR` : '');
   const parts = [`opened ${r(d.open)}${d.openVs ? ` ${d.openVs}` : ''}${d.gap !== null ? `, gap ${d.gap >= 0 ? '+' : ''}${r(d.gap)} from the prior close${d.adr ? ` (${(Math.abs(d.gap) / d.adr).toFixed(2)} ADR)` : ''}` : ''}`];
-  parts.push(d.openType ? `opening type ${d.openType}` : 'opening type: the first 30 minutes are not over');
-  if (d.ibRange !== null) {
-    parts.push(`initial balance ${r(d.ibLow)}-${r(d.ibHigh)} (${r(d.ibRange)} points${adr(d.ibRange)}), extended ${r(d.extUp)} up and ${r(d.extDown)} down: ${d.dayType}`);
-  } else {
-    parts.push('initial balance: the first hour is not over');
-  }
-  parts.push(`range so far ${r(d.range)}${d.adr ? ` of a ${d.adrDays}-day average ${r(d.adr)} (${Math.round((d.range / d.adr) * 100)}% used)` : ` (no ${d.adrDays}-day average yet)`}`);
+  // What isn't known yet (before 10:00 / 10:30 ET, or without enough days for the ADR) is left out.
+  if (d.openType) parts.push(`opening type ${d.openType}`);
+  if (d.ibRange !== null) parts.push(`initial balance ${r(d.ibLow)}-${r(d.ibHigh)} (${r(d.ibRange)} points${adr(d.ibRange)}), extended ${r(d.extUp)} up and ${r(d.extDown)} down: ${d.dayType}`);
+  parts.push(`range so far ${r(d.range)}${d.adr ? ` of a ${d.adrDays}-day average ${r(d.adr)} (${Math.round((d.range / d.adr) * 100)}% used)` : ''}`);
   return `${symbol ? `${symbol} day: ` : ''}${parts.join('; ')}.`;
 }
 

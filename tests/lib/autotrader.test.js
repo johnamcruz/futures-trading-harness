@@ -285,3 +285,45 @@ test('the account line says what it does not know, and formats every side and co
   assert.match(past, /32 sessions done, past the training length \(the attempt runs on until it passes or blows\)\./);
   assert.doesNotMatch(past, /0 sessions left/);
 });
+
+test('cycle history in the prompt: repeated results collapse into one, long ones are cut', () => {
+  const { historyText } = require('../../scripts/lib/autotrader');
+  const at = m => `2026-10-08T14:${String(m).padStart(2, '0')}:20.000Z`;
+  const h = [
+    ...[0, 3, 6, 9].map(m => ({ at: at(m), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' })),
+    { at: at(12), symbols: ['MNQ'], result: `CYCLE RESULT: executed - orb long ${'x'.repeat(400)}` },
+    { at: at(15), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
+  ];
+  const t = historyText(h);
+  assert.match(t, /Your last 6 cycle\(s\), oldest first: 14:00-14:09Z \(4 cycles\) MNQ: no-trade - nothing fired \| 14:12Z MNQ: executed - orb long x+… \| 14:15Z MNQ: no-trade - nothing fired\./);
+  assert.ok(t.length < 400, `${t.length} chars`);
+  assert.strictEqual(historyText([]), '');
+});
+
+test('a busy cycle prompt stays lean: every line is decision context, and the whole fits a budget', () => {
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
+  const bars = Array.from({ length: 10 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 8, 14, 3 * k)).toISOString(), o: 21500.25, h: 21510.75, l: 21490.5, c: 21505.25, v: 1234 }));
+  const record = 'track record: backtest 214 trades: win 41%, E +0.18R, edge positive; in trend-up: 60 trades, E +0.31R; at 10:00 ET: 22 trades, E -0.05R; live: 12 reviewed, 5W/7L, E -0.1R (in trend-up: 6, E +0.2R)';
+  const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/root/fth').trade([{
+    symbol: 'MNQ',
+    bar: {
+      t: bars[9].t, c: 21505.25, file: '/root/.fth/bars/MNQ-3m.json', contractId: 'CON.F.US.MNQ.Z26', recent: bars,
+      trend: 'Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.',
+      day: 'MNQ day: opened 21480.25 inside the prior value area, gap -12.5 from the prior close (0.04 ADR); opening type open-auction; initial balance 21455-21520.25 (65.25 points, 0.22 ADR), extended 0 up and 0 down: inside the initial balance; range so far 65.25 of a 10-day average 290.4 (22% used).',
+    },
+    scan: [
+      { name: 'orb', candidate: true, direction: 'long', signal: 'rules', confluence: { with: ['ema_cross'], against: [] }, record },
+      { name: 'ema_cross', candidate: true, direction: 'long', signal: 'rules', confluence: { with: ['orb'], against: [] }, record },
+    ],
+  }], {
+    state: { id: 1, at: '2026-10-08T14:33:20Z', balance: 50250, positions: [], workingOrders: 0, attempts: [] },
+    history: Array.from({ length: 10 }, (_, k) => ({ at: new Date(Date.UTC(2026, 9, 8, 14, 3 * k, 20)).toISOString(), symbols: ['MNQ'], result: `CYCLE RESULT: no-trade - ${k % 4 === 3 ? `orb fired but the stop was over budget ${'and more '.repeat(40)}` : 'nothing fired'}` })),
+    lessons: Array.from({ length: 6 }, (_, k) => `(0.${9 - k}) a lesson of about a hundred characters, as the instincts digest writes them, number ${k}`),
+    trades: Array.from({ length: 10 }, (_, k) => (k % 2 ? 'orb long win +1.8R in trend-up' : 'ema_cross short loss -1.02R in range [mistake:chased]')),
+  });
+  assert.ok(p.length < 4500, `the prompt grew to ${p.length} characters`);
+  // The context is there; the noise is not.
+  for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Instincts from your reviewed trades/]) assert.match(p, want);
+  assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
+});

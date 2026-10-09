@@ -259,8 +259,9 @@ function accountText(state) {
   if (state.error) return ` Account ${state.id}: state unavailable (${state.error}); read get_account_snapshot before deciding anything.`;
   const known = Array.isArray(state.positions);
   const positions = (state.positions || []).map(p => `${p.contractId} ${p.type === 1 ? 'long' : p.type === 2 ? 'short' : '?'} ${p.size} @ ${p.averagePrice}`);
+  const described = Array.isArray(state.openTrades) && state.openTrades.length === positions.length && positions.length > 0;
   const book = !known ? 'positions and working orders unknown (read get_account_snapshot)'
-    : `${positions.length ? `open: ${positions.join(', ')}` : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}`;
+    : `${positions.length ? (described ? `${positions.length} open position${positions.length === 1 ? '' : 's'} (below)` : `open: ${positions.join(', ')}`) : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}`;
   const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; ${book}.`;
   const blocked = a => (a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : '');
   const attempts = (state.attempts || []).map(a => (a.noBalance
@@ -299,10 +300,22 @@ function signalsText(symbol, scan) {
 }
 
 /** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
+const HISTORY_RESULT_CHARS = 160;
+
 function historyText(history) {
   const list = (history || []).slice(-RECENT_IN_PROMPT);
   if (!list.length) return '';
-  return ` Your last ${list.length} cycle(s), oldest first: ${list.map(h => `${h.at.slice(11, 16)}Z ${(h.symbols || []).join(',')}: ${String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '')}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
+  // Repeats ("no-trade - nothing fired" every bar) say one thing once: runs of the same result collapse.
+  const runs = [];
+  for (const h of list) {
+    const text = String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '').replace(/\s+/g, ' ').trim();
+    const short = text.length > HISTORY_RESULT_CHARS ? `${text.slice(0, HISTORY_RESULT_CHARS - 1)}…` : text;
+    const sym = (h.symbols || []).join(',');
+    const last = runs[runs.length - 1];
+    if (last && last.text === short && last.sym === sym) { last.n += 1; last.to = h.at; } else runs.push({ text: short, sym, n: 1, from: h.at, to: h.at });
+  }
+  const when = r => (r.n > 1 ? `${r.from.slice(11, 16)}-${r.to.slice(11, 16)}Z (${r.n} cycles)` : `${r.from.slice(11, 16)}Z`);
+  return ` Your last ${list.length} cycle(s), oldest first: ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
 }
 
 function prompts(cfg, now, root = '') {
@@ -471,6 +484,7 @@ function cycleResult(output) {
 
 module.exports = {
   accountText,
+  historyText,
   endOfDayAt,
   marketHoursErrors,
   historyBars,

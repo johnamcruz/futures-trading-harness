@@ -91,7 +91,8 @@ test('the prompt line, and the series in the rules language', () => {
   const s = dayContextSeries(NQ, { adrDays: 2 });
   const line = describeDay(s.day[at('2026-04-27T17:15:00.000Z')], { symbol: 'MNQ' });
   assert.match(line, /^MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close \(0\.06 ADR\); opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points, 0\.34 ADR\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5 of a 2-day average 403\.13 \(34% used\)\.$/);
-  assert.match(describeDay(s.day[at('2026-04-24T13:45:00.000Z')]), /the first 30 minutes are not over; initial balance: the first hour is not over/);
+  // Before 10:00 ET there is no opening type and before 10:30 no IB: they are left out, not described as missing.
+  assert.match(describeDay(s.day[at('2026-04-24T13:45:00.000Z')]), /^opened 27210 above the prior range, gap \+283\.75 from the prior close; range so far [0-9.]+\.$/);
   const { seriesSource, compileCondition } = require('../../scripts/lib/trading/rules');
   const { PARAMS } = require('../../scripts/lib/trading/market-snapshot');
   const get = seriesSource(NQ, { ...PARAMS });

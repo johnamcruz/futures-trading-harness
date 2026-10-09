@@ -82,13 +82,16 @@ function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize
   const R = x => (t.risk > 0 && x !== null ? Math.round(((t.sign * (x - t.entry)) / t.risk) * 100) / 100 : null);
   const since = t.openedAt ? ` since ${et ? et(t.openedAt) : t.openedAt}` : '';
   const held = t.barsHeld !== null ? `, ${t.barsHeld} bar${t.barsHeld === 1 ? '' : 's'} closed since` : '';
-  const risk = t.risk !== null ? `initial stop ${r(t.initialStop)}: risk ${r(t.risk)} points${tickSize ? ` = ${Math.round(t.risk / tickSize)} ticks` : ''}` : 'initial risk unknown';
+  const fromWorking = t.notes.includes('initial stop unknown: risk from the working stop');
+  const pts = t.risk !== null ? `${r(t.risk)} points${tickSize ? ` = ${Math.round(t.risk / tickSize)} ticks` : ''}` : null;
+  const risk = t.risk === null ? 'initial risk unknown'
+    : fromWorking ? `risk ${pts}, measured to the working stop (the initial stop is unknown)` : `initial stop ${r(t.initialStop)}: risk ${pts}`;
   const stop = t.stop !== null ? `working stop ${r(t.stop)} (${sR(R(t.stop))})` : 'NO working stop';
   const target = t.target !== null ? `, target ${r(t.target)} (${sR(R(t.target))})` : ', no target order';
   const now = t.last === null ? '; no closed bar since the fill yet'
     : t.rNow === null ? `; last close ${r(t.last)} (no R without an initial risk)`
       : `; now ${sR(t.rNow)} at ${r(t.last)}, best ${sR(t.mfeR)}, worst ${sR(t.maeR)}`;
-  const notes = t.notes.filter(n => n !== 'NO working stop');
+  const notes = t.notes.filter(n => n !== 'NO working stop' && n !== 'initial stop unknown: risk from the working stop');
   // `history`: how the strategy's past trades moved (track-record.js excursionNote), to judge this one by.
   return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.${history ? ` ${history}.` : ''}`;
 }

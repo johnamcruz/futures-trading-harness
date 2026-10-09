@@ -31,6 +31,15 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
   for (let k = 1; k < list.length; k += 1) assert.ok(list[k - 1].confidence >= list[k].confidence, 'strongest first');
   assert.strictEqual(digest(journal, 2).length, 3, 'the form of the recent trades, then the top 2');
   assert.match(digest(journal, 1)[1], /^\(0\.\d\) /);
+  // Focused on the setups in play: another strategy's setup instincts are left out; mistakes and lessons stay.
+  const focused = digest(journal, 10, { setups: ['orb'] });
+  assert.ok(focused.some(x => /orb in trend-up/.test(x)));
+  assert.ok(!focused.some(x => /keltner/.test(x)), 'keltner did not fire and is not open');
+  assert.ok(focused.some(x => /mistake:chased-entry/.test(x)));
+  const none = digest(journal, 10, { setups: [] });
+  assert.ok(!none.some(x => /\d+ trades, win \d+%/.test(x)), `nothing in play: no setup instincts (${none.join(' | ')})`);
+  assert.ok(none.some(x => /mistake:chased-entry/.test(x)));
+  assert.ok(digest(journal, 10).some(x => /keltner/.test(x)), 'without a focus, all of them');
   assert.deepStrictEqual([reviewR({ tags: ['r:-1.11'] }), reviewR({ text: 'R = 2.5' }), reviewR({ text: 'none' })], [-1.11, 2.5, null]);
   assert.deepStrictEqual([confidenceFor(1), confidenceFor(30)], [0.3, 0.9]);
 });
