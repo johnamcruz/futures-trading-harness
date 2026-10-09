@@ -66,7 +66,7 @@ function createRunner(deps) {
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
     // The day so far (trading/day-context.js): one line for the prompt, or null.
-    dayContext = () => null,
+    dayContext = null,
     // A strategy's track record (trading/track-record.js): (name, { regime, at }) -> one line, or null.
     trackRecord = () => null,
     // The journal's entries, for the open trades' setup and initial stop (trading/open-trades.js).
@@ -198,7 +198,7 @@ function createRunner(deps) {
       let day = null;
       let dayError = null;
       try {
-        day = dayContext(sym, bars);
+        day = dayContext ? dayContext(sym, bars) : null;
       } catch (err) {
         dayError = err.message;
         log(`${sym.symbol}: no day context this bar (${err.message})`, 'error');
@@ -450,53 +450,73 @@ function createRunner(deps) {
     }
   }
 
+  // The strategy scan for an item; a failure is named in the prompt (what fired is unknown), not left out.
+  function scanItem(item) {
+    try {
+      item.scan = scanFor(item.symbol, item.bars);
+    } catch (err) {
+      item.scan = null;
+      item.scanError = err.message;
+      log(`${item.symbol}: strategy scan failed (${err.message})`, 'error');
+    }
+    return item.scan;
+  }
+
+  // A policy screens its strategy's setups (only when flat: a verdict is for a new entry). A failed screen
+  // means no verdict, so the gate refuses any entry: the prompt says so instead of listing the setups.
+  function screenItem(item) {
+    try {
+      const screened = prop.screen(item.scan, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
+      item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
+      return screened;
+    } catch (err) {
+      item.screenError = err.message;
+      item.verdicts = [];
+      log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
+      return item.scan;
+    }
+  }
+
   async function wanted(item, manageOnly) {
     if (cfg.trigger === 'bar' && !manageOnly) {
-      // Every bar runs a cycle; a policy still records its verdicts for the gate.
-      if (prop && cfg.account) {
-        try {
-          const [net, working] = await exposure(item);
-          if (net === 0 && working === 0) {
-            const scanned = scanFor(item.symbol, item.bars);
-            item.scan = scanned;
-            const screened = prop.screen(scanned, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
-            item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
-            logScan(item, screened, { run: true, reason: 'bar closed' });
+      // Every bar runs a cycle with what fired; a policy still records its verdicts for the gate.
+      const results = scanItem(item);
+      if (results) {
+        let screened = results;
+        if (prop && cfg.account) {
+          try {
+            const [net, working] = await exposure(item);
+            if (net === 0 && working === 0) screened = screenItem(item);
+          } catch (err) {
+            log(`${item.symbol}: account check for the policy screen failed (${err.message}); no verdict this bar`, 'error');
           }
-        } catch (err) {
-          log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
         }
-      } else {
-        // The decision log still gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
-        try {
-          item.scan = scanFor(item.symbol, item.bars);
-          logScan(item, item.scan, { run: true, reason: 'bar closed' });
-        } catch (err) {
-          log(`${item.symbol}: scan for the decision log failed (${err.message})`, 'error');
-        }
+        // The decision log gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
+        logScan(item, screened, { run: true, reason: 'bar closed' });
       }
       return { run: true, reason: 'bar closed' };
     }
     if (!cfg.account) return { run: false, reason: 'cap reached and no account configured to check positions' };
+    let net;
+    let working;
     try {
-      const [net, working] = await exposure(item);
-      if (manageOnly) {
-        return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
-      }
-      const results = scanFor(item.symbol, item.bars);
-      item.scan = results;
-      // A policy screens its strategy's setups (only when flat: a verdict is for a new entry).
-      const screened = prop && net === 0 && working === 0
-        ? prop.screen(results, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() })
-        : results;
-      item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
-      const decision = signalDecision(screened, net, working, { paper: cfg.paper });
-      logScan(item, screened, decision);
-      return decision;
+      [net, working] = await exposure(item);
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
+      scanItem(item);
       return { run: true, reason: `account check failed (${err.message})` };
     }
+    if (manageOnly) {
+      return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
+    }
+    const results = scanItem(item);
+    // A failed scan: run the cycle (it says so) when there is something to manage, else wait for the next bar.
+    if (!results) return net !== 0 || working > 0 ? { run: true, reason: 'manage (the scan failed)' } : { run: false, reason: 'the scan failed' };
+    const screened = prop && net === 0 && working === 0 ? screenItem(item) : results;
+    if (!(prop && net === 0 && working === 0)) item.verdicts = [];
+    const decision = signalDecision(screened, net, working, { paper: cfg.paper });
+    logScan(item, screened, decision);
+    return decision;
   }
 
   /**
@@ -593,7 +613,7 @@ function createRunner(deps) {
     if (a.error) return { id: a.id, error: a.error };
     return {
       id: a.id, balance: a.balance, positions: a.positions ? a.positions.map(p => ({ contractId: p.contractId, side: p.type === 1 ? 'long' : p.type === 2 ? 'short' : null, size: p.size, averagePrice: p.averagePrice })) : null,
-      workingOrders: a.workingOrders, attempts: (a.attempts || []).map(x => ({ account: x.account, status: x.status, balance: x.balance, floor: x.floor, cushion: x.cushion, profit: x.profit, dayPnl: x.dayPnl, entryBlock: x.entryBlock || null })),
+      workingOrders: a.workingOrders, ...(a.openTradesError ? { openTradesError: a.openTradesError } : {}), attempts: (a.attempts || []).map(x => ({ account: x.account, status: x.status, balance: x.balance, floor: x.floor, cushion: x.cushion, profit: x.profit, dayPnl: x.dayPnl, entryBlock: x.entryBlock || null })),
     };
   }
 
@@ -646,15 +666,17 @@ function createRunner(deps) {
     if (pendingClose && d.action !== 'eod') await recordClose(now);
 
     if (d.action === 'premarket' || d.action === 'eod') {
-      const p = prompts(cfg, now, root);
       let ok = true;
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
       if (d.action === 'eod') ok = await eodBackstop();
       // Each job is built with the account as it is when that run starts.
-      const jobs = d.action === 'eod' ? [acct => p.eod({ state: acct })] : cfg.symbols.map(s => acct => p.premarket(s, { state: acct }));
+      // Each job's prompt is dated when it starts (a second symbol's premarket runs after the first).
+      const jobs = d.action === 'eod'
+        ? [{ symbol: null, build: (acct, at) => prompts(cfg, at, root).eod({ state: acct, day: d.state.day }) }]
+        : cfg.symbols.map(s => ({ symbol: s, build: (acct, at) => prompts(cfg, at, root).premarket(s, { state: acct }) }));
       const noTime = () => log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`);
-      for (const prompt of jobs) {
+      for (const job of jobs) {
         const at = clock.now();
         // A premarket run never delays end of day.
         if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn() }).action === 'eod') break;
@@ -664,7 +686,9 @@ function createRunner(deps) {
         const timeoutMs = limitFor(d.action, clock.now());
         if (timeoutMs < 30000) { noTime(); continue; }
         if (acct) emit('account', accountEvent(acct));
-        const r = await timedCycle(d.action, prompt(acct), { timeoutMs });
+        // What the prompt was built from, for the cycle log.
+        const context = { action: d.action, day: d.state.day, symbol: job.symbol, account: acct ? accountEvent(acct) : null };
+        const r = await timedCycle(d.action, job.build(acct, clock.now()), { timeoutMs, context });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
       // Then check again: flatten whatever the run left open.
@@ -748,18 +772,28 @@ function createRunner(deps) {
           // The journal, read once for this prompt (open trades, track records, plans, reviewed trades, mistakes).
           const entries = attempt('the journal: no open-trade setups, live results, premarket plan, reviewed trades, or lessons', () => journalEntries() || [], null);
           const journal = entries || [];
-          for (const x of run) if (x.dayError) unavailable.push(`${x.symbol} day context (${x.dayError})`);
+          for (const x of run) {
+            if (x.dayError) unavailable.push(`${x.symbol} day context (${x.dayError})`);
+            else if (dayContext && !x.bar.day) unavailable.push(`${x.symbol} day context (the bars don't hold today's open or a whole prior day)`);
+            if (x.scanError && !manageOnly) unavailable.push(`${x.symbol} strategy scan (${x.scanError}): what fired is unknown`);
+            if (x.screenError) unavailable.push(`${x.symbol} policy screen (${x.screenError}): no verdict, so no entry this bar`);
+          }
           // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
           let tradeObjs = [];
+          let manageAlso = [];
           if (acct && Array.isArray(acct.positions) && acct.positions.length) {
             try {
               // MNQ bars manage an NQ trade too (the same family); a contract with no bar this cycle has none.
               const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
+              // Its symbol's tick size even when its bar didn't close this cycle.
+              const sym = p => syms.find(x => x.contractId && famOf(x.contractId) === famOf(p.contractId));
+              const tickOf = p => (item(p) || sym(p) || {}).tickSize || null;
               tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
-              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { log(`prompt: ${t.setup} excursions unavailable (${err.message})`, 'error'); return null; } };
-              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
+              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
+              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t) })) };
+              manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
             } catch (err) {
-              log(`prompt: open trades unavailable (${err.message})`, 'error');
+              failed('the open trades\' details', err);
               acct = { ...acct, openTradesError: err.message };
             }
           }
@@ -774,7 +808,7 @@ function createRunner(deps) {
             }
           }) : x.scan);
           const items = run.map(x => ({
-            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x),
+            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), screenFailed: Boolean(x.screenError),
             bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
           }));
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
@@ -784,6 +818,8 @@ function createRunner(deps) {
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
+            cyclesLeft: Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0)) : null,
+            manageAlso, journalRead: entries !== null,
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
@@ -793,7 +829,9 @@ function createRunner(deps) {
               verdicts: x.verdicts || [],
             })),
             account: acct ? accountEvent(acct) : null,
-            openTrades: tradeObjs,
+            openTrades: tradeObjs, openTradeLines: (acct && acct.openTrades) || [], manageAlso,
+            recent: items.map(x => ({ symbol: x.symbol, bars: x.bar.recent || [] })),
+            attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
             manageOnly, recovered: recover, unavailable,
           };

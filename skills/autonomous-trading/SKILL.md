@@ -62,8 +62,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    one plan, at most one entry. A tool that fails twice ends the cycle as
    `error` (after confirming any open position has its stop).
 8. **Allowed scripts.** Only these run, by absolute path:
-   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`, and
-   `combine.js status`. Starting, stopping, or recording a prop attempt,
+   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`,
+   `bars.js`, `reconcile.js`, `lessons.js`, and `combine.js status`.
+   Starting, stopping, or recording a prop attempt,
    backtests, and training are the user's.
 
 ## Examples

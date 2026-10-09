@@ -90,9 +90,9 @@ test('no look-ahead: bar i gets the same context from bars 0..i as from the whol
 test('the prompt line, and the series in the rules language', () => {
   const s = dayContextSeries(NQ, { adrDays: 2 });
   const line = describeDay(s.day[at('2026-04-27T17:15:00.000Z')], { symbol: 'MNQ' });
-  assert.match(line, /^MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close \(0\.06 ADR\); opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points, 0\.34 ADR\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5 of a 2-day average 403\.13 \(34% used\)\.$/);
-  // Before 10:00 ET there is no opening type and before 10:30 no IB: they are left out, not described as missing.
-  assert.match(describeDay(s.day[at('2026-04-24T13:45:00.000Z')]), /^opened 27210 above the prior range, gap \+283\.75 from the prior close; range so far [0-9.]+\.$/);
+  assert.match(line, /^MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close \(0\.06 ADR\); prior day 27130\.25-27462\.5, close 27434, value area 27246\.54-27455\.86 \(POC 27414\.32\); overnight 27344\.25-27542\.5; opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points, 0\.34 ADR\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5 of a 2-day average 403\.13 \(34% used\)\.$/);
+  // Before 10:00 ET the opening type and before 10:30 the IB are pending: the line says when they are due.
+  assert.match(describeDay(s.day[at('2026-04-24T13:45:00.000Z')]), /^opened 27210 above the prior range, gap \+283\.75 from the prior close; prior day [0-9.]+-[0-9.]+, close [0-9.]+(, value area [^;]+)?; (overnight [0-9.]+-[0-9.]+; )?opening type due 10:00 ET; initial balance due 10:30 ET; range so far [0-9.]+ \(no 2-day average: fewer days in the data\)\.$/);
   const { seriesSource, compileCondition } = require('../../scripts/lib/trading/rules');
   const { PARAMS } = require('../../scripts/lib/trading/market-snapshot');
   const get = seriesSource(NQ, { ...PARAMS });

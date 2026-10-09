@@ -268,7 +268,8 @@ async function main(argv) {
     const p = prompts(cfg, new Date(), ROOT);
     const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })))] : symbols.map(s => p.premarket(s));
     let ok = true;
-    for (const prompt of jobs) ok = (await runCycle(cfg, once, prompt, opts)).ok && ok;
+    // A manual run has no bars or account read: its cycle log says so.
+    for (const prompt of jobs) ok = (await runCycle(cfg, once, prompt, opts, { context: { action: once, manual: true, symbols } })).ok && ok;
     return ok ? 0 : 1;
   }
 

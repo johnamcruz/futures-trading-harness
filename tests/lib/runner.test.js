@@ -641,7 +641,7 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   assert.ok(take.calls.summaries >= 1);
   const tradePrompt = b.prompts.find(x => /trade-session/.test(x));
   assert.match(tradePrompt, /Account 7 at \d\d:\d\d ET: balance \$50,100; flat; 0 working orders\./);
-  assert.match(tradePrompt, /mini attempt \(active\) as of \d\d:\d\d ET: balance \$50,100, floor \$48,000, cushion \$2,100/);
+  assert.match(tradePrompt, /mini attempt \(active\)(?: as of \d\d:\d\d ET, balance \$50,100)?: floor \$48,000, cushion \$2,100/);
   assert.ok(take.calls.summaryBalances.every(x => x === 50100), 'the attempt is built from the balance just read');
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
@@ -692,7 +692,7 @@ test('every closed bar records the multi-timeframe read for the gate, and the cy
   });
   assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
   assert.ok(ok.cycles.length >= 3);
-  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
+  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line.replace(/\.$/, '')} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
   // A failed record never stops the cycle; the prompt says the gate will refuse trend entries.
   const logs = [];
   const failed = await simulate({
@@ -729,4 +729,28 @@ test('the trade prompt carries the last closed bars and the model\'s own last cy
   const p = prompts(cfg, new Date(et(10, 6)), '/r').trade([{ symbol: 'MNQ', bar: { t: bars[11].t, c: 111.5, file: '/f', contractId: 'C', recent: bars.slice(-10) } }], { history: r.runner.state.history });
   assert.match(p, /MNQ last 10 closed 3m bars \(ET open time, oldest first\): 09:36 O 102 H 103 L 101 C 102\.5 V 12 \(\+0\.5\);/);
   assert.match(p, /Your last \d cycle\(s\), oldest first: .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
+});
+
+test('a failed strategy scan is named in the prompt; end-of-day and premarket cycles log their context', async () => {
+  const logs = [];
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => { throw new Error('rules engine down'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 1, 'the bar still gets its cycle');
+  for (const c of trade) {
+    assert.match(c.prompt, /Context unavailable this cycle \(not "none"\): MNQ strategy scan \(rules engine down\): what fired is unknown\./);
+    assert.doesNotMatch(c.prompt, /no rules strategy fired/, 'not "nothing fired"');
+    assert.deepStrictEqual(c.context.unavailable, ['MNQ strategy scan (rules engine down): what fired is unknown']);
+  }
+  assert.ok(logs.some(l => /^error MNQ: strategy scan failed \(rules engine down\)/.test(l)));
+  // End of day: the prompt and its logged context name the trading day.
+  const e = await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(15, 48), to: et(15, 55), market: fakeMarket({ minutes: 3 }) });
+  const eod = e.cycles.find(c => c.action === 'eod');
+  assert.ok(eod, 'an end-of-day cycle');
+  assert.match(eod.prompt, /for the trading day ending \d{4}-\d\d-\d\d, on 3-minute bars/);
+  assert.strictEqual(eod.context.action, 'eod');
+  assert.match(eod.context.day, /^\d{4}-\d\d-\d\d$/);
+  assert.ok(eod.prompt.includes(eod.context.day));
 });

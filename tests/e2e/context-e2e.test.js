@@ -92,7 +92,7 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.strictEqual(prompts.length, 1, 'one cycle on the closed bar');
   const p = prompts[0];
   // 1. The day so far.
-  assert.match(p, /MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close; opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5\./);
+  assert.match(p, /MNQ day: opened 27410\.75 inside the prior value area, gap -23\.25 from the prior close; prior day 27130\.25-27462\.5, close 27434, value area 27246\.5-27455\.75 \(POC 27414\.25\); overnight 27344\.25-27542\.5; opening type open-[a-z-]+( up| down)?; initial balance 27298\.5-27435 \(136\.5 points\), extended 0 up and 0 down: inside the initial balance; range so far 136\.5 \(no 10-day average: fewer days in the data\)\./);
   // 2. value_area fired short, with its track record (backtest, the 13:00 ET slice, the live review).
   assert.match(p, /value_area short[^|]*\[value_area track record: backtest 120 trades: win 42%, E \+0\.21R, edge positive; at 13:00 ET: 14 trades, E \+0\.35R; live: 1 reviewed, 0W\/1L, E -1R\]/);
   // The open position is described once, as a trade, not listed again in the account line.
@@ -102,7 +102,7 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.match(p, new RegExp(`Open trade ${NQ.replace(/\./g, '\\.')} long 1 @ 27410\\.5 since 12:58 ET, 6 bars closed since \\(setup:orb\\): initial stop 27390: risk 20\\.5 points = 82 ticks; working stop 27399 \\(-0\\.56R\\), no target order; now -0\\.79R at 27394\\.25, best \\+0\\.38R, worst -0\\.95R\\. orb winners in its backtest: median best \\+2\\.4R, 80% never went below -0\\.6R; this trade's worst -0\\.95R is deeper than 80% of its winners went\\.`));
   // 4. New York time throughout, UTC once in the header (for tools); the bar line in ET.
   assert.match(p, /^Autonomous cycle at 2026-04-27 13:18:\d\d ET \(2026-04-27T17:18:\d\d\.\d+Z\)\./);
-  assert.match(p, /MNQ: a 3-minute bar just closed \(opened 13:15 ET, close 27394\.25\)/);
+  assert.match(p, /MNQ: a 3-minute bar just closed \(opened 13:15 ET\)/);
   assert.doesNotMatch(p.replace(/^[^)]*\)/, ''), /\d\d:\d\d(:\d\d)?(\.\d+)?Z\b/, 'no other UTC time in the prompt');
   // 5. Today's premarket plan and the next news blackout.
   assert.match(p, /MNQ premarket plan \(09:05 ET\): Balance day expected inside 27246-27456 \(prior value area\); fade the edges\./);
