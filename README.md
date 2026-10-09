@@ -131,7 +131,8 @@ and the reference.
   reach it only through the broker adapter (`scripts/lib/broker/adapter.js`):
   reads straight to the server, order calls through the gateway.
 - Switching brokers is config: add the server to `brokers.json` and set
-  `FTH_BROKER`.
+  `FTH_BROKER`. What still makes a new server harder to write than it should
+  be is tracked in [docs/TECH-DEBT.md](docs/TECH-DEBT.md).
 
 Check a server against the interface before using it. The check is read-only
 (no orders, no journal writes):
