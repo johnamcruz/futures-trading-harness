@@ -80,6 +80,16 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     }
   }
 
+  // A policy strategy owns its strategies' setups only while it can trade: active (or any
+  // non-disabled one in a paper run) with an attempt running. Otherwise they trade as before.
+  function activePolicies(symbol, contractId) {
+    const root = contractRoot(contractId) || symbol;
+    const fam = r => (familyOf(r) ? familyOf(r).micro : r);
+    return strategies().filter(s => s.valid && s.signal === 'policy'
+      && (s.status === 'active' || (paper && s.status !== 'disabled'))
+      && s.instruments.some(x => fam(x) === fam(root)) && live.readAttempt(home, s.account));
+  }
+
   return {
     accounts,
     /**
@@ -127,17 +137,18 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
      * trained policy (or taken as sized without one). The verdict (contract,
      * size, stop) is recorded for the gate.
      */
-    screen(results, { symbol, contractId, bars, now = new Date() }) {
-      const root = contractRoot(contractId) || symbol;
-      const fam = r => (familyOf(r) ? familyOf(r).micro : r);
-      // A policy strategy owns its strategies' setups only while it can trade: active (or any
-      // non-disabled one in a paper run) with an attempt running. Otherwise they trade as before.
-      const policies = strategies().filter(s => s.valid && s.signal === 'policy'
-        && (s.status === 'active' || (paper && s.status !== 'disabled'))
-        && s.instruments.some(x => fam(x) === fam(root)) && live.readAttempt(home, s.account));
-      if (!policies.length) return results;
+    /** The strategies an active policy owns on this contract now: Map(strategy -> policy); empty when none. */
+    owners({ symbol, contractId }) {
       const owners = new Map();
-      for (const s of policies) for (const n of s.strategies) if (!owners.has(n)) owners.set(n, s.name);
+      for (const s of activePolicies(symbol, contractId)) for (const n of s.strategies) if (!owners.has(n)) owners.set(n, s.name);
+      return owners;
+    },
+    screen(results, { symbol, contractId, bars, now = new Date() }) {
+      // The contract's root (MNQ), not the plugin root this factory was given.
+      const root = contractRoot(contractId) || symbol;
+      const policies = activePolicies(symbol, contractId);
+      if (!policies.length) return results;
+      const owners = this.owners({ symbol, contractId });
       const byName = new Map((results || []).map(r => [r.name, r]));
       const out = (results || []).filter(r => !policies.some(s => s.name === r.name))
         .map(r => (owners.has(r.name) && r.candidate ? { ...r, candidate: false, note: `traded through ${owners.get(r.name)}` } : r));

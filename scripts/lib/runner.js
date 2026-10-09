@@ -462,6 +462,21 @@ function createRunner(deps) {
     return item.scan;
   }
 
+  // The policy's screen couldn't run (it threw, or the account check before it failed): no verdict. Only
+  // the fired strategies an active policy owns lose their entry; plain strategies still trade. Without an
+  // owners hook every fired strategy is treated as owned (the gate decides; the prompt errs on caution).
+  function policyFailed(item, why) {
+    let owned;
+    try {
+      const map = typeof prop.owners === 'function' ? prop.owners({ symbol: item.symbol, contractId: item.contractId }) : null;
+      owned = (item.scan || []).filter(r => r.candidate && r.direction && (!map || map.has(r.name))).map(r => r.name);
+    } catch (_err) {
+      owned = (item.scan || []).filter(r => r.candidate && r.direction).map(r => r.name);
+    }
+    item.verdicts = [];
+    if (owned.length) { item.screenError = why; item.notEntries = owned; }
+  }
+
   // A policy screens its strategy's setups (only when flat: a verdict is for a new entry). A failed screen
   // means no verdict, so the gate refuses any entry: the prompt says so instead of listing the setups.
   function screenItem(item) {
@@ -470,8 +485,7 @@ function createRunner(deps) {
       item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
       return screened;
     } catch (err) {
-      item.screenError = err.message;
-      item.verdicts = [];
+      policyFailed(item, err.message);
       log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
       return item.scan;
     }
@@ -488,8 +502,8 @@ function createRunner(deps) {
             const [net, working] = await exposure(item);
             if (net === 0 && working === 0) screened = screenItem(item);
           } catch (err) {
-            // No account read, no screen: no verdict, so the gate refuses entries (named in the prompt).
-            item.screenError = `account check failed: ${err.message}`;
+            // No account read, no screen: no verdict for the policy's strategies (named in the prompt).
+            policyFailed(item, `account check failed: ${err.message}`);
             log(`${item.symbol}: account check for the policy screen failed (${err.message}); no verdict this bar`, 'error');
           }
         }
@@ -506,10 +520,7 @@ function createRunner(deps) {
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       scanItem(item);
-      if (prop) {
-        item.screenError = `account check failed: ${err.message}`;
-        item.verdicts = [];
-      }
+      if (prop && item.scan) policyFailed(item, `account check failed: ${err.message}`);
       log(`${item.symbol}: account check failed (${err.message}); running the cycle to manage anything open`, 'error');
       return { run: true, reason: `account check failed (${err.message})` };
     }
@@ -815,7 +826,7 @@ function createRunner(deps) {
             }
           }) : x.scan);
           const items = run.map(x => ({
-            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), screenFailed: Boolean(x.screenError),
+            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [],
             bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
           }));
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);

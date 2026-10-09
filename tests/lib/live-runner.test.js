@@ -241,3 +241,12 @@ test('a policy strategy owns its strategies\' setups only while it is active and
   edited.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   assert.match(prop.latestVerdict(edited.home, 'prop_x', 'MNQ').reason, /trained with exit/);
 });
+
+test('owners: the strategies an active policy with a running attempt owns on the contract; none otherwise', () => {
+  const on = setup({ policy: null });
+  const owners = on.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT });
+  assert.ok(owners.size > 0 && [...owners.values()].every(v => v === 'prop_x'), JSON.stringify([...owners]));
+  assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'CON.F.US.GCE.Z26' }).size, 0, 'another instrument');
+  const off = setup({ policy: null, start: false });
+  assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
+});

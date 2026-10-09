@@ -559,10 +559,11 @@ test('after the session, with trades today, the runner keeps housekeeping until 
 });
 
 /** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
-function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503' } = {}) {
+function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503', owners = undefined } = {}) {
   const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
   return {
     calls,
+    ...(owners ? { owners } : {}),
     async snapshot(now) { calls.snapshots.push(now.getTime()); },
     async endOfDay(now, day) {
       calls.eod.push(now.getTime());
@@ -762,7 +763,25 @@ test('under a policy, a failed account check means no verdict: named, and the co
   const p = r.prompts.find(x => /trade-session/.test(x));
   assert.ok(p, 'the cycle still runs, to manage anything open');
   assert.match(p, /MNQ policy screen \(account check failed: HTTP 502\): no verdict, so no entry this bar/);
-  assert.match(p, /\(No policy verdict this bar: not entries\.\)/);
+  assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
   assert.doesNotMatch(p, /These are .*'s components/);
   assert.ok(r.logs.some(l => /^ERROR MNQ: account check failed \(HTTP 502\)/.test(l)), r.logs.filter(l => /^ERROR/.test(l)).join(' / '));
+});
+
+test('a prop account with no active policy: a failed account check leaves plain strategies tradable', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  for (const trigger of ['signal', 'bar']) {
+    // owners: no active policy owns anything on this contract (e.g. prop_portfolio_3m is paper).
+    const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp({ owners: () => new Map() }), until: et(10, 10), trigger, accountFails: true });
+    const p = r.prompts.find(x => /trade-session/.test(x));
+    assert.ok(p, trigger);
+    assert.match(p, /fired on this bar[^:]*: trendy long[.\s]/, trigger);
+    assert.doesNotMatch(p, /no verdict|not an entry/, `${trigger}: no policy is involved, so nothing about verdicts`);
+  }
+  // Owned by an active policy: marked, and only that one.
+  const two = [...candidate, { name: 'plain', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const r = await trailSim({ tape: {}, startFlat: true, scan: two, prop: fakeProp({ owners: () => new Map([['trendy', 'prop_x']]) }), until: et(10, 10), trigger: 'signal', accountFails: true });
+  const p = r.prompts.find(x => /trade-session/.test(x));
+  assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
+  assert.match(p, /plain long(?! \(its policy)/);
 });

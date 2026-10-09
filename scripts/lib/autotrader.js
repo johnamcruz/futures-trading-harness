@@ -297,7 +297,7 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], screenFailed = false } = {}) {
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [] } = {}) {
   // Manage-only is stated once, in the instruction's mode.
   if (manageOnly) return '';
   // No scan: the reason is in the "Context unavailable" line.
@@ -306,11 +306,11 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], screenFa
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
-    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
+    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
-  // A failed screen is named once, in the "Context unavailable" line; its components are not entries.
-  const policy = screenFailed ? ' (No policy verdict this bar: not entries.)'
+  // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.
+  const policy = notEntries.length ? ''
     : verdicts.length ? ` These are ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
   return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
@@ -348,14 +348,14 @@ function prompts(cfg, now, root = '') {
     trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
-      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, screenFailed }) =>
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
         ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (opened ${etTime(bar.t)}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
         + (bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan ? ` ${sentence(bar.plan)}` : '')
         + (bar.day ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, cfg.timeframe)
-        + signalsText(symbol, scan, { manageOnly, verdicts: verdicts || [], screenFailed }));
+        + signalsText(symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [] }));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
