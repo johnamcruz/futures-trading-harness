@@ -60,6 +60,14 @@ function createRunner(deps) {
     cfg, root, client, clock, runCycle, isKillSwitchOn, createKillSwitch,
     loadState, saveState, writeBars, scanFor, log = () => {}, entryOrders = () => [], strategyNamed = () => null,
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
+    // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
+    recordMtf = () => null,
+    // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
+    recordSignals = () => {},
+    // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
+    lessons = () => [],
+    // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
+    recentTrades = () => [],
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
@@ -163,7 +171,14 @@ function createRunner(deps) {
         log(`${sym.symbol}: could not write the bars file (${err.message}); housekeeping only`, 'error');
         record(false, false, now);
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId } };
+      let trend = null;
+      try {
+        trend = recordMtf(sym, bars);
+      } catch (err) {
+        // Without a fresh record the gate refuses trend strategies' entries (fail closed).
+        log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
+      }
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, recent: bars.slice(-10) } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -399,6 +414,11 @@ function createRunner(deps) {
   /** Record a scanned bar in the decision log; a failure to log never stops the pass. */
   function logScan(item, results, decision) {
     try {
+      recordSignals(item, results);
+    } catch (err) {
+      log(`${item.symbol}: could not record the bar's signals (${err.message}); the gate refuses rules entries`, 'error');
+    }
+    try {
       scanLog({ at: clock.now(), symbol: item.symbol, contractId: item.contractId, bar: item.bar, results, decision });
     } catch (err) {
       log(`${item.symbol}: decision log failed (${err.message})`, 'error');
@@ -412,12 +432,22 @@ function createRunner(deps) {
         try {
           const [net, working] = await exposure(item);
           if (net === 0 && working === 0) {
-            const screened = prop.screen(scanFor(item.symbol, item.bars), { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
+            const scanned = scanFor(item.symbol, item.bars);
+            item.scan = scanned;
+            const screened = prop.screen(scanned, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
             item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
             logScan(item, screened, { run: true, reason: 'bar closed' });
           }
         } catch (err) {
           log(`${item.symbol}: policy screen failed (${err.message}); the gate refuses its entries`, 'error');
+        }
+      } else {
+        // The decision log still gets every bar: what fired, so live can be reconciled with the scan (reconcile.js).
+        try {
+          item.scan = scanFor(item.symbol, item.bars);
+          logScan(item, item.scan, { run: true, reason: 'bar closed' });
+        } catch (err) {
+          log(`${item.symbol}: scan for the decision log failed (${err.message})`, 'error');
         }
       }
       return { run: true, reason: 'bar closed' };
@@ -429,6 +459,7 @@ function createRunner(deps) {
         return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };
       }
       const results = scanFor(item.symbol, item.bars);
+      item.scan = results;
       // A policy screens its strategy's setups (only when flat: a verdict is for a new entry).
       const screened = prop && net === 0 && working === 0
         ? prop.screen(results, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() })
@@ -683,11 +714,13 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts })), { manageOnly, recovered: recover, state: acct });
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: x.scan })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons(); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
           state = recordRun(state, 'trade', cycleNow);
+          // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
+          state = { ...state, history: [...((state && state.history) || []), { at: cycleNow.toISOString(), symbols: run.map(x => x.symbol), result: (r && r.result) || null }].slice(-10) };
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
         }

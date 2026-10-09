@@ -12,21 +12,28 @@ must not try.
 ## Method
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
-writes the bars that just closed), use it for that timeframe instead of
-calling `get_bars`.
+writes the bars that just closed), use it for that timeframe. Fetch any other
+timeframe to a file with `node <root>/scripts/bars.js --symbol <SYMBOL>
+--timeframe <minutes> --count <n> --out <file>` (it prints the file and when
+the last bar closed); never paste a long `get_bars` reply into a file.
 
 1. Load the skills `vwap-volume-profile`, `liquidity-concepts`,
    `session-timing`, and `market-snapshot`.
-2. Fetch closed 3m bars (500) and 15m bars (160), save each to
-   `/tmp/fth/volume-<SYMBOL>-<tf>.json`, and run the market-snapshot script. Get
-   `get_quote` for the live bid/ask/last.
-3. VWAP: price vs session and RTH VWAP, distance in ATR(14), number of RTH
-   VWAP crosses in the last 30 bars (trend vs rotation).
-4. Participation: relative volume of the last 3 bars vs the opening-range
-   average and vs the same time yesterday (if in the data). Flag climax bars.
-5. Liquidity: untaken pools above and below (prior-day/overnight highs/lows,
-   equal highs/lows, round numbers), recent sweeps (wick through, close back
-   inside), open fair value gaps on 3m/15m.
+2. Bars: the 3m file (2000 bars) and, with `bars.js`, 15m (160) to
+   `/tmp/fth/volume-<SYMBOL>-15m.json`; run the market-snapshot script on each.
+   Get `get_quote` for the live bid/ask/last.
+3. VWAP (snapshot `vwap`): which applies (`rth` 09:30-16:00 ET, else
+   `session`), the distance in ATR(14), and the crosses in the last 30 bars
+   (`rthCrossesLast30`, or `sessionCrossesLast30` when `applies` is
+   `session`: many = rotation, few = trend).
+4. Participation (snapshot `participation`): relative volume of the last bar
+   and the last 3 vs the opening-range average, vs the 20 bars before, and vs
+   the same time the previous day. Flag climax bars (relative volume 3+ with a
+   wide range).
+5. Liquidity (snapshot `levels` and `liquidity`): untaken pools above and
+   below (prior-day/overnight highs/lows, `equalHighs` / `equalLows`, round
+   numbers), recent sweeps (wick through, close back inside), and
+   `openFvgs` on 3m/15m.
 6. Approximate value area for the session from bar volume (state that it's an
    approximation).
 

@@ -40,6 +40,12 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   const denied = claude[claude.indexOf('--disallowedTools') + 1].split(',');
   assert.ok(denied.includes('Read(//proc/**)') && denied.includes('Write(//fth/**)'));
   assert.ok(claudeDenied('/r', { home: '/h' }).includes('Edit(//h/.futures-trading-harness/**)'));
+  // The skills' scripts (multi-timeframe read, prop status) and the runner's logs are allowed; credentials are not.
+  assert.ok(tools.includes('Bash(node /fth/scripts/mtf.js:*)') && tools.includes('Bash(node /fth/scripts/combine.js status:*)'));
+  assert.ok(claudeTools('/r', { home: '/h' }).includes('Read(//h/.futures-trading-harness/logs/**)'));
+  assert.ok(claudeTools('/r', { home: '/h', stateDir: '/srv/fth' }).includes('Read(//srv/fth/logs/**)'));
+  assert.ok(claudeDenied('/r', { home: '/h', stateDir: '/srv/fth' }).includes('Read(//srv/fth/.env)'));
+  assert.ok(claudeDenied('/r', { home: '/h' }).includes('Read(//h/.futures-trading-harness/.env)'));
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);
   const qwen = buildCommand(cfg, p, '/fth');

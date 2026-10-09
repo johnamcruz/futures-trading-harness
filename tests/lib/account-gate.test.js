@@ -203,3 +203,16 @@ test('micros and minis are one root: an MNQ entry waits while an NQ position is 
   assert.ok(checks(evaluateAccount({ input: order(), now: NOW, config, ledger, propAttempt: 'topstep_100k' })).includes('prop-one-position'));
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), now: NOW, config, propAttempt: 'topstep_100k' })), []);
 });
+
+test('correlated exposure: a second same-direction equity-index position is refused; the other side, or a non-index, is not', () => {
+  const mesLong = [{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 1 }];
+  const v = evaluateAccount({ input: order(), positions: mesLong, now: NOW, config });
+  assert.deepStrictEqual(checks(v), ['correlated-exposure']);
+  assert.match(v[0].message, /CON.F.US.MES.Z26 is already long; equity index futures move together/);
+  assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: 'setup:orb short, stop 1' }), positions: mesLong, now: NOW, config }), []);
+  // A larger limit allows it; gold is not an equity index.
+  assert.deepStrictEqual(evaluateAccount({ input: order(), positions: mesLong, now: NOW, config: { ...config, maxCorrelatedPositions: 2 } }), []);
+  assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [{ contractId: 'CON.F.US.MGC.Z26', type: 1, size: 1 }], now: NOW, config }), []);
+  // Exits are never held by it.
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] done' }), positions: [...long1, ...mesLong], now: NOW, config })), []);
+});

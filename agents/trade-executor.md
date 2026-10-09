@@ -22,8 +22,9 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 2. `get_contract`: round entry, stop, and target to `tickSize`.
 3. Follow the strategy's exit plan (the scan's `exit`, from its `exit:` block):
    - **Trailing** (`trailActivateR` set, `targetR` null): stop only, no
-     take-profit order. The runner trails the stop after every closed bar
-     (from +2R, giving back 0.5R for the ported strategies).
+     take-profit order. The autonomous runner trails the stop after every
+     closed bar (from `trailActivateR`, giving back `trailGivebackR`);
+     interactively the head trader asks you to move it after each bar.
    - **Target** (`targetR` set): stop and target at `targetR` × the stop
      distance.
    - **Target level** (`exit.target` set, the scan gives `targetDistance`):
@@ -46,7 +47,8 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 
 - Move the stop to breakeven or tighten it with `modify_order`. Never widen it
   (the gateway refuses). For a trailing strategy, leave the stop to the
-  runner's trail unless the plan says to exit earlier.
+  runner's trail while the runner runs; interactively, move it when the head
+  trader asks (toward the market only).
 - After a partial exit, reduce the protective stop's size to the remaining
   position with `modify_order {size, reason: "[protect] ..."}` (only after
   the exit: the stops must keep covering the position).

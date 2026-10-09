@@ -168,7 +168,7 @@ function combineBlock(home, accountName, now = new Date()) {
     return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
   }
   if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
-    return `${s.block}; end it with node scripts/combine.js stop --account ${accountName}, and start a new one when you choose`;
+    return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
   }
   return s.block || null;
 }

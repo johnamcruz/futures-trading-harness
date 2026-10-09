@@ -10,7 +10,7 @@ const http = require('http');
 const path = require('path');
 const { spawn } = require('child_process');
 const { tmpDir } = require('../helpers');
-const { inMarketHours } = require('../../scripts/lib/trading/clock');
+const { inMarketHours, zonedParts } = require('../../scripts/lib/trading/clock');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -60,7 +60,10 @@ test('a runner config that trades outside market hours is refused', { timeout: 3
 // The runner runs on the real clock: during market hours a fresh bar starts a
 // cycle; outside them it must stay idle.
 test('runner starts a cycle on a fresh closed bar during market hours, and none outside them', { timeout: 30000 }, async () => {
-  const open = inMarketHours(new Date()) && inMarketHours(new Date(Date.now() + 25000));
+  // Open = market hours, and before this config's 15:50 ET end of day (its session is the whole market session).
+  const etMin = d => { const p = zonedParts(d, 'America/New_York'); return p.hour * 60 + p.minute; };
+  const beforeEod = d => { const m = etMin(d); return m >= 18 * 60 || m < 15 * 60 + 49; };
+  const open = [new Date(), new Date(Date.now() + 25000)].every(d => inMarketHours(d) && beforeEod(d));
   const { server, calls, url } = await fakeProjectX();
   const home = tmpDir();
   const dataDir = path.join(home, 'fth');
@@ -70,9 +73,9 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
     command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'],
     timeframe: 1,
     dataDir,
-    sessions: ['09:30-16:00@America/New_York'],
+    sessions: ['18:00-15:50@America/New_York'],
     premarketAt: '',
-    eodAt: '16:00@America/New_York',
+    eodAt: '15:50@America/New_York',
     weekdaysOnly: false,
     barDelaySeconds: 0,
   }));

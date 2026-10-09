@@ -82,7 +82,7 @@ bars (`MNQ` on `NQ` data), as algoTraderBot does.
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
 | Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the bar's close (plus `slippageTicks`). The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
+| Entry | Strategies are checked in priority order. The first candidate enters at the next bar's open (plus `slippageTicks`), or at the signal bar's close with `fill: close`. The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
 
 **The market session** always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday) and before `eodAt`, and every
@@ -143,7 +143,9 @@ trail, and `max_bars` if set), whichever rules strategy found the setup: a
 | `gate` | true | Harness rules, as above |
 | `sessions`, `eodAt` | 18:00-15:50 ET, 15:50 ET | Runner schedule: sessions inside the 18:00-16:00 ET session (with `gate`; `asia`, `london`, `ny` work); `eodAt` required, no later than 16:00 ET |
 | `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk |
-| `slippageTicks` | 0 | Against you on entries and stop fills |
+| `slippageTicks` | 1 | Against you on entries and stop fills |
+| `fill` | `next-open` | `next-open`: an entry fills at the next bar's open (live, the order goes in after the cycle that read the closed bar); a setup whose fill bar opens through its stop or target, or falls after end of day or in a new day, expires (counted in the report). `close`: at the signal bar's close, as algoTraderBot |
+| `walkForward` | null | `{ grid, trainMonths, testMonths, minTrades }`: walk-forward test of one strategy (`--walk-forward --grid key=v1,v2`); see below |
 | `feesPerSide` | per contract (micros $0.37) | Dollars per contract per side |
 | `maxDailyLoss` | 500 | Daily dollar loss that ends the day (0 = off) |
 | `window` | 500 | Bars of history per evaluation (algoTraderBot's BARS_WINDOW) |
@@ -218,3 +220,30 @@ XGBoost model, proba ≥ floor), the raw mechanical entries are not
 profitable. That matches why algoTraderBot grades them. Here, the LLM's
 analysis plays that grading role, so use the backtest for strategy
 correctness and exit design. Judge the harness's edge from paper trading.
+
+## Walk-forward (rules strategies)
+
+A strategy whose parameters were picked by looking at backtests is overfit
+until shown otherwise. `--walk-forward` tunes a grid on rolling in-sample
+months and trades the winner, untouched, on the months after; only those
+out-of-sample trades count, next to the strategy's own parameters on the
+same months:
+
+```bash
+node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy crt_1h \
+  --walk-forward --grid crtMinRR=1.5,2,2.5 --grid exit.max_bars=20,40 --train-months 6 --test-months 1
+```
+
+`walk-forward.md` reports the out-of-sample mean R with its 95% interval,
+the retention (out-of-sample over in-sample mean R), how many folds were
+positive, and how often the same point won. Keep the defaults unless the
+tuned run beats them out of sample.
+
+## Trusting a result
+
+Every report gives the mean R's 95% interval and an edge verdict
+(anecdotal under 30 trades; unproven while the interval includes 0), the
+Sharpe ratio of daily P&L, MAE, the longest losing streak, breakdowns by
+entry hour (ET) and weekday, and a data audit (bars missing inside market
+hours, opens that jump more than 8 x ATR from the previous close, as an
+unadjusted roll does, and malformed bars).

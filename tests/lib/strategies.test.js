@@ -240,3 +240,90 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   assert.match(by('p_es').errors.join(), /none of its strategies trades MYM's index/);
   assert.match(by('p_off').errors.join(), /off_rules is disabled/);
 });
+
+test('mtf: trend (the default) or reversal; a policy strategy takes it from its setups; the reversal ports say so', () => {
+  const base = ['name: x', 'description: A test strategy long enough to pass the description rule.', 'status: active', 'instruments: [MNQ]',
+    'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1'];
+  const errs = extra => validateStrategy(parseFrontmatter(`---\n${[...base, ...extra].join('\n')}\n---\n${BODY}`).data, BODY, 'x');
+  assert.deepStrictEqual(errs([]), []);
+  assert.deepStrictEqual(errs(['mtf: reversal']), []);
+  assert.match(errs(['mtf: sideways']).join(), /mtf: trend \| reversal/);
+  const { strategies } = loadStrategies(ROOT, {});
+  const byName = Object.fromEntries(strategies.map(s => [s.name, s]));
+  for (const n of ['crt_1h', 'crt_4h', 'cisd_ote', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
+  for (const n of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'vwap_reclaim', 'ofi']) assert.strictEqual(byName[n].mtf, 'trend', n);
+  assert.strictEqual(byName.prop_portfolio_3m.mtf, undefined);
+});
+
+test('scan: a trend strategy that fires against the prevailing trend is not a candidate; a reversal one is', () => {
+  const dir = tmpDir();
+  const rules = style => [
+    `name: ${style}_up`, `description: Fires long on every bar, a ${style} test of the multi-timeframe trend rule.`,
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', `mtf: ${style}`,
+    'rules:', '  long:', '    - volume > 0', 'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n');
+  writeStrategy(dir, 'trend_up', rules('trend'));
+  writeStrategy(dir, 'reversal_up', rules('reversal'));
+  const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => /_up$/.test(s.name));
+  // 6000 3-minute bars falling in waves: a 4h downtrend.
+  const bars = Array.from({ length: 6000 }, (_, k) => {
+    const c = 20000 - 0.3 * k + 40 * Math.sin((2 * Math.PI * k) / 320);
+    return { t: new Date(Date.UTC(2026, 8, 1, 13) + k * 180000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
+  });
+  const r = Object.fromEntries(scan(mine, { bars }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 8, 13, 14)) }).map(x => [x.name, x]));
+  assert.strictEqual(r.trend_up.direction, 'long');
+  assert.strictEqual(r.trend_up.candidate, false);
+  assert.ok(r.trend_up.filtersFailed.some(f => /^mtf: against the prevailing 4h down trend/.test(f)), r.trend_up.filtersFailed.join());
+  assert.deepStrictEqual([r.trend_up.mtf.prevailing, r.trend_up.mtf.longAllowed, r.trend_up.mtf.shortAllowed], ['4h down', false, true]);
+  assert.ok(!r.reversal_up.filtersFailed.some(f => /^mtf:/.test(f)));
+  assert.strictEqual(r.reversal_up.mtf.style, 'reversal');
+});
+
+test('CLI scan reads CSV bars as well as get_bars JSON', () => {
+  const out = [];
+  run(['scan', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--now', '2026-04-28T14:00:00Z'], { out: s => out.push(s) });
+  const results = JSON.parse(out.join(''));
+  assert.ok(results.length > 3 && results.every(x => x.name));
+  assert.ok(results.some(x => x.mtf && x.mtf.ready), 'scan results carry the trend rule');
+});
+
+test('scan: each strategy that fired lists the others firing with it and against it on its timeframe', () => {
+  const dir = tmpDir();
+  const mk = (name, side) => writeStrategy(dir, name, [
+    `name: ${name}`, `description: Fires ${side} on every bar, a confluence test strategy for the scan.`, 'status: active', 'instruments: [MNQ]',
+    'timeframe: 3m', 'signal: rules', 'mtf: reversal', 'rules:', `  ${side}:`, '    - volume > 0', 'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  mk('up_a', 'long');
+  mk('up_b', 'long');
+  mk('down_c', 'short');
+  const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => ['up_a', 'up_b', 'down_c'].includes(s.name));
+  const bars = Array.from({ length: 60 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + k * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100 + (k % 3), v: 10 }));
+  const r = Object.fromEntries(scan(mine, { bars }, { symbol: 'MNQ' }).map(x => [x.name, x]));
+  assert.deepStrictEqual(r.up_a.confluence, { with: ['up_b'], against: ['down_c'] });
+  assert.deepStrictEqual(r.down_c.confluence, { with: [], against: ['up_a', 'up_b'] });
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const p = prompts(validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' }), new Date(), '/r')
+    .trade([{ symbol: 'MNQ', bar: { t: bars[59].t, c: 100, file: '/f', contractId: 'C' }, scan: Object.values(r) }]);
+  assert.match(p, /MNQ fired on this bar .*: down_c short; against up_a, up_b \| up_a long with up_b; against down_c/);
+  assert.match(p, /Strategies disagree on the side: stand aside/);
+});
+
+test('recent: what fired on each of the last bars, as the scan judged each at its close', () => {
+  const { recentSignals } = require('../../scripts/lib/trading/strategies');
+  const out = [];
+  run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--bars', '3'], { out: s => out.push(s) });
+  const rows = JSON.parse(out.join(''));
+  assert.strictEqual(rows.length, 3);
+  assert.deepStrictEqual(rows[1], { bar: '2026-04-28T04:09:00.000Z', fired: ['bos long', 'ema_cross long'] });
+  assert.ok(typeof recentSignals === 'function');
+  assert.throws(() => run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--bars', '99'], { out: () => {} }), /--bars: 1 to 50/);
+});
+
+test('snapshot context: the numbers the skip rules talk about', () => {
+  const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const c = snapshot(readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))).context;
+  for (const k of ['emaCrossesLast30', 'adxFallingBars', 'keltnerWidthVsAvg20', 'supertrendFlipsLast20', 'range5Atr', 'session', 'flow']) assert.ok(k in c, k);
+  assert.ok(Number.isInteger(c.emaCrossesLast30) && c.session.high >= c.session.low);
+  assert.strictEqual(c.flow.real, false, 'no buy/sell volume in this file: the flow is the bar-shape estimate');
+});

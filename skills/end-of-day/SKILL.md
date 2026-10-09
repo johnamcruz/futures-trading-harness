@@ -14,14 +14,32 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
 ## How It Works
 
 1. `get_account_snapshot`.
-2. Open positions: interactive sessions ask the user; autonomous runs flatten
-   without asking. The trade-executor role uses `close_position` and journals
-   `[exit] end of day`, then cancels every working order.
+2. Open positions: flatten every one by `eodAt` (by 16:00 ET; 12:50 ET on
+   an early-close day), in every mode, without asking: no position is held
+   into the daily break. The trade-executor role uses `close_position` and
+   journals `[exit] end of day`, then cancels every working order. In an
+   interactive session you may ask the user only about cancelling a pending
+   entry earlier than that.
 3. Confirm with `list_open_positions` and `list_open_orders` that nothing is
    left.
 4. Run trade-review with end-of-day lessons (the trade-reviewer role).
-5. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
-   total, rule breaks, blocked orders, lessons, and tomorrow's focus.
+5. Prop attempt running: the autonomous runner records the day's closing
+   balance itself (it retries a failed record and lists a close it couldn't
+   record in `combine.js status`). Interactive, or a missed close: the user
+   records it with `node <root>/scripts/combine.js record-day --account <name>
+   --day YYYY-MM-DD --balance <dollars>` (the balance after the session's
+   last fill); tell them the exact command. Agents don't run it.
+6. Autonomous days: `node <root>/scripts/reconcile.js --day <trading day>
+   --timeframe <minutes>` compares the day's entries with the signals the
+   runner saw: how many were taken, passed (with the note that says why), and
+   entries with no signal behind them. Quote its first line.
+7. `node <root>/scripts/lessons.js`: the instincts the reviews add up to
+   (setups to favour or avoid by regime, recurring mistakes). Write a lesson
+   only when one has the evidence (the trade-review rules).
+8. `journal_add {kind:"note", tags:["eod"]}`: net P&L after fees, trades, R
+   total, rule breaks, blocked orders (journal `order_blocked` and
+   `<FTH_HOME>/logs/gate-log.jsonl`), signals taken vs passed, lessons, and
+   tomorrow's focus.
 
 ## Examples
 

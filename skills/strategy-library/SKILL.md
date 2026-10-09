@@ -34,12 +34,32 @@ Autonomous runs only permit these scripts by absolute path.
 node <root>/scripts/strategies.js list           # name, status, signal, instruments
 node <root>/scripts/strategies.js show orb       # the full STRATEGY.md
 node <root>/scripts/strategies.js scan /tmp/fth/MNQ-3m.json --symbol MNQ
+node <root>/scripts/strategies.js list --json    # machine-readable
+node <root>/scripts/strategies.js recent /tmp/fth/MNQ-3m.json --symbol MNQ --bars 5   # what fired on each of the last 5 bars
 ```
+
+`recent` answers the skip rules about recent signals ("fired the other way
+in the last 5 bars"). A scan result's `detail` carries the detectors' state:
+a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
+fire, and cisd_ote's `hadSweep` and displacement.
+
+`scan` judges sessions at the current time; pass `--now <ISO>` to judge them
+at another time (e.g. the bar's close when replaying a file). It reads the
+signal on the file's last closed bar and doesn't know the file's timeframe:
+read results only for strategies whose timeframe is the file's (a 3m strategy
+on 1-minute bars, or the reverse, is not a signal), and only when that last
+bar is fresh (no older than one bar plus a minute).
 
 `scan` runs market-snapshot with each strategy's `params` and reports, per
 strategy: `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`), `candidate`, and `stopDistance`. `signal: rules`
+`inRegime` (fits the strategy's `regimes`), `confluence` (on a strategy
+that fired: the other strategies on its timeframe that fired the same side,
+`with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
+1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
+this strategy's style), `candidate`, and `stopDistance`. A trend strategy
+that fires against the prevailing trend is never a candidate (`filtersFailed`
+says `mtf: ...`); only `mtf: reversal` strategies may fade it. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
 one did or didn't fire. Strategies with `signal: manual` are listed with
 `candidate: true` when in session; you evaluate their trigger from the body.
@@ -50,17 +70,32 @@ one did or didn't fire. Strategies with `signal: manual` are listed with
 2. A trade needs, in order: the trigger has fired on a closed bar (scan
    `candidate: true`, or the manual trigger described in the body), every
    context filter holds, no "Skip when" rule applies, and planned R:R ≥
-   `risk.min_rr`.
+   `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
+   `min_rr` stands in for it).
 3. Stop from `risk.stop`: `atr:<k>` or a distance expression (e.g.
    cisd_ote's `cisd_ote_risk`) → the scan's `stopDistance`;
-   `structure`/`swing` → beyond the level the body names. Round to tick size.
+   `structure`/`swing` → beyond the level the body names. Round the stop
+   away from the entry to the tick (a long's stop down, a short's up), the
+   target toward it; bracket ticks = `ceil(distance / tickSize)`.
+   `atr:<k>` means k × ATR(20) on the strategy's bars.
 4. Tag the plan and the order `setup:<name>`.
 
 ### What the code enforces (order gate and MCP gateway)
 
 Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. `paper` strategies can only be paper-traded.
+`sessions`. `paper` strategies can only be paper-traded. A rules strategy
+enters only on its own trigger (`trigger-fired`): the signal record must show
+it fired on that side on a bar that closed less than 10 minutes ago (the
+runner records every bar; interactively `scan ... --record`). The gate does
+**not** judge a manual strategy's trigger, the skip rules, or that the order
+is the plan's: those are yours and risk-manager's. It does refuse an order that contradicts its
+own rationale (`order-consistency`): write the side right after the tag
+(`setup:orb long ...`), the stop and target as prices on the tick, and
+brackets the same distance as those prices.
+While a prop attempt runs, only its policy strategy's verdict can enter.
+The trend rule is a hard gate check (`mtf-trend`): a trend strategy's entry
+against the recorded prevailing trend, or without a fresh record, is refused.
 
 ## Examples
 

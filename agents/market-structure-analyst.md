@@ -17,18 +17,23 @@ current time. If no contractId, use `search_contracts` and take the
 ## Method
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
-writes the bars that just closed), use it for that timeframe instead of
-calling `get_bars`.
+writes the bars that just closed), use it for that timeframe. Fetch any other
+timeframe to a file with `node <root>/scripts/bars.js --symbol <SYMBOL>
+--timeframe <minutes> --count <n> --out <file>` (it prints the file and when
+the last bar closed); never paste a long `get_bars` reply into a file.
 
 1. Load the skills `market-structure`, `multi-timeframe-analysis`,
    `liquidity-concepts`, `market-snapshot`, and `strategy-library`.
-2. Fetch closed bars: 1h (120), 15m (160), 3m (500). Stay within the rate
-   limit: one request per timeframe. Save each result to
-   `/tmp/fth/structure-<SYMBOL>-<tf>.json` and run the market-snapshot script on it.
-3. Per timeframe: last 3–4 swing highs/lows with prices and times, trend
+2. Bars: the 3m file (2000 bars) and, with `bars.js`, 60m (120) and 15m
+   (160) to `/tmp/fth/structure-<SYMBOL>-<tf>.json`. One request per
+   timeframe (the rate limit is shared). Run the market-snapshot script and
+   `mtf.js` on the 3m file.
+3. Per timeframe: the last swing highs/lows (`liquidity.swingHighs` /
+   `swingLows` in the snapshot) with prices and times, trend
    classification, the latest BOS or CHoCH, and the dealing range with its 50%.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
-   formed, equal highs/lows, untested 1h swings.
+   formed, equal highs/lows (`liquidity.equalHighs` / `equalLows`), open fair
+   value gaps (`liquidity.openFvgs`), untested 1h swings.
 5. Which structure strategies are live for this symbol (`strategies.js list`;
    e.g. `setup:bos`, `setup:cisd_ote`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to

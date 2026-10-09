@@ -253,7 +253,8 @@ function detect(bars, atr, p = PARAMS) {
   if (!(Number.isFinite(a) && a > 0)) return null;
   const risk = Math.abs(rec.entry - rec.sl);
   if (!(risk > 0)) return null;
-  return { direction: rec.isLong ? 'long' : 'short', entry: rec.entry, stop: rec.sl, risk };
+  // hadSweep and disp: the body's skip rules ask whether a sweep preceded the displacement.
+  return { direction: rec.isLong ? 'long' : 'short', entry: rec.entry, stop: rec.sl, risk, hadSweep: Boolean(rec.hadSweep), disp: rec.disp };
 }
 
 module.exports = { PARAMS, resample, detectPivots, detectZoneSignals, extractSignals, detect };

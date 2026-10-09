@@ -22,7 +22,7 @@ The server must be registered under the name `projectx`, so tools are
 3. `journal_read {kind:"lesson"}` plus recent `review` entries.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
 5. `search_contracts {searchText:"MNQ"}`: take `activeContract=true`; note `tickSize`, `tickValue`.
-6. `get_bars` (+ `get_quote`) on several timeframes, then market-snapshot.
+6. Bars to a file: the runner's bars file, or `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --record` (+ `get_quote`), then market-snapshot, `mtf.js`, and `strategies.js scan --record`.
 7. `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`.
 8. `place_order` only when the plan's trigger has happened.
 9. Manage with `get_account_snapshot` / `get_quote` / `list_open_orders`.
@@ -51,9 +51,54 @@ The server must be registered under the name `projectx`, so tools are
 - `close_position` leaves resting stop/target orders: cancel them.
 - `search_trades`: `profitAndLoss: null` marks an opening fill; fees separate.
 
+- **Partial fills**: a limit or a large market entry may fill in part.
+  `get_account_snapshot` / `list_open_positions` give the filled size; a
+  bracket covers the filled quantity. Cancel the unfilled rest when the plan
+  no longer wants it, and size any `[protect]` stop to the position, not to
+  the order.
+- **Stop vs rationale**: the rationale's stop price and
+  `stopLossBracket.ticks` must say the same stop (ticks =
+  `ceil(|entry - stop| / tickSize)`). After a market fill the bracket sits
+  that many ticks from the fill price, not from the planned entry: read the
+  working stop's price in `list_open_orders` and journal it if it differs.
+
+### Failures and limits
+
+- `get_bars`: 50 requests per 30 s across all agents. Reuse the runner's bars
+  file; one request per extra timeframe.
+- A read times out or errors (429, 5xx): retry once after a few seconds, then
+  stand aside for this cycle.
+- An order call times out or errors without a clear rejection: **don't
+  resend**. Read `list_open_orders` and `get_account_snapshot` first; the
+  order may be working or filled. Only place it again when both show it
+  isn't there, and the plan still holds.
+- A position without a working protective stop (bracket rejected, partial
+  fill, cancelled by mistake): place a `[protect]` stop at once, or close the
+  position. Nothing else comes first.
+
+### Journal
+
+`journal_add` / `journal_read` keep the journal the gate reads, a JSON-lines
+file at `PROJECTX_JOURNAL_PATH` (default `~/.projectx-mcp/journal.jsonl`):
+one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `data`). Kinds: `plan`, `note`,
+`review`, `lesson`; every `place_order` writes an `order_placed` entry by
+itself. Write through the tools only; never edit the file. The gate reads
+plans (a plan for this contract within `FTH_PLAN_MAX_AGE_MIN`, 120) and
+reviews (every entry reviewed before the next) from it. Which strategy fired
+it reads from the signal record (`strategies.js scan --record`), not the
+plan. Optional parameters the gate and reviews use: `journal_read {kind, tag}`
+filters, `journal_add {orderId}` links a review to its order, and
+`modify_order {reason}` labels a stop change (`[protect] ...`).
+
 ### Harness rationale convention (the order gate reads it)
 
 - Entry: `setup:<name> <side> <trigger>, stop <price>, target <price>, risk $<n>`.
+  The gate checks the order against it (`order-consistency`): `<side>`
+  (long/short) must be the order's side, the prices on the tick and on the
+  right sides, and the brackets the same distance (from `limitPrice` /
+  `stopPrice`; for a market order, stop + target ticks = the stop-to-target
+  span). Write a distance as a unit (`stop 40 ticks`) and it isn't read as a
+  price.
 - Exit / scale-out: `[exit] <why>`.
 - Protective order for an existing fill: `[protect] <what it protects>`.
 

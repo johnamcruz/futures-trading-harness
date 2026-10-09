@@ -18,6 +18,7 @@ const { evaluateRules, seriesSource, valueAt } = require('./rules');
 const { classifyRegime, regimeFits } = require('./regime');
 const { parseWindows, inWindow } = require('./clock');
 const ind = require('./indicators');
+const mtf = require('./mtf');
 
 const DEFAULT_WINDOW = 500; // bars per evaluation, as algoTraderBot's BARS_WINDOW
 const RTH_OPEN = 9 * 60 + 30;
@@ -58,6 +59,9 @@ function inSessions(strategy, now) {
  */
 function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
   const ms = bars.map(b => Date.parse(b.t));
+  // The multi-timeframe trend rule's frames, per bar (causal), computed once on first use.
+  let ruleSer = null;
+  const mtfAt = i => { ruleSer = ruleSer || mtf.ruleSeries(bars); return mtf.biasesAt(ruleSer, i); };
   const seriesCache = new Map();
   const rulesCache = new Map();
   const regimeCache = new Map();
@@ -130,7 +134,8 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
     const head = { name: s.name, status: s.status, timeframe: s.timeframe, inSession: session };
     if (s.signal === 'manual') {
       const base = withRegime(head);
-      return { ...base, signal: 'manual', candidate: session && base.inRegime, note: 'evaluate the trigger from STRATEGY.md' };
+      // The side is the LLM's call; the summary says which sides the trend rule leaves open (the gate enforces it).
+      return { ...base, signal: 'manual', candidate: session && base.inRegime, mtf: mtf.ruleSummary(mtfAt(i), s.mtf || 'trend'), note: 'evaluate the trigger from STRATEGY.md' };
     }
     const ser = series(s);
     const atr20 = num(ser.atrStop[i]);
@@ -162,6 +167,12 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
     // distance on this bar can't be placed: no candidate.
     const mechanicalStop = Boolean(atrMult || s.compiledStop);
     if (direction && mechanicalStop && !(stopDistance > 0)) fails.push('stop: no positive distance on this bar');
+    // The trend rule: a trend strategy never enters against the prevailing higher-timeframe trend.
+    const biases = direction || describe ? mtfAt(i) : null;
+    if (direction) {
+      const rule = mtf.trendRule(biases, direction, s.mtf || 'trend');
+      if (!rule.allowed) fails.push(`mtf: ${rule.reason}`);
+    }
     const base = direction || describe ? withRegime(head) : { ...head, regime: null, regimes: s.regimes || null, inRegime: null };
     return {
       ...base,
@@ -174,6 +185,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       ...(s.compiledTarget ? { targetDistance: targetDistance === null ? null : Math.round(targetDistance * 1e4) / 1e4 } : {}),
       minRR: s.risk.min_rr,
       exit: exitPlan(s),
+      ...(biases ? { mtf: mtf.ruleSummary(biases, s.mtf || 'trend') } : {}),
       ...(ruleDetail ? { rules: ruleDetail } : {}),
       // Detector state on this bar (e.g. a CRT sweep's range, extreme, and why it did or didn't fire).
       ...(describe && s.signal === 'rules' ? (d => (Object.keys(d).length ? { detail: d } : {}))(rulesSource(s).explain(i)) : {}),

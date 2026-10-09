@@ -39,7 +39,7 @@ function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null })
   };
 }
 
-async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt = null, positions, timeoutAt = null }) {
+async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt = null, positions, timeoutAt = null, deps = {} }) {
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', ...rawCfg });
   const clockRef = { t: from };
   const cycles = [];
@@ -62,6 +62,7 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
     saveState: () => {},
     writeBars: sym => `/bars/${sym.symbol}.json`,
     scanFor: () => [],
+    ...deps,
   });
   let guard = 0;
   while (clockRef.t < to) {
@@ -678,4 +679,52 @@ test('a prop attempt state that cannot be built leaves the account line in the p
   const prompt = r.prompts.find(x => /trade-session/.test(x));
   assert.match(prompt, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./);
   assert.doesNotMatch(prompt, /attempt/);
+});
+
+test('every closed bar records the multi-timeframe read for the gate, and the cycle prompt carries its trend rule', async () => {
+  const recorded = [];
+  const line = 'Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.';
+  const ok = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { recordMtf: (sym, bars) => { recorded.push([sym.symbol, bars.length]); return line; } },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
+  assert.ok(ok.cycles.length >= 3);
+  assert.ok(ok.cycles.every(c => c.prompt.includes(`MNQ ${line} (recorded for the order gate, which enforces it).`)), ok.cycles[0].prompt);
+  // A failed record never stops the cycle; the prompt says the gate will refuse trend entries.
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market: fakeMarket({ minutes: 3 }),
+    deps: { recordMtf: () => { throw new Error('disk full'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  assert.ok(failed.cycles.length >= 1);
+  assert.match(failed.cycles[0].prompt, /MNQ: no multi-timeframe record this bar, so the gate refuses trend strategies' entries/);
+  assert.ok(logs.some(l => /error MNQ: could not record the multi-timeframe read \(disk full\)/.test(l)), logs.join('\n'));
+});
+
+test('every scanned bar records its signals for the gate, also on the default bar trigger', async () => {
+  const recorded = [];
+  const scan = [{ name: 'orb', signal: 'rules', status: 'active', candidate: true, direction: 'long', stopDistance: 5 }];
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => scan, recordSignals: (item, results) => recorded.push([item.symbol, item.bar.t, results.length]) },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([s, t, n]) => s === 'MNQ' && t && n === 1), JSON.stringify(recorded));
+});
+
+test('the trade prompt carries the last closed bars and the model\'s own last cycle results', async () => {
+  let n = 0;
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 12), market: fakeMarket({ minutes: 3 }),
+    deps: { runCycle: async () => { n += 1; return { ok: true, timedOut: false, result: `CYCLE RESULT: no-trade - reason ${n}` }; } },
+  });
+  // simulate() records prompts via its own runCycle; use the runner's state for the history and check the builder directly.
+  assert.ok(r.runner.state.history.length >= 2);
+  assert.match(r.runner.state.history.at(-1).result, /no-trade - reason \d/);
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' });
+  const bars = Array.from({ length: 12 }, (_, k) => ({ t: new Date(et(9, 30) + k * 180000).toISOString(), o: 100 + k, h: 101 + k, l: 99 + k, c: 100.5 + k, v: 10 + k }));
+  const p = prompts(cfg, new Date(et(10, 6)), '/r').trade([{ symbol: 'MNQ', bar: { t: bars[11].t, c: 111.5, file: '/f', contractId: 'C', recent: bars.slice(-10) } }], { history: r.runner.state.history });
+  assert.match(p, /MNQ last 10 closed 3m bars \(ET open time, oldest first\): 09:36 O 102 H 103 L 101 C 102\.5 V 12 \(\+0\.5\);/);
+  assert.match(p, /Your last \d cycle\(s\), oldest first: .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
 });

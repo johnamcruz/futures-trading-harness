@@ -6,6 +6,7 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 signal: rules
+mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
 rules:
   long:
     - cisd_ote_dir > 0
@@ -78,6 +79,14 @@ setup; the steps below are what the series computes.
 - The 1-hour trend (EMA 9/21 on 60-minute) is strongly against the zone
   direction and there was no sweep.
 - Risk to the origin is above the position-sizing budget at size 1.
+
+**Known quirk (kept for parity with the source):** the detector runs on the
+trailing window at each closed 3-minute bar and executes only a touch on the
+first or second 3-minute bar of a 12-minute zone bin; touches on its third or
+fourth bar never trade, live or in a backtest (half the bins' bars). Offline
+statistics that scan the whole history see those touches and also read the
+12-minute bar's close, which ends after the touch: they overstate what this
+strategy trades. Judge it by the harness's own backtest.
 
 ## Examples
 

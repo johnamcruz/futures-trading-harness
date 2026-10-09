@@ -11,6 +11,7 @@
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { contractRoot } = require('./trading/journal');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
@@ -37,18 +38,21 @@ const DEFAULTS = {
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
-  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': snapshot + scan, analysts only to confirm a candidate (use for 1m)
+  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no analysts or news, the trader runs the snapshot, scan, and MTF read and calls risk-manager only on a candidate (use for 1m)
   earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close trading days (YYYY-MM-DD, the date the day ends on)
   closedDates: [], // e.g. ["2026-11-26", "2026-12-25"]: CME holidays with no session (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
+  alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
+  alertCommand: null, // or an argv array run with the message in FTH_ALERT, e.g. ["osascript", "-e", "display notification (system attribute \"FTH_ALERT\")"]
   orderFlow: 'auto', // record real order flow from the TopstepX market hub: true, false, or 'auto' (when a strategy on this timeframe declares connectors: [order_flow])
   paper: false,
   model: '',
   extraArgs: [],
 };
 const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
-const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'blackouts.js'];
+// The read-only (or append-only) scripts the skills tell an autonomous run to use.
+const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
 const NEWS_DOMAINS = ['bls.gov', 'bea.gov', 'federalreserve.gov', 'eia.gov', 'treasurydirect.gov', 'cmegroup.com', 'census.gov', 'dol.gov'];
 
@@ -68,11 +72,12 @@ const abs = p => `/${p}`;
  * broader allow in the user's settings): reading credentials and other
  * agents' configs, and writing the harness, its state, or Claude settings.
  */
-function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home) } = {}) {
+function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   return [
     'mcp__projectx', 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
-    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, 'Read(//tmp/fth/**)',
+    // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
+    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
     'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
     // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
@@ -87,6 +92,8 @@ function claudeDenied(root, { home = os.homedir(), stateDir = null } = {}) {
     ...state,
     'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
     `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
+    // Credentials (.env in the state dir, the default ~/.futures-trading-harness, or the repo).
+    `Read(${h('.futures-trading-harness')}/.env)`, ...(stateDir ? [`Read(${abs(stateDir)}/.env)`] : []),
     `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
     `Edit(${h('.futures-trading-harness')}/**)`, `Write(${h('.futures-trading-harness')}/**)`,
     `Edit(${h('.projectx-mcp')}/**)`, `Write(${h('.projectx-mcp')}/**)`,
@@ -180,7 +187,10 @@ function usesOrderFlow(strategies, timeframe) {
 
 /** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
 function historyBars(timeframe) {
-  return Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe));
+  // At least 2000 bars and three trading days, and the multi-timeframe read's whole window
+  // (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. ProjectX caps a request at 20000.
+  const { HISTORY_HOURS } = require('./trading/mtf');
+  return Math.min(20000, Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
 
 function validateConfig(raw) {
@@ -224,6 +234,8 @@ function validateConfig(raw) {
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (![true, false, 'auto'].includes(cfg.orderFlow)) errors.push('orderFlow: true, false, or "auto"');
+  if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
+  if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
   if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
   if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {
@@ -259,9 +271,42 @@ function accountText(state) {
   return head + attempts.join('');
 }
 
+const RECENT_IN_PROMPT = 10;
+
+/** The last closed bars, oldest first, compact: "09:33 O 21500.25 H 21504 L 21498.5 C 21503.75 V 1200 (+3.5)". */
+function recentBarsText(symbol, bars, timeframe) {
+  const list = (bars || []).slice(-RECENT_IN_PROMPT);
+  if (!list.length) return '';
+  const { zonedParts } = require('./trading/clock');
+  const hhmm = t => { const p = zonedParts(new Date(t), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`; };
+  const num = x => (Number.isFinite(x) ? Number(x.toFixed(4)) : '?');
+  const rows = list.map(b => `${hhmm(b.t)} O ${num(b.o)} H ${num(b.h)} L ${num(b.l)} C ${num(b.c)} V ${b.v ?? '?'} (${b.c >= b.o ? '+' : ''}${num(b.c - b.o)})`);
+  return ` ${symbol} last ${list.length} closed ${timeframe}m bars (ET open time, oldest first): ${rows.join('; ')}.`;
+}
+
+/** What fired on this bar, with its confluence: "orb long (with ema_cross; against bos)". */
+function signalsText(symbol, scan) {
+  if (!Array.isArray(scan)) return '';
+  const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
+  if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
+  const one = r => {
+    const c = r.confluence || { with: [], against: [] };
+    return `${r.name} ${r.direction}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}`;
+  };
+  const conflict = fired.some(r => r.confluence && r.confluence.against.length);
+  return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}`;
+}
+
+/** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
+function historyText(history) {
+  const list = (history || []).slice(-RECENT_IN_PROMPT);
+  if (!list.length) return '';
+  return ` Your last ${list.length} cycle(s), oldest first: ${list.map(h => `${h.at.slice(11, 16)}Z ${(h.symbols || []).join(',')}: ${String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '')}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`.` : '';
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
   const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
@@ -269,10 +314,13 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
-      const bars = list.filter(x => x.bar).map(({ symbol, bar }) =>
-        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`);
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan }) =>
+        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
+        + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + recentBarsText(symbol, bar.recent, cfg.timeframe)
+        + signalsText(symbol, scan));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
@@ -283,8 +331,9 @@ function prompts(cfg, now, root = '') {
       // A policy strategy's verdicts: the only entries the gate will accept (prop-challenge-pacing skill).
       const verdicts = list.flatMap(x => x.verdicts || []).map(v => (v.action === 'skip'
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
-        : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')} Run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+        : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
+          + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
+      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')}${historyText(history)}${trades.length ? ` Your last ${trades.length} reviewed trade(s), oldest first: ${trades.join(' | ')}.` : ''}${lessons.length ? ` Instincts from your reviewed trades (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };
@@ -307,13 +356,14 @@ function buildCommand(cfg, prompt, root, env = process.env) {
   const model = cfg.model ? String(cfg.model) : '';
   switch (cfg.harness) {
     case 'claude':
-      return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'json', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env) }).join(','),
+      // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
+      return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
         '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
-      return ['codex', 'exec', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
+      return ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
         '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
         ...(model ? ['-m', model] : []), ...extra, prompt];
     case 'qwen':

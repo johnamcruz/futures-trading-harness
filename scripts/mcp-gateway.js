@@ -12,7 +12,7 @@
  * Register THIS command as the MCP server named "projectx" in your harness.
  * Credentials stay in the environment; the gateway passes it to the child
  * unchanged and never reads or logs them. Decisions are appended to
- * ~/.futures-trading-harness/gate-log.jsonl (FTH_GATE_LOG). stdout carries only
+ * ~/.futures-trading-harness/logs/gate-log.jsonl (FTH_GATE_LOG). stdout carries only
  * protocol messages.
  */
 

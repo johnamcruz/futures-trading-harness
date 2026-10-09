@@ -16,6 +16,20 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'fth-test-'));
 }
 
+/**
+ * A harness home with a multi-timeframe record (mtf-state.js) and a signal
+ * record (signal-state.js) for MNQ, so the gate's trend rule and trigger check
+ * have a read. Default: every frame up, orb fired long, closed at closedAt.
+ */
+function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedAt = '2026-10-07T13:57:00.000Z', symbol = 'MNQ', fired = [{ name: 'orb', direction: 'long' }] } = {}) {
+  fs.mkdirSync(path.join(home, 'mtf'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'mtf', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, biases }));
+  // And the signal record (signal-state.js): which rules strategies fired on that bar.
+  fs.mkdirSync(path.join(home, 'signals'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'signals', `${symbol}-3m.json`), JSON.stringify({ symbol, timeframe: '3m', asOf: closedAt, closedAt, candidates: fired }));
+  return home;
+}
+
 function writeJournal(dir, entries) {
   const file = path.join(dir, 'journal.jsonl');
   fs.writeFileSync(file, entries.map(e => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''));
@@ -50,4 +64,4 @@ function entryOrder(extra = {}) {
   return o;
 }
 
-module.exports = { NOW, CONTRACT, minutesAgo, tmpDir, writeJournal, plan, placed, review, entryOrder };
+module.exports = { NOW, CONTRACT, minutesAgo, tmpDir, trendHome, writeJournal, plan, placed, review, entryOrder };

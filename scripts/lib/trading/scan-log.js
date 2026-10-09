@@ -32,6 +32,8 @@ function summarizeResult(r) {
   if (r.detail) out.detail = r.detail;
   if (r.verdict) out.verdict = { action: r.verdict.action, maxSize: r.verdict.maxSize, contract: r.verdict.contract, reason: r.verdict.reason };
   if (r.note) out.note = r.note;
+  if (r.confluence) out.confluence = r.confluence;
+  if (r.mtf) out.mtf = { prevailing: r.mtf.prevailing, longAllowed: r.mtf.longAllowed, shortAllowed: r.mtf.shortAllowed };
   return out;
 }
 

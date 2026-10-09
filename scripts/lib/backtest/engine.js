@@ -31,10 +31,15 @@
  * size, and whether to close a trade that is past its ratchet. The
  * challenge env (rl/challenge-env.js) trains on exactly this loop.
  *
- * Fills: market entries at the bar close plus `slippageTicks`; stops at the
- * stop price (or the bar's open when it gapped through) minus slippage;
- * targets at the target price (or a better open); trailing closes at the bar
- * close. Results are in R (1R = the initial stop distance, before costs, as
+ * Fills: by default (`fill: 'next-open'`) a market entry fills at the next
+ * bar's open plus `slippageTicks` (1): live, the order goes in after the
+ * cycle that read the closed bar, during the next bar. A setup whose fill bar
+ * opens through its stop or (for a target level) its target, or falls in
+ * another trading day or after end of day, expires untraded (`expired`).
+ * `fill: 'close'` fills at the signal bar's close, as algoTraderBot does.
+ * Stops fill at the stop price (or the bar's open when it gapped through)
+ * minus slippage; targets at the target price (or a better open); trailing
+ * closes at the bar close. Results are in R (1R = the initial stop distance, before costs, as
  * algoTraderBot reports) and in dollars after fees and slippage.
  */
 
@@ -46,7 +51,7 @@ const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
-const { buildObservation } = require('../rl/observation');
+const { buildObservation, marketFeatures, confluence } = require('../rl/observation');
 
 const { normalizeBars } = ind;
 
@@ -62,7 +67,12 @@ const DEFAULTS = {
   size: 1,
   riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like algoTraderBot --risk)
   maxContracts: 5,
-  slippageTicks: 0,
+  slippageTicks: 1, // per market fill (entries and stops), in ticks
+  fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
+  minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
+  // Strategies firing both sides on the bar: 'reversal' (as the live gate: only a reversal strategy, mtf: reversal,
+  // may enter), 'skip' (no entry), or 'priority' (the first in order trades, as algoTraderBot had no such rule).
+  conflict: 'reversal',
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
   maxDailyLoss: 500, // $ realized loss that ends the trading day, like projectx-mcp's PROJECTX_MAX_DAILY_LOSS (0 = off)
@@ -123,19 +133,29 @@ function prepare(markets, strategies, opts = {}) {
     });
     const ev = createEvaluator(bars, { window: o.window });
     const memo = new Map();
-    // The first candidate on bar i, in strategy order (the scan at the bar's close).
+    // The first candidate on bar i, in strategy order (the scan at the bar's close), with its
+    // confluence: how many strategies fired its side and how many the other.
     const setupAt = i => {
       if (!memo.has(i)) {
-        let pick = null;
+        const fired = [];
         for (const s of usable) {
           const r = ev.at(s, i, { describe: false });
-          if (r.candidate && r.stopDistance > 0) { pick = { s, r }; break; }
+          if (r.candidate && r.direction) fired.push({ s, r });
+        }
+        let pick = fired.find(f => f.r.stopDistance > 0) || null;
+        if (pick) {
+          const withIt = fired.filter(f => f.r.direction === pick.r.direction).length;
+          const against = fired.length - withIt;
+          const conflicted = against > 0 && (o.conflict === 'skip' || (o.conflict === 'reversal' && pick.s.mtf !== 'reversal'));
+          if (withIt < (o.minConfluence || 1) || conflicted) pick = null;
+          else pick = { ...pick, confluence: withIt, against };
         }
         memo.set(i, pick);
       }
       return memo.get(i);
     };
-    const feats = { atr20: ind.atr(bars, 20), atr100: ind.atr(bars, 100), adx: ind.adx(bars, 14) };
+    // The policy's market features (rl/observation.js), the same function live uses.
+    const feats = marketFeatures(bars);
     return { ...m, bars, ev, usable, setupAt, feats };
   });
   return { books, skipped };
@@ -179,6 +199,7 @@ function runEngine(markets, strategies, opts = {}) {
   let closesToday = []; // { pnl, ts } of closed trades this trading day
   let equity = 0;
   const curve = [];
+  let expired = 0; // setups whose next-bar fill never happened (gap through the stop or target, new day, end of day)
 
   const tfMs = book => timeframeMs(`${o.timeframe}m`) || (book.bars[1] ? book.bars[1].ms - book.bars[0].ms : 60000);
   const closeTrade = (book, bar, price, reason) => {
@@ -195,6 +216,7 @@ function runEngine(markets, strategies, opts = {}) {
       mfeR: Math.round(p.peakR * 1000) / 1000,
       maeR: Math.round(p.troughR * 1000) / 1000,
       barsHeld: p.barsHeld, reason, pnl: round2(gross), fees: round2(fees), net: round2(net),
+      confluence: p.confluence || 1, conflict: p.conflict || 0,
       target: p.target,
       // Why it was taken: the setup's stop and target distances and its detectors' state (trades.jsonl).
       ...(p.setup ? { setup: p.setup } : {}),
@@ -254,6 +276,7 @@ function runEngine(markets, strategies, opts = {}) {
         // Nothing is carried into a new trading day: close what yesterday left
         // (data with no bar after the close) at its last bar.
         for (const b of books) {
+          if (b.pos && b.pos.pending && b.pos.tradingDay !== dayKey) { b.pos = null; expired += 1; }
           if (b.pos && b.pos.tradingDay !== dayKey) closeTrade(b, b.bars[b.lastIndex], b.bars[b.lastIndex].c, 'eod');
         }
         if (cs) {
@@ -266,6 +289,30 @@ function runEngine(markets, strategies, opts = {}) {
       closesToday = [];
     }
     book.lastIndex = i;
+
+    // The exchange calendar, as live: holidays have no session; early closes
+    // end at 13:00 ET with end of day at earlyCloseEodAt.
+    const tday = tradingDayKey(closeAt);
+    const early = earlyDays.has(tday);
+    const eod = early && eodEarly ? eodEarly : eodNormal;
+    const afterEod = closedDays.has(tday) || (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt))
+      || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
+
+    // 0. A setup from the previous bar fills at this bar's open (fill: next-open), or expires.
+    if (book.pos && book.pos.pending) {
+      const q = book.pos;
+      const entry = onTick(bar.o + q.sign * o.slippageTicks * book.tickSize, book.tickSize);
+      const stop = onTick(entry - q.sign * q.risk, book.tickSize);
+      const target = q.targetFrom === 'entry' ? onTick(entry + q.sign * q.targetTicks * book.tickSize, book.tickSize) : q.target;
+      const gapped = q.sign * (entry - q.signalStop) <= 0 || (q.targetFrom === 'level' && q.sign * (target - entry) < book.tickSize - 1e-9);
+      if (gapped || afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) {
+        book.pos = null;
+        expired += 1;
+      } else {
+        Object.assign(q, { pending: false, entry, stop, initialStop: stop, target, entryTime: bar.t });
+        entriesToday += 1;
+      }
+    }
 
     // 1. Broker: the resting stop and target against this bar.
     // Hard rule: no trade is carried past the close into the next trading
@@ -303,13 +350,6 @@ function runEngine(markets, strategies, opts = {}) {
     // 2. Manage an open trade at the bar's close. Like algoTraderBot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    // The exchange calendar, as live: holidays have no session; early closes
-    // end at 13:00 ET with end of day at earlyCloseEodAt.
-    const tday = tradingDayKey(closeAt);
-    const early = earlyDays.has(tday);
-    const eod = early && eodEarly ? eodEarly : eodNormal;
-    const afterEod = closedDays.has(tday) || (eod && sessionMinute(closeAt) >= sessionMinuteOf(eod, closeAt))
-      || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
     let managed = false;
     if (book.pos && i > book.pos.entryIndex) {
       const q = book.pos;
@@ -376,7 +416,9 @@ function runEngine(markets, strategies, opts = {}) {
       if (!cp) continue;
       if (o.policy) {
         const mini = Boolean(fam && cp.root === fam.mini);
-        const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name } });
+        // Confluence: the policy strategy's other strategies on this bar, as the live scan sees them.
+        const others = book.usable.filter(s => s !== pick.s).map(s => ({ name: s.name, ...(r => ({ candidate: r.candidate, direction: r.direction }))(book.ev.at(s, i, { describe: false })) }));
+        const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name, confluence: confluence(others, pick.s.name, sign) } });
         if (action === 'skip') continue;
         if (action === 'half') cp = sizeFor(0.5);
         if (!cp) continue;
@@ -397,6 +439,7 @@ function runEngine(markets, strategies, opts = {}) {
           ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize)
           : null,
       entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
+      confluence: pick.confluence || 1, conflict: pick.against || 0,
       setup: setupOf(book, pick, i),
     };
     // A target level the fill already reached (slippage past it) leaves no reward: no trade.
@@ -404,17 +447,29 @@ function runEngine(markets, strategies, opts = {}) {
       book.pos = null;
       continue;
     }
+    if (o.fill === 'next-open') {
+      // Fills at the next bar's open (step 0 there). The stop keeps its distance from the
+      // fill; a fill at or through the signal's stop level means the setup is gone.
+      Object.assign(book.pos, {
+        pending: true,
+        signalStop: book.pos.initialStop,
+        targetFrom: plan.targetR ? 'entry' : plan.target ? 'level' : null,
+        targetTicks: plan.targetR ? Math.round((book.pos.target - entry) * sign / book.tickSize) : null,
+      });
+      continue;
+    }
     entriesToday += 1;
   }
 
   // Settle anything still open at the end of the data, at the last close.
   for (const book of books) {
+    if (book.pos && book.pos.pending) { book.pos = null; expired += 1; }
     if (book.pos) {
       const last = book.bars[book.lastIndex];
       closeTrade(book, last, last.c, 'end');
     }
   }
-  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions };
+  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions, expired };
 }
 
 module.exports = { roundHalfEven, DEFAULTS, prepare, runEngine };

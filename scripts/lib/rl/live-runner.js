@@ -156,7 +156,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
           const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : `no tick specs for ${root}`);
           verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
-          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, now });
+          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now });
         }
         live.appendVerdict(home, verdict);
         log(`${symbol}: ${s.name} ${pick.direction} setup from ${pick.name}: ${s.policy ? `policy ${s.policy.bundle}` : 'sizing'} says ${verdict.action}`

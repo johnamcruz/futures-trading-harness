@@ -21,6 +21,7 @@ const { loadAccounts, accountNamed } = require('./lib/trading/accounts');
 const prop = require('./lib/trading/prop-state');
 const combine = require('./lib/trading/combine');
 const { harnessHome } = require('./lib/paths');
+const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -36,16 +37,27 @@ function liveVerdicts(home, now) {
   return [...latest.values()].filter(v => Date.parse(v.expiresAt) > now.getTime());
 }
 
-function statusOf(home, account, now) {
+/**
+ * An attempt's state. The size budget is each policy strategy's own (its
+ * `sizing`), as the gate and the verdicts compute it; with no policy strategy
+ * on the account, the default sizing's, labelled so.
+ */
+function statusOf(home, account, now, strategies = []) {
   const r = prop.readAttempt(home, account.name);
   if (!r) return { account: account.name, started: false };
   const s = r.snapshot;
   const cs = prop.stateFrom(account, r, s ? s.balance : NaN);
+  const policies = strategies.filter(x => x.valid && x.signal === 'policy' && x.account === account.name && x.status !== 'disabled');
+  const budgets = policies.length
+    ? policies.map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }))
+    : [{ strategy: null, budgetUsd: combine.budget(cs) }];
   return {
     account: account.name, started: true, startedAt: r.startedAt, days: r.days.length, ...combine.summary(cs),
-    budgetUsd: combine.budget(cs), snapshotAt: s ? s.at : null, entryBlock: prop.combineBlock(home, account.name, now),
+    budgets, budgetUsd: budgets[0].budgetUsd, snapshotAt: s ? s.at : null, entryBlock: prop.combineBlock(home, account.name, now),
   };
 }
+
+const budgetText = r => r.budgets.map(b => (b.strategy ? `${b.strategy} size budget $${b.budgetUsd}` : `size budget $${b.budgetUsd} (default sizing; no policy strategy trades this account)`)).join('; ');
 
 function main(argv, out = s => process.stdout.write(s)) {
   const cmd = argv[0];
@@ -75,7 +87,8 @@ function main(argv, out = s => process.stdout.write(s)) {
   if (cmd === 'status') {
     const name = arg(argv, '--account');
     const accounts = name ? [accountNamed(ROOT, name, process.env)] : loadAccounts(ROOT, process.env).accounts.filter(a => a.valid);
-    const rows = accounts.map(a => statusOf(home, a, new Date())).filter(r => name || r.started);
+    const { strategies } = loadStrategies(ROOT, process.env);
+    const rows = accounts.map(a => statusOf(home, a, new Date(), strategies)).filter(r => name || r.started);
     const verdicts = liveVerdicts(home, new Date());
     if (argv.includes('--json')) out(`${JSON.stringify({ attempts: rows, verdicts }, null, 2)}\n`);
     else if (!rows.length) out('no attempt is started (node scripts/combine.js start --account <name>)\n');
@@ -83,7 +96,7 @@ function main(argv, out = s => process.stdout.write(s)) {
       for (const r of rows) {
         out(!r.started ? `${r.account}: no attempt started\n`
           : `${r.account}: ${r.status}, balance $${r.balance} (floor $${r.floor}, cushion $${r.cushion}), profit $${r.profit} of $${r.target}, `
-            + `day $${r.dayPnl}, ${r.sessionsDone} sessions done, ${r.sessionsLeft} left; size budget $${r.budgetUsd}; `
+            + `day $${r.dayPnl}, ${r.sessionsDone} sessions done, ${r.sessionsLeft} left; ${budgetText(r)}; `
             + `${r.entryBlock ? `entries blocked: ${r.entryBlock}` : 'entries allowed'}\n`);
       }
       for (const v of verdicts) {

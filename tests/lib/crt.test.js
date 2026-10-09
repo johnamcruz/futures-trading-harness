@@ -178,7 +178,7 @@ test('backtest: a CRT trade exits at the far side of the range (exit.target is a
   for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
   const up = [];
   for (let k = 1; k <= 8; k += 1) up.push([et(11, 18) + k * 180000, 21486 + 7 * (k - 1), 21486 + 7 * k, 21485 + 7 * (k - 1), 21486 + 7 * k]);
-  const run = rows => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2, ...rows]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, slippageTicks: 1 }).trades;
+  const run = rows => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2, ...rows]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 1 }).trades;
   const [t] = run(up);
   assert.strictEqual(t.strategy, 'crt_1h');
   assert.strictEqual(t.entry, 21486.75, 'the close plus one tick of slippage');
@@ -269,7 +269,7 @@ test('backtest: a fill already at or past the target level is not taken', () => 
   const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
   const warm = [];
   for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
-  const trades = slip => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, slippageTicks: slip }).trades;
+  const trades = slip => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: slip }).trades;
   assert.strictEqual(trades(1).length, 1);
   assert.strictEqual(trades(1)[0].setup.detail['crt(60)'].reason, 'fired', 'the trade carries the detector state that took it');
   assert.strictEqual(trades(400).length, 0, '400 ticks of slippage puts the fill past C1\'s high');

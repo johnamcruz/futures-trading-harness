@@ -28,19 +28,52 @@
  *
  * biasSeries(bars, m) is the same bias per bar, causal (each bar sees only
  * candles completed before it), for the rules language: mtf_bias(m).
+ *
+ * The trend rule (trendRule, ruleSeries): the prevailing trend is the highest
+ * of RULE_FRAMES (4h, 1h, 15m, built from the trigger bars) that has one. A
+ * trend strategy (every strategy unless it declares `mtf: reversal`) may not
+ * enter against it, and needs the 4-hour read to exist; a reversal strategy
+ * may fade it. With no trend on any frame, both sides are open. The scan, the
+ * backtester, the runner's record (recordFor), and the order gate all apply
+ * this one rule.
  */
 
 const ind = require('./indicators');
 const { zonedParts } = require('./clock');
 
-const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: 14, swingK: 2, rangeLen: 20 };
+// maxCandles: a read uses at most the last 300 completed candles (enough for EMA50 to settle),
+// so a per-bar series over a long backtest stays linear.
+// historyHours: every read uses only the candles of the last 240 hours (about 60 4-hour candles,
+// enough for EMA50), so the live read (the runner keeps 250 hours of bars, HISTORY_HOURS) and the
+// backtest's per-bar read see exactly the same candles.
+const DEFAULTS = { fast: 20, slow: 50, adx: 14, atr: 14, swingK: 2, rangeLen: 20, maxCandles: 300, historyHours: 240 };
+// What the live runner and bars.js keep: the read's window plus margin.
+const HISTORY_HOURS = 250;
+// The frames the trend rule reads, highest first.
+const RULE_FRAMES = [240, 60, 15];
+const STYLES = ['trend', 'reversal'];
 const LABEL = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 240: '4h', 1440: 'daily' };
 const label = m => LABEL[m] || `${m}m`;
 
+/** The bars' step in ms: the smallest gap between the last 50 bars (gaps only ever add time). */
+function stepOf(bars) {
+  let step = Infinity;
+  for (let i = Math.max(1, bars.length - 50); i < bars.length; i += 1) {
+    const d = Date.parse(bars[i].t) - Date.parse(bars[i - 1].t);
+    if (d > 0 && d < step) step = d;
+  }
+  return Number.isFinite(step) ? step : 60000;
+}
+
+/** Does the bar at `t` (lasting `stepMs`) close exactly on an m-minute candle boundary? Then its candle is complete. */
+function closesCandle(t, stepMs, minutes) {
+  return startsOnOpen({ t: new Date(Date.parse(t) + stepMs).toISOString() }, minutes);
+}
+
 /**
  * The m-minute candles in `bars`: [{ t, o, h, l, c, v, start, end, complete }].
- * The last candle is in progress (complete: false); a first candle the bars
- * start partway into is dropped.
+ * The last candle is in progress (complete: false) unless the last bar closed
+ * on its boundary; a first candle the bars start partway into is dropped.
  */
 function candles(bars, minutes) {
   const h = ind.htfCandles(bars, minutes);
@@ -62,7 +95,8 @@ function candles(bars, minutes) {
     }
   }
   if (cur) out.push(cur);
-  return out.filter(c => !c.cut).map((c, k, all) => ({ ...c, complete: k < all.length - 1 }));
+  const lastDone = bars.length > 0 && closesCandle(bars[bars.length - 1].t, stepOf(bars), minutes);
+  return out.filter(c => !c.cut).map((c, k, all) => ({ ...c, complete: k < all.length - 1 || lastDone }));
 }
 
 function startsOnOpen(bar, minutes) {
@@ -103,8 +137,9 @@ function structure(cs, k) {
 }
 
 /** The trend read of completed candles `cs` (oldest first). */
-function readTimeframe(cs, opts = {}) {
+function readTimeframe(all, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
+  const cs = all.length > o.maxCandles ? all.slice(-o.maxCandles) : all;
   if (cs.length < 3) return { candles: cs.length, bias: 0, trend: 'unknown', reason: `only ${cs.length} completed candle(s)` };
   const closes = cs.map(c => c.c);
   const emaF = ind.ema(closes, o.fast);
@@ -129,7 +164,7 @@ function readTimeframe(cs, opts = {}) {
   const hi = Math.max(...window.map(c => c.h));
   const lo = Math.min(...window.map(c => c.l));
   return {
-    candles: cs.length,
+    candles: all.length,
     asOf: last(cs).t,
     trend: bias > 0 ? 'up' : bias < 0 ? 'down' : 'range',
     bias,
@@ -166,6 +201,46 @@ function alignment(frames) {
   return { long: verdict(1), short: verdict(-1), bias: score > 0 ? 'long' : score < 0 ? 'short' : 'neutral', score, maxScore: max };
 }
 
+/**
+ * The trend rule for one side. `biases`: { 240: 1|0|-1|NaN, 60: ..., 15: ... }
+ * (NaN: no read yet). Returns { allowed, prevailing: { minutes, label, trend } | null, ready, reason }.
+ */
+function trendRule(biases, side, style = 'trend') {
+  const sign = side === 'long' || side === 1 ? 1 : side === 'short' || side === -1 ? -1 : 0;
+  const ready = Number.isFinite(biases[RULE_FRAMES[0]]);
+  const top = RULE_FRAMES.find(m => Number.isFinite(biases[m]) && biases[m] !== 0);
+  const prevailing = top ? { minutes: top, label: label(top), trend: biases[top] > 0 ? 'up' : 'down' } : null;
+  if (style === 'reversal') return { allowed: true, prevailing, ready, reason: null };
+  if (!ready) return { allowed: false, prevailing, ready, reason: `no ${label(RULE_FRAMES[0])} trend read yet (needs 3 completed ${label(RULE_FRAMES[0])} candles in the bars)` };
+  if (prevailing && sign && Math.sign(biases[top]) === -sign) {
+    return { allowed: false, prevailing, ready, reason: `against the prevailing ${prevailing.label} ${prevailing.trend} trend: only a reversal strategy (mtf: reversal) may fade it` };
+  }
+  return { allowed: true, prevailing, ready, reason: null };
+}
+
+/** Per bar: the rule frames' biases, causal (the candles completed before the bar). { 240: [...], 60: [...], 15: [...] } */
+function ruleSeries(bars, opts = {}) {
+  return Object.fromEntries(RULE_FRAMES.map(m => [m, biasSeries(bars, m, opts)]));
+}
+
+const biasesAt = (series, i) => Object.fromEntries(RULE_FRAMES.map(m => [m, series[m][i]]));
+
+/** The trend-rule summary of a bias map, for a scan result or a record. */
+function ruleSummary(biases, style = 'trend') {
+  const word = b => (Number.isFinite(b) ? (b > 0 ? 'up' : b < 0 ? 'down' : 'range') : 'unknown');
+  const long = trendRule(biases, 'long', style);
+  const short = trendRule(biases, 'short', style);
+  return {
+    style,
+    frames: Object.fromEntries(RULE_FRAMES.map(m => [label(m), word(biases[m])])),
+    prevailing: long.prevailing ? `${long.prevailing.label} ${long.prevailing.trend}` : null,
+    ready: long.ready,
+    longAllowed: long.allowed,
+    shortAllowed: short.allowed,
+    ...(long.reason || short.reason ? { reason: long.reason || short.reason } : {}),
+  };
+}
+
 function line(m, x) {
   if (x.trend === 'unknown') return `${label(m)}: unknown (${x.reason})`;
   const v = x.votes;
@@ -178,8 +253,15 @@ function line(m, x) {
  * The full read. `bars`: the trigger bars (oldest first, closed). `daily`:
  * optional daily bars (get_bars day), read as the highest timeframe.
  */
+/** The completed candles that start inside the read's window, ending at `asOfMs`. */
+function inWindow(cs, asOfMs, opts = {}) {
+  const from = asOfMs - ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
+  return cs.filter(c => Date.parse(c.t) >= from);
+}
+
 function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } = {}) {
   const nb = ind.normalizeBars(bars);
+  const asOfMs = nb.length ? Date.parse(nb[nb.length - 1].t) : 0;
   if (nb.length < 3) throw new Error(`need bars to read, got ${nb.length}`);
   const tfs = [...new Set(timeframes)].sort((a, b) => b - a);
   for (const m of tfs) if (!(Number.isInteger(m) && m > 0 && 1440 % m === 0)) throw new Error(`timeframe ${m}: minutes that divide a day (15, 30, 60, 240, ...)`);
@@ -192,7 +274,7 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   for (const m of tfs) {
     if (daily && m === 1440) continue;
     const cs = candles(nb, m);
-    const done = cs.filter(c => c.complete);
+    const done = inWindow(cs.filter(c => c.complete), asOfMs, opts);
     const cur = cs.find(c => !c.complete) || null;
     frames.push({
       minutes: m, label: label(m), source: 'built from the trigger bars', read: readTimeframe(done, opts),
@@ -201,43 +283,73 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   }
   const al = alignment(frames.filter(f => f.read.trend !== 'unknown'));
   const lastBar = last(nb);
+  // The trend rule reads the frames built from the trigger bars (the daily is context only).
+  const ruleBiases = Object.fromEntries(RULE_FRAMES.map(m => {
+    const cs = inWindow(candles(nb, m).filter(c => c.complete), asOfMs, opts);
+    return [m, cs.length >= 3 ? readTimeframe(cs, opts).bias : NaN];
+  }));
+  const rule = ruleSummary(ruleBiases);
+  const forming = f => (f.forming ? ` | forming ${f.label} candle from ${f.forming.t}: O ${f.forming.o} H ${f.forming.h} L ${f.forming.l} C ${f.forming.c} (not in the trend)` : '');
   return {
     asOf: lastBar.t,
     price: lastBar.c,
     frames,
     alignment: al,
+    biases: ruleBiases,
+    rule,
     lines: [
-      ...frames.map(f => line(f.minutes, f.read)),
+      ...frames.map(f => line(f.minutes, f.read) + forming(f)),
       `Alignment: long ${al.long}, short ${al.short}; bias ${al.bias} (score ${al.score} of ±${al.maxScore}).`,
+      ruleLine(rule),
     ],
   };
 }
 
-/** Per bar: the m-minute bias as of the last candle completed before that bar (causal). */
+function ruleLine(r) {
+  if (!r.ready) return `Trend rule: ${r.reason}; trend strategies can't enter yet, reversal strategies can.`;
+  if (!r.prevailing) return 'Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.';
+  const against = r.longAllowed ? 'short' : 'long';
+  return `Trend rule: prevailing trend ${r.prevailing}; trend strategies may not go ${against}, reversal strategies (mtf: reversal) may.`;
+}
+
+/**
+ * Per bar: the m-minute bias as of the candles completed by that bar's close
+ * (causal: a candle that closes with the bar counts; the one in progress doesn't).
+ */
 function biasSeries(bars, minutes, opts = {}) {
   const n = bars.length;
   const out = new Array(n).fill(NaN);
   const h = ind.htfCandles(bars, minutes);
+  const step = stepOf(bars);
+  const windowMs = ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
   const done = [];
+  let first = 0; // the oldest completed candle still inside the window
   let cur = null;
   let bias = NaN;
+  const finish = asOfMs => {
+    if (cur && !cur.cut) done.push(cur);
+    cur = null;
+    // The completed candles of the window, as mtfRead reads them: the rule and the read agree.
+    while (first < done.length && Date.parse(done[first].t) < asOfMs - windowMs) first += 1;
+    const win = done.slice(first);
+    bias = win.length >= 3 ? readTimeframe(win, opts).bias : NaN;
+  };
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
+    const ms = Date.parse(b.t);
     if (!cur || cur.key !== h.key[i]) {
-      if (cur && !cur.cut) {
-        done.push(cur);
-        // Every completed candle, as mtfRead reads them: the rule and the read agree.
-        bias = done.length >= 3 ? readTimeframe(done, opts).bias : NaN;
-      }
+      if (cur) finish(ms);
       cur = { key: h.key[i], t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, cut: i === 0 && !startsOnOpen(b, minutes) };
     } else {
       cur.h = Math.max(cur.h, b.h);
       cur.l = Math.min(cur.l, b.l);
       cur.c = b.c;
     }
+    // This bar closes its candle: it is complete now, not when the next bar opens.
+    if (closesCandle(b.t, step, minutes)) finish(ms);
     out[i] = bias;
   }
   return out;
 }
 
-module.exports = { DEFAULTS, candles, readTimeframe, alignment, mtfRead, biasSeries, label };
+module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };

@@ -12,6 +12,11 @@
  *   node scripts/autotrader.js --config autotrader.json            run the schedule
  *   node scripts/autotrader.js --config autotrader.json --once trade [--symbol MNQ]
  *   node scripts/autotrader.js --config autotrader.json --dry-run  print the next action
+ *   node scripts/autotrader.js --status [--stale-minutes 10]        watchdog: exit 1 if the runner is silent or stopped
+ *
+ * Alerts: every runner error, and the kill switch tripping, goes to
+ * <FTH_HOME>/logs/alerts-<day>.jsonl and, when configured, to alertWebhook /
+ * alertCommand (scripts/lib/alerts.js).
  *
  * Needs PROJECTX_USERNAME and PROJECTX_API_KEY (read-only use: contracts, bars,
  * positions, working orders) in its environment, like projectx-mcp.
@@ -44,6 +49,12 @@ const { loadConfig } = require('./lib/trading/config');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
+const { writeMtfRecord } = require('./lib/trading/mtf-state');
+const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
+const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
+const { writeCycleLog } = require('./lib/cycle-log');
+const { digest, recentTrades } = require('./lib/trading/instincts');
+const { resolveJournalPath, readJournal } = require('./lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -162,6 +173,10 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const res = await runOnce(cfg, argv, timeoutMs);
   const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
+  // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
+  const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
+  process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
+  if (summary.missingSkills.length) process.stderr.write(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   process.stdout.write(`[autotrader] ${result}\n`);
   const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
@@ -219,6 +234,15 @@ function writeQwenSettings(cfg, dataDir, opts) {
 }
 
 async function main(argv) {
+  if (argv.includes('--status')) {
+    // The watchdog: for cron / launchd / a monitor. Exit 1 pages someone.
+    const stale = arg(argv, '--stale-minutes') !== undefined ? Number(arg(argv, '--stale-minutes')) : 10;
+    const st = watchdogStatus(HOME_DIR, { staleMinutes: stale, killSwitchFile: loadConfig(process.env).killSwitchFile });
+    process.stdout.write(st.ok
+      ? `runner ok: last pass ${st.ageMinutes} min ago (pid ${st.heartbeat.pid})\n`
+      : `runner NOT ok:\n${st.problems.map(p => `- ${p}`).join('\n')}\n`);
+    return st.ok ? 0 : 1;
+  }
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run]');
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
@@ -267,11 +291,14 @@ async function main(argv) {
   process.on('exit', releaseLock);
 
   // Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
+  const alert = createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` });
   const log = (msg, level) => {
     const now = new Date();
     const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
     (level === 'error' ? process.stderr : process.stdout).write(line);
     appendLog(now, line);
+    // Every error is an alert (throttled); a human hears about trouble while it matters.
+    if (level === 'error') alert(msg);
   };
   const client = createClient();
   const wantFlow = cfg.orderFlow === true || (cfg.orderFlow === 'auto' && usesOrderFlow(loadStrategies(ROOT, process.env).strategies, cfg.timeframe));
@@ -297,6 +324,10 @@ async function main(argv) {
       writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
       return file;
     },
+    recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
+    lessons: () => digest(readJournal(resolveJournalPath(process.env)), 5),
+    recentTrades: () => recentTrades(readJournal(resolveJournalPath(process.env)), 10),
+    recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.
       const { strategies } = loadStrategies(ROOT, process.env);
@@ -315,9 +346,15 @@ async function main(argv) {
   event({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
   process.on('exit', code => event({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
+  const beat = () => writeHeartbeat(HOME_DIR, { symbols: cfg.symbols, timeframe: cfg.timeframe, killSwitch: fs.existsSync(killSwitchFile) });
   for (;;) {
     const ms = await runner.step();
-    if (ms > 0) await new Promise(r => setTimeout(r, ms));
+    beat();
+    // Long waits (the daily break, the weekend) in one-minute pieces, so the heartbeat stays fresh.
+    for (let left = ms; left > 0; left -= 60000) {
+      await new Promise(r => setTimeout(r, Math.min(left, 60000)));
+      beat();
+    }
   }
 }
 

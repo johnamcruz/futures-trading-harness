@@ -36,7 +36,7 @@ description: Identify futures liquidity - prior day/overnight highs and lows, eq
 ## Examples
 
 ```text
-Overnight high 21612 and prior-day high 21615 (equal highs). 09:41 ET: 3m bar
-wicks to 21624, closes 21606. → sweep of a double liquidity pool. Long ideas
+Overnight high 21614.75 and prior-day high 21615.00 (equal highs, one tick
+apart). The 09:39 ET 3m bar wicks to 21624.00 and closes 21606.00. → sweep of a double liquidity pool. Long ideas
 paused; watch for a bearish CISD / BOS down for a short with stop above 21624.
 ```

@@ -15,13 +15,17 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 ## How It Works
 
-1. Fetch closed bars, oldest first:
-   `get_bars {contractId, unit:"minute", unitNumber:3, limit:500, includePartialBar:false}`.
-   Use 500 bars: algoTraderBot's window (cisd_ote and SuperTrend depend on
-   it), enough for EMA(200) and prior-day levels; 3-minute bars match the
-   strategy parameters.
-2. Save the tool's JSON result verbatim to a temp file, e.g.
-   `/tmp/fth/MNQ-3m.json` (create the folder first).
+1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
+   file (the prompt names it). Otherwise:
+   `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --count 2000`
+   writes `/tmp/fth/MNQ-3m.json` and prints when its last bar closed.
+   Don't paste a `get_bars` reply into a file: 2000 bars are far more than a
+   tool reply can carry. 2000 bars are enough for EMA(200), prior-day levels, and the
+   1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,
+   the regime) read their own trailing 500 bars, as their source did.
+   3-minute bars match the strategy parameters (1-minute for the flow
+   strategies).
+2. (The file is projectx get_bars JSON; CSV and Parquet files work too.)
 3. Run the script from the harness root (`<root>`, an absolute path; see the
    `strategy-library` skill for how to find it):
 
@@ -37,12 +41,30 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    - `structure`: last confirmed fractal swing high/low (k=2) and when.
    - `levels`: priorRth high/low/close, overnight high/low, openingRange
      (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET
-     anchor), vwapRth (09:30 ET anchor).
+     anchor), vwapRth (09:30 ET anchor; null before today's 09:30 ET open
+     and after 16:00 ET: use vwapSession then, as the strategy filters do).
+   - `vwap`: which VWAP applies now (`rth` or `session`), the distance in
+     ATR(14), and the RTH and session crosses in the last 30 bars.
+   - `participation`: relative volume of the last bar and the last 3 vs the
+     opening-range average, the 20 bars before, and the same time the
+     previous day (orb's skip rule reads `relVolLastVsOpeningRange`).
+   - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
+     0.1 x ATR), and open fair value gaps.
+   - `context`: the numbers the strategies' skip rules name: EMA 9/20
+     crosses in the last 30 bars, bars of falling ADX, Keltner width vs its
+     20-bar average (a squeeze is under 1), the band-close streak, SuperTrend
+     flips in the last 20 bars, the last 5 bars' range in ATR, the session's
+     high and low so far, and order flow (`real`: buy/sell volume recorded,
+     else the bar-shape estimate; OFI over 1/3/5 bars, 5-bar delta, volume vs
+     its 60-bar average). Read a skip rule's number here; never estimate it.
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, VWAP crosses in 30 bars, ATR vs its average).
    - `referenceStop`: distance and long/short stop prices. Round to `tickSize`.
-5. Never quote a number the script did not produce or a tool did not return.
+5. Check the last bar's time (`last.t`, UTC): older than one bar of the timeframe
+   (plus a minute) at the time you read it means stale data; say so and
+   don't plan from it.
+6. Never quote a number the script did not produce or a tool did not return.
 
 ## Examples
 

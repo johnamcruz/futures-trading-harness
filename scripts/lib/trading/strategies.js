@@ -50,10 +50,11 @@ function strategyDirs(pluginRoot, env = process.env) {
 }
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
-const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate',
+const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
   'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'policy', 'source'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts', 'policy'];
+const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd'];
 const POLICY_KEYS = ['bundle'];
@@ -166,6 +167,12 @@ function validateStrategy(data, body, folderName) {
     req(Array.isArray(data.regimes) && data.regimes.length > 0 && data.regimes.every(r => REGIME_TAGS.includes(r)),
       `regimes: a list of ${REGIME_TAGS.join(', ')}`);
   }
+  // The multi-timeframe trend rule (mtf.js): trend strategies (the default) never enter against
+  // the prevailing higher-timeframe trend; a reversal strategy may fade it.
+  if (data.mtf !== undefined) {
+    req(MTF_STYLES.includes(data.mtf), `mtf: ${MTF_STYLES.join(' | ')} (trend, the default: never against the prevailing 4h/1h/15m trend; reversal: may fade it)`);
+    req(data.signal !== 'policy', 'mtf: a policy strategy takes it from each setup\'s own strategy');
+  }
   if (data.regime_gate !== undefined) {
     req(typeof data.regime_gate === 'boolean', 'regime_gate: true or false');
     req(data.regime_gate !== true || Array.isArray(data.regimes), 'regime_gate: needs a regimes list');
@@ -275,7 +282,7 @@ function loadStrategyFile(file) {
   const tgt = ok && parsed.data.exit ? parsed.data.exit.target : undefined;
   const compiledTarget = tgt === undefined ? null
     : typeof tgt === 'string' ? compileExpression(tgt) : { long: compileExpression(tgt.long), short: compileExpression(tgt.short) };
-  return { ...parsed.data, name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
+  return { ...parsed.data, mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'), name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors };
 }
 
 /** Load every strategy from the search path. Folders starting with _ (templates) are skipped. */
@@ -351,7 +358,50 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
       results.push({ name: s.name, status: s.status, error: err.message, candidate: false });
     }
   }
-  return results;
+  return withConfluence(results);
+}
+
+/**
+ * What fired on each of the last `count` closed bars (oldest first): for skip
+ * rules about recent signals ("ofi_absorption fired the other way in the last
+ * 5 bars"). Each bar is judged as the live scan judged it at its close
+ * (causal: one evaluator, bar i sees bars 0..i).
+ */
+function recentSignals(strategies, bars, { symbol, count = 5 } = {}) {
+  const root = String(symbol || '').toUpperCase();
+  const norm = normalizeBars(bars);
+  const ev = createEvaluator(norm);
+  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || s.instruments.includes(root)));
+  const out = [];
+  for (let i = Math.max(0, norm.length - count); i < norm.length; i += 1) {
+    const fired = [];
+    for (const s of usable) {
+      try {
+        const r = ev.at(s, i, { describe: false });
+        if (r.candidate && r.direction) fired.push(`${s.name} ${r.direction}`);
+      } catch (_err) {
+        // one broken strategy doesn't hide the others
+      }
+    }
+    out.push({ bar: norm[i].t, fired });
+  }
+  return out;
+}
+
+/**
+ * Confluence: for every strategy that fired, the other strategies on its
+ * timeframe that fired the same way (`with`) and the other way (`against`)
+ * on the same bar.
+ */
+function withConfluence(results) {
+  const fired = results.filter(r => r.candidate && r.direction);
+  return results.map(r => (r.candidate && r.direction ? {
+    ...r,
+    confluence: {
+      with: fired.filter(o => o !== r && o.timeframe === r.timeframe && o.direction === r.direction).map(o => o.name),
+      against: fired.filter(o => o !== r && o.timeframe === r.timeframe && o.direction !== r.direction).map(o => o.name),
+    },
+  } : r));
 }
 
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */
@@ -382,4 +432,4 @@ module.exports = {
   loadStrategies,
   scan,
   checkStrategyForOrder,
-};
+ recentSignals };

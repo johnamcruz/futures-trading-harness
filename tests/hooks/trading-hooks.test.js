@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
+const { tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
 
 // The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
 // market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
@@ -62,9 +62,13 @@ const gate = (payload, env) =>
 
 function setup(entries, extraEnv = {}) {
   const dir = tmpDir();
+  // A home of its own with a fresh up-trend read (closed 3 min before TEST_NOW), unless a test brings one.
+  const home = extraEnv.FTH_HOME || path.join(dir, 'home');
+  if (!fs.existsSync(path.join(home, 'mtf', 'MNQ.json'))) trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z' });
   return {
     dir,
     env: {
+      FTH_HOME: home,
       PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
@@ -88,6 +92,71 @@ test('order gate allows a planned entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 0, r.stderr);
+});
+
+test('order gate: a setup tag that is not first is refused with where it goes', () => {
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[setup-tag\] Rationale must start with the strategy as setup:<name>/);
+});
+
+test('order gate: an order that contradicts its rationale is refused with what disagrees', () => {
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(entryOrder({ side: 'sell', rationale: 'setup:orb long break above 21500, stop 21480' })), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[order-consistency\] The order doesn't agree with itself: the rationale says long but the order side is sell/);
+  const off = gate(orderPayload(entryOrder({ rationale: 'setup:orb long, stop 21480.10' })), env);
+  assert.strictEqual(off.code, 2);
+  assert.match(off.stderr, /\[order-consistency\].*not on the 0\.25 tick/);
+});
+
+test('order gate: a trend strategy entry against the recorded prevailing trend is refused', () => {
+  const home = trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', biases: { 240: -1, 60: -1, 15: 0 } });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_HOME: home });
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the prevailing 4h down trend/);
+  const short = gate(orderPayload({ ...ORDER, side: 'sell', rationale: 'setup:anytime short, stop 21520, target 21460' }), env);
+  assert.strictEqual(short.code, 0, short.stderr);
+  // No record at all: refused, with how to make one.
+  const none = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  fs.rmSync(path.join(none.env.FTH_HOME, 'mtf'), { recursive: true });
+  assert.match(gate(orderPayload(), none.env).stderr, /\[mtf-trend\] No multi-timeframe read for MNQ/);
+});
+
+test('order gate: a rules strategy entry needs its own trigger in the signal record', () => {
+  const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const order = orderPayload({ ...ORDER, rationale: 'setup:crossing long, stop 21480, target 21540' });
+  const none = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired: [] }) });
+  const r = gate(order, none.env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[trigger-fired\] setup:crossing long did not fire on the last closed MNQ bar/);
+  const fired = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired: [{ name: 'crossing', direction: 'long' }] }) });
+  const ok = gate(order, fired.env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
+test('order gate: with a Claude transcript, an entry needs the trading skills loaded in the session', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, skill('trade-session'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
+  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill).join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
+test('order gate: a trend strategy is refused when another strategy fired the other side on the bar', () => {
+  const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const fired = [{ name: 'crossing', direction: 'long', confluence: { with: [], against: ['other'] } }, { name: 'other', direction: 'short', confluence: { with: [], against: ['crossing'] } }];
+  const { env } = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired }) });
+  const r = gate(orderPayload({ ...ORDER, rationale: 'setup:crossing long, stop 21480, target 21540' }), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[trigger-fired\] setup:crossing long conflicts with other firing the other side on the same bar/);
 });
 
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
@@ -199,8 +268,8 @@ test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even wi
 });
 
 test('stop hook asks once for a review of unreviewed entries', () => {
-  const now = new Date();
-  const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(now.getTime() - 60000).toISOString() })));
+  // An entry a minute before the gate's test clock (a fixed Wednesday morning, whatever the wall clock says).
+  const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(Date.parse(TEST_NOW) - 60000).toISOString() })));
   const run = payload => runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict', payload, env);
   const first = run({ stop_hook_active: false });
   assert.strictEqual(first.code, 2);

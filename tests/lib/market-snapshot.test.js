@@ -44,3 +44,45 @@ test('CLI reads a file and validates parameters', () => {
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr, /unknown parameter/);
 });
+
+test('snapshot: participation, VWAP crosses and distance, swings, equal highs, open FVGs; flags in either form', () => {
+  const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
+  const t0 = Date.parse('2025-03-10T13:30:00Z'); // 09:30 ET
+  // A bar before the open, so today's RTH VWAP is a whole session.
+  const rows = [{ t: new Date(t0 - 180000).toISOString(), o: 100, h: 100.5, l: 99.5, c: 100, v: 50 }];
+  for (let k = 0; k < 60; k += 1) {
+    const c = 100 + (k % 10 < 5 ? k % 10 : 10 - (k % 10)); // a zigzag: swing highs at 105, equal
+    rows.push({ t: new Date(t0 + k * 180000).toISOString(), o: c, h: c + 0.5, l: c - 0.5, c, v: k < 5 ? 100 : 50 });
+  }
+  // A bullish gap 3 bars from the end that nothing has filled.
+  rows.push({ t: new Date(t0 + 60 * 180000).toISOString(), o: 101, h: 101.5, l: 100.5, c: 101, v: 200 });
+  rows.push({ t: new Date(t0 + 61 * 180000).toISOString(), o: 103, h: 104, l: 102.5, c: 104, v: 200 });
+  rows.push({ t: new Date(t0 + 62 * 180000).toISOString(), o: 104, h: 105, l: 103.5, c: 105, v: 200 });
+  const s = snapshot(rows);
+  assert.strictEqual(s.participation.relVolLastVsOpeningRange, 2, 'opening range bars averaged 100');
+  assert.strictEqual(s.participation.relVolLast3VsPrior20, 4);
+  assert.strictEqual(s.vwap.applies, 'rth');
+  assert.ok(s.vwap.rthCrossesLast30 > 0);
+  assert.ok(s.liquidity.swingHighs.length > 0 && s.liquidity.equalHighs.length > 0);
+  assert.deepStrictEqual(s.liquidity.openFvgs.at(-1), { side: 'bullish', low: 101.5, high: 103.5, at: rows[62].t });
+  const path = require('path');
+  const { spawnSync } = require('child_process');
+  const csv = path.resolve(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv');
+  const cli = args => spawnSync(process.execPath, [path.resolve(__dirname, '..', '..', 'scripts', 'market-snapshot.js'), csv, ...args], { encoding: 'utf8' });
+  assert.strictEqual(JSON.parse(cli(['--orbMinutes', '30']).stdout).params.orbMinutes, 30);
+  assert.strictEqual(JSON.parse(cli(['--orbMinutes=20']).stdout).params.orbMinutes, 20);
+  assert.match(cli(['--bogus', '1']).stderr, /unknown parameter --bogus/);
+});
+
+test('snapshot levels: a day or overnight session the data starts partway into gives no levels', () => {
+  const { levels } = require('../../scripts/lib/trading/market-snapshot');
+  const at = iso => ({ t: iso, o: 100, h: 101, l: 99, c: 100, v: 1 });
+  // Data starting at 12:00 ET on Tuesday: Tuesday's RTH is partial, the overnight too.
+  const bars = ['2026-10-06T16:00:00Z', '2026-10-06T19:00:00Z', '2026-10-06T22:30:00Z', '2026-10-07T12:00:00Z'].map(at);
+  bars[1].h = 150;
+  const l = levels(bars);
+  assert.strictEqual(l.priorRth, null, 'Tuesday began at noon in the data: not a whole day');
+  assert.deepStrictEqual(l.overnight, { high: 101, low: 99 }, 'the overnight session from 18:00 Tue is whole');
+  const late = levels(['2026-10-06T23:00:00Z', '2026-10-07T12:00:00Z'].map(at));
+  assert.strictEqual(late.overnight, null, 'data starting after 18:00 ET: the overnight is partial');
+});

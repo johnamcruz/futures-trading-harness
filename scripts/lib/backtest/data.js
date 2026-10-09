@@ -115,6 +115,61 @@ function loadBars(file, opts = {}) {
   return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, ...flowOf(b) }));
 }
 
+/**
+ * Bars named on a command line: '-' is JSON on stdin (a get_bars reply or an
+ * array); anything else is a file loadBars reads (JSON, CSV, Parquet, Excel).
+ */
+function readBarsArg(file) {
+  if (file === '-') return normalizeBars(JSON.parse(fs.readFileSync(0, 'utf8')));
+  return loadBars(path.resolve(file));
+}
+
+/**
+ * A data audit before trusting a backtest: bars missing inside market hours
+ * (the same trading day, not across the daily break or a weekend), opens that
+ * jump more than `jumpAtr` x ATR(20) from the previous close (an unadjusted
+ * contract roll, a bad tick, or a feed gap), and malformed bars (high below
+ * low, or a close outside the range). Returns { bars, missing, gaps (largest
+ * first), jumps, invalid, warnings }.
+ */
+function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
+  const { inMarketHours, tradingDayKey } = require('../trading/clock');
+  const { atr } = require('../trading/indicators');
+  const step = timeframe * MINUTE;
+  const a = atr(bars, 20);
+  const gaps = [];
+  const jumps = [];
+  let missing = 0;
+  let invalid = 0;
+  for (let i = 0; i < bars.length; i += 1) {
+    const b = bars[i];
+    if (!(b.h >= b.l) || b.c > b.h || b.c < b.l || b.o > b.h || b.o < b.l) invalid += 1;
+    if (i === 0) continue;
+    const p = bars[i - 1];
+    const ms = Date.parse(b.t);
+    const pms = Date.parse(p.t);
+    if (ms - pms > step && tradingDayKey(new Date(ms)) === tradingDayKey(new Date(pms))) {
+      // Count only the absent bars that would have been in market hours (not the 16:00-18:00 ET break).
+      let n = 0;
+      for (let t = pms + step; t < ms; t += step) if (inMarketHours(new Date(t))) n += 1;
+      if (n > 0) { missing += n; gaps.push({ after: p.t, before: b.t, bars: n }); }
+    }
+    const atrPrev = a[i - 1];
+    if (Number.isFinite(atrPrev) && atrPrev > 0 && Math.abs(b.o - p.c) > jumpAtr * atrPrev) {
+      jumps.push({ t: b.t, from: p.c, to: b.o, atr: Math.round(atrPrev * 100) / 100, x: Math.round((Math.abs(b.o - p.c) / atrPrev) * 10) / 10 });
+    }
+  }
+  gaps.sort((x, y) => y.bars - x.bars);
+  jumps.sort((x, y) => y.x - x.x);
+  const warnings = [];
+  if (missing) warnings.push(`${missing} bar(s) missing inside market hours in ${gaps.length} gap(s); largest ${gaps[0].bars} after ${gaps[0].after}`);
+  if (jumps.length) warnings.push(`${jumps.length} open(s) jump more than ${jumpAtr} x ATR from the previous close (an unadjusted roll or a bad tick?); largest ${jumps[0].x} x ATR at ${jumps[0].t}`);
+  if (invalid) warnings.push(`${invalid} malformed bar(s) (high below low, or open/close outside the range)`);
+  // Real order flow (buy/sell volume) is recorded live only; the rest is the bar-shape estimate.
+  const flowBars = bars.filter(b => Number.isFinite(b.bv) && Number.isFinite(b.sv)).length;
+  return { bars: bars.length, missing, gaps: gaps.slice(0, top), jumps: jumps.slice(0, top), invalid, flowCoverage: bars.length ? Math.round((flowBars / bars.length) * 1000) / 1000 : 0, warnings };
+}
+
 /** { bv, sv } when the bar carries real order flow, else nothing. */
 function flowOf(b) {
   return Number.isFinite(b.bv) && Number.isFinite(b.sv) ? { bv: b.bv, sv: b.sv } : {};
@@ -184,4 +239,4 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
   return out.map(({ t, o, h, l, c, v, bv, sv }) => ({ t, o, h, l, c, v, ...flowOf({ bv, sv }) }));
 }
 
-module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, barMinutes, aggregate, bucketStart, epochMs };
+module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, readBarsArg, auditBars, barMinutes, aggregate, bucketStart, epochMs };

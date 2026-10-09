@@ -27,6 +27,8 @@ function run(rawInput, ctx = {}, deps = {}) {
     pluginRoot: ctx.pluginRoot || path.resolve(__dirname, '..', '..'),
     now: deps.now || gateNow(env),
     tool: match[1].toLowerCase(),
+    // Claude Code passes the session transcript: the gate checks the trading skills were loaded.
+    transcriptPath: payload.transcript_path || null,
   });
   if (result.allowed) return '';
 

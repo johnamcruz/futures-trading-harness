@@ -93,7 +93,8 @@ function bars(path) {
 }
 
 const run = (path, s = strategy(), opts = {}) => runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], {
-  timeframe: 3, gate: false, ...opts,
+  // The fill mechanics as algoTraderBot: at the signal close, no slippage (the live-latency default has its own tests).
+  timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, ...opts,
 }).trades;
 
 test('engine: entry at the signal close, stop at 1R, fixed target at min_rr', () => {
@@ -152,6 +153,15 @@ test('a backtest run on the parity data writes a report; trades match the live e
   for (const f of ['report.md', 'report.json', 'trades.csv']) assert.ok(fs.existsSync(path.join(runDir, f)));
   // Every trade's R is consistent with its prices.
   for (const t of report.trades) assert.ok(Math.abs(t.r - (t.direction === 'long' ? 1 : -1) * (t.exit - t.entry) / t.risk) < 1e-3);
+
+  // Where it came from: strategy hashes, the data file's hash and size, and the data audit.
+  const pv = report.meta.provenance;
+  assert.deepStrictEqual(Object.keys(pv.strategies).sort(), ['bos', 'supertrend']);
+  assert.match(pv.strategies.bos, /^[0-9a-f]{16}$/);
+  assert.match(pv.data.MNQ.sha256, /^[0-9a-f]{16}$/);
+  assert.ok(pv.data.MNQ.bytes > 0);
+  assert.ok(report.meta.dataAudit.MNQ.bars > 1000);
+  assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), /- Provenance: harness /);
 });
 
 test('engine: a trade closed by the trail is not followed by an entry on the same bar', () => {
@@ -169,7 +179,7 @@ test('engine: stops and targets on a 0.1 tick are exact (no float misses)', () =
   const path = [[2045, 2045.2, 2044.9, 2045.1], [2045.1, 2045.2, 2044.9, 2045.0]];
   const bars = [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
   const s = strategy({ compiledRules: compileRules({ long: ['close crosses_above 2045.05'] }).compiled, risk: { stop: 'atr:0.5', min_rr: 2 } });
-  const trades = runEngine([{ symbol: 'MNQ', bars, tickSize: 0.1, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false }).trades;
+  const trades = runEngine([{ symbol: 'MNQ', bars, tickSize: 0.1, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0 }).trades;
   assert.strictEqual(trades[0].initialStop, 2044.9);
   assert.strictEqual(trades[0].reason, 'stop', 'the low touches 2044.9 exactly');
 });
@@ -211,7 +221,7 @@ test('engine: losses are counted from P&L before fees, as the live gate counts t
   const s = strategy({ exit: { target_r: 5, max_bars: 1 } });
   const path = [[100, 101, 99.9, 101], [101, 101.3, 100.9, 101.25], [101.25, 101.3, 99.9, 100], [100, 101, 99.9, 101], [101, 101.1, 100.9, 101]];
   const opts = { gate: true, sessions: ['09:30-16:00@America/New_York'], eodAt: '16:00@America/New_York', gateConfig: loadConfig({ FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_MAX_DAILY_LOSSES: '1' }) };
-  const trades = runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 }], [s], { timeframe: 3, ...opts }).trades;
+  const trades = runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 }], [s], { timeframe: 3, fill: 'close', slippageTicks: 0, ...opts }).trades;
   assert.ok(trades[0].pnl > 0 && trades[0].net < 0, 'a 1-tick win that fees turn negative');
   assert.strictEqual(trades.length, 2, 'it is not a loss: the second entry is allowed');
 });
@@ -226,13 +236,13 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
   const path = [[100, 101, 99.9, 101], [101, 101.2, 100.8, 101.1]];
   const mk = (rows, start) => rows.map(([o, h, l, c], i) => ({ t: new Date(start + i * 180000).toISOString(), o, h, l, c, v: 1 }));
-  const late = runEngine([{ symbol: 'MNQ', bars: mk([...flat, ...path], t0 - 520 * 180000), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy()], { timeframe: 3, gate: false }).trades;
+  const late = runEngine([{ symbol: 'MNQ', bars: mk([...flat, ...path], t0 - 520 * 180000), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy()], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0 }).trades;
   assert.deepStrictEqual(late, [], 'a 16:00 ET close is after end of day: no entry');
   // An entry at 10:03 with no more bars until the next morning: closed at that day's last bar.
   const day = Date.parse('2025-03-10T14:00:00Z');
   const rows = mk([...flat, [100, 101, 99.9, 101]], day - 520 * 180000);
   rows.push({ t: new Date(Date.parse('2025-03-11T14:00:00Z')).toISOString(), o: 90, h: 91, l: 89, c: 90, v: 1 });
-  const held = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } })], { timeframe: 3, gate: false }).trades;
+  const held = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy({ exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } })], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0 }).trades;
   assert.deepStrictEqual(held.map(t => [t.reason, t.exit]), [['eod', 101]], 'not carried into the next day');
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, eodAt: null }, ROOT), /eodAt/);
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
@@ -271,7 +281,7 @@ test('backtests follow the exchange calendar: no trading on holidays, early clos
   const t0 = Date.parse('2025-03-10T17:00:00Z'); // 13:00 ET
   const flat = Array.from({ length: 520 }, () => [100, 100.5, 99.5, 100]);
   const rows = [...flat, ...path].map(([o, h, l, c], i) => ({ t: new Date(t0 - 520 * 180000 + i * 180000).toISOString(), o, h, l, c, v: 1 }));
-  const early = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, earlyCloseDates: ['2025-03-10'] }).trades;
+  const early = runEngine([{ symbol: 'MNQ', bars: rows, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, earlyCloseDates: ['2025-03-10'] }).trades;
   assert.deepStrictEqual(early, [], 'early close: no entry after 13:00 ET');
 });
 
@@ -299,4 +309,86 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, rules 
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: .*needs prop/);
   assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /training needs a policy strategy|signal: rules/);
   assert.throws(() => runBacktest({ ...base, bundle: 'missing' }, { root: ROOT, outRoot: dir, env }), /not found/);
+});
+
+test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {
+  const live = { fill: 'next-open', slippageTicks: 1 };
+  // The signal bar closes at 101; the next bar opens at 101.25: filled at 101.50, the stop 1R (ATR 1) below the fill.
+  const [t] = run([[100.5, 101.2, 100.4, 101], [101.25, 104.5, 101, 104], [104, 104.5, 103.5, 104]], strategy({ exit: { target_r: 2 } }), live);
+  assert.strictEqual(t.entry, 101.5);
+  assert.strictEqual(t.initialStop, 100.5);
+  assert.strictEqual(t.target, 103.5, '2R from the fill');
+  assert.strictEqual(t.reason, 'target');
+  assert.strictEqual(t.entryTime, bars([[0, 0, 0, 0], [0, 0, 0, 0]])[521].t, 'entered at the fill bar\'s open');
+  // The next bar opens at 99.75, through the signal's stop (100): the setup is gone.
+  const r = runEngine([{ symbol: 'MNQ', bars: bars([[100.5, 101.2, 100.4, 101], [99.75, 100, 99, 99.5], [99.5, 99.6, 99.4, 99.5]]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy()], { timeframe: 3, gate: false, ...live });
+  assert.deepStrictEqual([r.trades.length, r.expired], [0, 1]);
+  // A signal on the last bar of the data has no fill bar: expired, not a trade.
+  const end = runEngine([{ symbol: 'MNQ', bars: bars([[100.5, 101.2, 100.4, 101]]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [strategy()], { timeframe: 3, gate: false, ...live });
+  assert.deepStrictEqual([end.trades.length, end.expired], [0, 1]);
+});
+
+test('report: confidence interval, edge verdict, Sharpe, MAE, losing streak, and hour/weekday breakdowns', () => {
+  const { buildReport, toMarkdown, sharpe } = require('../../scripts/lib/backtest/report');
+  const mk = (i, r, net) => ({
+    symbol: 'MNQ', strategy: 'x', reason: 'stop', entryTime: new Date(Date.UTC(2025, 2, 10 + (i % 5), 14, 0)).toISOString(),
+    exitTime: new Date(Date.UTC(2025, 2, 10 + (i % 5), 15, 0) + i * 1000).toISOString(), r, mfeR: Math.max(r, 0.5), maeR: -0.5, net, fees: 0.74, barsHeld: 4,
+  });
+  const few = buildReport([mk(0, 2, 20), mk(1, -1, -10), mk(2, -1, -10)], { fill: 'next-open', slippageTicks: 1 });
+  assert.match(few.summary.edge, /anecdotal/);
+  assert.strictEqual(few.summary.longestLosingStreak, 2);
+  assert.deepStrictEqual([few.summary.meanMaeR, few.summary.worstMaeR, few.summary.avgBarsHeld], [-0.5, -0.5, 4]);
+  assert.deepStrictEqual(Object.keys(few.byHour), ['10:00 ET']);
+  assert.ok(Object.keys(few.byWeekday)[0].endsWith('-Mon'));
+  const many = buildReport(Array.from({ length: 40 }, (_, i) => mk(i, i % 4 === 0 ? -1 : 1.5, i % 4 === 0 ? -10 : 15 + i)), { fill: 'close', slippageTicks: 0 });
+  assert.strictEqual(many.summary.edge, 'positive');
+  assert.ok(many.summary.meanRCI95[0] > 0 && many.summary.meanRCI95[1] > many.summary.meanRCI95[0]);
+  assert.ok(many.summary.sharpe > 0);
+  assert.strictEqual(sharpe([mk(0, 1, 10)]), null, 'one day is no Sharpe');
+  const md = toMarkdown({ ...many, meta: { runId: 'r', symbols: ['MNQ'], timeframe: 3, start: 'a', end: 'b', strategies: ['x'], gate: true, fill: 'next-open', slippageTicks: 1, expired: 2 } });
+  assert.match(md, /Edge: positive; mean R 95% interval/);
+  assert.match(md, /at the next bar's open \(live latency\), 1 tick\(s\) of slippage per market fill; 2 setup\(s\) expired/);
+  assert.match(md, /## By entry hour \(ET\)/);
+});
+
+test('data audit: missing bars inside market hours, jumps from an unadjusted roll, and malformed bars; the daily break is not a gap', () => {
+  const { auditBars } = require('../../scripts/lib/backtest/data');
+  const t0 = Date.parse('2025-03-10T14:00:00Z'); // 10:00 ET
+  const at = k => new Date(t0 + k * 180000).toISOString();
+  const rows = [];
+  for (let k = 0; k < 60; k += 1) rows.push({ t: at(k), o: 100, h: 100.5, l: 99.5, c: 100 });
+  // 4 bars missing at 13:00 ET, then a 60-point open jump (ATR about 1), then a bad bar.
+  rows.splice(20, 4);
+  rows.push({ t: at(60), o: 160, h: 160.5, l: 159.5, c: 160 });
+  rows.push({ t: at(61), o: 160, h: 159, l: 160, c: 160 });
+  // 16:00 ET close to 18:00 ET open: the daily break, not missing data.
+  rows.push({ t: new Date(Date.parse('2025-03-10T22:00:00Z')).toISOString(), o: 160, h: 160.5, l: 159.5, c: 160 });
+  const a = auditBars(rows, 3);
+  assert.strictEqual(a.missing, 4);
+  assert.deepStrictEqual(a.gaps[0], { after: at(19), before: at(24), bars: 4 });
+  assert.strictEqual(a.jumps.length, 1);
+  assert.strictEqual(a.jumps[0].t, at(60));
+  assert.strictEqual(a.invalid, 1);
+  assert.strictEqual(a.warnings.length, 3);
+  assert.match(a.warnings[1], /jump more than 8 x ATR .* unadjusted roll/);
+});
+
+test('confluence: trades record how many strategies agreed; minConfluence and conflict: skip filter entries', () => {
+  const a = strategy({ name: 'a' });
+  const b = strategy({ name: 'b' });
+  const shortRules = { short: ['close crosses_above 100.5'] };
+  const c = strategy({ name: 'c', rules: shortRules, compiledRules: compileRules(shortRules).compiled });
+  const path = [[100.5, 101.2, 100.4, 101], [101, 104.5, 100.9, 104], [104, 104.5, 103.5, 104]];
+  const go = (list, opts = {}) => runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], list, { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, ...opts }).trades;
+  const [t] = go([a, b]);
+  assert.deepStrictEqual([t.strategy, t.confluence, t.conflict], ['a', 2, 0]);
+  assert.strictEqual(go([a]).length, 1);
+  assert.strictEqual(go([a], { minConfluence: 2 }).length, 0, 'one strategy alone is not enough');
+  assert.strictEqual(go([a, c]).length, 0, 'the default, as the live gate: a trend strategy does not enter against another signal');
+  assert.strictEqual(go([{ ...a, mtf: 'reversal' }, c]).length, 1, 'a reversal strategy may');
+  const [mixed] = go([a, c], { conflict: 'priority' });
+  assert.deepStrictEqual([mixed.strategy, mixed.confluence, mixed.conflict], ['a', 1, 1]);
+  assert.strictEqual(go([a, c], { conflict: 'skip' }).length, 0, 'strategies disagree: no entry');
+  const { buildReport } = require('../../scripts/lib/backtest/report');
+  assert.deepStrictEqual(Object.keys(buildReport([t, mixed], {}).byConfluence), ['1 agreeing, 1 against', '2 agreeing']);
 });

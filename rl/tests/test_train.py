@@ -40,6 +40,10 @@ class TrainTest(unittest.TestCase):
         bundle_file = d / "out" / "synthetic_policy.json"
         bundle = json.loads(bundle_file.read_text())
         self.assertFalse(bundle["validated"])
+        # The policy learned with the market context: the trend frames, confluence, VWAP, and the last 10 candles.
+        for field in ("mtf_4h", "mtf_1h", "mtf_15m", "confluence_with", "confluence_against", "vwap_dist", "bar1_body", "bar10_range"):
+            self.assertIn(field, bundle["obsFields"])
+        self.assertEqual(bundle["network"]["obsDim"] if "obsDim" in bundle.get("network", {}) else len(bundle["obsFields"]), len(bundle["obsFields"]))
         self.assertEqual(code, 2)
         self.assertFalse((d / "models" / "synthetic_policy.json").exists())
         self.assertEqual(bundle["gate"], {"minPassRate": 1.0, "maxBlows": 0, "minWinRate": 0.0})

@@ -70,10 +70,11 @@ test('vol_sma is missing, not 0, when its bars traded no volume', () => {
   assert.ok(get('vol_sma(2)').every(Number.isNaN));
 });
 
-test('the runner keeps three trading days of bars (at least 2000) for the scan', () => {
+test('the runner keeps the multi-timeframe window (250 hours), three trading days, and at least 2000 bars', () => {
   const { validateConfig } = require('../../scripts/lib/autotrader');
-  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 1 }).bars, 4140);
-  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3 }).bars, 2000);
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 1 }).bars, 15000);
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3 }).bars, 5000);
+  assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 15 }).bars, 2000);
   assert.strictEqual(validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, bars: 800 }).bars, 800);
 });
 

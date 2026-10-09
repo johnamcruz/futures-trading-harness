@@ -126,3 +126,25 @@ test('a level that starts over is not a cross', () => {
   const r = evaluateRules(compileRules({ long: ['close crosses_above vwap_session'] }).compiled, b, { ...PARAMS });
   assert.strictEqual(r.direction, null);
 });
+
+test('or_high / or_low are causal: the range\'s last bar has its value from bars up to it, live and in a backtest alike', () => {
+  const fs = require('fs');
+  const pathx = require('path');
+  const { compileExpression, valueAt, seriesSource } = require('../../scripts/lib/trading/rules');
+  const { PARAMS } = require('../../scripts/lib/trading/market-snapshot');
+  const { normalizeBars } = require('../../scripts/lib/trading/indicators');
+  const bars = normalizeBars(fs.readFileSync(pathx.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), 'utf8').trim().split('\n').slice(1)
+    .map(l => { const [t, o, h, lo, c, v] = l.split(','); return { t: new Date(t.replace(' ', 'T')).toISOString(), o: +o, h: +h, l: +lo, c: +c, v: +v }; }));
+  for (const name of ['or_high', 'or_low']) {
+    const terms = compileExpression(name);
+    const full = seriesSource(bars, PARAMS);
+    let set = 0;
+    for (let i = 250; i < bars.length; i += 1) {
+      const a = valueAt(terms, full, i);
+      const b = valueAt(terms, seriesSource(bars.slice(0, i + 1), PARAMS), i);
+      assert.strictEqual(a, b, `${name} at ${bars[i].t}`);
+      if (a !== null) set += 1;
+    }
+    assert.ok(set > 0);
+  }
+});

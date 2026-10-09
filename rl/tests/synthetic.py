@@ -76,7 +76,8 @@ def write_config(folder, **extra):
     Returns (config path, the environment variables that find the account and strategy)."""
     folder = Path(folder)
     write_bars(folder / "MNQ_3min.csv")
-    env = {"FTH_ACCOUNTS_DIRS": str(write_account(folder)), "FTH_STRATEGIES_DIRS": str(write_strategy(folder))}
+    # FTH_HOME in the test folder: a test's out-of-sample looks never reach the user's real harness state.
+    env = {"FTH_ACCOUNTS_DIRS": str(write_account(folder)), "FTH_STRATEGIES_DIRS": str(write_strategy(folder)), "FTH_HOME": str(folder / "fth_home")}
     cfg = {
         "name": "synthetic_policy",
         "strategy": "prop_test",

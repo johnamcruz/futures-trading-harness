@@ -324,7 +324,13 @@ thing that happens: start and stop, each cycle (start, end, duration, result
 line, timeout), the account read for it (balance, positions, prop attempt),
 positions picked up for management, stops moved, closes (why, R at close,
 best and worst R, bars held), end-of-day flattens and closes recorded, the
-kill switch, and errors.
+kill switch, and errors. `cycles-<day>.jsonl` has one line per cycle with
+what the model saw and did (its prompt's size, the skills it loaded, its tool
+calls by name, the orders it sent, and skills an entry needed but it never
+loaded), and `cycles/<day>/<time>-<action>.json` the whole cycle: the prompt
+(with the last 10 bars and the model's last 10 results), the transcript, and
+the summary. `gate-log.jsonl` has every order the gate refused and why;
+`alerts-<day>.jsonl` every alert.
 
 Training logs go next to each run's outputs, in `logs/`: `<stage>.log`
 (every line, timestamped: per seed, steps, steps/s, ETA, pass / blow /
@@ -394,9 +400,27 @@ node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-0
 node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.example.json
 ```
 
-Results are in R (as algoTraderBot reports them) and in dollars after fees,
-broken down by strategy, exit, and month. See
+Entries fill at the next bar's open with a tick of slippage (live, the
+order goes in after the cycle that read the bar; `--fill close` for
+algoTraderBot's mechanics). Results are in R (as algoTraderBot reports them)
+and in dollars after fees, broken down by strategy, exit, month, entry hour,
+and weekday, with a 95% interval on mean R, an edge verdict, Sharpe, MAE, a
+data audit, and provenance. `--walk-forward --grid <param>=a,b,c` tunes a
+rules strategy in sample and reports only its out-of-sample trades. See
 [docs/BACKTESTING.md](docs/BACKTESTING.md).
+
+### Operating it
+
+- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: 2000 closed
+  bars to `/tmp/fth/MNQ-3m.json` (credentials from your `.env`, never
+  printed) and the multi-timeframe read recorded for the gate. Interactive
+  sessions use it in place of pasting `get_bars` replies.
+- `node scripts/autotrader.js --status`: a watchdog for cron or launchd;
+  exits 1 when the runner is silent or the kill switch is on. Runner errors
+  also go to `alertWebhook` / `alertCommand` (config) and
+  `logs/alerts-<day>.jsonl`.
+- `node scripts/reconcile.js --day 2026-10-07`: the day's entries against
+  the signals the runner saw (taken, passed and why, off-scan entries).
 
 ### Passing prop challenges
 
@@ -487,7 +511,7 @@ node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 -
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
-| `FTH_GATE_LOG` | `~/.futures-trading-harness/gate-log.jsonl` | Gate decisions |
+| `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
 | `PROJECTX_JOURNAL_PATH` | `~/.projectx-mcp/journal.jsonl` | Must match the MCP server |
 

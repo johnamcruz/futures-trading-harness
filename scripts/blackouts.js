@@ -4,7 +4,7 @@
  * script; it can't remove a future window, so writing blackouts only ever
  * restricts trading. Windows that ended more than a day ago are pruned.
  *
- *   node scripts/blackouts.js add --start 2026-10-14T12:20:00Z --end 2026-10-14T12:40:00Z --reason "CPI"
+ *   node scripts/blackouts.js add --start 2026-10-14T12:25:00Z --end 2026-10-14T12:40:00Z --reason "CPI"
  *   node scripts/blackouts.js list
  */
 

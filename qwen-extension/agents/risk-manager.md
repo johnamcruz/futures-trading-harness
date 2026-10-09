@@ -40,7 +40,10 @@ Load the skills `position-sizing`, `prop-challenge-pacing`,
    plan) the firm's cushion to the trailing loss floor if you can't derive it.
 6. Approve a policy strategy's entry only as its verdict says: that contract
    (micro or mini) and side, at most its size, with its stop ticks. Never one
-   it skipped.
+   it skipped. The verdict's size replaces the position-sizing caps (25% of
+   the daily allowance, 10% of the cushion, size 1); the budget it was sized
+   from is the attempt's, and the gate enforces it. While an attempt runs,
+   veto any entry that isn't the policy strategy's verdict.
 
 Output:
 
@@ -59,18 +62,36 @@ Stand-down conditions: <any that apply now>
 
 Check, in order, and stop at the first failure:
 
-1. Account tradable and flat or within the plan's intent; no unprotected position.
-2. Symbol and size within server limits.
-3. Entry, stop, and target are on the correct sides; prices are multiples of
+0. The trigger fired: the scan shows the strategy `candidate: true` in this
+   direction on the last closed bar (or, for a manual strategy, the plan
+   quotes the trigger on closed bars and you can see it in the bars), or, for
+   a policy strategy, a live verdict matches the plan. Otherwise VETO. (The
+   gate checks rules strategies' triggers from the signal record; a manual
+   strategy's trigger only you check.)
+1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
+   on the side the prevailing trend allows (the plan quotes the `Trend rule:`
+   line of `mtf.js`, or the scan's `mtf`). Against it, VETO: the gate refuses
+   it anyway. A reversal strategy fading it: at most half size, nearest target.
+   The alignment for the side: `pullback` → VETO until the trigger timeframe
+   turns back; `mixed` → half size (`floor(size / 2)`, VETO if 0).
+   Conflict: other strategies fired the other side on the same bar (the
+   scan's `confluence.against`) → VETO unless the plan is a reversal at a
+   higher-timeframe level and says why.
+2. Account tradable and flat or within the plan's intent; no unprotected position.
+3. Symbol and size within server limits.
+4. Entry, stop, and target are on the correct sides; prices are multiples of
    `tickSize` (from `get_contract`).
-4. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
+5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
    budget. Recompute; don't trust the plan's arithmetic.
-5. The strategy (`strategies.js show <name>`) is `active`, trades this symbol,
-   is inside its sessions, and reward-to-risk ≥ its `risk.min_rr`; risk ≤ its
-   `risk.max_risk_usd` if set.
-6. Setup not restricted by a lesson; not in a blackout or no-entry window;
+6. The strategy (`strategies.js show <name>`) is `active`, trades this symbol,
+   is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
+   trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);
+   risk ≤ its `risk.max_risk_usd` if set. Size within position-sizing, or
+   within the verdict for a policy strategy; a `mixed` multi-timeframe read
+   halves it (`floor(size / 2)`, VETO if 0).
+7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
-7. The analysts' red flags are addressed in the plan.
+8. The analysts' red flags are addressed in the plan.
 
 Output exactly one of:
 

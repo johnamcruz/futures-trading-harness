@@ -57,6 +57,10 @@ test('qwen settings merge is idempotent, keeps user entries, and removes old har
 
 test('qwen workspace permissions allow harness scripts and deny edits to the harness and its state', () => {
   const p = qwenWorkspaceSettings('/fth', '/home/u').permissions;
+  // The skills' scripts (multi-timeframe read, prop status) and the runner's logs are allowed; credentials are not.
+  assert.ok(p.allow.includes('Bash(node /fth/scripts/mtf.js *)') && p.allow.includes('Bash(node /fth/scripts/combine.js status *)'));
+  assert.ok(p.allow.includes('Read(//home/u/.futures-trading-harness/logs/**)'));
+  assert.ok(p.deny.includes('Read(//home/u/.futures-trading-harness/.env)'));
   assert.ok(p.allow.includes('mcp__projectx'));
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
   assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
