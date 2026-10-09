@@ -60,6 +60,16 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of
      them (`hvn`, `lvn`). With the default 100 rows levels fall between ticks:
      round to `tickSize` before using one as an order price. Bar-based: say so.
+   - `day` (RTH only, else null): the open against the prior RTH day
+     (`openVs`: inside the prior value area, outside value inside the range,
+     or outside the range), the `gap` from the prior close, the `openType`
+     (open-drive, open-test-drive, open-rejection-reverse, open-auction, from
+     the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first
+     hour) and how far the day has gone past it (`extUp`, `extDown`), the
+     `dayType` so far (inside the initial balance; normal variation: one side
+     extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
+     0.35 ADR; neutral: both sides), and the `range` against the average daily range (`adr`, over
+     `adrDays`, default 10). `line` is the same as the prompt's "day:" line.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
      0.1 x ATR), and open fair value gaps.
    - `context`: the numbers the strategies' skip rules name: EMA 9/20

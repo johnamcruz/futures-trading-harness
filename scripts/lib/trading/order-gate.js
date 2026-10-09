@@ -343,6 +343,7 @@ function formatBlock(violations) {
 }
 
 module.exports = {
+  STOP_PRICE,
   marketClosed,
   isRiskReducing,
   checkConsistency,

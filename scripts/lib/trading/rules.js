@@ -43,6 +43,8 @@
  *   prior_high prior_low prior_close   last completed RTH day (9:30-16:00 ET)
  *   rth_open    today's 09:30 ET open, from that bar until 16:00 ET
  *   rth_high rth_low   today's RTH high and low so far, this bar included
+ *   ib_high ib_low   today's initial balance (09:30-10:30 ET), from the bar that completes it
+ *   adr(n)      the average RTH range of the last n complete days (scripts/lib/trading/day-context.js)
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
@@ -91,6 +93,7 @@ const crt = require('./crt');
 const mtf = require('./mtf');
 const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
+const dayContext = require('./day-context');
 
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
@@ -103,12 +106,12 @@ const VP_LEVELS = ['poc', 'vah', 'val'];
 const VP_NODES = ['hvn_above', 'hvn_below', 'lvn_above', 'lvn_below'];
 const VP_FUNCS = [...VP_LEVELS.map(f => `vp_${f}`), ...VP_NODES];
 const VP_NAMES = ['prior', 'session'].flatMap(w => [...VP_LEVELS, ...VP_NODES].map(f => `${w}_${f}`));
-const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF, ...VP_FUNCS]);
+const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', 'adr', ...HTF, ...VP_FUNCS]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
-  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'minute_et',
+  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et',
   'cisd_ote_dir', 'cisd_ote_risk', ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
@@ -338,6 +341,11 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     }
     return crts.get(m);
   };
+  const dayCtx = new Map();
+  const dayOf = adrDays => {
+    if (!dayCtx.has(adrDays)) dayCtx.set(adrDays, dayContext.dayContextSeries(bars, { adrDays, params }));
+    return dayCtx.get(adrDays);
+  };
   const profiles = new Map();
   const profileOf = (kind, length = 0) => {
     const key = `${kind}:${length}`;
@@ -371,6 +379,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'crt_risk': return crtOf(len).risk;
         case 'crt_target': return crtOf(len).target;
         case 'mtf_bias': return mtf.biasSeries(bars, len);
+        case 'adr': return dayOf(len).adr;
         default:
           if (VP_FUNCS.includes(fn[1])) return profileOf('rolling', len)[fn[1].replace(/^vp_/, '')];
           break;
@@ -396,6 +405,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
       case 'prior_high': case 'prior_low': case 'prior_close':
       case 'overnight_high': case 'overnight_low': case 'rth_open': case 'rth_high': case 'rth_low': return level(key);
       case 'cisd_ote_dir': case 'cisd_ote_risk': cisdSeries(); return cache.get(key);
+      case 'ib_high': case 'ib_low': return dayOf(10)[key];
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;
@@ -476,7 +486,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   return get;
 }
 
-const LEVELS = new Set(['prior_high', 'prior_low', 'prior_close', 'or_high', 'or_low', 'rth_open', 'prior_poc', 'prior_vah', 'prior_val']);
+const LEVELS = new Set(['prior_high', 'prior_low', 'prior_close', 'or_high', 'or_low', 'rth_open', 'ib_high', 'ib_low', 'prior_poc', 'prior_vah', 'prior_val']);
 
 function valueAt(terms, get, i) {
   let total = 0;

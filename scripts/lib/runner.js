@@ -29,6 +29,8 @@
  *      what the gate allows) and, past the ratchet, may close the trade.
  */
 
+const { openTrades, describeOpenTrade } = require('./trading/open-trades');
+const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot } = require('./trading/journal');
@@ -37,6 +39,7 @@ const { familyRoot } = require('./trading/contracts');
 // Micros and minis of one index share bars: a position or order in either
 // belongs to the symbol polled (MNQ bars manage an NQ trade too).
 const famOf = contractId => familyRoot(contractRoot(contractId));
+const etTime = iso => { const p = zonedParts(new Date(iso), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ET`; };
 const { trailStep } = require('./trading/trail');
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ } = require('./trading/clock');
 const { exitPlan } = require('./trading/strategies');
@@ -62,6 +65,14 @@ function createRunner(deps) {
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
+    // The day so far (trading/day-context.js): one line for the prompt, or null.
+    dayContext = () => null,
+    // A strategy's track record (trading/track-record.js): (name, { regime, at }) -> one line, or null.
+    trackRecord = () => null,
+    // The journal's entries, for the open trades' setup and initial stop (trading/open-trades.js).
+    journalEntries = () => [],
+    // An open trade against its strategy's recorded excursions (track-record.js excursionNote): (trade) -> text or null.
+    tradeHistory = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
     recordSignals = () => {},
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
@@ -178,7 +189,13 @@ function createRunner(deps) {
         // Without a fresh record the gate refuses trend strategies' entries (fail closed).
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, recent: bars.slice(-10) } };
+      let day = null;
+      try {
+        day = dayContext(sym, bars);
+      } catch (err) {
+        log(`${sym.symbol}: no day context this bar (${err.message})`, 'error');
+      }
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, day, recent: bars.slice(-10) } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -552,6 +569,7 @@ function createRunner(deps) {
         // Without a state read, positions and orders are unknown, not flat.
         positions: state ? state.positions.filter(p => Number(p.size || 0) > 0) : null,
         workingOrders: state ? state.orders.length : null,
+        orders: state ? state.orders : null,
         attempts,
       };
     } catch (err) {
@@ -714,7 +732,32 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: x.scan })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons(); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
+          // The journal, read once for this prompt (open trades, track records).
+          let entries = [];
+          try { entries = journalEntries() || []; } catch (err) { log(`journal unavailable for the prompt (${err.message})`, 'error'); }
+          // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
+          if (acct && Array.isArray(acct.positions) && acct.positions.length) {
+            try {
+              // MNQ bars manage an NQ trade too (the same family).
+              const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
+              const trades = openTrades({ positions: acct.positions, orders: acct.orders || [], entries, barsFor: p => (item(p) ? item(p).bars : null) });
+              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (_err) { return null; } };
+              acct = { ...acct, openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
+            } catch (err) {
+              log(`open trades unavailable for the prompt (${err.message})`, 'error');
+            }
+          }
+          // Each strategy that fired carries its track record into the prompt.
+          const withRecords = x => (Array.isArray(x.scan) ? x.scan.map(r => {
+            if (!(r.candidate && r.direction)) return r;
+            try {
+              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString(), entries }) };
+            } catch (err) {
+              log(`${x.symbol}: no track record for ${r.name} (${err.message})`, 'error');
+              return r;
+            }
+          }) : x.scan);
+          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: withRecords(x) })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons(); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
           recover = false;
           if (acct) emit('account', accountEvent(acct));
           const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });

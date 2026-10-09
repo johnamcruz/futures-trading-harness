@@ -36,7 +36,10 @@ description: Rules for running the trading harness unattended (headless, schedul
    `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate's
    decisions in `logs/gate-log.jsonl`). The prompt also carries the last 10
    closed bars and your last 10 cycle results: read them, and don't reverse a
-   recent decision without saying what changed.
+   recent decision without saying what changed. It carries the day so far
+   (the "day:" line), each fired strategy's track record, and each open
+   trade's state (setup, initial risk, stop, target, R now, best and worst):
+   the `trade-session` skill says how to weigh them.
 4. **Guardrails are final.** A block from the order gate, the MCP gateway, or
    the server ends the entry attempt. Fix what the block names when it is
    yours to fix (for example, review a closed trade, cancel a leftover order),

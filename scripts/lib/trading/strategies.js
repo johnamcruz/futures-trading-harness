@@ -77,7 +77,7 @@ const PARAM_RULES = {
   stMult: 'pos', kcMult: 'pos', stopAtrMult: 'pos',
   crtSweepBars: 'int', crtShiftBars: 'int', crtMaxDepth: 'pos', crtMinRangeAtr: 'nonneg', crtBufferAtr: 'nonneg', crtMinRR: 'pos',
   // Volume profile (prior_*, session_*, vp_*(n) series): rows or a row size in points, value area %, node detection %.
-  vpRows: 'int', vpLookback: 'int', vpRowSize: 'nonneg', vpValueArea: 'pos', vpNodePct: 'nonneg', vpTroughPct: 'nonneg', vpThreshold: 'nonneg',
+  vpRows: 'int', vpLookback: 'int', adrDays: 'int', vpRowSize: 'nonneg', vpValueArea: 'pos', vpNodePct: 'nonneg', vpTroughPct: 'nonneg', vpThreshold: 'nonneg',
 };
 
 function editDistance(a, b) {
@@ -157,6 +157,10 @@ function validateStrategy(data, body, folderName) {
     for (const [name, uses] of Object.entries(CONNECTORS)) {
       if (uses.test(text) && !connectors.includes(name)) errors.push(`connectors: the rules use ${name} data; declare connectors: [${name}]`);
     }
+    // The initial balance and ADR need a bar at 09:30 ET: a timeframe that divides 30 minutes.
+    const tf = /^(\d+)(m|h)$/.exec(String(data.timeframe || ''));
+    const tfMin = tf ? Number(tf[1]) * (tf[2] === 'h' ? 60 : 1) : null;
+    if (/\b(ib_high|ib_low|adr\()/.test(text) && tfMin && 30 % tfMin !== 0) errors.push(`rules: ib_high, ib_low and adr(n) need a timeframe that divides 30 minutes (a bar at 09:30 ET), not ${data.timeframe}`);
   }
 
   if (data.sessions !== undefined && data.sessions !== null) {

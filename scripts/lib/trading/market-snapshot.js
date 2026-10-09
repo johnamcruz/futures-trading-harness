@@ -10,6 +10,7 @@ const ind = require('./indicators');
 const { classifyRegime } = require('./regime');
 const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
+const dayContext = require('./day-context');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -23,6 +24,7 @@ const PARAMS = {
   // Volume profile settings (vpRows, vpRowSize, ...): defaults and meaning in volume-profile.js.
   ...vp.PARAM_DEFAULTS,
   vpLookback: 360, // bars in the snapshot's rolling profile
+  adrDays: 10, // days in the average daily range (day-context.js)
 };
 
 const RTH_OPEN = 9 * 60 + 30;
@@ -301,6 +303,11 @@ function snapshot(input, overrides = {}) {
       sessionCrossesLast30: vwapCrosses(bars, vwapSession),
     },
     volumeProfile: volumeProfile(bars, p, at(atr14, i)),
+    // The day so far: the open against the prior day, the opening type, the initial balance, the day type, the range against the ADR.
+    day: (() => {
+      const d = dayContext.dayContextSeries(bars, { adrDays: p.adrDays, params: p }).day[i];
+      return d ? { ...d, line: dayContext.describeDay(d) } : null;
+    })(),
     participation: participation(bars, p.orbMinutes),
     context: context(bars, series, at(atr14, i)),
     liquidity: liquidity(bars, p.swingK, at(atr14, i)),
