@@ -62,3 +62,46 @@ test('an apostrophe inside an unquoted value is just a character', () => {
   assert.deepStrictEqual(parseYaml("a: [it's, MES]\nb: Don't fade # comment"), { a: ["it's", 'MES'], b: "Don't fade" });
   assert.throws(() => parseYaml("a: 'unterminated"), /unterminated/);
 });
+
+test('an unquoted value with ": " is refused, as YAML parsers (Claude Code, Qwen) refuse it; quoted is fine', () => {
+  const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+  assert.throws(() => parseFrontmatter('---\nname: x\ndescription: a policy strategy (signal: policy) trades\n---\nbody'), /unquoted value can't contain ": "/);
+  assert.throws(() => parseFrontmatter('---\nname: x\ndescription: ends with a colon:\n---\nbody'), /unquoted value/);
+  assert.strictEqual(parseFrontmatter('---\nname: x\ndescription: "a policy strategy (signal: policy) trades"\n---\nbody').data.description, 'a policy strategy (signal: policy) trades');
+  assert.strictEqual(parseFrontmatter('---\nname: x\nsessions: [09:45-11:30@America/New_York]\n---\nbody').data.sessions[0], '09:45-11:30@America/New_York');
+});
+
+test('every frontmatter block in the repo parses (skills, agents, commands, rules, strategies, accounts, generated copies)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+  const root = path.resolve(__dirname, '..', '..');
+  let yaml = null;
+  try { yaml = require('js-yaml'); } catch (_err) { /* the harness's own parser still checks */ }
+  const files = [];
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (['node_modules', '.git'].includes(e.name)) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (p.endsWith('.md')) files.push(p);
+    }
+  };
+  walk(root);
+  const bad = [];
+  let n = 0;
+  for (const f of files) {
+    const text = fs.readFileSync(f, 'utf8');
+    const m = /^---\n([\s\S]*?)\n---/.exec(text);
+    if (!m) continue;
+    n += 1;
+    try {
+      parseFrontmatter(text);
+      if (yaml) yaml.load(m[1]);
+    } catch (err) {
+      bad.push(`${path.relative(root, f)}: ${String(err.message).split('\n')[0]}`);
+    }
+  }
+  assert.ok(n > 40, `found ${n} frontmatter blocks`);
+  assert.deepStrictEqual(bad, []);
+});

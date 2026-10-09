@@ -1,6 +1,6 @@
 ---
 name: multi-timeframe-analysis
-description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (mtf: reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
+description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (one marked mtf reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
 ---
 
 # Multi-Timeframe Analysis
