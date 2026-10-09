@@ -16,7 +16,7 @@ An injection or a bad tool path turns directly into money lost.
 ## How It Works
 
 1. **Layers, each independent:**
-   - Firm rules (Topstep): daily loss, trailing drawdown, auto-flatten.
+   - Firm rules (the prop firm): daily loss, trailing drawdown, auto-flatten.
    - Broker MCP server guardrails (`get_server_config`): trading enabled, allowed accounts and
      symbols, max order and position size, max daily loss. Enforced in the
      server before the API.

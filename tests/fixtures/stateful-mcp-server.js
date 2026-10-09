@@ -1,6 +1,6 @@
 'use strict';
 
-// Stateful stand-in for projectx-mcp: place_order is acknowledged at once and
+// Stateful stand-in broker MCP server: place_order is acknowledged at once and
 // the market fill lands FILL_DELAY_MS later, like a real exchange round trip.
 // Starts with net position START_NET in CONTRACT.
 const CONTRACT = process.env.CONTRACT || 'CON.F.US.MNQ.Z26';

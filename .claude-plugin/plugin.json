@@ -1,7 +1,7 @@
 {
   "name": "futures-trading-harness",
   "version": "0.2.0",
-  "description": "LLM-agnostic futures trading harness for TopstepX via projectx-mcp: strategies as Markdown, parallel analyst/risk/executor/reviewer roles, workflow skills, and a fail-closed order gate.",
+  "description": "LLM-agnostic futures trading harness through any broker MCP server: strategies as Markdown, parallel analyst/risk/executor/reviewer roles, workflow skills, and a fail-closed order gate.",
   "author": {
     "name": "John Cruz",
     "url": "https://github.com/johnamcruz"
@@ -13,18 +13,17 @@
     "claude-code",
     "trading",
     "futures",
-    "topstepx",
-    "projectx",
     "mcp",
     "agents",
     "skills",
-    "hooks"
+    "hooks",
+    "broker"
   ],
   "userConfig": {
     "hooks_enabled": {
       "type": "boolean",
       "title": "Enable trading harness hooks",
-      "description": "Run the order gate, session briefing, and review reminder. Turning this off removes the harness discipline layer; the projectx-mcp server guardrails still apply.",
+      "description": "Run the order gate, session briefing, and review reminder. Turning this off removes the harness discipline layer; the broker MCP server guardrails still apply.",
       "default": true
     },
     "hook_profile": {
