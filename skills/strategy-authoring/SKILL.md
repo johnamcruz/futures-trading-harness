@@ -45,7 +45,12 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
 5. Validate: `node <root>/scripts/strategies.js validate`.
 6. Promote only on evidence: paper-trade it (reviews tagged `paper`), run
    setup-expectancy, and set `status: active` only with the user's approval.
-7. Write mechanical triggers as `rules`, not code. A condition is
+7. Write mechanical triggers as `rules`, not code. Every item in a side
+   must hold (AND); an item can be a group, `any: [...]` (one of them holds,
+   OR) or `all: [...]` (every one), nested two deep, so one strategy can take
+   two setups or two confirmations (see `value_area`: a POC rejection or
+   breakout, confirmed by order flow or expansion). The scan shows each
+   group's `parts`, so you can see which branch held. A condition is
    `<expr> <op> <expr>` with `>`, `>=`, `<`, `<=`, `crosses_above`,
    `crosses_below`. Expressions use series and numbers joined by `+`, `-`, and
    `number *`: `open high low close volume`, `ema(n) sma(n) atr(n) adx(n)

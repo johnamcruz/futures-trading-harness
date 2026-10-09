@@ -82,3 +82,51 @@ test('value_area_breakout: two closes above value on volume after 10:00 ET, long
   bars[bars.length - 2] = { ...bars[bars.length - 2], v: 50 };
   assert.strictEqual(fires(STRATS.value_area_breakout, bars).length, 0);
 });
+
+/** Day 2 from 09:30 ET: `flat` bars at a price, then the given bars ({ o, h, l, c, v }). */
+function day2(bars, flatAt, n, extra) {
+  for (let k = 0; k < n; k += 1) bars.push({ ...bar(DAY2 + k * S, flatAt, flatAt + 0.25), v: 100 });
+  extra.forEach((x, k) => bars.push({ t: new Date(DAY2 + (n + k) * S).toISOString(), v: 100, ...x }));
+  return bars;
+}
+
+test('value_area: a POC rejection confirmed by order flow fires long, to the value area high', () => {
+  const { bars, p } = history(0);
+  const poc = p.poc;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc + 4, poc + 4)));
+  // 10:00 closes above the POC; 10:03 dips to it and closes near its high, on buying.
+  day2(bars, poc + 4, 10, [
+    { o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3 },
+    { o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4 },
+  ]);
+  const f = fires(STRATS.value_area, bars);
+  assert.strictEqual(f.length, 1, JSON.stringify(f.map(x => bars[x.i].t)));
+  const { i, r } = f[0];
+  assert.strictEqual(i, bars.length - 1);
+  assert.strictEqual(r.direction, 'long');
+  const [setup, confirm] = [r.rules.long[2], r.rules.long[3]];
+  assert.deepStrictEqual(setup.parts.map(x => x.ok), [true, false], 'the rejection branch');
+  assert.deepStrictEqual(confirm.parts.map(x => x.ok), [true, false], 'confirmed by order flow, not expansion');
+  assert.ok(Math.abs(r.targetDistance - (p.vah - bars[i].c)) < 1e-3, 'target: the value area high');
+  assert.ok(r.targetDistance >= 2 * r.stopDistance);
+  // The same bar without the buying (sellers over the last 3 bars): no trade.
+  const weak = bars.slice(0, -2).concat([{ ...bars.at(-2), c: poc + 2.1 }, { ...bars.at(-1), o: poc + 2.4, c: poc + 1 }]);
+  assert.strictEqual(fires(STRATS.value_area, weak).length, 0);
+});
+
+test('value_area: a POC breakout confirmed by range expansion on volume fires short, to the value area low', () => {
+  const { bars, p } = history(0);
+  const poc = p.poc;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc + 3, poc + 3)));
+  // 10:03: one wide bar down through the POC on 5x volume, closing mid-range (no selling signal from flow).
+  day2(bars, poc + 3, 11, [{ o: poc + 2, h: poc + 2.5, l: poc - 10, c: poc - 3, v: 500 }]);
+  const f = fires(STRATS.value_area, bars);
+  assert.strictEqual(f.length, 1, JSON.stringify(f.map(x => bars[x.i].t)));
+  const { r } = f[0];
+  assert.strictEqual(r.direction, 'short');
+  assert.deepStrictEqual(r.rules.short[2].parts.map(x => x.ok), [false, true], 'the breakout branch');
+  assert.deepStrictEqual(r.rules.short[3].parts.map(x => x.ok), [false, true], 'confirmed by expansion, not order flow');
+  // Without the volume, nothing confirms it.
+  bars[bars.length - 1] = { ...bars.at(-1), v: 120 };
+  assert.strictEqual(fires(STRATS.value_area, bars).length, 0);
+});

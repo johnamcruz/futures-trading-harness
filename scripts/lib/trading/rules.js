@@ -15,6 +15,13 @@
  *
  * Every condition in a side must hold on the last closed bar (AND). A side
  * whose conditions all hold fires that direction; if both fire, nothing fires.
+ * An item can also be a group: `any: [...]` holds when one of its items does
+ * (OR), `all: [...]` when every one does; groups nest two deep:
+ *
+ *       - any:                                  # a setup: rejection or breakout
+ *           - all: [low <= prior_poc, close > prior_poc, close[1] > prior_poc]
+ *           - close crosses_above prior_poc
+ *       - any: [ofi(3) >= 0.2, high - low >= 1.5 * atr(20)]   # confirmed by flow or expansion
  *
  * Condition:  <expr> <op> <expr>
  *   op:       >  >=  <  <=  crosses_above  crosses_below
@@ -104,6 +111,9 @@ const NAMES = new Set([
   'cisd_ote_dir', 'cisd_ote_risk', ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
+const MAX_GROUP_ITEMS = 8;
+const MAX_GROUP_DEPTH = 2;
+const MAX_CONDITIONS_PER_SIDE = 24;
 
 function tokenize(text) {
   const tokens = [];
@@ -200,6 +210,21 @@ function compileCondition(text) {
   }
 }
 
+/** Compile a rule item: a condition string, or { any: [items] } / { all: [items] } (nested up to MAX_GROUP_DEPTH). */
+function compileItem(item, depth = 0) {
+  if (typeof item === 'string') return compileCondition(item);
+  const keys = item && typeof item === 'object' && !Array.isArray(item) ? Object.keys(item) : [];
+  if (keys.length !== 1 || !['any', 'all'].includes(keys[0])) throw new Error(`${JSON.stringify(item)}: a condition, or a group { any: [...] } or { all: [...] }`);
+  const group = keys[0];
+  const list = item[group];
+  if (depth >= MAX_GROUP_DEPTH) throw new Error(`${group}: groups nest at most ${MAX_GROUP_DEPTH} deep`);
+  if (!Array.isArray(list) || list.length < 2 || list.length > MAX_GROUP_ITEMS) throw new Error(`${group}: a list of 2 to ${MAX_GROUP_ITEMS} items`);
+  const items = list.map(x => compileItem(x, depth + 1));
+  return { group, items, text: `${group}(${items.map(x => x.text).join(group === 'any' ? ' | ' : ' & ')})` };
+}
+
+const leaves = item => (item.group ? item.items.reduce((n, x) => n + leaves(x), 0) : 1);
+
 /** Validate a `rules` frontmatter block. Returns { compiled, errors }. */
 function compileRules(rules) {
   const errors = [];
@@ -216,13 +241,15 @@ function compileRules(rules) {
       continue;
     }
     if (list.length > MAX_RULES_PER_SIDE) errors.push(`rules.${side}: at most ${MAX_RULES_PER_SIDE} conditions`);
-    for (const text of list) {
+    for (const item of list) {
       try {
-        compiled[side].push(compileCondition(text));
+        compiled[side].push(compileItem(item));
       } catch (err) {
         errors.push(`rules.${side}: ${err.message}`);
       }
     }
+    const n = compiled[side].reduce((a, x) => a + leaves(x), 0);
+    if (n > MAX_CONDITIONS_PER_SIDE) errors.push(`rules.${side}: at most ${MAX_CONDITIONS_PER_SIDE} conditions in all, groups included`);
   }
   if (!compiled.long.length && !compiled.short.length && !errors.length) errors.push('rules: define long and/or short conditions');
   return { compiled, errors };
@@ -484,10 +511,17 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   const i = index;
   const missing = c => [c.left, c.right].some(e => valueAt(e, get, i) === null)
     || (c.op.startsWith('crosses_') && [c.left, c.right].some(e => valueAt(e, get, i - 1) === null));
-  const side = conds => conds.map(c => {
+  // A group reports each of its items too, so a scan shows which branch held.
+  const result = c => {
+    if (c.group) {
+      const parts = c.items.map(result);
+      const ok = c.group === 'any' ? parts.some(x => x.ok) : parts.every(x => x.ok);
+      return { rule: c.text, ok, parts };
+    }
     const ok = holds(c, get, i);
     return ok || !missing(c) ? { rule: c.text, ok } : { rule: c.text, ok, missing: true };
-  });
+  };
+  const side = conds => conds.map(result);
   const long = side(compiled.long);
   const short = side(compiled.short);
   const longFires = long.length > 0 && long.every(r => r.ok);
@@ -495,4 +529,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

@@ -177,3 +177,30 @@ test('volume profile series: compile, read the profile module, and are causal', 
   const open = nq.findIndex((b, i) => i > 0 && sessionKey(b.t, 18 * 60) !== sessionKey(nq[i - 1].t, 18 * 60));
   assert.ok(open > 0 && get.resets('session_poc', open) && !get.resets('session_poc', open + 1));
 });
+
+test('any/all groups: OR of branches, nested two deep, with each part in the result', () => {
+  const { compiled, errors } = compileRules({
+    long: [
+      'close > 0',
+      { any: [{ all: ['close > 105', 'close > open'] }, 'close crosses_above 103'] },
+      { any: ['volume > 1000', 'close > 100'] },
+    ],
+  });
+  assert.deepStrictEqual(errors, []);
+  assert.strictEqual(compiled.long[1].text, 'any(all(close > 105 & close > open) | close crosses_above 103)');
+  const b = bars([100, 101, 102, 104]); // close 104 crosses above 103; not > 105
+  const r = evaluateRules(compiled, b, { ...PARAMS });
+  assert.strictEqual(r.direction, 'long');
+  assert.deepStrictEqual(r.long[1].parts.map(x => x.ok), [false, true], 'the breakout branch held, not the first');
+  assert.deepStrictEqual(r.long[1].parts[0].parts.map(x => x.ok), [false, false]); // these bars open at their close
+  // Neither branch: the group fails, and so does the side.
+  assert.strictEqual(evaluateRules(compiled, bars([100, 101, 102, 102.5]), { ...PARAMS }).direction, null);
+  for (const [rules, msg] of [
+    [{ long: [{ any: ['close > 1'] }] }, /2 to 8 items/],
+    [{ long: [{ either: ['close > 1', 'close > 2'] }] }, /a condition, or a group/],
+    [{ long: [{ any: ['close > 1', 'close > 2'], all: ['close > 1', 'close > 2'] }] }, /a condition, or a group/],
+    [{ long: [{ any: [{ all: [{ any: ['close > 1', 'close > 2'] }, 'close > 3'] }, 'close > 4'] }] }, /nest at most 2 deep/],
+    [{ long: [{ any: ['close > 1', 'close > banana'] }] }, /unknown series/],
+    [{ long: Array.from({ length: 4 }, () => ({ any: Array.from({ length: 8 }, (_, k) => `close > ${k}`) })) }, /at most 24 conditions/],
+  ]) assert.match(compileRules(rules).errors.join('; '), msg);
+});
