@@ -4,15 +4,17 @@ Status: design, for review before any code.
 
 ## Goal
 
-One MCP tool contract that every broker or prop-firm MCP server implements.
-The harness (agents, skills, the order gate, the gateway) already talks to its
-broker only through MCP tools; this document writes those tools down as the
-contract, so another firm's server plugs in the same way projectx-mcp does.
+A single MCP interface that every prop firm and broker follows. The harness
+codes against this interface only, never against one firm: the agents, skills,
+order gate, and gateway call these tools, whoever is behind them. A firm is
+supported when its MCP server implements the interface.
 
 - [projectx-mcp](https://github.com/johnamcruz/projectx-mcp) (TopstepX) is the
-  reference implementation. It conforms today, unchanged.
-- Nothing else in the harness changes: same gateway, same order gate, same
-  agents and skills, same runner, same prop rules.
+  first implementation and the default. Its tools already match.
+- Other firms (Apex, Tradovate, ...) each get their own MCP server that
+  implements the same tools.
+- The harness's behaviour doesn't change: same gateway, same order gate, same
+  agents and skills, same prop rules.
 
 ## Non-goals
 
@@ -22,15 +24,17 @@ contract, so another firm's server plugs in the same way projectx-mcp does.
 
 ## How a server plugs in
 
-The installer already takes the server entry and registers it behind the gateway:
+The installer registers whichever server you give it, behind the gateway, under
+one neutral name, `broker`:
 
 ```bash
-node scripts/install.js --target all --projectx /abs/<server>/dist/index.js
+node scripts/install.js --target all --broker-mcp /abs/projectx-mcp/dist/index.js   # TopstepX
+node scripts/install.js --target all --broker-mcp /abs/<other>-mcp/dist/index.js    # any other firm
 ```
 
-Any server that implements this interface goes in the same place. The agents
-see its tools as `mcp__projectx__<tool>` (the registered server name; see Open
-decisions).
+The agents always see `mcp__broker__<tool>`, so switching firms is one path.
+`--projectx` and `PROJECTX_MCP_ENTRY` keep working as aliases for existing
+installs.
 
 ## Transport
 
@@ -100,7 +104,9 @@ reduce risk.
 ## Journal file
 
 The order gate reads the journal from disk, so the server writes it to
-`PROJECTX_JOURNAL_PATH` (default `~/.projectx-mcp/journal.jsonl`): JSONL, one
+`BROKER_JOURNAL_PATH` (the harness passes it to the server; default
+`~/.futures-trading-harness/journal.jsonl`; `PROJECTX_JOURNAL_PATH` stays an
+alias, and projectx-mcp learns to read `BROKER_JOURNAL_PATH`): JSONL, one
 entry per line, `{ ts, kind, text, accountId?, contractId?, orderId?, tags?, data? }`.
 The server writes `order_placed` for every `place_order` (`text` = the
 rationale, `data.result` = the result) and `order_blocked` for a refused one.
@@ -120,24 +126,21 @@ rationale, `data.result` = the result) and `order_blocked` for a refused one.
 - A maximum order size and a maximum net position per contract.
 - A daily loss limit: once it's reached, orders that add exposure are refused.
 
-## What the implementation adds
+## What the implementation changes
 
-Small, and none of it changes existing behaviour:
-
-1. `scripts/lib/broker-interface.js`: the tool list above as data.
+1. `scripts/lib/broker-interface.js`: the tool list above as data, the one
+   source the checker and the tests read.
 2. `scripts/check-broker-mcp.js`: starts a server, lists its tools, makes
    read-only calls, and reports what doesn't match. It never places an order.
-3. Tests: projectx-mcp's tool names match the interface, and this document
-   names every tool in it.
+3. Server name `projectx` -> `broker`: agents' tool lists, skills, rules, the
+   installer, and the generated adapters (`mcp__broker__*`).
+4. Neutral names: `--broker-mcp` / `BROKER_MCP_ENTRY` and `BROKER_JOURNAL_PATH`,
+   with the `projectx` names as aliases.
+5. Tests: a fake server that implements the interface passes the checker; a
+   server missing a tool fails; this document names every tool.
 
-## Open decisions
+## Out of scope for this PR
 
-1. **Server name.** Keep `projectx` (no change to agents, skills, or existing
-   installs), or rename it to a neutral `broker` (`mcp__broker__*`, touches every
-   agent and the installer). Recommended: keep `projectx` for now.
-2. **Environment names.** The journal path and the installer flag say
-   `projectx` (`PROJECTX_JOURNAL_PATH`, `--projectx`). Keep them, or add
-   neutral aliases (`FTH_JOURNAL_PATH`, `--broker-mcp`).
-3. **Runner data.** The runner reads bars and positions through the ProjectX
-   REST API, not MCP, so it runs only on TopstepX. Keep that, or move it onto
-   these tools later in its own PR.
+- The autonomous runner reads bars and positions through the ProjectX REST API,
+  so it runs on TopstepX only. Moving it onto these tools is a follow-up PR.
+- Live order flow (the ProjectX market hub stream) is not part of MCP.
