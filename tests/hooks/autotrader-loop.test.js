@@ -65,8 +65,12 @@ test('a live runner refuses to start when the broker server would refuse its hou
 test('runner starts a cycle on a fresh closed bar during market hours, and none outside them', { timeout: 30000 }, async () => {
   // Open = market hours, and before this config's 15:50 ET end of day (its session is the whole market session).
   const etMin = d => { const p = zonedParts(d, 'America/New_York'); return p.hour * 60 + p.minute; };
-  const beforeEod = d => { const m = etMin(d); return m >= 18 * 60 || m < 15 * 60 + 49; };
-  const open = [new Date(), new Date(Date.now() + 25000)].every(d => inMarketHours(d) && beforeEod(d));
+  const beforeEod = (d, endMin) => { const m = etMin(d); return m >= 18 * 60 || m < endMin; };
+  const span = [new Date(), new Date(Date.now() + 25000)];
+  // Open: a cycle must run (a minute of margin before 15:50). Closed: none may (past 15:50 or the market shut).
+  // In between (15:49-15:50, or a market open/close inside the window) only the runner staying up is checked.
+  const open = span.every(d => inMarketHours(d) && beforeEod(d, 15 * 60 + 49));
+  const closed = span.every(d => !inMarketHours(d) || !beforeEod(d, 15 * 60 + 50));
   const home = tmpDir();
   const callsFile = path.join(home, 'calls.txt');
   const dataDir = path.join(home, 'fth');
@@ -87,7 +91,7 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
     if (!open) {
       await new Promise(r => setTimeout(r, 5000));
       assert.ok(runner.exitCode === null, `the runner keeps running:\n${io.out}`);
-      assert.ok(!io.out.includes('CYCLE RESULT'), 'no cycle outside market hours');
+      if (closed) assert.ok(!io.out.includes('CYCLE RESULT'), 'no cycle outside market hours');
       return;
     }
     await new Promise((resolve, reject) => {
