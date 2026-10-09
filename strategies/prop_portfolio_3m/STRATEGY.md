@@ -6,7 +6,7 @@ status: paper                 # paper until a validated bundle is shipped and th
 instruments: [MNQ, NQ]        # the Nasdaq family: bars from MNQ; trades MNQ or NQ (contracts)
 timeframe: 3m
 signal: policy                # a trained policy trades the setups of the strategies below
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h]   # priority order: the first that fires on a bar is the setup
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area_reentry, value_area_breakout]   # priority order: the first that fires on a bar is the setup
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing:                       # risk from the headroom above the floor
   cushion_frac: 0.3           # a trade risks at most 30% of the cushion above the floor ...

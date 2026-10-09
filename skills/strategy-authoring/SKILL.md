@@ -52,7 +52,8 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    highest(n) lowest(n)` (n up to 500; adx up to 250), order flow
    `ofi(n) delta(n) vol_sma(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
-   `prior_high prior_low prior_close overnight_high overnight_low`, `minute_et`,
+   `prior_high prior_low prior_close overnight_high overnight_low`, `rth_open`
+   (today's 09:30 ET open, until 16:00 ET), `minute_et`,
    `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector), and
    higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
    (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`
@@ -65,6 +66,16 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    the last m-minute candle completed before the bar (1 up, -1 down, 0 range;
    the `multi-timeframe-analysis` skill): `mtf_bias(240) >= 0` keeps a long
    out of a 4-hour downtrend.
+   Volume profile (bar-based; the `vwap-volume-profile` skill): `prior_poc
+   prior_vah prior_val` (the last complete RTH day, fixed for the day),
+   `session_poc session_vah session_val` (this Globex session, developing),
+   `vp_poc(n) vp_vah(n) vp_val(n)` (the last n bars), and the nearest node
+   above or below the close, `prior_hvn_above prior_lvn_below` (and
+   `_hvn_below`, `_lvn_above`, `session_*`, `hvn_above(n)` ...). Use nodes
+   as targets and distances, not crosses: they move as price passes them.
+   Tune with params `vpRows` (default 100), `vpRowSize` (points per row
+   instead), `vpValueArea` (70), `vpNodePct` (9), `vpTroughPct` (7),
+   `vpThreshold` (1).
    `[n]` looks back n bars: `highest(20)[1]` is the 20-bar high before this
    bar (without it the current bar is included, so a close can never cross
    above it). `minute_et` is the bar's open time in New York minutes (9:45 =

@@ -148,3 +148,32 @@ test('or_high / or_low are causal: the range\'s last bar has its value from bars
     assert.ok(set > 0);
   }
 });
+
+test('volume profile series: compile, read the profile module, and are causal', () => {
+  const path = require('path');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const { profileSeries } = require('../../scripts/lib/trading/volume-profile');
+  const nq = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
+  for (const text of ['close > prior_vah', 'close crosses_below session_poc', 'close < vp_val(360)', 'prior_lvn_above - close > 2 * atr(14)', 'hvn_below(120) < close']) {
+    assert.doesNotThrow(() => compileCondition(text), text);
+  }
+  assert.throws(() => compileCondition('close > vp_poc(600)'), /length must be 1-500/);
+  assert.throws(() => compileCondition('close > rth_poc'), /unknown series/);
+  const get = seriesSource(nq, { ...PARAMS });
+  const prior = profileSeries(nq, 'prior_rth');
+  const roll = profileSeries(nq, 'rolling', { length: 120 });
+  assert.deepStrictEqual(get('prior_vah'), prior.vah);
+  assert.deepStrictEqual(get('prior_lvn_above'), prior.lvn_above);
+  assert.deepStrictEqual(get('vp_poc(120)'), roll.poc);
+  assert.ok(get('session_poc').some(Number.isFinite));
+  // Params change the profile: 20 rows give other levels than 100.
+  const coarse = seriesSource(nq, { ...PARAMS, vpRows: 20 })('prior_vah');
+  assert.ok(coarse.some((v, i) => Number.isFinite(v) && v !== prior.vah[i]));
+  // A new day's prior value area is a reset, not a cross.
+  const day = prior.vah.findIndex((v, i) => i > 0 && Number.isFinite(prior.vah[i - 1]) && v !== prior.vah[i - 1]);
+  if (day > 0) assert.strictEqual(get.resets('prior_vah', day), true);
+  // So is the 18:00 ET restart of the session profile.
+  const { sessionKey } = require('../../scripts/lib/trading/indicators');
+  const open = nq.findIndex((b, i) => i > 0 && sessionKey(b.t, 18 * 60) !== sessionKey(nq[i - 1].t, 18 * 60));
+  assert.ok(open > 0 && get.resets('session_poc', open) && !get.resets('session_poc', open + 1));
+});

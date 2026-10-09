@@ -72,6 +72,15 @@ test('snapshot: participation, VWAP crosses and distance, swings, equal highs, o
   assert.strictEqual(JSON.parse(cli(['--orbMinutes', '30']).stdout).params.orbMinutes, 30);
   assert.strictEqual(JSON.parse(cli(['--orbMinutes=20']).stdout).params.orbMinutes, 20);
   assert.match(cli(['--bogus', '1']).stderr, /unknown parameter --bogus/);
+  // The volume profile block, on the real bars: prior RTH day, session, rolling.
+  const vpBlock = JSON.parse(cli([]).stdout).volumeProfile;
+  for (const k of ['priorRth', 'session', 'rolling']) {
+    const x = vpBlock[k];
+    assert.ok(x && x.val < x.poc && x.poc < x.vah, `${k}: ${JSON.stringify(x)}`);
+    assert.ok(['above value', 'inside value', 'below value'].includes(x.price));
+  }
+  assert.strictEqual(vpBlock.rolling.bars, 360);
+  assert.match(vpBlock.note, /bar-based approximation/);
 });
 
 test('snapshot levels: a day or overnight session the data starts partway into gives no levels', () => {

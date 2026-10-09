@@ -9,6 +9,7 @@
 const ind = require('./indicators');
 const { classifyRegime } = require('./regime');
 const { zonedParts } = require('./clock');
+const vp = require('./volume-profile');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -19,6 +20,10 @@ const PARAMS = {
   atrStop: 20, stopAtrMult: 0.5,
   // Candle Range Theory sweeps (crt_dir / crt_risk / crt_target, scripts/lib/trading/crt.js).
   crtSweepBars: 10, crtShiftBars: 5, crtMaxDepth: 0.5, crtMinRangeAtr: 2, crtBufferAtr: 0.25, crtMinRR: 2,
+  // Volume profile (scripts/lib/trading/volume-profile.js): 100 rows, 70% value area,
+  // nodes against 9% (peaks) / 7% (troughs) of the rows each side, ignoring rows under 1%.
+  vpRows: 100, vpValueArea: 70, vpNodePct: 9, vpTroughPct: 7, vpThreshold: 1,
+  vpLookback: 360, // bars in the snapshot's rolling profile
 };
 
 const RTH_OPEN = 9 * 60 + 30;
@@ -232,6 +237,24 @@ function context(bars, series, atrNow) {
   };
 }
 
+/**
+ * Volume profile at the last bar: the prior RTH day's, this Globex session's
+ * (developing), and the last vpLookback bars' (rolling), each with POC,
+ * value area, nodes, and where price is (scripts/lib/trading/volume-profile.js).
+ */
+function volumeProfile(bars, p, atrNow) {
+  const i = bars.length - 1;
+  const options = vp.optionsFromParams(p);
+  const r = x => round(x, 2);
+  const one = (kind, length) => vp.describe(vp.profileAt(bars, kind, i, { length, options }), bars[i].c, atrNow, r);
+  return {
+    priorRth: one('prior_rth'),
+    session: one('session'),
+    rolling: bars.length >= p.vpLookback ? one('rolling', p.vpLookback) : null,
+    note: `bar-based approximation (each bar's volume spread over its range), ${options.rowSize > 0 ? `${options.rowSize}-point rows` : `${options.rows} rows`}, ${Math.round(options.valueArea * 100)}% value area; fromPocAtr = (price - POC) / ATR(14)`,
+  };
+}
+
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
@@ -278,6 +301,7 @@ function snapshot(input, overrides = {}) {
       rthCrossesLast30: vwapCrosses(bars, vwapRth),
       sessionCrossesLast30: vwapCrosses(bars, vwapSession),
     },
+    volumeProfile: volumeProfile(bars, p, at(atr14, i)),
     participation: participation(bars, p.orbMinutes),
     context: context(bars, series, at(atr14, i)),
     liquidity: liquidity(bars, p.swingK, at(atr14, i)),
@@ -292,4 +316,4 @@ function snapshot(input, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, signalSeries, levels };
+module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile };

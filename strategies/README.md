@@ -22,6 +22,14 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
 | `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | paper |
 | `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | paper |
+| `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | paper |
+| `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | paper |
+
+The value area pair reads the prior RTH day's volume profile
+(`prior_poc prior_vah prior_val`, `scripts/lib/trading/volume-profile.js`):
+a bar-based profile any strategy can use, also as a developing session
+profile (`session_*`), a rolling one (`vp_*(n)`), and its high and low volume
+nodes.
 
 The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`)
 and declares `connectors: [order_flow]`, so the runner records real

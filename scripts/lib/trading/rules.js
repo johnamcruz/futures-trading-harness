@@ -34,6 +34,7 @@
  *   keltner_upper keltner_mid keltner_lower
  *   vwap_session vwap_rth or_high or_low swing_high swing_low
  *   prior_high prior_low prior_close   last completed RTH day (9:30-16:00 ET)
+ *   rth_open    today's 09:30 ET open, from that bar until 16:00 ET
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
@@ -56,6 +57,18 @@
  *               before this bar: 1 up, -1 down, 0 range (scripts/lib/trading/mtf.js:
  *               close vs EMA20, EMA20 vs EMA50, swing structure; two of three).
  *               mtf_bias(240) >= 0 keeps a long out of a 4-hour downtrend
+ *   Volume profile (scripts/lib/trading/volume-profile.js; bar-based, each value
+ *   from bars closed by this bar):
+ *   prior_poc prior_vah prior_val   the last complete RTH day's point of control
+ *                                   and value area (fixed for the day)
+ *   session_poc session_vah session_val   the Globex session's (from 18:00 ET), developing
+ *   vp_poc(n) vp_vah(n) vp_val(n)   the last n bars' (a rolling profile)
+ *   prior_hvn_above prior_hvn_below prior_lvn_above prior_lvn_below
+ *   session_hvn_above ... hvn_above(n) hvn_below(n) lvn_above(n) lvn_below(n)
+ *               the nearest high / low volume node above or below the close;
+ *               for targets and distances (they move when price passes a node,
+ *               so don't cross them). Params vpRows, vpRowSize, vpValueArea,
+ *               vpNodePct, vpTroughPct, vpThreshold tune the profile.
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
@@ -69,6 +82,7 @@ const cisd = require('./cisd-ote');
 const crt = require('./crt');
 const mtf = require('./mtf');
 const { zonedParts } = require('./clock');
+const vp = require('./volume-profile');
 
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
@@ -76,13 +90,18 @@ const GLOBEX_OPEN = 18 * 60;
 
 const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
 const HTF = new Set(['htf_open', 'htf_high', 'htf_low', 'htf_close', 'htfc_open', 'htfc_high', 'htfc_low', 'crt_dir', 'crt_risk', 'crt_target', 'mtf_bias']);
-const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF]);
+// Volume profile fields: levels, and the nearest node above/below the close.
+const VP_LEVELS = ['poc', 'vah', 'val'];
+const VP_NODES = ['hvn_above', 'hvn_below', 'lvn_above', 'lvn_below'];
+const VP_FUNCS = [...VP_LEVELS.map(f => `vp_${f}`), ...VP_NODES];
+const VP_NAMES = ['prior', 'session'].flatMap(w => [...VP_LEVELS, ...VP_NODES].map(f => `${w}_${f}`));
+const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', ...HTF, ...VP_FUNCS]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
-  'prior_close', 'overnight_high', 'overnight_low', 'minute_et',
-  'cisd_ote_dir', 'cisd_ote_risk',
+  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'minute_et',
+  'cisd_ote_dir', 'cisd_ote_risk', ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
 
@@ -219,7 +238,7 @@ function causalLevels(bars) {
   const n = bars.length;
   const out = {
     prior_high: new Array(n).fill(NaN), prior_low: new Array(n).fill(NaN), prior_close: new Array(n).fill(NaN),
-    overnight_high: new Array(n).fill(NaN), overnight_low: new Array(n).fill(NaN),
+    overnight_high: new Array(n).fill(NaN), overnight_low: new Array(n).fill(NaN), rth_open: new Array(n).fill(NaN),
   };
   let rthDay = null; // RTH day in progress
   let rth = null;
@@ -240,8 +259,9 @@ function causalLevels(bars) {
     if (onComplete) { out.overnight_high[i] = onHigh; out.overnight_low[i] = onLow; }
     if (minute >= RTH_OPEN && minute < RTH_CLOSE) {
       // Complete only when the bars before it were seen (not cut off mid-session).
-      if (!rth) { rth = { high: b.h, low: b.l, close: b.c, complete: i > 0 }; rthDay = day; }
+      if (!rth) { rth = { open: b.o, high: b.h, low: b.l, close: b.c, complete: i > 0 }; rthDay = day; }
       rth.high = Math.max(rth.high, b.h); rth.low = Math.min(rth.low, b.l); rth.close = b.c;
+      if (rth.complete) out.rth_open[i] = rth.open;
     } else if (!(minute >= RTH_CLOSE && minute < GLOBEX_OPEN)) {
       onHigh = Number.isNaN(onHigh) ? b.h : Math.max(onHigh, b.h);
       onLow = Number.isNaN(onLow) ? b.l : Math.min(onLow, b.l);
@@ -285,6 +305,12 @@ function seriesSource(bars, params, { window = 500 } = {}) {
     }
     return crts.get(m);
   };
+  const profiles = new Map();
+  const profileOf = (kind, length = 0) => {
+    const key = `${kind}:${length}`;
+    if (!profiles.has(key)) profiles.set(key, vp.profileSeries(bars, kind === 'prior' ? 'prior_rth' : kind, { length, options: vp.optionsFromParams(params) }));
+    return profiles.get(key);
+  };
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
     const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
@@ -312,7 +338,9 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'crt_risk': return crtOf(len).risk;
         case 'crt_target': return crtOf(len).target;
         case 'mtf_bias': return mtf.biasSeries(bars, len);
-        default: break;
+        default:
+          if (VP_FUNCS.includes(fn[1])) return profileOf('rolling', len)[fn[1].replace(/^vp_/, '')];
+          break;
       }
     }
     switch (key) {
@@ -333,13 +361,17 @@ function seriesSource(bars, params, { window = 500 } = {}) {
       case 'swing_high': return ind.swings(bars, params.swingK).high;
       case 'swing_low': return ind.swings(bars, params.swingK).low;
       case 'prior_high': case 'prior_low': case 'prior_close':
-      case 'overnight_high': case 'overnight_low': return level(key);
+      case 'overnight_high': case 'overnight_low': case 'rth_open': return level(key);
       case 'cisd_ote_dir': case 'cisd_ote_risk': cisdSeries(); return cache.get(key);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;
       });
-      default: throw new Error(`unknown series "${key}"`);
+      default: {
+        const w = /^(prior|session)_(.+)$/.exec(key);
+        if (w && VP_NAMES.includes(key)) return profileOf(w[1])[w[2]];
+        throw new Error(`unknown series "${key}"`);
+      }
     }
   };
   // The range is known when its last bar closes: give that bar the value too,
@@ -392,7 +424,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   /** True when a level series starts over between bars i-1 and i (a jump, not a price cross). */
   get.resets = (key, i) => {
     if (i < 1) return false;
-    if (key === 'vwap_session') return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
+    if (key === 'vwap_session' || key.startsWith('session_')) return ind.sessionKey(bars[i].t, GLOBEX_OPEN) !== ind.sessionKey(bars[i - 1].t, GLOBEX_OPEN);
     // A higher-timeframe candle level starts over when a new candle opens.
     const h = /^(htfc?_[a-z]+)\((\d+)\)$/.exec(key);
     if (h && HTF.has(h[1]) && !h[1].startsWith('crt_') && h[1] !== 'mtf_bias') { const k = htf(Number(h[2])).key; return k[i] !== k[i - 1]; }
@@ -405,7 +437,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   return get;
 }
 
-const LEVELS = new Set(['prior_high', 'prior_low', 'prior_close', 'or_high', 'or_low']);
+const LEVELS = new Set(['prior_high', 'prior_low', 'prior_close', 'or_high', 'or_low', 'rth_open', 'prior_poc', 'prior_vah', 'prior_val']);
 
 function valueAt(terms, get, i) {
   let total = 0;
