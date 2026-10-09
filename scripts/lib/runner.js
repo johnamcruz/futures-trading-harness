@@ -71,6 +71,8 @@ function createRunner(deps) {
     trackRecord = () => null,
     // The journal's entries, for the open trades' setup and initial stop (trading/open-trades.js).
     journalEntries = () => [],
+    // An open trade against its strategy's recorded excursions (track-record.js excursionNote): (trade) -> text or null.
+    tradeHistory = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
     recordSignals = () => {},
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
@@ -730,12 +732,17 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
+          // The journal, read once for this prompt (open trades, track records).
+          let entries = [];
+          try { entries = journalEntries() || []; } catch (err) { log(`journal unavailable for the prompt (${err.message})`, 'error'); }
           // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
           if (acct && Array.isArray(acct.positions) && acct.positions.length) {
             try {
-              const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => contractRoot(x.contractId) === contractRoot(p.contractId));
-              const trades = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journalEntries(), barsFor: p => (item(p) ? item(p).bars : null) });
-              acct = { ...acct, openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime })) };
+              // MNQ bars manage an NQ trade too (the same family).
+              const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
+              const trades = openTrades({ positions: acct.positions, orders: acct.orders || [], entries, barsFor: p => (item(p) ? item(p).bars : null) });
+              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (_err) { return null; } };
+              acct = { ...acct, openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
             } catch (err) {
               log(`open trades unavailable for the prompt (${err.message})`, 'error');
             }
@@ -744,7 +751,7 @@ function createRunner(deps) {
           const withRecords = x => (Array.isArray(x.scan) ? x.scan.map(r => {
             if (!(r.candidate && r.direction)) return r;
             try {
-              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString() }) };
+              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString(), entries }) };
             } catch (err) {
               log(`${x.symbol}: no track record for ${r.name} (${err.message})`, 'error');
               return r;

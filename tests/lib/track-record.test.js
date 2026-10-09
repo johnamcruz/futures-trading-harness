@@ -71,3 +71,47 @@ test('backtest --record writes each strategy\'s own record (run alone), and only
   assert.notStrictEqual(wf.status, 0);
   assert.match(wf.stderr + wf.stdout, /record: plain runs only/);
 });
+
+test('excursions: how far winners ran, how deep they dipped, how often +1R was given back; the open-trade note', () => {
+  const { excursions, excursionNote, quantile } = require('../../scripts/lib/trading/track-record');
+  assert.strictEqual(quantile([5, 1, 3, 2, 4], 0.5), 3);
+  assert.strictEqual(quantile([5, 1, 3, 2, 4], 0.2), 1);
+  assert.strictEqual(quantile([], 0.5), null);
+  // 10 winners: best +2..+3R, worst -0.1..-1.0R; 10 losers: 4 reached +1R first.
+  const trades = [
+    ...Array.from({ length: 10 }, (_, k) => ({ r: 2, mfeR: 2 + k / 10, maeR: -(k + 1) / 10 })),
+    ...Array.from({ length: 10 }, (_, k) => ({ r: -1, mfeR: k < 4 ? 1.2 : 0.3, maeR: -1 })),
+  ];
+  const x = excursions(trades);
+  assert.deepStrictEqual(x, { winners: 10, losers: 10, winnersMedianMfeR: 2.4, winnersMaeFloorR: -0.9, losersMedianMfeR: 0.3, reached1R: 14, gaveBackAfter1R: 0.29 });
+  const rec = { strategy: 'orb', excursions: x };
+  assert.strictEqual(excursionNote(rec, { maeR: -0.5 }), 'orb winners in its backtest: median best +2.4R, 80% never went below -0.9R');
+  assert.match(excursionNote(rec, { maeR: -0.95 }), /this trade's worst -0\.95R is deeper than 80% of its winners went/);
+  assert.match(excursionNote(rec, { maeR: -0.2, mfeR: 1.3, rNow: 0.1 }), /29% of its trades that reached \+1R ended at or below 0 \(this one: best \+1\.3R, now \+0\.1R\)/);
+  assert.strictEqual(excursionNote({ strategy: 'orb', excursions: { ...x, winners: 3 } }, { maeR: -2 }), null, 'too few winners to say');
+  assert.strictEqual(excursionNote(null, {}), null);
+  // In a report's record.
+  const r = fromReport({ meta: {}, trades: [{ strategy: 'orb', r: 1, net: 1, fees: 0, mfeR: 1.5, maeR: -0.2, entryTime: '2026-10-07T14:03:00.000Z', exitTime: '2026-10-07T14:30:00.000Z' }] }, 'orb');
+  assert.strictEqual(r.excursions.winners, 1);
+});
+
+test('a record from another version of the strategy is flagged stale', () => {
+  const { definitionHash } = require('../../scripts/lib/trading/track-record');
+  const dir = tmpDir();
+  const file = path.join(dir, 'STRATEGY.md');
+  fs.writeFileSync(file, '---\nname: x\n---\nv1');
+  const rec = fromReport({ meta: {}, trades: [] }, 'x', { file });
+  assert.strictEqual(rec.definition, definitionHash(file));
+  assert.doesNotMatch(describeRecord({ backtest: rec, file }), /STALE/);
+  fs.writeFileSync(file, '---\nname: x\n---\nv2');
+  assert.match(describeRecord({ backtest: rec, file }), /^track record: STALE: the STRATEGY\.md changed since this backtest was recorded; re-record it; backtest 0 trades/);
+});
+
+test('--record with min-confluence still records each strategy alone, with its trades', () => {
+  const home = tmpDir();
+  const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--strategy', 'ema_cross', '--min-confluence', '2', '--record', '--out', path.join(home, 'bt')], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home } });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.ok(readRecord(home, 'ema_cross').summary.trades > 0, 'alone, confluence is not required');
+  assert.ok(readRecord(home, 'ema_cross').definition, 'fingerprinted');
+});

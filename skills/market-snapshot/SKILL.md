@@ -66,8 +66,9 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      (open-drive, open-test-drive, open-rejection-reverse, open-auction, from
      the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first
      hour) and how far the day has gone past it (`extUp`, `extDown`), the
-     `dayType` so far (inside the initial balance, normal variation, trend,
-     neutral), and the `range` against the average daily range (`adr`, over
+     `dayType` so far (inside the initial balance; normal variation: one side
+     extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
+     0.35 ADR; neutral: both sides), and the `range` against the average daily range (`adr`, over
      `adrDays`, default 10). `line` is the same as the prompt's "day:" line.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
      0.1 x ATR), and open fair value gaps.

@@ -159,9 +159,11 @@ and the current time.
   the open against the prior day, the opening type, the initial balance
   (IB) and how far the day has extended past it, the day type, and how much
   of the average daily range (ADR) is used. Read it before choosing a setup:
-  an open outside the prior range with an open-drive and one-sided IB
-  extension is a trend day (trade with it; fading needs a reversal setup at a
-  higher-timeframe level); an open inside the prior value area that stays
+  a trend day (one side extended two IBs, or one from a narrow IB), often
+  after an open outside the prior range and an open-drive, is traded with it
+  (fading needs a reversal setup at a higher-timeframe level); a normal
+  variation day (one side extended, less) has made its move and often
+  rotates back; an open inside the prior value area that stays
   inside the IB is balance (fade the edges, small targets, stand aside in
   the middle); a neutral day (both sides extended) is two-sided. With 80% or
   more of the ADR used, the room left for a target is small: say so, and
@@ -172,11 +174,16 @@ and the current time.
   strategy with no recorded edge, a negative slice for this regime or hour,
   or live results well under its backtest is a smaller trade or no trade;
   say which in the plan. Under 30 trades is anecdotal, not evidence. No
-  record ("no backtest recorded") is the weakest case, not a neutral one.
+  record ("no backtest recorded") is the weakest case, not a neutral one, and
+  a STALE record (the strategy changed since) doesn't describe it.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO
-  working stop" is the first thing to fix. Manage it by its strategy's exit
+  working stop" is the first thing to fix. The line compares it with the
+  strategy's backtested winners (how far they ran, how deep 80% of them
+  dipped, how often +1R was given back): a trade already deeper than most
+  winners went, or one that reached +1R in a strategy that often gives it
+  back, is weaker than its R says. Manage it by its strategy's exit
   (`exit` in its STRATEGY.md: trail, target, time stop); never loosen the
   stop. A trade that gave back most of a large best (e.g. best +2R, now
   +0.3R) or is past its time stop is the case to act on; say what you did and

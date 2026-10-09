@@ -25,20 +25,24 @@ test('day types from the initial balance extensions', () => {
   assert.strictEqual(dayType(110, 100, 109, 101), 'inside the initial balance');
   assert.strictEqual(dayType(110, 100, 114, 100), 'normal variation up');
   assert.strictEqual(dayType(110, 100, 110, 97), 'normal variation down');
-  assert.strictEqual(dayType(110, 100, 121, 100), 'trend up', 'extended a whole IB');
+  assert.strictEqual(dayType(110, 100, 121, 100), 'normal variation up', 'one IB of extension is still normal variation (Dalton)');
+  assert.strictEqual(dayType(110, 100, 130, 100), 'trend up', 'two IBs');
+  assert.strictEqual(dayType(110, 100, 100, 79), 'trend down');
+  assert.strictEqual(dayType(110, 100, 121, 100, 40), 'trend up', 'one IB from a narrow IB (under 0.35 ADR)');
+  assert.strictEqual(dayType(110, 100, 121, 100, 20), 'normal variation up', 'an IB half the ADR is not narrow');
   assert.strictEqual(dayType(110, 100, 112, 98), 'neutral');
 });
 
 test('on real NQ bars: the open against the prior day, the initial balance, the day type, the ADR', () => {
   const s = dayContextSeries(NQ, { adrDays: 2 });
-  // 2026-04-24: opened 27210.00, above the prior RTH day's range, +283.75 from its close; a trend day up.
+  // 2026-04-24: opened 27210.00, above the prior RTH day's range, +283.75 from its close; extended 1.4 IBs up.
   const close = s.day[at('2026-04-24T19:57:00.000Z')];
   assert.strictEqual(close.open, 27210);
   assert.strictEqual(close.openVs, 'above the prior range');
   assert.strictEqual(close.gap, 283.75);
   assert.strictEqual(close.ibHigh, 27267.25);
   assert.strictEqual(close.ibLow, 27130.25);
-  assert.strictEqual(close.dayType, 'trend up');
+  assert.strictEqual(close.dayType, 'normal variation up', '195.25 above a 137-point IB: under 2 IBs');
   assert.strictEqual(close.adr, null, 'one complete day before it: no 2-day average');
   // The IB is known from the 10:27 ET bar (it closes at 10:30), not before.
   const ib = at('2026-04-24T14:27:00.000Z');
@@ -56,6 +60,22 @@ test('on real NQ bars: the open against the prior day, the initial balance, the 
   assert.ok(Math.abs(s.adr[at('2026-04-27T17:15:00.000Z')] - 403.125) < 1e-9);
   // Outside RTH there is no day context.
   assert.strictEqual(s.day[NQ.length - 1], null);
+});
+
+test('a missing last bar of the opening window or the first hour still completes them, from their own bars', () => {
+  // 2026-04-24 without its 09:57 and 10:27 ET bars: the opening type and the IB come on the next bar.
+  const drop = new Set(['2026-04-24T13:57:00.000Z', '2026-04-24T14:27:00.000Z']);
+  const bars = NQ.filter(b => !drop.has(b.t));
+  const full = dayContextSeries(NQ, { adrDays: 2 });
+  const gap = dayContextSeries(bars, { adrDays: 2 });
+  const after = t => bars.findIndex(b => b.t === t);
+  assert.ok(typeof gap.day[after('2026-04-24T14:00:00.000Z')].openType === 'string');
+  // The IB from the first hour's bars only: the 10:30 bar's range is not in it.
+  const ib = gap.day[after('2026-04-24T14:30:00.000Z')];
+  const want = NQ.filter(b => b.t >= '2026-04-24T13:30:00.000Z' && b.t < '2026-04-24T14:30:00.000Z' && !drop.has(b.t));
+  assert.strictEqual(ib.ibHigh, Math.max(...want.map(b => b.h)));
+  assert.strictEqual(ib.ibLow, Math.min(...want.map(b => b.l)));
+  assert.ok(ib.ibHigh <= full.day[at('2026-04-24T14:30:00.000Z')].ibHigh);
 });
 
 test('no look-ahead: bar i gets the same context from bars 0..i as from the whole series', () => {
@@ -85,4 +105,14 @@ test('the prompt line, and the series in the rules language', () => {
   assert.ok(Number.isNaN(get('ib_high')[done - 1]) && Number.isFinite(get('ib_high')[done]));
   const r = evaluateRules(compileRules({ long: ['close crosses_above ib_high'] }).compiled, NQ, { ...PARAMS }, { index: done, get });
   assert.strictEqual(r.long[0].ok, false);
+});
+
+test('a strategy can use ib_high, ib_low, adr(n) only on a timeframe with a bar at 09:30 ET', () => {
+  const { validateStrategy } = require('../../scripts/lib/trading/strategies');
+  const body = '## When to Use\n## How It Works\n## Examples';
+  const base = { name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], signal: 'rules', rules: { long: ['close crosses_above ib_high'] }, risk: { stop: 'atr:1', min_rr: 2 } };
+  assert.deepStrictEqual(validateStrategy({ ...base, timeframe: '3m' }, body, 'x'), []);
+  assert.deepStrictEqual(validateStrategy({ ...base, timeframe: '15m' }, body, 'x'), []);
+  assert.ok(validateStrategy({ ...base, timeframe: '1h' }, body, 'x').some(e => /divides 30 minutes/.test(e)));
+  assert.ok(validateStrategy({ ...base, timeframe: '20m', rules: { long: ['rth_high - rth_low < adr(10)'] } }, body, 'x').some(e => /divides 30 minutes/.test(e)));
 });

@@ -14,9 +14,10 @@
  *   IB         the initial balance: the first hour's high and low (09:30-10:30
  *              ET), its size against the average daily range, and how far the
  *              day has extended beyond it
- *   day type   so far, from the IB extensions: inside the IB (balance so far),
- *              normal variation (one side extended), trend (one side extended
- *              by a whole IB or more), or neutral (both sides extended)
+ *   day type   so far, from the IB extensions (Dalton): inside the IB (balance
+ *              so far), normal variation (one side extended, under 2 IBs),
+ *              trend (one side extended 2 IBs or more, or 1 IB or more from a
+ *              narrow IB, under 0.35 of the ADR), or neutral (both sides)
  *   ADR        the average RTH range of the last `adrDays` complete days, and
  *              how much of it today has used
  *
@@ -63,13 +64,15 @@ function openingType({ o, h, l, c, th, tl }) {
   return 'open-auction';
 }
 
-/** The day type so far from the initial balance and the day's extremes. */
-function dayType(ibHigh, ibLow, high, low) {
+/** The day type so far from the initial balance, the day's extremes, and the ADR (optional). */
+function dayType(ibHigh, ibLow, high, low, adr = null) {
   const ib = ibHigh - ibLow;
   const up = Math.max(0, high - ibHigh);
   const dn = Math.max(0, ibLow - low);
   if (up > 0 && dn > 0) return 'neutral';
-  if (ib > 0 && (up >= ib || dn >= ib)) return `trend ${up > 0 ? 'up' : 'down'}`;
+  const ext = Math.max(up, dn);
+  const narrow = adr > 0 && ib < 0.35 * adr;
+  if (ib > 0 && (ext >= 2 * ib || (narrow && ext >= ib))) return `trend ${up > 0 ? 'up' : 'down'}`;
   if (up > 0) return 'normal variation up';
   if (dn > 0) return 'normal variation down';
   return 'inside the initial balance';
@@ -102,7 +105,7 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
     if (!inRth) continue;
     if (!cur) {
       // Whole only when its 09:30 bar is here with bars before it.
-      cur = { date: day, whole: i > 0 && minute === RTH_OPEN, open: b.o, high: b.h, low: b.l, close: b.c, oh: b.h, ol: b.l, oth: i, otl: i, ib: null, openType: null, prior: last };
+      cur = { date: day, whole: i > 0 && minute === RTH_OPEN, open: b.o, high: b.h, low: b.l, close: b.c, oh: b.h, ol: b.l, oc: b.c, oth: i, otl: i, ibh: b.h, ibl: b.l, ib: null, openType: null, prior: last };
       const p = prior.profile[i];
       cur.openVs = !last ? null
         : p && b.o >= p.val && b.o <= p.vah ? 'inside the prior value area'
@@ -113,13 +116,17 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
     cur.high = Math.max(cur.high, b.h); cur.low = Math.min(cur.low, b.l); cur.close = b.c;
     if (!cur.whole) continue;
     const end = minute + step;
-    // The opening window: its extremes and when they came.
+    // The opening window: its extremes and when they came. It completes on the bar that ends it,
+    // or (a missing bar) on the first bar after it, from the window's own bars.
     if (minute < RTH_OPEN + openMinutes) {
       if (b.h > cur.oh) { cur.oh = b.h; cur.oth = i; }
       if (b.l < cur.ol) { cur.ol = b.l; cur.otl = i; }
-      if (end >= RTH_OPEN + openMinutes) cur.openType = openingType({ o: cur.open, h: cur.oh, l: cur.ol, c: b.c, th: cur.oth, tl: cur.otl });
+      cur.oc = b.c;
     }
-    if (!cur.ib && end >= RTH_OPEN + ibMinutes) cur.ib = { high: cur.high, low: cur.low };
+    if (cur.openType === null && end >= RTH_OPEN + openMinutes) cur.openType = openingType({ o: cur.open, h: cur.oh, l: cur.ol, c: cur.oc, th: cur.oth, tl: cur.otl });
+    // The initial balance, likewise, from the first hour's bars only.
+    if (minute < RTH_OPEN + ibMinutes) { cur.ibh = Math.max(cur.ibh, b.h); cur.ibl = Math.min(cur.ibl, b.l); }
+    if (!cur.ib && end >= RTH_OPEN + ibMinutes) cur.ib = { high: cur.ibh, low: cur.ibl };
     const ib = cur.ib;
     if (ib) { out.ib_high[i] = ib.high; out.ib_low[i] = ib.low; }
     out.adr[i] = adr;
@@ -127,7 +134,7 @@ function dayContextSeries(bars, { ibMinutes = DEFAULTS.ibMinutes, openMinutes = 
       date: cur.date, open: cur.open, gap: cur.prior ? cur.open - cur.prior.close : null, openVs: cur.openVs, openType: cur.openType,
       ibHigh: ib ? ib.high : null, ibLow: ib ? ib.low : null, ibRange: ib ? ib.high - ib.low : null,
       extUp: ib ? Math.max(0, cur.high - ib.high) : null, extDown: ib ? Math.max(0, ib.low - cur.low) : null,
-      dayType: ib ? dayType(ib.high, ib.low, cur.high, cur.low) : null,
+      dayType: ib ? dayType(ib.high, ib.low, cur.high, cur.low, Number.isFinite(adr) ? adr : null) : null,
       high: cur.high, low: cur.low, range: cur.high - cur.low, adr: Number.isFinite(adr) ? adr : null, adrDays,
     };
   }

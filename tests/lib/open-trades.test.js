@@ -75,6 +75,17 @@ test('the initial stop falls back to the working stop; a stop on the wrong side 
   assert.deepStrictEqual(openTrades({ positions: [{ contractId: C, type: 1, size: 0, averagePrice: 1 }] }), []);
 });
 
+test('a stop written in ticks is not a price; a thousands separator is read', () => {
+  const pos = { contractId: C, type: 1, size: 1, averagePrice: 21500.25, creationTimestamp: '2026-10-08T14:41:10Z' };
+  const orders = [{ contractId: C, type: 4, side: 1, stopPrice: 21490.25 }];
+  const [ticks] = openTrades({ positions: [pos], orders, entries: [placed('2026-10-08T14:41:00Z', 'setup:orb long break, stop 40 ticks')], barsFor: () => null });
+  assert.strictEqual(ticks.initialStop, 21490.25, 'from the working stop, not 40');
+  assert.deepStrictEqual(ticks.notes, ['initial stop unknown: risk from the working stop']);
+  const [comma] = openTrades({ positions: [pos], orders, entries: [placed('2026-10-08T14:41:00Z', 'setup:orb long, stop 21,489.00')], barsFor: () => null });
+  assert.strictEqual(comma.initialStop, 21489);
+  assert.strictEqual(comma.risk, 11.25);
+});
+
 test('the entry order: the last successful order with a setup, on the contract (or its root), before the fill', () => {
   const pos = { contractId: C, creationTimestamp: '2026-10-08T14:41:10Z' };
   assert.strictEqual(entryOrder([placed('2026-10-08T14:42:30Z', 'setup:orb long')], pos), null, 'after the fill');

@@ -39,7 +39,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { dayContextSeries, describeDay } = require('./lib/trading/day-context');
-const { readRecord, liveRecord, describeRecord } = require('./lib/trading/track-record');
+const { readRecord, liveRecord, describeRecord, excursionNote } = require('./lib/trading/track-record');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, usesOrderFlow } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
 const { createClient } = require('./lib/projectx-rest');
@@ -328,8 +328,9 @@ async function main(argv) {
     },
     recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
     // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
-    trackRecord: (name, { regime, at }) => describeRecord({
-      backtest: readRecord(HOME_DIR, name), live: liveRecord(readJournal(resolveJournalPath(process.env)), name, regime), regime, at,
+    trackRecord: (name, { regime, at, entries }) => describeRecord({
+      backtest: readRecord(HOME_DIR, name), live: liveRecord(entries || readJournal(resolveJournalPath(process.env)), name, regime), regime, at,
+      file: (loadStrategies(ROOT, process.env).strategies.find(s => s.name === name) || {}).file || null,
     }),
     // The day so far (trading/day-context.js), one line for the prompt; levels on the contract's tick.
     dayContext: (sym, bars) => {
@@ -339,6 +340,7 @@ async function main(argv) {
     lessons: () => digest(readJournal(resolveJournalPath(process.env)), 5),
     recentTrades: () => recentTrades(readJournal(resolveJournalPath(process.env)), 10),
     journalEntries: () => readJournal(resolveJournalPath(process.env)),
+    tradeHistory: t => excursionNote(readRecord(HOME_DIR, t.setup), t),
     recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.

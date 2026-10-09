@@ -312,9 +312,10 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     const home = harnessHome(env);
     for (const s of strategies) {
       // Its own record: the strategy alone (in a joint run strategies compete for one position).
-      const alone = strategies.length === 1 ? report
-        : buildReport(runEngine(markets, [s], { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) }).trades, report.meta);
-      const rec = trackRecord.fromReport(alone, s.name);
+      // Alone, confluence can't be required (one strategy never agrees with another).
+      const alone = strategies.length === 1 && !(cfg.minConfluence > 1) ? report
+        : buildReport(runEngine(markets, [s], { ...cfg, minConfluence: 1, account: null, policy: null, gateConfig: loadConfig(env) }).trades, report.meta);
+      const rec = trackRecord.fromReport(alone, s.name, { file: s.file });
       const file = trackRecord.writeRecord(home, rec);
       log(`track record: ${s.name} ${rec.summary.trades} trades, E ${rec.summary.meanR === null ? '?' : rec.summary.meanR}R (${rec.summary.edge}) -> ${file}`);
     }

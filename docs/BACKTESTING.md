@@ -183,7 +183,10 @@ Each run writes these files to the run directory:
 
 `--record` writes each strategy's track record to
 `<FTH_HOME>/track-record/<strategy>.json`: its trades, win rate, mean R with
-its 95% interval, the edge verdict, and the same by regime and by hour. Each
+its 95% interval, the edge verdict, the same by regime and by hour, and its
+excursions (how far winners ran, how deep 80% of them dipped, how often +1R
+was given back; the prompt's open-trade line compares a live trade with
+them). A record from an edited STRATEGY.md is flagged stale. Each
 strategy is backtested on its own for it (in a joint run they compete for one
 position). The autonomous runner shows the record, with the journal's
 reviewed live trades, next to every strategy that fires, so the model weighs

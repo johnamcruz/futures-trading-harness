@@ -15,6 +15,8 @@
  */
 
 const { contractRoot, entryTime } = require('./journal');
+// The gate's reading of "stop <price>": a unit (40 ticks, 2R) is not a price; thousands separators are.
+const { STOP_PRICE } = require('./order-gate');
 
 const STOP_TYPES = new Set([3, 4, 5]);
 const LIMIT_TYPE = 1;
@@ -48,7 +50,8 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
     const placed = entryOrder(entries, p);
     const text = placed ? String(placed.text || '') : '';
     const setup = (/\bsetup:([a-z0-9_-]+)/i.exec(text) || [])[1] || null;
-    const planned = Number((/\bstop\s+(\d+(?:\.\d+)?)/i.exec(text) || [])[1]);
+    const m = STOP_PRICE.exec(text);
+    const planned = m ? Number(m[1].replace(/,/g, '')) : NaN;
     const notes = [];
     // The initial stop: the one the entry was planned with (on the right side of the entry), else the working stop.
     let initialStop = Number.isFinite(planned) && sign * (entry - planned) > 0 ? planned : null;
@@ -73,7 +76,7 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
 }
 
 /** One sentence per open trade, for the prompt. */
-function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize = null, et = null } = {}) {
+function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize = null, et = null, history = null } = {}) {
   const r = x => (x === null || x === undefined ? '?' : round(x));
   const sR = x => (x === null || x === undefined ? '?' : `${x >= 0 ? '+' : ''}${x}R`);
   const R = x => (t.risk > 0 && x !== null ? Math.round(((t.sign * (x - t.entry)) / t.risk) * 100) / 100 : null);
@@ -86,7 +89,8 @@ function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize
     : t.rNow === null ? `; last close ${r(t.last)} (no R without an initial risk)`
       : `; now ${sR(t.rNow)} at ${r(t.last)}, best ${sR(t.mfeR)}, worst ${sR(t.maeR)}`;
   const notes = t.notes.filter(n => n !== 'NO working stop');
-  return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.`;
+  // `history`: how the strategy's past trades moved (track-record.js excursionNote), to judge this one by.
+  return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.${history ? ` ${history}.` : ''}`;
 }
 
 module.exports = { STOP_TYPES, entryOrder, openTrades, describeOpenTrade };
