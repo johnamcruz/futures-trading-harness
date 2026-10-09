@@ -5,12 +5,13 @@
  * The runner never trades itself: on every closed bar of the configured
  * timeframe (see bar-clock.js) it starts one headless harness run (Claude
  * Code, Codex, Qwen Code, or any CLI agent), and every order still passes the
- * order gate and the projectx-mcp guardrails.
+ * order gate and the broker MCP server's guardrails.
  */
 
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { SERVER_NAME, activeBroker } = require('./broker/config');
 const { contractRoot } = require('./trading/journal');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
@@ -46,7 +47,6 @@ const DEFAULTS = {
   maxConsecutiveErrors: 3,
   alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
   alertCommand: null, // or an argv array run with the message in FTH_ALERT, e.g. ["osascript", "-e", "display notification (system attribute \"FTH_ALERT\")"]
-  orderFlow: 'auto', // record real order flow from the TopstepX market hub: true, false, or 'auto' (when a strategy on this timeframe declares connectors: [order_flow])
   paper: false,
   model: '',
   extraArgs: [],
@@ -66,7 +66,7 @@ function resolveDataDir(cfg, home = os.homedir(), env = process.env) {
 const abs = p => `/${p}`;
 
 /**
- * Claude Code permissions for an autonomous run. Allowed: the projectx MCP
+ * Claude Code permissions for an autonomous run. Allowed: the broker MCP
  * server, reading the harness, the bar data, and /tmp/fth, writing /tmp/fth,
  * the harness's own read/append scripts by absolute path, skills, subagents,
  * web search, and fetching calendar sites. Denied explicitly (deny beats any
@@ -75,7 +75,7 @@ const abs = p => `/${p}`;
  */
 function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   return [
-    'mcp__projectx', 'Skill', 'Agent', 'WebSearch',
+    `mcp__${SERVER_NAME}`, 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
@@ -86,7 +86,7 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
-function claudeDenied(root, { home = os.homedir(), stateDir = null } = {}) {
+function claudeDenied(root, { home = os.homedir(), stateDir = null, journalDir = null } = {}) {
   const h = p => abs(path.join(home, p));
   const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
@@ -97,7 +97,8 @@ function claudeDenied(root, { home = os.homedir(), stateDir = null } = {}) {
     `Read(${h('.futures-trading-harness')}/.env)`, ...(stateDir ? [`Read(${abs(stateDir)}/.env)`] : []),
     `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
     `Edit(${h('.futures-trading-harness')}/**)`, `Write(${h('.futures-trading-harness')}/**)`,
-    `Edit(${h('.projectx-mcp')}/**)`, `Write(${h('.projectx-mcp')}/**)`,
+    // The broker server's journal (the order gate reads it).
+    ...(journalDir ? [`Edit(${abs(journalDir)}/**)`, `Write(${abs(journalDir)}/**)`] : []),
     `Edit(${h('.claude')}/**)`, `Write(${h('.claude')}/**)`,
   ];
 }
@@ -116,7 +117,7 @@ function claudeOrderToolConflicts(settingsList) {
     for (const kind of ['ask', 'deny']) {
       for (const rule of perms[kind] || []) {
         const r = String(rule);
-        if (r === 'mcp__projectx' || ORDER_TOOL_NAMES.some(t => r === `mcp__projectx__${t}`)) hits.push(`${kind}: ${r}`);
+        if (r === 'mcp__broker' || ORDER_TOOL_NAMES.some(t => r === `mcp__broker__${t}`)) hits.push(`${kind}: ${r}`);
       }
     }
   }
@@ -180,16 +181,10 @@ function sessionPastEod(cfg) {
   return false;
 }
 
-/** Does a strategy the runner trades on this timeframe declare the order_flow connector? */
-function usesOrderFlow(strategies, timeframe) {
-  return strategies.some(s => s.valid && s.status !== 'disabled' && s.timeframe === `${timeframe}m`
-    && Array.isArray(s.connectors) && s.connectors.includes('order_flow'));
-}
-
 /** Closed bars the runner keeps per symbol: three trading days (23 h each), at least 2000. */
 function historyBars(timeframe) {
   // At least 2000 bars and three trading days, and the multi-timeframe read's whole window
-  // (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. ProjectX caps a request at 20000.
+  // (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. get_bars caps a request at 20000.
   const { HISTORY_HOURS } = require('./trading/mtf');
   return Math.min(20000, Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
@@ -234,7 +229,6 @@ function validateConfig(raw) {
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
-  if (![true, false, 'auto'].includes(cfg.orderFlow)) errors.push('orderFlow: true, false, or "auto"');
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
   if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
@@ -350,7 +344,7 @@ function prompts(cfg, now, root = '') {
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
-        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (opened ${etTime(bar.t)}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
+        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (opened ${etTime(bar.t)}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
         + (bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan ? ` ${sentence(bar.plan)}` : '')
         + (bar.day ? ` ${sentence(bar.day)}` : '')
@@ -401,7 +395,8 @@ function childEnv(cfg, root, base = process.env) {
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
   if (cfg.paper) {
     env.FTH_PAPER = '1';
-    env.PROJECTX_TRADING_ENABLED = 'false';
+    // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
+    Object.assign(env, activeBroker(env).paperEnv);
   }
   return env;
 }
@@ -415,7 +410,7 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
         '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
-        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env) }).join(','),
+        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journalDir: path.dirname(activeBroker(env).journalPath) }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
@@ -529,7 +524,6 @@ module.exports = {
   endOfDayAt,
   marketHoursErrors,
   historyBars,
-  usesOrderFlow,
   DEFAULTS,
   HARNESSES,
   claudeTools,

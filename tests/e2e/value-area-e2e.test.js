@@ -85,7 +85,7 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
     stopLossBracket: { ticks, type: 'stop' }, rationale: `setup:value_area_live short, POC rejection on the 13:15 ET bar, stop ${stop}`,
   };
   const gate = o => node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'],
-    env, JSON.stringify({ tool_name: 'mcp__projectx__place_order', tool_input: o }));
+    env, JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: o }));
   // No other strategy fired the other way, and five days of bars give no 4h trend read yet: allowed.
   assert.deepStrictEqual(r.confluence.against, []);
   const res = gate(order);

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * MCP order gateway: run projectx-mcp behind the harness order gate so every
+ * MCP order gateway: run the broker MCP server behind the harness order gate so every
  * MCP client gets the same enforcement, with or without hook support. This
  * is the authoritative gate: besides the journal and strategy checks, it asks
  * the server for live positions, working orders, and today's fills, so
  * [exit]/[protect] labels and loss counts can't be faked.
  *
- *   node scripts/mcp-gateway.js -- node /abs/path/projectx-mcp/dist/index.js
- *   PROJECTX_MCP_ENTRY=/abs/path/projectx-mcp/dist/index.js node scripts/mcp-gateway.js
+ *   node scripts/mcp-gateway.js                  the broker in the broker config
+ *   node scripts/mcp-gateway.js -- <server command> [args...]
  *
- * Register THIS command as the MCP server named "projectx" in your harness.
+ * Register THIS command as the MCP server named "broker" in your harness.
  * Credentials stay in the environment; the gateway passes it to the child
  * unchanged and never reads or logs them. Decisions are appended to
  * ~/.futures-trading-harness/logs/gate-log.jsonl (FTH_GATE_LOG). stdout carries only
@@ -36,6 +36,7 @@ const { loadConfig, gateNow } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 const { harnessHome } = require('./lib/paths');
 const { runningAttempts } = require('./lib/trading/prop-state');
+const { activeBroker, serverCommand } = require('./lib/broker/config');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
@@ -116,13 +117,14 @@ async function accountViolations(args, caller, now, ledger) {
 function main(argv) {
   const sep = argv.indexOf('--');
   let command = sep === -1 ? argv : argv.slice(sep + 1);
-  // Manifests that can't embed a local path (Qwen extension, Codex plugin) set
-  // PROJECTX_MCP_ENTRY to projectx-mcp's dist/index.js instead.
-  const entry = String(process.env.PROJECTX_MCP_ENTRY || '').trim();
-  if (command.length === 0 && entry) command = [process.execPath, entry];
+  // No command: the broker MCP server named in the broker config (broker/config.js).
   if (command.length === 0) {
-    process.stderr.write('[mcp-gateway] usage: mcp-gateway.js -- <projectx-mcp command> [args...] (or set PROJECTX_MCP_ENTRY)\n');
-    process.exit(2);
+    try {
+      command = serverCommand(activeBroker(process.env));
+    } catch (err) {
+      process.stderr.write(`[mcp-gateway] ${err.message}\n`);
+      process.exit(2);
+    }
   }
 
   const child = spawn(command[0], command.slice(1), { stdio: ['pipe', 'pipe', 'inherit'], env: process.env });

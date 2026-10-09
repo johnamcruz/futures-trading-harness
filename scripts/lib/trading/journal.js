@@ -1,27 +1,18 @@
 'use strict';
 
 /**
- * Read-only access to the projectx-mcp trading journal (JSONL).
- * The MCP server is the only writer; hooks only read it.
+ * Read-only access to the broker MCP server's trading journal (JSONL), at the
+ * path in the broker config (broker/config.js). The server is the only
+ * writer; hooks only read it.
  */
 
 const { rootOfIdSymbol } = require('./contracts');
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
-const DEFAULT_JOURNAL_PATH = path.join(os.homedir(), '.projectx-mcp', 'journal.jsonl');
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
 
-function expandHome(p) {
-  if (p === '~') return os.homedir();
-  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
-  return p;
-}
-
 function resolveJournalPath(env = process.env) {
-  const configured = String(env.PROJECTX_JOURNAL_PATH || '').trim();
-  return configured ? expandHome(configured) : DEFAULT_JOURNAL_PATH;
+  return require('../broker/config').activeBroker(env).journalPath;
 }
 
 /**
@@ -87,17 +78,16 @@ function reviewResult(entry) {
 }
 
 /**
- * Root symbol from a ProjectX contract id: CON.F.US.MNQ.Z25 -> MNQ.
+ * Root symbol from a contract id: CON.F.US.MNQ.Z25 -> MNQ.
  * Returns the input upper-cased when it doesn't look like a contract id.
  */
-/** The contract root of a ProjectX contract id: CON.F.US.MNQ.Z26 -> MNQ, CON.F.US.ENQ.Z26 -> NQ. */
+/** The contract root of a contract id: CON.F.US.MNQ.Z26 -> MNQ, CON.F.US.ENQ.Z26 -> NQ. */
 function contractRoot(contractId) {
   const parts = String(contractId || '').split('.');
   return parts.length >= 5 ? rootOfIdSymbol(parts[parts.length - 2]) : String(contractId || '').toUpperCase();
 }
 
 module.exports = {
-  DEFAULT_JOURNAL_PATH,
   resolveJournalPath,
   readJournal,
   readJournalWindow,

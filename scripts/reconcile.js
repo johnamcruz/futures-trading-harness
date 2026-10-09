@@ -6,7 +6,7 @@
  *
  *   node scripts/reconcile.js --day 2026-10-07 [--timeframe 3] [--json]
  *
- * Reads <FTH_HOME>/logs/scans-<day>.jsonl and the journal (PROJECTX_JOURNAL_PATH).
+ * Reads <FTH_HOME>/logs/scans-<day>.jsonl and the broker's journal (broker config).
  */
 
 'use strict';

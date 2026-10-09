@@ -1,7 +1,5 @@
 # Broker MCP Interface
 
-Status: design, for review before any code.
-
 One MCP interface that every prop firm and broker follows. It is extracted
 from the TopstepX server, [projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
 (v0.1.0, `src/server.ts`), as it works today: the same tools, inputs, results,
@@ -15,33 +13,51 @@ and gateway call these tools, whoever is behind them.
 ## Architecture
 
 ```text
-harness (agents, skills, order gate, runner)
-        |  interface tools only
-   broker adapter  (scripts/lib/broker-adapter.js + the gateway)
-        |  MCP stdio, the server named in config
-   <broker>-mcp    (its own GitHub repo: projectx-mcp, tradovate-mcp, ...)
+harness (agents, skills, order gate, runner, CLIs)
+        |  interface tools only (mcp__broker__<tool>)
+   gateway + broker adapter   (scripts/mcp-gateway.js, scripts/lib/broker/)
+        |  MCP stdio, the server named in the broker config
+   <broker>-mcp               (its own GitHub repo: projectx-mcp, tradovate-mcp, ...)
 ```
 
 - **One repo per broker.** Each MCP server lives in its own GitHub repo and
   implements this interface. The harness holds no broker code.
-- **Chosen in config.** The harness config names the servers and picks one;
-  TopstepX is the default:
+- **Chosen in config.** `mcp-configs/brokers.json` holds the defaults (TopstepX);
+  `~/.futures-trading-harness/brokers.json` adds brokers or overrides fields
+  (`FTH_BROKERS_FILE` names another file); `FTH_BROKER` picks one:
 
   ```json
   {
     "broker": "topstepx",
     "brokers": {
-      "topstepx": { "repo": "https://github.com/johnamcruz/projectx-mcp", "entry": "/abs/projectx-mcp/dist/index.js", "envFile": "~/.projectx-mcp/.env" }
+      "topstepx": {
+        "repo": "https://github.com/johnamcruz/projectx-mcp",
+        "entryEnv": "PROJECTX_MCP_ENTRY",
+        "journal": "~/.projectx-mcp/journal.jsonl", "journalEnv": "PROJECTX_JOURNAL_PATH",
+        "env": ["PROJECTX_USERNAME", "PROJECTX_API_KEY", "..."],
+        "paperEnv": { "PROJECTX_TRADING_ENABLED": "false" }
+      }
     }
   }
   ```
 
-  Switching brokers is a config change.
-- **One adapter.** The harness reaches the chosen server only through the
-  broker adapter, which complies with this design: it starts the configured
-  server behind the gateway (every order call is checked), confirms at startup
-  that the server lists every interface tool, and returns results in the shapes
-  below. Nothing outside the adapter knows which broker is behind it.
+  | Field | Meaning |
+  |---|---|
+  | `repo` | Where the server lives |
+  | `command` / `entry` / `entryEnv` | How to start it: an argv, a `.js` entry run with node, or the variable holding that entry |
+  | `journal` / `journalEnv` | The journal file it writes (the variable wins) |
+  | `env` | The variables it reads (credentials, guardrails), forwarded by harnesses |
+  | `paperEnv` | What a paper run sets so the server refuses every order |
+
+  Switching brokers is a config change. Its settings go in
+  `~/.futures-trading-harness/.env`, which the gateway loads.
+- **Registered as `broker`.** Every harness registers the gateway
+  (`node scripts/mcp-gateway.js`) as the MCP server named `broker`; the gateway
+  starts the configured server and checks every order call.
+- **One adapter.** Harness code reaches the broker only through
+  `scripts/lib/broker/adapter.js`: reads straight to the server, order calls
+  through the gateway. A live runner checks at startup that the server lists
+  every interface tool, has trading enabled, and allows its account.
 
 ## Transport
 
@@ -294,19 +310,26 @@ Each server has its own credentials and settings. projectx-mcp reads
 `PROJECTX_MAX_DAILY_LOSS`, and `PROJECTX_JOURNAL_PATH`
 (default `~/.projectx-mcp/journal.jsonl`).
 
-## What the implementation adds
+## Checking a server
 
-1. `scripts/lib/broker-interface.js`: this document as data.
-2. Config: the `broker` and `brokers` settings (default `topstepx`), read by
-   the installer and the gateway to start the chosen server.
-3. `scripts/lib/broker-adapter.js`: the adapter. It opens the configured server
-   through the gateway, checks its tool list against the interface, and exposes
-   the interface tools to harness code.
-4. `scripts/check-broker-mcp.js`: checks a server before it is configured:
-   lists its tools, makes read-only calls, reports what doesn't match. It never
-   places an order.
-5. Tests: a fake server built from the interface passes; one missing a tool or
-   field fails; switching `broker` in config starts the other server; this
-   document names every tool and field in the data.
+```bash
+node scripts/check-broker-mcp.js [--account <id>] [--symbol MNQ] -- <server command> [args...]
+```
 
-Behaviour on TopstepX stays as it is today.
+Lists the tools and makes read-only calls, checking each result against the
+interface. It never places, changes, or cancels an order, or writes the journal.
+
+## Not in the interface
+
+- Live order flow (trade prints). Order-flow strategies use recorded flow files
+  (`<FTH_HOME>/flow/`), else a bar-shape estimate. An optional tool could add it.
+
+## In the harness
+
+| File | Role |
+|---|---|
+| `scripts/lib/broker/interface.js` | This document as data |
+| `scripts/lib/broker/config.js` | The broker config: which server, its journal and variables |
+| `scripts/lib/broker/mcp-client.js` | A minimal MCP stdio client |
+| `scripts/lib/broker/adapter.js` | The adapter the runner and CLIs use |
+| `scripts/lib/broker/conformance.js`, `scripts/check-broker-mcp.js` | The conformance checker |

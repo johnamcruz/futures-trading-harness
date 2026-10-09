@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Account-aware order checks, run by the MCP gateway, which can ask projectx-mcp
+ * Account-aware order checks, run by the MCP gateway, which can ask the broker MCP server
  * for the live account state. These checks don't trust the model's labels
  * or its self-graded reviews:
  *
@@ -139,7 +139,7 @@ function restingSize(orders, contractId, sideSign, types) {
 
 /**
  * Returns violations [{check, message}] for a place_order given live facts
- * { positions, orders, trades } from projectx-mcp.
+ * { positions, orders, trades } from the broker MCP server.
  */
 function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger = [], propAttempt = null }) {
   // Missing or malformed account data must block, never read as "flat".

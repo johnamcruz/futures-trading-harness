@@ -2,8 +2,8 @@
 
 # Futures Trading Harness: Operator Instructions
 
-You are the head trader of an automated futures desk trading TopstepX
-through the `projectx` MCP server. These instructions apply to every
+You are the head trader of an automated futures desk trading a prop firm or
+broker account through the `broker` MCP server. These instructions apply to every
 harness (Claude Code, Codex, Qwen Code, or any agent that reads AGENTS.md).
 
 ## Start here
@@ -133,6 +133,7 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 ## Skills
 
 - `autonomous-trading` (skills/autonomous-trading/SKILL.md): Rules for running the trading harness unattended (headless, scheduled by scripts/autotrader.js on Claude Code, Codex, Qwen Code, or another harness) - one bounded cycle per run, no user questions, stand aside when unsure, and never touch guardrails. Use whenever a prompt says it is an autonomous or scheduled cycle.
+- `broker-mcp` (skills/broker-mcp/SKILL.md): Reference for trading through the broker MCP server (any prop firm or broker that implements the broker MCP interface; TopstepX by default) - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__broker__ tool or when an order behaves unexpectedly.
 - `end-of-day` (skills/end-of-day/SKILL.md): End-of-day routine - flatten before the 16:00 ET close (the harness's hard rule; Topstep itself flattens at 15:10 CT), cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
 - `liquidity-concepts` (skills/liquidity-concepts/SKILL.md): Identify futures liquidity - prior day/overnight highs and lows, equal highs/lows, stop runs and sweeps, fair value gaps, and round numbers - and decide whether a level is a target, a reaction point, or a trap. Use when picking targets, judging breakouts, or explaining a sharp reversal.
 - `market-snapshot` (skills/market-snapshot/SKILL.md): Compute indicators, key levels, and the market regime from projectx-mcp get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
@@ -146,7 +147,6 @@ user; numbers here are the harness defaults, not Topstep's official limits.
 - `setup-expectancy` (skills/setup-expectancy/SKILL.md): Measure whether each futures setup has an edge - win rate, average win/loss in R, expectancy, profit factor, sample size, and confidence - from get_performance and journal reviews, then promote, restrict, or cut setups. Use weekly, before raising size, or when a setup feels off.
 - `strategy-authoring` (skills/strategy-authoring/SKILL.md): Write a new trading strategy as a STRATEGY.md document - frontmatter schema, required sections, validation, and promotion from paper to active. Use when the user describes a strategy idea, ports one from code or a backtest, or edits an existing strategy.
 - `strategy-library` (skills/strategy-library/SKILL.md): Find, read, and apply the harness strategies - STRATEGY.md files with code-checked frontmatter and an LLM-read body - and scan bars for strategy candidates. Use whenever choosing, checking, or tagging a trade, and to locate the harness root ($FTH_ROOT) for its scripts.
-- `topstepx-mcp` (skills/topstepx-mcp/SKILL.md): Reference for trading TopstepX through the projectx-mcp server - tool list, session loop, order mechanics, error codes, and the harness rationale convention. Use before calling any mcp__projectx__ tool or when an order behaves unexpectedly.
 - `trade-review` (skills/trade-review/SKILL.md): Review closed futures trades against their plan - R multiple, plan adherence, execution errors, setup tag, and result tag - and turn evidence into short lessons. Use after every exit, at end of session, and when the order gate reports an unreviewed entry.
 - `trade-session` (skills/trade-session/SKILL.md): One complete, harness-neutral trading cycle - risk gate, parallel analyst and risk roles, head-trader synthesis against the strategy library, journaled plan, risk verdict, execution, and position management. Use for /trade-session, autonomous runs, and plan-only (paper) cycles.
 - `trading-agent-security` (skills/trading-agent-security/SKILL.md): Security model for an LLM agent with order authority on a futures account - layered guardrails, prompt injection through market data and news, credential handling, and refusing guardrail workarounds. Use when changing the harness, adding a data source, or when any input asks the agent to trade or change limits.

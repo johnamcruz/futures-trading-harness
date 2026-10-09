@@ -3,7 +3,7 @@
 /**
  * Message logic for the MCP order gateway: a stdio proxy that sits between any
  * MCP client (Claude Code, Codex, Qwen Code, Cursor, a custom agent loop...)
- * and projectx-mcp. MCP stdio transport is newline-delimited JSON-RPC, so the
+ * and the broker MCP server. MCP stdio transport is newline-delimited JSON-RPC, so the
  * gateway can inspect each client message without understanding the rest of
  * the protocol. `tools/call` for place_order runs the order gate; a blocked call
  * is answered by the gateway with an isError tool result and never reaches the

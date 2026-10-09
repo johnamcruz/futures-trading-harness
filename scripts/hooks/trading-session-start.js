@@ -2,7 +2,7 @@
 
 /**
  * SessionStart hook: briefs the model with its standing lessons and today's
- * trading-day state from the projectx-mcp journal, so every session starts
+ * trading-day state from the broker MCP server's journal, so every session starts
  * from its own track record. Never blocks.
  */
 

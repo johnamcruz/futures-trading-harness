@@ -1,10 +1,11 @@
 'use strict';
 
 /**
- * Real order flow from the TopstepX (ProjectX) market hub: every trade print
- * is classified as buyer- or seller-initiated and summed into 1-minute buy
- * and sell volume, which the rules' ofi(n) and delta(n) use instead of the
- * bar-shape estimate.
+ * Real order flow: every trade print is classified as buyer- or
+ * seller-initiated and summed into 1-minute buy and sell volume, which the
+ * rules' ofi(n) and delta(n) use instead of the bar-shape estimate. Recorded
+ * minutes live in <FTH_HOME>/flow/<contractId>.csv; live recording is not part
+ * of the broker MCP interface, so the harness doesn't record it.
  *
  * Classification: the hub's trade `type` is the aggressor side (0 buy-,
  * 1 sell-initiated). A print without a type falls
@@ -195,4 +196,24 @@ function parseFlowCsv(text) {
   return out;
 }
 
-module.exports = { createFlowBook, withFlow, flowCsv, parseFlowCsv, MINUTE, STALE_MINUTES, FLUSH_GRACE_MS };
+/** Recorded order flow on disk: <FTH_HOME>/flow/<contractId>.csv (time,buy_volume,sell_volume). */
+function flowDir(home) {
+  return require('path').join(home, 'flow');
+}
+
+function flowFile(home, contractId) {
+  return require('path').join(flowDir(home), `${String(contractId).replace(/[^A-Za-z0-9._-]/g, '_')}.csv`);
+}
+
+/** Recorded minutes for a contract between from and to (ms), from its file. */
+function readFlow(home, contractId, { from = -Infinity, to = Infinity } = {}) {
+  let text;
+  try {
+    text = require('fs').readFileSync(flowFile(home, contractId), 'utf8');
+  } catch (_err) {
+    return [];
+  }
+  return parseFlowCsv(text).filter(r => r.t >= from && r.t < to);
+}
+
+module.exports = { createFlowBook, withFlow, flowCsv, parseFlowCsv, flowDir, flowFile, readFlow, MINUTE, STALE_MINUTES, FLUSH_GRACE_MS };

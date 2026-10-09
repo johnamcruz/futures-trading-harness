@@ -3,7 +3,7 @@
 /**
  * The autonomous runner's loop body, with every side effect injected so it
  * can be driven by a simulated clock in tests. scripts/autotrader.js wires it
- * to the real clock, ProjectX REST, the filesystem, and the harness CLI.
+ * to the real clock, the broker adapter, the filesystem, and the harness CLI.
  *
  * One pass (step):
  *   1. Clock actions first: end-of-day catch-up, end of day, premarket.

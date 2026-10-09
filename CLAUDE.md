@@ -31,6 +31,12 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
   `rl/configs/{sweep,retrain,ship}/<family>.json` (`fth_rl/pipeline.py`); bundles
   export to `models/<name>.json`, run by `scripts/lib/rl/policy-net.js`. The promotion gate (0 blows every OOS month,
   >= 40% pass) lives in `policy-bundle.js` and `rl/fth_rl/config.py`; never lower it.
+- Brokers: no broker code in the harness. Every broker or prop firm runs its own MCP server (own repo)
+  implementing one interface, `docs/BROKER-MCP-INTERFACE.md` (as data: `scripts/lib/broker/interface.js`).
+  Which server is config (`mcp-configs/brokers.json`, `~/.futures-trading-harness/brokers.json`,
+  `FTH_BROKER`; `scripts/lib/broker/config.js`); TopstepX (projectx-mcp) is the default. It is registered
+  as the MCP server `broker` (gateway in front); harness code reaches it only through
+  `scripts/lib/broker/adapter.js`. Check a server with `scripts/check-broker-mcp.js`.
 - `rules/trading/`: always-on rules (installed for Claude, embedded in workspace/AGENTS.md).
 - `hooks/hooks.json`: every hook runs through `scripts/hooks/run-with-flags.js`.
 - `scripts/lib/`: pure logic (frontmatter, harness-sync, install, autotrader,

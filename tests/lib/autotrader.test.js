@@ -31,7 +31,7 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.deepStrictEqual(claude.slice(0, 5), ['claude', '-p', 'PROMPT', '--plugin-dir', '/fth']);
   assert.ok(claude.includes('dontAsk') && claude.includes('--model'));
   const tools = claude[claude.indexOf('--allowedTools') + 1].split(',');
-  assert.ok(tools.includes('mcp__projectx'));
+  assert.ok(tools.includes('mcp__broker'));
   assert.ok(tools.includes('Bash(node /fth/scripts/strategies.js:*)'));
   assert.ok(!tools.some(t => t === 'Write' || t === 'Bash' || /^Bash\(node:/.test(t)), 'no general write or shell access');
   assert.deepStrictEqual(claudeTools('/r').filter(t => t.startsWith('Write')), ['Write(//tmp/fth/**)']);
@@ -46,6 +46,9 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.ok(claudeTools('/r', { home: '/h', stateDir: '/srv/fth' }).includes('Read(//srv/fth/logs/**)'));
   assert.ok(claudeDenied('/r', { home: '/h', stateDir: '/srv/fth' }).includes('Read(//srv/fth/.env)'));
   assert.ok(claudeDenied('/r', { home: '/h' }).includes('Read(//h/.futures-trading-harness/.env)'));
+  // The broker server's journal folder can't be edited (the order gate reads the journal).
+  assert.ok(claudeDenied('/r', { home: '/h', journalDir: '/h/.projectx-mcp' }).includes('Edit(//h/.projectx-mcp/**)'));
+  assert.ok(claudeTools('/r', { home: '/h' }).includes('mcp__broker'));
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);
   const qwen = buildCommand(cfg, p, '/fth');
@@ -107,6 +110,11 @@ test('child env locks the gate and paper mode disables trading', () => {
   assert.deepStrictEqual([live.FTH_ROOT, live.FTH_AUTONOMOUS, live.FTH_PAPER], ['/r', '1', undefined]);
   const paper = childEnv(validateConfig({ paper: true }), '/r', {});
   assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
+  // The broker server's own off switch comes from the broker config (paperEnv), whatever the broker.
+  const home = require('../helpers').tmpDir();
+  require('fs').writeFileSync(require('path').join(home, 'brokers.json'), JSON.stringify({ broker: 'other', brokers: { other: { command: ['x'], paperEnv: { OTHER_LIVE: 'no' } } } }));
+  const other = childEnv(validateConfig({ paper: true }), '/r', { FTH_HOME: home });
+  assert.deepStrictEqual([other.OTHER_LIVE, other.PROJECTX_TRADING_ENABLED], ['no', undefined]);
   assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; run its scripts as `node \/r\/scripts/);
 });
 
@@ -127,8 +135,8 @@ test('signal trigger runs on an open position or a mechanical candidate only', (
 });
 
 test('Claude settings that ask or deny order tools are reported', () => {
-  assert.deepStrictEqual(claudeOrderToolConflicts([{ permissions: { ask: ['mcp__projectx__place_order', 'Bash'], allow: ['mcp__projectx__get_bars'] } }, { permissions: { deny: ['mcp__projectx'] } }]),
-    ['ask: mcp__projectx__place_order', 'deny: mcp__projectx']);
+  assert.deepStrictEqual(claudeOrderToolConflicts([{ permissions: { ask: ['mcp__broker__place_order', 'Bash'], allow: ['mcp__broker__get_bars'] } }, { permissions: { deny: ['mcp__broker'] } }]),
+    ['ask: mcp__broker__place_order', 'deny: mcp__broker']);
   assert.deepStrictEqual(claudeOrderToolConflicts([{}, null]), []);
 });
 

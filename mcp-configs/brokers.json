@@ -1,0 +1,18 @@
+{
+  "broker": "topstepx",
+  "brokers": {
+    "topstepx": {
+      "description": "TopstepX through projectx-mcp",
+      "repo": "https://github.com/johnamcruz/projectx-mcp",
+      "entryEnv": "PROJECTX_MCP_ENTRY",
+      "journal": "~/.projectx-mcp/journal.jsonl",
+      "journalEnv": "PROJECTX_JOURNAL_PATH",
+      "env": [
+        "PROJECTX_USERNAME", "PROJECTX_API_KEY", "PROJECTX_TRADING_ENABLED", "PROJECTX_ALLOWED_ACCOUNT_IDS",
+        "PROJECTX_ALLOWED_SYMBOLS", "PROJECTX_MAX_ORDER_SIZE", "PROJECTX_MAX_POSITION_SIZE", "PROJECTX_MAX_DAILY_LOSS",
+        "PROJECTX_JOURNAL_PATH", "PROJECTX_API_URL", "PROJECTX_MARKET_HUB_URL", "PROJECTX_MCP_ENTRY"
+      ],
+      "paperEnv": { "PROJECTX_TRADING_ENABLED": "false" }
+    }
+  }
+}

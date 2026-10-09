@@ -54,7 +54,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   // The stand-in LLM: the trade-session steps, through the production scripts' functions.
   async function llm(action, prompt) {
     const now = new Date(clockRef.t);
-    const file = /are in (\S+) \(projectx get_bars format/.exec(prompt)[1];
+    const file = /are in (\S+) \(get_bars format/.exec(prompt)[1];
     const bars = readBarsArg(file);
     const fired = /MNQ fired on this bar \([^)]*\): ([^.]*)\./.exec(prompt);
     const record = { at: now.toISOString(), prompt, decisions: [] };

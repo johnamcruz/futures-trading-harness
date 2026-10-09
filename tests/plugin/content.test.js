@@ -44,11 +44,11 @@ test('agents declare name, description, tools, model; only the executor can writ
     for (const k of ['description', 'tools', 'model']) assert.ok(data[k], `${file}: missing ${k}`);
     const tools = String(data.tools).split(',').map(t => t.trim());
     for (const t of tools.filter(x => x.startsWith('mcp__'))) {
-      const m = /^mcp__projectx__(\w+)$/.exec(t);
+      const m = /^mcp__broker__(\w+)$/.exec(t);
       assert.ok(m && PROJECTX_TOOLS.has(m[1]), `${file}: unknown MCP tool ${t}`);
     }
-    const writes = tools.filter(t => WRITE_TOOLS.some(w => t === `mcp__projectx__${w}`));
-    if (name === 'trade-executor') assert.ok(writes.includes('mcp__projectx__place_order'));
+    const writes = tools.filter(t => WRITE_TOOLS.some(w => t === `mcp__broker__${w}`));
+    if (name === 'trade-executor') assert.ok(writes.includes('mcp__broker__place_order'));
     else assert.deepStrictEqual(writes, [], `${file}: only trade-executor may hold order tools`);
   }
 });
@@ -95,7 +95,7 @@ test('hooks.json points at existing scripts through run-with-flags', () => {
   }
   assert.ok(count >= 3);
   const gate = hooks.PreToolUse.find(g => /place_order/.test(g.matcher));
-  assert.ok(new RegExp(gate.matcher).test('mcp__projectx__place_order'));
+  assert.ok(new RegExp(gate.matcher).test('mcp__broker__place_order'));
 });
 
 test('every harness manifest agrees on name and version, and its paths exist', () => {

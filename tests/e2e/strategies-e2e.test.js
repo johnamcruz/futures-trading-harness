@@ -85,7 +85,7 @@ for (const s of ACTIVE) {
       stopLossBracket: { ticks, type: 'stop' }, rationale: `setup:${s.name} ${side} trigger on the ${BARS[i].t} bar, stop ${stop}`,
     };
     const gate = o => node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'],
-      env, JSON.stringify({ tool_name: 'mcp__projectx__place_order', tool_input: o }));
+      env, JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: o }));
     const conflict = r.confluence.against.length > 0 && s.mtf !== 'reversal';
     const res = gate(order);
     if (conflict) {
@@ -118,7 +118,7 @@ test('every strategy with rules provides its context on every scanned bar; a pap
   const home = tmpDir();
   const env = { FTH_HOME: home, PROJECTX_JOURNAL_PATH: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
   const res = node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], env,
-    JSON.stringify({ tool_name: 'mcp__projectx__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:vwap_reclaim long, stop 27400' } }));
+    JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:vwap_reclaim long, stop 27400' } }));
   assert.strictEqual(res.status, 2);
   assert.match(res.stderr, /status "paper"/);
 });

@@ -134,8 +134,8 @@ test('skills: a user-only command an autonomous doc names is marked as the user\
   assert.deepStrictEqual(bad, []);
 });
 
-test('skills: every projectx tool the docs name is in the topstepx-mcp tool table', () => {
-  const ref = DOCS.find(d => d.rel === 'skills/topstepx-mcp/SKILL.md').text;
+test('skills: every broker tool the docs name is in the broker-mcp tool table', () => {
+  const ref = DOCS.find(d => d.rel === 'skills/broker-mcp/SKILL.md').text;
   const table = ref.slice(ref.indexOf('### Tools'), ref.indexOf('### Order mechanics'));
   const known = new Set([...table.matchAll(/`([a-z_]+)`/g)].map(m => m[1]));
   assert.ok(known.has('place_order') && known.size > 15, 'the tool table moved; update this test');
@@ -147,8 +147,8 @@ test('skills: every projectx tool the docs name is in the topstepx-mcp tool tabl
     for (const m of d.text.matchAll(/`([a-z_]+)(?:[ {(][^`]*)?`/g)) {
       if (TOOL.test(m[1]) && !known.has(m[1]) && !NOT_TOOLS.has(m[1])) bad.add(`${d.rel}: ${m[1]}`);
     }
-    for (const m of d.text.matchAll(/mcp__projectx__([a-z_]+)/g)) {
-      if (!known.has(m[1])) bad.add(`${d.rel}: mcp__projectx__${m[1]}`);
+    for (const m of d.text.matchAll(/mcp__broker__([a-z_]+)/g)) {
+      if (!known.has(m[1])) bad.add(`${d.rel}: mcp__broker__${m[1]}`);
     }
   }
   assert.deepStrictEqual([...bad], []);

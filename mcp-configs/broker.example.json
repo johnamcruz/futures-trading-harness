@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "broker": {
+      "command": "node",
+      "args": ["/absolute/path/to/futures-trading-harness/scripts/mcp-gateway.js"]
+    }
+  }
+}

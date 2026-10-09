@@ -14,8 +14,8 @@
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
  *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
  *
- * `fetch` downloads 1-minute bars from ProjectX (PROJECTX_USERNAME /
- * PROJECTX_API_KEY) to CSV or JSON; backtests themselves only read files.
+ * `fetch` downloads 1-minute bars from the broker (through the broker adapter)
+ * to CSV or JSON; backtests themselves only read files.
  */
 
 'use strict';
@@ -28,7 +28,7 @@ require('./lib/env-file').loadEnvForCli('backtest');
 const fs = require('fs');
 const path = require('path');
 const { runBacktest } = require('./lib/backtest/run');
-const { createClient } = require('./lib/projectx-rest');
+const { withAdapter } = require('./lib/broker/adapter');
 const { harnessHome } = require('./lib/paths');
 const { writeJsonAtomic } = require('./lib/harness-run');
 
@@ -47,7 +47,7 @@ async function fetchBars(argv) {
   if (!contractId || !Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || !out) {
     throw new Error('usage: backtest.js fetch --contract <id> --from <ISO> --to <ISO> --out <file.csv|file.json>');
   }
-  const bars = await createClient().history(contractId, { start: from, end: to });
+  const bars = await withAdapter({ root: ROOT, env: process.env }, broker => broker.history(contractId, { start: from, end: to }));
   const file = path.resolve(out);
   if (file.endsWith('.csv')) {
     fs.mkdirSync(path.dirname(file), { recursive: true });

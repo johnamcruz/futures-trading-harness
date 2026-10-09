@@ -6,7 +6,7 @@
  * of bars through a tool reply and never sees the credentials: scripts/bars.js
  * loads them from the user's .env and calls this.
  *
- * The file is projectx get_bars JSON ({ contractId, barSize, count, bars }),
+ * The file is get_bars JSON ({ contractId, barSize, count, bars }),
  * the same shape as the autonomous runner's bars file.
  */
 
@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeBars } = require('./trading/indicators');
 
-const MAX_COUNT = 20000; // ProjectX's retrieveBars limit per request
+const MAX_COUNT = 20000; // the most get_bars returns at once (broker MCP interface)
 
 /** Problems with the request: [message]. */
 function requestErrors({ symbol, timeframe, daily, count }) {
@@ -30,7 +30,7 @@ const defaultOut = (symbol, timeframe, daily) => path.join('/tmp/fth', `${symbol
 
 /**
  * { file, contractId, count, first, last, closedAt } after writing the bars.
- * `client`: projectx-rest (activeContract, closedBars).
+ * `client`: the broker adapter (activeContract, closedBars).
  */
 async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, now = new Date() }) {
   // By default as many bars as the runner keeps (the multi-timeframe read's whole window).

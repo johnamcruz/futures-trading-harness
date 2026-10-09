@@ -34,7 +34,7 @@ function readBlackouts(file) {
 }
 
 /**
- * Returns { allowed, intent, violations, message }. `tool` is the projectx tool
+ * Returns { allowed, intent, violations, message }. `tool` is the broker tool
  * being called: place_order (default) or modify_order.
  */
 function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order', transcriptPath = null } = {}) {

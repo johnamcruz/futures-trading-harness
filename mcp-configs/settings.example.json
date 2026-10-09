@@ -10,28 +10,28 @@
   },
   "permissions": {
     "ask": [
-      "mcp__projectx__place_order",
-      "mcp__projectx__modify_order",
-      "mcp__projectx__cancel_order",
-      "mcp__projectx__close_position",
-      "mcp__projectx__partial_close_position"
+      "mcp__broker__place_order",
+      "mcp__broker__modify_order",
+      "mcp__broker__cancel_order",
+      "mcp__broker__close_position",
+      "mcp__broker__partial_close_position"
     ],
     "allow": [
-      "mcp__projectx__get_server_config",
-      "mcp__projectx__list_accounts",
-      "mcp__projectx__get_account_snapshot",
-      "mcp__projectx__search_contracts",
-      "mcp__projectx__get_contract",
-      "mcp__projectx__list_available_contracts",
-      "mcp__projectx__get_bars",
-      "mcp__projectx__get_quote",
-      "mcp__projectx__list_open_orders",
-      "mcp__projectx__search_orders",
-      "mcp__projectx__list_open_positions",
-      "mcp__projectx__search_trades",
-      "mcp__projectx__get_performance",
-      "mcp__projectx__journal_read",
-      "mcp__projectx__journal_add"
+      "mcp__broker__get_server_config",
+      "mcp__broker__list_accounts",
+      "mcp__broker__get_account_snapshot",
+      "mcp__broker__search_contracts",
+      "mcp__broker__get_contract",
+      "mcp__broker__list_available_contracts",
+      "mcp__broker__get_bars",
+      "mcp__broker__get_quote",
+      "mcp__broker__list_open_orders",
+      "mcp__broker__search_orders",
+      "mcp__broker__list_open_positions",
+      "mcp__broker__search_trades",
+      "mcp__broker__get_performance",
+      "mcp__broker__journal_read",
+      "mcp__broker__journal_add"
     ]
   }
 }

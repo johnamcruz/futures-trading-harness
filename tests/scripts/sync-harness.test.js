@@ -30,7 +30,7 @@ test('generated files parse in their harness formats', () => {
   assert.match(files['workspace/AGENTS.md'], /## Risk Management/);
   const ext = JSON.parse(files['qwen-extension/qwen-extension.json']);
   assert.strictEqual(ext.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version);
-  assert.match(ext.mcpServers.projectx.args[0], /^\$\{extensionPath\}/);
+  assert.match(ext.mcpServers.broker.args[0], /^\$\{extensionPath\}/);
   for (const l of QWEN_LINKS) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', l, '.')), `qwen-extension/${l} resolves`);
 });
 

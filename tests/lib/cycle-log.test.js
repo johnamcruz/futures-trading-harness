@@ -14,22 +14,22 @@ const claudeStream = skills => [
   JSON.stringify({ type: 'system', subtype: 'init' }),
   ...skills.map(s => use('Skill', { skill: `futures-trading-harness:${s}` })),
   use('Bash', { command: 'node /r/scripts/strategies.js scan /b.json --symbol MNQ' }),
-  use('mcp__projectx__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'buy', size: 1, type: 'market', rationale: 'setup:orb long, stop 21480' }),
-  use('mcp__projectx__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'sell', size: 1, type: 'stop', rationale: '[protect] stop' }),
+  use('mcp__broker__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'buy', size: 1, type: 'market', rationale: 'setup:orb long, stop 21480' }),
+  use('mcp__broker__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'sell', size: 1, type: 'stop', rationale: '[protect] stop' }),
   JSON.stringify({ type: 'result', result: 'Done.\nCYCLE RESULT: executed - orb long 1 MNQ' }),
 ].join('\n');
 
 test('summarize: skills loaded, tool calls by name, shell commands, orders, and skills an entry needed', () => {
   const all = summarize(claudeStream(['trade-session', 'multi-timeframe-analysis', 'strategy-library']));
   assert.deepStrictEqual(all.skills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library']);
-  assert.strictEqual(all.tools.mcp__projectx__place_order, 2);
+  assert.strictEqual(all.tools.mcp__broker__place_order, 2);
   assert.match(all.commands[0], /strategies\.js scan/);
   assert.strictEqual(all.orders.length, 2);
   assert.deepStrictEqual(all.missingSkills, []);
   assert.deepStrictEqual(summarize(claudeStream(['trade-session'])).missingSkills, ['multi-timeframe-analysis', 'strategy-library']);
   // Codex --json events.
-  const codex = [JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'node mtf.js x' } }), JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'projectx', tool: 'get_bars', arguments: {} } })].join('\n');
-  assert.deepStrictEqual(toolCalls(codex).map(c => c.name), ['Bash', 'mcp__projectx__get_bars']);
+  const codex = [JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'node mtf.js x' } }), JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {} } })].join('\n');
+  assert.deepStrictEqual(toolCalls(codex).map(c => c.name), ['Bash', 'mcp__broker__get_bars']);
   assert.strictEqual(summarize('plain text, nothing parsed').skills.length, 0);
   // The cycle result is still found in a stream-json transcript.
   assert.strictEqual(cycleResult(claudeStream([])), 'CYCLE RESULT: executed - orb long 1 MNQ');
@@ -62,7 +62,7 @@ test('skills-loaded: names, transcript files (a subagent reads its session too),
   // The trade-executor subagent's own transcript has no skills; its session's main one does.
   fs.mkdirSync(path.join(dir, 'sess', 'subagents'), { recursive: true });
   const sub = path.join(dir, 'sess', 'subagents', 'agent-1.jsonl');
-  fs.writeFileSync(sub, use('mcp__projectx__place_order', {}));
+  fs.writeFileSync(sub, use('mcp__broker__place_order', {}));
   assert.strictEqual(checkSkillsLoaded(sub), null);
   const bare = path.join(dir, 'bare.jsonl');
   fs.writeFileSync(bare, claudeStream(['trade-session']));

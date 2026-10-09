@@ -7,7 +7,7 @@
  *
  *   node scripts/mtf.js <bars> [--tf=15,60,240] [--daily=<daily bars>] [--json] [--record --symbol=MNQ]
  *
- * <bars>: the trigger bars, closed, oldest first: projectx-mcp get_bars JSON
+ * <bars>: the trigger bars, closed, oldest first: get_bars JSON
  * ({ bars: [...] }), a bare JSON array, or a CSV / Parquet / Excel file (the
  * runner's bars file for the current symbol works as is). The higher
  * timeframes are built from them, aligned to the 18:00 ET open; give enough

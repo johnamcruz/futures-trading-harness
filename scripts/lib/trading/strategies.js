@@ -60,9 +60,8 @@ const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min
 const POLICY_KEYS = ['bundle'];
 /**
  * Data connectors a strategy can declare, like a skill declares its tools.
- * The runner turns on every connector an active strategy needs.
- *   order_flow: aggressor buy/sell volume per bar from the TopstepX market
- *               hub (series ofi, delta)
+ *   order_flow: aggressor buy/sell volume per bar (series ofi, delta), from
+ *               recorded flow files; without them, a bar-shape estimate
  */
 const CONNECTORS = { order_flow: /\b(ofi|delta)\(/ };
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];

@@ -79,7 +79,7 @@ function setup(entries, extraEnv = {}) {
   };
 }
 
-const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__projectx__place_order', tool_input: input });
+const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__broker__place_order', tool_input: input });
 
 test('order gate blocks an unplanned entry with exit code 2', () => {
   const { env } = setup([]);
@@ -161,8 +161,8 @@ test('order gate: a trend strategy is refused when another strategy fired the ot
 
 test('order gate ignores other tools and plugin-scoped tool names still match', () => {
   const { env } = setup([]);
-  assert.strictEqual(gate({ tool_name: 'mcp__projectx__get_bars', tool_input: {} }, env).code, 0);
-  assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_projectx__place_order', tool_input: ORDER }, env).code, 2);
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__get_bars', tool_input: {} }, env).code, 0);
+  assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_broker__place_order', tool_input: ORDER }, env).code, 2);
 });
 
 test('order gate blocks unknown strategies and instruments the strategy does not trade', () => {
@@ -343,6 +343,30 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
     assert.strictEqual(byId[id].result.isError, true, `exit ${id} must be blocked`);
     assert.match(byId[id].result.content[0].text, /\[exposure\]/);
   }
+});
+
+test('MCP gateway: with no command it starts the broker server named in the broker config', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')] } } }));
+  const env = {
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+  };
+  const run = extra => new Promise(resolve => {
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: { ...env, ...extra } });
+    let out = '';
+    let err = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stderr.on('data', c => { err += c; });
+    gw.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_bars', arguments: {} } })}\n`);
+    gw.on('close', code => resolve({ code, out, err }));
+  });
+  const ok = await run({});
+  assert.strictEqual(JSON.parse(ok.out.trim()).result.content[0].text, 'forwarded:tools/call:get_bars');
+  const unknown = await run({ FTH_BROKER: 'nope' });
+  assert.strictEqual(unknown.code, 2);
+  assert.match(unknown.err, /unknown broker "nope"/);
 });
 
 async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
