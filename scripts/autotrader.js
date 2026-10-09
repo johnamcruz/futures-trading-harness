@@ -266,7 +266,9 @@ async function main(argv) {
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
     if (once !== 'eod' && fs.existsSync(killSwitchFile)) throw new Error(`kill switch is on (${killSwitchFile})`);
     const p = prompts(cfg, new Date(), ROOT);
-    const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })))] : symbols.map(s => p.premarket(s));
+    // A manual trade run reads nothing for the prompt: it says so instead of claiming an empty journal.
+    const manual = { journalRead: false, unavailable: ['a manual run (--once): no bars, account, journal, news, premarket plan, or strategy scan were read; read them yourself'] };
+    const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })), manual)] : symbols.map(s => p.premarket(s));
     let ok = true;
     // A manual run has no bars or account read: its cycle log says so.
     for (const prompt of jobs) ok = (await runCycle(cfg, once, prompt, opts, { context: { action: once, manual: true, symbols } })).ok && ok;

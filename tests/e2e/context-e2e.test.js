@@ -123,6 +123,10 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.strictEqual(c.openTrades[0].setup, 'orb');
   assert.strictEqual(c.openTrades[0].risk, 20.5);
   assert.deepStrictEqual(c.unavailable, []);
+  // The end-of-day time in the prompt is the one logged.
+  assert.strictEqual(c.eodAt, '2026-04-27T19:50:00.000Z');
+  assert.match(p, /End of day: the runner flattens every position at 15:50 ET \(in 15[12] min\)/);
+  assert.ok(Number.isInteger(c.cyclesLeft));
 });
 
 test('context e2e: a section that fails is named in the prompt and in the cycle log, and the rest is still there', async () => {

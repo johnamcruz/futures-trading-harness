@@ -298,7 +298,8 @@ function recentBarsText(symbol, bars, timeframe) {
  * strategies are its components, entered only as the verdict says.
  */
 function signalsText(symbol, scan, { manageOnly = false, verdicts = [], screenFailed = false } = {}) {
-  if (manageOnly) return ` ${symbol}: manage-only cycle, so what fired is not listed (no new entries).`;
+  // Manage-only is stated once, in the instruction's mode.
+  if (manageOnly) return '';
   // No scan: the reason is in the "Context unavailable" line.
   if (!Array.isArray(scan)) return '';
   const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
@@ -308,7 +309,8 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], screenFa
     return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
-  const policy = screenFailed ? ' The policy screen failed this bar, so there is no verdict and no entry (the gate refuses one).'
+  // A failed screen is named once, in the "Context unavailable" line; its components are not entries.
+  const policy = screenFailed ? ' (No policy verdict this bar: not entries.)'
     : verdicts.length ? ` These are ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
   return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
@@ -370,11 +372,16 @@ function prompts(cfg, now, root = '') {
       const eod = endOfDayAt(cfg, now);
       const eodMs = eod ? tradingDayStart(now).getTime() + sessionMinuteOf(eod, now) * 60000 : null;
       const eodText = eodMs ? ` End of day: the runner flattens every position at ${etTime(eodMs)} (in ${Math.max(0, Math.round((eodMs - now.getTime()) / 60000))} min); a trade must have room to work before then.` : '';
-      const capText = Number.isInteger(cyclesLeft) && cyclesLeft <= 10 ? ` ${cyclesLeft} trade cycle${cyclesLeft === 1 ? '' : 's'} left today before manage-only.` : '';
+      const capText = manageOnly || !Number.isInteger(cyclesLeft) || cyclesLeft > 10 ? ''
+        : cyclesLeft === 0 ? ' This is the last trade cycle today; after it, cycles only manage.'
+          : ` ${cyclesLeft} more trade cycle${cyclesLeft === 1 ? '' : 's'} today after this one, then manage-only.`;
       const account = cfg.account ? accountText(state) : ' No account is configured: the runner reads no positions or orders (read get_account_snapshot if you need them).';
-      const own = !journalRead ? ''
-        : trades.length ? ` Your last ${trades.length} reviewed trade(s)${tradesSummary ? ` (${tradesSummary})` : ''}, oldest first: ${trades.join(' | ')}.`
-          : ' No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.';
+      // "None yet" only when the journal was read and holds neither (a failed read is named instead).
+      const ownFailed = unavailable.some(u => /reviewed trades|mistakes and lessons/.test(u));
+      const own = trades.length ? ` Your last ${trades.length} reviewed trade(s)${tradesSummary ? ` (${tradesSummary})` : ''}, oldest first: ${trades.join(' | ')}.`
+        : !journalRead || ownFailed ? ''
+          : lessons.length ? ' No reviewed trades in the journal yet.'
+            : ' No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.';
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';

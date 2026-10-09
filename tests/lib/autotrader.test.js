@@ -341,8 +341,9 @@ test('the fired line: a paper strategy is marked, manage-only lists nothing, a p
   assert.match(flat, /value_area short \(paper: plan only, the gate refuses a live entry\)/);
   assert.match(flat, /orb long(?! \(paper)/);
   const manage = p.trade([{ symbol: 'MNQ', bar, scan }], { manageOnly: true });
-  assert.match(manage, /MNQ: manage-only cycle, so what fired is not listed \(no new entries\)\./);
-  assert.doesNotMatch(manage, /value_area|orb long/);
+  // Manage-only is said once, in the instruction's mode; nothing that fired is listed.
+  assert.doesNotMatch(manage, /value_area|orb long|fired on this bar/);
+  assert.strictEqual(manage.match(/manage-only/g).length, 1, manage);
   const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'CON.F.US.MNQ.Z26', maxSize: 3, stopTicks: 40 }];
   const prop = p.trade([{ symbol: 'MNQ', bar, scan, verdicts }]);
   assert.match(prop, /These are prop_portfolio_3m's components: enter only as its verdict below says \(setup:prop_portfolio_3m\), never as setup:<component>\./);
@@ -376,8 +377,13 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   const p = prompts(cfg, new Date('2026-10-08T19:33:20Z'), '/r'); // 15:33:20 ET
   const late = p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 3 });
   assert.match(late, /End of day: the runner flattens every position at 15:50 ET \(in 17 min\); a trade must have room to work before then\./);
-  assert.match(late, /3 trade cycles left today before manage-only\./);
-  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 40 }), /cycles left/, 'only when few');
+  assert.match(late, /3 more trade cycles today after this one, then manage-only\./);
+  assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 0 }), /This is the last trade cycle today; after it, cycles only manage\./);
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 40 }), /trade cycles? today/, 'only when few');
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 0, manageOnly: true }), /last trade cycle/, 'manage-only already says it');
+  // Lessons without reviews: no claim that there are no lessons; a failed read: no "none yet" at all.
+  assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { lessons: ['(0.6) wait for the IB'] }), / No reviewed trades in the journal yet\. Your recurring mistakes and lessons/);
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { unavailable: ['your reviewed trades (bad)'] }), /No reviewed trades/);
   // No account configured, no journal entries: said, not silent.
   const noAcct = prompts(validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3 }), new Date('2026-10-08T14:33:20Z'), '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
   assert.match(noAcct, /No account is configured: the runner reads no positions or orders/);
@@ -387,7 +393,11 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [] }], { manageAlso: ['MES'] }), /run the trade-session skill for MNQ, and manage the open MES position \(no bar closed for it this cycle\) on account 1/);
   // A failed policy screen: no verdict, no entry.
   const scan = [{ name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } }];
-  assert.match(p.trade([{ symbol: 'MNQ', bar, scan, screenFailed: true }]), /orb long\. The policy screen failed this bar, so there is no verdict and no entry \(the gate refuses one\)\./);
+  // A failed screen is named once (in the unavailable line); the fired line only marks them as not entries.
+  const failedScreen = p.trade([{ symbol: 'MNQ', bar, scan, screenFailed: true }], { unavailable: ['MNQ policy screen (bundle missing): no verdict, so no entry this bar'] });
+  assert.match(failedScreen, /orb long\. \(No policy verdict this bar: not entries\.\)/);
+  assert.strictEqual(failedScreen.match(/no verdict, so no entry/g).length, 1, 'the reason, once');
+  assert.doesNotMatch(failedScreen, /The policy screen failed this bar/);
   // Verdicts name their symbol (two symbols can each have one).
   const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'skip', reason: 'cushion' }];
   assert.match(p.trade([{ symbol: 'MES', bar, scan, verdicts }]), / MES prop_portfolio_3m: the long setup from orb is skipped \(cushion\); no entry\./);

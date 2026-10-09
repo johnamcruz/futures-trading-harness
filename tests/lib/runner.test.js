@@ -336,7 +336,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false }) {
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [], scans: [], logs: [], events: [] };
@@ -360,6 +360,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         return out;
       },
       async accountState() {
+        if (accountFails) throw new Error('HTTP 502');
         return {
           positions: [
             ...(flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
@@ -753,4 +754,15 @@ test('a failed strategy scan is named in the prompt; end-of-day and premarket cy
   assert.strictEqual(eod.context.action, 'eod');
   assert.match(eod.context.day, /^\d{4}-\d\d-\d\d$/);
   assert.ok(eod.prompt.includes(eod.context.day));
+});
+
+test('under a policy, a failed account check means no verdict: named, and the components are not entries', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp(), until: et(10, 10), trigger: 'signal', accountFails: true });
+  const p = r.prompts.find(x => /trade-session/.test(x));
+  assert.ok(p, 'the cycle still runs, to manage anything open');
+  assert.match(p, /MNQ policy screen \(account check failed: HTTP 502\): no verdict, so no entry this bar/);
+  assert.match(p, /\(No policy verdict this bar: not entries\.\)/);
+  assert.doesNotMatch(p, /These are .*'s components/);
+  assert.ok(r.logs.some(l => /^ERROR MNQ: account check failed \(HTTP 502\)/.test(l)), r.logs.filter(l => /^ERROR/.test(l)).join(' / '));
 });

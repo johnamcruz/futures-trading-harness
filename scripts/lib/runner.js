@@ -488,6 +488,8 @@ function createRunner(deps) {
             const [net, working] = await exposure(item);
             if (net === 0 && working === 0) screened = screenItem(item);
           } catch (err) {
+            // No account read, no screen: no verdict, so the gate refuses entries (named in the prompt).
+            item.screenError = `account check failed: ${err.message}`;
             log(`${item.symbol}: account check for the policy screen failed (${err.message}); no verdict this bar`, 'error');
           }
         }
@@ -504,6 +506,11 @@ function createRunner(deps) {
     } catch (err) {
       // Can't see the account: run the cycle rather than risk leaving a position unmanaged.
       scanItem(item);
+      if (prop) {
+        item.screenError = `account check failed: ${err.message}`;
+        item.verdicts = [];
+      }
+      log(`${item.symbol}: account check failed (${err.message}); running the cycle to manage anything open`, 'error');
       return { run: true, reason: `account check failed (${err.message})` };
     }
     if (manageOnly) {
@@ -815,10 +822,12 @@ function createRunner(deps) {
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
+          // Trade cycles left today after this one (the cap counts this cycle).
+          const cyclesLeft = Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0) - 1) : null;
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
-            cyclesLeft: Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0)) : null,
+            cyclesLeft,
             manageAlso, journalRead: entries !== null,
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
@@ -832,6 +841,8 @@ function createRunner(deps) {
             openTrades: tradeObjs, openTradeLines: (acct && acct.openTrades) || [], manageAlso,
             recent: items.map(x => ({ symbol: x.symbol, bars: x.bar.recent || [] })),
             attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
+            eodAt: (() => { const eod = endOfDayAt(cfg, cycleNow); return eod ? new Date(tradingDayStart(cycleNow).getTime() + sessionMinuteOf(eod, cycleNow) * 60000).toISOString() : null; })(),
+            cyclesLeft,
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
             manageOnly, recovered: recover, unavailable,
           };
