@@ -151,7 +151,7 @@ function mergeQwenSettings(settings, root) {
  * edits to the harness, its state, and harness configs, so a run can't loosen
  * its own limits.
  */
-function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journalDir = path.join(home, '.futures-trading-harness') } = {}) {
+function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl') } = {}) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
   const h = p => abs(path.join(home, p));
   const state = stateDir === path.join(home, '.futures-trading-harness') ? [] : [`Edit(${abs(stateDir)}/**)`];
@@ -170,8 +170,8 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
         `Edit(${abs(`${root}/**`)})`,
         `Edit(${h('.futures-trading-harness')}/**)`,
         ...state,
-        // The broker server's journal (the order gate reads it).
-        `Edit(${abs(journalDir)}/**)`,
+        // The broker server's journal file (the order gate reads it).
+        `Edit(${abs(journal)})`,
         `Edit(${h('.qwen')}/**)`,
         `Read(${abs('/proc')}/**)`,
         `Read(${h('.qwen')}/**)`, `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`,
@@ -222,7 +222,7 @@ function planQwen({ root, home, broker }) {
   return {
     writes: [
       { file, content: `${JSON.stringify(mergeQwenSettings(settings, root), null, 2)}\n` },
-      { file: path.join(root, 'workspace', '.qwen', 'settings.json'), content: `${JSON.stringify(qwenWorkspaceSettings(root, home, { journalDir: path.dirname(broker.journalPath) }), null, 2)}\n` },
+      { file: path.join(root, 'workspace', '.qwen', 'settings.json'), content: `${JSON.stringify(qwenWorkspaceSettings(root, home, { journal: broker.journalPath }), null, 2)}\n` },
     ],
     next: [
       `qwen extensions link ${path.join(root, 'qwen-extension')}   (link, not install: the extension uses symlinks to this checkout)`,

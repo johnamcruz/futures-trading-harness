@@ -44,13 +44,26 @@ function readConfig(file) {
   }
 }
 
+/** A broker's paths resolved against its config file's folder (`~` expanded), so every process agrees. */
+function resolvePaths(b, dir) {
+  const abs = p => path.resolve(dir, expandHome(String(p)));
+  const out = { ...b };
+  if (out.entry) out.entry = abs(out.entry);
+  if (out.journal) out.journal = abs(out.journal);
+  if (Array.isArray(out.command) && out.command.length) out.command = [expandHome(String(out.command[0])), ...out.command.slice(1).map(String)];
+  return out;
+}
+
 function loadBrokers(env = process.env) {
   const defaults = readConfig(DEFAULTS_FILE) || { brokers: {} };
-  const userFile = String(env.FTH_BROKERS_FILE || '').trim() ? expandHome(String(env.FTH_BROKERS_FILE).trim()) : path.join(harnessHome(env), 'brokers.json');
-  const user = readConfig(userFile) || {};
-  const brokers = { ...defaults.brokers };
-  for (const [name, b] of Object.entries(user.brokers || {})) brokers[name] = { ...(brokers[name] || {}), ...b };
-  return { broker: user.broker || defaults.broker, brokers, file: userFile };
+  const explicit = String(env.FTH_BROKERS_FILE || '').trim();
+  const userFile = explicit ? path.resolve(expandHome(explicit)) : path.join(harnessHome(env), 'brokers.json');
+  const user = readConfig(userFile);
+  if (!user && explicit) throw new BrokerConfigError(`FTH_BROKERS_FILE: ${userFile} does not exist`);
+  const brokers = {};
+  for (const [name, b] of Object.entries(defaults.brokers || {})) brokers[name] = resolvePaths(b, path.dirname(DEFAULTS_FILE));
+  for (const [name, b] of Object.entries((user && user.brokers) || {})) brokers[name] = { ...(brokers[name] || {}), ...resolvePaths(b, path.dirname(userFile)) };
+  return { broker: (user && user.broker) || defaults.broker, brokers, file: userFile };
 }
 
 function activeBroker(env = process.env) {
@@ -61,7 +74,7 @@ function activeBroker(env = process.env) {
   if (!b) throw new BrokerConfigError(`unknown broker "${name}": add it to ${cfg.file} (known: ${Object.keys(cfg.brokers).join(', ') || 'none'})`);
   const fromEnv = key => (key && String(env[key] || '').trim()) || '';
   const entry = String(b.entry || '').trim() || fromEnv(b.entryEnv);
-  const command = Array.isArray(b.command) && b.command.length ? b.command.map(String) : entry ? [process.execPath, expandHome(entry)] : null;
+  const command = Array.isArray(b.command) && b.command.length ? b.command.map(String) : entry ? [process.execPath, path.resolve(expandHome(entry))] : null;
   const journal = fromEnv(b.journalEnv) || String(b.journal || '').trim();
   const vars = Array.isArray(b.env) ? b.env.map(String) : [];
   return { ...b, name, command, env: vars, paperEnv: b.paperEnv && typeof b.paperEnv === 'object' ? b.paperEnv : {}, journalPath: journal ? path.resolve(expandHome(journal)) : path.join(harnessHome(env), 'journal.jsonl') };

@@ -163,6 +163,16 @@ test('order gate ignores other tools and plugin-scoped tool names still match', 
   const { env } = setup([]);
   assert.strictEqual(gate({ tool_name: 'mcp__broker__get_bars', tool_input: {} }, env).code, 0);
   assert.strictEqual(gate({ tool_name: 'mcp__plugin_fth_broker__place_order', tool_input: ORDER }, env).code, 2);
+  // A server registered under an older name is still gated.
+  assert.strictEqual(gate({ tool_name: 'mcp__projectx__place_order', tool_input: ORDER }, env).code, 2);
+});
+
+test('order gate: a broken broker config blocks every order (fails closed) and says close_position still flattens', () => {
+  const { env, dir } = setup([]);
+  fs.writeFileSync(path.join(dir, 'brokers.json'), '{ broken');
+  const r = gate({ tool_name: 'mcp__broker__place_order', tool_input: { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' } }, { ...env, FTH_BROKERS_FILE: path.join(dir, 'brokers.json') });
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /broker-config[\s\S]*close_position still flattens/);
 });
 
 test('order gate blocks unknown strategies and instruments the strategy does not trade', () => {
@@ -343,6 +353,31 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
     assert.strictEqual(byId[id].result.isError, true, `exit ${id} must be blocked`);
     assert.match(byId[id].result.content[0].text, /\[exposure\]/);
   }
+});
+
+test('MCP gateway: a confirmed close lets the closed position\'s stop be cancelled before the account shows it', async () => {
+  const { spawn } = require('child_process');
+  const run = async extra => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
+      PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    };
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    const msg = (id, name, args) => JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+    // The runner's flatten: close, then cancel the leftover stop at once (the fill lands 1.5 s later).
+    gw.stdin.write(`${msg(1, 'close_position', { accountId: 1, contractId: EXIT_BASE.contractId, reason: '[exit] runner' })}\n${msg(2, 'cancel_order', { accountId: 1, orderId: 9 })}\n`);
+    gw.stdin.end();
+    await new Promise(resolve => gw.on('close', resolve));
+    return Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
+  };
+  const ok = await run({});
+  assert.strictEqual(ok[2].result.isError, undefined, 'the stop of a confirmed close may be cancelled');
+  const refused = await run({ CLOSE_FAIL: '1' });
+  assert.strictEqual(refused[2].result.isError, true, 'a refused close leaves the position: its stop stays');
+  assert.match(refused[2].result.content[0].text, /protective stop/);
 });
 
 test('MCP gateway: with no command it starts the broker server named in the broker config', async () => {

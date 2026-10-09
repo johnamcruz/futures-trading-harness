@@ -65,7 +65,7 @@ test('qwen settings merge is idempotent, keeps user entries, and removes old har
 });
 
 test('qwen workspace permissions allow harness scripts and deny edits to the harness and its state', () => {
-  const p = qwenWorkspaceSettings('/fth', '/home/u', { journalDir: '/home/u/.projectx-mcp' }).permissions;
+  const p = qwenWorkspaceSettings('/fth', '/home/u', { journal: '/home/u/.projectx-mcp/journal.jsonl' }).permissions;
   // The skills' scripts (multi-timeframe read, prop status) and the runner's logs are allowed; credentials are not.
   assert.ok(p.allow.includes('Bash(node /fth/scripts/mtf.js *)') && p.allow.includes('Bash(node /fth/scripts/combine.js status *)'));
   assert.ok(p.allow.includes('Read(//home/u/.futures-trading-harness/logs/**)'));
@@ -76,7 +76,7 @@ test('qwen workspace permissions allow harness scripts and deny edits to the har
   assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
   assert.ok(p.allow.includes('WebFetch(bls.gov)'));
   assert.ok(!p.allow.some(r => ['Bash', 'Edit', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
-  for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/**)', 'Edit(//home/u/.qwen/**)',
+  for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.projectx-mcp/journal.jsonl)', 'Edit(//home/u/.qwen/**)',
     'Read(//proc/**)', 'Read(//home/u/.claude.json)', 'Read(//fth/**/.env)']) assert.ok(p.deny.includes(rule), rule);
 });
 
@@ -109,6 +109,16 @@ test('CLI validates arguments and supports --dry-run', () => {
   assert.match(dry.stdout, /would write .*brokers\.json \(broker topstepx: \/opt\/projectx-mcp\/dist\/index\.js\)/);
   assert.match(dry.stdout, /would write .*config\.toml/);
   assert.deepStrictEqual(fs.readdirSync(home), []);
+  const old = spawnSync(process.execPath, [cli, '--target', 'all', '--projectx', ENTRY, '--dry-run', '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home } });
+  assert.strictEqual(old.status, 1);
+  assert.match(old.stderr, /--projectx is gone: .*--entry/);
+  // --entry goes where the harness reads it: <FTH_HOME>/brokers.json.
+  const state = path.join(home, 'state');
+  const wrote = spawnSync(process.execPath, [cli, '--target', 'claude', '--entry', ENTRY, '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: state } });
+  assert.strictEqual(wrote.status, 0, wrote.stderr);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(state, 'brokers.json'), 'utf8')).brokers.topstepx.entry, ENTRY);
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.mkdirSync(home);
   const unknown = spawnSync(process.execPath, [cli, '--target', 'all', '--broker', 'nope', '--dry-run', '--home', home], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home } });
   assert.strictEqual(unknown.status, 1);
   assert.match(unknown.stderr, /unknown broker "nope"/);

@@ -13,7 +13,8 @@ const path = require('path');
 const { checkOrder, logDecision } = require('../lib/trading/check-order');
 const { gateNow } = require('../lib/trading/config');
 
-const ORDER_TOOL = /^mcp__.*broker.*__(place_order|modify_order)$/i;
+// Any MCP server's order tools (the broker server, under whatever name an older install registered it).
+const ORDER_TOOL = /^mcp__.+__(place_order|modify_order)$/i;
 
 function run(rawInput, ctx = {}, deps = {}) {
   const payload = JSON.parse(rawInput);

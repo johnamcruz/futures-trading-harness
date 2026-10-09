@@ -86,7 +86,7 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
-function claudeDenied(root, { home = os.homedir(), stateDir = null, journalDir = null } = {}) {
+function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null } = {}) {
   const h = p => abs(path.join(home, p));
   const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
@@ -97,8 +97,8 @@ function claudeDenied(root, { home = os.homedir(), stateDir = null, journalDir =
     `Read(${h('.futures-trading-harness')}/.env)`, ...(stateDir ? [`Read(${abs(stateDir)}/.env)`] : []),
     `Edit(${abs(root)}/**)`, `Write(${abs(root)}/**)`,
     `Edit(${h('.futures-trading-harness')}/**)`, `Write(${h('.futures-trading-harness')}/**)`,
-    // The broker server's journal (the order gate reads it).
-    ...(journalDir ? [`Edit(${abs(journalDir)}/**)`, `Write(${abs(journalDir)}/**)`] : []),
+    // The broker server's journal file (the order gate reads it).
+    ...(journal ? [`Edit(${abs(journal)})`, `Write(${abs(journal)})`] : []),
     `Edit(${h('.claude')}/**)`, `Write(${h('.claude')}/**)`,
   ];
 }
@@ -410,7 +410,7 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
         '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
-        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journalDir: path.dirname(activeBroker(env).journalPath) }).join(','),
+        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).

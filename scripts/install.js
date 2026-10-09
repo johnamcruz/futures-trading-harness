@@ -26,6 +26,7 @@ const os = require('os');
 const path = require('path');
 const { TARGETS, applyPlan, planBrokerEntry } = require('./lib/install');
 const { activeBroker } = require('./lib/broker/config');
+const { harnessHome } = require('./lib/paths');
 
 function parseArgs(argv) {
   const get = name => {
@@ -34,6 +35,7 @@ function parseArgs(argv) {
   };
   const target = get('--target');
   const entry = get('--entry');
+  if (argv.includes('--projectx')) throw new Error('--projectx is gone: pass the broker MCP server\'s entry with --entry (and --broker <name> for a broker other than the default)');
   const targets = target === 'all' ? Object.keys(TARGETS) : String(target || '').split(',').filter(Boolean);
   if (targets.length === 0 || targets.some(t => !TARGETS[t])) {
     throw new Error(`--target must be one of ${Object.keys(TARGETS).join(', ')}, or all`);
@@ -46,7 +48,7 @@ function main() {
     const { targets, brokerName, entry, dryRun, home } = parseArgs(process.argv.slice(2));
     const env = { ...process.env, ...(brokerName ? { FTH_BROKER: brokerName } : {}) };
     const configured = activeBroker(env);
-    const brokerFile = planBrokerEntry({ home, brokerName: configured.name, entry });
+    const brokerFile = planBrokerEntry({ home, brokerName: configured.name, entry, stateDir: harnessHome(env, home) });
     if (brokerFile) {
       process.stdout.write(`${dryRun ? 'would write' : 'write'} ${brokerFile.file} (broker ${configured.name}: ${entry})\n`);
       if (!dryRun) applyPlan({ writes: [brokerFile] });

@@ -138,6 +138,11 @@ test('the broker config: topstepx by default; yours adds brokers, picks one, or 
   const back = activeBroker({ FTH_HOME: home, FTH_BROKER: 'topstepx' });
   assert.deepStrictEqual([back.command[1], back.env.includes('PROJECTX_API_KEY')], ['/y/index.js', true]);
   assert.throws(() => activeBroker({ FTH_HOME: home, FTH_BROKER: 'Bad Name' }), /not valid/);
+  // Paths resolve against the config file's folder, so the gateway (run from workspace/) and the runner agree.
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ brokers: { topstepx: { entry: 'srv/index.js', journal: 'j.jsonl' } } }));
+  const rel = activeBroker({ FTH_HOME: home });
+  assert.deepStrictEqual([rel.command[1], rel.journalPath], [path.join(home, 'srv', 'index.js'), path.join(home, 'j.jsonl')]);
+  assert.throws(() => activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: path.join(home, 'missing.json') }), /FTH_BROKERS_FILE: .*does not exist/);
   fs.writeFileSync(path.join(home, 'brokers.json'), '{ nope');
   assert.throws(() => activeBroker({ FTH_HOME: home }), /brokers\.json/);
 });

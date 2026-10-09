@@ -149,7 +149,8 @@ function main(argv) {
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     if (tool === 'cancel_order') {
       const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env) }));
+      ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
+      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger, now }));
     }
     if (tool === 'modify_order') {
       if (base.violations.length) return base;
@@ -203,8 +204,10 @@ function main(argv) {
     if (!sent || !response || response.error || (response.result && response.result.isError)) return;
     const { args, observedNet, observedRootNet, closeTool } = sent;
     if (closeTool) {
-      // A close is a market order the account may not show yet, like one sent through place_order.
-      if (!observedNet) return;
+      // A close is a market order the account may not show yet, like one sent through place_order. Only one
+      // the server confirmed (success: true; a refused close comes back as success: false) counts.
+      const res = resultJson(response);
+      if (!observedNet || !res || res.success !== true) return;
       const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
       if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime() });
       return;
