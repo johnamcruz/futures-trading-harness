@@ -52,7 +52,7 @@ const outcome = (res, what) => {
  * it trades: the server's own guardrails apply to every order tool.
  */
 function tradingBlocked(config, accountId) {
-  if (!config || config.tradingEnabled !== true) return 'the broker MCP server has trading disabled (projectx-mcp: PROJECTX_TRADING_ENABLED=true enables it), so it would refuse the runner\'s exits, stop moves and cancels; halt entries with the STOP file instead';
+  if (!config || config.tradingEnabled !== true) return 'the broker MCP server has trading disabled (get_server_config: tradingEnabled is not true; its own setting enables it), so it would refuse the runner\'s exits, stop moves and cancels; halt entries with the STOP file instead';
   const allowed = Array.isArray(config.allowedAccountIds) ? config.allowedAccountIds.map(Number) : [];
   if (allowed.length && !allowed.includes(Number(accountId))) return `account ${accountId} is not among the server's allowed accounts (${allowed.join(', ')})`;
   return null;

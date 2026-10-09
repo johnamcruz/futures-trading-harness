@@ -3,7 +3,7 @@
 /**
  * Account profiles: a prop-firm challenge as a Markdown document,
  * `accounts/<name>/ACCOUNT.md` (frontmatter read by code, body by the
- * agents). A policy strategy names one (`account: topstep_100k`) to size by its
+ * agents). A policy strategy names one (`account: <name>`) to size by its
  * cushion and to train a policy for it. Extra folders: FTH_ACCOUNTS_DIRS.
  */
 

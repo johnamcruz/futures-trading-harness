@@ -5,7 +5,7 @@
  * lives in its own repo and implements the broker MCP interface
  * (docs/BROKER-MCP-INTERFACE.md); the harness knows only these settings.
  *
- *   mcp-configs/brokers.json        the defaults (topstepx)
+ *   mcp-configs/brokers.json        the defaults
  *   <FTH_HOME>/brokers.json         yours: adds brokers or overrides fields
  *   FTH_BROKERS_FILE                another file instead of yours
  *   FTH_BROKER                      the broker to use (else the file's "broker")

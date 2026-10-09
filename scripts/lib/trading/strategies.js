@@ -124,7 +124,7 @@ function validateStrategy(data, body, folderName) {
     const list = data.strategies;
     req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
       'strategies: the rules strategies whose setups it trades, in priority order (e.g. [ema_cross, keltner])');
-    req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md), e.g. topstep_100k');
+    req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md)');
     if (data.sizing !== undefined) {
       const z = data.sizing;
       req(z && typeof z === 'object' && !Array.isArray(z) && Object.entries(z).every(([k, v]) => SIZING_KEYS.includes(k) && typeof v === 'number' && v >= 0),

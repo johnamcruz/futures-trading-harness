@@ -2,7 +2,7 @@
 /**
  * Prop-challenge attempts (accounts/<name>/ACCOUNT.md):
  *
- *   node scripts/combine.js start  --account topstep_100k [--force]  # start an attempt (--force restarts one)
+ *   node scripts/combine.js start  --account <account> [--force]  # start an attempt (--force restarts one)
  *   node scripts/combine.js status [--account <name>] [--json]
  *   node scripts/combine.js record-day --account <name> --day YYYY-MM-DD --balance <dollars>
  *                                                           # a close the runner missed

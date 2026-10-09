@@ -2,7 +2,7 @@
 /**
  * Install the harness for one or more harnesses (install targets).
  *
- *   node scripts/install.js --target claude|codex|qwen|all [--broker topstepx] [--entry /abs/<server>/dist/index.js] [--dry-run]
+ *   node scripts/install.js --target claude|codex|qwen|all [--broker <name>] [--entry /abs/<server>/dist/index.js] [--dry-run]
  *
  * The broker MCP server is the one in the broker config (mcp-configs/brokers.json,
  * yours in ~/.futures-trading-harness/brokers.json); --entry records its entry

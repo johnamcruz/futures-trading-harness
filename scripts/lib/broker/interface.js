@@ -2,8 +2,7 @@
 
 /**
  * The broker MCP interface as data: what every broker or prop-firm MCP server
- * implements, extracted from projectx-mcp (TopstepX), the reference
- * implementation. docs/BROKER-MCP-INTERFACE.md is the same contract in prose
+ * implements. docs/BROKER-MCP-INTERFACE.md is the same contract in prose
  * (a test keeps them in step). Read by the adapter (broker/adapter.js), the
  * conformance checker (scripts/check-broker-mcp.js), and tests.
  *

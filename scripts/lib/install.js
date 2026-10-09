@@ -121,7 +121,7 @@ const isOurHook = group => (group.hooks || []).some(h => /run-with-flags\.js"? (
  * User-level Qwen settings: the broker MCP server behind the gateway. Hooks
  * come from the extension (qwen-extension/hooks); any harness hooks an older
  * install merged here are removed so they don't run twice, and so is the
- * gateway an older install registered as "projectx".
+ * gateway an older install registered under another name.
  */
 function mergeQwenSettings(settings, root) {
   const next = { ...settings };
@@ -140,7 +140,7 @@ function mergeQwenSettings(settings, root) {
     throw new Error(`settings.json already has an mcpServers.${SERVER_NAME} that does not use the harness gateway; remove it first`);
   }
   const servers = { ...(settings.mcpServers || {}) };
-  if (isGateway(servers.projectx)) delete servers.projectx;
+  for (const [name, server] of Object.entries(servers)) if (name !== SERVER_NAME && isGateway(server)) delete servers[name];
   next.mcpServers = { ...servers, [SERVER_NAME]: { ...(existing || {}), ...ours } };
   return next;
 }

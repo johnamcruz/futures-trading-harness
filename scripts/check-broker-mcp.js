@@ -5,7 +5,7 @@
  * places, changes, or cancels an order, or writes the journal.
  *
  *   node scripts/check-broker-mcp.js [--account <id>] [--symbol MNQ] -- <server command> [args...]
- *   node scripts/check-broker-mcp.js -- node /abs/path/projectx-mcp/dist/index.js
+ *   node scripts/check-broker-mcp.js -- node /abs/path/<broker>-mcp/dist/index.js
  *
  * The server gets this process's environment (its credentials). Exit 0 when
  * it conforms, 1 when it doesn't.
