@@ -38,9 +38,11 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
 test('writeCycleLog: the whole cycle (prompt, transcript, summary) and one summary line a day', () => {
   const home = tmpDir();
   const at = new Date('2026-10-07T14:03:05Z');
-  const { file, summary } = writeCycleLog(home, { at, action: 'trade', harness: 'claude', prompt: 'P', argv: ['claude', '-p', 'P'], output: claudeStream(['trade-session']), result: 'CYCLE RESULT: executed', ok: true, durationMs: 1200 });
+  const context = { symbols: [{ symbol: 'MNQ', day: 'MNQ day: ...' }], unavailable: ['the journal (EACCES)'] };
+  const { file, summary } = writeCycleLog(home, { at, action: 'trade', harness: 'claude', prompt: 'P', context, argv: ['claude', '-p', 'P'], output: claudeStream(['trade-session']), result: 'CYCLE RESULT: executed', ok: true, durationMs: 1200 });
   const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.strictEqual(rec.prompt, 'P');
+  assert.deepStrictEqual(rec.context, context, 'what the prompt was built from');
   assert.deepStrictEqual(rec.argv, ['claude', '-p', '<prompt>']);
   assert.ok(rec.transcript.includes('place_order'));
   assert.strictEqual(path.basename(file), '140305-trade.json');

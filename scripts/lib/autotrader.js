@@ -15,6 +15,7 @@ const { contractRoot } = require('./trading/journal');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
+const { et: etTime, etStamp } = require('./trading/session-context');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -259,18 +260,21 @@ function accountText(state) {
   if (state.error) return ` Account ${state.id}: state unavailable (${state.error}); read get_account_snapshot before deciding anything.`;
   const known = Array.isArray(state.positions);
   const positions = (state.positions || []).map(p => `${p.contractId} ${p.type === 1 ? 'long' : p.type === 2 ? 'short' : '?'} ${p.size} @ ${p.averagePrice}`);
-  const described = Array.isArray(state.openTrades) && state.openTrades.length === positions.length && positions.length > 0;
+  // Positions are listed once: as trades (open-trades.js), or, when those couldn't be built, on their own line below.
+  const described = positions.length > 0 && ((Array.isArray(state.openTrades) && state.openTrades.length === positions.length) || Boolean(state.openTradesError));
   const book = !known ? 'positions and working orders unknown (read get_account_snapshot)'
     : `${positions.length ? (described ? `${positions.length} open position${positions.length === 1 ? '' : 's'} (below)` : `open: ${positions.join(', ')}`) : 'flat'}; ${state.workingOrders || 0} working order${state.workingOrders === 1 ? '' : 's'}`;
-  const head = ` Account ${state.id} at ${state.at}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; ${book}.`;
+  const head = ` Account ${state.id} at ${etTime(state.at)}: balance ${Number.isFinite(state.balance) ? usd(state.balance) : 'unknown'}; ${book}.`;
   const blocked = a => (a.entryBlock ? `; new entries blocked: ${a.entryBlock}` : '');
   const attempts = (state.attempts || []).map(a => (a.noBalance
     ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
-    : ` ${a.account} attempt (${a.status}) as of ${a.asOf}: balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
+    : ` ${a.account} attempt (${a.status}) as of ${a.asOf ? etTime(a.asOf) : '?'}: balance ${usd(a.balance)}, floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
     + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}`
     + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
   const trades = (state.openTrades || []).map(t => ` ${t}`).join('');
-  return head + trades + attempts.join('');
+  // Positions whose trade details couldn't be built: the model reads them itself.
+  const unbuilt = state.openTradesError && positions.length ? ` Open positions: ${positions.join(', ')} (trade details unavailable this cycle: ${state.openTradesError}; read list_open_positions and list_open_orders).` : '';
+  return head + trades + unbuilt + attempts.join('');
 }
 
 const RECENT_IN_PROMPT = 10;
@@ -286,17 +290,25 @@ function recentBarsText(symbol, bars, timeframe) {
   return ` ${symbol} last ${list.length} closed ${timeframe}m bars (ET open time, oldest first): ${rows.join('; ')}.`;
 }
 
-/** What fired on this bar, with its confluence: "orb long (with ema_cross; against bos)". */
-function signalsText(symbol, scan) {
+/**
+ * What fired on this bar, with its confluence and track record: "orb long
+ * with ema_cross [orb track record: ...]". A paper strategy is marked (the
+ * gate refuses its live entry); in a manage-only cycle nothing new may be
+ * entered, so nothing is listed; under a policy strategy's verdict the fired
+ * strategies are its components, entered only as the verdict says.
+ */
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [] } = {}) {
   if (!Array.isArray(scan)) return '';
+  if (manageOnly) return ` ${symbol}: manage-only cycle, so what fired is not listed (no new entries).`;
   const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
-    return `${r.name} ${r.direction}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
+    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
-  return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}`;
+  const policy = verdicts.length ? ` These are ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
+  return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
 
 /** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
@@ -314,28 +326,30 @@ function historyText(history) {
     const last = runs[runs.length - 1];
     if (last && last.text === short && last.sym === sym) { last.n += 1; last.to = h.at; } else runs.push({ text: short, sym, n: 1, from: h.at, to: h.at });
   }
-  const when = r => (r.n > 1 ? `${r.from.slice(11, 16)}-${r.to.slice(11, 16)}Z (${r.n} cycles)` : `${r.from.slice(11, 16)}Z`);
+  const when = r => (r.n > 1 ? `${etTime(r.from).replace(' ET', '')}-${etTime(r.to)} (${r.n} cycles)` : etTime(r.from));
   return ` Your last ${list.length} cycle(s), oldest first: ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
 }
 
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
-  const head = `Autonomous cycle at ${now.toISOString()}. Follow the autonomous-trading skill. No user is present.${where}`;
+  // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
+  const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [] } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [] } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
-      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan }) =>
-        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (open ${bar.t}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts }) =>
+        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (opened ${etTime(bar.t)}, close ${bar.c}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (projectx get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
         + (bar.trend ? ` ${symbol} ${bar.trend} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + (bar.plan ? ` ${bar.plan}` : '')
         + (bar.day ? ` ${bar.day}` : '')
         + recentBarsText(symbol, bar.recent, cfg.timeframe)
-        + signalsText(symbol, scan));
+        + signalsText(symbol, scan, { manageOnly, verdicts: verdicts || [] }));
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
@@ -348,7 +362,9 @@ function prompts(cfg, now, root = '') {
         ? ` ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
           + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
-      return `${head}${recover}${bars.join('')}${accountText(state)}${verdicts.join('')}${historyText(history)}${trades.length ? ` Your last ${trades.length} reviewed trade(s), oldest first: ${trades.join(' | ')}.` : ''}${lessons.length ? ` Instincts from your reviewed trades (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
+      // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
+      const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${accountText(state)}${verdicts.join('')}${historyText(history)}${trades.length ? ` Your last ${trades.length} reviewed trade(s)${tradesSummary ? ` (${tradesSummary})` : ''}, oldest first: ${trades.join(' | ')}.` : ''}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${acct}${mode ? ` in ${mode}` : ''}.`;
     },
     eod: ({ state = null } = {}) => `${head}${accountText(state)} Run the end-of-day skill${acct}: flatten every position and cancel working orders without asking, then review and summarize.`,
   };

@@ -5,7 +5,10 @@
  * reviews:
  *
  *   <FTH_HOME>/logs/cycles/<day>/<HHMMSS>-<action>.json   the whole cycle: the
- *       prompt it was given, the harness argv (prompt elided), the raw
+ *       prompt it was given and what it was built from (context: each symbol's
+ *       bar, trend, day, plan, what fired with its record; the account and open
+ *       trades; news; the sections that were unavailable), the harness argv
+ *       (prompt elided), the raw
  *       transcript, and the parsed summary
  *   <FTH_HOME>/logs/cycles-<day>.jsonl   one summary line per cycle: result,
  *       skills loaded, tool calls by name, shell commands, orders sent, and
@@ -70,7 +73,7 @@ function summarize(output) {
  * Write the cycle record and its summary line. Returns { file, summary }.
  * Never throws (logging must not stop trading).
  */
-function writeCycleLog(home, { at = new Date(), action, harness, prompt, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null }) {
+function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null }) {
   const day = tradingDayKey(at);
   const summary = summarize(output);
   const stamp = at.toISOString().slice(11, 19).replace(/:/g, '');
@@ -79,7 +82,8 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, argv = 
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({
       at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, summary,
-      prompt, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
+      // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
+      prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2));
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
       at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, file,

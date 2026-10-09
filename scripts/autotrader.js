@@ -38,7 +38,9 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { dayContextSeries, describeDay } = require('./lib/trading/day-context');
+const { dayContextSeries, describeDay, describeOvernight } = require('./lib/trading/day-context');
+const { premarketPlan, newsLine } = require('./lib/trading/session-context');
+const { readBlackouts } = require('./lib/trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./lib/trading/track-record');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, usesOrderFlow } = require('./lib/autotrader');
 const { createRunner } = require('./lib/runner');
@@ -55,7 +57,7 @@ const { writeMtfRecord } = require('./lib/trading/mtf-state');
 const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
-const { digest, recentTrades } = require('./lib/trading/instincts');
+const { digest, recentTrades, formSummary } = require('./lib/trading/instincts');
 const { resolveJournalPath, readJournal } = require('./lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -163,7 +165,7 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   return false;
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000 } = {}) {
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null } = {}) {
   const now = new Date();
   const argv = buildCommand(cfg, prompt, ROOT);
   if (opts.dryRun) {
@@ -176,7 +178,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const res = await runOnce(cfg, argv, timeoutMs);
   const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
-  const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
+  const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
   process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
   if (summary.missingSkills.length) process.stderr.write(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
   appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
@@ -335,10 +337,17 @@ async function main(argv) {
     // The day so far (trading/day-context.js), one line for the prompt; levels on the contract's tick.
     dayContext: (sym, bars) => {
       const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
-      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round: x => Number((Math.round(x / tick) * tick).toFixed(6)) });
+      const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
+      // In RTH the day so far; outside it, the overnight session against the prior day.
+      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round }) || describeOvernight(bars, { symbol: sym.symbol, round });
     },
-    lessons: ({ setups } = {}) => digest(readJournal(resolveJournalPath(process.env)), 5, { setups }),
-    recentTrades: () => recentTrades(readJournal(resolveJournalPath(process.env)), 10),
+    // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
+    // the last reviewed trades' record on their own line.
+    lessons: ({ entries } = {}) => digest(entries || readJournal(resolveJournalPath(process.env)), 5, { kinds: ['mistake', 'lesson'], form: false }),
+    recentTrades: ({ entries } = {}) => recentTrades(entries || readJournal(resolveJournalPath(process.env)), 10),
+    tradesSummary: ({ entries } = {}) => formSummary(entries || readJournal(resolveJournalPath(process.env)), 10),
+    premarketPlan: (symbol, entries, now) => premarketPlan(entries, symbol, now),
+    news: now => newsLine(readBlackouts(loadConfig(process.env).blackoutsFile), now),
     journalEntries: () => readJournal(resolveJournalPath(process.env)),
     tradeHistory: t => excursionNote(readRecord(HOME_DIR, t.setup), t),
     recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),

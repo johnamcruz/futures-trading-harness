@@ -25,7 +25,7 @@ const { scanRecord, appendJsonl } = require('../../scripts/lib/trading/scan-log'
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { tmpDir, writeJournal } = require('../helpers');
-const { digest, recentTrades } = require('../../scripts/lib/trading/instincts');
+const { digest, recentTrades, formSummary } = require('../../scripts/lib/trading/instincts');
 const { readJournal } = require('../../scripts/lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -96,8 +96,11 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: STEP })),
     scanFor: (symbol, bars) => scan(strategies3m, { bars }, { symbol, now: new Date(clockRef.t) }),
     scanLog: rec => appendJsonl(path.join(home, 'logs', 'scans.jsonl'), scanRecord(rec)),
-    lessons: () => digest(readJournal(journal), 5),
-    recentTrades: () => recentTrades(readJournal(journal), 10),
+    // As scripts/autotrader.js wires them: one journal read per prompt, each fact once.
+    journalEntries: () => readJournal(journal),
+    lessons: ({ entries }) => digest(entries, 5, { kinds: ['mistake', 'lesson'], form: false }),
+    recentTrades: ({ entries }) => recentTrades(entries, 10),
+    tradesSummary: ({ entries }) => formSummary(entries, 10),
   });
   for (let guard = 0; clockRef.t < Date.parse('2026-04-28T04:15:30Z') && guard < 5000; guard += 1) {
     const ms = await runner.step();
@@ -125,8 +128,9 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   const after = cycles.filter(c => Date.parse(c.at) > Date.parse(traded.at));
   assert.ok(after.length >= 1, 'a cycle after the trade');
   for (const c of after) {
-    assert.match(c.prompt, /Your last 1 reviewed trade\(s\), oldest first: bos long loss -1\.05R in trend-up \[mistake:chased\]/);
-    assert.match(c.prompt, /Instincts from your reviewed trades .*\(form\) last 1 trades: 0W\/1L, E -1\.05R/);
+    assert.match(c.prompt, /Your last 1 reviewed trade\(s\) \(0W\/1L, E -1\.05R\), oldest first: bos long loss -1\.05R in trend-up \[mistake:chased\]/);
+    assert.match(c.prompt, /Your recurring mistakes and lessons \(confidence; notes from your own past, not rules\): \(0\.\d\) mistake:chased in 1 of the last 1 reviewed trades/);
+    assert.doesNotMatch(c.prompt, /\(form\)/, 'the record is on the reviewed-trades line, not repeated');
   }
   // The records and logs the gate and the reviews read.
   assert.ok(fs.existsSync(path.join(home, 'mtf', 'MNQ.json')));

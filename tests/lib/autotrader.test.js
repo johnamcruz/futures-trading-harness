@@ -113,7 +113,7 @@ test('child env locks the gate and paper mode disables trading', () => {
 test('trade prompt carries the closed bar and its data file', () => {
   const bar = sym => ({ t: '2026-10-07T14:00:00Z', c: 21503.25, file: `/b/${sym}-1m.json`, contractId: `CON.F.US.${sym}.Z26` });
   const p = prompts(validateConfig({ timeframe: 1 }), et(10, 1), '/r').trade([{ symbol: 'MNQ', bar: bar('MNQ') }, { symbol: 'MES', bar: bar('MES') }], { recovered: true });
-  assert.match(p, /MNQ: a 1-minute bar just closed \(open 2026-10-07T14:00:00Z, close 21503.25\)/);
+  assert.match(p, /MNQ: a 1-minute bar just closed \(opened 10:00 ET, close 21503.25\)/);
   assert.match(p, /\/b\/MES-1m\.json .*contractId CON\.F\.US\.MES\.Z26/);
   assert.match(p, /trade-session skill for MNQ, MES \(one symbol at a time, open positions first\)/);
   assert.match(p, /previous cycle was stopped before it finished/);
@@ -255,8 +255,8 @@ test('every cycle prompt carries the account: balance, positions, orders, and ea
   }];
   const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
   const text = p.trade([{ symbol: 'MNQ' }], { state });
-  assert.match(text, /Account 123 at 2026-10-07T14:00:01.000Z: balance \$101,250; open: CON.F.US.ENQ.Z26 long 2 @ 21500.25; 1 working order\./);
-  assert.match(text, /topstep_100k attempt \(active\) as of 2026-10-07T14:00:01.000Z: balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
+  assert.match(text, /Account 123 at 10:00 ET: balance \$101,250; open: CON.F.US.ENQ.Z26 long 2 @ 21500.25; 1 working order\./);
+  assert.match(text, /topstep_100k attempt \(active\) as of 10:00 ET: balance \$101,250, floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
   const flat = { ...state, positions: [], workingOrders: 0, attempts: [{ ...attempts[0], entryBlock: 'a position is open on the account' }] };
   assert.match(p.trade([{ symbol: 'MNQ' }], { state: flat }), /balance \$101,250; flat; 0 working orders\..*new entries blocked: a position is open on the account\./);
   assert.match(p.premarket('MNQ', { state }), /Account 123 .*balance \$101,250.*Run the premarket skill/);
@@ -277,7 +277,7 @@ test('the account line says what it does not know, and formats every side and co
     account: 'topstep_50k', status: 'active', asOf: '2026-10-07T13:57:00.000Z', balance: 49750, floor: 48000, cushion: 1750, profit: -250, target: 3000, dayPnl: 0.3, sessionsLeft: 1, budgets: [],
   };
   const one = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [attempt] } });
-  assert.match(one, /topstep_50k attempt \(active\) as of 2026-10-07T13:57:00.000Z: balance \$49,750, floor \$48,000, cushion \$1,750, profit -\$250 of \$3,000, day \$0, 1 session left\./);
+  assert.match(one, /topstep_50k attempt \(active\) as of 09:57 ET: balance \$49,750, floor \$48,000, cushion \$1,750, profit -\$250 of \$3,000, day \$0, 1 session left\./);
   const none = p.trade([{ symbol: 'MNQ' }], { state: { ...base, positions: [], attempts: [{ account: 'topstep_50k', status: 'unknown', noBalance: true, entryBlock: 'the topstep_50k account snapshot is missing' }] } });
   assert.match(none, /topstep_50k attempt: no balance read yet, so no floor or cushion to show; new entries blocked: the topstep_50k account snapshot is missing\./);
   assert.doesNotMatch(none, /NaN|undefined/);
@@ -295,7 +295,7 @@ test('cycle history in the prompt: repeated results collapse into one, long ones
     { at: at(15), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
   ];
   const t = historyText(h);
-  assert.match(t, /Your last 6 cycle\(s\), oldest first: 14:00-14:09Z \(4 cycles\) MNQ: no-trade - nothing fired \| 14:12Z MNQ: executed - orb long x+… \| 14:15Z MNQ: no-trade - nothing fired\./);
+  assert.match(t, /Your last 6 cycle\(s\), oldest first: 10:00-10:09 ET \(4 cycles\) MNQ: no-trade - nothing fired \| 10:12 ET MNQ: executed - orb long x+… \| 10:15 ET MNQ: no-trade - nothing fired\./);
   assert.ok(t.length < 400, `${t.length} chars`);
   assert.strictEqual(historyText([]), '');
 });
@@ -324,6 +324,37 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   });
   assert.ok(p.length < 4500, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
-  for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Instincts from your reviewed trades/]) assert.match(p, want);
+  for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
+});
+
+test('the fired line: a paper strategy is marked, manage-only lists nothing, a policy\'s components point at its verdict', () => {
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
+  const bar = { t: '2026-10-08T14:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'CON.F.US.MNQ.Z26' };
+  const scan = [
+    { name: 'value_area', status: 'paper', candidate: true, direction: 'short', signal: 'rules', confluence: { with: [], against: [] } },
+    { name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } },
+  ];
+  const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/r');
+  const flat = p.trade([{ symbol: 'MNQ', bar, scan }]);
+  assert.match(flat, /value_area short \(paper: plan only, the gate refuses a live entry\)/);
+  assert.match(flat, /orb long(?! \(paper)/);
+  const manage = p.trade([{ symbol: 'MNQ', bar, scan }], { manageOnly: true });
+  assert.match(manage, /MNQ: manage-only cycle, so what fired is not listed \(no new entries\)\./);
+  assert.doesNotMatch(manage, /value_area|orb long/);
+  const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'CON.F.US.MNQ.Z26', maxSize: 3, stopTicks: 40 }];
+  const prop = p.trade([{ symbol: 'MNQ', bar, scan, verdicts }]);
+  assert.match(prop, /These are prop_portfolio_3m's components: enter only as its verdict below says \(setup:prop_portfolio_3m\), never as setup:<component>\./);
+  assert.match(prop, /prop_portfolio_3m: long setup from orb, verdict full: enter only as setup:prop_portfolio_3m/);
+});
+
+test('a section that could not be built is named; positions without trade details are still listed', () => {
+  const { prompts, validateConfig, accountText } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
+  const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/r').trade([{ symbol: 'MNQ' }], { unavailable: ['MNQ day context (boom)', 'the journal (EACCES)'] });
+  assert.match(p, /Context unavailable this cycle \(not "none"\): MNQ day context \(boom\); the journal \(EACCES\)\./);
+  assert.doesNotMatch(prompts(cfg, new Date(), '/r').trade([{ symbol: 'MNQ' }]), /Context unavailable/);
+  const t = accountText({ id: 1, at: '2026-10-08T14:33:20Z', balance: 50000, positions: [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 2, averagePrice: 21500 }], workingOrders: 1, openTradesError: 'bad order data' });
+  assert.match(t, /1 open position \(below\); 1 working order\. Open positions: CON\.F\.US\.MNQ\.Z26 long 2 @ 21500 \(trade details unavailable this cycle: bad order data; read list_open_positions and list_open_orders\)\./);
 });

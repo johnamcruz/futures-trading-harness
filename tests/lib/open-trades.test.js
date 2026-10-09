@@ -65,8 +65,12 @@ test('the initial stop falls back to the working stop; a stop on the wrong side 
   assert.strictEqual(a.initialStop, 21490);
   assert.deepStrictEqual(a.notes, ['initial stop unknown: risk from the working stop']);
   assert.strictEqual(a.setup, null);
-  assert.strictEqual(a.barsHeld, 0);
-  assert.match(describeOpenTrade(a), /setup unknown: no order_placed entry with a setup tag\): risk 10 points, measured to the working stop \(the initial stop is unknown\);.*no closed bar since the fill yet\.$/);
+  assert.strictEqual(a.barsHeld, null, 'no bars for its contract this cycle');
+  assert.match(describeOpenTrade(a), /setup unknown: no order_placed entry with a setup tag\): risk 10 points, measured to the working stop \(the initial stop is unknown\);.*no bars for this contract this cycle, so no R now, best, or worst/);
+  // Bars, but none since the fill (it filled during the bar that just closed).
+  const [c] = openTrades({ positions: [pos], orders: [{ contractId: C, type: 4, side: 1, stopPrice: 21490 }], entries: [], barsFor: () => [BARS[0]] });
+  assert.strictEqual(c.barsHeld, 0);
+  assert.match(describeOpenTrade(c), /no closed bar since the fill yet\.$/);
   // A breakeven-plus stop above a long's entry: no risk from it.
   const [b] = openTrades({ positions: [pos], orders: [{ contractId: C, type: 4, side: 1, stopPrice: 21505 }], entries: [placed('2026-10-08T14:41:00Z', 'setup:orb long, stop 21510.00')], barsFor: () => null });
   assert.strictEqual(b.initialStop, null);

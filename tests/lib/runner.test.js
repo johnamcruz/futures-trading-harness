@@ -49,10 +49,10 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
     root: '/r',
     client: market.client(clockRef, positions),
     clock: { now: () => new Date(clockRef.t) },
-    runCycle: async (action, prompt) => {
+    runCycle: async (action, prompt, limits = {}) => {
       const start = clockRef.t;
       const timedOut = timeoutAt !== null && start >= timeoutAt && !cycles.some(c => c.timedOut);
-      cycles.push({ action, prompt, start, timedOut });
+      cycles.push({ action, prompt, context: limits.context || null, start, timedOut });
       clockRef.t += cycleMs;
       return { ok: !timedOut, timedOut };
     },
@@ -74,18 +74,19 @@ async function simulate({ cfg: rawCfg, from, to, cycleMs = 20000, market, killAt
   return { cycles, runner };
 }
 
-const barOpens = prompt => [...prompt.matchAll(/(\w+): a \d+-minute bar just closed \(open ([^,]+),/g)].map(m => `${m[1]}@${m[2]}`);
+// Each symbol's bar in a cycle, from the context the cycle log records (the prompt shows ET times).
+const barOpens = c => (c.context ? c.context.symbols.map(x => `${x.symbol}@${x.bar.t}`) : []);
 
 test('3m, full session: exactly one cycle per closed bar, each started within seconds of the close', async () => {
   const market = fakeMarket({ minutes: 3 });
   const { cycles } = await simulate({ cfg: { timeframe: 3, sessions: ['09:35-15:00@America/New_York'] }, from: et(9, 30), to: et(15, 0), market });
   const trade = cycles.filter(c => c.action === 'trade');
-  const seen = trade.flatMap(c => barOpens(c.prompt));
+  const seen = trade.flatMap(c => barOpens(c));
   assert.strictEqual(new Set(seen).size, seen.length, 'no bar is processed twice');
   // Bars closing 09:36 ... 15:00 inside the 09:35-15:00 session: 109 closes.
   assert.ok(trade.length >= 107 && trade.length <= 109, `cycles: ${trade.length}`);
   for (const c of trade) {
-    const open = Date.parse(barOpens(c.prompt)[0].split('@')[1]);
+    const open = Date.parse(barOpens(c)[0].split('@')[1]);
     const lag = c.start - (open + 3 * 60000);
     assert.ok(lag >= 0 && lag <= 6000, `cycle started ${lag} ms after the close`);
   }
@@ -104,7 +105,7 @@ test('two symbols are served in the same cycle, so neither starves', async () =>
   const { cycles } = await simulate({ cfg: { timeframe: 3, symbols: ['MNQ', 'MES'] }, from: et(10, 0), to: et(11, 0), cycleMs: 100000, market });
   const trade = cycles.filter(c => c.action === 'trade');
   assert.ok(trade.length >= 19);
-  for (const c of trade) assert.deepStrictEqual(barOpens(c.prompt).map(x => x.split('@')[0]), ['MNQ', 'MES']);
+  for (const c of trade) assert.deepStrictEqual(barOpens(c).map(x => x.split('@')[0]), ['MNQ', 'MES']);
 });
 
 test('cycles longer than a bar skip bars instead of queueing them', async () => {
@@ -114,7 +115,7 @@ test('cycles longer than a bar skip bars instead of queueing them', async () => 
   for (let i = 1; i < trade.length; i += 1) assert.ok(trade[i].start >= trade[i - 1].start + 200000, 'never overlapping');
   assert.ok(trade.length >= 15 && trade.length <= 18, `cycles: ${trade.length}`); // back to back, each on a bar under half a bar old
   for (const c of trade) {
-    const open = Date.parse(barOpens(c.prompt)[0].split('@')[1]);
+    const open = Date.parse(barOpens(c)[0].split('@')[1]);
     assert.ok(c.start - (open + 180000) <= 90000, 'never acts on a stale bar');
   }
 });
@@ -639,8 +640,8 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   // Each trade cycle's prompt carries the attempt's state.
   assert.ok(take.calls.summaries >= 1);
   const tradePrompt = b.prompts.find(x => /trade-session/.test(x));
-  assert.match(tradePrompt, /Account 7 at [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100; flat; 0 working orders\./);
-  assert.match(tradePrompt, /mini attempt \(active\) as of [^:]+:\d\d:\d\d\.\d+Z: balance \$50,100, floor \$48,000, cushion \$2,100/);
+  assert.match(tradePrompt, /Account 7 at \d\d:\d\d ET: balance \$50,100; flat; 0 working orders\./);
+  assert.match(tradePrompt, /mini attempt \(active\) as of \d\d:\d\d ET: balance \$50,100, floor \$48,000, cushion \$2,100/);
   assert.ok(take.calls.summaryBalances.every(x => x === 50100), 'the attempt is built from the balance just read');
   // trigger: bar runs every bar, and the policy still records its verdicts.
   const each = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });

@@ -154,4 +154,44 @@ function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100 } 
   return `${symbol ? `${symbol} day: ` : ''}${parts.join('; ')}.`;
 }
 
-module.exports = { DEFAULTS, openingType, dayType, dayContextSeries, describeDay, stepMinutes };
+const GLOBEX_OPEN = 18 * 60;
+
+/**
+ * Outside RTH (the Globex session, 18:00-09:30 ET), one line in place of the
+ * day line: the overnight range so far, the prior RTH day (range, close, value
+ * area and POC) with price's place against it, and the time to the RTH open.
+ * Null in RTH, or when the bars don't hold the session's start or a whole
+ * prior RTH day. From bars 0..last only.
+ */
+function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100) / 100, params = {} } = {}) {
+  const n = bars.length;
+  if (!n) return null;
+  const last = bars[n - 1];
+  const { minute } = ind.etInfo(last.t);
+  if (minute >= RTH_OPEN && minute < RTH_CLOSE) return null;
+  const key = ind.sessionKey(last.t, GLOBEX_OPEN);
+  let s = n - 1;
+  while (s > 0 && ind.sessionKey(bars[s - 1].t, GLOBEX_OPEN) === key) s -= 1;
+  if (s === 0 && ind.etInfo(bars[0].t).minute !== GLOBEX_OPEN) return null; // the session started before the data
+  // The prior complete RTH day (its 09:30 bar in the data, with bars before it).
+  let day = null; let prior = null;
+  for (let i = 0; i < s; i += 1) {
+    const e = ind.etInfo(bars[i].t);
+    const inRth = e.minute >= RTH_OPEN && e.minute < RTH_CLOSE;
+    if (day && (e.day !== day.date || !inRth)) { if (day.whole) prior = day; day = null; }
+    if (!inRth) continue;
+    if (!day) day = { date: e.day, whole: i > 0 && e.minute === RTH_OPEN, high: bars[i].h, low: bars[i].l, close: bars[i].c };
+    day.high = Math.max(day.high, bars[i].h); day.low = Math.min(day.low, bars[i].l); day.close = bars[i].c;
+  }
+  if (day && day.whole) prior = day;
+  if (!prior) return null;
+  const p = profileSeries(bars, 'prior_rth', { options: optionsFromParams(params) }).profile[n - 1];
+  let hi = -Infinity; let lo = Infinity;
+  for (let i = s; i < n; i += 1) { hi = Math.max(hi, bars[i].h); lo = Math.min(lo, bars[i].l); }
+  const r = round;
+  const toOpen = minute >= GLOBEX_OPEN ? 24 * 60 - minute + RTH_OPEN : RTH_OPEN - minute;
+  const where = !p ? '' : last.c > p.vah ? ': price above the prior value area' : last.c < p.val ? ': price below the prior value area' : ': price inside the prior value area';
+  return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}${where}; RTH opens in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min.`;
+}
+
+module.exports = { DEFAULTS, openingType, dayType, dayContextSeries, describeDay, describeOvernight, stepMinutes };

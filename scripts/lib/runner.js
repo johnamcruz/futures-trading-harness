@@ -71,6 +71,12 @@ function createRunner(deps) {
     trackRecord = () => null,
     // The journal's entries, for the open trades' setup and initial stop (trading/open-trades.js).
     journalEntries = () => [],
+    // Today's premarket plan for a symbol (trading/session-context.js): (symbol, entries, now) -> one line.
+    premarketPlan = () => null,
+    // The news blackouts (trading/session-context.js): (now) -> one line.
+    news = () => null,
+    // The record of the last reviewed trades: ({ entries }) -> "4W/6L, E -0.12R" or null.
+    tradesSummary = () => null,
     // An open trade against its strategy's recorded excursions (track-record.js excursionNote): (trade) -> text or null.
     tradeHistory = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
@@ -190,12 +196,14 @@ function createRunner(deps) {
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
       }
       let day = null;
+      let dayError = null;
       try {
         day = dayContext(sym, bars);
       } catch (err) {
+        dayError = err.message;
         log(`${sym.symbol}: no day context this bar (${err.message})`, 'error');
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, day, recent: bars.slice(-10) } };
+      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, dayError, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, day, recent: bars.slice(-10) } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -732,40 +740,66 @@ function createRunner(deps) {
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
-          // The journal, read once for this prompt (open trades, track records).
-          let entries = [];
-          try { entries = journalEntries() || []; } catch (err) { log(`journal unavailable for the prompt (${err.message})`, 'error'); }
+          // Every section of the prompt is built here; one that fails is named in the prompt
+          // ("Context unavailable this cycle") and logged, never silently dropped.
+          const unavailable = [];
+          const failed = (what, err) => { unavailable.push(`${what} (${err.message})`); log(`prompt: ${what} unavailable (${err.message})`, 'error'); };
+          const attempt = (what, fn, fallback) => { try { return fn(); } catch (err) { failed(what, err); return fallback; } };
+          // The journal, read once for this prompt (open trades, track records, plans, reviewed trades, mistakes).
+          const entries = attempt('the journal: no open-trade setups, live results, premarket plan, reviewed trades, or lessons', () => journalEntries() || [], null);
+          const journal = entries || [];
+          for (const x of run) if (x.dayError) unavailable.push(`${x.symbol} day context (${x.dayError})`);
           // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
+          let tradeObjs = [];
           if (acct && Array.isArray(acct.positions) && acct.positions.length) {
             try {
-              // MNQ bars manage an NQ trade too (the same family).
+              // MNQ bars manage an NQ trade too (the same family); a contract with no bar this cycle has none.
               const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
-              const trades = openTrades({ positions: acct.positions, orders: acct.orders || [], entries, barsFor: p => (item(p) ? item(p).bars : null) });
-              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (_err) { return null; } };
-              acct = { ...acct, openTradeSetups: trades.map(t => t.setup).filter(Boolean), openTrades: trades.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
+              tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
+              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { log(`prompt: ${t.setup} excursions unavailable (${err.message})`, 'error'); return null; } };
+              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: item({ contractId: t.contractId }) ? item({ contractId: t.contractId }).tickSize : null, et: etTime, history: history(t) })) };
             } catch (err) {
-              log(`open trades unavailable for the prompt (${err.message})`, 'error');
+              log(`prompt: open trades unavailable (${err.message})`, 'error');
+              acct = { ...acct, openTradesError: err.message };
             }
           }
           // Each strategy that fired carries its track record into the prompt.
           const withRecords = x => (Array.isArray(x.scan) ? x.scan.map(r => {
             if (!(r.candidate && r.direction)) return r;
             try {
-              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString(), entries }) };
+              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString(), entries: journal }) };
             } catch (err) {
-              log(`${x.symbol}: no track record for ${r.name} (${err.message})`, 'error');
-              return r;
+              log(`prompt: ${x.symbol} track record for ${r.name} unavailable (${err.message})`, 'error');
+              return { ...r, record: `track record unavailable (${err.message})` };
             }
           }) : x.scan);
-          // The setups in play: what fired and what is open. The instincts shown are about these.
-          const inPlay = [...new Set([
-            ...run.flatMap(x => (Array.isArray(x.scan) ? x.scan.filter(r => r.candidate && r.direction).map(r => r.name) : [])),
-            ...((acct && acct.openTradeSetups) || []),
-          ])];
-          const prompt = prompts(cfg, cycleNow, root).trade(run.map(x => ({ symbol: x.symbol, bar: x.bar, verdicts: x.verdicts, scan: withRecords(x) })), { manageOnly, recovered: recover, state: acct, history: (state && state.history) || [], lessons: (() => { try { return lessons({ setups: inPlay }); } catch (_err) { return []; } })(), trades: (() => { try { return recentTrades(); } catch (_err) { return []; } })() });
+          const items = run.map(x => ({
+            symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x),
+            bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
+          }));
+          const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
+          const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
+          const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
+          const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
+          const prompt = prompts(cfg, cycleNow, root).trade(items, {
+            manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
+            lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
+          });
+          // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
+          const context = {
+            symbols: items.map(x => ({
+              symbol: x.symbol, bar: { t: x.bar.t, c: x.bar.c, contractId: x.bar.contractId, file: x.bar.file }, trend: x.bar.trend || null, day: x.bar.day || null, plan: x.bar.plan || null,
+              fired: (x.scan || []).filter(r => r.candidate && r.direction).map(r => ({ name: r.name, direction: r.direction, status: r.status, regime: r.regime || null, confluence: r.confluence || null, record: r.record || null })),
+              verdicts: x.verdicts || [],
+            })),
+            account: acct ? accountEvent(acct) : null,
+            openTrades: tradeObjs,
+            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
+            manageOnly, recovered: recover, unavailable,
+          };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
-          const r = await timedCycle(again.action, prompt, { timeoutMs }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
+          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           state = { ...state, history: [...((state && state.history) || []), { at: cycleNow.toISOString(), symbols: run.map(x => x.symbol), result: (r && r.result) || null }].slice(-10) };
