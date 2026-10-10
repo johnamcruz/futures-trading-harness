@@ -11,18 +11,17 @@ Strategies are Markdown documents: drop a `STRATEGY.md` into `strategies/` and
 the agents can trade it, and the order gate enforces its instruments, sessions,
 and status in code.
 
-The architecture is based on [ECC](https://github.com/affaan-m/ECC): one
-canonical tree of agents, skills, commands, rules, and profile-gated hooks, with
-native adapters generated for each harness.
+The architecture is one canonical tree of agents, skills, commands, rules, and
+profile-gated hooks, with native adapters generated for each harness.
 
 It also trains a reinforcement-learning policy to **pass prop-firm combines**
 (Topstep 100K by default: $6,000 target, $3,000 trailing max loss, $2,000
 daily limit) across all the strategies, in micros or minis; see
 [Passing prop challenges](#passing-prop-challenges).
 
-## ECC in brief
+## Architecture in brief
 
-ECC keeps everything an agent needs as plain documents in one tree, and
+The harness keeps everything an agent needs as plain documents in one tree, and
 generates each harness's own format from it:
 
 | Slot | What it is | Here |
@@ -581,6 +580,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS
 
 ## License
 
-MIT. See [LICENSE](LICENSE). The hook runtime and plugin architecture are
-derived from [ECC](https://github.com/affaan-m/ECC) by Affaan Mustafa, whose
-copyright notice the license keeps.
+MIT. See [LICENSE](LICENSE).
