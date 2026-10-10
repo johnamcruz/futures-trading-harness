@@ -8,3 +8,8 @@ its own generated `AGENTS.md` with the operator instructions.
 
 Before committing: `npm test`, `npm run lint`, and `node scripts/sync-harness.js`
 if you changed agents, commands, rules, or skills.
+
+Before every pull request (hard rule, every agent, every change): the
+regression (`npm run verify`) passes and an adversarial review by a reviewer
+other than the change's author found nothing left to fix. See "Before a pull
+request" in `CLAUDE.md`.

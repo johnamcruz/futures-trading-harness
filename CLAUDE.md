@@ -53,6 +53,7 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 ## Commands
 
 ```bash
+npm run verify                   # the regression: everything CI runs (test incl. e2e, lint, sync check, strategies, secrets)
 npm test                         # node tests/run-all.js
 npm run lint                     # eslint + markdownlint-cli2
 node scripts/sync-harness.js     # after editing agents, commands, rules, or skills
@@ -81,6 +82,32 @@ against:
 `tests/plugin/ecc-architecture.test.js` enforces what can be checked in code
 (lib modules unit-tested, CLI and hook size, no runtime dependencies, no
 broker code); its listed exceptions and pinned sizes may only shrink.
+
+## Before a pull request (hard rule)
+
+Every coding agent (Claude Code, Codex, Qwen Code, any other) and every person
+changing this repository does both of these before opening or updating a pull
+request, every time, whatever the size of the change:
+
+1. **Regression.** `npm run verify` passes: the full test suite (unit,
+   wiring, e2e, including `tests/e2e/mock-trading-e2e.test.js`), lint, the
+   generated-files check, strategy validation, and the secrets check, as CI
+   runs them. A change under `rl/` or `scripts/lib/rl/` also runs the Python
+   suite for real: `FTH_PYTHON=<python with rl/requirements.txt> FTH_REQUIRE_PYTHON=1 npm test`.
+2. **Adversarial review.** A reviewer other than the author of the change (a
+   separate agent or subagent with no stake in it, or a person) reviews the
+   whole diff against the base branch, trying to break it: inputs that make a
+   gate fail open, a refusal of a legitimate risk-reducing action, broker
+   faults (lost, late, refused or errored replies), races, tests that would
+   pass without the code they claim to cover, and ECC compliance. Every
+   confirmed finding is fixed (or, if not worth its code, answered with the
+   reason), then the regression runs again and the fixes get their own review,
+   until a round confirms nothing new.
+
+Never open a pull request with a failing regression or an unaddressed
+confirmed finding. The pull request description says what was run and what
+the review found and fixed (`.github/pull_request_template.md`).
+`tests/plugin/process.test.js` keeps `npm run verify` equal to what CI runs.
 
 ## Rules for changes
 

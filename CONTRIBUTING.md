@@ -31,9 +31,16 @@
 
 ```bash
 npm install
-npm test
-npm run lint
-node scripts/sync-harness.js --check
+npm run verify    # test (unit, wiring, e2e), lint, sync check, strategies, secrets: what CI runs
 ```
+
+## Before a pull request (hard rule)
+
+For everyone, people and coding agents alike, on every pull request: the
+regression passes (`npm run verify`; with `FTH_REQUIRE_PYTHON=1` and a Python
+that has `rl/requirements.txt` when `rl/` changed), and an adversarial review
+by someone other than the change's author found nothing left to fix (each
+confirmed finding fixed, the regression re-run, the fixes reviewed again). Say
+both in the pull request (the template asks). See `CLAUDE.md`.
 
 Use conventional commit messages.

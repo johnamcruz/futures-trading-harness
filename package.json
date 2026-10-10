@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "node tests/run-all.js",
+    "verify": "npm test && npm run lint && npm run sync:check && node scripts/strategies.js validate && npm run check:secrets",
     "lint": "eslint . && markdownlint-cli2",
     "sync": "node scripts/sync-harness.js",
     "sync:check": "node scripts/sync-harness.js --check",
