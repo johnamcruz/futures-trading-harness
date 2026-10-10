@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { writeJsonAtomic, readJson } = require('./lib/harness-run');
@@ -37,10 +37,12 @@ const { formatBlock } = require('./lib/trading/order-gate');
 const { harnessHome } = require('./lib/paths');
 const { runningAttempts } = require('./lib/trading/prop-state');
 const { activeBroker, translatedCommand } = require('./lib/broker/config');
+const markers = require('./lib/trading/order-markers');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
+const GRACE_MS = Number(process.env.FTH_UNKNOWN_ORDER_GRACE_MS) > 0 ? Number(process.env.FTH_UNKNOWN_ORDER_GRACE_MS) : markers.GRACE_MS;
 const ENTRY_ORDERS_KEPT = 200;
 
 const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
@@ -55,6 +57,7 @@ function recordEntryOrder(env, orderId, args) {
   try {
     const file = path.join(harnessHome(env), 'entry-orders.json');
     const list = readJson(file, []);
+    if (Array.isArray(list) && list.some(e => String(e.orderId) === String(orderId))) return;
     const setup = /^\s*setup:([a-z0-9][a-z0-9_-]*)/i.exec(String(args.rationale || ''));
     // The planned stop is the last "stop <price>" ("buy stop 21510 above the high, stop 21490" plans 21490).
     const stops = [...String(args.rationale || '').matchAll(new RegExp(STOP_PRICE.source, 'gi'))];
@@ -138,20 +141,60 @@ function main(argv) {
   let ledger = [];
   const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
 
-  // Order calls whose reply never came within LANE_TIMEOUT_MS: their effect is unknown.
-  const unanswered = new Set();
   const blocked = violations => ({ allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' });
+
+  /**
+   * Orders on this account whose outcome is unknown (order-markers.js): each
+   * is looked up in the broker's orders by its customTag and settled when it
+   * shows there (placed) or the grace period passes without it (never
+   * placed). Returns the markers still unknown.
+   */
+  const settle = async (accountId, now) => {
+    let mine;
+    try {
+      mine = markers.markersFor(markers.readMarkers(process.env), accountId);
+    } catch (err) {
+      return [{ tag: 'unreadable', file: markers.markerDir(process.env), unreadable: true, error: err.message }];
+    }
+    if (!mine.length) return [];
+    const readable = mine.filter(m => !m.unreadable);
+    let orders = null;
+    if (readable.length) {
+      const from = new Date(Math.min(...readable.map(m => Date.parse(m.sentAt))) - 60000).toISOString();
+      try {
+        orders = parseToolJson(await caller.call('search_orders', { accountId, startTimestamp: from }), 'search_orders');
+      } catch (err) {
+        process.stderr.write(`[mcp-gateway] could not look up orders of unknown outcome: ${err.message}\n`);
+        return mine;
+      }
+    }
+    const { placed, gone, unknown } = markers.resolveMarkers(mine, orders, now, GRACE_MS);
+    // Settled here: a late reply to one of this gateway's own calls must not count it a second time.
+    const forget = tag => {
+      for (const [id, t] of tagOf) if (t === tag) { tagOf.delete(id); overdue.delete(id); sentNet.delete(id); }
+    };
+    for (const { marker: m, order } of placed) {
+      markers.removeMarker(process.env, m.tag);
+      forget(m.tag);
+      if (!m.risk && order.id !== undefined && order.id !== null) recordEntryOrder(process.env, order.id, m.args || m);
+      // It may have filled moments ago: count it until the account shows it, like any order just sent.
+      if (Number.isFinite(m.observedNet)) ledger.push({ ...markers.markerLedger([m], now)[0], orderId: String(order.id) });
+    }
+    for (const m of gone) {
+      markers.removeMarker(process.env, m.tag);
+      forget(m.tag);
+    }
+    return unknown;
+  };
 
   const check = async (args, tool, id) => {
     const now = gateNow();
-    if (unanswered.size) {
-      return blocked([{ check: 'order-pending', message: `An earlier order call (request ${[...unanswered].join(', ')}) has had no reply for over ${LANE_TIMEOUT_MS / 1000} s, so the account state is unknown. Wait for it, then check positions and orders.` }]);
-    }
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
+    ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     if (tool === 'cancel_order') {
+      const unknown = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger, now }));
+      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...markers.markerLedger(unknown, now)], now }));
     }
     if (tool === 'modify_order') {
       if (base.violations.length) return base;
@@ -159,9 +202,13 @@ function main(argv) {
       return blocked(evaluateModifyAccount({ input: args, positions, orders, config: loadConfig(process.env) }));
     }
     if (tool !== 'place_order') return base;
-    ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-    const extra = await accountViolations(args, caller, now, ledger);
+    // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
+    // skippable); exits and stops still go, checked against the account as it would be if it filled.
+    const unknown = await settle(args.accountId, now);
+    const entry = !isRiskReducing(args.rationale);
+    const extra = await accountViolations(args, caller, now, entry ? ledger : [...ledger, ...markers.markerLedger(unknown, now)]);
     const violations = [...base.violations, ...extra.violations];
+    if (entry && unknown.length) violations.push({ check: 'order-pending', message: markers.pendingMessage(unknown, now, GRACE_MS) });
     // The account reads take time: an entry checked just before the close
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(gateNow(), loadConfig(process.env));
@@ -172,13 +219,28 @@ function main(argv) {
 
   // Responses the order lane is waiting for, by client request id.
   const waiting = new Map();
-  // After the timeout the lane is released but order calls stay refused
-  // (order-pending) until the late reply arrives and is recorded.
+  // Order calls past LANE_TIMEOUT_MS: the lane is released, and a place_order's
+  // marker stays on disk (new entries wait) until the late reply or the broker's orders settle it.
+  const overdue = new Set();
+  // Client request id -> the customTag of the place_order it carries.
+  const tagOf = new Map();
+  const settled = id => {
+    const tag = tagOf.get(id);
+    tagOf.delete(id);
+    if (tag) {
+      try {
+        markers.removeMarker(process.env, tag);
+      } catch (err) {
+        process.stderr.write(`[mcp-gateway] could not clear the record of order ${tag}: ${err.message}\n`);
+      }
+    }
+  };
   const awaitResponse = id => new Promise(resolve => {
-    const timer = setTimeout(() => { unanswered.add(id); resolve(null); }, LANE_TIMEOUT_MS);
+    const timer = setTimeout(() => { overdue.add(id); resolve(null); }, LANE_TIMEOUT_MS);
     waiting.set(id, msg => {
       clearTimeout(timer);
-      if (unanswered.delete(id)) recordSent(id, msg);
+      settled(id);
+      if (overdue.delete(id)) recordSent(id, msg);
       else resolve(msg);
     });
   });
@@ -264,6 +326,33 @@ function main(argv) {
         parsed = null;
       }
       for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
+      // Every place_order goes out with a customTag and a marker on disk first, so an unknown
+      // outcome (no reply, or this gateway gone) is found again in the broker's orders.
+      let line2 = forward;
+      if (parsed && !Array.isArray(parsed) && /(?:^|__)place_order$/.test(String(parsed.params && parsed.params.name || ''))) {
+        const args = parsed.params.arguments || {};
+        const tag = markers.tagFor(args);
+        const sent = parsed.id !== undefined ? sentNet.get(parsed.id) : null;
+        try {
+          markers.writeMarker(process.env, {
+            tag, accountId: args.accountId, contractId: args.contractId, side: args.side, size: args.size, type: args.type,
+            risk: isRiskReducing(args.rationale), args: { contractId: args.contractId, side: args.side, rationale: args.rationale, stopLossBracket: args.stopLossBracket },
+            observedNet: sent ? sent.observedNet : null, observedRootNet: sent ? sent.observedRootNet : null, sentAt: gateNow().toISOString(), pid: process.pid,
+          });
+        } catch (err) {
+          if (!isRiskReducing(args.rationale)) {
+            if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([{ check: 'order-pending', message: `The gateway could not record the order before sending it (${err.message}), so an unknown outcome could not be tracked. The order was not sent.` }]))));
+            sentNet.delete(parsed.id);
+            return;
+          }
+          process.stderr.write(`[mcp-gateway] could not record ${tag} before sending it: ${err.message}\n`);
+        }
+        if (args.customTag !== tag) {
+          parsed = { ...parsed, params: { ...parsed.params, arguments: { ...args, customTag: tag } } };
+          line2 = JSON.stringify(parsed);
+        }
+        if (parsed.id !== undefined) tagOf.set(parsed.id, tag);
+      }
       const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
       // Closes aren't gated, but they change the position: note the position
       // before them so the ledger can count them until the account shows it.
@@ -279,7 +368,7 @@ function main(argv) {
         }
       }
       const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
-      toChild(forward);
+      toChild(line2);
       // Hold the lane until the server has answered every order-changing call.
       await Promise.all(replies);
     }).catch(err => process.stderr.write(`[mcp-gateway] ${err.message}\n`));
