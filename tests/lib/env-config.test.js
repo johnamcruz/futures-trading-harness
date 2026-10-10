@@ -21,7 +21,7 @@ test('env-config: training fills as live (next bar\'s open, the backtester\'s sl
 
 test('env-config: a config can\'t train on cheaper fills than live', () => {
   assert.throws(() => build({ ...base, slippageTicks: 0 }), /slippageTicks: at least 1/);
-  assert.throws(() => build({ ...base, slippageTicks: 'none' }), /slippageTicks: at least 1/);
+  for (const s of ['none', '2', true, [1], Infinity]) assert.throws(() => build({ ...base, slippageTicks: s }), /slippageTicks: at least 1/, JSON.stringify(s));
   assert.throws(() => build({ ...base, fill: 'close' }), /fill: training always fills as live/);
 });
 

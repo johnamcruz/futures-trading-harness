@@ -141,8 +141,11 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   for (const [name, v] of Object.entries({ positions, orders, trades })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
-  // A position of unknown size is no flat account: the whole check refuses (fail closed).
-  for (const p of positions) signedSize(p);
+  // A position of unknown size is no flat account: the check refuses (fail closed). An entry reads every
+  // position (correlation, prop rules); an [exit] / [protect] only its own root's, so a bad row elsewhere
+  // never stops a position from getting its stop.
+  const ownRoot = contractRoot(input.contractId);
+  for (const p of positions) if (!isRiskReducing(input.rationale) || contractRoot(p.contractId) === ownRoot) signedSize(p);
   const skip = (config && config.skipChecks) || new Set();
   const violations = [];
   const add = (check, message) => {

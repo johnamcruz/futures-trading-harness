@@ -416,11 +416,14 @@ More runner settings:
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
   switches to manage-only cycles once reached.
 - The CME equity index calendar for 2026-2027 is built in
-  (`scripts/lib/trading/exchange-calendar.js`); `closedDates` (holidays) and
+  (`scripts/lib/trading/exchange-calendar.js`): every exchange holiday is
+  closed (no session at all, even where CME runs a short one), and the day
+  after Thanksgiving and Christmas Eve close at 13:00 ET. `closedDates` and
   `earlyCloseDates` (13:00 ET closes, end of day at `earlyCloseEodAt`) add
   days to it. Both go to the order gate too: no entries on a closed day or
-  after an early close. The runner won't start when the calendar runs out
-  within 30 days.
+  after an early close. After the calendar's last day the gate refuses every
+  entry (those days' holidays are unknown); the runner warns once a day for
+  the 30 days before it.
 - No run outlasts end of day: each gets at most the time left until
   `eodAt`, and end of day closes positions directly before the agents'
   review run. It is done only once the account reads flat (a position whose

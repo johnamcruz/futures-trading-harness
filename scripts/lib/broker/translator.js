@@ -101,6 +101,22 @@ function writeCache(file, cache) {
   return merged;
 }
 
+/**
+ * The one standard name for a contract the caller may name several ways: a
+ * month that is the cache's front month becomes its root (MNQ:2026-12 ->
+ * MNQ), and a broker id the cache knows becomes its standard name. Anything
+ * else comes back as given. Local; no lookup.
+ */
+function canonicalName(id, cache) {
+  if (typeof id !== 'string') return id;
+  const std = parseStandardName(id);
+  const known = std ? std.month && { root: std.root, month: std.month } : cache.ids[id];
+  if (!known) return id;
+  const front = cache.front[known.root];
+  if (front && (front.month === known.month || front.id === id)) return known.root;
+  return `${known.root}:${known.month}`;
+}
+
 /** The root of a broker id, from the cache (local; no lookup), or null. */
 function standardRoot(id, file) {
   const known = readCache(file).ids[String(id || '')];
@@ -249,5 +265,5 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
 
 module.exports = {
   CONTRACT_TOOLS, TranslationError,
-  isStandardName, parseStandardName, parseTicker, readCache, standardRoot, createTranslator,
+  isStandardName, parseStandardName, parseTicker, readCache, standardRoot, canonicalName, createTranslator,
 };

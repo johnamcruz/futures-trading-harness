@@ -8,7 +8,8 @@ test('sizes: a whole number of contracts, 0 or more; anything else is unknown an
   assert.strictEqual(positionSize({ size: 2 }), 2);
   assert.strictEqual(positionSize({ size: '3' }), 3);
   assert.strictEqual(positionSize({ size: 0 }), 0);
-  for (const size of [undefined, null, '', 'x', 1.5, -1, NaN, {}]) {
+  assert.strictEqual(positionSize({ size: ' 2 ' }), 2);
+  for (const size of [undefined, null, '', ' ', '\n', 'x', 1.5, -1, NaN, {}, [], [2], false, true, '0x2', '1e1', Infinity]) {
     assert.throws(() => positionSize({ contractId: 'MNQ', size }), /MNQ has no valid size/, JSON.stringify(size));
   }
   assert.throws(() => positionSize({ contractId: 'MNQ', quantity: 1 }), /no valid size/, 'another server\'s field name is no size');

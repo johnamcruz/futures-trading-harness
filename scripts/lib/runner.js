@@ -36,6 +36,7 @@ const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot } = require('./trading/contracts');
 const { isOpen } = require('./trading/positions');
+const { coverageError } = require('./trading/exchange-calendar');
 
 // Micros and minis of one index share bars: a position or order in either
 // belongs to the symbol polled (MNQ bars manage an NQ trade too).
@@ -51,6 +52,11 @@ const RESYNCS_BEFORE_REROLL = 3;
 const MAX_POLL_MS = 10000;
 const LOOKUP_RETRY_MS = 30000;
 const MAX_RETRY_MS = 60000;
+// A close sent this recently may not have filled yet: the contract is not closed (or its orders cancelled) again
+// until it settles, so two closes in flight never over-close into the other side.
+const CLOSE_SETTLE_MS = 10000;
+// End of day that reads the account but doesn't find it flat yet counts as failed runs (kill switch) only after this long.
+const UNFLAT_GRACE_MS = 120000;
 const FILL_GRACE_MS = 30000;
 // The account read for a run's prompt never holds a run up longer than this.
 const ACCOUNT_READ_MS = 5000;
@@ -96,7 +102,12 @@ function createRunner(deps) {
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
   let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
-  let unflatPasses = 0; // flatten passes in a row that found something open or working
+  let unflatPasses = 0; // flatten passes in a row (by one caller, unflatWhy) that found something open or working
+  let unflatWhy = null;
+  let unflatSince = 0; // when the current run of unflat passes began
+  let flattenRead = false; // whether the last flatten pass read the account
+  const closedAt = new Map(); // contractId -> when the runner last sent its close
+  let calendarCheckedDay = null;
   let eodRunDay = null; // the trading day whose end-of-day agents' run already happened
   const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
   const minutes = cfg.timeframe;
@@ -576,12 +587,15 @@ function createRunner(deps) {
   async function flattenAll(why) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return true;
     let state;
+    flattenRead = false;
+    if (why !== unflatWhy) { unflatPasses = 0; unflatWhy = why; }
     try {
       state = await client.accountState(cfg.account);
     } catch (err) {
       log(`${why}: could not read the account (${err.message}); retrying`, 'error');
       return false;
     }
+    flattenRead = true;
     const roots = new Set(cfg.symbols.map(familyRoot));
     const open = state.positions.filter(p => roots.has(famOf(p.contractId)) && isOpen(p));
     const working = state.orders.filter(x => roots.has(famOf(x.contractId)));
@@ -591,12 +605,21 @@ function createRunner(deps) {
       return true;
     }
     unflatPasses += 1;
+    if (unflatPasses === 1) unflatSince = clock.now().getTime();
+    // A contract closed moments ago and still open waits for its close to fill: no second close, and no cancel of its
+    // orders (one may be the close itself). Once it reads flat, its leftover orders are cancelled at once.
+    const nowMs = clock.now().getTime();
+    const stillOpen = new Set(open.map(p => p.contractId));
+    const settling = id => stillOpen.has(id) && nowMs - (closedAt.get(id) ?? -Infinity) < CLOSE_SETTLE_MS;
     if (unflatPasses > 1) {
       log(`${why}: still not flat after ${unflatPasses - 1} pass(es): ${open.map(p => p.contractId).join(', ') || 'no position'}${working.length ? `, ${working.length} working order(s)` : ''}; closing again`, 'error');
       emit('flatten_unverified', { why, passes: unflatPasses - 1, open: open.map(p => p.contractId), working: working.length });
     }
-    for (const p of open) {
+    const toClose = open.filter(x => !settling(x.contractId));
+    const toCancel = working.filter(x => !settling(x.contractId) && !toClose.some(p => p.contractId === x.contractId));
+    for (const p of toClose) {
       try {
+        closedAt.set(p.contractId, nowMs);
         await client.closePosition(cfg.account, p.contractId);
         log(`${why}: ${p.contractId} was open; closed at market`, 'error');
         emit('flatten', { why, contractId: p.contractId, size: Number(p.size), side: p.type === 1 ? 'long' : p.type === 2 ? 'short' : null });
@@ -604,7 +627,7 @@ function createRunner(deps) {
         log(`${why}: could not close ${p.contractId} (${err.message}); retrying`, 'error');
       }
     }
-    for (const o of working) {
+    for (const o of toCancel) {
       try {
         await client.cancelOrder(cfg.account, o.id);
       } catch (err) {
@@ -712,6 +735,12 @@ function createRunner(deps) {
 
   async function stepOnce() {
     const now = clock.now();
+    // Once a trading day: warn while the exchange calendar is running out (after it, the gate refuses entries).
+    if (dayKey(now) !== calendarCheckedDay) {
+      calendarCheckedDay = dayKey(now);
+      const gap = coverageError(now, { closed: cfg.closedDates, early: cfg.earlyCloseDates });
+      if (gap) { log(gap, 'error'); emit('calendar_ending', { message: gap }); }
+    }
     const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
     state = d.state;
     if (pendingClose && d.action !== 'eod') await recordClose(now);
@@ -757,13 +786,17 @@ function createRunner(deps) {
         pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
         await recordClose(now);
       }
-      // A failed end of day is retried on the next pass: flattening matters most.
+      // A failed end of day is retried on the next pass: flattening matters most. A day whose end of day
+      // was tried keeps its catch-up after the day rolls over, whether or not it ever traded.
       if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
+      else state = { ...state, eodAttempted: true };
       emit(d.action, { day: d.state.day, ok, cyclesToday: state.cycles });
-      record(ok, false, now);
+      // Waiting for closes to fill (the account read, not flat yet) is no failed run, for a while.
+      const awaitingFlat = d.action === 'eod' && !ok && flattenRead && now.getTime() - unflatSince < UNFLAT_GRACE_MS;
+      if (!awaitingFlat) record(ok, false, now);
       saveState(state);
       // A failed end of day is retried, with a growing pause (5 s .. 60 s).
-      return ok ? 0 : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
+      return ok ? 0 : awaitingFlat ? IDLE_MS : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
     }
     if (d.action === null && (!inMarketHours(now) || state.eodDone)) {
       // Outside market hours (or after today's end of day) nothing may be

@@ -2,15 +2,20 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { CLOSED, EARLY_CLOSE, COVERED_UNTIL, exchangeCalendar, coverageError } = require('../../scripts/lib/trading/exchange-calendar');
+const { CLOSED, EARLY_CLOSE, COVERED_UNTIL, exchangeCalendar, calendarEnd, coverageError } = require('../../scripts/lib/trading/exchange-calendar');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
 
 test('calendar: the built-in CME dates, plus configured ones (a list or a comma string); configuration only adds', () => {
   const base = exchangeCalendar();
   assert.ok(base.closedDates.has('2026-04-03') && base.closedDates.has('2026-12-25') && base.earlyCloseDates.has('2026-11-27'));
+  // Every exchange holiday is closed, even where CME runs a short session; only the half days are early closes.
+  for (const d of ['2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2027-06-18', '2027-07-05', '2027-11-25']) {
+    assert.ok(base.closedDates.has(d) && !base.earlyCloseDates.has(d), `${d} is closed`);
+  }
+  assert.deepStrictEqual(EARLY_CLOSE, ['2026-11-27', '2026-12-24', '2027-11-26']);
   const more = exchangeCalendar({ closed: '2028-04-14, 2028-12-25', early: ['2028-01-17'] });
   assert.ok(more.closedDates.has('2028-04-14') && more.closedDates.has('2028-12-25') && more.closedDates.has('2026-12-25'));
-  assert.ok(more.earlyCloseDates.has('2028-01-17') && more.earlyCloseDates.has('2026-11-26'));
+  assert.ok(more.earlyCloseDates.has('2028-01-17') && more.earlyCloseDates.has('2026-11-27'));
 });
 
 test('calendar: every date is a weekday trading day, none is both closed and early, all within the coverage', () => {
@@ -30,4 +35,9 @@ test('coverage: an error within 30 days of the table\'s end, unless configured d
   assert.strictEqual(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: ['2028-04-14'] }), null);
   assert.strictEqual(coverageError(new Date('2027-12-15T12:00:00Z'), { early: '2028-01-17' }), null);
   assert.match(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: ['not-a-date'] }), /calendar ends 2027-12-31/);
+  // By trading day: 30 days after 20:00 ET on 2027-12-01 is the trading day 2028-01-01, after 15:00 ET still 2027-12-31.
+  assert.match(coverageError(new Date('2027-12-02T01:00:00Z')), /calendar ends 2027-12-31/);
+  assert.strictEqual(coverageError(new Date('2027-12-01T20:00:00Z')), null);
+  assert.strictEqual(calendarEnd(), COVERED_UNTIL);
+  assert.strictEqual(calendarEnd({ early: '2028-11-24' }), '2028-11-24');
 });

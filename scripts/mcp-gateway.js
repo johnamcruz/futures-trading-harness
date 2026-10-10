@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse } = require('./lib/trading/mcp-gateway');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
@@ -131,7 +131,8 @@ function main(argv) {
     return r;
   };
 
-  const check = async (args, tool, id) => {
+  const check = async (sentArgs, tool, id) => {
+    const args = canonicalArgs(sentArgs); // one name per contract for the gate and its ledger
     const now = gateNow();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
@@ -194,15 +195,12 @@ function main(argv) {
   const recordSent = (id, response) => {
     const sent = sentNet.get(id);
     sentNet.delete(id);
-    if (!sent || !response || response.error || (response.result && response.result.isError)) return;
-    const { args, observedNet, observedRootNet, closeTool } = sent;
-    if (closeTool) {
-      // A close is a market order the account may not show yet, like one sent through place_order. Only one
-      // the server confirmed (success: true; a refused close comes back as success: false) counts.
-      const res = resultJson(response);
-      if (!observedNet || !res || res.success !== true) return;
-      const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
-      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt });
+    if (!sent || ((!response || response.error || (response.result && response.result.isError)) && !sent.closeEntry)) return;
+    const { args, observedNet, observedRootNet, closeEntry } = sent;
+    if (closeEntry) {
+      // Counted since it was sent; a refused close (success: false) is dropped, a confirmed one counts from now.
+      if (!response || response.error || (response.result && response.result.isError) || (resultJson(response) || {}).success !== true) ledger = ledger.filter(e => e !== closeEntry);
+      else closeEntry.at = gateNow().getTime();
       return;
     }
     const placed = resultJson(response);
@@ -274,11 +272,12 @@ function main(argv) {
       // before them so the ledger can count them until the account shows it.
       for (const m of lane) {
         const close = /(?:^|__)(close_position|partial_close_position)$/.exec(String(m.params.name || ''));
-        const args = m.params.arguments || {};
+        const args = canonicalArgs(m.params.arguments || {});
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
-          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId), sentAt: gateNow().getTime() });
+          const closeEntry = closeLedgerEntry(close[1], args, positions, gateNow());
+          if (closeEntry) { ledger.push(closeEntry); sentNet.set(m.id, { closeEntry }); }
         } catch (err) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }

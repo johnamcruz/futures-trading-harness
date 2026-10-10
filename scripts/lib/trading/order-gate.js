@@ -152,6 +152,9 @@ function checkPlan(input, dayEntries, now, config) {
 function marketClosed(now, config = {}) {
   const day = tradingDayKey(now);
   if (config.closedDates && config.closedDates.has(day)) return `The exchange is closed for the trading day ${day} (FTH_CLOSED_DATES); no entries.`;
+  if (config.calendarEnds && day > config.calendarEnds) {
+    return `The exchange calendar ends ${config.calendarEnds}: no entries on later trading days until their CME holidays and early closes are added (FTH_CLOSED_DATES / FTH_EARLY_CLOSE_DATES, or scripts/lib/trading/exchange-calendar.js).`;
+  }
   const until = config.earlyCloseDates && config.earlyCloseDates.has(day) ? EARLY_CLOSE_MIN : undefined;
   if (!inMarketHours(now, { until })) {
     return `New entries only during market hours (${MARKET_HOURS_LABEL}${until ? '; early close at 13:00 ET today' : ''}); no position may be held outside them.`;

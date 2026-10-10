@@ -90,7 +90,7 @@ item is removed from the list in the PR that fixes it.
   `paths`, `rl/policy-net`, `trading/cisd-ote`,
   `trading/contracts` (exercised only through other modules' tests).
 - **CLIs over 200 lines, pinned at their size:** `scripts/autotrader.js` (401)
-  and `scripts/mcp-gateway.js` (313): move logic to `scripts/lib/`.
+  and `scripts/mcp-gateway.js` (312): move logic to `scripts/lib/`.
 
 ## Other
 

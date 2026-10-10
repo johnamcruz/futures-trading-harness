@@ -190,7 +190,7 @@ function historyBars(timeframe) {
   return Math.min(20000, Math.max(2000, Math.ceil((3 * 23 * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
 }
 
-function validateConfig(raw, now = new Date()) {
+function validateConfig(raw) {
   const cfg = { ...DEFAULTS, ...(raw || {}) };
   const errors = [];
   if (!HARNESSES.includes(cfg.harness)) errors.push(`harness: one of ${HARNESSES.join(', ')}`);
@@ -213,9 +213,7 @@ function validateConfig(raw, now = new Date()) {
   }
   if (cfg.earlyCloseEodAt && !parseAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone"');
   if (Array.isArray(cfg.closedDates) && Array.isArray(cfg.earlyCloseDates)) {
-    const { exchangeCalendar, coverageError } = require('./trading/exchange-calendar');
-    const gap = coverageError(now, { closed: cfg.closedDates, early: cfg.earlyCloseDates });
-    if (gap) errors.push(`closedDates / earlyCloseDates: ${gap}`);
+    const { exchangeCalendar } = require('./trading/exchange-calendar');
     const cal = exchangeCalendar({ closed: cfg.closedDates, early: cfg.earlyCloseDates });
     cfg.closedDates = [...cal.closedDates].sort();
     cfg.earlyCloseDates = [...cal.earlyCloseDates].sort();
@@ -461,9 +459,10 @@ function freshDay(key) {
  */
 function decide(cfg, state, now, { killSwitch = false } = {}) {
   const key = dayKey(now);
-  // A previous trading day that traded but never finished end of day (runner
-  // down, crash): flatten first, whatever the time.
-  if (state && state.day !== key && !state.eodDone && (state.cycles > 0 || state.premarketDone)) {
+  // A previous trading day that traded, or whose end of day was tried, but
+  // never finished end of day (runner down, crash, not verified flat):
+  // flatten first, whatever the time.
+  if (state && state.day !== key && !state.eodDone && (state.cycles > 0 || state.premarketDone || state.eodAttempted)) {
     return { action: 'eod', state: { ...state } };
   }
   const s = state && state.day === key ? { ...state } : freshDay(key);

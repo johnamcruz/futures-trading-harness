@@ -250,6 +250,14 @@ test('exchange calendar: the built-in CME calendar applies with nothing configur
   const added = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2026-10-07' });
   assert.ok(at('2026-10-07T14:30:00Z', added).includes('market-hours'));
   assert.ok(added.closedDates.has('2026-04-03'));
+  // Every exchange holiday is closed, even where CME runs a short session.
+  assert.ok(at('2026-01-19T15:00:00Z').includes('market-hours'), 'MLK Day 10:00 ET: closed');
+  assert.ok(at('2026-07-03T15:00:00Z').includes('market-hours'), 'Independence Day (observed): closed');
+  // Past the calendar's end the holidays are unknown: no entries until it is extended.
+  const past = checks(evaluate(entryOrder(), [plan(1, { ts: '2028-01-05T14:59:00Z' })], { now: new Date('2028-01-05T15:00:00Z'), config: cal }));
+  assert.ok(past.includes('market-hours'));
+  const extended = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2028-12-25' });
+  assert.ok(!at('2028-01-05T15:00:00Z', extended).includes('market-hours'));
 });
 
 test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {
@@ -608,4 +616,17 @@ test('checkOrder: an unreadable broker config is a broker-config block, even for
   assert.strictEqual(r.allowed, false);
   assert.deepStrictEqual(r.violations.map(v => v.check), ['broker-config']);
   assert.match(r.message, /close_position still flattens/);
+});
+
+test('partial_close_position: the hook passes it (it needs the account), the gateway gates it like the other order tools; a full close is never gated', () => {
+  const path = require('path');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { orderTool } = require('../../scripts/lib/trading/mcp-gateway');
+  const r = checkOrder({ accountId: 7, contractId: CONTRACT, size: 1 }, { env: {}, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW, tool: 'partial_close_position' });
+  assert.deepStrictEqual([r.allowed, r.intent], [true, 'risk-reducing']);
+  const call = name => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } });
+  assert.strictEqual(orderTool(call('mcp__broker__partial_close_position')), 'partial_close_position');
+  assert.strictEqual(orderTool(call('partial_close_position')), 'partial_close_position');
+  assert.strictEqual(orderTool(call('close_position')), null);
+  assert.strictEqual(orderTool(call('mcp__broker__close_position')), null);
 });

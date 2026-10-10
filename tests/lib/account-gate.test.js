@@ -69,6 +69,11 @@ test('a position whose size can\'t be read is never a flat account: entries, exi
   assert.throws(() => evaluateAccount({ input: order(), positions: [{ contractId: 'MES', type: 1, size: 1.5 }], config, propAttempt: 'topstep_50k' }), /no valid size/);
   const stop = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }];
   assert.throws(() => evaluateCancel({ input: { orderId: 9 }, positions: odd, orders: stop, config, now: NOW }), /no valid size/);
+  // A bad row in another market never keeps an exit or a protective stop from its own position; an entry still refuses.
+  const elsewhere = [{ contractId: CONTRACT, type: 1, size: 1 }, { contractId: 'CL', type: 1, size: null }];
+  const protect = order({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' });
+  assert.deepStrictEqual(evaluateAccount({ input: protect, positions: elsewhere, config }).map(v => v.check), []);
+  assert.throws(() => evaluateAccount({ input: order(), positions: elsewhere, config }), /CL has no valid size/);
 });
 
 test('modify_order: a stop can\'t be moved once a close sent moments ago leaves it protecting nothing', () => {

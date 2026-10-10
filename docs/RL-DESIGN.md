@@ -157,7 +157,10 @@ three JSON files:
    validated on live fills: the next bar's open with at least the
    backtester's default slippage (1 tick per market fill). Training always
    fills that way; a config's `slippageTicks` may raise the slippage, never
-   lower it, and `fill` can't be set.
+   lower it, and `fill` can't be set. Retrain records the simulator its seeds
+   were trained in (`candidates.json`: `engine`); retrain and ship refuse
+   seeds from another, and the sweep fingerprint includes the fills, so an
+   older study doesn't resume with trials from both.
 
 `<out>` is the sweep config's `out_dir`, else `<FTH_HOME>/rl/<family>`.
 `python rl/train_policy.py --config <training config>` runs all three stages

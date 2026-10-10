@@ -17,7 +17,8 @@ const SIGN = { 1: 1, 2: -1 };
 
 function positionSize(p) {
   const raw = p ? p.size : undefined;
-  const n = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+  // A number, or a string of digits: never a coerced blank, boolean, list, or hex.
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
   if (!Number.isInteger(n) || n < 0) {
     throw new Error(`position ${p && p.contractId ? p.contractId : '?'} has no valid size (${JSON.stringify(raw)}): the account can't be read`);
   }

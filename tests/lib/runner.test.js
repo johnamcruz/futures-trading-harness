@@ -338,8 +338,9 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false }) {
-  let ghosts = ghostCloses; // closes the broker accepts without filling
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0 }) {
+  let ghosts = ghostCloses;
+  let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [], scans: [], logs: [], events: [] };
@@ -364,6 +365,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       },
       async accountState() {
         if (accountFails) throw new Error('HTTP 502');
+        if (fillsAt !== null && clockRef.t >= fillsAt) flat = true;
         return {
           positions: [
             ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, ...(oddSize ? {} : { size: 1 }), averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
@@ -373,7 +375,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         };
       },
       async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
-      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') { if (ghosts > 0) ghosts -= 1; else flat = true; } },
+      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') { if (ghosts > 0) ghosts -= 1; else if (closeFillMs) fillsAt = clockRef.t + closeFillMs; else flat = true; } },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return flat ? 0 : 1; },
@@ -412,6 +414,23 @@ test('end of day is done only once the account is verified flat: a close the bro
   assert.ok(prop.calls.eod[0] >= verifiedAt, 'the closing balance is recorded only once flat');
   assert.ok(r.events.some(e => e.kind === 'eod' && e.ok === true));
   assert.strictEqual(r.kills || 0, 0);
+});
+
+test('a close that fills late is never sent twice: two closes in flight would over-close into the other side', async () => {
+  // The agents' run fails at once, so the passes come quickly; the close fills 7 s after it is sent.
+  const r = await trailSim({ tape: {}, startAt: et(15, 49) + 2000, until: et(15, 53), closeFillMs: 7000, eodFails: true });
+  assert.strictEqual(r.closedIds.filter(id => id === 'MNQ').length, 1);
+  assert.ok(r.events.some(e => e.kind === 'eod' && e.ok === true));
+  assert.deepStrictEqual(r.cancelled, [9, 10], 'its stop and target are cancelled once it reads flat');
+});
+
+test('waiting for closes to fill is no failed run, for a while; a close that never fills still trips the kill switch', async () => {
+  const slow = await trailSim({ tape: {}, startAt: et(15, 49) + 2000, until: et(16, 5), ghostCloses: 4 });
+  assert.strictEqual(slow.kills || 0, 0);
+  assert.ok(slow.events.some(e => e.kind === 'eod' && e.ok === true));
+  const stuck = await trailSim({ tape: {}, startAt: et(15, 49) + 2000, until: et(16, 5), ghostCloses: 1000 });
+  assert.ok(stuck.kills >= 1, 'never verified flat: a real failure');
+  assert.ok(!stuck.events.some(e => e.kind === 'eod' && e.ok === true));
 });
 
 test('a position whose size can\'t be read is flattened, never read as flat', async () => {
@@ -679,7 +698,9 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
 test('every run\'s prompt states the account, read just before it; an unreadable account is said, not hidden', async () => {
   const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52) });
   const eod = r.prompts.find(x => /end-of-day skill/.test(x));
-  assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./, 'the end-of-day run sees the account after the flatten');
+  // The close went first; the stop and target of the contract it just closed are cancelled on the next pass, once it reads flat.
+  assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 2 working orders\./, 'the end-of-day run sees the account after the flatten');
+  assert.deepStrictEqual(r.cancelled, [9, 10], 'the leftovers are cancelled once the account reads flat');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });

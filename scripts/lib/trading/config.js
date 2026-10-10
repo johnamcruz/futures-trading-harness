@@ -8,7 +8,7 @@
 
 const path = require('path');
 const { harnessHome } = require('../paths');
-const { exchangeCalendar } = require('./exchange-calendar');
+const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
 
 // Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
 // Strategies narrow their own hours with `sessions` (e.g. [ny]).
@@ -105,6 +105,8 @@ function loadConfig(env = process.env) {
     // session, and early closes at 13:00 ET. The built-in CME calendar (exchange-calendar.js)
     // plus any configured dates: configuration can add days, never remove one.
     ...exchangeCalendar({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
+    // The last trading day the calendar covers: no entries after it (holidays unknown).
+    calendarEnds: calendarEnd({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
   };
 }
 

@@ -167,4 +167,40 @@ function lineSplitter(onLine) {
   };
 }
 
-module.exports = { orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * The call's arguments with its contract under its one standard name (the
+ * translator's cache: MNQ:2026-12 or the broker's own id for today's front
+ * month become MNQ), so the gate and its ledger of recent orders compare
+ * like with like. Only for checking: the call goes out as the client sent it.
+ */
+function canonicalArgs(args, env = process.env) {
+  if (!args || typeof args.contractId !== 'string') return args;
+  try {
+    const { activeBroker, contractsCacheFile } = require('../broker/config');
+    const { readCache, canonicalName } = require('../broker/translator');
+    return { ...args, contractId: canonicalName(args.contractId, readCache(contractsCacheFile(activeBroker(env).name, env))) };
+  } catch (_err) {
+    return args; // no broker config: the names are compared as given
+  }
+}
+
+/**
+ * The ledger entry for a close_position / partial_close_position about to be
+ * sent, from the account before it ({ contractId, root, sign, size, netBefore,
+ * rootNetBefore, at, sentAt }), or null when there is nothing to close. A
+ * close is a market order the account may not show yet: the gateway counts it
+ * from the moment it is sent (a late or lost reply still closes), and drops it
+ * only if the server refuses it.
+ */
+function closeLedgerEntry(tool, args, positions, now) {
+  if (!Array.isArray(positions)) return null;
+  const { contractNet, netPosition } = require('./account-gate');
+  const { contractRoot } = require('./journal');
+  const net = contractNet(positions, args.contractId);
+  const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);
+  if (!(size > 0)) return null;
+  const at = now.getTime();
+  return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at };
+}
+
+module.exports = { canonicalArgs, closeLedgerEntry, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

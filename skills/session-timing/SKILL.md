@@ -34,17 +34,21 @@ Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 | 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |
 | 16:10 ET / 15:10 CT | A typical prop firm's own flatten | The harness is flat by 16:00 ET |
 
-**Holidays and early closes.** CME closes on some US holidays and closes
-equity index futures early (13:00 ET) on others (the days around
-Thanksgiving, Christmas, and New Year, Juneteenth, Independence Day). The
-harness carries the CME equity index calendar for 2026-2027
-(`scripts/lib/trading/exchange-calendar.js`; Good Friday counts as closed).
+**Holidays and early closes.** The harness treats every exchange holiday
+as closed (New Year's Day, MLK Day, Presidents Day, Good Friday, Memorial
+Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, Christmas), even
+where CME runs a short session: no trading at all that day. The day after
+Thanksgiving and Christmas Eve are early closes (13:00 ET). The harness
+carries this calendar for 2026-2027
+(`scripts/lib/trading/exchange-calendar.js`).
 The runner config (`closedDates`, `earlyCloseDates`) and the gate's
 `FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES` add days to it, never remove
 one (trading days, YYYY-MM-DD of the day they end on). The gate refuses
 entries on a closed day and after 13:00 ET on an early-close day, and the
-runner flattens at `earlyCloseEodAt` (default 12:50 ET). It refuses to start
-when the calendar runs out within 30 days. Premarket checks the calendar; if
+runner flattens at `earlyCloseEodAt` (default 12:50 ET). After the
+calendar's last day the gate refuses every entry (market-hours: "The
+exchange calendar ends ..."); the runner warns once a day for the 30 days
+before it. Tell the user; never work around it. Premarket checks the calendar; if
 CME announces a change that isn't listed, tell the user and plan as if it
 were (no entries after 12:45 ET, flat by 12:50 ET).
 

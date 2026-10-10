@@ -84,6 +84,18 @@ class PipelineTest(unittest.TestCase):
             again = pipeline.run_retrain(d / "retrain" / "f.json")  # resumable: nothing retrained
             self.assertEqual(again["seeds"], cands["seeds"])
             self.assertEqual(cands["config"]["seeds"], [1, 2], "the config the seeds were trained with")
+            # The simulator they were trained in, with live fills; ship refuses seeds from another one.
+            self.assertGreaterEqual(cands["engine"]["slippageTicks"], 1)
+            self.assertEqual(cands["engine"]["fill"], "next-open")
+            cand_file = d / "out" / "retrain" / "candidates.json"
+            saved = cand_file.read_text()
+            cand_file.write_text(json.dumps({**json.loads(saved), "engine": {**cands["engine"], "slippageTicks": 0}}))
+            with self.assertRaisesRegex(ValueError, "another simulator"):
+                pipeline.run_retrain(d / "retrain" / "f.json")
+            if not any(c["selection"]["blown"] for c in cands["seeds"].values()):
+                with self.assertRaisesRegex(ValueError, "another simulator"):
+                    pipeline.run_ship(d / "ship" / "f.json")
+            cand_file.write_text(saved)
             if any(c["selection"]["blown"] for c in cands["seeds"].values()):
                 with self.assertRaisesRegex(ValueError, "isn't robust"):
                     pipeline.run_ship(d / "ship" / "f.json")

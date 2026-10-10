@@ -289,6 +289,13 @@ test('the built-in exchange calendar holds in the hook with nothing configured: 
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /market-hours.*2026-04-03/);
+  // Past the calendar's end: refused too (its holidays are unknown).
+  const later = '2028-01-05T15:00:00Z';
+  const past = setup([{ ts: minutesAgo(5, new Date(later)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_TEST_NOW: later, NODE_ENV: 'test', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
+  const r2 = gate(orderPayload(), past.env);
+  assert.strictEqual(r2.code, 2);
+  assert.match(r2.stderr, /market-hours.*calendar ends 2027-12-31/);
 });
 
 test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {

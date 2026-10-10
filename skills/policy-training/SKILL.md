@@ -74,7 +74,11 @@ Training fills as live: entries at the next bar's open, with at least the
 backtester's 1 tick of slippage per market fill (a config's `slippageTicks`
 may raise it, never lower it). Live trading refuses a bundle trained on
 cheaper fills (`engine: trained with 0 tick(s) of slippage, under the 1 of
-live fills; retrain it`): retrain it, never edit the bundle.
+live fills; retrain it`): retrain it, never edit the bundle. Retrain records
+the simulator its seeds were trained in, and retrain and ship refuse seeds
+from another one ("another simulator": move `candidates.json` aside and
+retrain); a sweep study made under other fills doesn't resume (start a new
+family).
 
 Never tune, select, or retrain on the out-of-sample window. Each ship
 evaluation is logged, per family and harness-wide (`<FTH_HOME>/rl/oos_looks.jsonl`,

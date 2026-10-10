@@ -69,7 +69,7 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
     symbols: [cfg.symbol], timeframe: Number.parseInt(strategy.timeframe, 10), data: cfg.data, strategies: components.map(c => c.name), gate: true,
   };
   for (const k of ENGINE_KEYS) if (cfg[k] !== undefined) raw[k] = cfg[k];
-  if (cfg.slippageTicks !== undefined && !(cfg.slippageTicks >= ENGINE_DEFAULTS.slippageTicks)) {
+  if (cfg.slippageTicks !== undefined && !(typeof cfg.slippageTicks === 'number' && Number.isFinite(cfg.slippageTicks) && cfg.slippageTicks >= ENGINE_DEFAULTS.slippageTicks)) {
     throw new Error(`slippageTicks: at least ${ENGINE_DEFAULTS.slippageTicks} (live fills); training on cheaper fills overstates the pass rate`);
   }
   if (cfg.fill !== undefined) throw new Error('fill: training always fills as live (the next bar\'s open)');

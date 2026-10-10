@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter } = require('../../scripts/lib/trading/mcp-gateway');
+const fs = require('fs');
+const path = require('path');
+const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter, canonicalArgs, closeLedgerEntry } = require('../../scripts/lib/trading/mcp-gateway');
+const { tmpDir } = require('../helpers');
 
 const call = (id, name, args = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 const allow = () => ({ allowed: true, violations: [] });
@@ -86,4 +89,29 @@ test('client requests may not use the gateway-reserved id prefix; lane calls are
   assert.strictEqual(isLaneCall(call(1, 'close_position')), true);
   assert.strictEqual(isLaneCall(call(1, 'get_bars')), false);
   assert.strictEqual(orderTool(call(1, 'cancel_order')), 'cancel_order');
+});
+
+test('canonicalArgs: the gate sees one name per contract, from the configured broker\'s translator cache', () => {
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: ['node', 'x.js'] } } }));
+  const env = { FTH_HOME: home };
+  const args = { accountId: 7, contractId: 'MNQ:2026-12', size: 1 };
+  assert.deepStrictEqual(canonicalArgs(args, env), args, 'no cache yet: as given');
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'CON.F.US.MNQ.Z26', month: '2026-12', day: '2026-10-07' } } }));
+  assert.deepStrictEqual(canonicalArgs(args, env), { ...args, contractId: 'MNQ' });
+  assert.strictEqual(canonicalArgs({ contractId: 'CON.F.US.MNQ.Z26' }, env).contractId, 'MNQ');
+  assert.strictEqual(args.contractId, 'MNQ:2026-12', 'the call itself is left as sent');
+  assert.deepStrictEqual(canonicalArgs({ orderId: 9 }, env), { orderId: 9 });
+  assert.deepStrictEqual(canonicalArgs(args, { FTH_HOME: home, FTH_BROKER: 'nope' }), args, 'no broker config: as given');
+});
+
+test('closeLedgerEntry: a close counts from the account before it, capped at the position; nothing to close is no entry', () => {
+  const now = new Date('2026-10-07T14:00:00Z');
+  const long2 = [{ contractId: 'MNQ', type: 1, size: 2 }, { contractId: 'MNQ:2027-03', type: 2, size: 1 }];
+  const full = closeLedgerEntry('close_position', { contractId: 'MNQ' }, long2, now);
+  assert.deepStrictEqual(full, { contractId: 'MNQ', root: 'MNQ', sign: -1, size: 2, netBefore: 2, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() });
+  assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 1 }, long2, now).size, 1);
+  assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 5 }, long2, now).size, 2);
+  assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MES' }, long2, now), null);
+  assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MNQ' }, null, now), null);
 });
