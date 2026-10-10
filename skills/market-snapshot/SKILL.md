@@ -53,8 +53,9 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      opening-range average, the 20 bars before, and the same time the
      previous trading day (orb's skip rule reads `relVolLastVsOpeningRange`).
    - Both count by trading day (from the 18:00 ET open): from 18:00 ET until
-     the new range closes at 09:45 ET, `levels.openingRange` and the
-     opening-range ratios are null, never the closed day's.
+     the new range closes (09:30 ET + orbMinutes; 09:45 by default),
+     `levels.openingRange` and the opening-range ratios are null, never the
+     closed day's.
    - `volumeProfile`: computed from the bars, never estimate it.
      `priorRth` (the last complete RTH day, the day's reference), `session`
      (this Globex session, developing), `rolling` (the last `vpLookback`
