@@ -187,8 +187,10 @@ function etInfo(t) {
 }
 
 /**
- * Opening range of the first `minutes` from `openMin` (ET) each day. Active only
- * on bars after the range has closed (fully in the past), NaN otherwise.
+ * Opening range of the first `minutes` from `openMin` (ET) each trading day.
+ * Active only on bars after the range has closed (fully in the past), NaN
+ * otherwise. The trading day starts at the 18:00 ET open, so the evening
+ * session has no range until the new one closes (never the closed day's).
  */
 function openingRange(bars, minutes = 15, openMin = 9 * 60 + 30) {
   const n = bars.length;
@@ -196,7 +198,8 @@ function openingRange(bars, minutes = 15, openMin = 9 * 60 + 30) {
   const low = new Array(n).fill(NaN);
   let day = null; let oh = NaN; let ol = NaN;
   for (let i = 0; i < n; i += 1) {
-    const { day: d, minute } = etInfo(bars[i].t);
+    const { minute } = etInfo(bars[i].t);
+    const d = sessionKey(bars[i].t, 18 * 60);
     if (d !== day) { day = d; oh = NaN; ol = NaN; }
     if (minute >= openMin && minute < openMin + minutes) {
       oh = Number.isNaN(oh) ? bars[i].h : Math.max(oh, bars[i].h);

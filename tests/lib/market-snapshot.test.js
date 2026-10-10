@@ -95,3 +95,23 @@ test('snapshot levels: a day or overnight session the data starts partway into g
   const late = levels(['2026-10-06T23:00:00Z', '2026-10-07T12:00:00Z'].map(at));
   assert.strictEqual(late.overnight, null, 'data starting after 18:00 ET: the overnight is partial');
 });
+
+test('participation counts by trading day: the evening (from the 18:00 ET open) has no opening range; midday and the close use the day\'s own', () => {
+  // Sunday 18:00 ET to 21:27 (volume 50), Monday's RTH (opening range volume 200, then 100), Monday 18:00 to 21:27 (100).
+  const bars = [];
+  const add = (from, to, v) => { for (let t = from; t < to; t += 180000) bars.push({ t: new Date(t).toISOString(), o: 100, h: 100.5, l: 99.5, c: 100, v }); };
+  const et = (d, h, m) => Date.UTC(2026, 9, d, h + 4, m); // October: ET = UTC-4
+  add(et(11, 18, 0), et(11, 21, 30), 50);
+  add(et(12, 9, 30), et(12, 9, 45), 200);
+  add(et(12, 9, 45), et(12, 16, 0), 100);
+  add(et(12, 18, 0), et(12, 21, 30), 100);
+  const evening = snapshot({ bars }).participation;
+  assert.strictEqual(evening.relVolLastVsOpeningRange, null, 'Tuesday\'s trading day: its range hasn\'t opened');
+  assert.strictEqual(evening.relVolLast3VsOpeningRange, null);
+  // Same minute a day earlier (the same bar whether days split at 18:00 or midnight): 21:27 ET Monday vs Sunday, 100 / 50.
+  assert.strictEqual(evening.relVolVsSameTimePriorDay, 2);
+  const midday = snapshot({ bars: bars.filter(b => Date.parse(b.t) <= et(12, 10, 0)) }).participation;
+  assert.strictEqual(midday.relVolLastVsOpeningRange, 0.5, 'Monday\'s own range (100 / 200)');
+  const breakTime = snapshot({ bars: bars.filter(b => Date.parse(b.t) < et(12, 16, 0)) }).participation;
+  assert.strictEqual(breakTime.relVolLastVsOpeningRange, 0.5, 'still Monday\'s range at the close');
+});

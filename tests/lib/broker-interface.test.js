@@ -168,6 +168,12 @@ test('the broker client: reads on one connection, order calls on the other; a st
   assert.deepStrictEqual(reads.map(r => r[0]).sort(), ['close', 'get_server_config', 'list_open_orders', 'list_open_positions']);
   assert.deepStrictEqual(writes.map(w => w[0]), ['modify_order', 'cancel_order', 'close_position', 'close']);
   assert.deepStrictEqual(writes[0][1], { accountId: 7, orderId: 9, stopPrice: 21490.25 });
+  // The fills since a time (a catch-up's close): search_trades on the read connection, a list or an error.
+  const fillReads = [];
+  const fillsClient = createAdapter({ mcp: stub(fillReads, () => [{ id: 1, profitAndLoss: -16, fees: 0.37, creationTimestamp: '2026-10-08T12:00:30Z' }]) });
+  assert.strictEqual((await fillsClient.fillsSince('7', new Date('2026-10-07T22:00:00Z'))).length, 1);
+  assert.deepStrictEqual(fillReads[0], ['search_trades', { accountId: 7, startTimestamp: '2026-10-07T22:00:00.000Z' }]);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ nope: 1 })) }).fillsSince(7, new Date()), /search_trades/);
 });
 
 test('tradingBlocked: the server must trade, on the runner\'s account', () => {
@@ -219,4 +225,21 @@ test('the spec document names every tool, required input, and required result fi
   }
   for (const kind of Object.keys(JOURNAL.serverWritten)) assert.ok(doc.includes(`\`${kind}\``), kind);
   for (const table of Object.values(OUTCOMES)) for (const [code, name] of Object.entries(table)) assert.ok(doc.includes(`${code} ${name}`), `${code} ${name}`);
+});
+
+test('the conformance checker: search_trades must honour a past startTimestamp (a catch-up close reads the fills since a day ended)', async () => {
+  const { checkConformance } = require('../../scripts/lib/broker/conformance');
+  const { TOOLS } = require('../../scripts/lib/broker/interface');
+  const now = new Date('2026-10-08T14:00:00Z');
+  const fill = (id, at) => ({ id, contractId: 'X', creationTimestamp: at, price: 1, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false, orderId: id });
+  const today = [fill(2, '2026-10-08T13:00:00Z')];
+  const older = fill(1, '2026-10-06T15:00:00Z');
+  const server = trades => ({
+    listTools: async () => Object.keys(TOOLS).map(name => ({ name, inputSchema: { type: 'object', properties: Object.fromEntries(Object.keys(TOOLS[name].input).map(k => [k, {}])) } })),
+    call: async (name, a) => (name === 'search_trades' ? trades(a) : (() => { throw new Error('not probed here'); })()),
+  });
+  const verdict = async trades => (await checkConformance(server(trades), { accountId: 7, now })).results.find(r => /past startTimestamp/.test(r.check));
+  assert.strictEqual((await verdict(a => (a.startTimestamp ? [older, ...today] : today))).ok, true, 'honoured');
+  assert.match((await verdict(a => (a.startTimestamp ? [] : today))).problems.join(), /narrowed or ignored/);
+  assert.match((await verdict(() => [older, fill(0, '2026-09-01T15:00:00Z'), ...today])).problems.join(), /startTimestamp is ignored/);
 });

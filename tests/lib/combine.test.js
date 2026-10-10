@@ -165,3 +165,21 @@ test('live: the attempt keeps the peak balance across snapshots and closes, as t
   // $1,700 below the peak: half of 0.3 x ($100,100 - $98,200 floor).
   assert.strictEqual(require('../../scripts/lib/trading/combine').budget(cs, { cushion_frac: 0.3, drawdown_halve_usd: 1500 }), 285);
 });
+
+test('closeBefore: a past day\'s close is today\'s balance less what later fills made (P&L and fees); an unreadable fill throws', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const end = prop.dayEndMs('2026-10-07');
+  assert.strictEqual(new Date(end).toISOString(), '2026-10-07T22:00:00.000Z', '18:00 ET (EDT) the evening it ends');
+  assert.strictEqual(new Date(prop.dayEndMs('2026-11-25')).toISOString(), '2026-11-25T23:00:00.000Z', '18:00 ET (EST)');
+  const fills = [
+    { creationTimestamp: '2026-10-07T14:00:00Z', profitAndLoss: null, fees: 0.37 }, // the missed day's own: already in its close
+    { creationTimestamp: '2026-10-08T12:00:30Z', profitAndLoss: -16, fees: 0.37 }, // the catch-up's close the next morning
+    { creationTimestamp: '2026-10-08T12:05:00Z', profitAndLoss: 5, fees: 0.37, voided: true },
+  ];
+  assert.strictEqual(prop.closeBefore(99983.26, fills, end), 99999.63);
+  assert.strictEqual(prop.closeBefore(100000, [], end), 100000);
+  assert.throws(() => prop.closeBefore(100000, [{ profitAndLoss: -1, fees: 0 }], end), /without a time/);
+  assert.throws(() => prop.closeBefore(100000, [{ creationTimestamp: '2026-10-08T12:00:00Z', profitAndLoss: 'x', fees: 0 }], end), /no readable P&L/);
+  assert.throws(() => prop.closeBefore(NaN, [], end), /no balance/);
+  assert.throws(() => prop.closeBefore(100000, null, end), /not a list/);
+});

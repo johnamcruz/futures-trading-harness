@@ -16,7 +16,7 @@ const path = require('path');
 const combine = require('./combine');
 const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf } = require('./contracts');
-const { tradingDayKey } = require('./clock');
+const { tradingDayKey, tradingDayStart } = require('./clock');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
 const VERDICT_KEEP = 500;
@@ -115,6 +115,35 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
     snapshot: { at: now.toISOString(), day, balance, open, openIds, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
   });
   return cs;
+}
+
+/** When trading day `day` (YYYY-MM-DD, the date it ends on) ended: the next day's 18:00 ET open, in ms. */
+function dayEndMs(day) {
+  // 23:59 UTC on that date is after 18:00 ET (19:59 EDT / 18:59 EST): inside the next trading day.
+  return tradingDayStart(new Date(`${day}T23:59:00Z`)).getTime();
+}
+
+/**
+ * A past trading day's closing balance from the balance now and the broker's
+ * fills since that day ended: the balance minus each later fill's realized
+ * P&L and fees (a catch-up end of day closes positions on a later day; their
+ * result is that day's, never the missed day's). Throws on a fill it can't
+ * read: a wrong close moves the trailing floor.
+ */
+function closeBefore(balanceNow, fills, endMs) {
+  if (!Number.isFinite(balanceNow)) throw new Error('no balance');
+  if (!Array.isArray(fills)) throw new Error('the fills are not a list');
+  let later = 0;
+  for (const f of fills) {
+    const ts = Date.parse(f && f.creationTimestamp);
+    if (!Number.isFinite(ts)) throw new Error(`a fill without a time (${JSON.stringify(f)})`);
+    if (ts < endMs || f.voided) continue;
+    const pnl = f.profitAndLoss === null || f.profitAndLoss === undefined ? 0 : Number(f.profitAndLoss);
+    const fees = f.fees === null || f.fees === undefined ? 0 : Number(f.fees);
+    if (!Number.isFinite(pnl) || !Number.isFinite(fees)) throw new Error(`a fill with no readable P&L or fees (${JSON.stringify(f)})`);
+    later += pnl - fees;
+  }
+  return Math.round((balanceNow - later) * 100) / 100;
 }
 
 /**
@@ -304,6 +333,7 @@ function readVerdicts(home) {
 }
 
 module.exports = {
+  dayEndMs, closeBefore,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
 };

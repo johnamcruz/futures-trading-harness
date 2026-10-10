@@ -17,6 +17,7 @@
  *                   taken (held, as holdCloses) but its reply is an error (a timeout after the broker took it)
  *   loseEntryReply  place_order is taken and filled, but no reply is sent (an order of unknown outcome)
  *   hideOrders      search_orders doesn't list orders yet (the broker is slow to show one)
+ *   failBalance     list_accounts fails (the account's balance can't be read)
  *   keepLegs        bracket legs stay working after the position goes flat (no auto OCO on flat)
  *   oddSize         positions are listed without a size
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
@@ -30,6 +31,7 @@
  */
 
 const fs = require('fs');
+const { tradingDayStart } = require('../../scripts/lib/trading/clock');
 
 const ACCOUNT = 7;
 const CONTRACTS = [
@@ -95,11 +97,11 @@ function fill(s, contractId, side, size, price, orderId) {
   const old = s.positions.find(x => x.contractId === contractId);
   let pnl = null;
   if (net !== 0 && Math.sign(net) !== sign) {
-    pnl = (price - old.averagePrice) * Math.sign(net) * Math.min(Math.abs(net), size) * (c.tickValue / c.tickSize);
+    pnl = Math.round((price - old.averagePrice) * Math.sign(net) * Math.min(Math.abs(net), size) * (c.tickValue / c.tickSize) * 100) / 100;
     s.balance += pnl;
   }
   const fees = 0.37 * size;
-  s.balance -= fees;
+  s.balance = Math.round((s.balance - fees) * 100) / 100; // the broker reports cents
   s.fills.push({ id: s.nextId++, orderId, accountId: ACCOUNT, contractId, creationTimestamp: iso(s.nowMs), price, profitAndLoss: pnl, fees, side, size, voided: false });
   const next = net + sign * size;
   s.positions = s.positions.filter(x => x.contractId !== contractId);
@@ -188,7 +190,10 @@ const NO_REPLY = { noReply: true };
 
 const HANDLERS = {
   get_server_config: (s, a, env) => ({ tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
-  list_accounts: s => [{ id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true, mcpTradingAllowed: true }],
+  list_accounts: s => {
+    if (s.failBalance) throw new Error('HTTP 503 service unavailable');
+    return [{ id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true, mcpTradingAllowed: true }];
+  },
   get_account_snapshot: s => ({ account: { id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true }, positions: HANDLERS.list_open_positions(s), openOrders: HANDLERS.list_open_orders(s), today: { realizedNetPnL: 0 } }),
   search_contracts: (s, a) => CONTRACTS.filter(c => c.name.startsWith(String(a.searchText || '').toUpperCase())),
   list_available_contracts: () => CONTRACTS,
@@ -198,7 +203,11 @@ const HANDLERS = {
   list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
   list_open_orders: s => s.orders.filter(o => o.status === 1),
   search_orders: s => (s.hideOrders ? [] : s.orders),
-  search_trades: s => s.fills,
+  // From startTimestamp, by default the start of the trading day (the 18:00 ET open), as the interface says.
+  search_trades: (s, a) => {
+    const from = a.startTimestamp ? Date.parse(a.startTimestamp) : tradingDayStart(new Date(s.nowMs)).getTime();
+    return s.fills.filter(f => Date.parse(f.creationTimestamp) >= from);
+  },
   get_performance: s => ({ window: { start: iso(s.nowMs - 3600000), end: iso(s.nowMs) }, overall: { fills: s.fills.length }, byContract: {} }),
   place_order: (s, a, env) => {
     const c = contractOf(a.contractId);

@@ -198,7 +198,9 @@ is the trail distance, not a level.
 #### `search_trades`
 
 Input: **`accountId`**, `startTimestamp` (default: the trading day start),
-`endTimestamp`.
+`endTimestamp`. A `startTimestamp` in a past trading day must be honoured (the
+fills since then, not only today's): after a day the runner missed, it
+records that day's close from the fills since it ended.
 
 Result: list of fills `{ id, contractId, creationTimestamp, price,
 profitAndLoss (null on the opening half of a round turn), fees (number | null),

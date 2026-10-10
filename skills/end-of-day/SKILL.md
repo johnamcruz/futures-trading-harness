@@ -27,7 +27,9 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
 4. Run trade-review with end-of-day lessons (the trade-reviewer role).
 5. Prop attempt running: the autonomous runner records the day's closing
    balance itself (it retries a failed record and lists a close it couldn't
-   record in `combine.js status`). Interactive, or a missed close: the user
+   record in `combine.js status`). A catch-up end of day (a day the runner
+   missed) records that day's own balance: today's less what the fills since
+   that day ended made, so an overnight loss counts on the day it was booked. Interactive, or a missed close: the user
    records it with `node <root>/scripts/combine.js record-day --account <name>
    --day YYYY-MM-DD --balance <dollars>` (the balance after the session's
    last fill); tell them the exact command. Agents don't run it.

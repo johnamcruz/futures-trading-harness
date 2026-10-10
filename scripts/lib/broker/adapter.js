@@ -124,6 +124,11 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return balance;
     },
 
+    /** The account's fills since `start` (search_trades), oldest first by the broker's order. */
+    async fillsSince(accountId, start) {
+      return listOf(await call('search_trades', { accountId: Number(accountId), startTimestamp: start.toISOString() }), 'search_trades');
+    },
+
     /** Number of working orders in a contract. */
     async workingOrders(accountId, contractId) {
       return (await ordersOf(accountId)).filter(o => o.contractId === contractId).length;

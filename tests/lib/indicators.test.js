@@ -58,6 +58,13 @@ test('opening range is active only after it closes', () => {
   assert.ok(Number.isNaN(or.high[3]));
   assert.strictEqual(or.high[4], 13);
   assert.strictEqual(or.low[4], 8);
+  // One trading day from the 18:00 ET open: the range holds through the 16:00 close and the break, and the
+  // evening session (the next trading day) has none until its own range closes, across midnight too.
+  const at = (d, h, m) => new Date(Date.UTC(2026, 9, d, h + 4, m)).toISOString(); // ET = UTC-4 in October
+  const day = [bar(at(12, 9, 30), 10, 20, 5, 15), bar(at(12, 9, 45), 15, 16, 14, 15), bar(at(12, 15, 55), 15, 16, 14, 15), bar(at(12, 17, 0), 15, 16, 14, 15),
+    bar(at(12, 18, 0), 15, 16, 14, 15), bar(at(12, 23, 55), 15, 16, 14, 15), bar(at(13, 0, 0), 15, 16, 14, 15), bar(at(13, 9, 30), 30, 40, 25, 35), bar(at(13, 9, 45), 35, 36, 34, 35)];
+  const r = ind.openingRange(day, 15);
+  assert.deepStrictEqual(r.high.map(x => (Number.isNaN(x) ? null : x)), [null, 20, 20, 20, null, null, null, null, 40]);
 });
 
 test('anchored vwap resets at the anchor and rth vwap ignores overnight bars', () => {

@@ -83,7 +83,9 @@ outside the session whatever the settings say, and the runner closes any
 position it finds outside it. Exits are always allowed.
 
 A trading day runs from the 18:00 ET open to the 16:00 ET close (Sunday
-evening and Monday are Monday's trading day). Strategies narrow their own
+evening and Monday are Monday's trading day): one day from open to close,
+whatever the calendar date, for everything the harness counts by day (the
+gate's loss and entry counts, end of day, prop closes, the calendar). Strategies narrow their own
 hours with `sessions`, using named sessions or explicit windows:
 
 | Session | New York time |
@@ -594,9 +596,12 @@ runner on the broker adapter. It covers a long's and a short's whole life (a
 real signal, the refusals, stop moves, partial closes, a gap through the
 stop, a target, the runner's trailing stop), closes in flight under three
 names for the contract, closes refused or of unknown outcome, an entry whose
-reply is lost, an unreadable position, holidays, the early close, and end of
-day against a broker that loses or delays its closes. A change to the gate,
-the gateway, or the runner keeps it green.
+reply is lost, an unreadable position, holidays, the early close, end of day
+against a broker that loses or delays its closes, losses counted from real
+fills, malformed brackets, a prop attempt's daily close (recorded once flat,
+or missed and then refused), and a runner that crashed mid-day catching up
+the next morning. A change to the gate, the gateway, or the runner keeps it
+green.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).
 

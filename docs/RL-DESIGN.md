@@ -185,7 +185,10 @@ Rules:
 - `node scripts/combine.js start --account <name>` starts an attempt (the
   user's call). The runner snapshots the account balance and open positions
   every bar and records each day's closing balance after the end-of-day
-  flatten, once flat. A close that can't be recorded is retried on its own
+  flatten, once flat. A catch-up end of day (the runner was down) records the
+  missed day's own close: today's balance less the realized P&L and fees of
+  the broker's fills since that day ended (`prop-state.js` `closeBefore`);
+  fills it can't read leave the close missed. A close that can't be recorded is retried on its own
   (five times, a minute apart); end of day itself is never held open by it.
   Each missed close (every one, not only the first) stops entries until it
   is recorded (`combine.js record-day`).
