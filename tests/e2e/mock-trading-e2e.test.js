@@ -564,7 +564,7 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
 
   // The trading day starts at the 18:00 ET open, not at midnight. `at` is 00:12 ET Tuesday: the same three losses
   // at 15:00 ET Monday (Monday's day) don't count; at 19:00 ET Monday (Tuesday's day, the evening before) they do.
-  const lossesAt = async (iso, label) => {
+  const lossesAt = async iso => {
     const w3 = world(at);
     const sig3 = signalOnFiredBar(w3);
     exchange.update(w3.state, s => { s.nowMs = Date.parse(iso); });
@@ -577,9 +577,9 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
       gw3.close();
     }
   };
-  const before = await lossesAt('2026-04-27T19:00:00Z', 'Monday 15:00 ET');
+  const before = await lossesAt('2026-04-27T19:00:00Z'); // Monday 15:00 ET
   assert.ok(before.r.ok, `losses on the previous trading day: ${before.r.error}`);
-  const evening = await lossesAt('2026-04-27T23:00:00Z', 'Monday 19:00 ET');
+  const evening = await lossesAt('2026-04-27T23:00:00Z'); // Monday 19:00 ET
   assert.ok(!evening.r.ok, 'losses since the 18:00 ET open are today\'s');
   assert.ok(lastBlock(evening.w).some(v => v.check === 'daily-loss-count'), JSON.stringify(lastBlock(evening.w)));
 
