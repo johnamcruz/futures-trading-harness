@@ -30,3 +30,11 @@ test('env-config: the account, strategies and gate come from the policy strategy
   assert.throws(() => build({ ...base, strategy: 'orb' }), /needs a policy strategy/);
   assert.throws(() => build({ ...base, symbol: 'CL' }), /trades .*, not CL/);
 });
+
+test('env-config: the engine\'s live fills are what rl/fth_rl/pipeline.py FILLS_VERSION names (change both together)', () => {
+  const fs = require('fs');
+  const py = fs.readFileSync(path.join(ROOT, 'rl', 'fth_rl', 'pipeline.py'), 'utf8');
+  const version = /FILLS_VERSION = "([^"]+)"/.exec(py)[1];
+  // A sweep study is bound to its fills: a change here without a new FILLS_VERSION would resume old studies with mixed trials.
+  assert.match(version, new RegExp(`^${DEFAULTS.fill}, at least ${DEFAULTS.slippageTicks} tick`));
+});

@@ -203,4 +203,18 @@ function closeLedgerEntry(tool, args, positions, now) {
   return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at };
 }
 
-module.exports = { canonicalArgs, closeLedgerEntry, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * Whether the server refused a close: a result whose body says success: false.
+ * An error reply (isError, a JSON-RPC error, an unreadable body) is no refusal:
+ * the broker may have taken the close (a timeout after it), so it still counts.
+ */
+function closeRefused(response) {
+  if (!response || response.error || !response.result || response.result.isError) return false;
+  try {
+    return JSON.parse(response.result.content[0].text).success === false;
+  } catch (_err) {
+    return false;
+  }
+}
+
+module.exports = { canonicalArgs, closeLedgerEntry, closeRefused, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

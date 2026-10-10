@@ -130,6 +130,12 @@ class PipelineTest(unittest.TestCase):
 
 
 class PipelineConfigTest(unittest.TestCase):
+    def test_fills_ignore_the_calendar_dates(self):
+        a = {"gate": True, "sessions": ["18:00-15:50@America/New_York"], "eodAt": "15:50@America/New_York", "slippageTicks": 1, "fill": "next-open", "closedDates": []}
+        self.assertEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "closedDates": ["2028-12-25"]}), "a year's holidays added: same fills")
+        self.assertNotEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "slippageTicks": 0}))
+        self.assertNotEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "fill": "close"}))
+
     def test_the_gate_account_data_and_windows_cannot_be_searched_and_the_gate_cannot_be_lowered(self):
         self.assertIn("never the strategy", pipeline.check_spec("windows.oos", {"type": "float", "low": 0, "high": 1}))
         self.assertIn("never the strategy", pipeline.check_spec("min_pass_rate", {"type": "float", "low": 0, "high": 1}))

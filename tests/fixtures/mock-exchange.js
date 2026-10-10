@@ -8,10 +8,17 @@
  * JSON file shared by every copy of the mock MCP server (the runner's reads
  * and the gateway each start one) and by the test, under a lock.
  *
- * Broker faults the test can switch on (state fields):
+ * Broker faults and behaviours the test can switch on (state fields):
  *   dropCloses: n   the next n closes are accepted and never fill (a ghost close)
- *   holdCloses      closes are accepted and fill only on settle() (fill lag)
+ *   holdCloses      closes are accepted and fill only on settle() (fill lag): a full close closes what is
+ *                   open when it fills, unless closeSizedAtSend (a market order for the size open when it was
+ *                   sent: two of them reverse the position); a partial close fills its size
+ *   closeReply      'refuse': closes come back success: false and close nothing; 'error': a close is
+ *                   taken (held, as holdCloses) but its reply is an error (a timeout after the broker took it)
+ *   loseEntryReply  place_order is taken and filled, but no reply is sent (an order of unknown outcome)
+ *   keepLegs        bracket legs stay working after the position goes flat (no auto OCO on flat)
  *   oddSize         positions are listed without a size
+ * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
  *
  *   initState(file, over)          a fresh account
  *   update(file, fn)               fn(state) under the lock; the state is saved
@@ -96,8 +103,8 @@ function fill(s, contractId, side, size, price, orderId) {
   const next = net + sign * size;
   s.positions = s.positions.filter(x => x.contractId !== contractId);
   if (next === 0) {
-    // Flat: its bracket legs go (auto OCO).
-    for (const o of s.orders) if (o.status === 1 && o.contractId === contractId && o.parentId) o.status = 3;
+    // Flat: its bracket legs go (auto OCO), unless the broker leaves them.
+    if (!s.keepLegs) for (const o of s.orders) if (o.status === 1 && o.contractId === contractId && o.parentId) o.status = 3;
     return;
   }
   const same = net !== 0 && Math.sign(next) === Math.sign(net);
@@ -129,19 +136,18 @@ function match(s) {
     const p = s.prices[o.contractId];
     if (o.status !== 1) continue; // cancelled by an OCO sibling in this pass
     const buy = o.side === 0;
-    if (o.type === 4 && (buy ? p >= o.stopPrice : p <= o.stopPrice)) fillOrder(s, o, o.stopPrice);
+    if (o.type === 4 && (buy ? p >= o.stopPrice : p <= o.stopPrice)) fillOrder(s, o, p); // at the price that reached it
     if (o.type === 1 && (buy ? p <= o.limitPrice : p >= o.limitPrice)) fillOrder(s, o, o.limitPrice);
   }
 }
 
 const setPrice = (file, contractId, price) => update(file, s => { s.prices[contractId] = price; match(s); });
 
-/** Fill the closes held back by holdCloses (each closes what is open then). */
+/** Fill the closes held back (holdCloses, closeReply 'error'): each a market order for the size and side it was sent with. */
 const settle = file => update(file, s => {
   for (const h of s.held.splice(0)) {
-    const net = netOf(s, h.contractId);
-    const size = h.size === null ? Math.abs(net) : Math.min(h.size, Math.abs(net));
-    if (size > 0) fill(s, h.contractId, net > 0 ? 1 : 0, size, s.prices[h.contractId], null);
+    const size = h.size ?? Math.abs(netOf(s, h.contractId));
+    if (size > 0) fill(s, h.contractId, h.size === null ? (netOf(s, h.contractId) > 0 ? 1 : 0) : h.side, size, s.prices[h.contractId], null);
   }
 });
 
@@ -159,6 +165,25 @@ function bars(s, a) {
 const journal = (env, entry) => {
   if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
 };
+
+/** A close (size null: the whole position) as the broker takes it: a market order for the size open now. */
+function closeOrder(s, contractId, partial) {
+  const net = netOf(s, contractId);
+  if (net === 0 || (partial !== null && !(partial >= 1 && partial <= Math.abs(net)))) return fail(2, 'PositionNotFound');
+  if (s.closeReply === 'refuse') return fail(3, 'Rejected');
+  const order = { contractId, side: net > 0 ? 1 : 0, size: partial ?? (s.closeSizedAtSend ? Math.abs(net) : null) };
+  if (s.dropCloses > 0) { s.dropCloses -= 1; return OK; } // accepted, never fills
+  if (s.holdCloses || s.closeReply === 'error') {
+    s.held.push(order);
+    if (s.closeReply === 'error') throw new Error('HTTP 504 gateway timeout');
+    return OK;
+  }
+  fill(s, contractId, order.side, order.size ?? Math.abs(net), s.prices[contractId], null);
+  return OK;
+}
+
+/** A result the server never sends (the reply is lost). */
+const NO_REPLY = { noReply: true };
 
 const HANDLERS = {
   get_server_config: (s, a, env) => ({ tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
@@ -187,6 +212,7 @@ const HANDLERS = {
     if (o.type === 2) fillOrder(s, o, s.prices[a.contractId]);
     else match(s);
     journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { result: { ...OK, orderId: o.id } } });
+    if (s.loseEntryReply) return NO_REPLY;
     return { orderId: o.id, ...OK };
   },
   modify_order: (s, a) => {
@@ -204,21 +230,8 @@ const HANDLERS = {
     o.status = 3;
     return OK;
   },
-  close_position: (s, a) => {
-    const net = netOf(s, a.contractId);
-    if (net === 0) return fail(2, 'PositionNotFound');
-    if (s.dropCloses > 0) { s.dropCloses -= 1; return OK; } // accepted, never fills
-    if (s.holdCloses) { s.held.push({ contractId: a.contractId, size: null }); return OK; }
-    fill(s, a.contractId, net > 0 ? 1 : 0, Math.abs(net), s.prices[a.contractId], null);
-    return OK;
-  },
-  partial_close_position: (s, a) => {
-    const net = netOf(s, a.contractId);
-    if (net === 0 || !(Number(a.size) >= 1) || Number(a.size) > Math.abs(net)) return fail(2, 'PositionNotFound');
-    if (s.holdCloses) { s.held.push({ contractId: a.contractId, size: Number(a.size) }); return OK; }
-    fill(s, a.contractId, net > 0 ? 1 : 0, Number(a.size), s.prices[a.contractId], null);
-    return OK;
-  },
+  close_position: (s, a) => closeOrder(s, a.contractId, null),
+  partial_close_position: (s, a) => closeOrder(s, a.contractId, Number(a.size)),
   journal_add: (s, a, env) => {
     const entry = { ts: new Date().toISOString(), ...a };
     if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify(entry)}\n`);
@@ -232,11 +245,20 @@ const HANDLERS = {
 
 /** One tool call against the shared state; every call is logged in state.calls. */
 function handle(file, tool, args = {}, env = process.env) {
-  return update(file, s => {
-    s.calls.push({ tool, args });
+  let thrown = null;
+  const out = update(file, s => {
+    // With whether a position was open when the call came (an order cancelled while one was, say).
+    s.calls.push({ tool, args, open: s.positions.length > 0 });
     if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);
-    return HANDLERS[tool](s, args, env);
+    try {
+      return HANDLERS[tool](s, args, env);
+    } catch (err) {
+      thrown = err; // the state change before it is kept (a timeout after the broker took the call)
+      return null;
+    }
   });
+  if (thrown) throw thrown;
+  return out;
 }
 
-module.exports = { ACCOUNT, CONTRACTS, HANDLERS, initState, update, read, setPrice, settle, handle };
+module.exports = { ACCOUNT, CONTRACTS, HANDLERS, NO_REPLY, initState, update, read, setPrice, settle, handle };

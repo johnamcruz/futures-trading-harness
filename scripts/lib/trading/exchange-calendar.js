@@ -64,15 +64,21 @@ function exchangeCalendar({ closed = [], early = [] } = {}) {
   };
 }
 
+/** A year has at least this many exchange holidays (closed days); fewer configured means the year isn't covered. */
+const MIN_CLOSED_PER_YEAR = 9;
+
 /**
- * The last trading day the calendar covers: COVERED_UNTIL, or the latest
- * configured date past it (configured dates extend it, so add a whole year's
- * holidays and early closes at once). The order gate refuses entries on any
- * later trading day: without its holidays it would trade into a closed
+ * The last trading day the calendar covers: COVERED_UNTIL, extended a year at
+ * a time by configured years that list a whole year's closed days (at least
+ * MIN_CLOSED_PER_YEAR), never by a stray date. The order gate refuses entries
+ * on any later trading day: without its holidays it would trade into a closed
  * exchange and hold positions through an early close.
  */
-function calendarEnd({ closed = [], early = [] } = {}) {
-  return [COVERED_UNTIL, ...listOf(closed), ...listOf(early)].filter(d => DATE.test(d)).sort().pop();
+function calendarEnd({ closed = [] } = {}) {
+  const configured = listOf(closed).filter(d => DATE.test(d));
+  let end = COVERED_UNTIL;
+  for (let y = Number(COVERED_UNTIL.slice(0, 4)) + 1; configured.filter(d => d.startsWith(`${y}-`)).length >= MIN_CLOSED_PER_YEAR; y += 1) end = `${y}-12-31`;
+  return end;
 }
 
 /**
@@ -82,8 +88,8 @@ function calendarEnd({ closed = [], early = [] } = {}) {
 function coverageError(now, dates = {}) {
   const latest = calendarEnd(dates);
   if (tradingDayKey(new Date(now.getTime() + WARN_DAYS * 86400000)) <= latest) return null;
-  return `the exchange calendar ends ${latest}, and the order gate refuses entries after it: add the CME holidays and early closes after it `
+  return `the exchange calendar ends ${latest}, and the order gate refuses entries after it: add the next year's CME holidays (all of them: a year counts once it lists at least ${MIN_CLOSED_PER_YEAR}) and early closes `
     + '(closedDates / earlyCloseDates, or FTH_CLOSED_DATES / FTH_EARLY_CLOSE_DATES), or extend scripts/lib/trading/exchange-calendar.js';
 }
 
-module.exports = { CLOSED, EARLY_CLOSE, COVERED_UNTIL, exchangeCalendar, calendarEnd, coverageError };
+module.exports = { CLOSED, EARLY_CLOSE, COVERED_UNTIL, MIN_CLOSED_PER_YEAR, exchangeCalendar, calendarEnd, coverageError };

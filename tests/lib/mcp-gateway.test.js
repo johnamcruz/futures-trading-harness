@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter, canonicalArgs, closeLedgerEntry } = require('../../scripts/lib/trading/mcp-gateway');
+const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter, canonicalArgs, closeLedgerEntry, closeRefused } = require('../../scripts/lib/trading/mcp-gateway');
 const { tmpDir } = require('../helpers');
 
 const call = (id, name, args = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
@@ -114,4 +114,15 @@ test('closeLedgerEntry: a close counts from the account before it, capped at the
   assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 5 }, long2, now).size, 2);
   assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MES' }, long2, now), null);
   assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MNQ' }, null, now), null);
+});
+
+test('closeRefused: only a body saying success: false is a refusal; an error reply is an unknown outcome', () => {
+  const reply = (text, extra = {}) => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text }], ...extra } });
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: false, errorCode: 2 }))), true);
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: true }))), false);
+  assert.strictEqual(closeRefused(reply('HTTP 504 gateway timeout', { isError: true })), false);
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: false }), { isError: true })), false, 'an error reply, whatever it says');
+  assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'boom' } }), false);
+  assert.strictEqual(closeRefused(reply('not json')), false);
+  assert.strictEqual(closeRefused(null), false);
 });

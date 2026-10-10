@@ -7,16 +7,18 @@
  * broker (brokers.json); the runner on the real broker adapter (reads straight
  * to the server, orders through the gateway). The exchange fills market
  * orders at its price, works bracket legs (OCO), triggers stops and limits as
- * the test moves the price, and can misbehave on cue: closes it accepts and
- * never fills, closes that fill late, positions listed without a size.
+ * the test moves the price (a gap fills past the stop), and misbehaves on
+ * cue: closes it loses, fills late, refuses, or takes with an error reply;
+ * an entry whose reply is lost; positions listed without a size.
  *
- * Covered: a trade's whole life (entry from a real strategy signal, refusals
- * of a second entry, a loosened stop and a removed stop, a tightened stop,
- * partial closes in and over size, a stop hit for a loss, a target, the
- * close, the stop that can't be moved right after it, the leftover cancelled),
- * the contract named three ways, an unreadable position, holidays and the
- * early close, and the runner's end of day against a broker that loses or
- * delays its closes.
+ * Covered: a long's whole life from a real strategy signal (a second entry,
+ * a loosened and a removed stop refused; a tightened stop; partial closes in
+ * and over size; a gap through the stop), a short's, a target, the runner's
+ * trailing stop; closes in flight under three names for the contract, closes
+ * refused or of unknown outcome, an entry of unknown outcome; the gateway on
+ * a raw server; an unreadable position; holidays, the early close and the
+ * calendar's end; and the runner's end of day against a broker that loses or
+ * delays its closes or leaves bracket legs behind.
  */
 
 const test = require('node:test');
@@ -141,13 +143,14 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
     assert.match((await attempt(gw, 'partial_close_position', { accountId: 7, contractId: 'MES', size: 1 })).error, /partial-close.*No open MES position/);
     assert.ok(!exchange.read(w.state).calls.some(c => c.tool === 'partial_close_position'));
 
-    // 5. The market falls through the tightened stop: stopped out for a loss, the target cancelled (OCO), the loss in the fills.
+    // 5. The market gaps through the tightened stop: stopped out at the gap price, worse than the stop; the target
+    //    cancelled (OCO); the loss in the fills.
     exchange.setPrice(w.state, MNQ_ID, tighter - 5);
     assert.strictEqual(position(w), null);
     assert.deepStrictEqual(working(w), [], 'the target went with the stop (OCO)');
     const exit = exchange.read(w.state).fills.at(-1);
-    assert.strictEqual(exit.price, tighter);
-    assert.strictEqual(exit.profitAndLoss, (tighter - sig.price) * 2, 'MNQ: $2 a point');
+    assert.strictEqual(exit.price, tighter - 5, 'a gap fills past the stop');
+    assert.strictEqual(exit.profitAndLoss, (tighter - 5 - sig.price) * 2, 'MNQ: $2 a point');
     assert.ok(exit.profitAndLoss < 0);
 
     // 6. Flat: the leftover-free account takes no exit; a cancel of an order that isn't there is the broker's refusal.
@@ -224,8 +227,9 @@ test('mock trading: no entry on an exchange holiday, after an early close, or pa
       const v = lastBlock(w).find(x => x.check === 'market-hours');
       assert.ok(v, label);
       assert.match(v.message, why, label);
-      // An exit always goes: the long is flattened.
-      assert.ok((await attempt(gw, 'close_position', { accountId: 7, contractId: 'MNQ' })).ok, label);
+      // An exit always goes, through the gate too: the long is flattened by an [exit] order.
+      const exit = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten before the close' });
+      assert.ok(exit.ok, `${label}: ${exit.error}`);
       assert.strictEqual(position(w), null, label);
     } finally {
       gw.close();
@@ -290,7 +294,8 @@ function openLong(w) {
 }
 
 test('mock trading: end of day flattens through the gateway and is done only once the account reads flat (a close the broker loses is sent again)', async () => {
-  const w = world('2026-10-07T19:48:00Z', { dropCloses: 1 });
+  // The broker loses the first close and leaves bracket legs working once flat (the runner cancels them).
+  const w = world('2026-10-07T19:48:00Z', { dropCloses: 1, keepLegs: true });
   openLong(w);
   const r = await runDay(w, { from: '2026-10-07T19:49:30Z', until: '2026-10-07T19:56:00Z' });
   const closes = exchange.read(w.state).calls.filter(c => c.tool === 'close_position');
@@ -303,13 +308,15 @@ test('mock trading: end of day flattens through the gateway and is done only onc
   assert.ok(r.events.some(e => e.kind === 'eod' && e.ok === true));
   assert.deepStrictEqual(r.runs.filter(x => x[0] === 'eod').length, 1, 'the agents\' end-of-day run happens once');
   assert.ok(!kinds.includes('kill_switch_created'));
-  // The protective stop of the still-open position was never cancelled before the position was gone.
+  // The stop and target were cancelled, and only once the position was gone: never a stop of an open position.
   const cancels = exchange.read(w.state).calls.filter(c => c.tool === 'cancel_order');
-  assert.ok(cancels.length <= 2);
+  assert.strictEqual(cancels.length, 2);
+  assert.ok(cancels.every(c => !c.open), JSON.stringify(cancels));
 });
 
 test('mock trading: a close that fills late is sent once, never twice (two would reverse the position)', async () => {
-  const w = world('2026-10-07T19:48:00Z', { holdCloses: true });
+  // A close fills late, for the size open when it was sent (a market order): two would leave the account short.
+  const w = world('2026-10-07T19:48:00Z', { holdCloses: true, closeSizedAtSend: true });
   openLong(w);
   let sentAt = null;
   const r = await runDay(w, {
@@ -374,7 +381,8 @@ test('mock trading: the runner trails a winner\'s stop through the gateway (2R o
     before: ms => {
       // Up 3R after 4 minutes; after 12 minutes back down through where the trail left the stop.
       if (ms >= at.getTime() + 4 * 60000 && ms < at.getTime() + 12 * 60000) exchange.setPrice(w.state, MNQ_ID, up);
-      if (ms >= at.getTime() + 12 * 60000) exchange.setPrice(w.state, MNQ_ID, t.price + 1 * t.risk);
+      // Then a quarter point under wherever the trail has the stop: it fills there.
+      if (ms >= at.getTime() + 12 * 60000 && position(w)) exchange.setPrice(w.state, MNQ_ID, working(w).find(o => o.type === 4).stopPrice - 0.25);
     },
   });
   const moves = exchange.read(w.state).calls.filter(c => c.tool === 'modify_order');
@@ -385,4 +393,95 @@ test('mock trading: the runner trails a winner\'s stop through the gateway (2R o
   assert.ok(exit.price >= t.price + 2 * t.risk, `the trail held at least 2R (exit ${exit.price}, entry ${t.price}, 1R ${t.risk})`);
   assert.ok(exit.profitAndLoss > 0);
   assert.ok(r.events.some(e => e.kind === 'position_managed' && e.setup === 'bos'));
+});
+
+test('mock trading: a close the broker refuses frees its stop; one whose reply errors (it may have filled) still holds it', async () => {
+  for (const reply of ['refuse', 'error']) {
+    const w = world('2026-10-07T14:30:00Z', { closeReply: reply });
+    exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+    const stopId = working(w).find(o => o.type === 4).id;
+    const gw = gatewayClient(w);
+    try {
+      const close = await attempt(gw, 'close_position', { accountId: 7, contractId: 'MNQ' });
+      assert.strictEqual(position(w).size, 1, `${reply}: not filled yet`);
+      const tighten = await attempt(gw, 'modify_order', { accountId: 7, orderId: stopId, stopPrice: 21495 });
+      if (reply === 'refuse') {
+        assert.deepStrictEqual([close.ok, close.result.success], [true, false]);
+        assert.ok(tighten.ok, `refused: the position stays, and so does its stop to manage: ${tighten.error}`);
+      } else {
+        assert.match(close.error, /HTTP 504/);
+        assert.match(tighten.error, /modify-entry.*once recent orders fill/, 'an unknown outcome counts as a close');
+        exchange.settle(w.state);
+        assert.strictEqual(position(w), null, 'the broker had taken it');
+      }
+    } finally {
+      gw.close();
+    }
+  }
+});
+
+test('mock trading: a gateway started on a raw broker server (no translator) compares names as the server gives them', async () => {
+  const w = world('2026-10-07T14:30:00Z');
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1 }, {});
+  // The translator has learned the contracts (another process's normal start).
+  const normal = gatewayClient(w);
+  await normal.call('search_contracts', { searchText: 'MNQ' });
+  normal.close();
+  const raw = createMcpClient({ command: process.execPath, args: [path.join(ROOT, 'scripts', 'mcp-gateway.js'), '--', process.execPath, SERVER], env: w.env, cwd: ROOT, timeoutMs: 20000 });
+  try {
+    const protect = await attempt(raw, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'sell', type: 'stop', size: 1, stopPrice: 21490, rationale: '[protect] stop for the long' });
+    assert.ok(protect.ok, protect.error);
+    assert.strictEqual(working(w).find(o => o.type === 4).stopPrice, 21490);
+  } finally {
+    raw.close();
+  }
+});
+
+test('mock trading: an entry whose reply is lost is an order of unknown outcome: no second entry, the exit still goes', async () => {
+  const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000).toISOString();
+  const w = world(at, { loseEntryReply: true });
+  w.env.FTH_LANE_TIMEOUT_MS = '1500';
+  const sig = signalOnFiredBar(w);
+  const entry = {
+    accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: sig.ticks, type: 'stop' },
+    rationale: `setup:bos long trigger on the closed bar, stop ${(sig.price - sig.ticks * 0.25).toFixed(2)}`,
+  };
+  const gw = createMcpClient({ command: process.execPath, args: [path.join(ROOT, 'scripts', 'mcp-gateway.js')], env: w.env, cwd: ROOT, timeoutMs: 4000 });
+  try {
+    const first = await attempt(gw, 'place_order', entry);
+    assert.ok(!first.ok, 'no reply');
+    assert.strictEqual(position(w).size, 1, 'the broker took it');
+    exchange.update(w.state, s => { s.loseEntryReply = false; });
+    const second = await attempt(gw, 'place_order', entry);
+    assert.match(second.error, /order-pending|position-open/);
+    assert.strictEqual(exchange.read(w.state).calls.filter(c => c.tool === 'place_order').length, 1, 'never sent twice');
+    const exit = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the unknown entry' });
+    assert.ok(exit.ok, exit.error);
+    assert.strictEqual(position(w), null);
+  } finally {
+    gw.close();
+  }
+});
+
+test('mock trading: a short through its life: its stop moves only down, a partial close over it is refused, a gap up fills worse', async () => {
+  const w = world('2026-10-07T14:30:00Z');
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'sell', type: 'market', size: 1, stopLossBracket: { ticks: 40 }, takeProfitBracket: { ticks: 80 } }, {});
+  const stop = working(w).find(o => o.type === 4);
+  assert.deepStrictEqual([position(w).type, stop.side, stop.stopPrice], [2, 0, 21510], 'short 1 @ 21500, buy stop 40 ticks above');
+  assert.strictEqual(working(w).find(o => o.type === 1).limitPrice, 21480, 'target 80 ticks below');
+  const gw = gatewayClient(w);
+  try {
+    assert.match((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21520 })).error, /modify-protection/);
+    assert.ok((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21505 })).ok);
+    assert.match((await attempt(gw, 'partial_close_position', { accountId: 7, contractId: 'MNQ', size: 2 })).error, /partial-close/);
+    // A buy that would add to the short is no exit.
+    assert.match((await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' })).error, /exposure/);
+  } finally {
+    gw.close();
+  }
+  exchange.setPrice(w.state, MNQ_ID, 21508);
+  assert.strictEqual(position(w), null);
+  const exit = exchange.read(w.state).fills.at(-1);
+  assert.deepStrictEqual([exit.side, exit.price, exit.profitAndLoss], [0, 21508, -16], 'bought back 8 points higher: -$16 on MNQ');
+  assert.deepStrictEqual(working(w), [], 'the target went with it (OCO)');
 });

@@ -106,7 +106,7 @@ function loadConfig(env = process.env) {
     // plus any configured dates: configuration can add days, never remove one.
     ...exchangeCalendar({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
     // The last trading day the calendar covers: no entries after it (holidays unknown).
-    calendarEnds: calendarEnd({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
+    calendarEnds: calendarEnd({ closed: env.FTH_CLOSED_DATES }),
   };
 }
 

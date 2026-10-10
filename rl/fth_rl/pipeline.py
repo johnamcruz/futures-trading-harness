@@ -46,6 +46,15 @@ NESTED_ROOTS = ("ppo", "reward", "sizing")  # maps: searched as root.key; the ot
 # The simulator's fills (scripts/lib/rl/env-config.js): trials trained on other fills are not comparable.
 # Bump it when the env's fills change, so an older study is not resumed with mixed trials.
 FILLS_VERSION = "next-open, at least 1 tick of slippage (2026-10)"
+# What makes two simulators fill alike: compared between retrain and ship (the calendar dates are not: a
+# year's holidays added to the config must not void seeds trained on windows those dates never touch).
+FILL_KEYS = ("gate", "sessions", "eodAt", "slippageTicks", "fill")
+
+
+def fills_of(engine):
+    return {k: (engine or {}).get(k) for k in FILL_KEYS}
+
+
 FINGERPRINT_KEYS = ("strategy", "symbol", "data", "windows", "eval_every", "sessions", "eodAt", "slippageTicks", "closedDates", "earlyCloseDates")
 SPEC_TYPES = ("float", "int", "categorical")
 STUDY_DEFAULTS = {
@@ -497,9 +506,9 @@ def _run_retrain(rt, dry_run):
         return None
     w = cfg["_windows"]
     with EnvServer(cfg_path) as server:
-        # The simulator the seeds are trained in (fills, sessions, calendar); ship refuses seeds from another.
+        # The simulator the seeds are trained in (its fills: FILL_KEYS); retrain and ship refuse seeds from another.
         engine = server.info()["engine"]
-        if candidates["seeds"] and candidates.get("engine") != engine:
+        if candidates["seeds"] and fills_of(candidates.get("engine")) != fills_of(engine):
             raise ValueError(f"{cand_file} holds seeds retrained in another simulator ({candidates.get('engine')}, now {engine}); "
                              "move it aside and retrain")
         candidates["engine"] = engine
@@ -587,7 +596,7 @@ def _run_ship(sh, dry_run, models_dir):
     with EnvServer(cfg_path, hash_data=True) as server:
         info = server_info(server)
         # The bundle records the simulator its network was trained in: the same one this evaluation runs in.
-        if candidates.get("engine") != info["engine"]:
+        if not candidates.get("engine") or fills_of(candidates["engine"]) != fills_of(info["engine"]):
             raise ValueError(f"the retrained seeds were trained in another simulator ({candidates.get('engine')}) than this harness runs "
                              f"({info['engine']}): retrain them (move {cand_file} aside)")
         oos, baseline, fails = evaluate_oos(server, cfg, best["network"])

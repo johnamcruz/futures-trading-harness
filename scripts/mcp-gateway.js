@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry } = require('./lib/trading/mcp-gateway');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
@@ -132,7 +132,7 @@ function main(argv) {
   };
 
   const check = async (sentArgs, tool, id) => {
-    const args = canonicalArgs(sentArgs); // one name per contract for the gate and its ledger
+    const args = sep === -1 ? canonicalArgs(sentArgs) : sentArgs; // behind the translator: one name per contract for the gate and its ledger
     const now = gateNow();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
@@ -198,9 +198,9 @@ function main(argv) {
     if (!sent || ((!response || response.error || (response.result && response.result.isError)) && !sent.closeEntry)) return;
     const { args, observedNet, observedRootNet, closeEntry } = sent;
     if (closeEntry) {
-      // Counted since it was sent; a refused close (success: false) is dropped, a confirmed one counts from now.
-      if (!response || response.error || (response.result && response.result.isError) || (resultJson(response) || {}).success !== true) ledger = ledger.filter(e => e !== closeEntry);
-      else closeEntry.at = gateNow().getTime();
+      // Counted since it was sent: only a refusal (success: false) drops it; an error reply is an unknown outcome and stays.
+      if (closeRefused(response)) ledger = ledger.filter(e => e !== closeEntry);
+      else if ((resultJson(response) || {}).success === true) closeEntry.at = gateNow().getTime();
       return;
     }
     const placed = resultJson(response);
@@ -272,7 +272,7 @@ function main(argv) {
       // before them so the ledger can count them until the account shows it.
       for (const m of lane) {
         const close = /(?:^|__)(close_position|partial_close_position)$/.exec(String(m.params.name || ''));
-        const args = canonicalArgs(m.params.arguments || {});
+        const args = sep === -1 ? canonicalArgs(m.params.arguments || {}) : m.params.arguments || {};
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');

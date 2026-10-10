@@ -423,7 +423,8 @@ More runner settings:
   days to it. Both go to the order gate too: no entries on a closed day or
   after an early close. After the calendar's last day the gate refuses every
   entry (those days' holidays are unknown); the runner warns once a day for
-  the 30 days before it.
+  the 30 days before it. Configured dates extend it only a whole year at a
+  time: list every holiday of the year (at least 9) in `closedDates`.
 - No run outlasts end of day: each gets at most the time left until
   `eodAt`, and end of day closes positions directly before the agents'
   review run. It is done only once the account reads flat (a position whose
@@ -587,12 +588,13 @@ node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after e
 `tests/e2e/mock-trading-e2e.test.js` trades end to end on a mock exchange
 (`tests/fixtures/mock-exchange.js`) through the production stack: the order
 gateway and the contract translator in front of a broker MCP server, and the
-runner on the broker adapter. It covers a trade's whole life (a real signal,
-the refusals, stop moves, partial closes, a stop-out, a target, the runner's
-trailing stop), a contract named three ways, an unreadable position,
-holidays, the early close, and end of day against a broker that loses or
-delays its closes. A change to the gate, the gateway, or the runner keeps it
-green.
+runner on the broker adapter. It covers a long's and a short's whole life (a
+real signal, the refusals, stop moves, partial closes, a gap through the
+stop, a target, the runner's trailing stop), closes in flight under three
+names for the contract, closes refused or of unknown outcome, an entry whose
+reply is lost, an unreadable position, holidays, the early close, and end of
+day against a broker that loses or delays its closes. A change to the gate,
+the gateway, or the runner keeps it green.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).
 

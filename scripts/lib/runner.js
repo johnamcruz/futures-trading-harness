@@ -335,6 +335,7 @@ function createRunner(deps) {
     }
     const lastBarT = bars[bars.length - 1].t;
     const closeOut = async why => {
+      closedAt.set(cid, clock.now().getTime()); // end of day won't send a second close while this one fills
       await client.closePosition(cfg.account, cid);
       const last = bars[bars.length - 1];
       emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
@@ -405,6 +406,7 @@ function createRunner(deps) {
         .filter(o => o.contractId === p.contractId && STOP_ORDER_TYPES.has(Number(o.type)) && (Number(o.side) === 0 ? 1 : -1) === -sign)
         .reduce((a, o) => a + Number(o.size || 0), 0);
       if (covered === Number(p.size)) continue;
+      closedAt.set(p.contractId, clock.now().getTime());
       await client.closePosition(cfg.account, p.contractId);
       closed.push(p.contractId);
       log(`${item.symbol}: ${p.contractId} ${sign > 0 ? 'long' : 'short'} ${p.size} has stops for ${covered} while no cycle can run (kill switch or outside sessions); closed at market`, 'error');

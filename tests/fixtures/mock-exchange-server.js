@@ -32,7 +32,9 @@ process.stdin.on('data', chunk => {
     else if (msg.method === 'tools/list') result = { tools };
     else if (msg.method === 'tools/call') {
       try {
-        result = { content: [{ type: 'text', text: JSON.stringify(exchange.handle(file, msg.params.name, msg.params.arguments || {})) }] };
+        const data = exchange.handle(file, msg.params.name, msg.params.arguments || {});
+        if (data && data.noReply) continue; // the reply is lost
+        result = { content: [{ type: 'text', text: JSON.stringify(data) }] };
       } catch (err) {
         result = { content: [{ type: 'text', text: err.message }], isError: true };
       }
