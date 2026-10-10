@@ -12,7 +12,7 @@
  */
 
 const { tradingDayStart, parseWindows, inWindow, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
-const { entriesSince, entryTime, hasTag, reviewResult, contractRoot } = require('./journal');
+const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
@@ -46,7 +46,7 @@ function isRiskReducing(rationale) {
 function liveReviews(entries, root = null) {
   return entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper')
     && (reviewResult(e) !== null || hasTag(e, 'result:nofill'))
-    && (!root || !e.contractId || contractRoot(e.contractId) === root));
+    && (!root || mayBeRoot(e.contractId, root)));
 }
 
 function successfulEntries(dayEntries) {
@@ -298,7 +298,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     : null);
 
   const root = contractRoot(input.contractId);
-  const entered = successfulEntries(dayEntries).filter(e => !e.contractId || contractRoot(e.contractId) === root).length;
+  const entered = successfulEntries(dayEntries).filter(e => mayBeRoot(e.contractId, root)).length;
   const reviewed = liveReviews(dayEntries, root).length;
   const enteredAll = successfulEntries(dayEntries).length;
   add('review-before-next-entry', entered > reviewed

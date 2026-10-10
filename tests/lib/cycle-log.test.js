@@ -14,8 +14,8 @@ const claudeStream = skills => [
   JSON.stringify({ type: 'system', subtype: 'init' }),
   ...skills.map(s => use('Skill', { skill: `futures-trading-harness:${s}` })),
   use('Bash', { command: 'node /r/scripts/strategies.js scan /b.json --symbol MNQ' }),
-  use('mcp__broker__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'buy', size: 1, type: 'market', rationale: 'setup:orb long, stop 21480' }),
-  use('mcp__broker__place_order', { contractId: 'CON.F.US.MNQ.Z26', side: 'sell', size: 1, type: 'stop', rationale: '[protect] stop' }),
+  use('mcp__broker__place_order', { contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale: 'setup:orb long, stop 21480' }),
+  use('mcp__broker__place_order', { contractId: 'MNQ', side: 'sell', size: 1, type: 'stop', rationale: '[protect] stop' }),
   JSON.stringify({ type: 'result', result: 'Done.\nCYCLE RESULT: executed - orb long 1 MNQ' }),
 ].join('\n');
 

@@ -114,7 +114,7 @@ const ENUMS = {
   positionType: { long: 1, short: 2 },
   orderStatus: { none: 0, open: 1, filled: 2, cancelled: 3, expired: 4, rejected: 5, pending: 6 },
   barUnit: ['second', 'minute', 'hour', 'day', 'week', 'month'],
-  contractId: 'CON.F.US.<SYMBOL>.<MONTH><YY>, e.g. CON.F.US.MNQ.Z26',
+  contractId: 'the server\'s own id; the harness never reads it (the contract translator maps it to a standard name: MNQ, NQ:2026-03)',
 };
 
 const JOURNAL = {

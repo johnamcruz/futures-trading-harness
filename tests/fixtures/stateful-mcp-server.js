@@ -4,7 +4,7 @@
 // the market fill lands FILL_DELAY_MS later, like a real exchange round trip.
 // Starts with net position START_NET in CONTRACT. STOP_ORDER=1: a resting
 // protective stop (id 9) on the other side; CLOSE_FAIL=1: close_position is refused (success: false).
-const CONTRACT = process.env.CONTRACT || 'CON.F.US.MNQ.Z26';
+const CONTRACT = process.env.CONTRACT || 'MNQ';
 const DELAY = Number(process.env.FILL_DELAY_MS || 300);
 let net = Number(process.env.START_NET || 0);
 let orderId = 100;

@@ -31,7 +31,7 @@ const { readJournal } = require('../../scripts/lib/trading/journal');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const STEP = 180000;
-const CONTRACT = 'CON.F.US.MNQ.M26';
+const CONTRACT = 'MNQ:2026-06';
 
 test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gate allows the trigger and refuses the rest', async () => {
   const home = tmpDir();

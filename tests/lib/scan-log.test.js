@@ -35,7 +35,7 @@ test('summarizeResult keeps what decided the verdict: failed rules, filters, ses
 
 test('scanRecord: one line per scanned bar with the runner\'s decision and the candidates', () => {
   const rec = scanRecord({
-    at: new Date('2026-10-07T15:21:05Z'), symbol: 'MNQ', contractId: 'CON.F.US.MNQ.Z26', bar: { t: '2026-10-07T15:18:00Z', c: 21486.5, h: 1 },
+    at: new Date('2026-10-07T15:21:05Z'), symbol: 'MNQ', contractId: 'MNQ', bar: { t: '2026-10-07T15:18:00Z', c: 21486.5, h: 1 },
     results: [result({ candidate: true, direction: 'long' }), { name: 'orb', candidate: false }], decision: { run: true, reason: 'signal: crt_1h long' },
   });
   assert.strictEqual(rec.at, '2026-10-07T15:21:05.000Z');

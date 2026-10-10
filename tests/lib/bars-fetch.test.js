@@ -14,7 +14,7 @@ function fakeClient(n = 50) {
   const calls = [];
   return {
     calls,
-    async activeContract(symbol) { calls.push(['contract', symbol]); return { id: `CON.F.US.${symbol}.Z26`, tickSize: 0.25, tickValue: 0.5 }; },
+    async activeContract(symbol) { calls.push(['contract', symbol]); return { id: symbol, tickSize: 0.25, tickValue: 0.5 }; },
     async closedBars(id, opts) {
       calls.push(['bars', id, opts.minutes, opts.limit, opts.daily]);
       return Array.from({ length: n }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 13) + k * 180000).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 3 })).reverse();
@@ -26,9 +26,9 @@ test('fetchBarsToFile writes get_bars JSON oldest first, and says when the last 
   const out = path.join(tmpDir(), 'sub', 'MNQ-3m.json');
   const client = fakeClient();
   const r = await fetchBarsToFile({ client, symbol: 'MNQ', timeframe: 3, count: 50, out });
-  assert.deepStrictEqual(client.calls[1], ['bars', 'CON.F.US.MNQ.Z26', 3, 50, false]);
+  assert.deepStrictEqual(client.calls[1], ['bars', 'MNQ', 3, 50, false]);
   const j = JSON.parse(fs.readFileSync(out, 'utf8'));
-  assert.deepStrictEqual([j.contractId, j.barSize, j.count], ['CON.F.US.MNQ.Z26', '3 minute', 50]);
+  assert.deepStrictEqual([j.contractId, j.barSize, j.count], ['MNQ', '3 minute', 50]);
   assert.ok(Date.parse(j.bars[0].t) < Date.parse(j.bars[49].t), 'oldest first');
   assert.strictEqual(r.closedAt, new Date(Date.parse(r.last) + 180000).toISOString());
   const daily = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', daily: true, count: 60, out: path.join(tmpDir(), 'd.json') });

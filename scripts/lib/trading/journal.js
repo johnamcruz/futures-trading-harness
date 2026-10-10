@@ -6,7 +6,6 @@
  * writer; hooks only read it.
  */
 
-const { rootOfIdSymbol } = require('./contracts');
 const fs = require('fs');
 
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
@@ -77,14 +76,66 @@ function reviewResult(entry) {
   return null;
 }
 
+// The translator's lookups for the selected broker, re-read only when the file changes.
+let named = { file: null, mtimeMs: -1, cache: null };
+function translatorCache() {
+  const fs = require('fs');
+  const { activeBroker, contractsCacheFile } = require('../broker/config');
+  const file = contractsCacheFile(activeBroker(process.env).name, process.env);
+  let mtimeMs;
+  try {
+    mtimeMs = fs.statSync(file).mtimeMs;
+  } catch (_err) {
+    mtimeMs = 0;
+  }
+  if (named.file !== file || named.mtimeMs !== mtimeMs) named = { file, mtimeMs, cache: require('../broker/translator').readCache(file) };
+  return named.cache;
+}
+
 /**
- * Root symbol from a contract id: CON.F.US.MNQ.Z25 -> MNQ.
- * Returns the input upper-cased when it doesn't look like a contract id.
+ * { root, named } for a contract id. A broker id the translator has looked up
+ * (the server's own journal entries) takes its root from those lookups, first:
+ * a broker's ids may look like names (MNQZ5). Else a standard name (MNQ,
+ * NQ:2026-03 -> NQ). Else the id upper-cased with named false: nothing knows
+ * its contract.
  */
-/** The contract root of a contract id: CON.F.US.MNQ.Z26 -> MNQ, CON.F.US.ENQ.Z26 -> NQ. */
+function resolveContract(contractId) {
+  const id = String(contractId || '');
+  try {
+    const known = translatorCache().ids[id];
+    if (known) return { root: known.root, named: true };
+  } catch (_err) {
+    // no broker config: no translator lookups to read
+  }
+  const std = require('../broker/translator').parseStandardName(id);
+  if (std) return { root: std.root, named: true };
+  return { root: id.toUpperCase(), named: false };
+}
+
+/** The root of a contract (see resolveContract); an unnamed id comes back upper-cased, matching no strategy's instruments. */
 function contractRoot(contractId) {
-  const parts = String(contractId || '').split('.');
-  return parts.length >= 5 ? rootOfIdSymbol(parts[parts.length - 2]) : String(contractId || '').toUpperCase();
+  return resolveContract(contractId).root;
+}
+
+/**
+ * True when an entry's contract may be on `root`: its root is `root`, or it is
+ * a broker id nothing names (an empty translator cache, another harness home,
+ * entries from before the translator). Gate counts that must not miss an entry
+ * (entries without a review, a used verdict) use this, so an id they can't
+ * name counts on every root: they fail closed. A review under such an id
+ * counts on every root too, so reviewing the entry as journal_read shows it
+ * clears it.
+ */
+function mayBeRoot(contractId, root) {
+  if (!contractId) return true;
+  const c = resolveContract(contractId);
+  return !c.named || c.root === root;
+}
+
+/** The month part of a standard name ('2026-03'), or '' for the front month. */
+function contractMonthTag(contractId) {
+  const std = require('../broker/translator').parseStandardName(contractId);
+  return std && std.month ? std.month : '';
 }
 
 module.exports = {
@@ -96,4 +147,6 @@ module.exports = {
   hasTag,
   reviewResult,
   contractRoot,
+  mayBeRoot,
+  contractMonthTag,
 };

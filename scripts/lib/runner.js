@@ -33,7 +33,7 @@ const { openTrades, describeOpenTrade } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
-const { contractRoot } = require('./trading/journal');
+const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot } = require('./trading/contracts');
 
 // Micros and minis of one index share bars: a position or order in either
@@ -246,7 +246,7 @@ function createRunner(deps) {
   async function trailPosition(item, { positions, orders }) {
     // This month's contract, or its mini/micro sibling (a policy strategy may trade either).
     const fam = famOf(item.contractId);
-    const sameMonth = x => x.contractId === item.contractId || (famOf(x.contractId) === fam && String(x.contractId).split('.').pop() === String(item.contractId).split('.').pop());
+    const sameMonth = x => x.contractId === item.contractId || (famOf(x.contractId) === fam && contractMonthTag(x.contractId) === contractMonthTag(item.contractId));
     const p = positions.find(x => sameMonth(x) && Number(x.size || 0) > 0);
     const cid = p ? p.contractId : item.contractId;
     const trails = { ...(state.trails || {}) };

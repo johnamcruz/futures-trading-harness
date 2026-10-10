@@ -36,7 +36,7 @@ const { loadConfig, gateNow } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
 const { harnessHome } = require('./lib/paths');
 const { runningAttempts } = require('./lib/trading/prop-state');
-const { activeBroker, serverCommand } = require('./lib/broker/config');
+const { activeBroker, translatedCommand } = require('./lib/broker/config');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
@@ -120,7 +120,8 @@ function main(argv) {
   // No command: the broker MCP server named in the broker config (broker/config.js).
   if (command.length === 0) {
     try {
-      command = serverCommand(activeBroker(process.env));
+      // Behind the contract translator: the gateway and its clients see standard contract names only.
+      command = translatedCommand(activeBroker(process.env));
     } catch (err) {
       process.stderr.write(`[mcp-gateway] ${err.message}\n`);
       process.exit(2);

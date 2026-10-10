@@ -28,10 +28,9 @@
  */
 
 const path = require('path');
-const { idSymbol } = require('../trading/contracts');
 const { createMcpClient } = require('./mcp-client');
 const { validateTools } = require('./interface');
-const { activeBroker, serverCommand } = require('./config');
+const { activeBroker, translatedCommand } = require('./config');
 
 class BrokerError extends Error {}
 
@@ -79,12 +78,11 @@ function createAdapter({ mcp, writeMcp = mcp }) {
 
     /** The active (front-month) contract for a root symbol such as MNQ. */
     async activeContract(symbol) {
-      const contracts = listOf(await call('search_contracts', { searchText: symbol, live: false }), 'search_contracts').filter(c => c.activeContract);
-      // Match the id's symbol exactly (NQ trades as ENQ; a search for YM also finds MYM), else a ticker of the root plus a month code.
-      const exact = contracts.find(c => String(c.id || '').split('.').slice(-2, -1)[0] === idSymbol(symbol))
-        || contracts.find(c => new RegExp(`^${symbol}[FGHJKMNQUVXZ]\\d{1,2}$`).test(String(c.name || '')));
-      if (!exact) throw new BrokerError(`no active contract found for ${symbol}`);
-      return { id: exact.id, name: exact.name, tickSize: Number(exact.tickSize), tickValue: Number(exact.tickValue) };
+      // The translator names the front month by its root (MNQ); later months carry their month (MNQ:2027-03).
+      const root = String(symbol).toUpperCase();
+      const c = listOf(await call('search_contracts', { searchText: root, live: false }), 'search_contracts').find(x => x.id === root);
+      if (!c) throw new BrokerError(`no active contract found for ${symbol}`);
+      return { id: c.id, name: c.name, tickSize: Number(c.tickSize), tickValue: Number(c.tickValue) };
     },
 
     /** Closed bars, oldest first: minute bars (`minutes`), or daily bars with `daily: true`. */
@@ -169,7 +167,8 @@ function createAdapter({ mcp, writeMcp = mcp }) {
  */
 function openAdapter({ root, env = process.env, timeoutMs } = {}) {
   const broker = activeBroker(env);
-  const [command, ...args] = serverCommand(broker);
+  // Behind the contract translator, like the gateway's: the runner sees standard contract names only.
+  const [command, ...args] = translatedCommand(broker);
   const name = 'futures-trading-harness-runner';
   // The gateway (a second copy of the server) starts on the first order call only: read-only CLIs never need it.
   let writes = null;

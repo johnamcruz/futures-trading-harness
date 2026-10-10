@@ -11,7 +11,7 @@ const { tmpDir } = require('../helpers');
 
 const M = 60000;
 const T0 = Date.UTC(2026, 9, 8, 14, 0);
-const C = 'CON.F.US.MNQ.Z26';
+const C = 'MNQ';
 const at = (min, sec = 0) => new Date(T0 + min * M + sec * 1000).toISOString();
 
 test('bars get flow only when every minute is known; CSV round-trips', () => {
@@ -51,5 +51,5 @@ test('recorded flow files load by contract and time window', () => {
   fs.mkdirSync(path.dirname(flowFile(home, C)), { recursive: true });
   fs.writeFileSync(flowFile(home, C), flowCsv([{ t: T0, bv: 3, sv: 1 }, { t: T0 + M, bv: 0, sv: 2 }]));
   assert.deepStrictEqual(readFlow(home, C, { from: T0 + M }).map(r => [r.t, r.bv, r.sv]), [[T0 + M, 0, 2]]);
-  assert.deepStrictEqual(readFlow(home, 'CON.F.US.MES.Z26'), []);
+  assert.deepStrictEqual(readFlow(home, 'MES'), []);
 });

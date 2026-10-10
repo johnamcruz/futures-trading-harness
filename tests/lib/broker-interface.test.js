@@ -16,6 +16,9 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
 const MNQ = 'CON.F.US.MNQ.Z26';
 const fake = (env = {}) => createMcpClient({ command: process.execPath, args: [FAKE], env: { ...process.env, ...env } });
+// The fake behind the contract translator, as the harness always runs a server: standard names above it.
+const TRANSLATOR = path.join(ROOT, 'scripts', 'contract-translator.js');
+const translated = (env = {}) => createMcpClient({ command: process.execPath, args: [TRANSLATOR, '--broker', 'fake', '--', process.execPath, FAKE], env: { ...process.env, FTH_HOME: tmpDir(), ...env } });
 
 test('the interface: 20 tools (5 order tools), enums, journal kinds, guardrails, transport', () => {
   assert.strictEqual(Object.keys(TOOLS).length, 20);
@@ -83,10 +86,11 @@ test('the MCP client: a tool error is thrown with its text; a server that exits 
   await assert.rejects(() => dead.listTools(), /MCP server exited/, 'starts again, and fails again');
 });
 
-test('the broker client reads and manages through any conforming server', async () => {
-  const client = createAdapter({ mcp: fake({ FAKE_NEWEST_FIRST: '1' }) });
+test('the broker client reads and manages through any conforming server, in standard contract names', async () => {
+  const client = createAdapter({ mcp: translated({ FAKE_NEWEST_FIRST: '1' }) });
+  const MNQ = 'MNQ'; // the server's own id (CON.F.US.MNQ.Z26) never reaches the adapter
   try {
-    assert.deepStrictEqual(await client.activeContract('MNQ'), { id: MNQ, name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5 });
+    assert.deepStrictEqual(await client.activeContract('MNQ'), { id: 'MNQ', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5 });
     const bars = await client.closedBars(MNQ, { minutes: 3, limit: 5, now: new Date('2026-10-07T20:00:00Z') });
     assert.ok(bars.length === 5 && Date.parse(bars[0].t) < Date.parse(bars[4].t), 'sorted oldest first');
     const state = await client.accountState(7);
@@ -112,7 +116,7 @@ test('the adapter opens the configured broker: reads straight to it, a stop move
   const client = openAdapter({ root: ROOT, env });
   try {
     await client.verify();
-    assert.strictEqual((await client.activeContract('MNQ')).id, MNQ);
+    assert.strictEqual((await client.activeContract('MNQ')).id, 'MNQ');
     // The fake's long 1 MNQ has its stop at 21480.00: lowering it is moving it away from the market.
     await assert.rejects(() => client.modifyStop(7, 9, 21470), /modify-protection|Blocked by trading harness/);
     await client.modifyStop(7, 9, 21490);

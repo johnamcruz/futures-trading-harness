@@ -31,8 +31,8 @@ const { tmpDir, writeJournal } = require('../helpers');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const STEP = 180000;
-const CONTRACT = 'CON.F.US.MNQ.M26';
-const NQ = 'CON.F.US.ENQ.M26'; // the open trade is a mini, managed on the micro's bars (the same family)
+const CONTRACT = 'MNQ:2026-06';
+const NQ = 'NQ:2026-06'; // the open trade is a mini, managed on the micro's bars (the same family)
 
 test('context e2e: the cycle prompt carries the day, the fired strategy\'s track record, and the open trade', async () => {
   const home = tmpDir();

@@ -31,17 +31,6 @@ const FAMILIES = [
   { micro: 'MGC', mini: 'GC' },
 ];
 
-/**
- * Contract ids (broker MCP interface) name a few minis by another symbol
- * (CON.F.US.ENQ.Z26 is NQ, EP is ES, GCE is GC); the micros use their root.
- */
-const ID_SYMBOL = { NQ: 'ENQ', ES: 'EP', GC: 'GCE' };
-const ROOT_OF_ID_SYMBOL = Object.fromEntries(Object.entries(ID_SYMBOL).map(([r, s]) => [s, r]));
-/** The symbol segment in a contract id for a root (NQ -> ENQ). */
-const idSymbol = root => ID_SYMBOL[String(root || '').toUpperCase()] || String(root || '').toUpperCase();
-/** The root for a contract id symbol segment (ENQ -> NQ). */
-const rootOfIdSymbol = sym => ROOT_OF_ID_SYMBOL[String(sym || '').toUpperCase()] || String(sym || '').toUpperCase();
-
 /** The micro/mini family of a root ({ micro, mini, ratio }), or null. */
 function familyOf(root) {
   const r = String(root || '').toUpperCase();
@@ -52,4 +41,4 @@ function familyOf(root) {
 /** One key per micro/mini family (its micro root), else the root itself: MNQ and NQ -> MNQ. */
 const familyRoot = root => (familyOf(root) ? familyOf(root).micro : String(root || '').toUpperCase());
 
-module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot, idSymbol, rootOfIdSymbol };
+module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot };

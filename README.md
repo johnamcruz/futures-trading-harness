@@ -130,6 +130,11 @@ and the reference.
 - The runner, `bars.js`, `backtest.js fetch`, and `orderflow.js export`
   reach it only through the broker adapter (`scripts/lib/broker/adapter.js`):
   reads straight to the server, order calls through the gateway.
+- Contracts have standard names: `MNQ`, `NQ`, `ES` for the front month,
+  `NQ:2026-03` for another. The contract translator
+  (`scripts/contract-translator.js`), which the harness always starts in front
+  of the selected server, maps them to that broker's own ids and back by asking
+  its `search_contracts` / `get_contract`, so nothing above it sees a broker id.
 - Switching brokers is config: add the server to `brokers.json` and set
   `FTH_BROKER`. What still makes a new server harder to write than it should
   be is tracked in [docs/TECH-DEBT.md](docs/TECH-DEBT.md).
@@ -531,7 +536,7 @@ recorded files and exports bars with their flow for backtests:
 
 ```bash
 node scripts/orderflow.js status
-node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
+node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
 ```
 
 ### Order gate settings

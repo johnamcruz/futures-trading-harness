@@ -81,6 +81,21 @@ function setup(entries, extraEnv = {}) {
 
 const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__broker__place_order', tool_input: input });
 
+test('order gate: a server-written entry under a broker id the translator never named still needs its review', () => {
+  const at = m => minutesAgo(m, new Date(TEST_NOW));
+  const raw = { ts: at(30), kind: 'order_placed', contractId: 'CON.F.US.MNQ.Z26', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } };
+  const { env } = setup([raw, { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2, 'no translator cache in this home: the id may be MNQ, so it counts');
+  assert.match(r.stderr, /\[review-before-next-entry\]/);
+  const reviewed = setup([raw, { ts: at(10), kind: 'review', contractId: raw.contractId, text: 'closed', tags: ['result:win'] },
+    { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, 'reviewed under the id journal_read shows: cleared');
+  // With the translator's lookup on file, it counts as MNQ (and still needs the review); on another root it wouldn't.
+  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
+  assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
+});
+
 test('order gate blocks an unplanned entry with exit code 2', () => {
   const { env } = setup([]);
   const r = gate(orderPayload(), env);
@@ -176,11 +191,11 @@ test('order gate: a broken broker config blocks every order (fails closed) and s
 });
 
 test('order gate blocks unknown strategies and instruments the strategy does not trade', () => {
-  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'CON.F.US.MES.Z26', text: 'plan' }]);
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MES', text: 'plan' }]);
   const unknown = gate(orderPayload({ ...ORDER, rationale: 'setup:nosuch long, stop 1' }), env);
   assert.strictEqual(unknown.code, 2);
   assert.match(unknown.stderr, /\[strategy\] setup:nosuch is not a known strategy/);
-  const mes = gate(orderPayload({ ...ORDER, contractId: 'CON.F.US.MES.Z26' }), env);
+  const mes = gate(orderPayload({ ...ORDER, contractId: 'MES' }), env);
   assert.match(mes.stderr, /does not trade MES/);
 });
 
@@ -296,7 +311,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
   const env = {
     PATH: process.env.PATH,
     HOME: dir,
-    FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]),
+    FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]),
     PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
@@ -404,6 +419,46 @@ test('MCP gateway: with no command it starts the broker server named in the brok
   assert.match(unknown.err, /unknown broker "nope"/);
 });
 
+test('MCP gateway: the configured server sits behind the contract translator: standard names above it, the broker\'s ids below', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const argsFile = path.join(dir, 'args.jsonl');
+  const fake = path.join(REPO, 'tests', 'fixtures', 'broker-mcp-server.js');
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: [process.execPath, fake] } } }));
+  const env = {
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FAKE_ARGS: argsFile, FTH_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const call = (id, name, args) => JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+  gw.stdin.write(`${[
+    call(1, 'search_contracts', { searchText: 'MNQ' }),
+    call(2, 'list_open_positions', { accountId: 7 }),
+    call(3, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the long' }),
+    call(4, 'get_bars', { contractId: 'ES', unit: 'minute', unitNumber: 1, limit: 5 }),
+    call(5, 'close_position', { accountId: 7, contractId: 'CON.F.US.MNQ.Z26' }),
+  ].join('\n')}\n`);
+  await new Promise(r => setTimeout(r, 2500));
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
+  const data = id => JSON.parse(byId[id].result.content[0].text);
+  // Above the translator: standard names only.
+  assert.deepStrictEqual(data(1).map(c => c.id), ['MNQ', 'MNQ:2027-03']);
+  assert.strictEqual(data(2)[0].contractId, 'MNQ');
+  assert.strictEqual(byId[3].result.isError, undefined, 'the gate judged the exit on the standard name and let it through');
+  assert.match(byId[4].result.content[0].text, /^contract: no ES contract found at this broker/);
+  // Below it: the server only ever saw its own ids.
+  const seen = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const placed = seen.find(c => c.name === 'place_order');
+  assert.strictEqual(placed.args.contractId, 'CON.F.US.MNQ.Z26');
+  assert.ok(!seen.some(c => c.args && c.args.contractId === 'MNQ'), 'no standard name reached the server');
+  assert.ok(seen.some(c => c.name === 'close_position' && c.args.contractId === 'CON.F.US.MNQ.Z26'), 'a broker id still closes: it goes through as is');
+  assert.ok(!byId[5].result.isError, byId[5].result.content && byId[5].result.content[0].text);
+});
+
 async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
   const { spawn } = require('child_process');
   const dir = tmpDir();
@@ -425,7 +480,7 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {
 }
 
 const call = (id, name, args) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
-const LONG1 = JSON.stringify([{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }]);
+const LONG1 = JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]);
 
 test('MCP gateway: an order call reusing an in-flight request id is refused', async () => {
   const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [
@@ -450,7 +505,7 @@ test('MCP gateway: no order calls while an earlier one has gone unanswered', asy
 });
 
 test('MCP gateway: a protective stop can be tightened but not widened', async () => {
-  const stop = JSON.stringify([{ id: 9, contractId: 'CON.F.US.MNQ.Z26', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
+  const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
   const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [
     call(1, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21400 }),
     call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21490 }),
@@ -469,7 +524,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
   gw.stdout.on('data', c => { out += c; });
-  gw.stdin.write(`${JSON.stringify(call(1, 'close_position', { accountId: 1, contractId: 'CON.F.US.MNQ.Z26' }))}\n`);
+  gw.stdin.write(`${JSON.stringify(call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }))}\n`);
   gw.stdin.write(`${JSON.stringify(call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }))}\n`);
   gw.stdin.end();
   await new Promise(resolve => gw.on('close', resolve));
@@ -591,7 +646,7 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   prop.startAttempt(home, accountNamed(REPO, 'topstep_50k', {}));
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
-    FAKE_POSITIONS: JSON.stringify([{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 1 }]),
+    FAKE_POSITIONS: JSON.stringify([{ contractId: 'MES', type: 1, size: 1 }]),
     PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
@@ -604,5 +659,5 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   assert.strictEqual(await new Promise(resolve => gw.on('close', resolve)), 0);
   const r = JSON.parse(out.trim().split('\n')[0]);
   assert.strictEqual(r.result.isError, true);
-  assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: CON.F.US.MES.Z26 is open/);
+  assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: MES is open/);
 });

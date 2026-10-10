@@ -63,7 +63,7 @@ test('missing account data blocks instead of reading as flat; unknown position t
 });
 
 test('positions in another month of the same root count (no entry on H27 while long Z26)', () => {
-  const h27 = order({ contractId: 'CON.F.US.MNQ.H27' });
+  const h27 = order({ contractId: 'MNQ:2027-03' });
   assert.deepStrictEqual(checks(evaluateAccount({ input: h27, positions: long1, config })), ['position-open']);
 });
 
@@ -98,14 +98,14 @@ test('cancel_order may not remove the last protective stop of an open position',
 
 test('cancel_order: a close the gateway sent and the server confirmed counts before the account shows it', () => {
   const now = new Date('2026-10-07T14:00:00Z');
-  const stop = { id: 11, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice: 21480 };
-  const long1 = [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }];
-  const closed = [{ contractId: 'CON.F.US.MNQ.Z26', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime() - 1000 }];
+  const stop = { id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 };
+  const long1 = [{ contractId: 'MNQ', type: 1, size: 1 }];
+  const closed = [{ contractId: 'MNQ', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime() - 1000 }];
   assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: closed, now }), []);
   // A stale entry, or one on another contract, doesn't count.
   const stale = [{ ...closed[0], at: now.getTime() - 60000 }];
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: stale, now })[0].message, /protective stop/);
-  const other = [{ ...closed[0], contractId: 'CON.F.US.MNQ.H27' }];
+  const other = [{ ...closed[0], contractId: 'MNQ:2027-03' }];
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: other, now })[0].message, /protective stop/);
 });
 
@@ -126,7 +126,7 @@ test('ledger: exits must hold against the position once every recent order fills
 test('entries wait while orders are working in a flat contract', () => {
   const leftover = [{ id: 5, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21400 }];
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), orders: leftover, config })), ['working-orders']);
-  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), orders: [{ ...leftover[0], contractId: 'CON.F.US.MES.Z26' }], config })), []);
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), orders: [{ ...leftover[0], contractId: 'MES' }], config })), []);
 });
 
 test('a protective stop may move toward the market only', () => {
@@ -143,10 +143,10 @@ test('a protective stop may move toward the market only', () => {
 
 test('contract months: an exit must be in the month that is open, and a long and a short in two months are not flat', () => {
   const Z = CONTRACT;
-  const H = 'CON.F.US.MNQ.H27';
+  const H = 'MNQ:2027-03';
   const longZ = [{ contractId: Z, type: 1, size: 1 }];
   const exitH = order({ contractId: H, side: 'sell', rationale: '[exit] before the roll' });
-  assert.match(evaluateAccount({ input: exitH, positions: longZ, config })[0].message, /open MNQ position is in CON\.F\.US\.MNQ\.Z26/);
+  assert.match(evaluateAccount({ input: exitH, positions: longZ, config })[0].message, /open MNQ position is in MNQ/);
   const hedged = [{ contractId: Z, type: 1, size: 1 }, { contractId: H, type: 2, size: 1 }];
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: hedged, config })), ['position-open']);
   const stopZ = { id: 50, contractId: Z, side: 1, type: 4, size: 1, stopPrice: 21400 };
@@ -180,7 +180,7 @@ test('ledger: entries and exits anchor on the right net (root for entries, contr
   const now = new Date();
   const ledger = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime() }];
   assert.strictEqual(pendingState(ledger, CONTRACT, 1, now, 30000, { exact: true }).projected, 0);
-  assert.strictEqual(pendingState(ledger, 'CON.F.US.MNQ.H27', 0, now, 30000, { exact: true }).projected, 0, 'another month has no pending orders');
+  assert.strictEqual(pendingState(ledger, 'MNQ:2027-03', 0, now, 30000, { exact: true }).projected, 0, 'another month has no pending orders');
 });
 
 test('ledger: a marketable limit that filled counts until the account shows it; a resting one does not', () => {
@@ -205,27 +205,27 @@ test('[exit]/[protect] orders may not carry bracket legs', () => {
 });
 
 test('micros and minis are one root: an MNQ entry waits while an NQ position is open, and a prop attempt holds one position across the account', () => {
-  const nq = [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 1 }];
+  const nq = [{ contractId: 'NQ', type: 1, size: 1 }];
   assert.ok(checks(evaluateAccount({ input: order(), positions: nq, now: NOW, config })).includes('position-open'));
-  const mes = [{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 2 }];
+  const mes = [{ contractId: 'MES', type: 1, size: 2 }];
   assert.ok(!checks(evaluateAccount({ input: order(), positions: mes, now: NOW, config })).includes('prop-one-position'));
   const v = evaluateAccount({ input: order(), positions: mes, now: NOW, config: { ...config, skipChecks: new Set(['prop-one-position']) }, propAttempt: 'topstep_100k' });
-  assert.match(v.find(x => x.check === 'prop-one-position').message, /topstep_100k attempt trades one position at a time: CON.F.US.MES.Z26 is open/);
+  assert.match(v.find(x => x.check === 'prop-one-position').message, /topstep_100k attempt trades one position at a time: MES is open/);
   // An order sent moments ago (not on the account yet) counts too.
-  const ledger = [{ contractId: 'CON.F.US.MES.Z26', sign: 1, size: 1, netBefore: 0, at: NOW.getTime() - 5000 }];
+  const ledger = [{ contractId: 'MES', sign: 1, size: 1, netBefore: 0, at: NOW.getTime() - 5000 }];
   assert.ok(checks(evaluateAccount({ input: order(), now: NOW, config, ledger, propAttempt: 'topstep_100k' })).includes('prop-one-position'));
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), now: NOW, config, propAttempt: 'topstep_100k' })), []);
 });
 
 test('correlated exposure: a second same-direction equity-index position is refused; the other side, or a non-index, is not', () => {
-  const mesLong = [{ contractId: 'CON.F.US.MES.Z26', type: 1, size: 1 }];
+  const mesLong = [{ contractId: 'MES', type: 1, size: 1 }];
   const v = evaluateAccount({ input: order(), positions: mesLong, now: NOW, config });
   assert.deepStrictEqual(checks(v), ['correlated-exposure']);
-  assert.match(v[0].message, /CON.F.US.MES.Z26 is already long; equity index futures move together/);
+  assert.match(v[0].message, /MES is already long; equity index futures move together/);
   assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: 'setup:orb short, stop 1' }), positions: mesLong, now: NOW, config }), []);
   // A larger limit allows it; gold is not an equity index.
   assert.deepStrictEqual(evaluateAccount({ input: order(), positions: mesLong, now: NOW, config: { ...config, maxCorrelatedPositions: 2 } }), []);
-  assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [{ contractId: 'CON.F.US.MGC.Z26', type: 1, size: 1 }], now: NOW, config }), []);
+  assert.deepStrictEqual(evaluateAccount({ input: order(), positions: [{ contractId: 'MGC', type: 1, size: 1 }], now: NOW, config }), []);
   // Exits are never held by it.
   assert.deepStrictEqual(checks(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] done' }), positions: [...long1, ...mesLong], now: NOW, config })), []);
 });
