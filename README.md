@@ -594,9 +594,12 @@ runner on the broker adapter. It covers a long's and a short's whole life (a
 real signal, the refusals, stop moves, partial closes, a gap through the
 stop, a target, the runner's trailing stop), closes in flight under three
 names for the contract, closes refused or of unknown outcome, an entry whose
-reply is lost, an unreadable position, holidays, the early close, and end of
-day against a broker that loses or delays its closes. A change to the gate,
-the gateway, or the runner keeps it green.
+reply is lost, an unreadable position, holidays, the early close, end of day
+against a broker that loses or delays its closes, losses counted from real
+fills, malformed brackets, a prop attempt's daily close (recorded once flat,
+or missed and then refused), and a runner that crashed mid-day catching up
+the next morning. A change to the gate, the gateway, or the runner keeps it
+green.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).
 
