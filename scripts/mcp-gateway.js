@@ -26,50 +26,21 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall } = require('./lib/trading/mcp-gateway');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
-const { writeJsonAtomic, readJson } = require('./lib/harness-run');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig, gateNow } = require('./lib/trading/config');
 const { formatBlock } = require('./lib/trading/order-gate');
-const { harnessHome } = require('./lib/paths');
 const { runningAttempts } = require('./lib/trading/prop-state');
 const { activeBroker, translatedCommand } = require('./lib/broker/config');
+const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/trading/order-tracker');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
-const ENTRY_ORDERS_KEPT = 200;
-
-const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
-
-/**
- * Remember the entries (setup:<name>) the gateway let through: the runner's
- * flat-account cleanup tells a pending entry from a leftover stop or target
- * by id, and its trailing-stop manager needs the strategy and the planned
- * stop (bracket ticks or the "stop <price>" in the rationale). Best effort.
- */
-function recordEntryOrder(env, orderId, args) {
-  try {
-    const file = path.join(harnessHome(env), 'entry-orders.json');
-    const list = readJson(file, []);
-    const setup = /^\s*setup:([a-z0-9][a-z0-9_-]*)/i.exec(String(args.rationale || ''));
-    // The planned stop is the last "stop <price>" ("buy stop 21510 above the high, stop 21490" plans 21490).
-    const stops = [...String(args.rationale || '').matchAll(new RegExp(STOP_PRICE.source, 'gi'))];
-    const stop = stops.length ? stops[stops.length - 1] : null;
-    const entry = {
-      orderId, contractId: args.contractId, side: String(args.side || '').toLowerCase(), setup: setup ? setup[1].toLowerCase() : null,
-      stopTicks: args.stopLossBracket && Number(args.stopLossBracket.ticks) > 0 ? Number(args.stopLossBracket.ticks) : null,
-      stopPrice: stop ? Number(stop[1]) : null, at: gateNow().toISOString(),
-    };
-    const next = [...(Array.isArray(list) ? list : []), entry].slice(-ENTRY_ORDERS_KEPT);
-    writeJsonAtomic(file, next);
-  } catch (err) {
-    process.stderr.write(`[mcp-gateway] could not record entry order ${orderId}: ${err.message}\n`);
-  }
-}
+const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
 
 function resultJson(response) {
   try {
@@ -89,8 +60,11 @@ async function accountFacts(args, caller, withTrades = true) {
   return { positions, orders, trades };
 }
 
-async function accountViolations(args, caller, now, ledger) {
-  const { positions, orders, trades } = await accountFacts(args, caller);
+async function accountViolations(args, caller, now, ledger, extraOrders = []) {
+  const facts = await accountFacts(args, caller);
+  const { positions, trades } = facts;
+  // Orders of unknown outcome that would rest (limits, stops) count as working orders.
+  const orders = Array.isArray(facts.orders) ? [...facts.orders, ...extraOrders] : facts.orders;
   // An order still resting keeps its ledger entry alive: when it fills later,
   // the fill is counted until the account shows it.
   if (Array.isArray(orders)) {
@@ -137,21 +111,36 @@ function main(argv) {
   // Market orders let through recently, until the account reflects them (see pendingNet).
   let ledger = [];
   const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
+  // Order calls past LANE_TIMEOUT_MS: the lane is released, and a place_order's
+  // marker stays on disk (new entries wait) until the late reply or the broker's orders settle it.
+  const overdue = new Set();
+  // Orders of unknown outcome: their records on disk, settled from the broker's orders (order-tracker.js).
+  const logErr = msg => process.stderr.write(`[mcp-gateway] ${msg}\n`);
+  const tracker = createOrderTracker({
+    env: process.env, graceMs: GRACE_MS, onError: logErr,
+    searchOrders: async a => parseToolJson(await caller.call('search_orders', a), 'search_orders'),
+  });
 
-  // Order calls whose reply never came within LANE_TIMEOUT_MS: their effect is unknown.
-  const unanswered = new Set();
   const blocked = violations => ({ allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' });
+
+  // Settle this account's orders of unknown outcome; what it found placed is counted like any order just sent.
+  const settle = async (accountId, now) => {
+    const r = await tracker.settle(accountId, now, { isWaiting: id => waiting.has(id) });
+    ledger.push(...r.ledger);
+    for (const id of r.settledIds) { overdue.delete(id); sentNet.delete(id); }
+    return r;
+  };
 
   const check = async (args, tool, id) => {
     const now = gateNow();
-    if (unanswered.size) {
-      return blocked([{ check: 'order-pending', message: `An earlier order call (request ${[...unanswered].join(', ')}) has had no reply for over ${LANE_TIMEOUT_MS / 1000} s, so the account state is unknown. Wait for it, then check positions and orders.` }]);
-    }
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
+    ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     if (tool === 'cancel_order') {
+      // An entry of unknown outcome counts as filled (its bracket stop may protect it); an exit of
+      // unknown outcome doesn't count as done: neither lets the last protective stop go.
+      const { unknown } = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger, now }));
+      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...tracker.cancelLedger(unknown, now)], now }));
     }
     if (tool === 'modify_order') {
       if (base.violations.length) return base;
@@ -159,26 +148,32 @@ function main(argv) {
       return blocked(evaluateModifyAccount({ input: args, positions, orders, config: loadConfig(process.env) }));
     }
     if (tool !== 'place_order') return base;
-    ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-    const extra = await accountViolations(args, caller, now, ledger);
+    // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
+    // skippable); exits and stops still go, checked against the account as it would be if it filled.
+    const { unknown, lookupFailed } = await settle(args.accountId, now);
+    const entry = !isRiskReducing(args.rationale);
+    const extra = entry
+      ? await accountViolations(args, caller, now, ledger)
+      : await accountViolations(args, caller, now, [...ledger, ...tracker.exitLedger(unknown, now)], tracker.exitOrders(unknown, now));
     const violations = [...base.violations, ...extra.violations];
+    if (!entry) tracker.annotateExposure(violations, unknown, now);
+    if (entry && unknown.length) violations.push(tracker.pendingViolation(unknown, now, lookupFailed));
     // The account reads take time: an entry checked just before the close
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(gateNow(), loadConfig(process.env));
     if (late && !violations.some(v => v.check === 'market-hours')) violations.push({ check: 'market-hours', message: late });
-    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet });
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: gateNow().getTime() });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };
 
   // Responses the order lane is waiting for, by client request id.
   const waiting = new Map();
-  // After the timeout the lane is released but order calls stay refused
-  // (order-pending) until the late reply arrives and is recorded.
   const awaitResponse = id => new Promise(resolve => {
-    const timer = setTimeout(() => { unanswered.add(id); resolve(null); }, LANE_TIMEOUT_MS);
+    const timer = setTimeout(() => { overdue.add(id); resolve(null); }, LANE_TIMEOUT_MS);
     waiting.set(id, msg => {
       clearTimeout(timer);
-      if (unanswered.delete(id)) recordSent(id, msg);
+      tracker.onReply(id, msg);
+      if (overdue.delete(id)) recordSent(id, msg);
       else resolve(msg);
     });
   });
@@ -210,19 +205,19 @@ function main(argv) {
       const res = resultJson(response);
       if (!observedNet || !res || res.success !== true) return;
       const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
-      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime() });
+      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt });
       return;
     }
     const placed = resultJson(response);
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
-      recordEntryOrder(process.env, placed.orderId, args);
+      recordEntryOrder(process.env, placed.orderId, args, sent.sentAt || gateNow().getTime(), logErr);
     }
     if (observedNet === null) return;
     // Every order type: a marketable limit or stop fills at once too. While
     // it rests it shows in list_open_orders and the ledger skips it.
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
     const orderId = placed && placed.orderId !== undefined && placed.orderId !== null ? String(placed.orderId) : null;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), orderId });
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt, orderId });
   };
   const log = e => logDecision(e, process.env);
 
@@ -264,6 +259,19 @@ function main(argv) {
         parsed = null;
       }
       for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
+      // Every place_order goes out with a customTag and a record on disk first, so an unknown
+      // outcome (no reply, or this gateway gone) is found again in the broker's orders.
+      const tagged = tracker.tagRequest(parsed, { observed: parsed && parsed.id !== undefined ? sentNet.get(parsed.id) : null, now: gateNow() });
+      if (tagged.refuse) {
+        const args = parsed.params.arguments || {};
+        if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([tagged.refuse]))));
+        log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [tagged.refuse], contractId: args.contractId, rationale: args.rationale });
+        sentNet.delete(parsed.id);
+        inFlight.delete(parsed.id);
+        return;
+      }
+      const line2 = tagged.msg === parsed ? forward : JSON.stringify(tagged.msg);
+      parsed = tagged.msg;
       const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
       // Closes aren't gated, but they change the position: note the position
       // before them so the ledger can count them until the account shows it.
@@ -273,13 +281,13 @@ function main(argv) {
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
-          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId) });
+          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId), sentAt: gateNow().getTime() });
         } catch (err) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }
       }
       const replies = lane.map(m => awaitResponse(m.id).then(r => { if (r) recordSent(m.id, r); }));
-      toChild(forward);
+      toChild(line2);
       // Hold the lane until the server has answered every order-changing call.
       await Promise.all(replies);
     }).catch(err => process.stderr.write(`[mcp-gateway] ${err.message}\n`));

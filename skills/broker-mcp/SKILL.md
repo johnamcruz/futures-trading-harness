@@ -75,6 +75,14 @@ guide resource once per session if it has one.
   resend**. Read `list_open_orders` and `get_account_snapshot` first; the
   order may be working or filled. Only place it again when both show it
   isn't there, and the plan still holds.
+- The gateway tracks such an order itself: every `place_order` goes out with
+  a `customTag` (yours, or one it adds), and until the broker's orders
+  (`search_orders`) show that tag, or 2 minutes pass without it, new entries
+  are refused with `[order-pending]`. Exits, stop moves and cancels are still
+  checked: an unknown market order counts as filled, an unknown limit or stop
+  as resting. `close_position` always goes. If an exit's own `customTag` is
+  already carried by an order of unknown outcome, the exit goes under a fresh
+  tag: find it by the `orderId` in the reply, not by your tag.
 - A position without a working protective stop (bracket rejected, partial
   fill, cancelled by mistake): place a `[protect]` stop at once, or close the
   position. Nothing else comes first.
@@ -114,6 +122,9 @@ drops them. Filter by `kind` / `tag` and read `contractId` in the results.
 |---|---|---|
 | `Blocked by risk guardrail:` | MCP server limit | Stand aside. Don't resize or reroute. |
 | `Blocked by trading harness` | Order gate hook | Fix the listed cause or stand aside. |
+| `[order-pending] customTag "…" is in use by an order of unknown outcome` | Your entry reuses the tag of an order still unsettled | Send it with another `customTag`, or none. |
+| `[account-required]` | `place_order` without `accountId` | Send it with the account's id. |
+| `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min; while `search_orders` fails it holds (tell the user), and an unreadable record named in the message is deleted by hand after checking the broker's orders. |
 | errorCode 4 `AccountViolation` / `canTrade=false` | Firm locked the account | Stop. Tell the user. |
 | errorCode 5 `OutsideTradingHours` | Market closed | Don't retry in a loop. |
 | "Live accounts not supported" on cancel/close | The broker limits the endpoint to sim/eval | Tell the user. |

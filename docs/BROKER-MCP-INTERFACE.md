@@ -227,6 +227,12 @@ brackets), `customTag` (≤ 100 chars, unique per account), **`rationale`**
 Result: `{ orderId (number | null), success, errorCode, errorName, errorMessage }`.
 `isError` is set when `success` is false.
 
+The harness's gateway sends every `place_order` with a `customTag` (the
+client's, or one it adds) and, when a reply never comes, looks the order up by
+that tag in `search_orders`. A server must pass `customTag` to the broker and
+return it on each order in `search_orders`; without it, an order whose reply
+was lost blocks new entries until the 2-minute grace period passes.
+
 The harness's order gate reads the `rationale`: the `setup:<strategy>` tag
 first, the side, `stop <price>`, `target <price>`; `[exit]` and `[protect]` mark
 orders that reduce risk.

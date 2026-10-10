@@ -95,7 +95,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
 | `modify-protection` | A protective stop may only move toward the market | no | yes |
 | `modify-entry` | Only orders working an open position (its stop or target) can be repriced; entries and leftovers are cancelled and re-placed through the gate | no | yes |
-| `order-pending` | No order call while an earlier one's result is unknown (no reply within 30 s) | no | yes |
+| `order-pending` | No new entry while an earlier order's outcome is unknown (no reply within 30 s, an error reply that isn't a sure refusal, or its gateway exited): every `place_order` goes out with a `customTag` and a record in `<FTH_HOME>/pending-orders/` (per account and tag), settled from the broker's `search_orders` (placed, or refused by its status) or after 2 min without it (not placed); survives restarts. Exits, stop moves and cancels are still checked as usual: for 2 min an unknown market order counts as filled and an unknown limit or stop as resting (an unknown entry's bracket stop can't be cancelled); `close_position` always goes | no | yes |
 | `batch` | Order calls go one at a time: a JSON-RPC batch containing one is refused whole | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 

@@ -78,11 +78,13 @@ function openPositions(positions, contractId) {
 
 /**
  * Market orders the gateway let through recently that the account may not
- * show yet. Each ledger entry is { contractId, sign, size, netBefore, at } and
- * lives for ttlMs. Together, the live entries for a root project the net the
- * account will show once all of them fill: the oldest entry's net before it
- * was sent plus every entry's change. Returns { projected, pending }, where
- * pending is true while the observed net hasn't reached the projection.
+ * show yet. Each ledger entry is { contractId, sign, size, netBefore, at,
+ * sentAt? } and lives for ttlMs from `at`. Together, the live entries for a
+ * root project the net the account will show once all of them fill: the net
+ * before the earliest-sent one plus every entry's change (sentAt orders them:
+ * an order settled late from the broker's list was still sent first).
+ * Returns { projected, pending }, where pending is true while the observed
+ * net hasn't reached the projection.
  */
 const hasBracket = b => b !== undefined && b !== null && !(typeof b === 'object' && Object.keys(b).length === 0);
 
@@ -92,7 +94,7 @@ function pendingState(ledger, contractId, observed, now, ttlMs = 30000, { exact 
     .filter(e => (exact ? e.contractId === contractId : contractRoot(e.contractId) === root) && now.getTime() - e.at < ttlMs)
     // An order still resting hasn't changed the position (working-orders and restingSize count it).
     .filter(e => !(e.orderId && resting.has(String(e.orderId))))
-    .sort((a, b) => a.at - b.at);
+    .sort((a, b) => (a.sentAt ?? a.at) - (b.sentAt ?? b.at));
   if (live.length === 0) return { projected: observed, pending: false };
   const anchor = exact ? live[0].netBefore : (live[0].rootNetBefore ?? live[0].netBefore);
   const projected = anchor + live.reduce((n, e) => n + e.sign * e.size, 0);
@@ -257,8 +259,11 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
   if (skip.has('cancel-protection')) return [];
   const order = orders.find(o => Number(o.id) === Number(input.orderId));
   if (!order || !STOP_TYPES.has(Number(order.type))) return [];
-  // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet.
-  const net = pendingState(ledger, order.contractId, contractNet(positions, order.contractId), now, undefined, { exact: true }).projected;
+  // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet;
+  // an exit still resting on the stop's side (a target) hasn't reduced the position. An entry still
+  // working may have filled in part, so it stays counted: its bracket stop keeps protecting it.
+  const resting = new Set(orders.filter(o => Number(o.side) === Number(order.side)).map(o => String(o.id)));
+  const net = pendingState(ledger, order.contractId, contractNet(positions, order.contractId), now, undefined, { exact: true, resting }).projected;
   const orderSign = Number(order.side) === 0 ? 1 : -1;
   if (net === 0 || orderSign !== -Math.sign(net)) return [];
   const otherStops = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
