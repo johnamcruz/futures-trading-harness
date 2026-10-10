@@ -83,7 +83,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `skills-loaded` | Claude Code: the session transcript (the hook's `transcript_path`, and its main session's for a subagent) shows the Skill tool loaded `trade-session`, `multi-timeframe-analysis`, and `strategy-library` before an entry. Codex and Qwen carry the skills in their workspace instructions and pass no transcript: not applicable | yes | no |
 | `order-consistency` | The order agrees with its rationale: the side named after the tag (`long`/`short`/`buy`/`sell`) is the order side; the stop and target sit on the right sides of a limit or stop entry's price and of each other; known-contract prices are on the tick; bracket ticks are whole and match the rationale's prices within a tick (a market order: stop + target ticks within two of the stop-to-target distance) | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
-| `market-hours` | Entries only in the market session, 18:00-16:00 ET, Sunday evening to Friday (closed 16:00-18:00 ET), not on `FTH_CLOSED_DATES` holidays, and before 13:00 ET on `FTH_EARLY_CLOSE_DATES` (the runner passes both from its config). A hard rule: no setting widens it and it can't be skipped; the gateway checks it again after reading the account | yes | yes |
+| `market-hours` | Entries only in the market session, 18:00-16:00 ET, Sunday evening to Friday (closed 16:00-18:00 ET), not on CME holidays, and before 13:00 ET on early-close days (the built-in calendar in `exchange-calendar.js`, plus `FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES`, which the runner passes from its config). A hard rule: no setting widens it and it can't be skipped; the gateway checks it again after reading the account | yes | yes |
 | `time-window`, `blackout` | Inside `FTH_ENTRY_HOURS` (default: the whole session), outside no-entry windows (09:30-09:35 and 15:45-16:00 ET) and news blackouts | yes | yes |
 | `loss-streak`, `daily-loss-count` | From graded journal reviews (hook) and from real closing fills (gateway) | yes | yes |
 | `review-before-next-entry` | Earlier entries in this contract have graded reviews | yes | yes |
@@ -94,13 +94,15 @@ is the authoritative layer. A blocked call never reaches the server.
 | `cancel-protection` | `cancel_order` may not remove the last protective stop of an open position | no | yes |
 | `modify-size` | `modify_order` may change prices, not size | yes | yes |
 | `modify-protection` | A protective stop may only move toward the market | no | yes |
-| `modify-entry` | Only orders working an open position (its stop or target) can be repriced; entries and leftovers are cancelled and re-placed through the gate | no | yes |
+| `modify-entry` | Only orders working an open position (its stop or target) can be repriced; entries and leftovers are cancelled and re-placed through the gate. Recent orders count: right after a close (or a partial close that leaves no position) a stop isn't working a position, and is refused with `once recent orders fill (net X)` | no | yes |
+| `partial-close` | `partial_close_position` needs a whole `size` of 1 or more, an open position in the contract, and a size no larger than it, counting recent orders (`close_position` always goes) | yes | yes |
 | `order-pending` | No new entry while an earlier order's outcome is unknown (no reply within 30 s, an error reply that isn't a sure refusal, or its gateway exited): every `place_order` goes out with a `customTag` and a record in `<FTH_HOME>/pending-orders/` (per account and tag), settled from the broker's `search_orders` (placed, or refused by its status) or after 2 min without it (not placed); survives restarts. Exits, stop moves and cancels are still checked as usual: for 2 min an unknown market order counts as filled and an unknown limit or stop as resting (an unknown entry's bracket stop can't be cancelled); `close_position` always goes | no | yes |
 | `batch` | Order calls go one at a time: a JSON-RPC batch containing one is refused whole | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 
 Malformed or oversized input, unreadable state, invalid config, a failed
-account query, or a crash blocks the order. In autonomous runs
+account query, a position whose size isn't a whole number of contracts, or a
+crash blocks the order. In autonomous runs
 (`FTH_AUTONOMOUS=1`) the gate can't be skipped, dry-run, or disabled.
 Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`.
 
@@ -112,7 +114,12 @@ process group: premarket at `premarketAt`, a trade cycle after every closed
 `timeframe`-minute bar inside `sessions` (bar closes detected by polling
 `get_bars` through the broker adapter right after each scheduled close, see `scripts/lib/bar-clock.js`;
 bars that close during a run are skipped), end of day at `eodAt` (retried until it
-succeeds, and run first thing if a previous day never finished). The kill
+succeeds, and run first thing if a previous day never finished). End of day
+succeeds only once the account reads flat: each pass closes what is open and
+cancels what is working, then re-reads; a close the broker accepted but that
+didn't fill is closed again on the next pass (`flatten_unverified` in the
+event log), and the agents' review runs once. The prop close is recorded only
+after that. The kill
 switch stops new cycles but not end of day; after `maxConsecutiveErrors`
 failed runs the runner creates it. An unreadable state file turns trade
 cycles off for the day. Runs execute in `workspace/` with `FTH_ROOT`,

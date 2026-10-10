@@ -233,8 +233,13 @@ test('the default cycle cap covers the whole 22-hour session; the runner passes 
   assert.strictEqual(validateConfig({ harness: 'qwen', timeframe: 1 }).maxCyclesPerDay, 1330);
   assert.strictEqual(validateConfig({ harness: 'qwen', timeframe: 3 }).maxCyclesPerDay, 450);
   const { childEnv } = require('../../scripts/lib/autotrader');
-  const env = childEnv(validateConfig({ harness: 'qwen', closedDates: ['2026-12-25'], earlyCloseDates: ['2026-11-27'] }), '/r', {});
-  assert.deepStrictEqual([env.FTH_CLOSED_DATES, env.FTH_EARLY_CLOSE_DATES], ['2026-12-25', '2026-11-27']);
+  // The built-in CME calendar, plus the dates the config adds.
+  const env = childEnv(validateConfig({ harness: 'qwen', closedDates: ['2028-04-14'], earlyCloseDates: ['2028-01-17'] }), '/r', {});
+  assert.ok(env.FTH_CLOSED_DATES.split(',').includes('2026-12-25') && env.FTH_CLOSED_DATES.split(',').includes('2028-04-14'));
+  assert.ok(env.FTH_EARLY_CLOSE_DATES.split(',').includes('2026-11-27') && env.FTH_EARLY_CLOSE_DATES.split(',').includes('2028-01-17'));
+  // A calendar that runs out within 30 days stops the runner from starting.
+  assert.throws(() => validateConfig({ harness: 'qwen' }, new Date('2027-12-15T12:00:00Z')), /exchange calendar ends 2027-12-31/);
+  assert.ok(validateConfig({ harness: 'qwen', closedDates: ['2028-12-25'] }, new Date('2027-12-15T12:00:00Z')));
   const closed = validateConfig({ harness: 'qwen', premarketAt: '', closedDates: ['2026-12-25'] });
   assert.strictEqual(decide(closed, null, new Date('2026-12-25T15:00:00Z')).action, null, 'no cycles on a holiday');
 });

@@ -37,15 +37,16 @@ Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 **Holidays and early closes.** CME closes on some US holidays and closes
 equity index futures early (13:00 ET) on others (the days around
 Thanksgiving, Christmas, and New Year, Juneteenth, Independence Day). The
-harness does not know the calendar by itself: the user lists the days in the
-runner config (`closedDates`, `earlyCloseDates`, `earlyCloseEodAt`), which
-the runner passes to the gate as `FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES`
-(trading days, YYYY-MM-DD of the day they end on). The gate then refuses
+harness carries the CME equity index calendar for 2026-2027
+(`scripts/lib/trading/exchange-calendar.js`; Good Friday counts as closed).
+The runner config (`closedDates`, `earlyCloseDates`) and the gate's
+`FTH_CLOSED_DATES` / `FTH_EARLY_CLOSE_DATES` add days to it, never remove
+one (trading days, YYYY-MM-DD of the day they end on). The gate refuses
 entries on a closed day and after 13:00 ET on an early-close day, and the
-runner flattens at `earlyCloseEodAt` (default 12:50 ET). Premarket checks the
-calendar; if today is a holiday or an early close and it isn't configured,
-tell the user and plan as if it were (no entries after 12:45 ET, flat by
-12:50 ET).
+runner flattens at `earlyCloseEodAt` (default 12:50 ET). It refuses to start
+when the calendar runs out within 30 days. Premarket checks the calendar; if
+CME announces a change that isn't listed, tell the user and plan as if it
+were (no entries after 12:45 ET, flat by 12:50 ET).
 
 **Contract roll.** Equity index futures expire quarterly (H Mar, M Jun, U
 Sep, Z Dec) on the third Friday; volume moves to the next contract about

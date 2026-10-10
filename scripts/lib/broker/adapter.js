@@ -31,6 +31,7 @@ const path = require('path');
 const { createMcpClient } = require('./mcp-client');
 const { validateTools } = require('./interface');
 const { activeBroker, translatedCommand } = require('./config');
+const { signedSize } = require('../trading/positions');
 
 class BrokerError extends Error {}
 
@@ -130,8 +131,8 @@ function createAdapter({ mcp, writeMcp = mcp }) {
 
     /** Signed net position in a contract (long +, short -). */
     async netPosition(accountId, contractId) {
-      return (await positionsOf(accountId)).filter(p => p.contractId === contractId)
-        .reduce((n, p) => n + (Number(p.type) === 1 ? 1 : Number(p.type) === 2 ? -1 : 0) * Number(p.size || 0), 0);
+      // An unknown type or size throws: the caller retries instead of reading a flat account.
+      return (await positionsOf(accountId)).filter(p => p.contractId === contractId).reduce((n, p) => n + signedSize({ ...p, type: Number(p.type) }), 0);
     },
 
     /** Cancel a working order. */

@@ -70,6 +70,12 @@ document says the same (ship prints the lines).
 8. **Research**: `node scripts/backtest.js --config <file> --prop <policy strategy> [--bundle <name>]`
    evaluates any bundle, validated or not, over attempts in a backtest.
 
+Training fills as live: entries at the next bar's open, with at least the
+backtester's 1 tick of slippage per market fill (a config's `slippageTicks`
+may raise it, never lower it). Live trading refuses a bundle trained on
+cheaper fills (`engine: trained with 0 tick(s) of slippage, under the 1 of
+live fills; retrain it`): retrain it, never edit the bundle.
+
 Never tune, select, or retrain on the out-of-sample window. Each ship
 evaluation is logged, per family and harness-wide (`<FTH_HOME>/rl/oos_looks.jsonl`,
 by policy strategy, data, and window); the bundle records how many looks there

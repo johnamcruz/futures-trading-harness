@@ -17,6 +17,7 @@
 
 const { contractRoot: rootOf } = require('./journal');
 const { familyRoot } = require('./contracts');
+const { positionSize, signedSize } = require('./positions');
 
 // Micros and minis of one index count as one root here (MNQ and NQ): an MNQ
 // entry waits while an NQ position is open, and the other way around.
@@ -52,28 +53,20 @@ function netPosition(positions, contractId) {
   const root = contractRoot(contractId);
   return positions
     .filter(p => contractRoot(p.contractId) === root)
-    .reduce((n, p) => {
-      const sign = POSITION_SIGN[p.type];
-      if (sign === undefined) throw new Error(`position with unknown type ${JSON.stringify(p.type)}`);
-      return n + sign * Number(p.size || 0);
-    }, 0);
+    .reduce((n, p) => n + signedSize(p), 0);
 }
 
 /** Net position in exactly this contract month. */
 function contractNet(positions, contractId) {
   return positions
     .filter(p => p.contractId === contractId)
-    .reduce((n, p) => {
-      const sign = POSITION_SIGN[p.type];
-      if (sign === undefined) throw new Error(`position with unknown type ${JSON.stringify(p.type)}`);
-      return n + sign * Number(p.size || 0);
-    }, 0);
+    .reduce((n, p) => n + signedSize(p), 0);
 }
 
 /** Open positions in any month of the contract's root (a long and a short in two months don't make it flat). */
 function openPositions(positions, contractId) {
   const root = contractRoot(contractId);
-  return positions.filter(p => contractRoot(p.contractId) === root && Number(p.size || 0) > 0);
+  return positions.filter(p => contractRoot(p.contractId) === root && positionSize(p) > 0);
 }
 
 /**
@@ -148,6 +141,8 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   for (const [name, v] of Object.entries({ positions, orders, trades })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
+  // A position of unknown size is no flat account: the whole check refuses (fail closed).
+  for (const p of positions) signedSize(p);
   const skip = (config && config.skipChecks) || new Set();
   const violations = [];
   const add = (check, message) => {
@@ -197,7 +192,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   // it was sized and trained: each entry's size assumes no other open risk.
   // Hard: not skippable.
   if (propAttempt) {
-    const anyOpen = positions.filter(p => Number(p.size || 0) > 0);
+    const anyOpen = positions.filter(p => positionSize(p) > 0);
     const inFlight = (ledger || []).filter(e => now.getTime() - e.at < 30000);
     if (anyOpen.length || inFlight.length) {
       violations.push({
@@ -221,7 +216,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   // Correlated exposure: the equity index futures (NQ, ES, YM, RTY and their micros) move
   // together, so a second same-direction position on another index is the same bet twice.
   if (EQUITY_INDEX.has(familyRoot(root)) && sideSign) {
-    const same = positions.filter(q => Number(q.size || 0) > 0 && POSITION_SIGN[q.type] === sideSign
+    const same = positions.filter(q => positionSize(q) > 0 && POSITION_SIGN[q.type] === sideSign
       && familyRoot(contractRoot(q.contractId)) !== familyRoot(root) && EQUITY_INDEX.has(familyRoot(contractRoot(q.contractId))));
     const cap = (config && config.maxCorrelatedPositions) || 1;
     add('correlated-exposure', same.length >= cap
@@ -282,7 +277,7 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
  *   cancel it and place a new order through the gate), and a protective
  *   stop only toward the market, checking every price field given.
  */
-function evaluateModifyAccount({ input = {}, positions, orders, config }) {
+function evaluateModifyAccount({ input = {}, positions, orders, config, ledger = [], now = new Date() }) {
   for (const [name, v] of Object.entries({ positions, orders })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
@@ -294,9 +289,18 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
     add('modify-protection', `Order ${input.orderId} is not working, so the change can't be checked. Check list_open_orders; cancel and re-place through the gate if needed.`);
     return violations;
   }
-  const net = contractNet(positions, order.contractId);
+  // The position as the account shows it and as it will be once recent orders (the ledger: a close
+  // sent moments ago, an order of unknown outcome) fill; an order still resting on this order's side
+  // hasn't changed it. The change must hold against both: a stop moved after a close it no longer
+  // protects would open a new position when it fills.
+  const observed = contractNet(positions, order.contractId);
+  const resting = new Set(orders.filter(o => Number(o.side) === Number(order.side)).map(o => String(o.id)));
+  const { projected } = pendingState(ledger, order.contractId, observed, now, undefined, { exact: true, resting });
+  const nets = observed === projected ? [observed] : [observed, projected];
   const orderSign = Number(order.side) === 0 ? 1 : -1;
-  const works = net !== 0 && orderSign === -Math.sign(net);
+  const works = nets.every(n => n !== 0 && orderSign === -Math.sign(n));
+  const net = observed === projected || !works ? observed : (Math.abs(projected) < Math.abs(observed) ? projected : observed);
+  const pendingNote = observed === projected ? '' : ` once recent orders fill (net ${projected})`;
   const isStop = STOP_TYPES.has(Number(order.type));
   const root = contractRoot(order.contractId);
 
@@ -304,10 +308,11 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
     const size = Number(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
       add('modify-size', `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.`);
-    } else if (works && isStop) {
+    } else if (isStop && nets.some(n => n !== 0 && orderSign === -Math.sign(n))) {
       const others = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
-      if (size + others < Math.abs(net)) {
-        add('modify-size', `Cutting stop ${order.id} to ${size} would leave ${Math.abs(net) - size - others} of the open ${root} position (net ${net}) without a stop. Reduce the position first ([exit] or partial_close_position), then cut the stop.`);
+      const covered = Math.max(...nets.map(n => (orderSign === -Math.sign(n) ? Math.abs(n) : 0)));
+      if (size + others < covered) {
+        add('modify-size', `Cutting stop ${order.id} to ${size} would leave ${covered - size - others} of the open ${root} position (${covered}) without a stop. Reduce the position first ([exit] or partial_close_position), then cut the stop.`);
       }
     }
   }
@@ -315,7 +320,7 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
   const fields = ['limitPrice', 'stopPrice', 'trailPrice'].filter(f => input[f] !== undefined && input[f] !== null);
   if (!fields.length) return violations;
   if (!works) {
-    add('modify-entry', `Order ${order.id} doesn't work an open ${order.contractId} position (it is an entry or a leftover), so repricing it could open a trade without the entry checks. Cancel it and place a new order through the gate.`);
+    add('modify-entry', `Order ${order.id} doesn't work an open ${order.contractId} position${pendingNote} (it is an entry or a leftover), so repricing it could open a trade without the entry checks. Cancel it and place a new order through the gate.`);
     return violations;
   }
   // An order bigger (with its same-side siblings) than the position it works
@@ -341,6 +346,47 @@ function evaluateModifyAccount({ input = {}, positions, orders, config }) {
     }
   }
   return violations;
+}
+
+/**
+ * partial_close_position reduces a position by `size` at market: there must
+ * be a position in that contract month, and the size must fit it, as the
+ * account shows it and once recent orders fill (a close or exit sent moments
+ * ago). A bigger "partial" close would reverse the position. A full
+ * close_position is never gated: flattening always works.
+ */
+function evaluatePartialClose({ input = {}, positions, orders, config, ledger = [], now = new Date() }) {
+  for (const [name, v] of Object.entries({ positions, orders })) {
+    if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
+  }
+  const skip = (config && config.skipChecks) || new Set();
+  if (skip.has('partial-close')) return [];
+  const size = Number(input.size);
+  if (!(Number.isInteger(size) && size >= 1)) return [{ check: 'partial-close', message: `partial_close_position size must be a whole number of contracts, 1 or more (got ${JSON.stringify(input.size)}).` }];
+  const observed = contractNet(positions, input.contractId);
+  const resting = new Set(orders.map(o => String(o.id)));
+  const { projected } = pendingState(ledger, input.contractId, observed, now, undefined, { exact: true, resting });
+  for (const net of observed === projected ? [observed] : [observed, projected]) {
+    const later = net === observed ? '' : ' once recent orders fill';
+    if (net === 0) return [{ check: 'partial-close', message: `No open ${input.contractId} position${later} to reduce; a partial close would open one.` }];
+    if (size > Math.abs(net)) {
+      return [{ check: 'partial-close', message: `partial_close_position size ${size} is over the open ${input.contractId} position (${Math.abs(net)})${later}; it would reverse it. Close it with close_position, or reduce by at most ${Math.abs(net)}.` }];
+    }
+  }
+  return [];
+}
+
+/**
+ * The account checks for an order change the gateway sees (cancel_order,
+ * modify_order, partial_close_position). `ledger` holds recent orders and
+ * unknown market orders as they'd fill; `cancelLedger` also counts unknown
+ * entries of any type as filled (their bracket stop may protect them).
+ */
+function evaluateAccountChange(tool, { input, positions, orders, config, now, ledger = [], cancelLedger = ledger }) {
+  if (tool === 'cancel_order') return evaluateCancel({ input, positions, orders, config, ledger: cancelLedger, now });
+  if (tool === 'modify_order') return evaluateModifyAccount({ input, positions, orders, config, ledger, now });
+  if (tool === 'partial_close_position') return evaluatePartialClose({ input, positions, orders, config, ledger, now });
+  throw new Error(`no account check for ${tool}`);
 }
 
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
@@ -377,5 +423,5 @@ function regimeViolation(strategy, bars, config) {
 
 module.exports = {
   parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
-  evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
+  evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
 };

@@ -338,7 +338,8 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false }) {
+  let ghosts = ghostCloses; // closes the broker accepts without filling
   const clockRef = { t: startAt };
   const step = 180000;
   const calls = { modified: [], closed: [], cancelled: [], closedIds: [], written: [], limits: [], prompts: [], scans: [], logs: [], events: [] };
@@ -365,14 +366,14 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         if (accountFails) throw new Error('HTTP 502');
         return {
           positions: [
-            ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
+            ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, ...(oddSize ? {} : { size: 1 }), averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
             ...(otherMonth && !calls.closedIds.includes(otherMonth) ? [{ id: 78, contractId: otherMonth, type: 1, size: 1, averagePrice: 21600, creationTimestamp: new Date(fillAt).toISOString() }] : []),
           ],
           orders: calls.cancelled.length ? [] : [...(noStop ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21600 }],
         };
       },
       async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
-      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') flat = true; },
+      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') { if (ghosts > 0) ghosts -= 1; else flat = true; } },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return flat ? 0 : 1; },
@@ -396,6 +397,27 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   while (clockRef.t < until) clockRef.t += await runner.step();
   return { ...calls, runner, cycles };
 }
+
+test('end of day is done only once the account is verified flat: a close the broker accepts but doesn\'t fill is closed again', async () => {
+  // The broker accepts the first two closes without filling them; the third fills.
+  const prop = fakeProp();
+  const r = await trailSim({ tape: {}, startAt: et(15, 49) + 2000, until: et(16, 5), ghostCloses: 2, prop });
+  assert.strictEqual(r.closedIds.filter(id => id === 'MNQ').length, 3, 'closed again until it is gone');
+  assert.deepStrictEqual(r.cycles.filter(c => c === 'eod'), ['eod'], 'the agents\' end-of-day run happens once; retries only flatten');
+  const kinds = r.events.map(e => e.kind);
+  assert.ok(kinds.includes('flatten_unverified') && kinds.includes('flatten_verified'));
+  // The prop close is recorded only after the verified flat, and end of day is done.
+  const verifiedAt = Date.parse(r.events.find(e => e.kind === 'flatten_verified').at);
+  assert.strictEqual(prop.calls.eod.length, 1);
+  assert.ok(prop.calls.eod[0] >= verifiedAt, 'the closing balance is recorded only once flat');
+  assert.ok(r.events.some(e => e.kind === 'eod' && e.ok === true));
+  assert.strictEqual(r.kills || 0, 0);
+});
+
+test('a position whose size can\'t be read is flattened, never read as flat', async () => {
+  const r = await trailSim({ tape: {}, until: et(16, 5), oddSize: true });
+  assert.ok(r.closedIds.includes('MNQ'));
+});
 
 test('time stop: a strategy with exit.max_bars is closed at market once it has been in the trade that long', async () => {
   // A CRT-style exit: a target level and a 3-bar time stop, no trail. Price goes nowhere.

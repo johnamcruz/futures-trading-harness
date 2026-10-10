@@ -10,7 +10,8 @@
  * server. Everything else passes through unchanged.
  */
 
-const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order)$/;
+// Calls the gateway checks; a full close_position never is (flattening always works).
+const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|partial_close_position)$/;
 // Calls that change orders or positions: the gateway waits for the server's
 // answer to each before reading the next client message, so a check never
 // runs while an earlier order is still in flight.

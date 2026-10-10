@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseToolJson, netPosition, pendingNet, pendingState, fillLossState, evaluateAccount: rawEvaluate, evaluateCancel } = require('../../scripts/lib/trading/account-gate');
+const { parseToolJson, netPosition, pendingNet, pendingState, fillLossState, evaluateAccount: rawEvaluate, evaluateCancel, evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange } = require('../../scripts/lib/trading/account-gate');
 const evaluateAccount = o => rawEvaluate({ positions: [], orders: [], trades: [], ...o });
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { CONTRACT, NOW, minutesAgo } = require('../helpers');
@@ -60,6 +60,46 @@ test('loss streak and daily losses come from real closing fills', () => {
 test('missing account data blocks instead of reading as flat; unknown position types throw', () => {
   assert.throws(() => rawEvaluate({ input: order(), positions: null, orders: [], trades: [], config }), /positions from the server is not a list/);
   assert.throws(() => netPosition([{ contractId: CONTRACT, type: 9, size: 1 }], CONTRACT), /unknown type/);
+});
+
+test('a position whose size can\'t be read is never a flat account: entries, exits, the prop rule and cancels all refuse', () => {
+  const odd = [{ contractId: CONTRACT, type: 1, quantity: 1 }];
+  assert.throws(() => evaluateAccount({ input: order(), positions: odd, config }), /no valid size/);
+  assert.throws(() => evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] flatten' }), positions: odd, config }), /no valid size/);
+  assert.throws(() => evaluateAccount({ input: order(), positions: [{ contractId: 'MES', type: 1, size: 1.5 }], config, propAttempt: 'topstep_50k' }), /no valid size/);
+  const stop = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }];
+  assert.throws(() => evaluateCancel({ input: { orderId: 9 }, positions: odd, orders: stop, config, now: NOW }), /no valid size/);
+});
+
+test('modify_order: a stop can\'t be moved once a close sent moments ago leaves it protecting nothing', () => {
+  const stop = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }];
+  const close = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: NOW.getTime(), sentAt: NOW.getTime() }];
+  const run = (input, ledger) => checks(evaluateModifyAccount({ input, positions: long1, orders: stop, config, ledger, now: NOW }));
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21600 }, []), [], 'no close sent: toward the market is fine');
+  assert.deepStrictEqual(run({ orderId: 9, stopPrice: 21600 }, close), ['modify-entry'], 'after the close: it would open a short');
+  // A partial close (2 -> 1) sent but not shown yet: the stop is cut to 1 only once the account shows 1
+  // (if the close doesn't fill, a 1-lot stop would leave a contract unprotected), as before.
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const stop2 = [{ ...stop[0], size: 2 }];
+  const partial = [{ ...close[0], netBefore: 2 }];
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, size: 1, reason: '[protect] cut' }, positions: long2, orders: stop2, config, ledger: partial, now: NOW })), ['modify-size']);
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, size: 1, reason: '[protect] cut' }, positions: long1, orders: stop2, config, ledger: partial, now: NOW })), [], 'once it shows');
+  // Moving the 2-lot stop after the partial close: on this side it exceeds the projected 1 and could flip it.
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21500 }, positions: long2, orders: stop2, config, ledger: partial, now: NOW })), ['modify-protection']);
+});
+
+test('partial_close_position: needs an open position in that month and a size within it, now and once recent orders fill', () => {
+  const run = (input, positions = long1, ledger = []) => checks(evaluatePartialClose({ input: { accountId: 1, contractId: CONTRACT, ...input }, positions, orders: [], config, ledger, now: NOW }));
+  assert.deepStrictEqual(run({ size: 1 }), []);
+  assert.deepStrictEqual(run({ size: 50 }), ['partial-close'], 'over the position: it would reverse it');
+  assert.deepStrictEqual(run({ size: 1 }, []), ['partial-close'], 'no position');
+  assert.deepStrictEqual(run({ size: 0 }), ['partial-close']);
+  assert.deepStrictEqual(run({ size: 1.5 }), ['partial-close']);
+  const close = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: NOW.getTime() }];
+  assert.deepStrictEqual(run({ size: 1 }, long1, close), ['partial-close'], 'a close sent moments ago leaves nothing to reduce');
+  assert.throws(() => run({ size: 1 }, [{ contractId: CONTRACT, type: 1 }]), /no valid size/);
+  assert.deepStrictEqual(checks(evaluateAccountChange('partial_close_position', { input: { contractId: CONTRACT, size: 5 }, positions: long1, orders: [], config, now: NOW })), ['partial-close']);
+  assert.throws(() => evaluateAccountChange('close_position', { input: {}, positions: [], orders: [], config, now: NOW }), /no account check/);
 });
 
 test('positions in another month of the same root count (no entry on H27 while long Z26)', () => {

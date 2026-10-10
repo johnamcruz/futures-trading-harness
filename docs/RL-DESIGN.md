@@ -153,7 +153,11 @@ three JSON files:
    harness rules are always on), data hashes, the selection and out-of-sample
    reports, and the gate. Live trading re-checks the gate from the bundle's
    own numbers, and uses a bundle only for the account, strategy, symbol,
-   timeframe, and sizing it was trained with.
+   timeframe, and sizing it was trained with, and only one trained and
+   validated on live fills: the next bar's open with at least the
+   backtester's default slippage (1 tick per market fill). Training always
+   fills that way; a config's `slippageTicks` may raise the slippage, never
+   lower it, and `fill` can't be set.
 
 `<out>` is the sweep config's `out_dir`, else `<FTH_HOME>/rl/<family>`.
 `python rl/train_policy.py --config <training config>` runs all three stages

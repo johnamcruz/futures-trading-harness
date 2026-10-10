@@ -27,7 +27,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -135,19 +135,16 @@ function main(argv) {
     const now = gateNow();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-    if (tool === 'cancel_order') {
-      // An entry of unknown outcome counts as filled (its bracket stop may protect it); an exit of
-      // unknown outcome doesn't count as done: neither lets the last protective stop go.
+    if (tool !== 'place_order') {
+      // cancel, modify, partial close: against the account, counting recent orders and orders of unknown outcome.
+      if (tool === 'modify_order' && base.violations.length) return base;
       const { unknown } = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...tracker.cancelLedger(unknown, now)], now }));
+      return blocked(evaluateAccountChange(tool, {
+        input: args, positions, orders, config: loadConfig(process.env), now,
+        ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger, ...tracker.cancelLedger(unknown, now)],
+      }));
     }
-    if (tool === 'modify_order') {
-      if (base.violations.length) return base;
-      const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateModifyAccount({ input: args, positions, orders, config: loadConfig(process.env) }));
-    }
-    if (tool !== 'place_order') return base;
     // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
     // skippable); exits and stops still go, checked against the account as it would be if it filled.
     const { unknown, lookupFailed } = await settle(args.accountId, now);

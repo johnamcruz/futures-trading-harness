@@ -415,12 +415,17 @@ More runner settings:
   it for 1-minute bars so a cycle fits in one bar).
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
   switches to manage-only cycles once reached.
-- `closedDates` (CME holidays) and `earlyCloseDates` (13:00 ET closes, end
-  of day at `earlyCloseEodAt`) are passed to the order gate too: no entries
-  on a closed day or after an early close.
+- The CME equity index calendar for 2026-2027 is built in
+  (`scripts/lib/trading/exchange-calendar.js`); `closedDates` (holidays) and
+  `earlyCloseDates` (13:00 ET closes, end of day at `earlyCloseEodAt`) add
+  days to it. Both go to the order gate too: no entries on a closed day or
+  after an early close. The runner won't start when the calendar runs out
+  within 30 days.
 - No run outlasts end of day: each gets at most the time left until
   `eodAt`, and end of day closes positions directly before the agents'
-  review run.
+  review run. It is done only once the account reads flat (a position whose
+  size can't be read counts as open); otherwise it closes and cancels again
+  on the next pass.
 - `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe); a cycle stopped by
   the timeout makes the next one start by checking protective stops.
 - Bars go to `~/.futures-trading-harness/bars` (runner-owned) unless

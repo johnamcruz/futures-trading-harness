@@ -35,6 +35,7 @@ const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = requi
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot } = require('./trading/contracts');
+const { isOpen } = require('./trading/positions');
 
 // Micros and minis of one index share bars: a position or order in either
 // belongs to the symbol polled (MNQ bars manage an NQ trade too).
@@ -95,6 +96,8 @@ function createRunner(deps) {
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
   let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
+  let unflatPasses = 0; // flatten passes in a row that found something open or working
+  let eodRunDay = null; // the trading day whose end-of-day agents' run already happened
   const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
   const minutes = cfg.timeframe;
   const delayMs = cfg.barDelaySeconds * 1000;
@@ -215,7 +218,7 @@ function createRunner(deps) {
   async function cleanupFlat(item, { positions, orders }, { noCycles = false } = {}) {
     const root = famOf(item.contractId);
     // Flat means no position in any month or size (micro, mini) of the root (not months netting to zero).
-    if (positions.some(p => famOf(p.contractId) === root && Number(p.size || 0) > 0)) return;
+    if (positions.some(p => famOf(p.contractId) === root && isOpen(p))) return;
     // When no cycle may run (kill switch, outside the sessions), a pending
     // entry that fills would have no one to manage it: cancel those too.
     const entries = noCycles ? new Set() : entryOrderIds();
@@ -247,7 +250,7 @@ function createRunner(deps) {
     // This month's contract, or its mini/micro sibling (a policy strategy may trade either).
     const fam = famOf(item.contractId);
     const sameMonth = x => x.contractId === item.contractId || (famOf(x.contractId) === fam && contractMonthTag(x.contractId) === contractMonthTag(item.contractId));
-    const p = positions.find(x => sameMonth(x) && Number(x.size || 0) > 0);
+    const p = positions.find(x => sameMonth(x) && isOpen(x));
     const cid = p ? p.contractId : item.contractId;
     const trails = { ...(state.trails || {}) };
     const save = t => { trails[item.contractId] = t; state = { ...state, trails }; };
@@ -383,7 +386,7 @@ function createRunner(deps) {
    */
   async function flattenUncovered(item, { positions, orders }) {
     const root = famOf(item.contractId);
-    const open = positions.filter(p => famOf(p.contractId) === root && Number(p.size || 0) > 0);
+    const open = positions.filter(p => famOf(p.contractId) === root && isOpen(p));
     const closed = [];
     for (const p of open) {
       const sign = p.type === 1 ? 1 : -1;
@@ -430,10 +433,12 @@ function createRunner(deps) {
     }
     const { positions, orders } = await client.accountState(cfg.account);
     const fam = famOf(item.contractId);
-    const mine = positions.filter(p => famOf(p.contractId) === fam && Number(p.size || 0) > 0);
-    const net = mine.reduce((n, p) => n + (p.type === 1 ? 1 : p.type === 2 ? -1 : 0) * Number(p.size || 0), 0);
+    const mine = positions.filter(p => famOf(p.contractId) === fam && isOpen(p));
+    // A size that can't be read counts as one contract: the position is open, never flat.
+    const size = p => (Number.isInteger(Number(p.size)) && Number(p.size) > 0 ? Number(p.size) : 1);
+    const net = mine.reduce((n, p) => n + (p.type === 1 ? 1 : p.type === 2 ? -1 : 0) * size(p), 0);
     // A long in one month and a short in another still needs managing.
-    return [net || mine.reduce((n, p) => n + Number(p.size || 0), 0), orders.filter(o => famOf(o.contractId) === fam).length];
+    return [net || mine.reduce((n, p) => n + size(p), 0), orders.filter(o => famOf(o.contractId) === fam).length];
   }
 
   /** Record a scanned bar in the decision log; a failure to log never stops the pass. */
@@ -560,25 +565,53 @@ function createRunner(deps) {
   /**
    * Close every position in the traded roots and cancel their orders: after
    * the end-of-day run, and whenever one turns up outside market hours (hard
-   * rule: no position is held outside the 18:00-16:00 ET session).
+   * rule: no position is held outside the 18:00-16:00 ET session). True only
+   * when a read of the account finds nothing open and nothing working there:
+   * after closing or cancelling anything it returns false, and the caller's
+   * retry reads the account again (a close the broker accepted may not have
+   * filled). Each close and cancel is tried on its own, so one failure never
+   * skips the others. End of day is done, and the prop close recorded, only
+   * once the account is verified flat.
    */
   async function flattenAll(why) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return true;
+    let state;
     try {
-      const { positions, orders } = await client.accountState(cfg.account);
-      const roots = new Set(cfg.symbols.map(familyRoot));
-      const open = positions.filter(p => roots.has(famOf(p.contractId)) && Number(p.size || 0) > 0);
-      for (const p of open) {
+      state = await client.accountState(cfg.account);
+    } catch (err) {
+      log(`${why}: could not read the account (${err.message}); retrying`, 'error');
+      return false;
+    }
+    const roots = new Set(cfg.symbols.map(familyRoot));
+    const open = state.positions.filter(p => roots.has(famOf(p.contractId)) && isOpen(p));
+    const working = state.orders.filter(x => roots.has(famOf(x.contractId)));
+    if (!open.length && !working.length) {
+      if (unflatPasses) emit('flatten_verified', { why, passes: unflatPasses });
+      unflatPasses = 0;
+      return true;
+    }
+    unflatPasses += 1;
+    if (unflatPasses > 1) {
+      log(`${why}: still not flat after ${unflatPasses - 1} pass(es): ${open.map(p => p.contractId).join(', ') || 'no position'}${working.length ? `, ${working.length} working order(s)` : ''}; closing again`, 'error');
+      emit('flatten_unverified', { why, passes: unflatPasses - 1, open: open.map(p => p.contractId), working: working.length });
+    }
+    for (const p of open) {
+      try {
         await client.closePosition(cfg.account, p.contractId);
         log(`${why}: ${p.contractId} was open; closed at market`, 'error');
         emit('flatten', { why, contractId: p.contractId, size: Number(p.size), side: p.type === 1 ? 'long' : p.type === 2 ? 'short' : null });
+      } catch (err) {
+        log(`${why}: could not close ${p.contractId} (${err.message}); retrying`, 'error');
       }
-      for (const o of orders.filter(x => roots.has(famOf(x.contractId)))) await client.cancelOrder(cfg.account, o.id);
-      return true;
-    } catch (err) {
-      log(`${why}: could not check the account (${err.message}); retrying`, 'error');
-      return false;
     }
+    for (const o of working) {
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+      } catch (err) {
+        log(`${why}: could not cancel order ${o.id} (${err.message}); retrying`, 'error');
+      }
+    }
+    return false;
   }
   const eodBackstop = () => flattenAll('end of day');
   let lastHoursCheck = 0;
@@ -613,7 +646,7 @@ function createRunner(deps) {
       return {
         id: cfg.account, at: now.toISOString(), balance,
         // Without a state read, positions and orders are unknown, not flat.
-        positions: state ? state.positions.filter(p => Number(p.size || 0) > 0) : null,
+        positions: state ? state.positions.filter(isOpen) : null,
         workingOrders: state ? state.orders.length : null,
         orders: state ? state.orders : null,
         attempts,
@@ -687,11 +720,13 @@ function createRunner(deps) {
       let ok = true;
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
-      if (d.action === 'eod') ok = await eodBackstop();
+      // Whether the day is done is decided by the check after the run.
+      if (d.action === 'eod') await eodBackstop();
       // Each job is built with the account as it is when that run starts.
       // Each job's prompt is dated when it starts (a second symbol's premarket runs after the first).
+      // The agents' end-of-day run happens once a day: a retry (the account not yet verified flat) only flattens.
       const jobs = d.action === 'eod'
-        ? [{ symbol: null, build: (acct, at) => prompts(cfg, at, root).eod({ state: acct, day: d.state.day }) }]
+        ? (eodRunDay === d.state.day ? [] : [{ symbol: null, build: (acct, at) => prompts(cfg, at, root).eod({ state: acct, day: d.state.day }) }])
         : cfg.symbols.map(s => ({ symbol: s, build: (acct, at) => prompts(cfg, at, root).premarket(s, { state: acct }) }));
       const noTime = () => log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`);
       for (const job of jobs) {
@@ -709,7 +744,8 @@ function createRunner(deps) {
         const r = await timedCycle(d.action, job.build(acct, clock.now()), { timeoutMs, context });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
-      // Then check again: flatten whatever the run left open.
+      if (d.action === 'eod') eodRunDay = d.state.day;
+      // Then check again: flatten whatever the run left open; done only once verified flat.
       if (d.action === 'eod') ok = (await eodBackstop()) && ok;
       // The day's closing balance, once flat (the trailing floor moves on it).
       // A failed record never holds end of day open (the flatten is what can't

@@ -238,6 +238,20 @@ test('exchange calendar: holidays have no session, early closes end entries at 1
   assert.ok(at('2026-11-27T18:00:00Z').includes('market-hours'), 'early close: 13:00 ET');
 });
 
+test('exchange calendar: the built-in CME calendar applies with nothing configured, and configuration only adds days', () => {
+  const cal = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' });
+  const at = (iso, config = cal) => checks(evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso), config }));
+  assert.ok(at('2026-04-03T14:00:00Z').includes('market-hours'), 'Good Friday 10:00 ET: closed');
+  assert.ok(at('2026-12-25T15:00:00Z').includes('market-hours'), 'Christmas Day');
+  assert.ok(at('2026-11-27T18:10:00Z').includes('market-hours'), 'day after Thanksgiving, 13:10 ET: after the early close');
+  assert.ok(!at('2026-11-27T17:30:00Z').includes('market-hours'), 'day after Thanksgiving, 12:30 ET: still open');
+  assert.ok(!at('2026-10-07T14:30:00Z').includes('market-hours'), 'an ordinary Wednesday');
+  // A configured date adds to the calendar; it can't take a built-in holiday away.
+  const added = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2026-10-07' });
+  assert.ok(at('2026-10-07T14:30:00Z', added).includes('market-hours'));
+  assert.ok(added.closedDates.has('2026-04-03'));
+});
+
 test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {
   const { gateNow } = require('../../scripts/lib/trading/config');
   const far = '2020-01-01T00:00:00Z';

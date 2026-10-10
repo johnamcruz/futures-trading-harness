@@ -282,6 +282,15 @@ test('session-start briefing shows the block the gate applies now: a missing or 
   assert.match(b.stdout, /- topstep_100k \(active\) as of .* \(180 min ago\): balance \$99,000, .*profit -\$1,000 of \$6,000.*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
 });
 
+test('the built-in exchange calendar holds in the hook with nothing configured: no entry on Good Friday, even with the check skipped', () => {
+  const now = '2026-04-03T14:00:00Z';
+  const { env } = setup([{ ts: minutesAgo(5, new Date(now)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_TEST_NOW: now, NODE_ENV: 'test', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /market-hours.*2026-04-03/);
+});
+
 test('market hours are a hard rule: no entry in the 16:00-18:00 ET break even with FTH_ENTRY_HOURS empty and the check skipped', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date('2026-10-07T21:00:00Z')), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_TEST_NOW: '2026-10-07T21:00:00Z', NODE_ENV: 'test', FTH_ORDER_GATE_SKIP: 'time-window,market-hours' });
@@ -659,6 +668,48 @@ test('MCP gateway: an unknown order the broker lists as rejected is settled as n
   const { byId } = await gatewayRun({ FAKE_SEARCH_ORDERS: JSON.stringify([{ id: 5, customTag: 'x-1', status: 5 }]) }, [call(2, 'place_order', ORDER)], { dir });
   assert.ok(!/order-pending/.test(byId[2].result.content[0].text), byId[2].result.content[0].text);
   assert.deepStrictEqual(fs.readdirSync(path.join(dir, '.futures-trading-harness', 'pending-orders')), []);
+});
+
+test('MCP gateway: a position whose size can\'t be read blocks entries (never read as flat); close_position still goes', async () => {
+  const odd = JSON.stringify([{ contractId: 'MNQ', type: 1, quantity: 1 }]);
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: odd }, [
+    call(1, 'place_order', ORDER),
+    call(2, 'close_position', { accountId: 1, contractId: 'MNQ' }),
+  ]);
+  assert.match(byId[1].result.content[0].text, /order gate could not run \(position MNQ has no valid size.*The order was not sent/);
+  assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:close_position');
+});
+
+test('MCP gateway: partial_close_position is checked against the position; close_position always goes', async () => {
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1 }, [
+    call(1, 'partial_close_position', { accountId: 1, contractId: 'MNQ', size: 50 }),
+    call(2, 'partial_close_position', { accountId: 1, contractId: 'MES', size: 1 }),
+    call(3, 'partial_close_position', { accountId: 1, contractId: 'MNQ', size: 1 }),
+    call(4, 'close_position', { accountId: 1, contractId: 'MES' }),
+  ]);
+  assert.match(byId[1].result.content[0].text, /\[partial-close\] partial_close_position size 50 is over the open MNQ position \(1\)/);
+  assert.match(byId[2].result.content[0].text, /\[partial-close\] No open MES position/);
+  assert.strictEqual(byId[3].result.content[0].text, 'forwarded:tools/call:partial_close_position');
+  assert.strictEqual(byId[4].result.content[0].text, 'forwarded:tools/call:close_position');
+});
+
+test('MCP gateway: a stop can\'t be moved toward the market right after a close the account doesn\'t show yet', async () => {
+  const { spawn } = require('child_process');
+  const dir = tmpDir();
+  const env = {
+    PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '600', STOP_ORDER: '1',
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  gw.stdin.write(`${JSON.stringify(call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }))}\n`);
+  gw.stdin.write(`${JSON.stringify(call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21600, reason: '[protect] tighten' }))}\n`);
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
+  assert.strictEqual(byId[1].result.isError, undefined);
+  assert.match(byId[2].result.content[0].text, /\[modify-entry\] .*once recent orders fill/);
 });
 
 test('MCP gateway: a protective stop can be tightened but not widened', async () => {

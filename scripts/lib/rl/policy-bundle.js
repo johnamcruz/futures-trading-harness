@@ -9,7 +9,10 @@
  * Live trading also requires a validated bundle: out of sample, zero blows
  * in every month (no exceptions) and a pass rate of at least
  * PROMOTION_GATE.minPassRate. The backtester can load an unvalidated
- * candidate for research.
+ * candidate for research. It also requires the bundle to have been trained
+ * and validated on live fills: the next bar's open and at least the
+ * backtester's default slippage (a policy that only passes on free fills
+ * doesn't pass).
  */
 
 const fs = require('fs');
@@ -23,6 +26,7 @@ const { timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
 const { ACTIONS, MASKS } = require('./challenge-env');
 const { DEFAULT_SIZING } = require('../trading/combine');
+const { DEFAULTS: ENGINE_DEFAULTS } = require('../backtest/engine');
 
 const BUNDLE_FORMAT = 'fth-policy';
 const BUNDLE_VERSION = 3;
@@ -102,6 +106,16 @@ function bundleMismatch(meta, strategy, symbolRoot = null) {
   return null;
 }
 
+/** Why a bundle's simulator filled cheaper than live, or null (a missing record fails closed). */
+function engineFillErrors(engine) {
+  const slip = engine && engine.slippageTicks;
+  if (!(typeof slip === 'number' && slip >= ENGINE_DEFAULTS.slippageTicks)) {
+    return `engine: trained with ${JSON.stringify(slip ?? null)} tick(s) of slippage, under the ${ENGINE_DEFAULTS.slippageTicks} of live fills; retrain it`;
+  }
+  if ((engine.fill ?? ENGINE_DEFAULTS.fill) !== ENGINE_DEFAULTS.fill) return `engine: trained with fill ${JSON.stringify(engine.fill)}, not live's ${ENGINE_DEFAULTS.fill}; retrain it`;
+  return null;
+}
+
 /** Problems with a parsed bundle (empty = usable). */
 function checkBundle(b, { requireValidated = true } = {}) {
   const errors = [];
@@ -123,6 +137,8 @@ function checkBundle(b, { requireValidated = true } = {}) {
     errors.push(`network: ${err.message}`);
   }
   if (requireValidated) {
+    const fills = engineFillErrors(b.engine);
+    if (fills) errors.push(fills);
     const fails = gateFailures(b.oos, b.gate && b.gate.minPassRate, (b.gate && b.gate.minWinRate) || 0);
     if (b.validated !== true || fails.length) errors.push(`not validated out of sample${fails.length ? `: ${fails.join('; ')}` : ''}`);
   }
