@@ -26,9 +26,8 @@ const { harnessHome } = require('../paths');
 
 const GRACE_MS = 120000;
 const LOOKBACK_MS = 60000;
-// Interface order status codes (broker/interface.js ENUMS.orderStatus).
-const STATUS = { open: 1, filled: 2, cancelled: 3, expired: 4, rejected: 5, pending: 6 };
-const DEAD = new Set([STATUS.cancelled, STATUS.expired, STATUS.rejected]);
+// Interface order statuses (broker/interface.js ENUMS.orderStatus) of an order that never worked or no longer does.
+const DEAD = new Set([3, 4, 5]); // cancelled, expired, rejected
 // Interface order type ids for orders that rest in the book before they fill.
 const RESTING_TYPE = { limit: 1, stop_limit: 3, stop: 4, trailing_stop: 5, join_bid: 6, join_ask: 7 };
 
@@ -106,32 +105,34 @@ const isMarket = m => String(m.type || 'market').toLowerCase() === 'market';
 
 /**
  * Sort markers by what the broker's orders (search_orders) say:
- * - placed: an order carries the tag; `filled` when its status says so (or,
- *   with no status, when it was a market order);
- * - gone: the order carrying the tag was cancelled, expired or rejected, or
- *   none does and the grace period has passed since it was sent;
+ * - placed: a live order (not cancelled, expired or rejected) carries the tag;
+ * - gone: the order carrying the tag, created after the marker's was sent,
+ *   was cancelled, expired or rejected; or none does and the grace period
+ *   has passed since it was sent;
  * - unknown: everything else (and every marker when the lookup failed, or
  *   whose call the caller is still waiting on).
  */
 function resolveMarkers(markers, orders, now, graceMs = GRACE_MS, { inFlight = () => false } = {}) {
   const listed = Array.isArray(orders);
   const tagged = (listed ? orders : []).filter(o => o && o.customTag !== undefined && o.customTag !== null);
-  // The order carrying the tag, created after the marker's order was sent (a client may reuse a tag of an
-  // older, finished order); the broker's clock may lag ours, so within the lookup's 60 s window.
-  const find = m => tagged.filter(o => String(o.customTag) === m.tag)
-    .filter(o => !Number.isFinite(Date.parse(o.creationTimestamp)) || Date.parse(o.creationTimestamp) >= Date.parse(m.sentAt) - LOOKBACK_MS)
-    .pop();
+  const created = o => Date.parse(o.creationTimestamp);
+  // Orders carrying the tag, newest first. A live one settles the marker as placed (the broker's clock may
+  // lag ours, so within the lookup's 60 s window). A dead one settles it as gone only when it was created
+  // after the marker's order was sent: a client may reuse the tag of an older, finished order.
+  const matches = m => tagged.filter(o => String(o.customTag) === m.tag)
+    .sort((a, b) => (Number.isFinite(created(b)) ? created(b) : Infinity) - (Number.isFinite(created(a)) ? created(a) : Infinity));
   const placed = [];
   const gone = [];
   const unknown = [];
   for (const m of markers) {
-    const order = m.unreadable ? null : find(m);
+    const all = m.unreadable ? [] : matches(m);
+    const sent = Date.parse(m.sentAt);
+    const live = all.find(o => !DEAD.has(Number(o.status)) && (!Number.isFinite(created(o)) || created(o) >= sent - LOOKBACK_MS));
+    const dead = all.find(o => DEAD.has(Number(o.status)) && (!Number.isFinite(created(o)) || created(o) >= sent));
     if (m.unreadable || !listed) unknown.push(m);
-    else if (order && DEAD.has(Number(order.status))) gone.push(m);
-    else if (order) {
-      const status = order.status === undefined || order.status === null ? null : Number(order.status);
-      placed.push({ marker: m, order, filled: status === STATUS.filled || (status === null && isMarket(m)) });
-    } else if (now.getTime() - Date.parse(m.sentAt) >= graceMs && !inFlight(m)) gone.push(m);
+    else if (live) placed.push({ marker: m, order: live });
+    else if (dead) gone.push(m);
+    else if (now.getTime() - Date.parse(m.sentAt) >= graceMs && !inFlight(m)) gone.push(m);
     else unknown.push(m);
   }
   return { placed, gone, unknown };
@@ -273,7 +274,7 @@ function pendingMessage(unknown, now, graceMs = GRACE_MS, { lookupFailed = false
  */
 function definitelyRefused(text) {
   const t = String(text || '').trim();
-  if (/^Blocked by risk guardrail:/.test(t) || /^contract:/.test(t)) return true;
+  if (/^Blocked by risk guardrail:/.test(t) || /^contract-translator: not sent:/.test(t)) return true;
   try {
     const r = JSON.parse(t);
     return Boolean(r) && r.success === false && Number.isFinite(Number(r.errorCode)) && ![6, 7].includes(Number(r.errorCode));

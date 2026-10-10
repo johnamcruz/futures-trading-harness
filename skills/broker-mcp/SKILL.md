@@ -122,7 +122,7 @@ drops them. Filter by `kind` / `tag` and read `contractId` in the results.
 |---|---|---|
 | `Blocked by risk guardrail:` | MCP server limit | Stand aside. Don't resize or reroute. |
 | `Blocked by trading harness` | Order gate hook | Fix the listed cause or stand aside. |
-| `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min. |
+| `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min; while `search_orders` fails it holds (tell the user), and an unreadable record named in the message is deleted by hand after checking the broker's orders. |
 | errorCode 4 `AccountViolation` / `canTrade=false` | Firm locked the account | Stop. Tell the user. |
 | errorCode 5 `OutsideTradingHours` | Market closed | Don't retry in a loop. |
 | "Live accounts not supported" on cancel/close | The broker limits the endpoint to sim/eval | Tell the user. |

@@ -449,7 +449,7 @@ test('MCP gateway: the configured server sits behind the contract translator: st
   assert.deepStrictEqual(data(1).map(c => c.id), ['MNQ', 'MNQ:2027-03']);
   assert.strictEqual(data(2)[0].contractId, 'MNQ');
   assert.strictEqual(byId[3].result.isError, undefined, 'the gate judged the exit on the standard name and let it through');
-  assert.match(byId[4].result.content[0].text, /^contract: no ES contract found at this broker/);
+  assert.match(byId[4].result.content[0].text, /^contract-translator: not sent: no ES contract found at this broker/);
   // Below it: the server only ever saw its own ids.
   const seen = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   const placed = seen.find(c => c.name === 'place_order');

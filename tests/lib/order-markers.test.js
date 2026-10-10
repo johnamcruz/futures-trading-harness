@@ -48,7 +48,7 @@ test('resolve: placed (filled or resting) or refused by the listed order\'s stat
   const orders = [{ id: 5, customTag: 'c', status: 2 }, { id: 6, customTag: 'd', status: 1 }, { id: 7, customTag: 'e', status: 5 }, { id: 8, customTag: 'f' }, { id: 9, customTag: 'g', status: 3 }];
   const ms = [fresh, old, marker({ tag: 'c' }), marker({ tag: 'd', type: 'limit' }), marker({ tag: 'e' }), marker({ tag: 'f' }), marker({ tag: 'g' }), { file: 'x', unreadable: true }];
   const r = m.resolveMarkers(ms, orders, NOW);
-  assert.deepStrictEqual(r.placed.map(p => [p.marker.tag, p.order.id, p.filled]), [['c', 5, true], ['d', 6, false], ['f', 8, true]]);
+  assert.deepStrictEqual(r.placed.map(p => [p.marker.tag, p.order.id]), [['c', 5], ['d', 6], ['f', 8]]);
   assert.deepStrictEqual(r.gone.map(g => g.tag), ['b', 'e', 'g'], 'rejected and cancelled orders were never working');
   assert.deepStrictEqual(r.unknown.map(u => u.tag || u.file), ['a', 'x']);
   // No order list (the lookup failed): nothing is settled.
@@ -69,6 +69,19 @@ test('ledger: an unknown market exit counts as if it filled; limits and stops co
   assert.deepStrictEqual([m.markerLedger(unknown, later), m.markerOrders(unknown, later)], [[], []]);
 });
 
+test('resolve: a live order with the tag wins over a dead one; a dead one older than the send never settles the marker', () => {
+  const fresh = marker({ tag: 'r' });
+  const at = d => new Date(NOW.getTime() + d).toISOString();
+  const sent = Date.parse(fresh.sentAt);
+  const oldDead = { id: 1, customTag: 'r', status: 3, creationTimestamp: new Date(sent - 30000).toISOString() };
+  const newLive = { id: 2, customTag: 'r', status: 1, creationTimestamp: at(0) };
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [newLive, oldDead], NOW).placed.map(p => p.order.id), [2]);
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [oldDead, newLive], NOW).placed.map(p => p.order.id), [2], 'whatever the list order');
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [oldDead], NOW).unknown.map(u => u.tag), ['r'], 'an older cancelled order with the tag is not this one');
+  const newDead = { id: 3, customTag: 'r', status: 5, creationTimestamp: at(0) };
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [oldDead, newDead], NOW).gone.map(g => g.tag), ['r']);
+});
+
 test('resolve: an order still awaited is never gone; an older order reusing the tag doesn\'t settle it', () => {
   const old = marker({ tag: 'a', sentAt: new Date(NOW.getTime() - m.GRACE_MS).toISOString() });
   assert.deepStrictEqual(m.resolveMarkers([old], [], NOW, m.GRACE_MS, { inFlight: x => x.tag === 'a' }).unknown.map(u => u.tag), ['a']);
@@ -81,7 +94,9 @@ test('resolve: an order still awaited is never gone; an older order reusing the 
 
 test('refusals: only a guardrail, the translator, or the broker\'s own refusal settles an order as not placed', () => {
   assert.ok(m.definitelyRefused('Blocked by risk guardrail: trading disabled'));
-  assert.ok(m.definitelyRefused('contract: no ES contract found at this broker'));
+  assert.ok(m.definitelyRefused('contract-translator: not sent: no ES contract found at this broker'));
+  assert.ok(!m.definitelyRefused('contract-translator: could not name the contracts in this result (x)'), 'that call reached the server');
+  assert.ok(!m.definitelyRefused('contract: something the broker server said'));
   assert.ok(m.definitelyRefused('{"orderId":null,"success":false,"errorCode":2,"errorName":"OrderRejected"}'));
   for (const t of ['{"success":false,"errorCode":6}', '{"success":false,"errorCode":7}', '{"success":false,"errorMessage":"Request timed out"}',
     'HTTP 500 Internal Server Error', 'Service Unavailable', 'EPIPE', 'The operation was aborted', '']) {

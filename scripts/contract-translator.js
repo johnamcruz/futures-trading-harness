@@ -68,8 +68,8 @@ function main(argv) {
           translated = await translator.translateResult(tool, data);
         } catch (err) {
           // Never pass broker ids up: nothing above the translator can trade them.
-          // Not "contract: " (the prefix of a refusal before sending): the call reached the server.
-          return errorResult(m.id, `contract result: could not name the contracts in this result (${err.message})`);
+          // Not the "not sent" prefix: the call reached the server.
+          return errorResult(m.id, `contract-translator: could not name the contracts in this result (${err.message})`);
         }
         const text = JSON.stringify(translated, null, 2);
         return { ...m, result: { ...r, content: [{ ...r.content[0], text }, ...r.content.slice(1)] } };
@@ -106,7 +106,8 @@ function main(argv) {
           return { ...m, params: { ...m.params, arguments: await translator.translateArgs(tool, m.params.arguments || {}) } };
         } catch (err) {
           toolOf.delete(m.id);
-          replies.push(errorResult(m.id, `contract: ${err.message}`));
+          // This prefix says for sure the order never reached the server (order-markers.definitelyRefused).
+          replies.push(errorResult(m.id, `contract-translator: not sent: ${err.message}`));
           return null;
         }
       };

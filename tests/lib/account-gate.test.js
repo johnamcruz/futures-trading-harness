@@ -115,6 +115,13 @@ test('cancel_order: a resting [exit] target in the ledger hasn\'t changed the po
   assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: long1, orders, config, ledger, now: NOW })), ['cancel-protection']);
 });
 
+test('cancel_order: an entry still working (perhaps filled in part) keeps its bracket stop protecting it', () => {
+  // The gateway sent buy 2 (order 77); it still works with 1 left while positions lag: flat on the account.
+  const orders = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 2, stopPrice: 21480 }, { id: 77, contractId: CONTRACT, side: 0, type: 1, size: 1, limitPrice: 21500 }];
+  const ledger = [{ contractId: CONTRACT, sign: 1, size: 2, netBefore: 0, at: NOW.getTime(), orderId: '77' }];
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: [], orders, config, ledger, now: NOW })), ['cancel-protection']);
+});
+
 test('ledger: entries are ordered by when they were sent, so one settled late doesn\'t count on top of a close sent after it', () => {
   const t = NOW.getTime();
   // An entry (buy 1 from flat) sent first but settled late, then a close of the resulting long sent after it.

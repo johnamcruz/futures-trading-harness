@@ -260,8 +260,9 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
   const order = orders.find(o => Number(o.id) === Number(input.orderId));
   if (!order || !STOP_TYPES.has(Number(order.type))) return [];
   // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet;
-  // an order still resting (a target) hasn't changed the position.
-  const resting = new Set(orders.map(o => String(o.id)));
+  // an exit still resting on the stop's side (a target) hasn't reduced the position. An entry still
+  // working may have filled in part, so it stays counted: its bracket stop keeps protecting it.
+  const resting = new Set(orders.filter(o => Number(o.side) === Number(order.side)).map(o => String(o.id)));
   const net = pendingState(ledger, order.contractId, contractNet(positions, order.contractId), now, undefined, { exact: true, resting }).projected;
   const orderSign = Number(order.side) === 0 ? 1 : -1;
   if (net === 0 || orderSign !== -Math.sign(net)) return [];
