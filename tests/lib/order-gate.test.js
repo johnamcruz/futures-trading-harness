@@ -157,7 +157,7 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
 
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  // The bundled orb has no session gate (as in algoTraderBot); give it one here.
+  // The bundled orb has no session gate (as in the original bot); give it one here.
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies
     .map(s => (s.name === 'orb' ? { ...s, sessions: ['09:45-11:30@America/New_York'] } : s));
   const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
@@ -236,6 +236,33 @@ test('exchange calendar: holidays have no session, early closes end entries at 1
   assert.ok(at('2026-12-25T02:00:00Z').includes('market-hours'), 'Christmas Eve 21:00 ET belongs to the closed day');
   assert.ok(!at('2026-11-27T17:59:00Z').includes('market-hours'), 'early close: 12:59 ET');
   assert.ok(at('2026-11-27T18:00:00Z').includes('market-hours'), 'early close: 13:00 ET');
+});
+
+test('exchange calendar: the built-in CME calendar applies with nothing configured, and configuration only adds days', () => {
+  const cal = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' });
+  const at = (iso, config = cal) => checks(evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso), config }));
+  assert.ok(at('2026-04-03T14:00:00Z').includes('market-hours'), 'Good Friday 10:00 ET: closed');
+  assert.ok(at('2026-12-25T15:00:00Z').includes('market-hours'), 'Christmas Day');
+  assert.ok(at('2026-11-27T18:10:00Z').includes('market-hours'), 'day after Thanksgiving, 13:10 ET: after the early close');
+  assert.ok(!at('2026-11-27T17:30:00Z').includes('market-hours'), 'day after Thanksgiving, 12:30 ET: still open');
+  assert.ok(!at('2026-10-07T14:30:00Z').includes('market-hours'), 'an ordinary Wednesday');
+  // A configured date adds to the calendar; it can't take a built-in holiday away.
+  const added = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2026-10-07' });
+  assert.ok(at('2026-10-07T14:30:00Z', added).includes('market-hours'));
+  assert.ok(added.closedDates.has('2026-04-03'));
+  // Every exchange holiday is closed, even where CME runs a short session.
+  assert.ok(at('2026-01-19T15:00:00Z').includes('market-hours'), 'MLK Day 10:00 ET: closed');
+  assert.ok(at('2026-07-03T15:00:00Z').includes('market-hours'), 'Independence Day (observed): closed');
+  // Past the calendar's end the holidays are unknown: no entries until it is extended.
+  const past = checks(evaluate(entryOrder(), [plan(1, { ts: '2028-01-05T14:59:00Z' })], { now: new Date('2028-01-05T15:00:00Z'), config: cal }));
+  assert.ok(past.includes('market-hours'));
+  // One stray date doesn't extend it; a whole year's holidays and early closes do.
+  assert.ok(at('2028-01-05T15:00:00Z', loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2028-12-25' })).includes('market-hours'));
+  const y2028 = require('../../scripts/lib/trading/exchange-calendar').cmeHolidays(2028);
+  const extended = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: y2028.closed.join(','), FTH_EARLY_CLOSE_DATES: y2028.early.join(',') });
+  assert.ok(!at('2028-01-05T15:00:00Z', extended).includes('market-hours'));
+  assert.ok(at('2028-01-17T15:00:00Z', extended).includes('market-hours'), 'MLK Day 2028, from the configured year');
+  assert.ok(at('2028-11-24T18:10:00Z', extended).includes('market-hours'), 'the day after Thanksgiving 2028, 13:10 ET: after the early close');
 });
 
 test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {
@@ -594,4 +621,17 @@ test('checkOrder: an unreadable broker config is a broker-config block, even for
   assert.strictEqual(r.allowed, false);
   assert.deepStrictEqual(r.violations.map(v => v.check), ['broker-config']);
   assert.match(r.message, /close_position still flattens/);
+});
+
+test('partial_close_position: the hook passes it (it needs the account), the gateway gates it like the other order tools; a full close is never gated', () => {
+  const path = require('path');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { orderTool } = require('../../scripts/lib/trading/mcp-gateway');
+  const r = checkOrder({ accountId: 7, contractId: CONTRACT, size: 1 }, { env: {}, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW, tool: 'partial_close_position' });
+  assert.deepStrictEqual([r.allowed, r.intent], [true, 'risk-reducing']);
+  const call = name => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } });
+  assert.strictEqual(orderTool(call('mcp__broker__partial_close_position')), 'partial_close_position');
+  assert.strictEqual(orderTool(call('partial_close_position')), 'partial_close_position');
+  assert.strictEqual(orderTool(call('close_position')), null);
+  assert.strictEqual(orderTool(call('mcp__broker__close_position')), null);
 });

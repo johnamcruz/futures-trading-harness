@@ -1,6 +1,6 @@
 ---
 name: supertrend
-description: SuperTrend(10, 3) direction-flip strategy on 1- or 3-minute futures bars, ported from algoTraderBot. Use when SuperTrend flips and higher-timeframe structure supports the new direction.
+description: SuperTrend(10, 3) direction-flip strategy on 1- or 3-minute futures bars, ported from the original Python bot. Use when SuperTrend flips and higher-timeframe structure supports the new direction.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -19,13 +19,13 @@ exit:
 risk:
   stop: atr:0.5
   min_rr: 2
-source: algoTraderBot/strategies/supertrend.py
+source: original bot, strategies/supertrend.py
 ---
 
 # Strategy: SuperTrend Flip (`setup:supertrend`)
 
-Source: `algoTraderBot/strategies/supertrend.py` (ST_PERIOD=10, ST_MULT=3.0,
-stop 0.5 × ATR(20)); the only algoTraderBot strategy with a 1-minute model.
+Source: the original bot's `supertrend.py` (ST_PERIOD=10, ST_MULT=3.0,
+stop 0.5 × ATR(20)); the only original-bot strategy with a 1-minute model.
 
 ## When to Use
 
@@ -44,7 +44,7 @@ stop 0.5 × ATR(20)); the only algoTraderBot strategy with a 1-minute model.
 **Entry:** market on the trigger bar's close, as the source does.
 
 **Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
-ticks), as algoTraderBot places it.
+ticks), as the original bot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),

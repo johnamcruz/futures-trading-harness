@@ -24,7 +24,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `instruments` | Contract roots, e.g. `[MNQ, MES]` |
    | `timeframe` | Trigger timeframe, e.g. `3m` |
    | `sessions` | Optional windows, entries only inside: named sessions `asia` (18:00-03:00 ET), `london` (03:00-09:30 ET), `ny` (09:30-16:00 ET), or `"HH:MM-HH:MM@Zone"`. Without it the strategy trades the whole market session, 18:00-16:00 ET (closed 16:00-18:00 ET and weekends; no position is carried past 16:00 ET) |
-   | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped single-setup strategy, the algoTraderBot ports included, is `rules`; the prop strategies (`prop_*`) are `policy` (below) |
+   | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped single-setup strategy, the ported ones included, is `rules`; the prop strategies (`prop_*`) are `policy` (below) |
    | `connectors` | Optional data the strategy needs beyond bars, like a skill's tools: `order_flow` (aggressor buy/sell volume per bar, for `ofi`/`delta`, from recorded flow files; without them a bar-shape estimate). Required when the rules use that data |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
    | `mtf` | `trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester and RL env skip it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design (`crt_1h`, `crt_4h`, `cisd_ote`, `ofi_absorption`, `value_area_reentry`); say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's |
@@ -62,7 +62,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    high and low so far), `ib_high ib_low` (today's initial balance, the
    first hour, from the bar that completes it), `adr(n)` (the average RTH
    range of the last n complete days), `minute_et`,
-   `cisd_ote_dir cisd_ote_risk` (algoTraderBot's CISD + OTE detector), and
+   `cisd_ote_dir cisd_ote_risk` (the original bot's CISD + OTE detector), and
    higher-timeframe candles `htf_open(m) htf_high(m) htf_low(m) htf_close(m)`
    (the previous m-minute candle) and `htfc_open(m) htfc_high(m) htfc_low(m)`
    (the one in progress, up to this bar); m divides a day (60 = 1 hour, 240 =

@@ -10,7 +10,8 @@
  * server. Everything else passes through unchanged.
  */
 
-const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order)$/;
+// Calls the gateway checks; a full close_position never is (flattening always works).
+const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|partial_close_position)$/;
 // Calls that change orders or positions: the gateway waits for the server's
 // answer to each before reading the next client message, so a check never
 // runs while an earlier order is still in flight.
@@ -166,4 +167,70 @@ function lineSplitter(onLine) {
   };
 }
 
-module.exports = { orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * The call's arguments with its contract under its one standard name (the
+ * translator's cache: MNQ:2026-12 or the broker's own id for today's front
+ * month become MNQ), so the gate and its ledger of recent orders compare
+ * like with like. Only for checking: the call goes out as the client sent it.
+ */
+function canonicalArgs(args, env = process.env) {
+  if (!args || typeof args.contractId !== 'string') return args;
+  try {
+    const { activeBroker, contractsCacheFile } = require('../broker/config');
+    const { readCache, canonicalName } = require('../broker/translator');
+    return { ...args, contractId: canonicalName(args.contractId, readCache(contractsCacheFile(activeBroker(env).name, env))) };
+  } catch (_err) {
+    return args; // no broker config: the names are compared as given
+  }
+}
+
+/**
+ * The ledger entry for a close_position / partial_close_position about to be
+ * sent, from the account before it ({ contractId, root, sign, size, netBefore,
+ * rootNetBefore, at, sentAt }), or null when there is nothing to close. A
+ * close is a market order the account may not show yet: the gateway counts it
+ * from the moment it is sent (a late or lost reply still closes), and drops it
+ * only if the server refuses it. It is `unconfirmed` until the server says
+ * success: a close of unknown outcome counts against new exits and stop
+ * moves, never to let a stop of the still-open position be cancelled.
+ */
+function closeLedgerEntry(tool, args, positions, now) {
+  if (!Array.isArray(positions)) return null;
+  const { contractNet, netPosition } = require('./account-gate');
+  const { contractRoot } = require('./journal');
+  const net = contractNet(positions, args.contractId);
+  const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);
+  if (!(size > 0)) return null;
+  const at = now.getTime();
+  return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at, unconfirmed: true };
+}
+
+/** A tool reply's JSON body (content[0].text), or null. */
+function resultJson(response) {
+  try {
+    return JSON.parse(response.result.content[0].text);
+  } catch (_err) {
+    return null;
+  }
+}
+
+/**
+ * Whether the server surely refused a close: a body saying success: false, a
+ * sure refusal in an error reply (a risk guardrail, the contract translator's
+ * "not sent": order-markers.definitelyRefused), or a malformed request
+ * (JSON-RPC -32600..-32602). Any other error (a timeout, a broken call) is an
+ * unknown outcome: the broker may have taken the close, so it still counts.
+ */
+function closeRefused(response) {
+  if (!response) return false;
+  if (response.error) return [-32600, -32601, -32602].includes(Number(response.error.code));
+  if (!response.result) return false;
+  if (response.result.isError) {
+    const text = Array.isArray(response.result.content) && response.result.content[0] ? response.result.content[0].text : '';
+    return require('./order-markers').definitelyRefused(text);
+  }
+  const body = resultJson(response);
+  return Boolean(body) && body.success === false;
+}
+
+module.exports = { canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

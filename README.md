@@ -181,7 +181,7 @@ strategies/
 ```
 
 Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The six algoTraderBot ports reproduce its signals bar
+rules`); none is code. The six ported strategies reproduce its signals bar
 for bar (`tests/lib/parity.test.js`).
 
 Each file has code-checked frontmatter and a body the agents follow:
@@ -240,7 +240,7 @@ To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
 `FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. The six bundled
-strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTraderBot).
+strategies are ported from an earlier Python trading bot.
 
 ## What's inside
 
@@ -415,12 +415,23 @@ More runner settings:
   it for 1-minute bars so a cycle fits in one bar).
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
   switches to manage-only cycles once reached.
-- `closedDates` (CME holidays) and `earlyCloseDates` (13:00 ET closes, end
-  of day at `earlyCloseEodAt`) are passed to the order gate too: no entries
-  on a closed day or after an early close.
+- The CME equity index calendar for 2026-2027 is built in
+  (`scripts/lib/trading/exchange-calendar.js`): every exchange holiday is
+  closed (no session at all, even where CME runs a short one), and the day
+  after Thanksgiving and Christmas Eve close at 13:00 ET. `closedDates` and
+  `earlyCloseDates` (13:00 ET closes, end of day at `earlyCloseEodAt`) add
+  days to it. Both go to the order gate too: no entries on a closed day or
+  after an early close. After the calendar's last day the gate refuses every
+  entry (those days' holidays are unknown); the runner warns once a day for
+  the 30 days before it. Configured dates extend it only a whole year at a
+  time: list every holiday (`closedDates`) and early close
+  (`earlyCloseDates`) of the year, as CME publishes them (the rules in
+  `exchange-calendar.js` `cmeHolidays` check that none is missing).
 - No run outlasts end of day: each gets at most the time left until
   `eodAt`, and end of day closes positions directly before the agents'
-  review run.
+  review run. It is done only once the account reads flat (a position whose
+  size can't be read counts as open); otherwise it closes and cancels again
+  on the next pass.
 - `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe); a cycle stopped by
   the timeout makes the next one start by checking protective stops.
 - Bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
@@ -430,7 +441,7 @@ More runner settings:
 ### Backtesting
 
 `scripts/backtest.js` replays historical bars from Parquet, Excel, CSV, or
-JSON files the way algoTraderBot backtests. After every closed bar it:
+JSON files the way the original bot backtests. After every closed bar it:
 
 1. settles the open trade against the bar;
 2. trails its stop;
@@ -440,7 +451,7 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 The market session always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday), and every trade closed at end
 of day. By default it also applies the harness's other rules (sessions,
-order-gate limits); `--no-gate` drops those to compare with algoTraderBot.
+order-gate limits); `--no-gate` drops those to compare with the original bot.
 
 ```bash
 node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
@@ -449,7 +460,7 @@ node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.ex
 
 Entries fill at the next bar's open with a tick of slippage (live, the
 order goes in after the cycle that read the bar; `--fill close` for
-algoTraderBot's mechanics). Results are in R (as algoTraderBot reports them)
+the original bot's mechanics). Results are in R (as the original bot reports them)
 and in dollars after fees, broken down by strategy, exit, month, entry hour,
 and weekday, with a 95% interval on mean R, an edge verdict, Sharpe, MAE, a
 data audit, and provenance. `--walk-forward --grid <param>=a,b,c` tunes a
@@ -571,10 +582,21 @@ only checks that they really reduce the position.
 
 ```bash
 npm install
-npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content (+ rl/tests when Python has numpy)
+npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content, e2e (+ rl/tests when Python has numpy)
 npm run lint                     # eslint + markdownlint
 node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after editing agents, commands, rules, skills
 ```
+
+`tests/e2e/mock-trading-e2e.test.js` trades end to end on a mock exchange
+(`tests/fixtures/mock-exchange.js`) through the production stack: the order
+gateway and the contract translator in front of a broker MCP server, and the
+runner on the broker adapter. It covers a long's and a short's whole life (a
+real signal, the refusals, stop moves, partial closes, a gap through the
+stop, a target, the runner's trailing stop), closes in flight under three
+names for the contract, closes refused or of unknown outcome, an entry whose
+reply is lost, an unreadable position, holidays, the early close, and end of
+day against a broker that loses or delays its closes. A change to the gate,
+the gateway, or the runner keeps it green.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).
 

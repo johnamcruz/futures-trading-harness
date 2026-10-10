@@ -1,6 +1,6 @@
 ---
 name: keltner
-description: Keltner channel volatility-expansion breakout strategy (EMA20 +/- 1.5 x ATR20, ADX >= 20) on 3-minute futures bars, ported from algoTraderBot. Use when a bar closes outside the Keltner channel in a trending regime.
+description: Keltner channel volatility-expansion breakout strategy (EMA20 +/- 1.5 x ATR20, ADX >= 20) on 3-minute futures bars, ported from the original Python bot. Use when a bar closes outside the Keltner channel in a trending regime.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -21,12 +21,12 @@ exit:
 risk:
   stop: atr:0.5
   min_rr: 2
-source: algoTraderBot/strategies/keltner.py
+source: original bot, strategies/keltner.py
 ---
 
 # Strategy: Keltner Breakout (`setup:keltner`)
 
-Source: `algoTraderBot/strategies/keltner.py` (KC_LEN=20, KC_MULT=1.5,
+Source: the original bot's `keltner.py` (KC_LEN=20, KC_MULT=1.5,
 KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 
 ## When to Use
@@ -49,7 +49,7 @@ KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 **Entry:** market on the trigger bar's close, as the source does.
 
 **Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
-ticks), as algoTraderBot places it.
+ticks), as the original bot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),

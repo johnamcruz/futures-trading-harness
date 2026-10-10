@@ -189,8 +189,15 @@ test('bundles: live trading needs zero blows in every out-of-sample month and at
   const bundle = {
     format: BUNDLE_FORMAT, version: BUNDLE_VERSION, name: 'mini_policy', strategy: 'prop_trendy', components: ['trendy'], account: 'mini', strategies: ['trendy'],
     obsFields: observationFields(['trendy']), actions: envlib.ACTIONS, network: network(1, [8], OBS_DIM + 1), gate: { minPassRate: 0.4, maxBlows: 0 }, oos, validated: true,
+    engine: { gate: true, slippageTicks: 1, fill: 'next-open' },
   };
   assert.deepStrictEqual(checkBundle(bundle), []);
+  // Live needs a bundle trained and validated on live fills; a missing record fails closed. Backtests may load it.
+  assert.match(checkBundle({ ...bundle, engine: { gate: true, slippageTicks: 0 } }).join(), /0 tick\(s\) of slippage, under the 1/);
+  assert.match(checkBundle({ ...bundle, engine: undefined }).join(), /null tick\(s\) of slippage/);
+  assert.match(checkBundle({ ...bundle, engine: { slippageTicks: 2, fill: 'close' } }).join(), /fill "close"/);
+  assert.deepStrictEqual(checkBundle({ ...bundle, engine: { slippageTicks: 2 } }), [], 'more slippage than live is fine');
+  assert.deepStrictEqual(checkBundle({ ...bundle, engine: { slippageTicks: 0 } }, { requireValidated: false }), []);
   assert.deepStrictEqual(gateFailures(oos), []);
   const oneBlow = { ...oos, blown: 1, months: { ...months, '2026-04': { ...months['2026-04'], blown: 1 } } };
   assert.match(gateFailures(oneBlow)[0], /2026-04.*zero blows/);

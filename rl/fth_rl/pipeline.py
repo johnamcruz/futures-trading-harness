@@ -43,6 +43,18 @@ from .train import build_bundle, evaluate_oos, harness_home, log, log_oos_look, 
 TUNABLE_ROOTS = ("ppo", "reward", "sizing", "contracts", "hidden", "total_timesteps", "normalize_reward", "clip_obs")
 NESTED_ROOTS = ("ppo", "reward", "sizing")  # maps: searched as root.key; the others are whole values
 # What a study is bound to: changing any of these makes old trials incomparable.
+# The simulator's fills (scripts/lib/rl/env-config.js): trials trained on other fills are not comparable.
+# Bump it when the env's fills change, so an older study is not resumed with mixed trials.
+FILLS_VERSION = "next-open, at least 1 tick of slippage (2026-10)"
+# What makes two simulators fill alike: compared between retrain and ship (the calendar dates are not: a
+# year's holidays added to the config must not void seeds trained on windows those dates never touch).
+FILL_KEYS = ("gate", "sessions", "eodAt", "slippageTicks", "fill")
+
+
+def fills_of(engine):
+    return {k: (engine or {}).get(k) for k in FILL_KEYS}
+
+
 FINGERPRINT_KEYS = ("strategy", "symbol", "data", "windows", "eval_every", "sessions", "eodAt", "slippageTicks", "closedDates", "earlyCloseDates")
 SPEC_TYPES = ("float", "int", "categorical")
 STUDY_DEFAULTS = {
@@ -200,6 +212,7 @@ def fingerprint(raw, base_path):
     absd = absolute_data(raw, Path(base_path).parent)
     key = {k: absd.get(k) for k in FINGERPRINT_KEYS}
     key["data_sha256"] = sorted(file_sha(f) for f in data_files(absd) if Path(f).exists())
+    key["fills"] = FILLS_VERSION
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
 
 
@@ -493,6 +506,12 @@ def _run_retrain(rt, dry_run):
         return None
     w = cfg["_windows"]
     with EnvServer(cfg_path) as server:
+        # The simulator the seeds are trained in (its fills: FILL_KEYS); retrain and ship refuse seeds from another.
+        engine = server.info()["engine"]
+        if candidates["seeds"] and fills_of(candidates.get("engine")) != fills_of(engine):
+            raise ValueError(f"{cand_file} holds seeds retrained in another simulator ({candidates.get('engine')}, now {engine}); "
+                             "move it aside and retrain")
+        candidates["engine"] = engine
         starts = server.starts(w["select"], cfg["eval_every"])
         for seed in rt["seeds"]:
             if str(seed) in candidates["seeds"]:
@@ -576,6 +595,10 @@ def _run_ship(sh, dry_run, models_dir):
         return None, None
     with EnvServer(cfg_path, hash_data=True) as server:
         info = server_info(server)
+        # The bundle records the simulator its network was trained in: the same one this evaluation runs in.
+        if not candidates.get("engine") or fills_of(candidates["engine"]) != fills_of(info["engine"]):
+            raise ValueError(f"the retrained seeds were trained in another simulator ({candidates.get('engine')}) than this harness runs "
+                             f"({info['engine']}): retrain them (move {cand_file} aside)")
         oos, baseline, fails = evaluate_oos(server, cfg, best["network"])
         looks = log_oos_look(sh["out"], sh["retrain"]["sweep"]["raw"]["name"], best["seed"], oos, info, cfg)
         bundle = build_bundle(sh["bundle"], cfg, info, best, [{"seed": c["seed"], "selection": {k: v for k, v in c["selection"].items() if k != "months"}} for c in seeds],

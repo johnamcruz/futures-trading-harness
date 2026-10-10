@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * CISD + OTE detection, a faithful port of algoTraderBot
+ * CISD + OTE detection, a faithful port of the original bot
  * strategies/cisd_ote_detect.py (itself a verbatim port of the model's training
  * pipeline). Kept line-for-line close to the source on purpose, quirks
  * included; tests/lib/cisd-ote.test.js checks it against the source's output.

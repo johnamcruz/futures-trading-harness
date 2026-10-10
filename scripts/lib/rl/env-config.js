@@ -8,12 +8,17 @@
  * and exit. A config may override `sizing` and `contracts` (a sweep searches
  * them); the bundle records what it was trained with, and live trading uses
  * it only when the strategy's document says the same.
+ *
+ * Fills are the backtester's live ones (next bar's open, and at least its
+ * default slippage per market fill): a policy trained on cheaper fills than
+ * live has a pass rate live trading won't see. A config may only add slippage.
  */
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { validateBacktestConfig, barsAt } = require('../backtest/run');
+const { DEFAULTS: ENGINE_DEFAULTS } = require('../backtest/engine');
 const { loadStrategies } = require('../trading/strategies');
 const { accountNamed } = require('../trading/accounts');
 const { loadConfig } = require('../trading/config');
@@ -61,9 +66,13 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
   if (!CONTRACT_MODES.includes(contracts)) throw new Error(`contracts: ${CONTRACT_MODES.join(' | ')}`);
   const sizing = cfg.sizing ?? strategy.sizing ?? null;
   const raw = {
-    symbols: [cfg.symbol], timeframe: Number.parseInt(strategy.timeframe, 10), data: cfg.data, strategies: components.map(c => c.name), gate: true, slippageTicks: 0,
+    symbols: [cfg.symbol], timeframe: Number.parseInt(strategy.timeframe, 10), data: cfg.data, strategies: components.map(c => c.name), gate: true,
   };
   for (const k of ENGINE_KEYS) if (cfg[k] !== undefined) raw[k] = cfg[k];
+  if (cfg.slippageTicks !== undefined && !(typeof cfg.slippageTicks === 'number' && Number.isFinite(cfg.slippageTicks) && cfg.slippageTicks >= ENGINE_DEFAULTS.slippageTicks)) {
+    throw new Error(`slippageTicks: at least ${ENGINE_DEFAULTS.slippageTicks} (live fills); training on cheaper fills overstates the pass rate`);
+  }
+  if (cfg.fill !== undefined) throw new Error('fill: training always fills as live (the next bar\'s open)');
   if (cfg.timeframe !== undefined && cfg.timeframe !== raw.timeframe) throw new Error(`timeframe: ${strategy.name} trades ${strategy.timeframe} bars`);
   const bt = validateBacktestConfig(raw, baseDir);
   const account = accountNamed(root, strategy.account, env);
@@ -83,7 +92,7 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
     // The volume profile its observation reads (value_area, poc_dist), from the policy strategy's params.
     profile: optionsFromParams(strategy.params || {}),
     // The simulator it was trained and validated in.
-    engine: { gate: true, sessions: bt.sessions, eodAt: bt.eodAt, slippageTicks: bt.slippageTicks, earlyCloseDates: bt.earlyCloseDates, closedDates: bt.closedDates },
+    engine: { gate: true, sessions: bt.sessions, eodAt: bt.eodAt, slippageTicks: bt.slippageTicks, fill: bt.fill, earlyCloseDates: bt.earlyCloseDates, closedDates: bt.closedDates },
     data: markets.map(m => ({ symbol: m.symbol, file: path.basename(m.file), sha256: hashData ? fileHash(m.file) : null })),
   };
   return { env: e, meta };

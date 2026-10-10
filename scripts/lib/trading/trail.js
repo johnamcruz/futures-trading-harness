@@ -2,7 +2,7 @@
 
 /**
  * Trailing exit for trend-following setups, the same rule live and in the
- * backtest (algoTraderBot's exit_manager.manage_trail, without the PPO
+ * backtest (the original bot's exit_manager.manage_trail, without the PPO
  * policy): hold the initial stop until the trade's best price reaches
  * `trailActivateR`, then keep the stop `trailGivebackR` behind that best
  * price. 1R is the initial stop distance.
@@ -13,7 +13,7 @@
  *   - the stop only ratchets toward the market, snapped to the tick on the
  *     safe side (down for a long's stop, up for a short's);
  *   - if the same bar's unfavorable extreme already crossed the tightened
- *     stop, the trade closes at market (the bar's close), as algoTraderBot
+ *     stop, the trade closes at market (the bar's close), as the original bot
  *     does: the new stop wasn't resting yet when price went through it.
  */
 

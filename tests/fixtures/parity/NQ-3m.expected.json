@@ -1,5 +1,5 @@
 {
-"source": "algoTraderBot strategies/*.py detect() on 500-bar windows (pandas 2)",
+"source": "the original bot's strategies/*.py detect() on 500-bar windows (pandas 2)",
 "first_eval_index": 499,
 "signals": [
 {

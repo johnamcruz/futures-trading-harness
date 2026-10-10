@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter } = require('../../scripts/lib/trading/mcp-gateway');
+const fs = require('fs');
+const path = require('path');
+const { handleClientLine, isOrderCall, isLaneCall, orderTool, childCaller, lineSplitter, canonicalArgs, closeLedgerEntry, closeRefused } = require('../../scripts/lib/trading/mcp-gateway');
+const { tmpDir } = require('../helpers');
 
 const call = (id, name, args = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 const allow = () => ({ allowed: true, violations: [] });
@@ -86,4 +89,44 @@ test('client requests may not use the gateway-reserved id prefix; lane calls are
   assert.strictEqual(isLaneCall(call(1, 'close_position')), true);
   assert.strictEqual(isLaneCall(call(1, 'get_bars')), false);
   assert.strictEqual(orderTool(call(1, 'cancel_order')), 'cancel_order');
+});
+
+test('canonicalArgs: the gate sees one name per contract, from the configured broker\'s translator cache', () => {
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: ['node', 'x.js'] } } }));
+  const env = { FTH_HOME: home };
+  const args = { accountId: 7, contractId: 'MNQ:2026-12', size: 1 };
+  assert.deepStrictEqual(canonicalArgs(args, env), args, 'no cache yet: as given');
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'CON.F.US.MNQ.Z26', month: '2026-12', day: '2026-10-07' } } }));
+  assert.deepStrictEqual(canonicalArgs(args, env), { ...args, contractId: 'MNQ' });
+  assert.strictEqual(canonicalArgs({ contractId: 'CON.F.US.MNQ.Z26' }, env).contractId, 'MNQ');
+  assert.strictEqual(args.contractId, 'MNQ:2026-12', 'the call itself is left as sent');
+  assert.deepStrictEqual(canonicalArgs({ orderId: 9 }, env), { orderId: 9 });
+  assert.deepStrictEqual(canonicalArgs(args, { FTH_HOME: home, FTH_BROKER: 'nope' }), args, 'no broker config: as given');
+});
+
+test('closeLedgerEntry: a close counts from the account before it, capped at the position; nothing to close is no entry', () => {
+  const now = new Date('2026-10-07T14:00:00Z');
+  const long2 = [{ contractId: 'MNQ', type: 1, size: 2 }, { contractId: 'MNQ:2027-03', type: 2, size: 1 }];
+  const full = closeLedgerEntry('close_position', { contractId: 'MNQ' }, long2, now);
+  assert.deepStrictEqual(full, { contractId: 'MNQ', root: 'MNQ', sign: -1, size: 2, netBefore: 2, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime(), unconfirmed: true });
+  assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 1 }, long2, now).size, 1);
+  assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 5 }, long2, now).size, 2);
+  assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MES' }, long2, now), null);
+  assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MNQ' }, null, now), null);
+});
+
+test('closeRefused: only a body saying success: false is a refusal; an error reply is an unknown outcome', () => {
+  const reply = (text, extra = {}) => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text }], ...extra } });
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: false, errorCode: 2 }))), true);
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: true }))), false);
+  assert.strictEqual(closeRefused(reply('HTTP 504 gateway timeout', { isError: true })), false);
+  assert.strictEqual(closeRefused(reply(JSON.stringify({ success: false }), { isError: true })), false, 'an error reply, whatever it says');
+  assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'boom' } }), false);
+  assert.strictEqual(closeRefused(reply('not json')), false);
+  // Sure refusals in an error reply: the broker's guardrail, the translator's "not sent", a malformed request.
+  assert.strictEqual(closeRefused(reply('Blocked by risk guardrail: trading is disabled', { isError: true })), true);
+  assert.strictEqual(closeRefused(reply('contract-translator: not sent: no ES contract found at this broker', { isError: true })), true);
+  assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'invalid params' } }), true);
+  assert.strictEqual(closeRefused(null), false);
 });

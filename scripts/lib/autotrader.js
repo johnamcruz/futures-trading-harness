@@ -41,8 +41,11 @@ const DEFAULTS = {
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
   cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no analysts or news, the trader runs the snapshot, scan, and MTF read and calls risk-manager only on a candidate (use for 1m)
-  earlyCloseDates: [], // e.g. ["2026-11-27", "2026-12-24"]: CME early-close trading days (YYYY-MM-DD, the date the day ends on)
-  closedDates: [], // e.g. ["2026-11-26", "2026-12-25"]: CME holidays with no session (the runner and the gate stay out)
+  // Added to the built-in CME calendar (trading/exchange-calendar.js), which covers 2026-2027:
+  // Added to the built-in CME calendar (trading days, YYYY-MM-DD of the date they end on). To trade past its end,
+  // add a whole year: every holiday and every early close (exchange-calendar.js cmeHolidays lists the rules).
+  earlyCloseDates: [], // e.g. ["2028-07-03", "2028-11-24"]: early closes (13:00 ET)
+  closedDates: [], // e.g. ["2028-01-17", ...]: holidays and other closures (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
   alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)
@@ -211,6 +214,12 @@ function validateConfig(raw) {
     if (!Array.isArray(cfg[k]) || !cfg[k].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) errors.push(`${k}: ["YYYY-MM-DD", ...]`);
   }
   if (cfg.earlyCloseEodAt && !parseAt(cfg.earlyCloseEodAt)) errors.push('earlyCloseEodAt: "HH:MM@Zone"');
+  if (Array.isArray(cfg.closedDates) && Array.isArray(cfg.earlyCloseDates)) {
+    const { exchangeCalendar } = require('./trading/exchange-calendar');
+    const cal = exchangeCalendar({ closed: cfg.closedDates, early: cfg.earlyCloseDates });
+    cfg.closedDates = [...cal.closedDates].sort();
+    cfg.earlyCloseDates = [...cal.earlyCloseDates].sort();
+  }
   if (cfg.bars === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.bars = historyBars(cfg.timeframe);
   if (cfg.maxCyclesPerDay === null && Number.isInteger(cfg.timeframe) && cfg.timeframe > 0) cfg.maxCyclesPerDay = Math.ceil((22 * 60) / cfg.timeframe) + 10;
   // US Eastern or Central time only: they change clocks with the exchange, so
@@ -452,9 +461,10 @@ function freshDay(key) {
  */
 function decide(cfg, state, now, { killSwitch = false } = {}) {
   const key = dayKey(now);
-  // A previous trading day that traded but never finished end of day (runner
-  // down, crash): flatten first, whatever the time.
-  if (state && state.day !== key && !state.eodDone && (state.cycles > 0 || state.premarketDone)) {
+  // A previous trading day that traded, or whose end of day was tried, but
+  // never finished end of day (runner down, crash, not verified flat):
+  // flatten first, whatever the time.
+  if (state && state.day !== key && !state.eodDone && (state.cycles > 0 || state.premarketDone || state.eodAttempted)) {
     return { action: 'eod', state: { ...state } };
   }
   const s = state && state.day === key ? { ...state } : freshDay(key);

@@ -26,8 +26,8 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateCancel, evaluateModifyAccount, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
+const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -41,14 +41,6 @@ const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
-
-function resultJson(response) {
-  try {
-    return JSON.parse(response.result.content[0].text);
-  } catch (_err) {
-    return null;
-  }
-}
 
 async function accountFacts(args, caller, withTrades = true) {
   const accountId = args.accountId;
@@ -91,6 +83,8 @@ async function accountViolations(args, caller, now, ledger, extraOrders = []) {
 function main(argv) {
   const sep = argv.indexOf('--');
   let command = sep === -1 ? argv : argv.slice(sep + 1);
+  // Behind the contract translator (the configured broker): one standard name per contract for the gate (canonicalArgs).
+  const canon = command.length === 0 ? canonicalArgs : a => a;
   // No command: the broker MCP server named in the broker config (broker/config.js).
   if (command.length === 0) {
     try {
@@ -117,7 +111,7 @@ function main(argv) {
   // Orders of unknown outcome: their records on disk, settled from the broker's orders (order-tracker.js).
   const logErr = msg => process.stderr.write(`[mcp-gateway] ${msg}\n`);
   const tracker = createOrderTracker({
-    env: process.env, graceMs: GRACE_MS, onError: logErr,
+    env: process.env, graceMs: GRACE_MS, onError: logErr, canon,
     searchOrders: async a => parseToolJson(await caller.call('search_orders', a), 'search_orders'),
   });
 
@@ -131,23 +125,21 @@ function main(argv) {
     return r;
   };
 
-  const check = async (args, tool, id) => {
+  const check = async (sentArgs, tool, id) => {
+    const args = canon(sentArgs); // one name per contract for the gate and its ledger
     const now = gateNow();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
-    if (tool === 'cancel_order') {
-      // An entry of unknown outcome counts as filled (its bracket stop may protect it); an exit of
-      // unknown outcome doesn't count as done: neither lets the last protective stop go.
+    if (tool !== 'place_order') {
+      // cancel, modify, partial close: against the account, counting recent orders and orders of unknown outcome.
+      if (tool === 'modify_order' && base.violations.length) return base;
       const { unknown } = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...tracker.cancelLedger(unknown, now)], now }));
+      return blocked(evaluateAccountChange(tool, {
+        input: args, positions, orders, config: loadConfig(process.env), now,
+        ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger.filter(e => !e.unconfirmed), ...tracker.cancelLedger(unknown, now)],
+      }));
     }
-    if (tool === 'modify_order') {
-      if (base.violations.length) return base;
-      const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateModifyAccount({ input: args, positions, orders, config: loadConfig(process.env) }));
-    }
-    if (tool !== 'place_order') return base;
     // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
     // skippable); exits and stops still go, checked against the account as it would be if it filled.
     const { unknown, lookupFailed } = await settle(args.accountId, now);
@@ -197,15 +189,12 @@ function main(argv) {
   const recordSent = (id, response) => {
     const sent = sentNet.get(id);
     sentNet.delete(id);
-    if (!sent || !response || response.error || (response.result && response.result.isError)) return;
-    const { args, observedNet, observedRootNet, closeTool } = sent;
-    if (closeTool) {
-      // A close is a market order the account may not show yet, like one sent through place_order. Only one
-      // the server confirmed (success: true; a refused close comes back as success: false) counts.
-      const res = resultJson(response);
-      if (!observedNet || !res || res.success !== true) return;
-      const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
-      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt });
+    if (!sent || ((!response || response.error || (response.result && response.result.isError)) && !sent.closeEntry)) return;
+    const { args, observedNet, observedRootNet, closeEntry } = sent;
+    if (closeEntry) {
+      // Counted since it was sent: only a refusal (success: false) drops it; an error reply is an unknown outcome and stays.
+      if (closeRefused(response)) ledger = ledger.filter(e => e !== closeEntry);
+      else if ((resultJson(response) || {}).success === true) Object.assign(closeEntry, { at: gateNow().getTime(), unconfirmed: false });
       return;
     }
     const placed = resultJson(response);
@@ -277,11 +266,12 @@ function main(argv) {
       // before them so the ledger can count them until the account shows it.
       for (const m of lane) {
         const close = /(?:^|__)(close_position|partial_close_position)$/.exec(String(m.params.name || ''));
-        const args = m.params.arguments || {};
+        const args = canon(m.params.arguments || {});
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
-          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId), sentAt: gateNow().getTime() });
+          const closeEntry = closeLedgerEntry(close[1], args, positions, gateNow());
+          if (closeEntry) { ledger.push(closeEntry); sentNet.set(m.id, { closeEntry }); }
         } catch (err) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }

@@ -11,7 +11,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 - Any time a decision depends on an indicator value or a level.
 - Checking whether a strategy's mechanical trigger fired on the last closed bar.
-- Getting a reference stop distance (0.5 × ATR(20), the stop algoTraderBot trained on).
+- Getting a reference stop distance (0.5 × ATR(20), the stop the original bot trained on).
 
 ## How It Works
 

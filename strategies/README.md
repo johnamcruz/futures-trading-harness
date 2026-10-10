@@ -56,11 +56,11 @@ with `long:`/`short:` condition lists in the frontmatter (see
 `vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
 `signal: manual` and is judged by the agents from the body. Every shipped
-strategy is rules, including the six algoTraderBot ports. Zone logic the
+strategy is rules, including the six ported strategies. Zone logic the
 rules can't spell out (cisd_ote) is a series the rules use (`cisd_ote_dir`).
 
-The ports' rules trade exactly as algoTraderBot's detectors do:
-`tests/lib/parity.test.js` checks every signal and stop against algoTraderBot's
+The ports' rules trade exactly as the original bot's detectors do:
+`tests/lib/parity.test.js` checks every signal and stop against the original bot's
 own output on its data. Their frontmatter adds no extra gates: no
 `sessions`, `regimes`, or `filters`. The runner's sessions and end of day
 decide when they trade. To adapt one to a regime, add `regimes:` (or a

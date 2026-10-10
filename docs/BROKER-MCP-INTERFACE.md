@@ -177,6 +177,9 @@ Input: **`accountId`**.
 
 Result: list of `{ id, accountId, contractId, creationTimestamp, type (1 long,
 2 short), size, averagePrice (entry), direction ("long" | "short") }`.
+`size` is a whole number of contracts (0 or more); the harness never reads a
+missing or malformed size as flat: its order gate refuses orders on that
+account, and its runner treats the position as open.
 
 #### `list_open_orders`
 
@@ -258,7 +261,9 @@ Input: **`accountId`**, **`contractId`**, `reason`. Result: outcome (close codes
 #### `partial_close_position`
 
 Input: **`accountId`**, **`contractId`**, **`size`** (positive integer),
-`reason`. Result: outcome (close codes).
+`reason`. Result: outcome (close codes). The harness's gateway checks it
+against the account (an open position, a size no larger than it); the
+server should refuse a size larger than the position too.
 
 ### Outcomes
 

@@ -15,11 +15,11 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true })
 const lines = file => (fs.readFileSync(file, 'utf8').match(/\n/g) || []).length;
 
 // Logic lives in scripts/lib/ and is tested: each module is loaded by a test of its own.
-const LIB_WITHOUT_OWN_TEST = ['backtest/parquet', 'paths', 'rl/env-config', 'rl/policy-net', 'trading/cisd-ote', 'trading/contracts'];
+const LIB_WITHOUT_OWN_TEST = ['backtest/parquet', 'paths', 'rl/policy-net', 'trading/cisd-ote', 'trading/contracts'];
 // CLIs stay thin (logic goes to scripts/lib/): a new CLI stays under 200 lines; the larger ones that
 // predate the rule are pinned near their size and may only shrink. Hook scripts stay under 200 lines.
 const CLI_MAX_LINES = 200;
-const CLI_CEILINGS = { 'autotrader.js': 401, 'mcp-gateway.js': 316 };
+const CLI_CEILINGS = { 'autotrader.js': 401, 'mcp-gateway.js': 306 };
 const PIN_SLACK = 25; // a pinned CLI that shrank by more than this: lower its ceiling
 const HOOK_MAX_LINES = 200;
 

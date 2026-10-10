@@ -1,6 +1,6 @@
 ---
 name: cisd_ote
-description: ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from algoTraderBot. Use after a liquidity sweep and displacement.
+description: ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from the original bot. Use after a liquidity sweep and displacement.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -18,12 +18,12 @@ exit:
 risk:
   stop: cisd_ote_risk
   min_rr: 2
-source: algoTraderBot/strategies/cisd_ote.py, cisd_ote_detect.py
+source: original bot, strategies/cisd_ote.py, cisd_ote_detect.py
 ---
 
 # Strategy: CISD + OTE (`setup:cisd_ote`)
 
-Source: `algoTraderBot/strategies/cisd_ote.py` and `cisd_ote_detect.py`
+Source: the original bot's `cisd_ote.py` and `cisd_ote_detect.py`
 (cisd_tf=12 min, swing_period=3, tolerance=0.5, expiry_bars=9,
 liquidity_lookback=5, fib 0.5–0.705, displacement body ratio ≥ 0.3 and close
 strength ≥ 0.4, pivot stop). Zone tracking across bars is more than the
@@ -66,7 +66,7 @@ setup; the steps below are what the series computes.
 5. **Entry** (entry_mode "bot"): a 3-minute bar trades into the zone and
    reaches its bottom (a long's low at or below the zone bottom; a short's high
    at or above it), after the 12-minute zone bar has closed. The signal fires
-   on the next 3-minute bar; enter at market on its close, as algoTraderBot
+   on the next 3-minute bar; enter at market on its close, as the original bot
    does.
 6. **Stop:** the leg's origin (L for longs, H for shorts). The stop distance
    is measured from that entry bar's open, as in the source, and applied from

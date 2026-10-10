@@ -21,7 +21,9 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    interactive session you may ask the user only about cancelling a pending
    entry earlier than that.
 3. Confirm with `list_open_positions` and `list_open_orders` that nothing is
-   left.
+   left. A close the broker accepted isn't a flat account: close again until
+   the position is gone. The autonomous runner does the same, and its end of
+   day is done only once the account reads flat.
 4. Run trade-review with end-of-day lessons (the trade-reviewer role).
 5. Prop attempt running: the autonomous runner records the day's closing
    balance itself (it retries a failed record and lists a close it couldn't

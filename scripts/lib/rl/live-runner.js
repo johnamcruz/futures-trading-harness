@@ -18,6 +18,7 @@
 const { loadAccounts } = require('../trading/accounts');
 const { contractRoot } = require('../trading/journal');
 const { specFor, familyOf } = require('../trading/contracts');
+const { isOpen } = require('../trading/positions');
 const { loadBundle, bundleMismatch } = require('./policy-bundle');
 const live = require('./live');
 const combine = require('../trading/combine');
@@ -66,7 +67,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     if (!list.length || !accountId) return;
     if (list.length > 1) warnOnce('many', `strategies trade ${list.length} account profiles (${list.map(a => a.name).join(', ')}) on one live account; each sees the same balance`);
     const { positions } = await client.accountState(accountId);
-    const openIds = positions.filter(p => Number(p.size || 0) > 0).map(p => String(p.contractId));
+    const openIds = positions.filter(isOpen).map(p => String(p.contractId));
     const open = openIds.length;
     // A closing balance is read only once the account is flat (the closing fills are in it).
     if (flat && open) throw new Error(`${open} position(s) still open (${openIds.join(', ')}); the closing balance is read once flat`);

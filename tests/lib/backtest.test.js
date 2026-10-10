@@ -93,7 +93,7 @@ function bars(path) {
 }
 
 const run = (path, s = strategy(), opts = {}) => runEngine([{ symbol: 'MNQ', bars: bars(path), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], {
-  // The fill mechanics as algoTraderBot: at the signal close, no slippage (the live-latency default has its own tests).
+  // The fill mechanics as the original bot: at the signal close, no slippage (the live-latency default has its own tests).
   timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, ...opts,
 }).trades;
 
@@ -127,7 +127,7 @@ test('engine: with harness rules, no entries outside sessions and a flatten at e
   assert.deepStrictEqual(eod.map(t => t.reason), ['eod']);
 });
 
-test('report: R stats as algoTraderBot reports them, plus dollars and drawdown', () => {
+test('report: R stats as the original bot reports them, plus dollars and drawdown', () => {
   const trades = [{ r: 2, mfeR: 2.5, net: 40, fees: 0.74 }, { r: -1, mfeR: 0.5, net: -20, fees: 0.74 }, { r: -1, mfeR: 0.2, net: -20, fees: 0.74 }];
   const s = stats(trades);
   assert.deepStrictEqual([s.trades, s.winRate, s.meanR, s.sumR, s.profitFactorR, s.capture, s.netPnL], [3, 0.333, 0, 0, 1, 0, 0]);
@@ -211,7 +211,7 @@ test('the gate limits come from the environment, as live', () => {
   assert.ok([...perDay.values()].every(n => n <= 2), 'at most one entry per trading day (a calendar day spans two)');
 });
 
-test('engine: a fixed target is measured from the unrounded stop distance, as algoTraderBot', () => {
+test('engine: a fixed target is measured from the unrounded stop distance, as the original bot', () => {
   // Stop 0.9 x ATR ~ 0.9045: 4 ticks of stop, but the 2R target is round(1.809 / 0.25) = 7 ticks.
   const trades = run([[100, 101, 99.9, 101], [101, 102.8, 100.8, 102.5]], strategy({ risk: { stop: 'atr:0.9', min_rr: 2 } }));
   assert.deepStrictEqual(trades.map(t => [t.initialStop, t.reason, t.exit]), [[100, 'target', 102.75]]);
@@ -267,7 +267,7 @@ test('a stop expression with no positive distance makes no candidate', () => {
   assert.match(r.filtersFailed.join(' '), /no positive distance/);
 });
 
-test('ticks round half to even, as algoTraderBot (Python round)', () => {
+test('ticks round half to even, as the original bot (Python round)', () => {
   const { roundHalfEven } = require('../../scripts/lib/backtest/engine');
   assert.deepStrictEqual([32.5, 33.5, 32.4999, 32.6, 8.125 / 0.25].map(roundHalfEven), [32, 34, 32, 33, 32]);
 });

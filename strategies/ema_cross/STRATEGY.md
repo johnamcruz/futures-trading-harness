@@ -1,6 +1,6 @@
 ---
 name: ema_cross
-description: 9/20 EMA crossover trend-continuation strategy gated by ADX >= 18 on 3-minute futures bars, ported from algoTraderBot. Use when the fast EMA crosses the slow EMA in a trending regime.
+description: 9/20 EMA crossover trend-continuation strategy gated by ADX >= 18 on 3-minute futures bars, ported from the original Python bot. Use when the fast EMA crosses the slow EMA in a trending regime.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -21,12 +21,12 @@ exit:
 risk:
   stop: atr:0.5
   min_rr: 2
-source: algoTraderBot/strategies/ema_cross.py
+source: original bot, strategies/ema_cross.py
 ---
 
 # Strategy: EMA 9/20 Cross (`setup:ema_cross`)
 
-Source: `algoTraderBot/strategies/ema_cross.py` (EMA_FAST=9, EMA_SLOW=20,
+Source: the original bot's `ema_cross.py` (EMA_FAST=9, EMA_SLOW=20,
 ADX_GATE=18, stop 0.5 × ATR(20)).
 
 ## When to Use
@@ -47,7 +47,7 @@ ADX_GATE=18, stop 0.5 × ATR(20)).
 **Entry:** market on the trigger bar's close, as the source does.
 
 **Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
-ticks), as algoTraderBot places it.
+ticks), as the original bot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),

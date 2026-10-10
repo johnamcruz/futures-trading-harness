@@ -84,6 +84,18 @@ class PipelineTest(unittest.TestCase):
             again = pipeline.run_retrain(d / "retrain" / "f.json")  # resumable: nothing retrained
             self.assertEqual(again["seeds"], cands["seeds"])
             self.assertEqual(cands["config"]["seeds"], [1, 2], "the config the seeds were trained with")
+            # The simulator they were trained in, with live fills; ship refuses seeds from another one.
+            self.assertGreaterEqual(cands["engine"]["slippageTicks"], 1)
+            self.assertEqual(cands["engine"]["fill"], "next-open")
+            cand_file = d / "out" / "retrain" / "candidates.json"
+            saved = cand_file.read_text()
+            cand_file.write_text(json.dumps({**json.loads(saved), "engine": {**cands["engine"], "slippageTicks": 0}}))
+            with self.assertRaisesRegex(ValueError, "another simulator"):
+                pipeline.run_retrain(d / "retrain" / "f.json")
+            if not any(c["selection"]["blown"] for c in cands["seeds"].values()):
+                with self.assertRaisesRegex(ValueError, "another simulator"):
+                    pipeline.run_ship(d / "ship" / "f.json")
+            cand_file.write_text(saved)
             if any(c["selection"]["blown"] for c in cands["seeds"].values()):
                 with self.assertRaisesRegex(ValueError, "isn't robust"):
                     pipeline.run_ship(d / "ship" / "f.json")
@@ -118,6 +130,12 @@ class PipelineTest(unittest.TestCase):
 
 
 class PipelineConfigTest(unittest.TestCase):
+    def test_fills_ignore_the_calendar_dates(self):
+        a = {"gate": True, "sessions": ["18:00-15:50@America/New_York"], "eodAt": "15:50@America/New_York", "slippageTicks": 1, "fill": "next-open", "closedDates": []}
+        self.assertEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "closedDates": ["2028-12-25"]}), "a year's holidays added: same fills")
+        self.assertNotEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "slippageTicks": 0}))
+        self.assertNotEqual(pipeline.fills_of(a), pipeline.fills_of({**a, "fill": "close"}))
+
     def test_the_gate_account_data_and_windows_cannot_be_searched_and_the_gate_cannot_be_lowered(self):
         self.assertIn("never the strategy", pipeline.check_spec("windows.oos", {"type": "float", "low": 0, "high": 1}))
         self.assertIn("never the strategy", pipeline.check_spec("min_pass_rate", {"type": "float", "low": 0, "high": 1}))

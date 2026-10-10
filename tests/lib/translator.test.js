@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { parseTicker, parseStandardName, isStandardName, createTranslator, standardRoot, TranslationError } = require('../../scripts/lib/broker/translator');
+const { parseTicker, parseStandardName, isStandardName, createTranslator, standardRoot, canonicalName, TranslationError } = require('../../scripts/lib/broker/translator');
 const fs = require('fs');
 const { contractRoot, contractMonthTag, mayBeRoot } = require('../../scripts/lib/trading/journal');
 const { tmpDir } = require('../helpers');
@@ -202,4 +202,19 @@ test('cache: a front month without a day is ignored; a cache that can\'t be writ
   } finally {
     process.stderr.write = write;
   }
+});
+
+test('canonicalName: every name for a contract becomes its one standard name (the front month by its root), from the cache only', () => {
+  const cache = {
+    ids: { 'CON.F.US.MNQ.Z26': { root: 'MNQ', month: '2026-12' }, 'CON.F.US.MNQ.H27': { root: 'MNQ', month: '2027-03' } },
+    front: { MNQ: { id: 'CON.F.US.MNQ.Z26', month: '2026-12', day: '2026-10-07' } },
+  };
+  assert.strictEqual(canonicalName('MNQ', cache), 'MNQ');
+  assert.strictEqual(canonicalName('MNQ:2026-12', cache), 'MNQ', 'the front month by its month');
+  assert.strictEqual(canonicalName('CON.F.US.MNQ.Z26', cache), 'MNQ', 'the front month by the broker id');
+  assert.strictEqual(canonicalName('CON.F.US.MNQ.H27', cache), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('MNQ:2027-03', cache), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('ES:2026-12', cache), 'ES:2026-12', 'no front month known: as given');
+  assert.strictEqual(canonicalName('CON.F.US.XYZ', cache), 'CON.F.US.XYZ');
+  assert.strictEqual(canonicalName(undefined, cache), undefined);
 });
