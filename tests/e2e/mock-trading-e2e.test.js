@@ -562,6 +562,20 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
     gw.close();
   }
 
+  // The same three losses on the previous trading day count for that day only: today's entry goes.
+  const w3 = world(at);
+  const sig3 = signalOnFiredBar(w3);
+  exchange.update(w3.state, s => { s.nowMs = Date.parse(at) - 86400000; }); // a day earlier, same time: yesterday's session
+  for (let i = 0; i < 3; i += 1) roundTrip(w3, -5);
+  exchange.update(w3.state, s => { s.nowMs = Date.parse(at); });
+  const gw3 = gatewayClient(w3);
+  try {
+    const ok = await attempt(gw3, 'place_order', bosEntry(sig3));
+    assert.ok(ok.ok, `yesterday's losses: ${ok.error}`);
+  } finally {
+    gw3.close();
+  }
+
   // Two losses, then a winner: no streak, under the day's limit: the same entry goes.
   const w2 = world(at);
   const sig2 = signalOnFiredBar(w2);

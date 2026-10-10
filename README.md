@@ -83,7 +83,9 @@ outside the session whatever the settings say, and the runner closes any
 position it finds outside it. Exits are always allowed.
 
 A trading day runs from the 18:00 ET open to the 16:00 ET close (Sunday
-evening and Monday are Monday's trading day). Strategies narrow their own
+evening and Monday are Monday's trading day): one day from open to close,
+whatever the calendar date, for everything the harness counts by day (the
+gate's loss and entry counts, end of day, prop closes, the calendar). Strategies narrow their own
 hours with `sessions`, using named sessions or explicit windows:
 
 | Session | New York time |

@@ -50,3 +50,25 @@ test('inWindow is start-inclusive, end-exclusive, and wraps midnight', () => {
   assert.strictEqual(inWindow(new Date('2026-10-08T01:00:00Z'), night), false);
   assert.strictEqual(minutesOfDay(new Date('2026-10-07T14:05:00Z'), 'UTC'), 14 * 60 + 5);
 });
+
+test('one trading day runs from the 18:00 ET open to the 16:00 ET close, the same day everywhere it is counted', () => {
+  const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+  const { sessionKey } = require('../../scripts/lib/trading/indicators');
+  const { dayKey } = require('../../scripts/lib/autotrader');
+  const { dayEndMs } = require('../../scripts/lib/trading/prop-state');
+  const et = (date, hhmm) => zonedTimeToUtc({ year: +date.slice(0, 4), month: +date.slice(5, 7), day: +date.slice(8, 10), hour: +hhmm.slice(0, 2), minute: +hhmm.slice(3, 5) }, 'America/New_York');
+  const days = at => [tradingDayKey(at), dayKey(at), sessionKey(at.toISOString(), 18 * 60).replace(/-(\d)(?=-|$)/g, '-0$1')];
+  // Sunday's 18:00 open through Monday's 16:00 close is Monday's day, in the gate, the runner and the indicators alike.
+  for (const [date, hhmm] of [['2026-10-11', '18:00'], ['2026-10-11', '23:59'], ['2026-10-12', '00:00'], ['2026-10-12', '09:30'], ['2026-10-12', '15:59']]) {
+    assert.deepStrictEqual(days(et(date, hhmm)), ['2026-10-12', '2026-10-12', '2026-10-12'], `${date} ${hhmm} ET`);
+  }
+  // The 16:00-18:00 break belongs to the day that closed; the 18:00 open starts the next.
+  assert.strictEqual(tradingDayKey(et('2026-10-12', '17:00')), '2026-10-12');
+  assert.strictEqual(tradingDayKey(et('2026-10-12', '18:00')), '2026-10-13');
+  // A day ends at the next open (18:00 ET), in summer and winter, and Friday's at Friday 18:00.
+  assert.strictEqual(dayEndMs('2026-10-12'), et('2026-10-12', '18:00').getTime());
+  assert.strictEqual(dayEndMs('2026-12-14'), et('2026-12-14', '18:00').getTime());
+  assert.strictEqual(dayEndMs('2026-10-16'), et('2026-10-16', '18:00').getTime());
+  // Across a clock change: the Sunday 18:00 open after the November change is Monday's day.
+  assert.strictEqual(tradingDayKey(et('2026-11-01', '18:30')), '2026-11-02');
+});
