@@ -581,4 +581,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The hook runtime and plugin architecture are
+derived from [ECC](https://github.com/affaan-m/ECC) by Affaan Mustafa, whose
+copyright notice the license keeps.
