@@ -60,15 +60,38 @@ test('ledger: an unknown market exit counts as if it filled; limits and stops co
   const ledger = m.markerLedger(unknown, NOW);
   assert.strictEqual(ledger.length, 1);
   assert.deepStrictEqual(pendingState(ledger, 'MNQ', 1, NOW, undefined, { exact: true }), { projected: 0, pending: true });
-  assert.deepStrictEqual(m.markerOrders(unknown), [
+  assert.deepStrictEqual(m.markerOrders(unknown, NOW), [
     { id: 'pending:l', contractId: 'MNQ', type: 1, side: 1, size: 1 },
     { id: 'pending:s', contractId: 'MNQ', type: 4, side: 0, size: 2 },
   ]);
+  // After the grace period the broker's account is the truth: nothing is projected.
+  const later = new Date(NOW.getTime() + m.GRACE_MS);
+  assert.deepStrictEqual([m.markerLedger(unknown, later), m.markerOrders(unknown, later)], [[], []]);
+});
+
+test('resolve: an order still awaited is never gone; an older order reusing the tag doesn\'t settle it', () => {
+  const old = marker({ tag: 'a', sentAt: new Date(NOW.getTime() - m.GRACE_MS).toISOString() });
+  assert.deepStrictEqual(m.resolveMarkers([old], [], NOW, m.GRACE_MS, { inFlight: x => x.tag === 'a' }).unknown.map(u => u.tag), ['a']);
+  const fresh = marker({ tag: 'r' });
+  const before = { id: 1, customTag: 'r', status: 2, creationTimestamp: new Date(NOW.getTime() - 3600000).toISOString() };
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [before], NOW).unknown.map(u => u.tag), ['r']);
+  const after = { ...before, id: 2, creationTimestamp: NOW.toISOString() };
+  assert.deepStrictEqual(m.resolveMarkers([fresh], [before, after], NOW).placed.map(p => p.order.id), [2]);
+});
+
+test('refusals: only a guardrail, the translator, or the broker\'s own refusal settles an order as not placed', () => {
+  assert.ok(m.definitelyRefused('Blocked by risk guardrail: trading disabled'));
+  assert.ok(m.definitelyRefused('contract: no ES contract found at this broker'));
+  assert.ok(m.definitelyRefused('{"orderId":null,"success":false,"errorCode":2,"errorName":"OrderRejected"}'));
+  for (const t of ['{"success":false,"errorCode":6}', '{"success":false,"errorCode":7}', '{"success":false,"errorMessage":"Request timed out"}',
+    'HTTP 500 Internal Server Error', 'Service Unavailable', 'EPIPE', 'The operation was aborted', '']) {
+    assert.ok(!m.definitelyRefused(t), t);
+  }
 });
 
 test('message: names each unknown order, what settles it, and what still goes through', () => {
   const text = m.pendingMessage([marker(), { file: '/h/pending-orders/x.json', unreadable: true }], NOW);
   assert.match(text, /outcome of 2 orders is unknown: sell 1 MNQ sent 10 s ago \(customTag fth-0001\); an unreadable record \/h\/pending-orders\/x\.json/);
-  assert.match(text, /until the order shows in the broker's orders, or 2 min pass without it\. Exits, stop moves and cancels still go through/);
+  assert.match(text, /until the order shows in the broker's orders, or 2 min pass without it\. Exits, stop moves and cancels are still checked as usual.*close_position always goes/);
   assert.match(m.pendingMessage([marker()], NOW, m.GRACE_MS, { lookupFailed: true }), /until the broker's orders \(search_orders\) can be read again/);
 });

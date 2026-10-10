@@ -507,7 +507,7 @@ test('MCP gateway: an order of unknown outcome blocks new entries, not exits, st
   assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:modify_order');
   assert.ok(!/order-pending/.test(byId[3].result.content[0].text), byId[3].result.content[0].text);
   assert.strictEqual(byId[4].result.content[0].text, 'forwarded:tools/call:close_position');
-  assert.match(byId[5].result.content[0].text, /\[order-pending\] The outcome of an order is unknown: sell 1 MNQ .*Exits, stop moves and cancels still go through/);
+  assert.match(byId[5].result.content[0].text, /\[order-pending\] The outcome of an order is unknown: sell 1 MNQ .*close_position always goes/);
 });
 
 test('MCP gateway: an unknown order outcome survives a gateway restart until the broker\'s orders settle it', async () => {
@@ -583,6 +583,38 @@ test('MCP gateway: with an exit of unknown outcome, the stop can\'t be cancelled
   assert.strictEqual(noStop.byId[3].result.content[0].text, 'forwarded:tools/call:place_order');
 });
 
+const writeUnknown = (dir, extra) => require('../../scripts/lib/trading/order-markers').writeMarker({ FTH_HOME: path.join(dir, '.futures-trading-harness') }, {
+  tag: 'u-1', accountId: 1, contractId: 'MNQ', side: 'buy', size: 1, type: 'market', risk: false, observedNet: 0, observedRootNet: 0,
+  args: { contractId: 'MNQ', side: 'buy', rationale: 'setup:orb long, stop 21480' }, sentAt: new Date(Date.parse(TEST_NOW) - 5000).toISOString(), ...extra,
+});
+
+test('MCP gateway: an entry of unknown outcome keeps its bracket stop from being cancelled', async () => {
+  const dir = tmpDir();
+  writeUnknown(dir);
+  // The account doesn't show the fill yet, but the bracket stop rests: it is the entry's protection.
+  const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
+});
+
+test('MCP gateway: an unknown entry listed as pending still counts until the account shows it', async () => {
+  const dir = tmpDir();
+  writeUnknown(dir);
+  const { byId } = await gatewayRun({ FAKE_SEARCH_ORDERS: JSON.stringify([{ id: 41, customTag: 'u-1', status: 6 }]) }, [call(2, 'place_order', ORDER)], { dir });
+  assert.match(byId[2].result.content[0].text, /\[position-open\] A MNQ position is about to open/);
+});
+
+test('MCP gateway: an unknown exit holds other exits back only within the grace period, and says so', async () => {
+  const dir = tmpDir();
+  writeUnknown(dir, { side: 'sell', risk: true, observedNet: 1, observedRootNet: 1, args: { contractId: 'MNQ', side: 'sell', rationale: '[exit] flatten' } });
+  const exit = call(1, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten again' });
+  // The lookup fails throughout (FAKE_SEARCH_ORDERS not JSON).
+  const soon = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_SEARCH_ORDERS: 'not json' }, [exit], { dir });
+  assert.match(soon.byId[1].result.content[0].text, /\[exposure\] .*once recent orders fill.*customTag u-1.*close_position flattens now/);
+  const later = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_SEARCH_ORDERS: 'not json', FTH_TEST_NOW: new Date(Date.parse(TEST_NOW) + 4 * 3600000).toISOString(), FTH_ENTRY_HOURS: '' }, [exit], { dir });
+  assert.strictEqual(later.byId[1].result.content[0].text, 'forwarded:tools/call:place_order', 'after the grace period the account is the truth for exits');
+});
+
 test('MCP gateway: a refusal settles an order; a transport failure leaves its outcome unknown', async () => {
   const dir = tmpDir();
   const pending = path.join(dir, '.futures-trading-harness', 'pending-orders');
@@ -590,8 +622,8 @@ test('MCP gateway: a refusal settles an order; a transport failure leaves its ou
   await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_PLACE_ERROR: '{"orderId":null,"success":false,"errorCode":2,"errorName":"OrderRejected"}' }, [exit], { dir });
   await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_PLACE_ERROR: 'Blocked by risk guardrail: trading disabled' }, [exit], { dir });
   assert.ok(!fs.existsSync(pending) || fs.readdirSync(pending).length === 0, 'refused: nothing left unknown');
-  await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_PLACE_ERROR: 'POST /api/Order/place timed out after 10000 ms' }, [exit], { dir });
-  assert.strictEqual(fs.readdirSync(pending).length, 1, 'the server\'s own call to the broker timed out: the order may exist');
+  await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_PLACE_ERROR: 'HTTP 500 Internal Server Error' }, [exit], { dir });
+  assert.strictEqual(fs.readdirSync(pending).length, 1, 'the server\'s own call to the broker failed: the order may exist');
 });
 
 test('MCP gateway: an unknown entry the broker lists as filled is recorded for the runner and counted until the account shows it', async () => {

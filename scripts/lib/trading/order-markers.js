@@ -109,45 +109,54 @@ const isMarket = m => String(m.type || 'market').toLowerCase() === 'market';
  *   with no status, when it was a market order);
  * - gone: the order carrying the tag was cancelled, expired or rejected, or
  *   none does and the grace period has passed since it was sent;
- * - unknown: everything else (and every marker when the lookup failed).
+ * - unknown: everything else (and every marker when the lookup failed, or
+ *   whose call the caller is still waiting on).
  */
-function resolveMarkers(markers, orders, now, graceMs = GRACE_MS) {
+function resolveMarkers(markers, orders, now, graceMs = GRACE_MS, { inFlight = () => false } = {}) {
   const listed = Array.isArray(orders);
-  const byTag = new Map((listed ? orders : []).filter(o => o && o.customTag !== undefined && o.customTag !== null).map(o => [String(o.customTag), o]));
+  const tagged = (listed ? orders : []).filter(o => o && o.customTag !== undefined && o.customTag !== null);
+  // The order carrying the tag, created after the marker's order was sent (a client may reuse a tag of an older, finished order).
+  const find = m => tagged.filter(o => String(o.customTag) === m.tag)
+    .filter(o => !Number.isFinite(Date.parse(o.creationTimestamp)) || Date.parse(o.creationTimestamp) >= Date.parse(m.sentAt) - 5000)
+    .pop();
   const placed = [];
   const gone = [];
   const unknown = [];
   for (const m of markers) {
-    const order = m.unreadable ? null : byTag.get(m.tag);
+    const order = m.unreadable ? null : find(m);
     if (m.unreadable || !listed) unknown.push(m);
     else if (order && DEAD.has(Number(order.status))) gone.push(m);
     else if (order) {
       const status = order.status === undefined || order.status === null ? null : Number(order.status);
       placed.push({ marker: m, order, filled: status === STATUS.filled || (status === null && isMarket(m)) });
-    } else if (now.getTime() - Date.parse(m.sentAt) >= graceMs) gone.push(m);
+    } else if (now.getTime() - Date.parse(m.sentAt) >= graceMs && !inFlight(m)) gone.push(m);
     else unknown.push(m);
   }
   return { placed, gone, unknown };
 }
 
+const recent = (m, now, graceMs) => now.getTime() - Date.parse(m.sentAt) < graceMs;
+
 /**
  * Ledger entries (see account-gate pendingState) for unknown market orders:
  * an exit checks against the account as it would be if they filled, so two
  * exits can't flip it. Limit and stop orders rest first: see markerOrders.
+ * Only within the grace period: after it, the broker's account is the truth
+ * (an order that never came would otherwise hold every exit back).
  */
-function markerLedger(markers, now) {
+function markerLedger(markers, now, graceMs = GRACE_MS) {
   return markers
-    .filter(m => !m.unreadable && isMarket(m) && Number.isFinite(m.observedNet) && Number(m.size) > 0)
+    .filter(m => !m.unreadable && isMarket(m) && Number.isFinite(m.observedNet) && Number(m.size) > 0 && recent(m, now, graceMs))
     .map(m => ({
       contractId: m.contractId, sign: String(m.side).toLowerCase() === 'buy' ? 1 : -1, size: Number(m.size),
       netBefore: m.observedNet, rootNetBefore: Number.isFinite(m.observedRootNet) ? m.observedRootNet : m.observedNet, at: now.getTime(), orderId: null,
     }));
 }
 
-/** Unknown limit and stop orders as the resting orders they probably are (interface order shape). */
-function markerOrders(markers) {
+/** Unknown limit and stop orders (within the grace period) as the resting orders they probably are (interface order shape). */
+function markerOrders(markers, now, graceMs = GRACE_MS) {
   return markers
-    .filter(m => !m.unreadable && RESTING_TYPE[String(m.type || '').toLowerCase()] !== undefined && Number(m.size) > 0)
+    .filter(m => !m.unreadable && RESTING_TYPE[String(m.type || '').toLowerCase()] !== undefined && Number(m.size) > 0 && recent(m, now, graceMs))
     .map(m => ({
       id: `pending:${m.tag}`, contractId: m.contractId, type: RESTING_TYPE[String(m.type).toLowerCase()],
       side: String(m.side).toLowerCase() === 'buy' ? 0 : 1, size: Number(m.size),
@@ -164,9 +173,28 @@ function pendingMessage(unknown, now, graceMs = GRACE_MS, { lookupFailed = false
     : `the order shows in the broker's orders, or ${Math.round(graceMs / 60000)} min pass without it`;
   return `The outcome of ${parts.length === 1 ? 'an order' : `${parts.length} orders`} is unknown: ${parts.join('; ')}. `
     + `The broker may hold a position or a working order this account check can't see yet. New entries wait until ${until}. `
-    + 'Exits, stop moves and cancels still go through.';
+    + 'Exits, stop moves and cancels are still checked as usual, with the unknown order counted as if it filled (a market order) or rests (a limit or stop); close_position always goes.';
+}
+
+/**
+ * True when an isError reply to place_order says for sure the order was not
+ * placed: a guardrail of the server, the contract translator refusing before
+ * it sent anything, or the broker's own refusal (success: false with a code
+ * other than OrderPending or UnknownError). Anything else (a timeout, a
+ * broken connection, an unknown error) may hide a live order.
+ */
+function definitelyRefused(text) {
+  const t = String(text || '').trim();
+  if (/^Blocked by risk guardrail:/.test(t) || /^contract:/.test(t)) return true;
+  try {
+    const r = JSON.parse(t);
+    return Boolean(r) && r.success === false && Number.isFinite(Number(r.errorCode)) && ![6, 7].includes(Number(r.errorCode));
+  } catch (_err) {
+    return false;
+  }
 }
 
 module.exports = {
   GRACE_MS, markerDir, newTag, tagFor, writeMarker, markerExists, removeMarker, readMarkers, markersFor, resolveMarkers, markerLedger, markerOrders, pendingMessage,
+  definitelyRefused,
 };
