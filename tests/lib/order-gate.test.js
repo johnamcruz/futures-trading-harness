@@ -71,6 +71,9 @@ test('an entry under a broker id the translator can\'t name counts on every cont
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [{ ...raw, contractId: '4471923' }, plan(5)])), ['review-before-next-entry'], 'an all-digit id is a broker id too');
   // A standard name on another contract does not count.
   assert.deepStrictEqual(evaluate(entryOrder(), [{ ...placed(30), contractId: 'MES' }, plan(5)]).violations, []);
+  // Reviewed under the id journal_read shows: cleared, on any contract.
+  const rev = { ...review(10, 'win'), contractId: 'CON.F.US.ENQ.Z25' };
+  assert.deepStrictEqual(evaluate(entryOrder(), [raw, rev, plan(5)]).violations, []);
 });
 
 test('paper mode and a truncated journal window block entries; autonomous mode ignores skip lists', () => {

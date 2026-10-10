@@ -58,7 +58,7 @@ function parseStandardName(s) {
  */
 function parseTicker(name, now = new Date()) {
   const m = TICKER.exec(String(name || '').toUpperCase());
-  if (!m) return null;
+  if (!m || !STANDARD.test(m[1])) return null; // the root must be a standard root (a letter, at most 6)
   const monthNum = MONTHS.indexOf(m[2]) + 1;
   let year;
   if (m[3].length === 2) year = 2000 + Number(m[3]);
@@ -85,8 +85,9 @@ function readCache(file) {
  */
 function mergeCache(into, from) {
   Object.assign(into.ids, from.ids);
+  const valid = f => Boolean(f && f.id && typeof f.day === 'string');
   for (const [root, f] of Object.entries(from.front)) {
-    if (!into.front[root] || String(f.day) >= String(into.front[root].day)) into.front[root] = f;
+    if (valid(f) && (!valid(into.front[root]) || f.day >= into.front[root].day)) into.front[root] = f;
   }
   return into;
 }
@@ -116,7 +117,14 @@ const parseJson = result => {
 
 function createTranslator({ call, cacheFile, now = () => new Date() }) {
   let cache = readCache(cacheFile);
-  const save = () => { cache = writeCache(cacheFile, cache); };
+  const save = () => {
+    try {
+      cache = writeCache(cacheFile, cache);
+    } catch (err) {
+      // A cache that can't be written costs lookups, never an answer.
+      process.stderr.write(`[contract-translator] could not write ${cacheFile}: ${err.message}\n`);
+    }
+  };
   const notTicker = new Set(); // ids the broker described with a name that is no futures ticker
 
   const remember = c => {
@@ -197,7 +205,11 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
     if (KEEP_ARGS.has(tool) || !args || typeof args.contractId !== 'string') return args;
     const id = args.contractId;
     // A broker id (seen in a result the translator could not name) goes through as is.
-    if (cache.ids[id] || notTicker.has(id) || !isStandardName(id)) return args;
+    if (cache.ids[id] || notTicker.has(id)) return args;
+    if (!isStandardName(id) && isStandardName(id.trim().toUpperCase())) {
+      throw new TranslationError(`"${id}" is not a contract name: write it as ${id.trim().toUpperCase()}`);
+    }
+    if (!isStandardName(id)) return args;
     return { ...args, contractId: await toBroker(id) };
   }
 

@@ -46,7 +46,7 @@ function isRiskReducing(rationale) {
 function liveReviews(entries, root = null) {
   return entries.filter(e => e.kind === 'review' && !hasTag(e, 'paper')
     && (reviewResult(e) !== null || hasTag(e, 'result:nofill'))
-    && (!root || !e.contractId || contractRoot(e.contractId) === root));
+    && (!root || mayBeRoot(e.contractId, root)));
 }
 
 function successfulEntries(dayEntries) {

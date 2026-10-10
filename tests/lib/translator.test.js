@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { parseTicker, parseStandardName, isStandardName, createTranslator, standardRoot, TranslationError } = require('../../scripts/lib/broker/translator');
+const fs = require('fs');
 const { contractRoot, contractMonthTag, mayBeRoot } = require('../../scripts/lib/trading/journal');
 const { tmpDir } = require('../helpers');
 
@@ -140,12 +141,11 @@ test('two translators on one cache file keep each other\'s ids and agree on the 
   assert.strictEqual(standardRoot('b-201', cacheFile), 'NQ', 'the first process\'s id survives the second\'s write');
   assert.strictEqual(standardRoot('b-102', cacheFile), 'MNQ');
   // The gateway adopts the front month the runner looked up today: no search of its own.
-  const gw = fakeBroker();
-  const tg = createTranslator({ call: gw.call, cacheFile: path.join(tmpDir(), 'other.json'), now: () => NOW });
-  assert.strictEqual(await tg.toBroker('MNQ'), 'b-101');
-  const tc = createTranslator({ call: async () => { throw new Error('no lookups'); }, cacheFile, now: () => NOW });
-  await ta.toBroker('MNQ');
-  assert.strictEqual(await tc.toBroker('MNQ'), 'b-101', 'read from the file another process wrote today');
+  const fresh = path.join(tmpDir(), 'contracts-fake.json');
+  const gateway = createTranslator({ call: async () => { throw new Error('no lookups'); }, cacheFile: fresh, now: () => NOW });
+  const runner = createTranslator({ call: fakeBroker().call, cacheFile: fresh, now: () => NOW });
+  await runner.toBroker('MNQ');
+  assert.strictEqual(await gateway.toBroker('MNQ'), 'b-101', 'read from the file the runner wrote after the gateway started');
 });
 
 test('contract lists are learned from their own tickers, one pass, no lookup per id', async () => {
@@ -159,8 +159,47 @@ test('contract lists are learned from their own tickers, one pass, no lookup per
   assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0, 'a contract known not to be a ticker isn\'t looked up again');
 });
 
-test('mayBeRoot: an id the gate can\'t name may be on any contract', () => {
+test('mayBeRoot: an id the gate can\'t name may be on any contract; the translator\'s lookups name ids first', () => {
   assert.ok(mayBeRoot('MNQ', 'MNQ') && mayBeRoot('MNQ:2027-03', 'MNQ') && mayBeRoot(undefined, 'MNQ'));
   assert.ok(!mayBeRoot('MES', 'MNQ'));
   assert.ok(mayBeRoot('CON.F.US.XYZ.Z26', 'MNQ'));
+  // A broker whose ids look like names (MNQZ5): its lookups decide, not the name's shape.
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'contracts-topstepx.json'), JSON.stringify({ ids: { MNQZ5: { root: 'MNQ', month: '2025-12' } }, front: {} }));
+  const prev = process.env.FTH_HOME;
+  process.env.FTH_HOME = home;
+  try {
+    assert.strictEqual(contractRoot('MNQZ5'), 'MNQ');
+    assert.ok(mayBeRoot('MNQZ5', 'MNQ') && !mayBeRoot('MNQZ5', 'MES'));
+  } finally {
+    if (prev === undefined) delete process.env.FTH_HOME;
+    else process.env.FTH_HOME = prev;
+  }
+});
+
+test('a lower-case or padded name is refused with its standard form, not sent to the broker', async () => {
+  const t = createTranslator({ call: fakeBroker().call, cacheFile: path.join(tmpDir(), 'c.json'), now: () => NOW });
+  await assert.rejects(() => t.translateArgs('place_order', { contractId: 'mnq' }), /write it as MNQ/);
+  await assert.rejects(() => t.translateArgs('place_order', { contractId: 'MNQ ' }), /write it as MNQ/);
+  assert.strictEqual(parseTicker('1Z5', NOW), null, 'a root needs a letter');
+  assert.strictEqual(parseTicker('ABCDEFGZ5', NOW), null, 'a root has at most 6 characters');
+});
+
+test('cache: a front month without a day is ignored; a cache that can\'t be written costs lookups, not answers', async () => {
+  const dir = tmpDir();
+  const cacheFile = path.join(dir, 'c.json');
+  fs.writeFileSync(cacheFile, JSON.stringify({ ids: {}, front: { MNQ: { id: 'b-102' } } }));
+  const t = createTranslator({ call: fakeBroker().call, cacheFile, now: () => NOW });
+  assert.strictEqual(await t.toBroker('MNQ'), 'b-101');
+  const blocked = path.join(dir, 'file');
+  fs.writeFileSync(blocked, '');
+  const u = createTranslator({ call: fakeBroker().call, cacheFile: path.join(blocked, 'c.json'), now: () => NOW });
+  const write = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    assert.strictEqual(await u.toBroker('MNQ'), 'b-101');
+    assert.deepStrictEqual((await u.translateResult('list_open_positions', [{ contractId: 'b-102' }]))[0].contractId, 'MNQ:2027-03');
+  } finally {
+    process.stderr.write = write;
+  }
 });

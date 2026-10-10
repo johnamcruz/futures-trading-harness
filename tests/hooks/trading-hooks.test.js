@@ -88,6 +88,9 @@ test('order gate: a server-written entry under a broker id the translator never 
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 2, 'no translator cache in this home: the id may be MNQ, so it counts');
   assert.match(r.stderr, /\[review-before-next-entry\]/);
+  const reviewed = setup([raw, { ts: at(10), kind: 'review', contractId: raw.contractId, text: 'closed', tags: ['result:win'] },
+    { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, 'reviewed under the id journal_read shows: cleared');
   // With the translator's lookup on file, it counts as MNQ (and still needs the review); on another root it wouldn't.
   fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
