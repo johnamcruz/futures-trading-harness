@@ -26,7 +26,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
 const BARS = readBarsArg(CSV).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const STEP = 180000;
-const CONTRACT = 'CON.F.US.MNQ.M26';
+const CONTRACT = 'MNQ:2026-06';
 const FIRE = BARS.findIndex(b => b.t === '2026-04-27T17:15:00.000Z');
 
 const node = (args, env, input) => spawnSync(process.execPath, args, { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env }, input });

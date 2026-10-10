@@ -6,7 +6,7 @@ const path = require('path');
 
 /** 2026-10-07 10:00 America/New_York (a Wednesday, outside default no-entry windows). */
 const NOW = new Date('2026-10-07T14:00:00Z');
-const CONTRACT = 'CON.F.US.MNQ.Z26';
+const CONTRACT = 'MNQ';
 
 function minutesAgo(n, now = NOW) {
   return new Date(now.getTime() - n * 60000).toISOString();

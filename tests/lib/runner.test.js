@@ -17,14 +17,16 @@ const et = (h, m, s = 0) => DAY + ((h + 4) * 60 + m) * 60000 + s * 1000;
  */
 function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null }) {
   let requests = 0;
-  const contractAt = t => (rollAt && t >= rollAt ? 'CON.F.US.X.H27' : 'CON.F.US.X.Z26');
+  // Standard contract names (the contract translator's): the root, or root:YYYY-MM for another month.
+  const contractAt = (t, symbol) => (rollAt && t >= rollAt ? `${symbol}:2027-03` : symbol);
   return {
     get requests() { return requests; },
     client: (clockRef, positions = { net: 0, working: 0 }) => ({
-      async activeContract(symbol) { return { id: contractAt(clockRef.t).replace('.X.', `.${symbol}.`) }; },
+      async activeContract(symbol) { return { id: contractAt(clockRef.t, symbol) }; },
       async closedBars(contractId, { limit }) {
         requests += 1;
-        if (contractAt(clockRef.t).split('.').pop() !== contractId.split('.').pop()) return [];
+        // Bars only for the contract that is current now (an old month after the roll has none).
+        if (contractAt(clockRef.t, contractId.split(':')[0]) !== contractId) return [];
         const step = minutes * 60000;
         let lastOpen = Math.floor((clockRef.t - publishMs) / step) * step - step;
         if (outage) while (lastOpen + step > outage[0] && lastOpen + step <= outage[1]) lastOpen -= step;
@@ -149,7 +151,7 @@ test('contract roll: the new front month is picked up on the next trading day', 
   const market = fakeMarket({ minutes: 3, rollAt: et(12, 0) });
   const { cycles } = await simulate({ cfg: { timeframe: 3, weekdaysOnly: false }, from: et(11, 0), to: et(11, 0) + 26 * 3600000, market });
   const trade = cycles.filter(c => c.action === 'trade');
-  assert.ok(trade.some(c => /H27/.test(c.prompt)), 'trades the new contract after the roll');
+  assert.ok(trade.some(c => /MNQ:2027-03/.test(c.prompt)), 'trades the new contract after the roll');
   assert.ok(trade.filter(c => c.start > et(12, 0) && c.start < et(15, 0)).length >= 1, 'resyncs re-resolve the contract within the day too');
 });
 
@@ -175,7 +177,7 @@ test('a symbol whose first poll returns no bars still resyncs and re-checks its 
   let lookups = 0;
   const runner = bareRunner({
     cfg: { timeframe: 3 }, clockRef,
-    client: { async activeContract() { lookups += 1; return { id: 'CON.F.US.MNQ.Z26' }; }, async closedBars() { return []; } },
+    client: { async activeContract() { lookups += 1; return { id: 'MNQ' }; }, async closedBars() { return []; } },
   });
   while (clockRef.t < et(10, 30)) clockRef.t += await runner.step();
   assert.ok(lookups >= 2, `contract re-checked after repeated resyncs (lookups ${lookups})`);
@@ -247,9 +249,9 @@ test('hard market hours: sessions in the 16:00-18:00 ET break, a missing end of 
 test('outside market hours the runner flattens anything open, once a minute', async () => {
   const r = await trailSim({ tape: {}, until: et(16, 5) });
   assert.ok(r.cycles.includes('eod'));
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26'], 'closed at end of day');
+  assert.deepStrictEqual(r.closedIds, ['MNQ'], 'closed at end of day');
   const brk = await trailSim({ tape: {}, startAt: et(17, 0), until: et(17, 3) });
-  assert.deepStrictEqual(brk.closedIds, ['CON.F.US.MNQ.Z26'], 'a position found in the 16:00-18:00 ET break is closed');
+  assert.deepStrictEqual(brk.closedIds, ['MNQ'], 'a position found in the 16:00-18:00 ET break is closed');
 });
 
 test('a session that runs past end of day is rejected', () => {
@@ -263,9 +265,9 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
   const cancelled = [];
   let positions = [];
   const orders = [
-    { id: 1, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1 }, // leftover stop
-    { id: 2, contractId: 'CON.F.US.MNQ.Z26', type: 1, side: 0, size: 1 }, // pending entry
-    { id: 3, contractId: 'CON.F.US.MES.Z26', type: 4, side: 1, size: 1 }, // another root
+    { id: 1, contractId: 'MNQ', type: 4, side: 1, size: 1 }, // leftover stop
+    { id: 2, contractId: 'MNQ', type: 1, side: 0, size: 1 }, // pending entry
+    { id: 3, contractId: 'MES', type: 4, side: 1, size: 1 }, // another root
   ];
   const runner = createRunner({
     cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
@@ -276,14 +278,14 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
     },
     clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
-    writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => [{ orderId: 2, contractId: 'CON.F.US.MNQ.Z26', setup: 'orb', side: 'buy' }],
+    writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => [{ orderId: 2, contractId: 'MNQ', setup: 'orb', side: 'buy' }],
   });
   while (clockRef.t < et(10, 2)) clockRef.t += await runner.step();
   assert.deepStrictEqual(cancelled, [1]);
   // With a position open nothing is cancelled.
-  positions = [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1 }];
+  positions = [{ contractId: 'MNQ', type: 1, size: 1 }];
   cancelled.length = 0;
-  orders.push({ id: 4, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1 });
+  orders.push({ id: 4, contractId: 'MNQ', type: 4, side: 1, size: 1 });
   while (clockRef.t < et(10, 8)) clockRef.t += await runner.step();
   assert.deepStrictEqual(cancelled, []);
 });
@@ -300,7 +302,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
   const runner = createRunner({
     cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
     client: {
-      async activeContract() { return { id: 'CON.F.US.MNQ.Z26', tickSize: 0.25, tickValue: 0.5 }; },
+      async activeContract() { return { id: 'MNQ', tickSize: 0.25, tickValue: 0.5 }; },
       async closedBars() {
         const lastOpen = Math.floor((clockRef.t - 1000) / step) * step - step;
         k = Math.min(path.length - 1, Math.max(0, Math.round((lastOpen - et(10, 0)) / step)));
@@ -309,8 +311,8 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
       },
       async accountState() {
         return {
-          positions: closed.length ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(et(10, 0) + 5000).toISOString() }],
-          orders: closed.length ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: 1, stopPrice }],
+          positions: closed.length ? [] : [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(et(10, 0) + 5000).toISOString() }],
+          orders: closed.length ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice }],
         };
       },
       async modifyStop(acct, id, price) { modified.push(price); stopPrice = price; },
@@ -322,14 +324,14 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
     clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }),
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
     writeBars: () => '/b.json', scanFor: () => [],
-    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(et(10, 0) + 3000).toISOString() }],
+    entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(et(10, 0) + 3000).toISOString() }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }),
   });
   while (clockRef.t < et(10, 15)) clockRef.t += await runner.step();
   // Bar 2: peak 21525 = 2.5R -> stop 21520 (2R). Bar 3: peak 3.5R -> 21530.
   // Bar 4: peak 4R -> 21535, but its low 21534 is already through it -> closed at market.
   assert.deepStrictEqual(modified, [21520, 21530]);
-  assert.deepStrictEqual(closed, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(closed, ['MNQ']);
 });
 
 /**
@@ -348,7 +350,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   const runner = createRunner({
     cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}) }), root: '/r',
     client: {
-      async activeContract() { return { id: 'CON.F.US.MNQ.Z26', tickSize: 0.25, tickValue: 0.5 }; },
+      async activeContract() { return { id: 'MNQ', tickSize: 0.25, tickValue: 0.5 }; },
       async closedBars() {
         const lastOpen = Math.floor((clockRef.t - 1000) / step) * step - step;
         const out = [];
@@ -363,14 +365,14 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         if (accountFails) throw new Error('HTTP 502');
         return {
           positions: [
-            ...(flat ? [] : [{ id: 77, contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
+            ...(flat ? [] : [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: new Date(fillAt).toISOString() }]),
             ...(otherMonth && !calls.closedIds.includes(otherMonth) ? [{ id: 78, contractId: otherMonth, type: 1, size: 1, averagePrice: 21600, creationTimestamp: new Date(fillAt).toISOString() }] : []),
           ],
-          orders: calls.cancelled.length ? [] : [...(noStop ? [] : [{ id: 9, contractId: 'CON.F.US.MNQ.Z26', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'CON.F.US.MNQ.Z26', type: 1, side: 1, size: 1, limitPrice: 21600 }],
+          orders: calls.cancelled.length ? [] : [...(noStop ? [] : [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: stopSize, stopPrice }]), { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21600 }],
         };
       },
       async modifyStop(acct, id, price) { if (failsLeft > 0) { failsLeft -= 1; throw new Error('HTTP 503'); } calls.modified.push(price); stopPrice = price; },
-      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'CON.F.US.MNQ.Z26') flat = true; },
+      async closePosition(acct, id) { calls.closed.push(clockRef.t); calls.closedIds.push(id); if (id === 'MNQ') flat = true; },
       async cancelOrder(acct, id) { calls.cancelled.push(id); },
       async netPosition() { return flat ? 0 : 1; },
       async workingOrders() { return flat ? 0 : 1; },
@@ -385,7 +387,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => null, saveState: () => {},
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
-    entryOrders: () => [{ orderId: 5, contractId: 'CON.F.US.MNQ.Z26', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
+    entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
     scanLog: rec => calls.scans.push(rec),
     event: ev => calls.events.push(ev),
@@ -398,7 +400,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
 test('time stop: a strategy with exit.max_bars is closed at market once it has been in the trade that long', async () => {
   // A CRT-style exit: a target level and a 3-bar time stop, no trail. Price goes nowhere.
   const r = await trailSim({ tape: {}, exit: { target: 'crt_target(60)', max_bars: 3 }, until: et(10, 20) });
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.closedIds, ['MNQ']);
   assert.ok(r.closed[0] >= et(10, 9) && r.closed[0] < et(10, 12), `closed after the third bar (${new Date(r.closed[0]).toISOString()})`);
   assert.ok(r.cancelled.includes(9) && r.cancelled.includes(10), 'its orders are cancelled');
   assert.deepStrictEqual(r.modified, [], 'nothing trails');
@@ -410,7 +412,7 @@ test('time stop: a strategy with exit.max_bars is closed at market once it has b
 test('time stop: max_bars counts the strategy\'s bars, scaled to the runner\'s timeframe', async () => {
   // 1 bar of a 15-minute strategy = 5 bars of the 3-minute runner.
   const r = await trailSim({ tape: {}, exit: { target: 'x', max_bars: 1 }, stf: '15m', until: et(10, 30) });
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.closedIds, ['MNQ']);
   assert.ok(r.closed[0] >= et(10, 15) && r.closed[0] < et(10, 18), `closed after the fifth 3m bar (${new Date(r.closed[0]).toISOString()})`);
   assert.ok(r.logs.some(l => /time stop 1 15m bars = 5 3m bars/.test(l)), r.logs.join('\n'));
   assert.ok(r.logs.some(l => /time stop: 5 3m bars in the trade \(max_bars 1\)/.test(l)));
@@ -422,7 +424,7 @@ test('the decision log gets one record per scanned bar, and every bar\'s cycle d
   assert.ok(r.scans.length >= 1);
   const rec = r.scans[0];
   assert.strictEqual(rec.symbol, 'MNQ');
-  assert.strictEqual(rec.contractId, 'CON.F.US.MNQ.Z26');
+  assert.strictEqual(rec.contractId, 'MNQ');
   assert.ok(rec.bar && rec.bar.t && rec.bar.c === 21500);
   assert.strictEqual(rec.results[0].detail['crt(60)'].reason, 'fired');
   assert.ok(rec.decision && rec.decision.run === true, JSON.stringify(rec.decision));
@@ -454,7 +456,7 @@ test('the event log records cycles, account reads, managed positions, stops move
   assert.ok(trail.logs.some(l => /trade: CYCLE RESULT: managed - trade/.test(l)), 'the result line is in the text log too');
   // End of day: the position left open is flattened, and the day's end is recorded.
   const eod = await trailSim({ tape: {}, until: et(15, 52) });
-  assert.ok(eod.events.some(e => e.kind === 'flatten' && e.why === 'end of day' && e.contractId === 'CON.F.US.MNQ.Z26'));
+  assert.ok(eod.events.some(e => e.kind === 'flatten' && e.why === 'end of day' && e.contractId === 'MNQ'));
   assert.ok(eod.events.some(e => e.kind === 'eod' && e.ok === true && e.day));
 });
 
@@ -504,8 +506,8 @@ test('kill switch on: a stop bigger than the position (it would flip it) counts 
 });
 
 test('kill switch on: an unprotected position in another month of the root is closed too', async () => {
-  const r = await trailSim({ tape: {}, otherMonth: 'CON.F.US.MNQ.H27', killAfterCycle: true, until: et(10, 9) });
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.H27']);
+  const r = await trailSim({ tape: {}, otherMonth: 'MNQ:2027-03', killAfterCycle: true, until: et(10, 9) });
+  assert.deepStrictEqual(r.closedIds, ['MNQ:2027-03']);
   assert.deepStrictEqual(r.cancelled, [], 'the protected Z26 position keeps its orders');
 });
 
@@ -529,14 +531,14 @@ test('a bars file that cannot be written still lets housekeeping protect the pos
 test('end of day: a position the end-of-day run left open is closed directly', async () => {
   const r = await trailSim({ tape: {}, until: et(15, 52) });
   assert.ok(r.cycles.includes('eod'));
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.closedIds, ['MNQ']);
   assert.deepStrictEqual(r.cancelled.sort(), [10, 9]);
 });
 
 test('end of day flattens first, even when the agents\' end-of-day run fails', async () => {
   const r = await trailSim({ tape: {}, eodFails: true, until: et(15, 52) });
   assert.ok(r.cycles.includes('eod'));
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.closedIds, ['MNQ']);
   assert.ok(r.closed[0] <= et(15, 50) + 5000, 'closed at end of day, not after the run');
 });
 
@@ -601,7 +603,7 @@ test('end of day never deadlocks on the closing balance: a failed record is retr
   assert.strictEqual(a.kills || 0, 0, 'no kill switch');
   // Never recordable (a position the runner doesn't trade stays open): five tries, then it stops;
   // end of day is still done once, and the gate's missed-close check keeps prop entries refused.
-  const never = fakeProp({ eodFails: Infinity, eodError: '1 position(s) still open (CON.F.US.GCE.Z26)' });
+  const never = fakeProp({ eodFails: Infinity, eodError: '1 position(s) still open (GC)' });
   const b = await trailSim({ tape: {}, startAt: et(15, 30) + 2000, until: et(17, 0), prop: never });
   assert.deepStrictEqual(b.cycles.filter(c => c === 'eod'), ['eod']);
   assert.strictEqual(never.calls.eod.length, 5);
@@ -621,7 +623,7 @@ test('prop challenge: past the ratchet the policy is asked every bar and may clo
   const asked = prop.calls.positions[0];
   assert.ok(asked.pos.peakR >= 2, 'never asked before the ratchet');
   assert.deepStrictEqual({ sign: asked.pos.sign, entry: asked.pos.entry, risk: asked.pos.risk, size: asked.pos.size }, { sign: 1, entry: 21500, risk: 10, size: 1 });
-  assert.deepStrictEqual(r.closedIds, ['CON.F.US.MNQ.Z26']);
+  assert.deepStrictEqual(r.closedIds, ['MNQ']);
   assert.ok(r.cancelled.includes(9) && r.cancelled.includes(10));
   // Hold: the trail manages it alone.
   const holder = fakeProp({ position: () => 'hold' });
@@ -635,7 +637,7 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   const skip = fakeProp({ screen: rs => rs.map(x => ({ ...x, candidate: false })) });
   const a = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: skip, until: et(10, 10), trigger: 'signal' });
   assert.ok(skip.calls.screens.length >= 1);
-  assert.strictEqual(skip.calls.screens[0].info.contractId, 'CON.F.US.MNQ.Z26');
+  assert.strictEqual(skip.calls.screens[0].info.contractId, 'MNQ');
   assert.deepStrictEqual(a.cycles.filter(c => c === 'trade'), []);
   const take = fakeProp();
   const b = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: take, until: et(10, 10), trigger: 'signal' });
@@ -657,7 +659,7 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   const eod = r.prompts.find(x => /end-of-day skill/.test(x));
   assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 0 working orders\./, 'the end-of-day run sees the account after the flatten');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade CON\.F\.US\.MNQ\.Z26 long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });

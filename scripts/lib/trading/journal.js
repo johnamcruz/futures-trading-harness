@@ -6,7 +6,6 @@
  * writer; hooks only read it.
  */
 
-const { rootOfIdSymbol } = require('./contracts');
 const fs = require('fs');
 
 const MAX_TAIL_BYTES = 8 * 1024 * 1024;
@@ -78,13 +77,29 @@ function reviewResult(entry) {
 }
 
 /**
- * Root symbol from a contract id: CON.F.US.MNQ.Z25 -> MNQ.
- * Returns the input upper-cased when it doesn't look like a contract id.
+ * The root of a contract: from a standard name (MNQ, NQ:2026-03 -> NQ); for a
+ * broker id the server itself wrote (its journal entries), from the contract
+ * translator's lookups for the selected broker (local file, no lookup).
+ * Anything else comes back upper-cased, so it matches no strategy's instruments.
  */
-/** The contract root of a contract id: CON.F.US.MNQ.Z26 -> MNQ, CON.F.US.ENQ.Z26 -> NQ. */
 function contractRoot(contractId) {
-  const parts = String(contractId || '').split('.');
-  return parts.length >= 5 ? rootOfIdSymbol(parts[parts.length - 2]) : String(contractId || '').toUpperCase();
+  const { parseStandardName, standardRoot } = require('../broker/translator');
+  const std = parseStandardName(contractId);
+  if (std) return std.root;
+  try {
+    const { activeBroker, contractsCacheFile } = require('../broker/config');
+    const root = standardRoot(contractId, contractsCacheFile(activeBroker(process.env).name, process.env));
+    if (root) return root;
+  } catch (_err) {
+    // no broker config: no translator lookups to read
+  }
+  return String(contractId || '').toUpperCase();
+}
+
+/** The month part of a standard name ('2026-03'), or '' for the front month. */
+function contractMonthTag(contractId) {
+  const std = require('../broker/translator').parseStandardName(contractId);
+  return std && std.month ? std.month : '';
 }
 
 module.exports = {
@@ -96,4 +111,5 @@ module.exports = {
   hasTag,
   reviewResult,
   contractRoot,
+  contractMonthTag,
 };

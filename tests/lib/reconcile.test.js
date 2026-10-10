@@ -14,7 +14,7 @@ const scans = [
   { symbol: 'MNQ', bar: bar('2026-10-07T14:00:00.000Z'), results: [{ name: 'orb', candidate: true, direction: 'long' }, { name: 'bos', candidate: false, direction: 'short' }] },
   { symbol: 'MNQ', bar: bar('2026-10-07T15:00:00.000Z'), results: [{ name: 'ema_cross', candidate: true, direction: 'short' }] },
 ];
-const placed = (ts, text, ok = true) => ({ ts, kind: 'order_placed', contractId: 'CON.F.US.MNQ.Z26', text, data: { result: { success: ok } } });
+const placed = (ts, text, ok = true) => ({ ts, kind: 'order_placed', contractId: 'MNQ', text, data: { result: { success: ok } } });
 const journal = [
   placed('2026-10-07T14:04:30.000Z', 'setup:orb long, stop 21480'), // 90 s after the 14:03 close
   { ts: '2026-10-07T15:04:00.000Z', kind: 'note', text: 'ema_cross short passed: relative volume 0.8x (skip rule)' },

@@ -49,7 +49,7 @@ test('reviewResult reads result tags only from reviews', () => {
 });
 
 test('contractRoot and entriesSince', () => {
-  assert.strictEqual(contractRoot('CON.F.US.MNQ.Z25'), 'MNQ');
+  assert.strictEqual(contractRoot('MNQ:2025-12'), 'MNQ');
   assert.strictEqual(contractRoot('mes'), 'MES');
   const e = [{ ts: '2026-01-01T00:00:00Z' }, { ts: '2026-01-02T00:00:00Z' }, { ts: 'bad' }];
   assert.strictEqual(entriesSince(e, new Date('2026-01-01T12:00:00Z')).length, 1);

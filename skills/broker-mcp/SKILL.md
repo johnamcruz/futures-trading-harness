@@ -24,7 +24,7 @@ guide resource once per session if it has one.
 2. `list_accounts`: pick `canTrade=true` and `mcpTradingAllowed=true`.
 3. `journal_read {kind:"lesson"}` plus recent `review` entries.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
-5. `search_contracts {searchText:"MNQ"}`: take `activeContract=true`; note `tickSize`, `tickValue`.
+5. `search_contracts {searchText:"MNQ"}`: contracts come back by standard name: `MNQ` is the front month, `MNQ:2027-03` a later one. Note `tickSize`, `tickValue`. Use the name as `contractId` everywhere; the harness translates it to the broker's own id.
 6. Bars to a file: the runner's bars file, or `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --record` (+ `get_quote`), then market-snapshot, `mtf.js`, and `strategies.js scan --record`.
 7. `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`.
 8. `place_order` only when the plan's trigger has happened.
@@ -118,7 +118,7 @@ filters, `journal_add {orderId}` links a review to its order, and
 ## Examples
 
 ```text
-place_order {accountId, contractId:"CON.F.US.MNQ.Z26", side:"buy", type:"market", size:1,
+place_order {accountId, contractId:"MNQ", side:"buy", type:"market", size:1,
   stopLossBracket:{ticks:40, type:"stop"}, takeProfitBracket:{ticks:80, type:"limit"},
   rationale:"setup:orb long close above OR high 21500.00, stop 21490.00, target 21520.00, risk $20"}
 

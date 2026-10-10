@@ -106,11 +106,11 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
     await done;
   }
   const out = io.out;
-  assert.match(out, /MNQ: active contract CON\.F\.US\.MNQ\.Z26/);
+  assert.match(out, /MNQ: active contract MNQ/);
   assert.match(out, /CYCLE RESULT: no-trade - fake harness/);
   const file = path.join(dataDir, 'MNQ-1m.json');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.strictEqual(data.contractId, 'CON.F.US.MNQ.Z26');
+  assert.strictEqual(data.contractId, 'MNQ');
   assert.strictEqual(data.bars.length, 3);
   const logs = fs.readdirSync(path.join(home, '.futures-trading-harness', 'logs'));
   const log = fs.readFileSync(path.join(home, '.futures-trading-harness', 'logs', logs.find(f => /^autotrader-.*\.log$/.test(f))), 'utf8');

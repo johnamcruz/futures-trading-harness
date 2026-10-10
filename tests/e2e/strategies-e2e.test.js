@@ -24,7 +24,7 @@ const { tmpDir, writeJournal } = require('../helpers');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const STEP = 180000;
-const CONTRACT = 'CON.F.US.MNQ.M26';
+const CONTRACT = 'MNQ:2026-06';
 const ALL = loadStrategies(ROOT, {}).strategies;
 const ACTIVE = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ'));
 

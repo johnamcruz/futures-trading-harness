@@ -14,7 +14,7 @@ const { main: combineCli } = require('../../scripts/combine');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const CONTRACT = 'CON.F.US.MNQ.Z26';
+const CONTRACT = 'MNQ';
 
 const COMPONENTS = ['trendy', 'other'];
 const FIELDS = observationFields(COMPONENTS);
@@ -111,11 +111,11 @@ test('no end-of-day or position deadlock: a day before the attempt is not an err
   const { hooks, home, account, client } = setup();
   await hooks.endOfDay(new Date('2026-10-02T20:00:00Z'), '2026-10-02'); // before the attempt started (2026-10-05)
   assert.deepStrictEqual(prop.readAttempt(home, account.name).days, []);
-  client.open = [{ contractId: 'CON.F.US.GCE.Z26', size: 1, type: 1 }];
-  await assert.rejects(() => hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07'), /still open \(CON.F.US.GCE.Z26\)/);
+  client.open = [{ contractId: 'GC', size: 1, type: 1 }];
+  await assert.rejects(() => hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07'), /still open \(GC\)/);
   const now = new Date('2026-10-07T14:30:00Z');
   await hooks.snapshot(now);
-  assert.match(prop.combineBlock(home, account.name, now), /a position is open on the account \(CON.F.US.GCE.Z26\).*close it to trade the attempt/);
+  assert.match(prop.combineBlock(home, account.name, now), /a position is open on the account \(GC\).*close it to trade the attempt/);
 });
 
 test('a setup whose stop is too wide for the cushion is skipped with the reason, not silently', async () => {
@@ -246,7 +246,7 @@ test('owners: the strategies an active policy with a running attempt owns on the
   const on = setup({ policy: null });
   const owners = on.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT });
   assert.ok(owners.size > 0 && [...owners.values()].every(v => v === 'prop_x'), JSON.stringify([...owners]));
-  assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'CON.F.US.GCE.Z26' }).size, 0, 'another instrument');
+  assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'GC' }).size, 0, 'another instrument');
   const off = setup({ policy: null, start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
 });

@@ -49,10 +49,10 @@ tell the user and plan as if it were (no entries after 12:45 ET, flat by
 
 **Contract roll.** Equity index futures expire quarterly (H Mar, M Jun, U
 Sep, Z Dec) on the third Friday; volume moves to the next contract about
-eight days earlier (the roll, the Thursday or Friday before). Always trade
-the contract `search_contracts {searchText:"MNQ"}` marks
-`activeContract=true`, and re-read it each session: a stale `contractId` from
-an old plan or journal entry may be the expiring month. Bars from before the
+eight days earlier (the roll, the Thursday or Friday before). Trade the
+front month by its plain name (`MNQ`): the harness maps it to the contract the
+broker marks active, once per trading day, so after the roll `MNQ` is the new
+month and the old one shows as `MNQ:2026-12`. Bars from before the
 roll come from the old contract at a different price (the spread between
 months): levels, VWAP, and swings that straddle the roll day are not
 comparable; prefer the new contract's own bars for levels on roll days.

@@ -74,9 +74,27 @@ harness (agents, skills, order gate, runner, CLIs)
 | Name | Type |
 |---|---|
 | `accountId` | integer, from `list_accounts` |
-| `contractId` | non-empty string, `CON.F.US.<SYMBOL>.<MONTH><YY>`, e.g. `CON.F.US.MNQ.Z26`, from `search_contracts` |
+| `contractId` | the server's own id for a contract, any format. The harness never sees it: see Contract names |
 | ISO time | ISO 8601 string with an offset, e.g. `2026-10-09T13:30:00Z` |
 | trading day | starts 17:00 America/Chicago; daily figures and defaults use it |
+
+## Contract names
+
+The harness names contracts by standard names: the root for the front month
+(`MNQ`, `NQ`, `ES`), or root and month for another (`NQ:2026-03`). Agents,
+strategies, the journal, the gate, and the runner use only these. The contract
+translator (`scripts/contract-translator.js`), which the harness always starts
+in front of the selected server, maps them to the server's own ids and back,
+by asking that same server:
+
+- a name to an id: `search_contracts` with the root; the front month is the
+  contract the server marks `activeContract`, fixed for the trading day;
+- an id to a name: from those answers, else `get_contract`.
+
+A contract's root and month come from its `name`, the exchange ticker: root +
+month code + year (`NQZ5`, `MNQH26`). That is all a server has to provide; its
+ids can be anything. Lookups are cached per broker
+(`~/.futures-trading-harness/contracts-<broker>.json`).
 
 ## Tools
 

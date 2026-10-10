@@ -8,7 +8,8 @@
  * out), FAKE_JOURNAL (the journal file it writes), FAKE_NEWEST_FIRST (bars newest
  * first, as a non-conforming server would), FAKE_LIVE_BARS (three 1-minute bars,
  * the newest closed seconds ago), FAKE_FLAT (no position or order),
- * FAKE_CALLS (a file it appends each tool call's name to), FAKE_TRADING_OFF
+ * FAKE_CALLS (a file it appends each tool call's name to), FAKE_ARGS (a file it
+ * appends each call's name and arguments to, as JSON lines), FAKE_TRADING_OFF
  * (get_server_config reports trading disabled).
  */
 
@@ -109,6 +110,7 @@ process.stdin.on('data', chunk => {
       const { name, arguments: args = {} } = msg.params;
       state.calls.push(name);
       if (process.env.FAKE_CALLS) fs.appendFileSync(process.env.FAKE_CALLS, `${name}\n`);
+      if (process.env.FAKE_ARGS) fs.appendFileSync(process.env.FAKE_ARGS, `${JSON.stringify({ name, args })}\n`);
       result = HANDLERS[name] && !drop.has(name)
         ? { content: [{ type: 'text', text: JSON.stringify(HANDLERS[name](args)) }] }
         : { content: [{ type: 'text', text: `unknown tool ${name}` }], isError: true };

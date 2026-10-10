@@ -38,7 +38,7 @@ test('stop stated in the rationale satisfies stop-defined', () => {
 
 test('stale, other-symbol, and previous-day plans do not count', () => {
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(121)])), ['plan-required']);
-  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(5, { contractId: 'CON.F.US.MES.Z26' })])), ['plan-required']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(5, { contractId: 'MES' })])), ['plan-required']);
   // NOW is 09:00 CT; 17 hours ago is before the 17:00 CT trading-day start
   const big = { ...config, planMaxAgeMin: 24 * 60 };
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(17 * 60)], { config: big })), ['plan-required']);
@@ -60,7 +60,7 @@ test('setup tag must open the rationale and the stop must be a number after "sto
 test('reviews without a result tag or for another contract do not clear the review gate', () => {
   const untagged = { ts: minutesAgo(10), kind: 'review', text: 'done', tags: ['setup:orb'] };
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), untagged, plan(5)])), ['review-before-next-entry']);
-  const otherContract = { ...review(10, 'win'), contractId: 'CON.F.US.MES.Z26' };
+  const otherContract = { ...review(10, 'win'), contractId: 'MES' };
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), otherContract, plan(5)])), ['review-before-next-entry']);
 });
 
@@ -157,7 +157,7 @@ test('strategy check: known, active, instrument, and session', () => {
   assert.deepStrictEqual(checks(withReg(entryOrder(), '2026-10-07T16:00:00Z')), ['strategy']);
   // unknown strategy and instrument not traded
   assert.match(withReg(entryOrder({ rationale: 'setup:mystery long stop 1' }), '2026-10-07T14:00:00Z').violations[0].message, /not a known strategy/);
-  assert.match(withReg(entryOrder({ contractId: 'CON.F.US.MCL.Z26' }), '2026-10-07T14:00:00Z').violations.map(v => v.message).join(), /does not trade MCL/);
+  assert.match(withReg(entryOrder({ contractId: 'MCL' }), '2026-10-07T14:00:00Z').violations.map(v => v.message).join(), /does not trade MCL/);
   // paper strategies cannot place live entries
   const paper = strategies.map(s => (s.name === 'orb' ? { ...s, status: 'paper' } : s));
   const r = evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config, strategies: paper });
@@ -339,7 +339,7 @@ test('policy: an entry needs a fresh verdict for this contract and side, at no m
   // A verdict to trade the mini refuses a micro order, and the other way around.
   assert.match(propSetup({ policy: true, verdict: { contract: 'NQ' } })(entryOrder()).violations[0].message, /the verdict trades NQ, not MNQ/);
   assert.match(propSetup({ policy: true, verdict: { policy: 'other' } })(entryOrder()).violations[0].message, /came from other/);
-  assert.match(propSetup({ policy: true, verdict: { contractId: 'CON.F.US.MES.Z26', symbol: 'MES', contract: 'MES' } })(entryOrder()).violations[0].message, /no verdict/);
+  assert.match(propSetup({ policy: true, verdict: { contractId: 'MES', symbol: 'MES', contract: 'MES' } })(entryOrder()).violations[0].message, /no verdict/);
   // Exits and protective orders are never gated, policy or not.
   assert.deepStrictEqual(none(entryOrder({ rationale: '[exit] policy close' })).violations, []);
 });
@@ -395,7 +395,7 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
   // $50,000 on the mini account: budget 0.2 x $2,000 = $400. A 40-tick stop risks $20.74 a micro
   // (19 fit) or $202.80 a mini (NQ: $200 + $2.80 fees). auto trades minis once the size reaches 10 micros: 1 NQ.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
-  const NQ = 'CON.F.US.ENQ.Z26';
+  const NQ = 'NQ';
   const run = (contracts, input, verdict) => {
     const home = trendHome();
     prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
@@ -451,8 +451,8 @@ test('policy: only this strategy\'s entries on this index use its verdict', () =
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 3, policy: null, at: new Date(NOW.getTime() - 120000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
   const run = entries => evaluateOrder({ input: entryOrder(), entries: [plan(), ...entries], now: NOW, config: { ...config, home, skipChecks: new Set(['review-before-next-entry']) }, strategies: [propStrategy()], accounts: [MINI] }).violations;
   assert.deepStrictEqual(run([placed(1, 'setup:orb-x long')]), [], 'another strategy\'s tag');
-  assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.MES.Z26' }]), [], 'another index');
-  assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.ENQ.Z26' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
+  assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'MES' }]), [], 'another index');
+  assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'NQ' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
 });
 
 test('order-consistency: the side named in the rationale must be the order side', () => {
@@ -484,7 +484,7 @@ test('order-consistency: prices on the tick and whole bracket ticks', () => {
   // A number with a unit is not a price.
   assert.deepStrictEqual(evaluate(entryOrder({ rationale: 'setup:orb long, stop 40 ticks, target 2R' }), [plan()]).violations, []);
   // An unknown contract has no tick spec: only the side checks apply.
-  assert.ok(!checks(evaluate(entryOrder({ contractId: 'CON.F.US.ZZZ.Z26', rationale: 'setup:orb long, stop 1.111' }), [plan()])).includes('order-consistency'));
+  assert.ok(!checks(evaluate(entryOrder({ contractId: 'ZZZ', rationale: 'setup:orb long, stop 1.111' }), [plan()])).includes('order-consistency'));
 });
 
 test('order-consistency: brackets must match the rationale prices', () => {

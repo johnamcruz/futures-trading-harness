@@ -3,7 +3,7 @@
  * Recorded order flow: export it with 1-minute bars (from the broker, through
  * the broker adapter) for backtests, and list what is recorded.
  *
- *   node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
+ *   node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
  *   node scripts/orderflow.js status
  *
  * Files: <FTH_HOME>/flow/<contractId>.csv (time,buy_volume,sell_volume per

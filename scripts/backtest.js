@@ -12,7 +12,7 @@
  *       [--min-confluence 2] [--conflict reversal|skip|priority]   require agreeing strategies / skip disagreement
  *       [--prop <policy strategy> [--bundle <name>] [--every 5]]   prop challenge attempts
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
- *   node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
+ *   node scripts/backtest.js fetch --contract MNQ:2025-03 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
  *
  * `fetch` downloads 1-minute bars from the broker (through the broker adapter)
  * to CSV or JSON; backtests themselves only read files.

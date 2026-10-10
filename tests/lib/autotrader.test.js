@@ -119,10 +119,10 @@ test('child env locks the gate and paper mode disables trading', () => {
 });
 
 test('trade prompt carries the closed bar and its data file', () => {
-  const bar = sym => ({ t: '2026-10-07T14:00:00Z', c: 21503.25, file: `/b/${sym}-1m.json`, contractId: `CON.F.US.${sym}.Z26` });
+  const bar = sym => ({ t: '2026-10-07T14:00:00Z', c: 21503.25, file: `/b/${sym}-1m.json`, contractId: sym });
   const p = prompts(validateConfig({ timeframe: 1 }), et(10, 1), '/r').trade([{ symbol: 'MNQ', bar: bar('MNQ') }, { symbol: 'MES', bar: bar('MES') }], { recovered: true });
   assert.match(p, /MNQ: a 1-minute bar just closed \(opened 10:00 ET\)/);
-  assert.match(p, /\/b\/MES-1m\.json .*contractId CON\.F\.US\.MES\.Z26/);
+  assert.match(p, /\/b\/MES-1m\.json .*contractId MES/);
   assert.match(p, /trade-session skill for MNQ, MES \(one symbol at a time, open positions first\)/);
   assert.match(p, /previous cycle was stopped before it finished/);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), et(10, 1), '/r').trade('MNQ', { manageOnly: true }), /lean cycle.*manage-only/);
@@ -245,7 +245,7 @@ test('a policy strategy\'s verdicts go into the cycle prompt as the only allowed
     { strategy: 'prop_portfolio_3m', component: 'supertrend', direction: 'long', action: 'full', contract: 'NQ', maxSize: 3, stopTicks: 40 },
     { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the policy' },
   ];
-  const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'CON.F.US.MNQ.Z26' }, verdicts }]);
+  const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'MNQ' }, verdicts }]);
   assert.match(text, /prop_portfolio_3m: long setup from supertrend, verdict full: enter only as setup:prop_portfolio_3m, NQ buy, at most 3, stopLossBracket.ticks 40/);
   assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the policy\); no entry/);
 });
@@ -261,9 +261,9 @@ test('every cycle prompt carries the account: balance, positions, orders, and ea
     account: 'topstep_100k', status: 'active', asOf: '2026-10-07T14:00:01.000Z', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
     budgets: [{ strategy: 'prop_portfolio_3m', budgetUsd: 975 }], entryBlock: null,
   }];
-  const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'CON.F.US.ENQ.Z26', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
+  const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'NQ', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
   const text = p.trade([{ symbol: 'MNQ' }], { state });
-  assert.match(text, /Account 123 at 10:00 ET: balance \$101,250; open: CON.F.US.ENQ.Z26 long 2 @ 21500.25; 1 working order\./);
+  assert.match(text, /Account 123 at 10:00 ET: balance \$101,250; open: NQ long 2 @ 21500.25; 1 working order\./);
   assert.match(text, /topstep_100k attempt \(active\): floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
   const flat = { ...state, positions: [], workingOrders: 0, attempts: [{ ...attempts[0], entryBlock: 'a position is open on the account' }] };
   assert.match(p.trade([{ symbol: 'MNQ' }], { state: flat }), /balance \$101,250; flat; 0 working orders\..*new entries blocked: a position is open on the account\./);
@@ -316,7 +316,7 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/root/fth').trade([{
     symbol: 'MNQ',
     bar: {
-      t: bars[9].t, c: 21505.25, file: '/root/.fth/bars/MNQ-3m.json', contractId: 'CON.F.US.MNQ.Z26', recent: bars,
+      t: bars[9].t, c: 21505.25, file: '/root/.fth/bars/MNQ-3m.json', contractId: 'MNQ', recent: bars,
       trend: 'Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.',
       day: 'MNQ day: opened 21480.25 inside the prior value area, gap -12.5 from the prior close (0.04 ADR); opening type open-auction; initial balance 21455-21520.25 (65.25 points, 0.22 ADR), extended 0 up and 0 down: inside the initial balance; range so far 65.25 of a 10-day average 290.4 (22% used).',
     },
@@ -339,7 +339,7 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
 test('the fired line: a paper strategy is marked, manage-only lists nothing, a policy\'s components point at its verdict', () => {
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
-  const bar = { t: '2026-10-08T14:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'CON.F.US.MNQ.Z26' };
+  const bar = { t: '2026-10-08T14:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'MNQ' };
   const scan = [
     { name: 'value_area', status: 'paper', candidate: true, direction: 'short', signal: 'rules', confluence: { with: [], against: [] } },
     { name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } },
@@ -352,7 +352,7 @@ test('the fired line: a paper strategy is marked, manage-only lists nothing, a p
   // Manage-only is said once, in the instruction's mode; nothing that fired is listed.
   assert.doesNotMatch(manage, /value_area|orb long|fired on this bar/);
   assert.strictEqual(manage.match(/manage-only/g).length, 1, manage);
-  const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'CON.F.US.MNQ.Z26', maxSize: 3, stopTicks: 40 }];
+  const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'MNQ', maxSize: 3, stopTicks: 40 }];
   const prop = p.trade([{ symbol: 'MNQ', bar, scan, verdicts }]);
   assert.match(prop, /These are prop_portfolio_3m's components: enter only as its verdict below says \(setup:prop_portfolio_3m\), never as setup:<component>\./);
   assert.match(prop, /prop_portfolio_3m: long setup from orb, verdict full: enter only as setup:prop_portfolio_3m/);
@@ -364,8 +364,8 @@ test('a section that could not be built is named; positions without trade detail
   const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/r').trade([{ symbol: 'MNQ' }], { unavailable: ['MNQ day context (boom)', 'the journal (EACCES)'] });
   assert.match(p, /Context unavailable this cycle \(not "none"\): MNQ day context \(boom\); the journal \(EACCES\)\./);
   assert.doesNotMatch(prompts(cfg, new Date(), '/r').trade([{ symbol: 'MNQ' }]), /Context unavailable/);
-  const t = accountText({ id: 1, at: '2026-10-08T14:33:20Z', balance: 50000, positions: [{ contractId: 'CON.F.US.MNQ.Z26', type: 1, size: 2, averagePrice: 21500 }], workingOrders: 1, openTradesError: 'bad order data' });
-  assert.match(t, /1 open position \(below\); 1 working order\. Open positions: CON\.F\.US\.MNQ\.Z26 long 2 @ 21500 \(trade details unavailable this cycle: bad order data; read list_open_positions and list_open_orders\)\./);
+  const t = accountText({ id: 1, at: '2026-10-08T14:33:20Z', balance: 50000, positions: [{ contractId: 'MNQ', type: 1, size: 2, averagePrice: 21500 }], workingOrders: 1, openTradesError: 'bad order data' });
+  assert.match(t, /1 open position \(below\); 1 working order\. Open positions: MNQ long 2 @ 21500 \(trade details unavailable this cycle: bad order data; read list_open_positions and list_open_orders\)\./);
 });
 
 test('the end-of-day prompt names the trading day it closes (a catch-up says so) and the timeframe to reconcile', () => {
@@ -380,7 +380,7 @@ test('the end-of-day prompt names the trading day it closes (a catch-up says so)
 
 test('the trade prompt says when the runner flattens, the cycles left when few, and what it cannot see', () => {
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
-  const bar = { t: '2026-10-08T19:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'CON.F.US.MNQ.Z26' };
+  const bar = { t: '2026-10-08T19:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'MNQ' };
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1, eodAt: '15:50@America/New_York' });
   const p = prompts(cfg, new Date('2026-10-08T19:33:20Z'), '/r'); // 15:33:20 ET
   const late = p.trade([{ symbol: 'MNQ', bar, scan: [] }], { cyclesLeft: 3 });

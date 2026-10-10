@@ -102,13 +102,13 @@ async function handleClientLine(line, check, log = () => {}) {
  * ids prefixed "fth-gw-" and their responses are consumed here, never shown to
  * the client.
  */
-function childCaller(writeToChild, { timeoutMs = 15000, nonce = require('crypto').randomBytes(6).toString('hex') } = {}) {
+function childCaller(writeToChild, { timeoutMs = 15000, nonce = require('crypto').randomBytes(6).toString('hex'), prefix = 'fth-gw-' } = {}) {
   let seq = 0;
   const pending = new Map();
   return {
     call(name, args) {
       seq += 1;
-      const id = `fth-gw-${nonce}-${seq}`;
+      const id = `${prefix}${nonce}-${seq}`;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id);
@@ -120,7 +120,7 @@ function childCaller(writeToChild, { timeoutMs = 15000, nonce = require('crypto'
     },
     /** Returns true when the server line was a response to one of our calls. */
     consume(line) {
-      if (!line.includes('"fth-gw-')) return false;
+      if (!line.includes(`"${prefix}`)) return false;
       let msg;
       try {
         msg = JSON.parse(line);

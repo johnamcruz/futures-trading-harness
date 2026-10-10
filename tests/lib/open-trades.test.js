@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { openTrades, describeOpenTrade, entryOrder } = require('../../scripts/lib/trading/open-trades');
 
-const C = 'CON.F.US.MNQ.Z26';
+const C = 'MNQ';
 const placed = (ts, text, ok = true, contractId = C) => ({ ts, kind: 'order_placed', contractId, text, data: { result: { success: ok } } });
 const bar = (t, o, h, l, c) => ({ t, o, h, l, c });
 // Filled at 14:41:10Z; the 14:39 bar holds the fill (partly before it), then two bars after.
@@ -21,7 +21,7 @@ test('a long: setup and initial stop from the entry\'s order, working stop and t
       { contractId: C, type: 4, side: 1, stopPrice: 21494.75 }, // trailed up from the initial 21489.00
       { contractId: C, type: 1, side: 1, limitPrice: 21560 },
       { contractId: C, type: 1, side: 0, limitPrice: 21400 }, // a buy limit: not this trade's target
-      { contractId: 'CON.F.US.MES.Z26', type: 4, side: 1, stopPrice: 6000 },
+      { contractId: 'MES', type: 4, side: 1, stopPrice: 6000 },
     ],
     entries: [
       placed('2026-10-08T13:00:00Z', 'setup:orb long, stop 21300.00'), // an earlier trade
@@ -94,6 +94,6 @@ test('the entry order: the last successful order with a setup, on the contract (
   const pos = { contractId: C, creationTimestamp: '2026-10-08T14:41:10Z' };
   assert.strictEqual(entryOrder([placed('2026-10-08T14:42:30Z', 'setup:orb long')], pos), null, 'after the fill');
   assert.strictEqual(entryOrder([placed('2026-10-08T14:20:00Z', 'setup:orb long')], pos), null, 'too long before');
-  assert.strictEqual(entryOrder([placed('2026-10-08T14:41:00Z', 'setup:orb long', true, 'CON.F.US.MNQ.H27')], pos).text, 'setup:orb long', 'same root');
+  assert.strictEqual(entryOrder([placed('2026-10-08T14:41:00Z', 'setup:orb long', true, 'MNQ:2027-03')], pos).text, 'setup:orb long', 'same root');
   assert.strictEqual(entryOrder([placed('2026-10-08T14:41:00Z', 'no setup tag')], pos), null);
 });

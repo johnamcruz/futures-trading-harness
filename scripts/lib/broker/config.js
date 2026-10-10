@@ -21,6 +21,9 @@
  * loadBrokers(env)            { broker, brokers } merged
  * activeBroker(env)           the chosen broker, resolved: { name, ..., command, journalPath }
  * serverCommand(broker)       [command, ...args], or throws when no server is set
+ * translatedCommand(broker)   the server behind the contract translator (scripts/contract-translator.js):
+ *                             how the harness always starts it, so it only ever sees standard contract names
+ * contractsCacheFile(name, env)  the translator's lookups for a broker (contracts-<name>.json)
  * SERVER_NAME                 the name every harness registers the server under
  */
 
@@ -86,4 +89,12 @@ function serverCommand(broker) {
   throw new BrokerConfigError(`broker ${broker.name}: no MCP server configured (${where} in brokers.json; the server is ${broker.repo || 'its own repo'})`);
 }
 
-module.exports = { SERVER_NAME, DEFAULTS_FILE, loadBrokers, activeBroker, serverCommand, BrokerConfigError };
+function translatedCommand(broker) {
+  return [process.execPath, path.join(ROOT, 'scripts', 'contract-translator.js'), '--broker', broker.name, '--', ...serverCommand(broker)];
+}
+
+function contractsCacheFile(name, env = process.env) {
+  return path.join(harnessHome(env), `contracts-${String(name || 'default').replace(/[^a-z0-9_-]/gi, '_')}.json`);
+}
+
+module.exports = { translatedCommand, contractsCacheFile, SERVER_NAME, DEFAULTS_FILE, loadBrokers, activeBroker, serverCommand, BrokerConfigError };

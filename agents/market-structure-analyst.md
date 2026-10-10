@@ -10,9 +10,9 @@ facts and a structural bias. You cannot place orders and must not try.
 
 ## Inputs
 
-The caller gives you a symbol (e.g. MNQ), optionally a contractId and the
-current time. If no contractId, use `search_contracts` and take the
-`activeContract=true` one.
+The caller gives you a symbol (e.g. MNQ) and the current time. The symbol is
+the contractId: the harness names the front month by its root (`MNQ`) and
+other months as `MNQ:2027-03`.
 
 ## Method
 

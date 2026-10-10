@@ -32,7 +32,7 @@ cp mcp-configs/backtest.example.json backtest.json
 node scripts/backtest.js --config backtest.json
 
 # Optional: download 1-minute bars from the broker (through the broker adapter) to a file first
-node scripts/backtest.js fetch --contract CON.F.US.MNQ.H25 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
+node scripts/backtest.js fetch --contract MNQ:2025-03 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
 ```
 
 ### Data
@@ -63,7 +63,7 @@ exported with the bars:
 
 ```bash
 node scripts/orderflow.js status
-node scripts/orderflow.js export --contract CON.F.US.MNQ.Z26 --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
+node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
 node scripts/backtest.js --data data/MNQ-1m-flow.csv --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
 ```
 

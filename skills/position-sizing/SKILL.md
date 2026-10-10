@@ -25,7 +25,7 @@ description: Size futures trades from the stop distance, tick value, and the rem
    | MCL | CL | 0.01 | 1.00 | 10.00 |
 
    Contract ids can name a root by another symbol than the exchange's
-   (E-mini NQ is `CON.F.US.ENQ.Z26`, ES is `EP`). Confirm with `search_contracts`.
+   (the harness names contracts by their root: `NQ`, `MNQ`; another month is `NQ:2026-03`). Confirm with `search_contracts`.
 2. **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
    fees from the account, if known).
 3. **Risk budget** = the smallest of:
