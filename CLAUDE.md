@@ -59,6 +59,24 @@ node scripts/sync-harness.js     # after editing agents, commands, rules, or ski
 node scripts/strategies.js validate
 ```
 
+## ECC architecture (hard rule)
+
+Every new change or modification follows the ECC architecture; a change that
+doesn't is not done, whatever else it fixes. Before committing, check it against:
+
+- Roles are agents, know-how and workflows are skills, commands are shims,
+  always-on rules are rules, events are hooks, and strategies and accounts are
+  documents. Generated adapters come only from `node scripts/sync-harness.js`.
+- Logic lives in `scripts/lib/` with tests in `tests/`; CLIs and hooks stay thin.
+- What the agent must know about a change (a new refusal, a new tool behaviour)
+  goes into the skill or agent that uses it, synced to every harness.
+- Brokers stay outside: harness code reaches them only through the adapter and
+  the broker MCP interface.
+
+`tests/plugin/ecc-architecture.test.js` enforces what can be checked in code
+(lib modules tested, CLI and hook size, no runtime dependencies, no broker
+code); its listed exceptions may only shrink.
+
 ## Rules for changes
 
 - CommonJS, Node 22+ (`.nvmrc`), no runtime dependencies (plugin installs don't run npm install).

@@ -81,6 +81,17 @@ impact first.
 - **Fix:** acceptable as is. Optionally, the interface could recommend
   standard names (`BROKER_TRADING_ENABLED`, ...) for new servers.
 
+## Goal: every module follows the ECC architecture
+
+`tests/plugin/ecc-architecture.test.js` lists what predates its rules; each
+item is removed from the list in the PR that fixes it.
+
+- **scripts/lib modules without a test of their own:** `backtest/parquet`,
+  `paths`, `rl/env-config`, `rl/policy-net`, `trading/cisd-ote`,
+  `trading/contracts` (exercised only through other modules' tests).
+- **A CLI over 400 lines:** `scripts/autotrader.js` (401): move logic to
+  `scripts/lib/autotrader.js`.
+
 ## Other
 
 - Skills added to `skills/` reach Codex and Qwen only after

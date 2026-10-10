@@ -63,7 +63,9 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 
 If an order is blocked (`Blocked by risk guardrail` or `Blocked by trading
 harness`), do not retry, resize, reroute, or relabel it. Report the block
-verbatim to the caller.
+verbatim to the caller. `[order-pending]` means an earlier order got no clear
+answer and may be live: don't resend it; check `list_open_orders` and
+`get_account_snapshot` (broker-mcp skill, Failures and limits).
 
 ## Output
 

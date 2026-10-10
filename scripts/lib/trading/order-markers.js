@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const { harnessHome } = require('../paths');
 
 const GRACE_MS = 120000;
+const LOOKBACK_MS = 60000;
 // Interface order status codes (broker/interface.js ENUMS.orderStatus).
 const STATUS = { open: 1, filled: 2, cancelled: 3, expired: 4, rejected: 5, pending: 6 };
 const DEAD = new Set([STATUS.cancelled, STATUS.expired, STATUS.rejected]);
@@ -115,9 +116,10 @@ const isMarket = m => String(m.type || 'market').toLowerCase() === 'market';
 function resolveMarkers(markers, orders, now, graceMs = GRACE_MS, { inFlight = () => false } = {}) {
   const listed = Array.isArray(orders);
   const tagged = (listed ? orders : []).filter(o => o && o.customTag !== undefined && o.customTag !== null);
-  // The order carrying the tag, created after the marker's order was sent (a client may reuse a tag of an older, finished order).
+  // The order carrying the tag, created after the marker's order was sent (a client may reuse a tag of an
+  // older, finished order); the broker's clock may lag ours, so within the lookup's 60 s window.
   const find = m => tagged.filter(o => String(o.customTag) === m.tag)
-    .filter(o => !Number.isFinite(Date.parse(o.creationTimestamp)) || Date.parse(o.creationTimestamp) >= Date.parse(m.sentAt) - 5000)
+    .filter(o => !Number.isFinite(Date.parse(o.creationTimestamp)) || Date.parse(o.creationTimestamp) >= Date.parse(m.sentAt) - LOOKBACK_MS)
     .pop();
   const placed = [];
   const gone = [];
@@ -137,20 +139,106 @@ function resolveMarkers(markers, orders, now, graceMs = GRACE_MS, { inFlight = (
 
 const recent = (m, now, graceMs) => now.getTime() - Date.parse(m.sentAt) < graceMs;
 
+/** A ledger entry (see account-gate pendingState) for a marker's order, as if it filled. */
+function ledgerEntry(m, now, orderId = null) {
+  return {
+    contractId: m.contractId, sign: String(m.side).toLowerCase() === 'buy' ? 1 : -1, size: Number(m.size),
+    netBefore: m.observedNet, rootNetBefore: Number.isFinite(m.observedRootNet) ? m.observedRootNet : m.observedNet,
+    at: now.getTime(), sentAt: Date.parse(m.sentAt), orderId,
+  };
+}
+
 /**
- * Ledger entries (see account-gate pendingState) for unknown market orders:
- * an exit checks against the account as it would be if they filled, so two
- * exits can't flip it. Limit and stop orders rest first: see markerOrders.
+ * Ledger entries for unknown orders, as if they filled. For exits, only
+ * market orders (an exit checks against the account as it would be if they
+ * filled, so two exits can't flip it; limit and stop orders rest first: see
+ * markerOrders). `anyType` counts every type, for cancel-protection: an entry
+ * of unknown outcome, even a limit, may be filled and protected by the stop.
  * Only within the grace period: after it, the broker's account is the truth
  * (an order that never came would otherwise hold every exit back).
  */
-function markerLedger(markers, now, graceMs = GRACE_MS) {
+function markerLedger(markers, now, graceMs = GRACE_MS, { anyType = false } = {}) {
   return markers
-    .filter(m => !m.unreadable && isMarket(m) && Number.isFinite(m.observedNet) && Number(m.size) > 0 && recent(m, now, graceMs))
-    .map(m => ({
-      contractId: m.contractId, sign: String(m.side).toLowerCase() === 'buy' ? 1 : -1, size: Number(m.size),
-      netBefore: m.observedNet, rootNetBefore: Number.isFinite(m.observedRootNet) ? m.observedRootNet : m.observedNet, at: now.getTime(), orderId: null,
-    }));
+    .filter(m => !m.unreadable && (anyType || isMarket(m)) && Number.isFinite(m.observedNet) && Number(m.size) > 0 && recent(m, now, graceMs))
+    .map(m => ledgerEntry(m, now));
+}
+
+/**
+ * Ledger entries for orders settled as placed: like any order just sent,
+ * counted until the account shows it (pendingState skips one that still
+ * rests). One sent before the grace period already shows.
+ */
+function placedLedger(placed, now, graceMs = GRACE_MS) {
+  return placed
+    .filter(({ marker: m }) => Number.isFinite(m.observedNet) && Number(m.size) > 0 && recent(m, now, graceMs))
+    .map(({ marker: m, order }) => ledgerEntry(m, now, String(order.id)));
+}
+
+/**
+ * Settle an account's markers from the broker's orders. `searchOrders(args)`
+ * calls search_orders and returns its list (throws on failure); `inFlight(m)`
+ * says whether the caller still awaits that order's reply. Placed and gone
+ * markers are removed (a failed removal goes to onError). Returns
+ * { placed, gone, unknown, lookupFailed }.
+ */
+async function settleMarkers({ env, accountId, now, graceMs = GRACE_MS, searchOrders, inFlight = () => false, onError = () => {} }) {
+  let mine;
+  try {
+    mine = markersFor(readMarkers(env), accountId);
+  } catch (_err) {
+    return { placed: [], gone: [], unknown: [{ tag: null, file: markerDir(env), unreadable: true }], lookupFailed: false };
+  }
+  if (!mine.length) return { placed: [], gone: [], unknown: [], lookupFailed: false };
+  const readable = mine.filter(m => !m.unreadable);
+  let orders = [];
+  if (readable.length) {
+    const from = new Date(Math.min(...readable.map(m => Date.parse(m.sentAt))) - LOOKBACK_MS).toISOString();
+    try {
+      orders = await searchOrders({ accountId: Number(accountId), startTimestamp: from });
+      if (!Array.isArray(orders)) throw new Error('search_orders did not return a list');
+    } catch (err) {
+      onError(`could not look up orders of unknown outcome: ${err.message}`);
+      return { placed: [], gone: [], unknown: mine, lookupFailed: true };
+    }
+  }
+  const { placed, gone, unknown } = resolveMarkers(mine, orders, now, graceMs, { inFlight });
+  for (const m of [...placed.map(p => p.marker), ...gone]) {
+    try {
+      removeMarker(env, m);
+    } catch (err) {
+      onError(`could not clear the record of order ${m.tag}: ${err.message}`);
+    }
+  }
+  return { placed, gone, unknown, lookupFailed: false };
+}
+
+/**
+ * Before a place_order is sent: pick its customTag and write its marker.
+ * `inUse(tag)` says whether a call of the caller's own still carries the tag.
+ * A tag already carried by an order of unknown outcome on the account is
+ * refused for an entry (its record would be overwritten, then erased by the
+ * reply) and replaced by a fresh one for an exit. An entry whose marker can't
+ * be written is refused too: its outcome could not be tracked.
+ * Returns { refuse } or { tag, args (with the customTag), error? }.
+ */
+function prepareSend({ env, args, risk, observed = null, inUse = () => false, now }) {
+  let tag = tagFor(args);
+  if (inUse(tag) || markerExists(env, args.accountId, tag)) {
+    if (!risk) return { refuse: `customTag ${JSON.stringify(tag)} is in use by an order of unknown outcome on this account. Send the entry with another customTag (or none).` };
+    tag = newTag();
+  }
+  let error = null;
+  try {
+    writeMarker(env, {
+      tag, accountId: args.accountId, contractId: args.contractId, side: args.side, size: args.size, type: args.type, risk,
+      args: { contractId: args.contractId, side: args.side, rationale: args.rationale, stopLossBracket: args.stopLossBracket },
+      observedNet: observed ? observed.observedNet : null, observedRootNet: observed ? observed.observedRootNet : null, sentAt: now.toISOString(),
+    });
+  } catch (err) {
+    if (!risk) return { refuse: `The gateway could not record the order before sending it (${err.message}), so an unknown outcome could not be tracked. The order was not sent.` };
+    error = err.message;
+  }
+  return { tag, args: args.customTag === tag ? args : { ...args, customTag: tag }, error };
 }
 
 /** Unknown limit and stop orders (within the grace period) as the resting orders they probably are (interface order shape). */
@@ -195,6 +283,6 @@ function definitelyRefused(text) {
 }
 
 module.exports = {
-  GRACE_MS, markerDir, newTag, tagFor, writeMarker, markerExists, removeMarker, readMarkers, markersFor, resolveMarkers, markerLedger, markerOrders, pendingMessage,
-  definitelyRefused,
+  GRACE_MS, markerDir, newTag, tagFor, writeMarker, markerExists, removeMarker, readMarkers, markersFor, resolveMarkers, markerLedger, placedLedger,
+  markerOrders, settleMarkers, prepareSend, pendingMessage, definitelyRefused,
 };

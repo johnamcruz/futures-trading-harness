@@ -89,6 +89,49 @@ test('refusals: only a guardrail, the translator, or the broker\'s own refusal s
   }
 });
 
+test('ledger: for cancel-protection every unknown entry counts as filled, a limit too; a settled order counts from its send time', () => {
+  const limitEntry = marker({ tag: 'le', side: 'buy', type: 'limit', observedNet: 0, observedRootNet: 0 });
+  assert.deepStrictEqual(m.markerLedger([limitEntry], NOW), []);
+  const [e] = m.markerLedger([limitEntry], NOW, m.GRACE_MS, { anyType: true });
+  assert.deepStrictEqual([e.sign, e.size, e.netBefore, e.sentAt], [1, 1, 0, Date.parse(limitEntry.sentAt)]);
+  const placed = m.placedLedger([{ marker: limitEntry, order: { id: 41 } }, { marker: marker({ sentAt: new Date(NOW.getTime() - m.GRACE_MS).toISOString() }), order: { id: 42 } }], NOW);
+  assert.deepStrictEqual(placed.map(x => x.orderId), ['41'], 'one sent before the grace period already shows on the account');
+});
+
+test('settleMarkers: looks the account\'s records up once, removes the settled ones, keeps everything on a failed lookup', async () => {
+  const env = { FTH_HOME: tmpDir() };
+  m.writeMarker(env, marker({ tag: 'p' }));
+  m.writeMarker(env, marker({ tag: 'g', sentAt: new Date(NOW.getTime() - m.GRACE_MS).toISOString() }));
+  m.writeMarker(env, marker({ tag: 'u' }));
+  m.writeMarker(env, marker({ tag: 'other', accountId: 8 }));
+  const failed = await m.settleMarkers({ env, accountId: 7, now: NOW, searchOrders: async () => { throw new Error('down'); }, onError: () => {} });
+  assert.deepStrictEqual([failed.lookupFailed, failed.unknown.length], [true, 3]);
+  const calls = [];
+  const r = await m.settleMarkers({ env, accountId: '7', now: NOW, searchOrders: async a => { calls.push(a); return [{ id: 5, customTag: 'p', status: 1 }]; } });
+  assert.deepStrictEqual(calls, [{ accountId: 7, startTimestamp: new Date(NOW.getTime() - m.GRACE_MS - 60000).toISOString() }]);
+  assert.deepStrictEqual([r.placed.map(p => p.marker.tag), r.gone.map(g => g.tag), r.unknown.map(u => u.tag)], [['p'], ['g'], ['u']]);
+  assert.deepStrictEqual(m.readMarkers(env).map(x => x.tag).sort(), ['other', 'u']);
+  assert.deepStrictEqual(await m.settleMarkers({ env: { FTH_HOME: tmpDir() }, accountId: 7, now: NOW, searchOrders: async () => assert.fail('no lookup without records') }), { placed: [], gone: [], unknown: [], lookupFailed: false });
+});
+
+test('prepareSend: writes the record and tags the order; a tag in use is refused for an entry and replaced for an exit', () => {
+  const env = { FTH_HOME: tmpDir() };
+  const args = { accountId: 7, contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale: 'setup:orb long', customTag: 'orb-1' };
+  const first = m.prepareSend({ env, args, risk: false, observed: { observedNet: 0, observedRootNet: 0 }, now: NOW });
+  assert.deepStrictEqual([first.tag, first.args, first.refuse], ['orb-1', args, undefined]);
+  assert.deepStrictEqual(m.readMarkers(env).map(x => [x.tag, x.observedNet, x.risk]), [['orb-1', 0, false]]);
+  assert.match(m.prepareSend({ env, args, risk: false, now: NOW }).refuse, /customTag "orb-1" is in use/);
+  const exit = m.prepareSend({ env, args: { ...args, side: 'sell', rationale: '[exit] flatten' }, risk: true, now: NOW });
+  assert.match(exit.tag, /^fth-/);
+  assert.strictEqual(exit.args.customTag, exit.tag);
+  assert.match(m.prepareSend({ env, args: { ...args, customTag: 'busy' }, risk: false, inUse: t => t === 'busy', now: NOW }).refuse, /in use/);
+  // A record that can't be written: an entry is refused, an exit still goes.
+  const blocked = { FTH_HOME: path.join(tmpDir(), 'file') };
+  fs.writeFileSync(blocked.FTH_HOME, '');
+  assert.match(m.prepareSend({ env: blocked, args: { ...args, customTag: undefined }, risk: false, now: NOW }).refuse, /could not record the order/);
+  assert.ok(m.prepareSend({ env: blocked, args: { ...args, customTag: undefined }, risk: true, now: NOW }).error);
+});
+
 test('message: names each unknown order, what settles it, and what still goes through', () => {
   const text = m.pendingMessage([marker(), { file: '/h/pending-orders/x.json', unreadable: true }], NOW);
   assert.match(text, /outcome of 2 orders is unknown: sell 1 MNQ sent 10 s ago \(customTag fth-0001\); an unreadable record \/h\/pending-orders\/x\.json/);

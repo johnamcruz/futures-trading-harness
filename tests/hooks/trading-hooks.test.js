@@ -597,6 +597,17 @@ test('MCP gateway: an entry of unknown outcome keeps its bracket stop from being
   assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
 });
 
+test('MCP gateway: a limit entry of unknown outcome keeps its bracket stop too; a resting target never lets the only stop go', async () => {
+  const dir = tmpDir();
+  writeUnknown(dir, { type: 'limit' });
+  const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
+  const withTarget = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: 'MNQ', side: 1, type: 1, size: 1, limitPrice: 21600 }]);
+  const target = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: withTarget }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })]);
+  assert.match(target.byId[2].result.content[0].text, /\[cancel-protection\]/);
+});
+
 test('MCP gateway: an unknown entry listed as pending still counts until the account shows it', async () => {
   const dir = tmpDir();
   writeUnknown(dir);

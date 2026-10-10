@@ -152,62 +152,29 @@ function main(argv) {
 
   const blocked = violations => ({ allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' });
 
+  // A call this gateway is still waiting on.
+  const ownCall = m => [...tagOf.entries()].find(([, t]) => t.tag === m.tag && String(t.accountId) === String(m.accountId));
   /**
-   * Orders on this account whose outcome is unknown (order-markers.js): each
-   * is looked up in the broker's orders by its customTag and settled when it
-   * shows there (placed, or refused by its status) or the grace period passes
-   * without it (never placed). Returns { unknown, lookupFailed }.
+   * Settle this account's orders of unknown outcome from the broker's orders
+   * (order-markers.js), then update what this gateway holds: entry records for
+   * the runner, the ledger, and its own calls a late reply must not count twice.
    */
   const settle = async (accountId, now) => {
-    let mine;
-    try {
-      mine = markers.markersFor(markers.readMarkers(process.env), accountId);
-    } catch (_err) {
-      return { unknown: [{ tag: null, file: markers.markerDir(process.env), unreadable: true }], lookupFailed: false };
-    }
-    if (!mine.length) return { unknown: [], lookupFailed: false };
-    const readable = mine.filter(m => !m.unreadable);
-    let orders = null;
-    if (readable.length) {
-      const from = new Date(Math.min(...readable.map(m => Date.parse(m.sentAt))) - 60000).toISOString();
-      try {
-        orders = parseToolJson(await caller.call('search_orders', { accountId: Number(accountId), startTimestamp: from }), 'search_orders');
-        if (!Array.isArray(orders)) throw new Error('search_orders did not return a list');
-      } catch (err) {
-        process.stderr.write(`[mcp-gateway] could not look up orders of unknown outcome: ${err.message}\n`);
-        return { unknown: mine, lookupFailed: true };
-      }
-    }
-    // A call this gateway is still waiting on is never "gone": its reply may yet come.
-    const waitingOn = m => [...tagOf.entries()].some(([id, t]) => t.tag === m.tag && String(t.accountId) === String(m.accountId) && waiting.has(id));
-    const { placed, gone, unknown } = markers.resolveMarkers(mine, orders, now, GRACE_MS, { inFlight: waitingOn });
-    const drop = m => {
-      try {
-        markers.removeMarker(process.env, m);
-      } catch (err) {
-        process.stderr.write(`[mcp-gateway] could not clear the record of order ${m.tag}: ${err.message}\n`);
-      }
-    };
-    for (const { marker: m, order } of placed) {
-      drop(m);
-      // Settled here: a late reply to one of this gateway's own calls must not count it a second time.
-      for (const [id, t] of tagOf) {
-        if (t.tag === m.tag && String(t.accountId) === String(m.accountId)) { tagOf.delete(id); overdue.delete(id); sentNet.delete(id); }
-      }
+    const r = await markers.settleMarkers({
+      env: process.env, accountId, now, graceMs: GRACE_MS,
+      searchOrders: async a => parseToolJson(await caller.call('search_orders', a), 'search_orders'),
+      inFlight: m => { const own = ownCall(m); return Boolean(own && waiting.has(own[0])); },
+      onError: msg => process.stderr.write(`[mcp-gateway] ${msg}\n`),
+    });
+    for (const { marker: m, order } of r.placed) {
+      const own = ownCall(m);
+      if (own) { tagOf.delete(own[0]); overdue.delete(own[0]); sentNet.delete(own[0]); }
       if (!m.risk && order.id !== undefined && order.id !== null) recordEntryOrder(process.env, order.id, m.args || m);
-      // Like any order just sent (recordSent): counted until the account shows it, unless it still rests
-      // (pendingState skips orders in list_open_orders). One sent long ago already shows.
-      if (Number.isFinite(m.observedNet) && now.getTime() - Date.parse(m.sentAt) < GRACE_MS) {
-        const sign = String(m.side).toLowerCase() === 'buy' ? 1 : -1;
-        ledger.push({ contractId: m.contractId, root: contractRoot(m.contractId), sign, size: Number(m.size), netBefore: m.observedNet, rootNetBefore: Number.isFinite(m.observedRootNet) ? m.observedRootNet : m.observedNet, at: now.getTime(), orderId: String(order.id) });
-      }
     }
+    ledger.push(...markers.placedLedger(r.placed, now, GRACE_MS));
     // Not placed: a reply that still comes later is recorded as usual.
-    for (const m of gone) {
-      drop(m);
-      for (const [id, t] of tagOf) if (t.tag === m.tag && String(t.accountId) === String(m.accountId)) tagOf.delete(id);
-    }
-    return { unknown, lookupFailed: false };
+    for (const m of r.gone) { const own = ownCall(m); if (own) tagOf.delete(own[0]); }
+    return r;
   };
 
   const check = async (args, tool, id) => {
@@ -219,7 +186,7 @@ function main(argv) {
       // unknown outcome doesn't count as done: neither lets the last protective stop go.
       const { unknown } = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...markers.markerLedger(unknown.filter(m => !m.risk), now, GRACE_MS)], now }));
+      return blocked(evaluateCancel({ input: args, positions, orders, config: loadConfig(process.env), ledger: [...ledger, ...markers.markerLedger(unknown.filter(m => !m.risk), now, GRACE_MS, { anyType: true })], now }));
     }
     if (tool === 'modify_order') {
       if (base.violations.length) return base;
@@ -246,7 +213,7 @@ function main(argv) {
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(gateNow(), loadConfig(process.env));
     if (late && !violations.some(v => v.check === 'market-hours')) violations.push({ check: 'market-hours', message: late });
-    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet });
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: gateNow().getTime() });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };
 
@@ -305,7 +272,7 @@ function main(argv) {
       const res = resultJson(response);
       if (!observedNet || !res || res.success !== true) return;
       const size = closeTool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(observedNet)) : Math.abs(observedNet);
-      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime() });
+      if (size > 0) ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(observedNet), size, netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt });
       return;
     }
     const placed = resultJson(response);
@@ -317,7 +284,7 @@ function main(argv) {
     // it rests it shows in list_open_orders and the ledger skips it.
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
     const orderId = placed && placed.orderId !== undefined && placed.orderId !== null ? String(placed.orderId) : null;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), orderId });
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: gateNow().getTime(), sentAt: sent.sentAt, orderId });
   };
   const log = e => logDecision(e, process.env);
 
@@ -365,39 +332,20 @@ function main(argv) {
       if (parsed && !Array.isArray(parsed) && parsed.method === 'tools/call' && /(?:^|__)place_order$/.test(String(parsed.params && parsed.params.name || ''))) {
         const args = parsed.params.arguments || {};
         const risk = isRiskReducing(args.rationale);
-        const refuse = message => {
-          if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([{ check: 'order-pending', message }]))));
-          log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'order-pending', message }], contractId: args.contractId, rationale: args.rationale });
+        const sent = parsed.id !== undefined ? sentNet.get(parsed.id) : null;
+        const inUse = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId));
+        const prep = markers.prepareSend({ env: process.env, args, risk, observed: sent, inUse, now: gateNow() });
+        if (prep.refuse) {
+          if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([{ check: 'order-pending', message: prep.refuse }]))));
+          log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'order-pending', message: prep.refuse }], contractId: args.contractId, rationale: args.rationale });
           sentNet.delete(parsed.id);
           inFlight.delete(parsed.id);
-        };
-        let tag = markers.tagFor(args);
-        // A tag already carried by an order of unknown outcome on this account: a second order with it
-        // would overwrite that record, and its reply would erase it.
-        const taken = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId)) || markers.markerExists(process.env, args.accountId, t);
-        if (taken(tag)) {
-          if (!risk) {
-            refuse(`customTag ${JSON.stringify(tag)} is in use by an order of unknown outcome on this account. Send the entry with another customTag (or none).`);
-            return;
-          }
-          tag = markers.newTag();
+          return;
         }
-        const sent = parsed.id !== undefined ? sentNet.get(parsed.id) : null;
-        try {
-          markers.writeMarker(process.env, {
-            tag, accountId: args.accountId, contractId: args.contractId, side: args.side, size: args.size, type: args.type,
-            risk, args: { contractId: args.contractId, side: args.side, rationale: args.rationale, stopLossBracket: args.stopLossBracket },
-            observedNet: sent ? sent.observedNet : null, observedRootNet: sent ? sent.observedRootNet : null, sentAt: gateNow().toISOString(),
-          });
-        } catch (err) {
-          if (!risk) {
-            refuse(`The gateway could not record the order before sending it (${err.message}), so an unknown outcome could not be tracked. The order was not sent.`);
-            return;
-          }
-          process.stderr.write(`[mcp-gateway] could not record ${tag} before sending it: ${err.message}\n`);
-        }
-        if (args.customTag !== tag) {
-          parsed = { ...parsed, params: { ...parsed.params, arguments: { ...args, customTag: tag } } };
+        if (prep.error) process.stderr.write(`[mcp-gateway] could not record ${prep.tag} before sending it: ${prep.error}\n`);
+        const tag = prep.tag;
+        if (prep.args !== args) {
+          parsed = { ...parsed, params: { ...parsed.params, arguments: prep.args } };
           line2 = JSON.stringify(parsed);
         }
         if (parsed.id !== undefined) tagOf.set(parsed.id, { accountId: args.accountId, tag });
@@ -411,7 +359,7 @@ function main(argv) {
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
-          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId) });
+          if (Array.isArray(positions)) sentNet.set(m.id, { args, closeTool: close[1], observedNet: contractNet(positions, args.contractId), observedRootNet: netPosition(positions, args.contractId), sentAt: gateNow().getTime() });
         } catch (err) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);
         }

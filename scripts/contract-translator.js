@@ -68,7 +68,8 @@ function main(argv) {
           translated = await translator.translateResult(tool, data);
         } catch (err) {
           // Never pass broker ids up: nothing above the translator can trade them.
-          return errorResult(m.id, `contract: could not name the contracts in this result (${err.message})`);
+          // Not "contract: " (the prefix of a refusal before sending): the call reached the server.
+          return errorResult(m.id, `contract result: could not name the contracts in this result (${err.message})`);
         }
         const text = JSON.stringify(translated, null, 2);
         return { ...m, result: { ...r, content: [{ ...r.content[0], text }, ...r.content.slice(1)] } };

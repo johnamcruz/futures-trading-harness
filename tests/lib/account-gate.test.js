@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseToolJson, netPosition, pendingNet, fillLossState, evaluateAccount: rawEvaluate, evaluateCancel } = require('../../scripts/lib/trading/account-gate');
+const { parseToolJson, netPosition, pendingNet, pendingState, fillLossState, evaluateAccount: rawEvaluate, evaluateCancel } = require('../../scripts/lib/trading/account-gate');
 const evaluateAccount = o => rawEvaluate({ positions: [], orders: [], trades: [], ...o });
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { CONTRACT, NOW, minutesAgo } = require('../helpers');
@@ -107,6 +107,20 @@ test('cancel_order: a close the gateway sent and the server confirmed counts bef
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: stale, now })[0].message, /protective stop/);
   const other = [{ ...closed[0], contractId: 'MNQ:2027-03' }];
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop], config, ledger: other, now })[0].message, /protective stop/);
+});
+
+test('cancel_order: a resting [exit] target in the ledger hasn\'t changed the position, so the only stop stays', () => {
+  const orders = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: CONTRACT, side: 1, type: 1, size: 1, limitPrice: 21600 }];
+  const ledger = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: NOW.getTime(), orderId: '55' }];
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: long1, orders, config, ledger, now: NOW })), ['cancel-protection']);
+});
+
+test('ledger: entries are ordered by when they were sent, so one settled late doesn\'t count on top of a close sent after it', () => {
+  const t = NOW.getTime();
+  // An entry (buy 1 from flat) sent first but settled late, then a close of the resulting long sent after it.
+  const entry = { contractId: CONTRACT, sign: 1, size: 1, netBefore: 0, at: t, sentAt: t - 20000 };
+  const close = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: t - 1000, sentAt: t - 1000 };
+  assert.strictEqual(pendingState([close, entry], CONTRACT, 1, NOW, undefined, { exact: true }).projected, 0);
 });
 
 test('ledger: exits must hold against the position once every recent order fills', () => {
