@@ -44,10 +44,10 @@ The harness tracks the attempt and enforces it:
   bundle passed `rl/ship.py`), and starts the attempt with `combine.js
   start`. Until then every verdict entry is refused (`[strategy] ... status
   "paper"`): report it and stand aside.
-- **A verdict for the mini** (`NQ` while the bars are MNQ's): find the NQ
-  contractId with `search_contracts` (the active contract; contract ids name NQ
-  `ENQ`, ES `EP`), and write the plan **and** the order with that
-  contractId; a plan for the MNQ contract doesn't count for an NQ order.
+- **A verdict for the mini** (`NQ` while the bars are MNQ's): use the
+  contract name `NQ` as the contractId (the harness translates it to the
+  broker's id), and write the plan **and** the order with it; a plan for
+  `MNQ` doesn't count for an NQ order.
 - The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;
   none can be skipped): no started attempt
   (`node <root>/scripts/combine.js start --account <name>`, the user's call); a

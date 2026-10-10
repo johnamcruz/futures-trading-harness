@@ -18,7 +18,8 @@
  * createTranslator({ call, cacheFile, now })
  *   .toBroker(name)               standard name -> broker id (throws when not found)
  *   .toStandard(id)               broker id -> standard name (the id itself when it isn't a futures ticker)
- *   .translateArgs(tool, args)    a tool call's contractId, standard -> broker
+ *   .translateArgs(tool, args)    a tool call's contractId, standard -> broker (a known or
+ *                                 non-standard broker id passes through, so a raw id can still be closed)
  *   .translateResult(tool, data)  every contractId (and contract ids) in a result, broker -> standard
  *
  * isStandardName(s), parseStandardName(s), parseTicker(name, now)
@@ -29,8 +30,9 @@ const fs = require('fs');
 const path = require('path');
 
 const MONTHS = 'FGHJKMNQUVXZ';
-const STANDARD = /^([A-Z][A-Z0-9]{0,5})(?::(\d{4})-(\d{2}))?$/;
-const TICKER = /^([A-Z][A-Z0-9]*?)([FGHJKMNQUVXZ])(\d{1,2})$/;
+// A root has a letter (6E, M2K, MNQ); an all-digit string is a broker id, never a name.
+const STANDARD = /^((?=[A-Z0-9]*[A-Z])[A-Z0-9]{1,6})(?::(\d{4})-(\d{2}))?$/;
+const TICKER = /^((?=[A-Z0-9]*?[A-Z])[A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$/;
 const { tradingDayKey } = require('../trading/clock');
 // Tools whose result lists contracts: their `id` is a contract id too.
 const CONTRACT_TOOLS = new Set(['search_contracts', 'get_contract', 'list_available_contracts']);
@@ -76,11 +78,26 @@ function readCache(file) {
   }
 }
 
+/**
+ * Merge into the file: the gateway's and the runner's translators share it, and
+ * hooks read it, so one process never drops another's ids. Per root, the front
+ * month of the later trading day wins.
+ */
+function mergeCache(into, from) {
+  Object.assign(into.ids, from.ids);
+  for (const [root, f] of Object.entries(from.front)) {
+    if (!into.front[root] || String(f.day) >= String(into.front[root].day)) into.front[root] = f;
+  }
+  return into;
+}
+
 function writeCache(file, cache) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const merged = mergeCache(readCache(file), cache);
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(cache, null, 2)}\n`);
+  fs.writeFileSync(tmp, `${JSON.stringify(merged, null, 2)}\n`);
   fs.renameSync(tmp, file);
+  return merged;
 }
 
 /** The root of a broker id, from the cache (local; no lookup), or null. */
@@ -99,7 +116,8 @@ const parseJson = result => {
 
 function createTranslator({ call, cacheFile, now = () => new Date() }) {
   let cache = readCache(cacheFile);
-  const save = () => writeCache(cacheFile, cache);
+  const save = () => { cache = writeCache(cacheFile, cache); };
+  const notTicker = new Set(); // ids the broker described with a name that is no futures ticker
 
   const remember = c => {
     const t = c && c.id ? parseTicker(c.name, now()) : null;
@@ -122,11 +140,22 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
 
   const frontFresh = root => Boolean(cache.front[root]) && cache.front[root].day === tradingDayKey(now());
 
+  /**
+   * Today's front month of a root. Another process (gateway or runner) may have
+   * looked it up today already: adopt its answer, so "MNQ" names one contract in
+   * both, and search only when nobody has.
+   */
+  async function ensureFront(root) {
+    if (frontFresh(root)) return;
+    cache = mergeCache(readCache(cacheFile), cache);
+    if (!frontFresh(root)) await lookUpRoot(root);
+  }
+
   async function toBroker(name) {
     const std = parseStandardName(name);
     if (!std) throw new TranslationError(`"${name}" is not a contract name: use a root such as MNQ, NQ, ES (the front month) or MNQ:2026-12`);
     if (!std.month) {
-      if (!frontFresh(std.root)) await lookUpRoot(std.root);
+      await ensureFront(std.root);
       if (!cache.front[std.root]) throw new TranslationError(`no ${std.root} contract found at this broker`);
       return cache.front[std.root].id;
     }
@@ -143,23 +172,33 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   async function toStandard(id) {
     if (id === null || id === undefined || id === '') return id;
     let known = cache.ids[id];
-    if (!known) {
+    if (!known && !notTicker.has(id)) {
+      let c;
       try {
-        known = remember(parseJson(await call('get_contract', { contractId: id })));
-        save();
+        c = parseJson(await call('get_contract', { contractId: id }));
       } catch (_err) {
-        known = null;
+        c = null; // a failed lookup is tried again next time
       }
+      known = c ? remember(c) : null;
+      if (known) save();
+      else if (c) notTicker.add(id);
     }
     if (!known) return id; // not a futures ticker: left as the broker's id
-    if (!frontFresh(known.root)) await lookUpRoot(known.root);
+    try {
+      await ensureFront(known.root);
+    } catch (_err) {
+      // the search failed: yesterday's front month if there is one, else the month's own name (both translate back)
+    }
     const front = cache.front[known.root];
     return front && front.id === id ? known.root : `${known.root}:${known.month}`;
   }
 
   async function translateArgs(tool, args = {}) {
     if (KEEP_ARGS.has(tool) || !args || typeof args.contractId !== 'string') return args;
-    return { ...args, contractId: await toBroker(args.contractId) };
+    const id = args.contractId;
+    // A broker id (seen in a result the translator could not name) goes through as is.
+    if (cache.ids[id] || notTicker.has(id) || !isStandardName(id)) return args;
+    return { ...args, contractId: await toBroker(id) };
   }
 
   /** Every contractId in a result (and the ids of contract tools' results), broker -> standard. */
@@ -179,7 +218,18 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
       }
       return out;
     };
-    return walk(data, CONTRACT_TOOLS.has(tool));
+    const contractList = CONTRACT_TOOLS.has(tool);
+    if (contractList) {
+      // Contract lists carry each contract's ticker: learn them all at once, no lookup per id.
+      const items = (Array.isArray(data) ? data : [data]).filter(c => c && typeof c.id === 'string' && c.name !== undefined);
+      let learned = false;
+      for (const c of items) {
+        if (remember(c)) learned = true;
+        else notTicker.add(c.id);
+      }
+      if (learned) save();
+    }
+    return walk(data, contractList);
   }
 
   return { toBroker, toStandard, translateArgs, translateResult, cache: () => cache };

@@ -81,6 +81,18 @@ function setup(entries, extraEnv = {}) {
 
 const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__broker__place_order', tool_input: input });
 
+test('order gate: a server-written entry under a broker id the translator never named still needs its review', () => {
+  const at = m => minutesAgo(m, new Date(TEST_NOW));
+  const raw = { ts: at(30), kind: 'order_placed', contractId: 'CON.F.US.MNQ.Z26', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } };
+  const { env } = setup([raw, { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(), env);
+  assert.strictEqual(r.code, 2, 'no translator cache in this home: the id may be MNQ, so it counts');
+  assert.match(r.stderr, /\[review-before-next-entry\]/);
+  // With the translator's lookup on file, it counts as MNQ (and still needs the review); on another root it wouldn't.
+  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
+  assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
+});
+
 test('order gate blocks an unplanned entry with exit code 2', () => {
   const { env } = setup([]);
   const r = gate(orderPayload(), env);
@@ -423,6 +435,7 @@ test('MCP gateway: the configured server sits behind the contract translator: st
     call(2, 'list_open_positions', { accountId: 7 }),
     call(3, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the long' }),
     call(4, 'get_bars', { contractId: 'ES', unit: 'minute', unitNumber: 1, limit: 5 }),
+    call(5, 'close_position', { accountId: 7, contractId: 'CON.F.US.MNQ.Z26' }),
   ].join('\n')}\n`);
   await new Promise(r => setTimeout(r, 2500));
   gw.stdin.end();
@@ -439,6 +452,8 @@ test('MCP gateway: the configured server sits behind the contract translator: st
   const placed = seen.find(c => c.name === 'place_order');
   assert.strictEqual(placed.args.contractId, 'CON.F.US.MNQ.Z26');
   assert.ok(!seen.some(c => c.args && c.args.contractId === 'MNQ'), 'no standard name reached the server');
+  assert.ok(seen.some(c => c.name === 'close_position' && c.args.contractId === 'CON.F.US.MNQ.Z26'), 'a broker id still closes: it goes through as is');
+  assert.ok(!byId[5].result.isError, byId[5].result.content && byId[5].result.content[0].text);
 });
 
 async function gatewayRun(extraEnv, messages, { gapMs = 0 } = {}) {

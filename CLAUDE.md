@@ -39,7 +39,7 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
   `scripts/lib/broker/adapter.js`. Check a server with `scripts/check-broker-mcp.js`.
   Contracts have standard names (`MNQ`, `NQ:2026-03`): the contract translator
   (`scripts/contract-translator.js`, `scripts/lib/broker/translator.js`) sits in front of every server and
-  maps them to the broker's own ids by asking that server; nothing above it sees a broker id.
+  maps them to the broker's own contract ids by asking that server; nothing above it needs one.
 - `rules/trading/`: always-on rules (installed for Claude, embedded in workspace/AGENTS.md).
 - `hooks/hooks.json`: every hook runs through `scripts/hooks/run-with-flags.js`.
 - `scripts/lib/`: pure logic (frontmatter, harness-sync, install, autotrader,

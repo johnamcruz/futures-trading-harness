@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
 const { parseTicker, parseStandardName, isStandardName, createTranslator, standardRoot, TranslationError } = require('../../scripts/lib/broker/translator');
-const { contractRoot, contractMonthTag } = require('../../scripts/lib/trading/journal');
+const { contractRoot, contractMonthTag, mayBeRoot } = require('../../scripts/lib/trading/journal');
 const { tmpDir } = require('../helpers');
 
 // A broker whose ids look nothing like the standard names: the translator learns them from its own answers.
@@ -95,4 +95,72 @@ test('the front month is looked up again on a new trading day, and per broker', 
 test('the harness reads roots and months from standard names', () => {
   assert.deepStrictEqual([contractRoot('NQ:2026-03'), contractRoot('MNQ'), contractMonthTag('NQ:2026-03'), contractMonthTag('MNQ')], ['NQ', 'MNQ', '2026-03', '']);
   assert.strictEqual(contractRoot('unknown.id'), 'UNKNOWN.ID', 'an unknown id matches no strategy');
+});
+
+test('a broker id the translator could not name still goes through, so it can be closed', async () => {
+  const { call } = fakeBroker();
+  const t = createTranslator({ call, cacheFile: path.join(tmpDir(), 'c.json'), now: () => NOW });
+  assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: 'CON.F.US.MNQ.Z25' }), { contractId: 'CON.F.US.MNQ.Z25' });
+  assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: '4471923' }), { contractId: '4471923' }, 'all digits: a broker id, not a name');
+  await t.toBroker('MNQ');
+  assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: 'b-101' }), { contractId: 'b-101' }, 'a known broker id');
+  assert.ok(isStandardName('6E') && !isStandardName('4471923'));
+  assert.deepStrictEqual(parseTicker('6EZ6', NOW), { root: '6E', month: '2026-12' });
+});
+
+test('a failed search keeps results translatable: yesterday\'s front month, else the month\'s own name', async () => {
+  const { call } = fakeBroker();
+  let down = false;
+  const flaky = async (name, args) => {
+    if (down && name === 'search_contracts') return { content: [{ type: 'text', text: 'rate limited' }], isError: true };
+    return call(name, args);
+  };
+  const t = createTranslator({ call: flaky, cacheFile: path.join(tmpDir(), 'c.json'), now: () => NOW });
+  down = true;
+  assert.strictEqual(await t.toStandard('b-102'), 'MNQ:2027-03');
+  assert.strictEqual(await t.toBroker('MNQ:2027-03'), 'b-102', 'the month name translates back without a search');
+  down = false;
+  await t.toBroker('MNQ');
+  const shared = path.join(tmpDir(), 'd.json');
+  const later = createTranslator({ call: flaky, cacheFile: shared, now: () => new Date(NOW.getTime() + 86400000) });
+  await later.toBroker('MNQ');
+  down = true;
+  const nextDay = createTranslator({ call: flaky, cacheFile: shared, now: () => new Date(NOW.getTime() + 2 * 86400000) });
+  assert.strictEqual(await nextDay.toStandard('b-101'), 'MNQ', 'yesterday\'s front month');
+});
+
+test('two translators on one cache file keep each other\'s ids and agree on the front month', async () => {
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const a = fakeBroker();
+  const b = fakeBroker();
+  const ta = createTranslator({ call: a.call, cacheFile, now: () => NOW });
+  const tb = createTranslator({ call: b.call, cacheFile, now: () => NOW });
+  await ta.toBroker('NQ');
+  await tb.toBroker('MNQ:2027-03');
+  assert.strictEqual(standardRoot('b-201', cacheFile), 'NQ', 'the first process\'s id survives the second\'s write');
+  assert.strictEqual(standardRoot('b-102', cacheFile), 'MNQ');
+  // The gateway adopts the front month the runner looked up today: no search of its own.
+  const gw = fakeBroker();
+  const tg = createTranslator({ call: gw.call, cacheFile: path.join(tmpDir(), 'other.json'), now: () => NOW });
+  assert.strictEqual(await tg.toBroker('MNQ'), 'b-101');
+  const tc = createTranslator({ call: async () => { throw new Error('no lookups'); }, cacheFile, now: () => NOW });
+  await ta.toBroker('MNQ');
+  assert.strictEqual(await tc.toBroker('MNQ'), 'b-101', 'read from the file another process wrote today');
+});
+
+test('contract lists are learned from their own tickers, one pass, no lookup per id', async () => {
+  const { call, calls } = fakeBroker();
+  const t = createTranslator({ call, cacheFile: path.join(tmpDir(), 'c.json'), now: () => NOW });
+  const listed = await t.translateResult('list_available_contracts', CONTRACTS);
+  assert.deepStrictEqual(listed.map(c => c.id), ['MNQ', 'MNQ:2027-03', 'NQ', 'b-301']);
+  assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0);
+  assert.strictEqual(calls.filter(c => c[0] === 'search_contracts').length, 2, 'one search per root, for its front month');
+  await t.translateResult('list_open_positions', [{ contractId: 'b-301' }, { contractId: 'b-301' }]);
+  assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0, 'a contract known not to be a ticker isn\'t looked up again');
+});
+
+test('mayBeRoot: an id the gate can\'t name may be on any contract', () => {
+  assert.ok(mayBeRoot('MNQ', 'MNQ') && mayBeRoot('MNQ:2027-03', 'MNQ') && mayBeRoot(undefined, 'MNQ'));
+  assert.ok(!mayBeRoot('MES', 'MNQ'));
+  assert.ok(mayBeRoot('CON.F.US.XYZ.Z26', 'MNQ'));
 });

@@ -14,7 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const combine = require('./combine');
-const { contractRoot, entryTime } = require('./journal');
+const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf } = require('./contracts');
 const { tradingDayKey } = require('./clock');
 
@@ -269,7 +269,7 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
       const fam = r => (familyOf(r) ? familyOf(r).micro : r);
       const used = entries.some(e => e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
         && tag.test(String(e.text || '')) && entryTime(e) >= Date.parse(v.at)
-        && (!e.contractId || fam(contractRoot(e.contractId)) === fam(root)));
+        && (mayBeRoot(e.contractId, root) || (Boolean(e.contractId) && fam(contractRoot(e.contractId)) === fam(root))));
       if (!Number.isFinite(Date.parse(v.at))) why = 'the verdict has no time; wait for the next setup';
       else if (used) why = `the verdict of ${v.at} was already used for an entry; wait for the next setup`;
     }

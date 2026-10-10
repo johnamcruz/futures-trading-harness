@@ -64,6 +64,15 @@ test('reviews without a result tag or for another contract do not clear the revi
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [placed(30), otherContract, plan(5)])), ['review-before-next-entry']);
 });
 
+test('an entry under a broker id the translator can\'t name counts on every contract (fails closed)', () => {
+  // The server writes order_placed under its own id; with no translator lookups to name it, it still needs its review.
+  const raw = { ...placed(30), contractId: 'CON.F.US.ENQ.Z25' };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [raw, plan(5)])), ['review-before-next-entry']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [{ ...raw, contractId: '4471923' }, plan(5)])), ['review-before-next-entry'], 'an all-digit id is a broker id too');
+  // A standard name on another contract does not count.
+  assert.deepStrictEqual(evaluate(entryOrder(), [{ ...placed(30), contractId: 'MES' }, plan(5)]).violations, []);
+});
+
 test('paper mode and a truncated journal window block entries; autonomous mode ignores skip lists', () => {
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...config, paper: true } })), ['paper-mode']);
   const r = evaluateOrder({ input: entryOrder(), entries: [plan(5)], now: NOW, config, journalTruncated: true });
@@ -453,6 +462,7 @@ test('policy: only this strategy\'s entries on this index use its verdict', () =
   assert.deepStrictEqual(run([placed(1, 'setup:orb-x long')]), [], 'another strategy\'s tag');
   assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'MES' }]), [], 'another index');
   assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'NQ' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
+  assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.ENQ.Z25' }]).map(v => v.message).join(), /already used/, 'a broker id it can\'t name: fails closed');
 });
 
 test('order-consistency: the side named in the rationale must be the order side', () => {

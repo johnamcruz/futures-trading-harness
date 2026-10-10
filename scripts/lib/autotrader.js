@@ -361,7 +361,7 @@ function prompts(cfg, now, root = '') {
       const verdicts = list.flatMap(x => (x.verdicts || []).map(v => ({ ...v, symbol: x.symbol }))).map(v => (v.action === 'skip'
         ? ` ${v.symbol} ${v.strategy}: the ${v.direction} setup from ${v.component} is skipped (${v.reason || 'the policy'}); no entry.`
         : ` ${v.symbol} ${v.strategy}: ${v.direction} setup from ${v.component}, verdict ${v.action}: enter only as setup:${v.strategy}, ${v.contract} ${v.direction === 'long' ? 'buy' : 'sell'}, at most ${v.maxSize}, stopLossBracket.ticks ${v.stopTicks}`
-          + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the ${v.contract} contractId is not ${v.contractId}: find it with search_contracts, active contract; NQ trades as ENQ, ES as EP; use it for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
+          + `${v.contract && v.contractId && contractRoot(v.contractId) !== v.contract ? ` (the contract is ${v.contract}, not ${v.contractId}: use contractId "${v.contract}" for the plan and the order)` : ''} (prop-challenge-pacing skill).`));
       // When the runner flattens, and how many trade cycles are left before manage-only (when few).
       const eod = endOfDayAt(cfg, now);
       const eodMs = eod ? tradingDayStart(now).getTime() + sessionMinuteOf(eod, now) * 60000 : null;

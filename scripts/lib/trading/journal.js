@@ -96,6 +96,21 @@ function contractRoot(contractId) {
   return String(contractId || '').toUpperCase();
 }
 
+/**
+ * True when an entry's contract may be on `root`: its root is `root`, or it is
+ * a broker id the translator's lookups don't name (an empty cache, another
+ * harness home, entries from before the translator). Gate counts that must not
+ * miss an entry (entries without a review, a used verdict) use this, so an id
+ * they can't name counts against every root: they fail closed.
+ */
+function mayBeRoot(contractId, root) {
+  if (!contractId) return true;
+  const r = contractRoot(contractId);
+  if (r === root) return true;
+  const { parseStandardName } = require('../broker/translator');
+  return !parseStandardName(contractId) && r === String(contractId).toUpperCase();
+}
+
 /** The month part of a standard name ('2026-03'), or '' for the front month. */
 function contractMonthTag(contractId) {
   const std = require('../broker/translator').parseStandardName(contractId);
@@ -111,5 +126,6 @@ module.exports = {
   hasTag,
   reviewResult,
   contractRoot,
+  mayBeRoot,
   contractMonthTag,
 };

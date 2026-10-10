@@ -92,6 +92,9 @@ it reads from the signal record (`strategies.js scan --record`), not the
 plan. Optional parameters the gate and reviews use: `journal_read {kind, tag}`
 filters, `journal_add {orderId}` links a review to its order, and
 `modify_order {reason}` labels a stop change (`[protect] ...`).
+Don't filter `journal_read` by `contractId`: the server stores its own
+`order_placed` entries under the broker's contract id, so a filter on `MNQ`
+drops them. Filter by `kind` / `tag` and read `contractId` in the results.
 
 ### Harness rationale convention (the order gate reads it)
 
