@@ -155,7 +155,7 @@ Further safeguards:
 - **Market session.** Sessions must lie inside 18:00-16:00 ET (the trading
   day runs from the 18:00 ET open to the 16:00 ET close) and `eodAt`
   (required) can't be later than 16:00 ET. Outside the session (16:00-18:00
-  ET, weekends), or after the day's end of day, the runner reads the account
+  ET, weekends, exchange holidays), or after the day's end of day, the runner reads the account
   once a minute and closes any position in its symbols. No position is
   carried past the close.
 - **Deadlines.** No run outlasts end of day: each gets at most the time left

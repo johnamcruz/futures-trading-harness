@@ -338,7 +338,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0 }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {} }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -350,7 +350,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   let killed = false;
   const cycles = [];
   const runner = createRunner({
-    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}) }), root: '/r',
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}), ...cfgOver }), root: '/r',
     client: {
       async activeContract() { return { id: 'MNQ', tickSize: 0.25, tickValue: 0.5 }; },
       async closedBars() {
@@ -431,6 +431,12 @@ test('waiting for closes to fill is no failed run, for a while; a close that nev
   const stuck = await trailSim({ tape: {}, startAt: et(15, 49) + 2000, until: et(16, 5), ghostCloses: 1000 });
   assert.ok(stuck.kills >= 1, 'never verified flat: a real failure');
   assert.ok(!stuck.events.some(e => e.kind === 'eod' && e.ok === true));
+});
+
+test('on an exchange holiday nothing trades, and a position carried into it is flattened', async () => {
+  const r = await trailSim({ tape: {}, startAt: et(10, 0) + 2000, until: et(10, 10), cfgOver: { closedDates: ['2026-10-07'] } });
+  assert.deepStrictEqual(r.cycles.filter(c => c === 'trade'), []);
+  assert.ok(r.closedIds.includes('MNQ'));
 });
 
 test('a position whose size can\'t be read is flattened, never read as flat', async () => {

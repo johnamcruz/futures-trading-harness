@@ -798,9 +798,9 @@ function createRunner(deps) {
       // A failed end of day is retried, with a growing pause (5 s .. 60 s).
       return ok ? 0 : awaitingFlat ? IDLE_MS : Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors - 1, 4));
     }
-    if (d.action === null && (!inMarketHours(now) || state.eodDone)) {
-      // Outside market hours (or after today's end of day) nothing may be
-      // open: check once a minute and flatten whatever is.
+    if (d.action === null && (!inMarketHours(now) || state.eodDone || cfg.closedDates.includes(dayKey(now)))) {
+      // Outside market hours, on an exchange holiday, or after today's end of
+      // day nothing may be open: check once a minute and flatten whatever is.
       if (now.getTime() - lastHoursCheck >= 60000) {
         lastHoursCheck = now.getTime();
         await flattenAll('outside market hours');

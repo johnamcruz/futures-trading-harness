@@ -579,10 +579,20 @@ only checks that they really reduce the position.
 
 ```bash
 npm install
-npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content (+ rl/tests when Python has numpy)
+npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content, e2e (+ rl/tests when Python has numpy)
 npm run lint                     # eslint + markdownlint
 node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after editing agents, commands, rules, skills
 ```
+
+`tests/e2e/mock-trading-e2e.test.js` trades end to end on a mock exchange
+(`tests/fixtures/mock-exchange.js`) through the production stack: the order
+gateway and the contract translator in front of a broker MCP server, and the
+runner on the broker adapter. It covers a trade's whole life (a real signal,
+the refusals, stop moves, partial closes, a stop-out, a target, the runner's
+trailing stop), a contract named three ways, an unreadable position,
+holidays, the early close, and end of day against a broker that loses or
+delays its closes. A change to the gate, the gateway, or the runner keeps it
+green.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/HARNESS-DESIGN.md](docs/HARNESS-DESIGN.md).
 

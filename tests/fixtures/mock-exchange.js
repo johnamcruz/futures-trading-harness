@@ -1,0 +1,242 @@
+'use strict';
+
+/**
+ * A mock exchange for end-to-end tests: one account's positions, working
+ * orders and fills, with market fills at the current price, bracket legs
+ * (OCO: a filled leg cancels its sibling; a flat position cancels both), and
+ * stops and limits that trigger when the test moves the price. Its state is a
+ * JSON file shared by every copy of the mock MCP server (the runner's reads
+ * and the gateway each start one) and by the test, under a lock.
+ *
+ * Broker faults the test can switch on (state fields):
+ *   dropCloses: n   the next n closes are accepted and never fill (a ghost close)
+ *   holdCloses      closes are accepted and fill only on settle() (fill lag)
+ *   oddSize         positions are listed without a size
+ *
+ *   initState(file, over)          a fresh account
+ *   update(file, fn)               fn(state) under the lock; the state is saved
+ *   read(file)                     the state
+ *   setPrice(file, contract, p)    move the market (triggers stops and limits)
+ *   settle(file)                   fill the closes held by holdCloses
+ *   handle(file, tool, args, env)  a broker MCP tool call -> its result
+ */
+
+const fs = require('fs');
+
+const ACCOUNT = 7;
+const CONTRACTS = [
+  { id: 'CON.F.US.MNQ.Z26', name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
+  { id: 'CON.F.US.MNQ.H27', name: 'MNQH7', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: false },
+  { id: 'CON.F.US.MES.Z26', name: 'MESZ6', description: 'Micro E-mini S&P 500', tickSize: 0.25, tickValue: 1.25, activeContract: true },
+];
+const TYPE = { limit: 1, market: 2, stop: 4 };
+const OK = { success: true, errorCode: 0, errorName: 'Success', errorMessage: null };
+const fail = (errorCode, errorName) => ({ success: false, errorCode, errorName, errorMessage: errorName });
+
+const iso = ms => new Date(ms).toISOString();
+const contractOf = id => CONTRACTS.find(c => c.id === id);
+const netOf = (s, id) => {
+  const p = s.positions.find(x => x.contractId === id);
+  return p ? (p.type === 1 ? 1 : -1) * p.size : 0;
+};
+
+function initState(file, over = {}) {
+  const state = {
+    nowMs: Date.parse('2026-10-07T14:00:00Z'), prices: { 'CON.F.US.MNQ.Z26': 21500, 'CON.F.US.MNQ.H27': 21600, 'CON.F.US.MES.Z26': 5800 },
+    balance: 50000, nextId: 100, positions: [], orders: [], fills: [], dropCloses: 0, holdCloses: false, held: [], oddSize: false, calls: [], ...over,
+  };
+  fs.writeFileSync(file, JSON.stringify(state));
+  return state;
+}
+
+function lock(file) {
+  const dir = `${file}.lock`;
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  for (let i = 0; i < 5000; i += 1) {
+    try {
+      fs.mkdirSync(dir);
+      return () => fs.rmdirSync(dir);
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      Atomics.wait(wait, 0, 0, 2);
+    }
+  }
+  throw new Error(`mock exchange: ${dir} stayed locked`);
+}
+
+function update(file, fn) {
+  const release = lock(file);
+  try {
+    const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const out = fn(s);
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(s));
+    fs.renameSync(`${file}.tmp`, file);
+    return out;
+  } finally {
+    release();
+  }
+}
+
+const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+
+/** A fill: the position, realized P&L on the part it closes, and OCO legs once flat. */
+function fill(s, contractId, side, size, price, orderId) {
+  const c = contractOf(contractId);
+  const sign = side === 0 ? 1 : -1;
+  const net = netOf(s, contractId);
+  const old = s.positions.find(x => x.contractId === contractId);
+  let pnl = null;
+  if (net !== 0 && Math.sign(net) !== sign) {
+    pnl = (price - old.averagePrice) * Math.sign(net) * Math.min(Math.abs(net), size) * (c.tickValue / c.tickSize);
+    s.balance += pnl;
+  }
+  const fees = 0.37 * size;
+  s.balance -= fees;
+  s.fills.push({ id: s.nextId++, orderId, accountId: ACCOUNT, contractId, creationTimestamp: iso(s.nowMs), price, profitAndLoss: pnl, fees, side, size, voided: false });
+  const next = net + sign * size;
+  s.positions = s.positions.filter(x => x.contractId !== contractId);
+  if (next === 0) {
+    // Flat: its bracket legs go (auto OCO).
+    for (const o of s.orders) if (o.status === 1 && o.contractId === contractId && o.parentId) o.status = 3;
+    return;
+  }
+  const same = net !== 0 && Math.sign(next) === Math.sign(net);
+  const avg = same && Math.abs(next) > Math.abs(net) ? (old.averagePrice * Math.abs(net) + price * size) / Math.abs(next) : same ? old.averagePrice : price;
+  s.positions.push({ id: same ? old.id : s.nextId++, accountId: ACCOUNT, contractId, creationTimestamp: same ? old.creationTimestamp : iso(s.nowMs), type: next > 0 ? 1 : 2, size: Math.abs(next), averagePrice: avg });
+}
+
+function fillOrder(s, o, price) {
+  o.status = 2;
+  o.fillVolume = o.size;
+  o.filledPrice = price;
+  o.updateTimestamp = iso(s.nowMs);
+  fill(s, o.contractId, o.side, o.size, price, o.id);
+  // A filled leg cancels its sibling; a filled entry gets its bracket legs.
+  if (o.parentId) for (const x of s.orders) if (x.parentId === o.parentId && x.id !== o.id && x.status === 1) x.status = 3;
+  const tick = contractOf(o.contractId).tickSize;
+  const dir = o.side === 0 ? 1 : -1;
+  const leg = (type, ticks) => s.orders.push({
+    id: s.nextId++, accountId: ACCOUNT, contractId: o.contractId, creationTimestamp: iso(s.nowMs), updateTimestamp: iso(s.nowMs), status: 1, type, side: 1 - o.side,
+    size: o.size, limitPrice: type === 1 ? price + dir * ticks * tick : null, stopPrice: type === 4 ? price - dir * ticks * tick : null, fillVolume: 0, filledPrice: null, customTag: null, parentId: o.id,
+  });
+  if (o.brackets && o.brackets.stop) leg(4, o.brackets.stop);
+  if (o.brackets && o.brackets.target) leg(1, o.brackets.target);
+}
+
+/** Working stops and limits the price has reached fill (a stop at its price, a limit at its limit). */
+function match(s) {
+  for (const o of s.orders.filter(x => x.status === 1)) {
+    const p = s.prices[o.contractId];
+    if (o.status !== 1) continue; // cancelled by an OCO sibling in this pass
+    const buy = o.side === 0;
+    if (o.type === 4 && (buy ? p >= o.stopPrice : p <= o.stopPrice)) fillOrder(s, o, o.stopPrice);
+    if (o.type === 1 && (buy ? p <= o.limitPrice : p >= o.limitPrice)) fillOrder(s, o, o.limitPrice);
+  }
+}
+
+const setPrice = (file, contractId, price) => update(file, s => { s.prices[contractId] = price; match(s); });
+
+/** Fill the closes held back by holdCloses (each closes what is open then). */
+const settle = file => update(file, s => {
+  for (const h of s.held.splice(0)) {
+    const net = netOf(s, h.contractId);
+    const size = h.size === null ? Math.abs(net) : Math.min(h.size, Math.abs(net));
+    if (size > 0) fill(s, h.contractId, net > 0 ? 1 : 0, size, s.prices[h.contractId], null);
+  }
+});
+
+function bars(s, a) {
+  const step = (a.unit === 'day' ? 1440 : Number(a.unitNumber) || 1) * 60000;
+  const end = Math.min(a.endTime ? Date.parse(a.endTime) : s.nowMs, s.nowMs);
+  const start = a.startTime ? Date.parse(a.startTime) : end - step * (a.limit || 100);
+  const out = [];
+  const price = s.prices[a.contractId] || 0;
+  // Only closed bars (the harness asks without the partial one), flat at the current price.
+  for (let t = Math.floor(start / step) * step; t + step <= end; t += step) out.push({ t: iso(t), o: price, h: price + 1, l: price - 1, c: price, v: 100 });
+  return { contractId: a.contractId, barSize: `${a.unitNumber || 1} ${a.unit || 'minute'}`, count: Math.min(out.length, a.limit || 100), bars: out.slice(-(a.limit || 100)) };
+}
+
+const journal = (env, entry) => {
+  if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+};
+
+const HANDLERS = {
+  get_server_config: (s, a, env) => ({ tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
+  list_accounts: s => [{ id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true, mcpTradingAllowed: true }],
+  get_account_snapshot: s => ({ account: { id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true }, positions: HANDLERS.list_open_positions(s), openOrders: HANDLERS.list_open_orders(s), today: { realizedNetPnL: 0 } }),
+  search_contracts: (s, a) => CONTRACTS.filter(c => c.name.startsWith(String(a.searchText || '').toUpperCase())),
+  list_available_contracts: () => CONTRACTS,
+  get_contract: (s, a) => contractOf(a.contractId) || null,
+  get_bars: (s, a) => bars(s, a),
+  get_quote: (s, a) => ({ contractId: a.contractId, quote: { bid: s.prices[a.contractId] - 0.25, ask: s.prices[a.contractId], last: s.prices[a.contractId] } }),
+  list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
+  list_open_orders: s => s.orders.filter(o => o.status === 1),
+  search_orders: s => s.orders,
+  search_trades: s => s.fills,
+  get_performance: s => ({ window: { start: iso(s.nowMs - 3600000), end: iso(s.nowMs) }, overall: { fills: s.fills.length }, byContract: {} }),
+  place_order: (s, a, env) => {
+    const c = contractOf(a.contractId);
+    if (!c) return fail(8, 'ContractNotFound');
+    const o = {
+      id: s.nextId++, accountId: ACCOUNT, contractId: a.contractId, creationTimestamp: iso(s.nowMs), updateTimestamp: iso(s.nowMs), status: 1, type: TYPE[a.type],
+      side: a.side === 'buy' ? 0 : 1, size: Number(a.size), limitPrice: a.limitPrice ?? null, stopPrice: a.stopPrice ?? null, fillVolume: 0, filledPrice: null,
+      customTag: a.customTag ?? null, parentId: null,
+      brackets: { stop: a.stopLossBracket ? a.stopLossBracket.ticks : null, target: a.takeProfitBracket ? a.takeProfitBracket.ticks : null },
+    };
+    s.orders.push(o);
+    if (o.type === 2) fillOrder(s, o, s.prices[a.contractId]);
+    else match(s);
+    journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { result: { ...OK, orderId: o.id } } });
+    return { orderId: o.id, ...OK };
+  },
+  modify_order: (s, a) => {
+    const o = s.orders.find(x => x.id === Number(a.orderId) && x.status === 1);
+    if (!o) return fail(2, 'OrderNotFound');
+    if (a.stopPrice !== undefined) o.stopPrice = a.stopPrice;
+    if (a.limitPrice !== undefined) o.limitPrice = a.limitPrice;
+    if (a.size !== undefined) o.size = Number(a.size);
+    match(s);
+    return OK;
+  },
+  cancel_order: (s, a) => {
+    const o = s.orders.find(x => x.id === Number(a.orderId) && x.status === 1);
+    if (!o) return fail(2, 'OrderNotFound');
+    o.status = 3;
+    return OK;
+  },
+  close_position: (s, a) => {
+    const net = netOf(s, a.contractId);
+    if (net === 0) return fail(2, 'PositionNotFound');
+    if (s.dropCloses > 0) { s.dropCloses -= 1; return OK; } // accepted, never fills
+    if (s.holdCloses) { s.held.push({ contractId: a.contractId, size: null }); return OK; }
+    fill(s, a.contractId, net > 0 ? 1 : 0, Math.abs(net), s.prices[a.contractId], null);
+    return OK;
+  },
+  partial_close_position: (s, a) => {
+    const net = netOf(s, a.contractId);
+    if (net === 0 || !(Number(a.size) >= 1) || Number(a.size) > Math.abs(net)) return fail(2, 'PositionNotFound');
+    if (s.holdCloses) { s.held.push({ contractId: a.contractId, size: Number(a.size) }); return OK; }
+    fill(s, a.contractId, net > 0 ? 1 : 0, Number(a.size), s.prices[a.contractId], null);
+    return OK;
+  },
+  journal_add: (s, a, env) => {
+    const entry = { ts: new Date().toISOString(), ...a };
+    if (env.MOCK_JOURNAL) fs.appendFileSync(env.MOCK_JOURNAL, `${JSON.stringify(entry)}\n`);
+    return entry;
+  },
+  journal_read: (s, a, env) => {
+    if (!env.MOCK_JOURNAL || !fs.existsSync(env.MOCK_JOURNAL)) return [];
+    return fs.readFileSync(env.MOCK_JOURNAL, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => !a.kind || e.kind === a.kind);
+  },
+};
+
+/** One tool call against the shared state; every call is logged in state.calls. */
+function handle(file, tool, args = {}, env = process.env) {
+  return update(file, s => {
+    s.calls.push({ tool, args });
+    if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);
+    return HANDLERS[tool](s, args, env);
+  });
+}
+
+module.exports = { ACCOUNT, CONTRACTS, HANDLERS, initState, update, read, setPrice, settle, handle };
