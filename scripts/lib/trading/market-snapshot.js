@@ -107,10 +107,12 @@ function participation(bars, orbMinutes) {
   const vol = b => (Number.isFinite(b.v) ? b.v : 0);
   const last3 = mean(bars.slice(-3).map(vol));
   const prior20 = mean(bars.slice(Math.max(0, i - 23), i - 2).map(vol));
-  const now = etMinute(bars[i].t);
-  const orBars = bars.filter(b => { const e = etMinute(b.t); return e.day === now.day && e.minute >= RTH_OPEN && e.minute < RTH_OPEN + orbMinutes; });
+  // By trading day (from the 18:00 ET open): the evening session has no opening range yet.
+  const dayOf = b => ind.sessionKey(b.t, GLOBEX_OPEN);
+  const now = { ...etMinute(bars[i].t), day: dayOf(bars[i]) };
+  const orBars = bars.filter(b => { const e = etMinute(b.t); return dayOf(b) === now.day && e.minute >= RTH_OPEN && e.minute < RTH_OPEN + orbMinutes; });
   const orAvg = now.minute >= RTH_OPEN + orbMinutes && orBars.length ? mean(orBars.map(vol)) : null;
-  const yesterday = [...bars].reverse().find(b => { const e = etMinute(b.t); return e.day !== now.day && e.minute === now.minute; });
+  const yesterday = [...bars].reverse().find(b => dayOf(b) !== now.day && etMinute(b.t).minute === now.minute);
   return {
     lastBarVolume: vol(bars[i]),
     relVolLastVsOpeningRange: ratio(vol(bars[i]), orAvg),

@@ -226,3 +226,20 @@ test('the spec document names every tool, required input, and required result fi
   for (const kind of Object.keys(JOURNAL.serverWritten)) assert.ok(doc.includes(`\`${kind}\``), kind);
   for (const table of Object.values(OUTCOMES)) for (const [code, name] of Object.entries(table)) assert.ok(doc.includes(`${code} ${name}`), `${code} ${name}`);
 });
+
+test('the conformance checker: search_trades must honour a past startTimestamp (a catch-up close reads the fills since a day ended)', async () => {
+  const { checkConformance } = require('../../scripts/lib/broker/conformance');
+  const { TOOLS } = require('../../scripts/lib/broker/interface');
+  const now = new Date('2026-10-08T14:00:00Z');
+  const fill = (id, at) => ({ id, contractId: 'X', creationTimestamp: at, price: 1, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false, orderId: id });
+  const today = [fill(2, '2026-10-08T13:00:00Z')];
+  const older = fill(1, '2026-10-06T15:00:00Z');
+  const server = trades => ({
+    listTools: async () => Object.keys(TOOLS).map(name => ({ name, inputSchema: { type: 'object', properties: Object.fromEntries(Object.keys(TOOLS[name].input).map(k => [k, {}])) } })),
+    call: async (name, a) => (name === 'search_trades' ? trades(a) : (() => { throw new Error('not probed here'); })()),
+  });
+  const verdict = async trades => (await checkConformance(server(trades), { accountId: 7, now })).results.find(r => /past startTimestamp/.test(r.check));
+  assert.strictEqual((await verdict(a => (a.startTimestamp ? [older, ...today] : today))).ok, true, 'honoured');
+  assert.match((await verdict(a => (a.startTimestamp ? [] : today))).problems.join(), /narrowed or ignored/);
+  assert.match((await verdict(() => [older, fill(0, '2026-09-01T15:00:00Z'), ...today])).problems.join(), /startTimestamp is ignored/);
+});

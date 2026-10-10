@@ -10,8 +10,9 @@
  */
 
 const { TOOLS, validateTools, validateResult } = require('./interface');
+const { tradingDayStart } = require('../trading/clock');
 
-async function checkConformance(mcp, { accountId = null, symbol = 'MNQ' } = {}) {
+async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = new Date() } = {}) {
   const results = [];
   const record = (check, problems) => results.push({ check, ok: problems.length === 0, problems });
   const probe = async (check, name, args, { optional = false } = {}) => {
@@ -57,7 +58,16 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ' } = {}) 
     await probe('get_account_snapshot', 'get_account_snapshot', { accountId: acct });
     await probe('list_open_positions', 'list_open_positions', { accountId: acct });
     await probe('list_open_orders', 'list_open_orders', { accountId: acct });
-    await probe('search_trades (the trading day)', 'search_trades', { accountId: acct });
+    const day = await probe('search_trades (the trading day)', 'search_trades', { accountId: acct });
+    // A catch-up end of day reads the fills since a past day ended: startTimestamp must reach back, not be cut to today.
+    const since = tradingDayStart(new Date(now.getTime() - 7 * 86400000)).toISOString();
+    const week = await probe(`search_trades since ${since} (startTimestamp)`, 'search_trades', { accountId: acct, startTimestamp: since });
+    if (Array.isArray(day) && Array.isArray(week)) {
+      record('search_trades: a past startTimestamp is honoured (at least the trading day\'s fills, none before it)', [
+        ...(week.length < day.length ? [`${week.length} fill(s) since ${since}, fewer than the trading day's ${day.length}: startTimestamp is narrowed or ignored`] : []),
+        ...(week.some(f => Date.parse(f.creationTimestamp) < Date.parse(since)) ? [`fills before ${since}: startTimestamp is ignored`] : []),
+      ]);
+    }
   }
   await probe('journal_read', 'journal_read', { limit: 1 });
   return { ok: results.every(r => r.ok), results };
