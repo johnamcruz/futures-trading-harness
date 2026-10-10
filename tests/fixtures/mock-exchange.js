@@ -202,7 +202,7 @@ const HANDLERS = {
   list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
   list_open_orders: s => s.orders.filter(o => o.status === 1),
   search_orders: s => (s.hideOrders ? [] : s.orders),
-  search_trades: s => s.fills,
+  search_trades: (s, a) => s.fills.filter(f => !a.startTimestamp || Date.parse(f.creationTimestamp) >= Date.parse(a.startTimestamp)),
   get_performance: s => ({ window: { start: iso(s.nowMs - 3600000), end: iso(s.nowMs) }, overall: { fills: s.fills.length }, byContract: {} }),
   place_order: (s, a, env) => {
     const c = contractOf(a.contractId);

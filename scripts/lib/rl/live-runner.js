@@ -62,7 +62,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     return live.stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
   }
 
-  async function balances(now, fn, { flat = false } = {}) {
+  async function balances(now, fn, { flat = false, closeOf = null } = {}) {
     const list = accounts();
     if (!list.length || !accountId) return;
     if (list.length > 1) warnOnce('many', `strategies trade ${list.length} account profiles (${list.map(a => a.name).join(', ')}) on one live account; each sees the same balance`);
@@ -71,7 +71,9 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     const open = openIds.length;
     // A closing balance is read only once the account is flat (the closing fills are in it).
     if (flat && open) throw new Error(`${open} position(s) still open (${openIds.join(', ')}); the closing balance is read once flat`);
-    const balance = await client.accountBalance(accountId);
+    const current = await client.accountBalance(accountId);
+    // A past day's close (a catch-up): today's balance less what the fills since that day ended made.
+    const balance = closeOf ? live.closeBefore(current, await client.fillsSince(accountId, new Date(closeOf)), closeOf) : current;
     for (const a of list) {
       if (!live.readAttempt(home, a.name)) {
         warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
@@ -122,13 +124,17 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     },
     /** Every bar: the balance and open positions now. */
     snapshot: now => balances(now, (a, b, t, open, openIds) => live.snapshot(home, a, b, t, { open, openIds })),
-    /** After the end-of-day flatten: the closing balance of trading day `day` (YYYY-MM-DD). */
+    /**
+     * After the end-of-day flatten: the closing balance of trading day `day`
+     * (YYYY-MM-DD). For a catch-up (a day that has ended), the balance then,
+     * from the fills since (closeBefore): never today's.
+     */
     endOfDay: (now, day) => balances(now, (a, b) => {
       // A day before the attempt started has nothing to record (a catch-up end of day for it is not an error).
       const r = live.readAttempt(home, a.name);
       if (r && r.startDay && day < r.startDay) return;
       live.recordEndOfDay(home, a, b, day);
-    }, { flat: true }),
+    }, { flat: true, closeOf: now.getTime() >= live.dayEndMs(day) ? live.dayEndMs(day) : null }),
 
     /**
      * Scan results with every policy strategy applied. A policy strategy owns

@@ -168,6 +168,12 @@ test('the broker client: reads on one connection, order calls on the other; a st
   assert.deepStrictEqual(reads.map(r => r[0]).sort(), ['close', 'get_server_config', 'list_open_orders', 'list_open_positions']);
   assert.deepStrictEqual(writes.map(w => w[0]), ['modify_order', 'cancel_order', 'close_position', 'close']);
   assert.deepStrictEqual(writes[0][1], { accountId: 7, orderId: 9, stopPrice: 21490.25 });
+  // The fills since a time (a catch-up's close): search_trades on the read connection, a list or an error.
+  const fillReads = [];
+  const fillsClient = createAdapter({ mcp: stub(fillReads, () => [{ id: 1, profitAndLoss: -16, fees: 0.37, creationTimestamp: '2026-10-08T12:00:30Z' }]) });
+  assert.strictEqual((await fillsClient.fillsSince('7', new Date('2026-10-07T22:00:00Z'))).length, 1);
+  assert.deepStrictEqual(fillReads[0], ['search_trades', { accountId: 7, startTimestamp: '2026-10-07T22:00:00.000Z' }]);
+  await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ nope: 1 })) }).fillsSince(7, new Date()), /search_trades/);
 });
 
 test('tradingBlocked: the server must trade, on the runner\'s account', () => {

@@ -58,6 +58,8 @@ function setup({ policy = 'always_2', start = true, models = {}, contracts = 'mi
     open: [],
     async accountBalance(id) { balances.push(id); return 50250; },
     async accountState() { return { positions: client.open, orders: [] }; },
+    fills: [],
+    async fillsSince(id, start) { client.fillsFrom = start.toISOString(); return client.fills.filter(f => Date.parse(f.creationTimestamp) >= start.getTime()); },
   };
   const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy], log: m => logs.push(m) });
   return { hooks, home, account, strategy, logs, balances, client };
@@ -97,9 +99,12 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   await hooks.endOfDay(new Date('2026-10-07T19:50:00Z'), '2026-10-07');
   await hooks.endOfDay(new Date('2026-10-07T19:55:00Z'), '2026-10-07');
   assert.deepStrictEqual(prop.readAttempt(home, account.name).days, [{ day: '2026-10-07', balance: 50250, pnl: 250 }]);
-  // A catch-up end of day after the 18:00 ET open records the day it closes, not today.
+  // A catch-up end of day after the 18:00 ET open records the day it closes, not today, at that day's balance:
+  // what the fills since it ended (the catch-up's own close at -$150, fees $0.74) made is taken back out.
+  client.fills = [{ creationTimestamp: '2026-10-08T22:05:00Z', profitAndLoss: -150, fees: 0.74 }, { creationTimestamp: '2026-10-08T19:00:00Z', profitAndLoss: 40, fees: 0.74 }];
   await hooks.endOfDay(new Date('2026-10-08T22:30:00Z'), '2026-10-08');
-  assert.deepStrictEqual(prop.readAttempt(home, account.name).days.map(d => d.day), ['2026-10-07', '2026-10-08']);
+  assert.strictEqual(client.fillsFrom, '2026-10-08T22:00:00.000Z', 'the fills since 18:00 ET that evening');
+  assert.deepStrictEqual(prop.readAttempt(home, account.name).days.map(d => [d.day, d.balance]), [['2026-10-07', 50250], ['2026-10-08', 50400.74]]);
   // No attempt: nothing is written, the gate keeps refusing, and the log says how to start one.
   const none = setup({ start: false });
   await none.hooks.snapshot(now);

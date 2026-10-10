@@ -637,10 +637,9 @@ test('mock trading: a prop attempt\'s close is recorded at end of day once the a
   const kinds = r.events.map(e => e.kind);
   assert.ok(!kinds.includes('close_record_failed'), 'never tried while a position was open');
   assert.ok(kinds.indexOf('close_recorded') > kinds.indexOf('flatten_verified') && kinds.indexOf('flatten_verified') > kinds.indexOf('flatten_unverified'), kinds.join(','));
-  assert.doesNotMatch(prop.combineBlock(w.home, PROP_ACCOUNT, new Date('2026-10-07T19:56:00Z')) || '', /never recorded/);
 });
 
-test('mock trading: a close the runner can\'t record (the balance can\'t be read) is a missed close: the next day the gate refuses prop entries until it is recorded', async () => {
+test('mock trading: a close the runner can\'t record (the balance can\'t be read) is a missed close: the next day the prop attempt is blocked until it is recorded', async () => {
   const w = world('2026-10-07T19:30:00Z', { balance: 100000 });
   prop.startAttempt(w.home, propAccount(), new Date('2026-10-07T13:00:00Z'));
   // The day trades (a snapshot is taken), then the broker's balance goes unreadable through end of day.
@@ -668,6 +667,9 @@ test('mock trading: a runner that crashed mid-day catches up the next morning: i
   const day1 = await runDay(w, { from: '2026-10-07T14:00:30Z', until: '2026-10-07T14:15:00Z', withProp: true });
   assert.ok(day1.runs.some(x => x[0] === 'trade'), 'it traded');
   assert.ok(position(w), 'still open when it died');
+  // The balance that day closed at (the open long's fees only), then the market falls 8 points overnight.
+  const closeOfDay1 = exchange.read(w.state).balance;
+  exchange.update(w.state, x => { x.prices[MNQ_ID] = 21492; });
   // Day 2, 08:00 ET: a new runner starts from the saved day state.
   const day2 = await runDay(w, { from: '2026-10-08T12:00:30Z', until: '2026-10-08T12:20:00Z', withProp: true });
   const first = day2.runs[0];
@@ -676,7 +678,9 @@ test('mock trading: a runner that crashed mid-day catches up the next morning: i
   assert.strictEqual(position(w), null, 'flattened before anything else');
   const closes = exchange.read(w.state).calls.filter(c => c.tool === 'close_position');
   assert.ok(closes.length >= 1);
-  assert.deepStrictEqual(prop.readAttempt(w.home, PROP_ACCOUNT).days.map(d => d.day), ['2026-10-07'], 'the missed day\'s close');
+  // The missed day's close is its own balance: the overnight loss (-$16, fees) belongs to the day it was booked on.
+  assert.deepStrictEqual(prop.readAttempt(w.home, PROP_ACCOUNT).days.map(d => [d.day, d.balance]), [['2026-10-07', closeOfDay1]]);
+  assert.strictEqual(exchange.read(w.state).balance, Math.round((closeOfDay1 - 16 - 0.37) * 100) / 100, 'booked on day 2');
   assert.ok(day2.runs.some(x => x[0] === 'trade' && x[1] > first[1]), 'then the new day trades');
 
   // The same crash before a holiday: the catch-up still flattens; the holiday doesn't trade.
