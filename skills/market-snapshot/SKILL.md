@@ -51,7 +51,10 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
      ATR(14), and the RTH and session crosses in the last 30 bars.
    - `participation`: relative volume of the last bar and the last 3 vs the
      opening-range average, the 20 bars before, and the same time the
-     previous day (orb's skip rule reads `relVolLastVsOpeningRange`).
+     previous trading day (orb's skip rule reads `relVolLastVsOpeningRange`).
+   - Both count by trading day (from the 18:00 ET open): from 18:00 ET until
+     the new range closes at 09:45 ET, `levels.openingRange` and the
+     opening-range ratios are null, never the closed day's.
    - `volumeProfile`: computed from the bars, never estimate it.
      `priorRth` (the last complete RTH day, the day's reference), `session`
      (this Globex session, developing), `rolling` (the last `vpLookback`
