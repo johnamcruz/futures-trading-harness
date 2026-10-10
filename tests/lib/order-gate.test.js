@@ -256,11 +256,13 @@ test('exchange calendar: the built-in CME calendar applies with nothing configur
   // Past the calendar's end the holidays are unknown: no entries until it is extended.
   const past = checks(evaluate(entryOrder(), [plan(1, { ts: '2028-01-05T14:59:00Z' })], { now: new Date('2028-01-05T15:00:00Z'), config: cal }));
   assert.ok(past.includes('market-hours'));
-  // One stray date doesn't extend it; a whole year's closed days do.
+  // One stray date doesn't extend it; a whole year's holidays and early closes do.
   assert.ok(at('2028-01-05T15:00:00Z', loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: '2028-12-25' })).includes('market-hours'));
-  const extended = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'].join(',') });
+  const y2028 = require('../../scripts/lib/trading/exchange-calendar').cmeHolidays(2028);
+  const extended = loadConfig({ FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_CLOSED_DATES: y2028.closed.join(','), FTH_EARLY_CLOSE_DATES: y2028.early.join(',') });
   assert.ok(!at('2028-01-05T15:00:00Z', extended).includes('market-hours'));
   assert.ok(at('2028-01-17T15:00:00Z', extended).includes('market-hours'), 'MLK Day 2028, from the configured year');
+  assert.ok(at('2028-11-24T18:10:00Z', extended).includes('market-hours'), 'the day after Thanksgiving 2028, 13:10 ET: after the early close');
 });
 
 test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {

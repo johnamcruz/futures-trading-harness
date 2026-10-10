@@ -85,7 +85,8 @@ guide resource once per session if it has one.
   tag: find it by the `orderId` in the reply, not by your tag.
 - A position without a working protective stop (bracket rejected, partial
   fill, cancelled by mistake): place a `[protect]` stop at once, or close the
-  position. Nothing else comes first.
+  position. Nothing else comes first. (Right after a close whose reply was an
+  error, the gate refuses the `[protect]`: `close_position` again; see Errors.)
 
 ### Journal
 
@@ -126,6 +127,7 @@ drops them. Filter by `kind` / `tag` and read `contractId` in the results.
 | `[account-required]` | `place_order` without `accountId` | Send it with the account's id. |
 | `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min; while `search_orders` fails it holds (tell the user), and an unreadable record named in the message is deleted by hand after checking the broker's orders. |
 | `[partial-close]` | `partial_close_position` with no open position in the contract, a size that isn't a whole number of 1 or more, or more than the position (counting orders sent moments ago) | Re-read `list_open_positions`; close at most what is open, or `close_position`. |
+| `... once recent orders fill` after a `close_position` / `partial_close_position` whose reply was an error | The close's outcome is unknown (the broker may have filled it): for 30 s the gate counts it, so a `[protect]` or `[exit]` for that position, or a stop move, is refused. Its stop can't be cancelled while the account still shows the position | Re-read `list_open_positions`. Still open: `close_position` again (it always goes). Gone: cancel the leftover orders. Don't cancel the stop of a position that is still open. |
 | `[modify-entry] ... once recent orders fill` | The position this stop or target worked was just closed (or is about to be) by a recent order | Don't move it; cancel the leftover order once the account reads flat. |
 | `order gate could not run (position … has no valid size …)` | The broker returned a position without a whole-number size: the account can't be read | No orders but `close_position` (never gated). Tell the user; it holds until the broker reports a size. |
 | errorCode 4 `AccountViolation` / `canTrade=false` | Firm locked the account | Stop. Tell the user. |

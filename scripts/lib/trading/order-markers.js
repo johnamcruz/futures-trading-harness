@@ -220,9 +220,10 @@ async function settleMarkers({ env, accountId, now, graceMs = GRACE_MS, searchOr
  * refused for an entry (its record would be overwritten, then erased by the
  * reply) and replaced by a fresh one for an exit. An entry whose marker can't
  * be written is refused too: its outcome could not be tracked.
+ * `contractId`: the name the gate compares (the gateway's one standard name), when it differs from the call's.
  * Returns { refuse } or { tag, args (with the customTag), error? }.
  */
-function prepareSend({ env, args, risk, observed = null, inUse = () => false, now }) {
+function prepareSend({ env, args, risk, observed = null, inUse = () => false, now, contractId = args.contractId }) {
   let tag = tagFor(args);
   if (inUse(tag) || markerExists(env, args.accountId, tag)) {
     if (!risk) return { refuse: `customTag ${JSON.stringify(tag)} is in use by an order of unknown outcome on this account. Send the entry with another customTag (or none).` };
@@ -231,7 +232,7 @@ function prepareSend({ env, args, risk, observed = null, inUse = () => false, no
   let error = null;
   try {
     writeMarker(env, {
-      tag, accountId: args.accountId, contractId: args.contractId, side: args.side, size: args.size, type: args.type, risk,
+      tag, accountId: args.accountId, contractId, side: args.side, size: args.size, type: args.type, risk,
       args: { contractId: args.contractId, side: args.side, rationale: args.rationale, stopLossBracket: args.stopLossBracket },
       observedNet: observed ? observed.observedNet : null, observedRootNet: observed ? observed.observedRootNet : null, sentAt: now.toISOString(),
     });

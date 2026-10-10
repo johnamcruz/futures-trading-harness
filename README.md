@@ -424,7 +424,9 @@ More runner settings:
   after an early close. After the calendar's last day the gate refuses every
   entry (those days' holidays are unknown); the runner warns once a day for
   the 30 days before it. Configured dates extend it only a whole year at a
-  time: list every holiday of the year (at least 9) in `closedDates`.
+  time: list every holiday (`closedDates`) and early close
+  (`earlyCloseDates`) of the year, as CME publishes them (the rules in
+  `exchange-calendar.js` `cmeHolidays` check that none is missing).
 - No run outlasts end of day: each gets at most the time left until
   `eodAt`, and end of day closes positions directly before the agents'
   review run. It is done only once the account reads flat (a position whose

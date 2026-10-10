@@ -42,8 +42,10 @@ const DEFAULTS = {
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
   cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no analysts or news, the trader runs the snapshot, scan, and MTF read and calls risk-manager only on a candidate (use for 1m)
   // Added to the built-in CME calendar (trading/exchange-calendar.js), which covers 2026-2027:
-  earlyCloseDates: [], // e.g. ["2028-01-17"]: CME early-close trading days (YYYY-MM-DD, the date the day ends on)
-  closedDates: [], // e.g. ["2028-04-14"]: CME holidays with no session (the runner and the gate stay out)
+  // Added to the built-in CME calendar (trading days, YYYY-MM-DD of the date they end on). To trade past its end,
+  // add a whole year: every holiday and every early close (exchange-calendar.js cmeHolidays lists the rules).
+  earlyCloseDates: [], // e.g. ["2028-07-03", "2028-11-24"]: early closes (13:00 ET)
+  closedDates: [], // e.g. ["2028-01-17", ...]: holidays and other closures (the runner and the gate stay out)
   earlyCloseEodAt: '12:50@America/New_York',
   maxConsecutiveErrors: 3,
   alertWebhook: '', // https URL: runner errors and the kill switch are POSTed there as JSON { text, content } (Slack, Discord, ntfy, ...)

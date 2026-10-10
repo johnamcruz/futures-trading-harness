@@ -49,7 +49,7 @@ runner flattens at `earlyCloseEodAt` (default 12:50 ET). After the
 calendar's last day the gate refuses every entry (market-hours: "The
 exchange calendar ends ..."); the runner warns once a day for the 30 days
 before it. Configured dates extend it only a whole year at a time (every
-holiday of the year, at least 9). Tell the user; never work around it. Premarket checks the calendar; if
+holiday and every early close of the year). Tell the user; never work around it. Premarket checks the calendar; if
 CME announces a change that isn't listed, tell the user and plan as if it
 were (no entries after 12:45 ET, flat by 12:50 ET).
 

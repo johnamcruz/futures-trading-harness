@@ -56,7 +56,7 @@ function world(at, over = {}) {
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, MOCK_STATE: state, MOCK_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: at,
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
-    FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_UNKNOWN_ORDER_GRACE_MS: '1000',
+    FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
   };
   return { home, state, journal, env };
 }
@@ -411,6 +411,8 @@ test('mock trading: a close the broker refuses frees its stop; one whose reply e
       } else {
         assert.match(close.error, /HTTP 504/);
         assert.match(tighten.error, /modify-entry.*once recent orders fill/, 'an unknown outcome counts as a close');
+        // ... but never to unprotect a position the account still shows.
+        assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stopId })).error, /cancel-protection/);
         exchange.settle(w.state);
         assert.strictEqual(position(w), null, 'the broker had taken it');
       }
@@ -439,7 +441,8 @@ test('mock trading: a gateway started on a raw broker server (no translator) com
 
 test('mock trading: an entry whose reply is lost is an order of unknown outcome: no second entry, the exit still goes', async () => {
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000).toISOString();
-  const w = world(at, { loseEntryReply: true });
+  // The broker takes the entry, its reply is lost, and its order list doesn't show it yet.
+  const w = world(at, { loseEntryReply: true, hideOrders: true });
   w.env.FTH_LANE_TIMEOUT_MS = '1500';
   const sig = signalOnFiredBar(w);
   const entry = {
@@ -453,8 +456,16 @@ test('mock trading: an entry whose reply is lost is an order of unknown outcome:
     assert.strictEqual(position(w).size, 1, 'the broker took it');
     exchange.update(w.state, s => { s.loseEntryReply = false; });
     const second = await attempt(gw, 'place_order', entry);
-    assert.match(second.error, /order-pending|position-open/);
+    assert.ok(!second.ok);
+    assert.ok(lastBlock(w).some(v => v.check === 'order-pending'), JSON.stringify(lastBlock(w)));
     assert.strictEqual(exchange.read(w.state).calls.filter(c => c.tool === 'place_order').length, 1, 'never sent twice');
+    // Once the broker lists it (by the customTag the gateway gave it), it is settled as placed: no longer pending.
+    exchange.update(w.state, s => { s.hideOrders = false; });
+    const third = await attempt(gw, 'place_order', entry);
+    assert.ok(!third.ok);
+    assert.deepStrictEqual(lastBlock(w).map(v => v.check).filter(c => c === 'order-pending'), [], JSON.stringify(lastBlock(w)));
+    assert.ok(lastBlock(w).some(v => v.check === 'position-open'));
+    assert.ok(exchange.read(w.state).orders[0].customTag, 'the gateway tagged it');
     const exit = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the unknown entry' });
     assert.ok(exit.ok, exit.error);
     assert.strictEqual(position(w), null);
@@ -474,7 +485,7 @@ test('mock trading: a short through its life: its stop moves only down, a partia
     assert.match((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21520 })).error, /modify-protection/);
     assert.ok((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21505 })).ok);
     assert.match((await attempt(gw, 'partial_close_position', { accountId: 7, contractId: 'MNQ', size: 2 })).error, /partial-close/);
-    // A buy that would add to the short is no exit.
+    // A sell would add to the short: no exit.
     assert.match((await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' })).error, /exposure/);
   } finally {
     gw.close();

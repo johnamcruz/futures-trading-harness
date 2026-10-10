@@ -190,7 +190,9 @@ function canonicalArgs(args, env = process.env) {
  * rootNetBefore, at, sentAt }), or null when there is nothing to close. A
  * close is a market order the account may not show yet: the gateway counts it
  * from the moment it is sent (a late or lost reply still closes), and drops it
- * only if the server refuses it.
+ * only if the server refuses it. It is `unconfirmed` until the server says
+ * success: a close of unknown outcome counts against new exits and stop
+ * moves, never to let a stop of the still-open position be cancelled.
  */
 function closeLedgerEntry(tool, args, positions, now) {
   if (!Array.isArray(positions)) return null;
@@ -200,21 +202,35 @@ function closeLedgerEntry(tool, args, positions, now) {
   const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);
   if (!(size > 0)) return null;
   const at = now.getTime();
-  return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at };
+  return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at, unconfirmed: true };
 }
 
-/**
- * Whether the server refused a close: a result whose body says success: false.
- * An error reply (isError, a JSON-RPC error, an unreadable body) is no refusal:
- * the broker may have taken the close (a timeout after it), so it still counts.
- */
-function closeRefused(response) {
-  if (!response || response.error || !response.result || response.result.isError) return false;
+/** A tool reply's JSON body (content[0].text), or null. */
+function resultJson(response) {
   try {
-    return JSON.parse(response.result.content[0].text).success === false;
+    return JSON.parse(response.result.content[0].text);
   } catch (_err) {
-    return false;
+    return null;
   }
 }
 
-module.exports = { canonicalArgs, closeLedgerEntry, closeRefused, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };
+/**
+ * Whether the server surely refused a close: a body saying success: false, a
+ * sure refusal in an error reply (a risk guardrail, the contract translator's
+ * "not sent": order-markers.definitelyRefused), or a malformed request
+ * (JSON-RPC -32600..-32602). Any other error (a timeout, a broken call) is an
+ * unknown outcome: the broker may have taken the close, so it still counts.
+ */
+function closeRefused(response) {
+  if (!response) return false;
+  if (response.error) return [-32600, -32601, -32602].includes(Number(response.error.code));
+  if (!response.result) return false;
+  if (response.result.isError) {
+    const text = Array.isArray(response.result.content) && response.result.content[0] ? response.result.content[0].text : '';
+    return require('./order-markers').definitelyRefused(text);
+  }
+  const body = resultJson(response);
+  return Boolean(body) && body.success === false;
+}
+
+module.exports = { canonicalArgs, closeLedgerEntry, closeRefused, resultJson, orderTool, isOrderCall, isLaneCall, blockedResponse, handleClientLine, childCaller, lineSplitter };

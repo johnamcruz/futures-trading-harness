@@ -109,7 +109,7 @@ test('closeLedgerEntry: a close counts from the account before it, capped at the
   const now = new Date('2026-10-07T14:00:00Z');
   const long2 = [{ contractId: 'MNQ', type: 1, size: 2 }, { contractId: 'MNQ:2027-03', type: 2, size: 1 }];
   const full = closeLedgerEntry('close_position', { contractId: 'MNQ' }, long2, now);
-  assert.deepStrictEqual(full, { contractId: 'MNQ', root: 'MNQ', sign: -1, size: 2, netBefore: 2, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() });
+  assert.deepStrictEqual(full, { contractId: 'MNQ', root: 'MNQ', sign: -1, size: 2, netBefore: 2, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime(), unconfirmed: true });
   assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 1 }, long2, now).size, 1);
   assert.strictEqual(closeLedgerEntry('partial_close_position', { contractId: 'MNQ', size: 5 }, long2, now).size, 2);
   assert.strictEqual(closeLedgerEntry('close_position', { contractId: 'MES' }, long2, now), null);
@@ -124,5 +124,9 @@ test('closeRefused: only a body saying success: false is a refusal; an error rep
   assert.strictEqual(closeRefused(reply(JSON.stringify({ success: false }), { isError: true })), false, 'an error reply, whatever it says');
   assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'boom' } }), false);
   assert.strictEqual(closeRefused(reply('not json')), false);
+  // Sure refusals in an error reply: the broker's guardrail, the translator's "not sent", a malformed request.
+  assert.strictEqual(closeRefused(reply('Blocked by risk guardrail: trading is disabled', { isError: true })), true);
+  assert.strictEqual(closeRefused(reply('contract-translator: not sent: no ES contract found at this broker', { isError: true })), true);
+  assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'invalid params' } }), true);
   assert.strictEqual(closeRefused(null), false);
 });

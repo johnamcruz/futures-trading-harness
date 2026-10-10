@@ -16,6 +16,7 @@
  *   closeReply      'refuse': closes come back success: false and close nothing; 'error': a close is
  *                   taken (held, as holdCloses) but its reply is an error (a timeout after the broker took it)
  *   loseEntryReply  place_order is taken and filled, but no reply is sent (an order of unknown outcome)
+ *   hideOrders      search_orders doesn't list orders yet (the broker is slow to show one)
  *   keepLegs        bracket legs stay working after the position goes flat (no auto OCO on flat)
  *   oddSize         positions are listed without a size
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
@@ -196,7 +197,7 @@ const HANDLERS = {
   get_quote: (s, a) => ({ contractId: a.contractId, quote: { bid: s.prices[a.contractId] - 0.25, ask: s.prices[a.contractId], last: s.prices[a.contractId] } }),
   list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
   list_open_orders: s => s.orders.filter(o => o.status === 1),
-  search_orders: s => s.orders,
+  search_orders: s => (s.hideOrders ? [] : s.orders),
   search_trades: s => s.fills,
   get_performance: s => ({ window: { start: iso(s.nowMs - 3600000), end: iso(s.nowMs) }, overall: { fills: s.fills.length }, byContract: {} }),
   place_order: (s, a, env) => {

@@ -26,7 +26,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision } = require('./lib/trading/check-order');
-const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused } = require('./lib/trading/mcp-gateway');
+const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
@@ -41,14 +41,6 @@ const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
-
-function resultJson(response) {
-  try {
-    return JSON.parse(response.result.content[0].text);
-  } catch (_err) {
-    return null;
-  }
-}
 
 async function accountFacts(args, caller, withTrades = true) {
   const accountId = args.accountId;
@@ -91,6 +83,8 @@ async function accountViolations(args, caller, now, ledger, extraOrders = []) {
 function main(argv) {
   const sep = argv.indexOf('--');
   let command = sep === -1 ? argv : argv.slice(sep + 1);
+  // Behind the contract translator (the configured broker): one standard name per contract for the gate (canonicalArgs).
+  const canon = command.length === 0 ? canonicalArgs : a => a;
   // No command: the broker MCP server named in the broker config (broker/config.js).
   if (command.length === 0) {
     try {
@@ -117,7 +111,7 @@ function main(argv) {
   // Orders of unknown outcome: their records on disk, settled from the broker's orders (order-tracker.js).
   const logErr = msg => process.stderr.write(`[mcp-gateway] ${msg}\n`);
   const tracker = createOrderTracker({
-    env: process.env, graceMs: GRACE_MS, onError: logErr,
+    env: process.env, graceMs: GRACE_MS, onError: logErr, canon,
     searchOrders: async a => parseToolJson(await caller.call('search_orders', a), 'search_orders'),
   });
 
@@ -132,7 +126,7 @@ function main(argv) {
   };
 
   const check = async (sentArgs, tool, id) => {
-    const args = sep === -1 ? canonicalArgs(sentArgs) : sentArgs; // behind the translator: one name per contract for the gate and its ledger
+    const args = canon(sentArgs); // one name per contract for the gate and its ledger
     const now = gateNow();
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, now, tool });
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
@@ -143,7 +137,7 @@ function main(argv) {
       const { positions, orders } = await accountFacts(args, caller, false);
       return blocked(evaluateAccountChange(tool, {
         input: args, positions, orders, config: loadConfig(process.env), now,
-        ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger, ...tracker.cancelLedger(unknown, now)],
+        ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger.filter(e => !e.unconfirmed), ...tracker.cancelLedger(unknown, now)],
       }));
     }
     // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
@@ -200,7 +194,7 @@ function main(argv) {
     if (closeEntry) {
       // Counted since it was sent: only a refusal (success: false) drops it; an error reply is an unknown outcome and stays.
       if (closeRefused(response)) ledger = ledger.filter(e => e !== closeEntry);
-      else if ((resultJson(response) || {}).success === true) closeEntry.at = gateNow().getTime();
+      else if ((resultJson(response) || {}).success === true) Object.assign(closeEntry, { at: gateNow().getTime(), unconfirmed: false });
       return;
     }
     const placed = resultJson(response);
@@ -272,7 +266,7 @@ function main(argv) {
       // before them so the ledger can count them until the account shows it.
       for (const m of lane) {
         const close = /(?:^|__)(close_position|partial_close_position)$/.exec(String(m.params.name || ''));
-        const args = sep === -1 ? canonicalArgs(m.params.arguments || {}) : m.params.arguments || {};
+        const args = canon(m.params.arguments || {});
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');

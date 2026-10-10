@@ -111,3 +111,12 @@ test('ledgers and messages: what the gate counts for cancels and exits, and how 
   assert.strictEqual(v[1].message, 'm');
   assert.deepStrictEqual(Object.keys(t.pendingViolation(unknown, NOW, true)), ['check', 'message']);
 });
+
+test('tracker: its records carry the contract by the gate\'s name (canon), whatever the call named it', () => {
+  const env = { FTH_HOME: tmpDir() };
+  const t = tracker(env, { canon: a => ({ ...a, contractId: a.contractId === 'MNQ:2026-12' ? 'MNQ' : a.contractId }) });
+  const msg = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'place_order', arguments: { accountId: 7, contractId: 'MNQ:2026-12', side: 'sell', type: 'stop', size: 1, stopPrice: 21490, rationale: '[protect] stop' } } };
+  const out = t.tagRequest(msg, { now: new Date('2026-10-07T14:00:00Z') });
+  assert.strictEqual(out.msg.params.arguments.contractId, 'MNQ:2026-12', 'sent as the client named it');
+  assert.deepStrictEqual(markers.readMarkers(env).map(x => x.contractId), ['MNQ']);
+});

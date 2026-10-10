@@ -63,7 +63,7 @@ function graceFor(env, laneTimeoutMs) {
   return Math.max(test && asked > 0 ? asked : markers.GRACE_MS, laneTimeoutMs + 30000);
 }
 
-function createOrderTracker({ env, graceMs, searchOrders, onError = () => {} }) {
+function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, canon = a => a }) {
   // Client request id -> { accountId, tag } of the place_order it carries, until its reply.
   const tagOf = new Map();
   const ownCall = m => [...tagOf.entries()].find(([, t]) => t.tag === m.tag && String(t.accountId) === String(m.accountId));
@@ -82,7 +82,8 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {} }) 
         return risk ? { args } : { refuse: { check: 'account-required', message: 'place_order needs an accountId: the gateway tracks each order\'s outcome per account.' } };
       }
       const inUse = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId));
-      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now });
+      // Its record carries the contract by the gate's own name (canon), so exits and stops count it.
+      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: canon(args).contractId });
       if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
       if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag });

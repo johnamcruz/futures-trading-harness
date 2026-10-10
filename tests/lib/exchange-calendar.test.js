@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { CLOSED, EARLY_CLOSE, COVERED_UNTIL, MIN_CLOSED_PER_YEAR, exchangeCalendar, calendarEnd, coverageError } = require('../../scripts/lib/trading/exchange-calendar');
+const { CLOSED, EARLY_CLOSE, COVERED_UNTIL, cmeHolidays, exchangeCalendar, calendarEnd, coverageError } = require('../../scripts/lib/trading/exchange-calendar');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
 
 test('calendar: the built-in CME dates, plus configured ones (a list or a comma string); configuration only adds', () => {
@@ -32,10 +32,10 @@ test('calendar: every date is a weekday trading day, none is both closed and ear
 test('coverage: an error within 30 days of the table\'s end, unless configured dates reach past it', () => {
   assert.strictEqual(coverageError(new Date('2026-10-10T12:00:00Z')), null);
   assert.match(coverageError(new Date('2027-12-15T12:00:00Z')), /calendar ends 2027-12-31/);
-  // Only a whole year's closed days extend it, never a stray date.
-  const y2028 = ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'];
-  assert.strictEqual(y2028.length, MIN_CLOSED_PER_YEAR);
-  assert.strictEqual(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: y2028 }), null);
+  // Only a whole year (every holiday and early close) extends it, never a stray date.
+  const y2028 = cmeHolidays(2028);
+  assert.strictEqual(coverageError(new Date('2027-12-15T12:00:00Z'), y2028), null);
+  assert.match(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: y2028.closed }), /calendar ends 2027-12-31/, 'its early closes missing');
   assert.match(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: ['2028-04-14'] }), /calendar ends 2027-12-31/);
   assert.match(coverageError(new Date('2027-12-15T12:00:00Z'), { early: '2028-01-17' }), /calendar ends 2027-12-31/);
   assert.match(coverageError(new Date('2027-12-15T12:00:00Z'), { closed: ['not-a-date'] }), /calendar ends 2027-12-31/);
@@ -44,7 +44,28 @@ test('coverage: an error within 30 days of the table\'s end, unless configured d
   assert.strictEqual(coverageError(new Date('2027-12-01T20:00:00Z')), null);
   assert.strictEqual(calendarEnd(), COVERED_UNTIL);
   assert.strictEqual(calendarEnd({ early: '2028-11-24' }), COVERED_UNTIL);
-  assert.strictEqual(calendarEnd({ closed: ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'].join(',') }), '2028-12-31');
-  assert.strictEqual(calendarEnd({ closed: ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'].slice(1) }), COVERED_UNTIL, 'a year missing a holiday is not covered');
-  assert.strictEqual(calendarEnd({ closed: ['2029-01-01', '2029-01-15', '2029-02-19', '2029-03-30', '2029-05-28', '2029-06-19', '2029-07-04', '2029-09-03', '2029-11-22'] }), COVERED_UNTIL, 'years extend it in order: 2028 first');
+  assert.strictEqual(calendarEnd({ closed: y2028.closed.join(','), early: y2028.early.join(',') }), '2028-12-31');
+  const y2029 = cmeHolidays(2029);
+  assert.strictEqual(calendarEnd({ closed: y2028.closed.slice(1), early: y2028.early }), COVERED_UNTIL, 'a year missing a holiday is not covered');
+  assert.strictEqual(calendarEnd({ closed: y2029.closed, early: y2029.early }), COVERED_UNTIL, 'years extend it in order: 2028 first');
+  assert.strictEqual(calendarEnd({ closed: [...y2028.closed, ...y2029.closed.slice(1)], early: [...y2028.early, ...y2029.early] }), '2028-12-31', '2029 without New Year\'s Day');
+  assert.strictEqual(calendarEnd({ closed: [...y2028.closed, ...y2029.closed, '2029-01-09'], early: [...y2028.early, ...y2029.early] }), '2029-12-31', 'an extra closure is fine');
+});
+
+test('cmeHolidays: the rules reproduce the built-in table, and the CME calendars around it', () => {
+  assert.deepStrictEqual([2026, 2027].flatMap(y => cmeHolidays(y).closed), CLOSED);
+  assert.deepStrictEqual([2026, 2027].flatMap(y => cmeHolidays(y).early), EARLY_CLOSE);
+  // 2025: July 3, the day after Thanksgiving and Christmas Eve closed early; Good Friday April 18.
+  assert.deepStrictEqual(cmeHolidays(2025), {
+    closed: ['2025-01-01', '2025-01-20', '2025-02-17', '2025-04-18', '2025-05-26', '2025-06-19', '2025-07-04', '2025-09-01', '2025-11-27', '2025-12-25'],
+    early: ['2025-07-03', '2025-11-28', '2025-12-24'],
+  });
+  // 2028: New Year's Day on a Saturday isn't kept; Christmas Eve on a Sunday has no early close.
+  assert.deepStrictEqual(cmeHolidays(2028), {
+    closed: ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'],
+    early: ['2028-07-03', '2028-11-24'],
+  });
+  for (const y of [2026, 2027, 2028, 2029, 2030, 2031, 2032]) {
+    for (const d of [...cmeHolidays(y).closed, ...cmeHolidays(y).early]) assert.ok(![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()), `${d} is a weekday`);
+  }
 });

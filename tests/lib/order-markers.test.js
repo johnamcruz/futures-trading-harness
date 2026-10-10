@@ -145,6 +145,11 @@ test('prepareSend: writes the record and tags the order; a tag in use is refused
   fs.writeFileSync(blocked.FTH_HOME, '');
   assert.match(m.prepareSend({ env: blocked, args: { ...args, customTag: undefined }, risk: false, now: NOW }).refuse, /could not record the order/);
   assert.ok(m.prepareSend({ env: blocked, args: { ...args, customTag: undefined }, risk: true, now: NOW }).error);
+  // The record names the contract as the gate compares it (the gateway's one standard name); the call goes out as sent.
+  const env2 = { FTH_HOME: tmpDir() };
+  const month = m.prepareSend({ env: env2, args: { ...args, contractId: 'MNQ:2026-12', customTag: 'm1' }, risk: false, now: NOW, contractId: 'MNQ' });
+  assert.strictEqual(month.args.contractId, 'MNQ:2026-12');
+  assert.deepStrictEqual(m.readMarkers(env2).map(x => x.contractId), ['MNQ']);
 });
 
 test('message: names each unknown order, what settles it, and what still goes through', () => {
