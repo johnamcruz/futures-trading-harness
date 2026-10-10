@@ -2,7 +2,7 @@
 
 /**
  * Mechanical backtest of STRATEGY.md strategies on historical bars, modeled on
- * algoTraderBot's backtest (backtest.drive + bot.handle_bar + SimBroker):
+ * the original bot's backtest (backtest.drive + bot.handle_bar + SimBroker):
  *
  *   for each closed bar (all symbols, in time order):
  *     1. the simulated broker settles the open trade against the bar: stop
@@ -20,7 +20,7 @@
  * as they do live (`gate: true`): the runner's sessions, the order gate's
  * no-entry windows, loss streak cooldown, daily loss count, and daily entry
  * cap. `gate: false` drops those (not the market hours) when comparing with
- * algoTraderBot.
+ * the original bot.
  *
  * With an account profile (`account`, accounts/<name>/ACCOUNT.md) the run is
  * a prop challenge: trades are sized from the account's cushion
@@ -36,11 +36,11 @@
  * cycle that read the closed bar, during the next bar. A setup whose fill bar
  * opens through its stop or (for a target level) its target, or falls in
  * another trading day or after end of day, expires untraded (`expired`).
- * `fill: 'close'` fills at the signal bar's close, as algoTraderBot does.
+ * `fill: 'close'` fills at the signal bar's close, as the original bot does.
  * Stops fill at the stop price (or the bar's open when it gapped through)
  * minus slippage; targets at the target price (or a better open); trailing
  * closes at the bar close. Results are in R (1R = the initial stop distance, before costs, as
- * algoTraderBot reports) and in dollars after fees and slippage.
+ * the original bot reports) and in dollars after fees and slippage.
  */
 
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
@@ -55,7 +55,7 @@ const { buildObservation, marketFeatures, confluence } = require('../rl/observat
 
 const { normalizeBars } = ind;
 
-/** Round half to even, as Python's round() (algoTraderBot's tick math). */
+/** Round half to even, as Python's round() (the original bot's tick math). */
 function roundHalfEven(x) {
   const f = Math.floor(x);
   const d = x - f;
@@ -65,13 +65,13 @@ function roundHalfEven(x) {
 
 const DEFAULTS = {
   size: 1,
-  riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like algoTraderBot --risk)
+  riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like the original bot's --risk)
   maxContracts: 5,
   slippageTicks: 1, // per market fill (entries and stops), in ticks
   fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
   minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
   // Strategies firing both sides on the bar: 'reversal' (as the live gate: only a reversal strategy, mtf: reversal,
-  // may enter), 'skip' (no entry), or 'priority' (the first in order trades, as algoTraderBot had no such rule).
+  // may enter), 'skip' (no entry), or 'priority' (the first in order trades, as the original bot had no such rule).
   conflict: 'reversal',
   feesPerSide: null, // per contract; default from the contract spec
   gate: true,
@@ -349,7 +349,7 @@ function runEngine(markets, strategies, opts = {}) {
       }
     }
 
-    // 2. Manage an open trade at the bar's close. Like algoTraderBot's
+    // 2. Manage an open trade at the bar's close. Like the original bot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
     let managed = false;
@@ -433,7 +433,7 @@ function runEngine(markets, strategies, opts = {}) {
       strategy: pick.s.name, contract: leg.root, tickValue: leg.tickValue, fee: leg.fee, mini: Boolean(fam && leg.root === fam.mini),
       sign, entry, risk, size, plan,
       stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
-      // As algoTraderBot: target ticks from the unrounded stop distance.
+      // As the original bot: target ticks from the unrounded stop distance.
       target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize)
         // exit.target: a level, the signal bar's close plus the distance (e.g. the far side of a CRT range);
         // an entry whose fill is already at or past it is skipped below.

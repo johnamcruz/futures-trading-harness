@@ -23,7 +23,7 @@ const VALID = [
   'status: paper', 'instruments: [MES]', 'timeframe: 5m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1.5',
 ].join('\n');
 
-test('bundled strategies are all valid Markdown rules, the algoTraderBot ports included', () => {
+test('bundled strategies are all valid Markdown rules, the ported ones included', () => {
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);

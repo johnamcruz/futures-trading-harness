@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Backtest STRATEGY.md strategies on historical bars (Parquet, Excel, CSV, or
- * JSON), the way algoTraderBot backtests: after every closed bar, settle the
+ * JSON), the way the original bot backtests: after every closed bar, settle the
  * open trade, trail its stop, and check every strategy for an entry, with the
  * same rules evaluation the live scan uses. See docs/BACKTESTING.md.
  *

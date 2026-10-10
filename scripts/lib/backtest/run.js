@@ -117,7 +117,7 @@ function validateBacktestConfig(raw, baseDir) {
   if (!(cfg.slippageTicks >= 0)) errors.push('slippageTicks: 0 or more');
   if (!(Number.isInteger(cfg.minConfluence) && cfg.minConfluence >= 1)) errors.push('minConfluence: strategies that must fire the same side, 1 or more');
   if (!['reversal', 'priority', 'skip'].includes(cfg.conflict)) errors.push('conflict: "reversal" (as live: only a reversal strategy enters when strategies disagree), "skip", or "priority" (the first strategy in order trades)');
-  if (!['next-open', 'close'].includes(cfg.fill)) errors.push('fill: "next-open" (entries fill at the next bar\'s open, as live after the cycle) or "close" (at the signal bar\'s close, as algoTraderBot)');
+  if (!['next-open', 'close'].includes(cfg.fill)) errors.push('fill: "next-open" (entries fill at the next bar\'s open, as live after the cycle) or "close" (at the signal bar\'s close, as the original bot)');
   if (!(cfg.maxDailyLoss >= 0)) errors.push('maxDailyLoss: dollars, 0 for off');
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
   if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');

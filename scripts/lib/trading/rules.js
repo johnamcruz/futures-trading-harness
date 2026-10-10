@@ -48,7 +48,7 @@
  *   overnight_high overnight_low       this Globex session before 9:30 ET, up to
  *                                      the previous bar (so a break can cross it)
  *   minute_et (minutes since midnight New York time at the bar's open, e.g. 9:45 = 585)
- *   cisd_ote_dir  1 / -1 on a bar where a CISD + OTE zone entry fires (algoTraderBot's
+ *   cisd_ote_dir  1 / -1 on a bar where a CISD + OTE zone entry fires (the original bot's
  *                 cisd_ote detector on the trailing window), else 0
  *   cisd_ote_risk that entry's stop distance (to the zone pivot), for risk.stop
  *   htf_open(m) htf_high(m) htf_low(m) htf_close(m)
@@ -309,7 +309,7 @@ function causalLevels(bars) {
 /** Lazily computed series over normalized bars; values are aligned to bars, NaN in warm-up. */
 function seriesSource(bars, params, { window = 500 } = {}) {
   const cache = new Map();
-  // algoTraderBot's cisd_ote detector, run on the trailing window at every bar.
+  // The original bot's cisd_ote detector, run on the trailing window at every bar.
   const cisdSeries = () => {
     const atr = ind.atr(bars, params.atrStop || 20);
     const withMs = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));

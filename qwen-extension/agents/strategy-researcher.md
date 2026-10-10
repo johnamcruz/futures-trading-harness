@@ -18,7 +18,7 @@ Load the skills `strategy-authoring` and `strategy-library`.
 
 ## Method
 
-1. Read the source: strategy code (e.g. `algoTraderBot/strategies/*.py` and
+1. Read the source: strategy code (e.g. the original bot's `strategies/*.py` and
    `config.py`), backtest reports, or the user's description. Extract the exact
    mechanical rules and parameters: timeframe, indicators and settings, gates,
    trigger, stop rule, target or exit rule, session filters.

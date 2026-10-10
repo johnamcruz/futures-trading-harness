@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Backtest results: R-multiple statistics as algoTraderBot reports them
+ * Backtest results: R-multiple statistics as the original bot reports them
  * (trades, win rate, mean and total R, profit factor, MFE and capture), plus
  * dollars after fees and slippage, max drawdown, and breakdowns by strategy,
  * exit reason, symbol, month, entry hour (ET), and weekday.
@@ -132,7 +132,7 @@ function toMarkdown(report) {
   return [
     `# Backtest ${m.runId}`,
     '',
-    `${m.symbols.join(', ')} on ${m.timeframe}m bars, ${m.start} to ${m.end}; strategies: ${m.strategies.join(', ')}; ${m.gate ? 'harness rules on (sessions, end of day, order-gate limits)' : 'no harness rules (as algoTraderBot trades)'}.`,
+    `${m.symbols.join(', ')} on ${m.timeframe}m bars, ${m.start} to ${m.end}; strategies: ${m.strategies.join(', ')}; ${m.gate ? 'harness rules on (sessions, end of day, order-gate limits)' : 'no harness rules (as the original bot trades)'}.`,
     '',
     '## Summary',
     '',

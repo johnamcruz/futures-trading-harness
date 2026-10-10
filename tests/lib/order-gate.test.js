@@ -157,7 +157,7 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
 
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  // The bundled orb has no session gate (as in algoTraderBot); give it one here.
+  // The bundled orb has no session gate (as in the original bot); give it one here.
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies
     .map(s => (s.name === 'orb' ? { ...s, sessions: ['09:45-11:30@America/New_York'] } : s));
   const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });

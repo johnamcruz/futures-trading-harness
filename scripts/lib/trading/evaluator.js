@@ -8,9 +8,9 @@
  *
  * Every mechanical strategy is Markdown rules (`signal: rules`), evaluated by
  * the rules engine over series computed once (causal: bar i only sees bars
- * 0..i). The cisd_ote series runs algoTraderBot's detector on the trailing
+ * 0..i). The cisd_ote series runs the original bot's detector on the trailing
  * `window` bars, as the source does. The shipped ports reproduce
- * algoTraderBot's signals bar for bar (tests/lib/parity.test.js).
+ * the original bot's signals bar for bar (tests/lib/parity.test.js).
  */
 
 const { PARAMS, signalSeries } = require('./market-snapshot');
@@ -20,7 +20,7 @@ const { parseWindows, inWindow } = require('./clock');
 const ind = require('./indicators');
 const mtf = require('./mtf');
 
-const DEFAULT_WINDOW = 500; // bars per evaluation, as algoTraderBot's BARS_WINDOW
+const DEFAULT_WINDOW = 500; // bars per evaluation, as the original bot's BARS_WINDOW
 const RTH_OPEN = 9 * 60 + 30;
 const RTH_CLOSE = 16 * 60;
 const GLOBEX_OPEN = 18 * 60;

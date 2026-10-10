@@ -1,6 +1,6 @@
 ---
 name: bos
-description: Break of structure continuation strategy - a close beyond the last confirmed fractal swing (k=2) on 3-minute futures bars, ported from algoTraderBot. Use when price closes through the latest swing high/low in the direction of the higher-timeframe trend.
+description: Break of structure continuation strategy - a close beyond the last confirmed fractal swing (k=2) on 3-minute futures bars, ported from the original Python bot. Use when price closes through the latest swing high/low in the direction of the higher-timeframe trend.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -19,12 +19,12 @@ exit:
 risk:
   stop: atr:0.5
   min_rr: 1.5
-source: algoTraderBot/strategies/bos.py
+source: original bot, strategies/bos.py
 ---
 
 # Strategy: Break of Structure (`setup:bos`)
 
-Source: `algoTraderBot/strategies/bos.py` (SWING_K=2 confirmed fractals, stop
+Source: the original bot's `bos.py` (SWING_K=2 confirmed fractals, stop
 0.5 × ATR(20)). See market-structure for the BOS vs CHoCH distinction.
 
 ## When to Use
@@ -47,7 +47,7 @@ low (short), with the prior close on the other side.
 **Entry:** market on the trigger bar's close, as the source does.
 
 **Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
-ticks), as algoTraderBot places it.
+ticks), as the original bot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),

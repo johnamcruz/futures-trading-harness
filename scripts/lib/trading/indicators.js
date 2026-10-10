@@ -2,7 +2,7 @@
 
 /**
  * Deterministic, causal indicators over OHLCV bars, so agents don't do
- * indicator math in their heads. Definitions follow algoTraderBot/indicators.py:
+ * indicator math in their heads. Definitions follow the original bot's indicators.py:
  * EMA = pandas ewm(adjust=False); ATR and ADX use Wilder smoothing.
  * Every array is aligned to the bars; warm-up values are NaN.
  */

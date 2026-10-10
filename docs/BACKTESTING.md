@@ -1,7 +1,7 @@
 # Backtesting
 
 `scripts/backtest.js` replays historical bars through the strategies the way
-algoTraderBot's backtester does. After every closed bar it does three things,
+the original bot's backtester does. After every closed bar it does three things,
 in order:
 
 1. **Settle.** A simulated broker settles the open trade against the bar.
@@ -74,15 +74,15 @@ node scripts/backtest.js --data data/MNQ-1m-flow.csv --symbol MNQ --timeframe 1 
 
 Use bars at the trading timeframe, or finer bars that divide it (1-minute
 data runs a 3-minute backtest). Micro contracts can use the full contract's
-bars (`MNQ` on `NQ` data), as algoTraderBot does.
+bars (`MNQ` on `NQ` data), as the original bot does.
 
 ### Each bar
 
 | Step | What happens |
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
-| Manage | A bar that starts with a trade open only manages it (as in algoTraderBot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as algoTraderBot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
-| Entry | Strategies are checked in priority order. The first candidate enters at the next bar's open (plus `slippageTicks`), or at the signal bar's close with `fill: close`. The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as algoTraderBot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
+| Manage | A bar that starts with a trade open only manages it (as in the original bot): a trade closed here makes no new entry on the same bar. **Trailing exits:** the peak follows the bar's high (longs) or low (shorts). From `trail_activate_r` on, the stop sits `trail_giveback_r` behind the peak. It moves toward the market only and is rounded to the tick. If the bar already crossed the new stop, the trade closes at the bar's close, as the original bot does. **Then, in order:** `max_bars`, and end of day at `eodAt` (always). |
+| Entry | Strategies are checked in priority order. The first candidate enters at the next bar's open (plus `slippageTicks`), or at the signal bar's close with `fill: close`. The stop is the strategy's distance (`atr:k` × ATR(20), or a distance expression such as cisd_ote's `cisd_ote_risk`) rounded to whole ticks. The target is set when the exit plan has one, in ticks from the unrounded distance (as the original bot). With `exit.target` (a distance expression, e.g. `crt_target(60)`), the target is a level instead: the signal bar's close plus that distance, rounded to the tick; an entry whose fill is already at or past it is skipped. |
 
 **The market session** always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday) and before `eodAt`, and every
@@ -105,7 +105,7 @@ enforces:
 - The broker MCP server's daily dollar loss limit (`maxDailyLoss`).
 
 **`gate: false`** (`--no-gate`) drops those limits (not the market session).
-Use it to compare with algoTraderBot.
+Use it to compare with the original bot.
 
 ### Exits
 
@@ -144,11 +144,11 @@ trail, and `max_bars` if set), whichever rules strategy found the setup: a
 | `sessions`, `eodAt` | 18:00-15:50 ET, 15:50 ET | Runner schedule: sessions inside the 18:00-16:00 ET session (with `gate`; `asia`, `london`, `ny` work); `eodAt` required, no later than 16:00 ET |
 | `size` / `riskPerTrade`, `maxContracts` | 1 / none, 5 | Fixed contracts, or size from the stop and a dollar risk |
 | `slippageTicks` | 1 | Against you on entries and stop fills |
-| `fill` | `next-open` | `next-open`: an entry fills at the next bar's open (live, the order goes in after the cycle that read the closed bar); a setup whose fill bar opens through its stop or target, or falls after end of day or in a new day, expires (counted in the report). `close`: at the signal bar's close, as algoTraderBot |
+| `fill` | `next-open` | `next-open`: an entry fills at the next bar's open (live, the order goes in after the cycle that read the closed bar); a setup whose fill bar opens through its stop or target, or falls after end of day or in a new day, expires (counted in the report). `close`: at the signal bar's close, as the original bot |
 | `walkForward` | null | `{ grid, trainMonths, testMonths, minTrades }`: walk-forward test of one strategy (`--walk-forward --grid key=v1,v2`); see below |
 | `feesPerSide` | per contract (micros $0.37) | Dollars per contract per side |
 | `maxDailyLoss` | 500 | Daily dollar loss that ends the day (0 = off) |
-| `window` | 500 | Bars of history per evaluation (algoTraderBot's BARS_WINDOW) |
+| `window` | 500 | Bars of history per evaluation (the original bot's BARS_WINDOW) |
 | `outDir` | `<FTH_HOME>/backtests/<run>` | Results |
 
 ### Results
@@ -156,7 +156,7 @@ trail, and `max_bars` if set), whichever rules strategy found the setup: a
 Each run writes these files to the run directory:
 
 - **`report.md` and `report.json`:**
-  - **R statistics**, as algoTraderBot reports them: trades, win rate, mean
+  - **R statistics**, as the original bot reports them: trades, win rate, mean
     and total R, profit factor, MFE, and capture (total R ÷ total MFE).
   - **Dollar figures** after fees: net P&L, profit factor, and max drawdown.
   - **Breakdowns** by strategy, exit reason, symbol, month, hour (ET),
@@ -214,9 +214,9 @@ pass, and the same by month, for the rules alone and with the policy.
 
 ### Strategy correctness
 
-`tests/lib/parity.test.js` runs the shipped strategies' rules over algoTraderBot's
+`tests/lib/parity.test.js` runs the shipped strategies' rules over the original bot's
 own NQ and RTY 3-minute data. It checks each of the six strategies against
-the signals algoTraderBot's Python detectors produced on the same bars: same
+the signals the original bot's Python detectors produced on the same bars: same
 bar, same direction, same stop.
 
 We also ran the same check over 17,500 bars on NQ, ES, RTY, YM, and GC. All
@@ -227,16 +227,16 @@ same bar, direction, and stop.
 ## Examples
 
 ```text
-$ node scripts/backtest.js --data ../algoTraderBot/data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01
+$ node scripts/backtest.js --data data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01
 [backtest] bos, cisd_ote, ema_cross, keltner, orb, supertrend, vwap_reclaim on MNQ (2701 3m bars)
 [backtest] 85 trades | win 24% | mean -0.281R | sum -23.92R | PF 0.64 | net $-1707.4 | max DD $1967.24 | 5.1 s
 [backtest]   bos          n=42   win=24%  meanR=-0.215 sumR=-9.03
 ...
 ```
 
-Without algoTraderBot's model filter (each signal graded by its Chronos +
+Without the original bot's model filter (each signal graded by its Chronos +
 XGBoost model, proba ≥ floor), the raw mechanical entries are not
-profitable. That matches why algoTraderBot grades them. Here, the LLM's
+profitable. That matches why the original bot grades them. Here, the LLM's
 analysis plays that grading role, so use the backtest for strategy
 correctness and exit design. Judge the harness's edge from paper trading.
 

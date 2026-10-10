@@ -1,6 +1,6 @@
 ---
 name: orb
-description: Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from algoTraderBot. Use when price closes beyond the opening range or when planning the morning session.
+description: Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from the original Python bot. Use when price closes beyond the opening range or when planning the morning session.
 version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
@@ -28,12 +28,12 @@ exit:
 risk:
   stop: atr:0.5
   min_rr: 2
-source: algoTraderBot/strategies/orb.py
+source: original bot, strategies/orb.py
 ---
 
 # Strategy: Opening Range Breakout (`setup:orb`)
 
-Source: `algoTraderBot/strategies/orb.py` (ORB_BARS=5 × 3-min, ORB_ADX_GATE=18,
+Source: the original bot's `orb.py` (ORB_BARS=5 × 3-min, ORB_ADX_GATE=18,
 no breakouts after 16:00 ET, stop 0.5 × ATR(20), fixed-RR fallback 2R).
 
 ## When to Use
@@ -60,7 +60,7 @@ trigger is the 09:48 bar (`minute_et >= 588`).
 **Entry:** market on the trigger bar's close, as the source does.
 
 **Stop:** 0.5 × ATR(20) from the fill (the scan's `stopDistance`, rounded to
-ticks), as algoTraderBot places it.
+ticks), as the original bot places it.
 
 **Exit:** no fixed target. Hold the stop until the trade is up 2R; from
 then on the runner trails it 0.5R behind the best price (the `exit` block),

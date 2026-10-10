@@ -181,7 +181,7 @@ strategies/
 ```
 
 Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The six algoTraderBot ports reproduce its signals bar
+rules`); none is code. The six ported strategies reproduce its signals bar
 for bar (`tests/lib/parity.test.js`).
 
 Each file has code-checked frontmatter and a body the agents follow:
@@ -240,7 +240,7 @@ To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
 `FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. The six bundled
-strategies are ported from [algoTraderBot](https://github.com/johnamcruz/algoTraderBot).
+strategies are ported from an earlier Python trading bot.
 
 ## What's inside
 
@@ -438,7 +438,7 @@ More runner settings:
 ### Backtesting
 
 `scripts/backtest.js` replays historical bars from Parquet, Excel, CSV, or
-JSON files the way algoTraderBot backtests. After every closed bar it:
+JSON files the way the original bot backtests. After every closed bar it:
 
 1. settles the open trade against the bar;
 2. trails its stop;
@@ -448,7 +448,7 @@ JSON files the way algoTraderBot backtests. After every closed bar it:
 The market session always applies, as it does live: entries only from
 18:00 to 16:00 ET (Sunday evening to Friday), and every trade closed at end
 of day. By default it also applies the harness's other rules (sessions,
-order-gate limits); `--no-gate` drops those to compare with algoTraderBot.
+order-gate limits); `--no-gate` drops those to compare with the original bot.
 
 ```bash
 node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-01-01 --end 2025-04-01
@@ -457,7 +457,7 @@ node scripts/backtest.js --config backtest.json    # see mcp-configs/backtest.ex
 
 Entries fill at the next bar's open with a tick of slippage (live, the
 order goes in after the cycle that read the bar; `--fill close` for
-algoTraderBot's mechanics). Results are in R (as algoTraderBot reports them)
+the original bot's mechanics). Results are in R (as the original bot reports them)
 and in dollars after fees, broken down by strategy, exit, month, entry hour,
 and weekday, with a 95% interval on mean R, an edge verdict, Sharpe, MAE, a
 data audit, and provenance. `--walk-forward --grid <param>=a,b,c` tunes a
