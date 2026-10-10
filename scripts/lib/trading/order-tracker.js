@@ -4,7 +4,7 @@
  * The gateway's view of its order calls' outcomes, on top of order-markers.js
  * (the records on disk). One tracker per gateway process:
  *
- *   beforeSend({ id, args, risk, observed, now })  tag the place_order and write its record
+ *   tagRequest(msg, { observed, now })            tag a place_order request and write its record (beforeSend)
  *   onReply(id, msg)                                a reply settles the record, unless it may hide a live order
  *   settle(accountId, now, { isWaiting })           settle this account's records from the broker's orders
  *   cancelLedger / exitLedger / exitOrders          unknown orders as the gate counts them
@@ -18,6 +18,9 @@ const path = require('path');
 const markers = require('./order-markers');
 const { harnessHome } = require('../paths');
 const { writeJsonAtomic, readJson } = require('../harness-run');
+const { isRiskReducing } = require('./order-gate');
+
+const PLACE_ORDER = /(?:^|__)place_order$/;
 
 const ENTRY_ORDERS_KEPT = 200;
 const STOP_PRICE = /\bstop(?:\s+at)?\s*[:=@]?\s*(\d+(?:\.\d+)?)\b/i;
@@ -69,17 +72,34 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {} }) 
   return {
     graceMs,
 
-    /** Before a place_order goes out: { refuse } or { args (tagged) }. */
+    /**
+     * Before a place_order goes out: { refuse: { check, message } } or { args (tagged) }.
+     * An order without an accountId can't be tracked per account: an entry is refused,
+     * an exit goes untracked (the server refuses it anyway; the interface requires one).
+     */
     beforeSend({ id, args, risk, observed, now }) {
-      if (!risk && (args.accountId === undefined || args.accountId === null || args.accountId === '')) {
-        return { refuse: 'place_order needs an accountId: the gateway tracks each order\'s outcome per account.' };
+      if (args.accountId === undefined || args.accountId === null || args.accountId === '') {
+        return risk ? { args } : { refuse: { check: 'account-required', message: 'place_order needs an accountId: the gateway tracks each order\'s outcome per account.' } };
       }
       const inUse = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId));
       const prep = markers.prepareSend({ env, args, risk, observed, inUse, now });
-      if (prep.refuse) return prep;
+      if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
       if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag });
       return prep;
+    },
+
+    /**
+     * A client message about to be forwarded: a place_order tools/call goes out
+     * tagged, with its record written first (beforeSend). Anything else is
+     * returned as it is. Returns { msg } (the message to send) or { refuse }.
+     */
+    tagRequest(msg, { observed = null, now }) {
+      if (!msg || Array.isArray(msg) || msg.method !== 'tools/call' || !msg.params || !PLACE_ORDER.test(String(msg.params.name || ''))) return { msg };
+      const args = msg.params.arguments || {};
+      const prep = this.beforeSend({ id: msg.id, args, risk: isRiskReducing(args.rationale), observed, now });
+      if (prep.refuse) return prep;
+      return { msg: prep.args === args ? msg : { ...msg, params: { ...msg.params, arguments: prep.args } } };
     },
 
     /**

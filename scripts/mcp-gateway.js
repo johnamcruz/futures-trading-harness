@@ -259,26 +259,19 @@ function main(argv) {
         parsed = null;
       }
       for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
-      // Every place_order goes out with a customTag and a marker on disk first, so an unknown
+      // Every place_order goes out with a customTag and a record on disk first, so an unknown
       // outcome (no reply, or this gateway gone) is found again in the broker's orders.
-      let line2 = forward;
-      if (parsed && !Array.isArray(parsed) && parsed.method === 'tools/call' && /(?:^|__)place_order$/.test(String(parsed.params && parsed.params.name || ''))) {
+      const tagged = tracker.tagRequest(parsed, { observed: parsed && parsed.id !== undefined ? sentNet.get(parsed.id) : null, now: gateNow() });
+      if (tagged.refuse) {
         const args = parsed.params.arguments || {};
-        const risk = isRiskReducing(args.rationale);
-        const sent = parsed.id !== undefined ? sentNet.get(parsed.id) : null;
-        const prep = tracker.beforeSend({ id: parsed.id, args, risk, observed: sent, now: gateNow() });
-        if (prep.refuse) {
-          if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([{ check: 'order-pending', message: prep.refuse }]))));
-          log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'order-pending', message: prep.refuse }], contractId: args.contractId, rationale: args.rationale });
-          sentNet.delete(parsed.id);
-          inFlight.delete(parsed.id);
-          return;
-        }
-        if (prep.args !== args) {
-          parsed = { ...parsed, params: { ...parsed.params, arguments: prep.args } };
-          line2 = JSON.stringify(parsed);
-        }
+        if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([tagged.refuse]))));
+        log({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [tagged.refuse], contractId: args.contractId, rationale: args.rationale });
+        sentNet.delete(parsed.id);
+        inFlight.delete(parsed.id);
+        return;
       }
+      const line2 = tagged.msg === parsed ? forward : JSON.stringify(tagged.msg);
+      parsed = tagged.msg;
       const lane = [].concat(parsed || []).filter(m => isLaneCall(m) && m.id !== undefined);
       // Closes aren't gated, but they change the position: note the position
       // before them so the ledger can count them until the account shows it.

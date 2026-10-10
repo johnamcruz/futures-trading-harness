@@ -30,14 +30,31 @@ test('entry records: written once per order, with the time the order was sent an
   assert.deepStrictEqual(list.map(e => [e.orderId, e.setup, e.stopPrice, e.at]), [[41, 'orb', 21490, '2026-10-07T14:20:00.000Z']]);
 });
 
-test('beforeSend: tags and records the order; an entry with no account is refused', () => {
+test('beforeSend: tags and records the order; with no account an entry is refused and an exit goes untracked', () => {
   const env = { FTH_HOME: tmpDir() };
   const t = tracker(env);
   const sent = t.beforeSend({ id: 1, args: ENTRY, risk: false, observed: { observedNet: 0, observedRootNet: 0 }, now: NOW });
   assert.strictEqual(sent.args.customTag, 'orb-1');
   assert.deepStrictEqual(markers.readMarkers(env).map(m => m.tag), ['orb-1']);
-  assert.match(t.beforeSend({ id: 2, args: { ...ENTRY, customTag: 'orb-1' }, risk: false, now: NOW }).refuse, /in use/, 'its own call still carries the tag');
-  assert.match(t.beforeSend({ id: 3, args: { ...ENTRY, accountId: undefined }, risk: false, now: NOW }).refuse, /needs an accountId/);
+  const reused = t.beforeSend({ id: 2, args: { ...ENTRY, customTag: 'orb-1' }, risk: false, now: NOW }).refuse;
+  assert.deepStrictEqual([reused.check, /in use/.test(reused.message)], ['order-pending', true], 'its own call still carries the tag');
+  assert.strictEqual(t.beforeSend({ id: 3, args: { ...ENTRY, accountId: undefined }, risk: false, now: NOW }).refuse.check, 'account-required');
+  const exit = { ...ENTRY, accountId: undefined, side: 'sell', rationale: '[exit] flatten', customTag: undefined };
+  assert.deepStrictEqual(t.beforeSend({ id: 4, args: exit, risk: true, now: NOW }), { args: exit });
+  assert.strictEqual(markers.readMarkers(env).length, 1, 'no record for an order no account can settle');
+});
+
+test('tagRequest: only a place_order tools/call is tagged; anything else passes as it is', () => {
+  const env = { FTH_HOME: tmpDir() };
+  const t = tracker(env);
+  const call = (name, args, id = 1) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+  for (const msg of [call('cancel_order', { accountId: 7, orderId: 9 }), { jsonrpc: '2.0', id: 1, method: 'tools/list' }, [call('place_order', ENTRY)], null]) {
+    assert.strictEqual(t.tagRequest(msg, { now: NOW }).msg, msg);
+  }
+  const out = t.tagRequest(call('mcp__broker__place_order', { ...ENTRY, customTag: undefined }), { now: NOW }).msg;
+  assert.match(out.params.arguments.customTag, /^fth-/);
+  assert.strictEqual(markers.readMarkers(env).length, 1);
+  assert.strictEqual(t.tagRequest(call('place_order', { ...ENTRY, accountId: '' }, 2), { now: NOW }).refuse.check, 'account-required');
 });
 
 test('onReply: a result or a sure refusal clears the record; an error that may hide a live order keeps it', () => {
