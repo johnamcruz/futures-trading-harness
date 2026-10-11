@@ -23,6 +23,7 @@
  * strategy's strategies fire with (and against) the setup on this bar.
  */
 
+const crypto = require('crypto');
 const { sessionMinute } = require('../trading/clock');
 const ind = require('../trading/indicators');
 const { ruleSeries } = require('../trading/mtf');
@@ -160,4 +161,18 @@ function confluence(results, setupName, sign) {
   return { with: others.filter(r => r.direction === want).length, against: others.filter(r => r.direction !== want).length };
 }
 
-module.exports = { OBS_FIELDS, OBS_DIM, RECENT_BARS, observationFields, buildObservation, marketFeatures, confluence };
+/**
+ * The observation's version for a policy strategy: sha256 of its fields, the
+ * volume-profile settings its params give, and the code that computes it
+ * (buildObservation, marketFeatures, confluence). Anything trained on
+ * observations (a label dataset) records it; one built with another version
+ * is refused at train time (rl/fth_rl/dataset.py).
+ */
+function observationVersion(components = [], params = {}) {
+  return crypto.createHash('sha256').update(JSON.stringify({
+    fields: observationFields(components), profile: optionsFromParams(params || {}),
+    code: [buildObservation, marketFeatures, confluence].map(f => f.toString()),
+  })).digest('hex');
+}
+
+module.exports = { OBS_FIELDS, OBS_DIM, RECENT_BARS, observationFields, observationVersion, buildObservation, marketFeatures, confluence };

@@ -26,7 +26,7 @@
  */
 
 const { ACTIONS, ACTION_N, MASKS, runAttempt, outcomeReward, denseReward, tradeReward, evaluate, policyHook } = require('./challenge-env');
-const { OBS_FIELDS, observationFields } = require('./observation');
+const { OBS_FIELDS, observationFields, observationVersion } = require('./observation');
 const { loadPolicy } = require('./policy-net');
 const { checkBundle, BUNDLE_FORMAT, BUNDLE_VERSION, PROMOTION_GATE } = require('./policy-bundle');
 
@@ -116,7 +116,7 @@ function serve({ env, meta = {}, readLine, writeLine }) {
     try {
       switch (req.cmd) {
         case 'info':
-          reply({ ...meta, bundleFormat: BUNDLE_FORMAT, bundleVersion: BUNDLE_VERSION, promotionGate: PROMOTION_GATE, obsFields: env.prop ? observationFields(env.prop.components) : OBS_FIELDS, actions: ACTIONS, actionN: ACTION_N, masks: MASKS, reward: env.reward, accountProfile: env.account, days: env.days.length, firstDay: env.days[0] ?? null, lastDay: env.days[env.days.length - 1] ?? null });
+          reply({ ...meta, bundleFormat: BUNDLE_FORMAT, bundleVersion: BUNDLE_VERSION, promotionGate: PROMOTION_GATE, obsFields: env.prop ? observationFields(env.prop.components) : OBS_FIELDS, obsVersion: env.prop ? observationVersion(env.prop.components, env.prop.strategy && env.prop.strategy.params) : observationVersion(), actions: ACTIONS, actionN: ACTION_N, masks: MASKS, reward: env.reward, accountProfile: env.account, days: env.days.length, firstDay: env.days[0] ?? null, lastDay: env.days[env.days.length - 1] ?? null });
           break;
         case 'starts':
           reply({ starts: env.starts(toMs(req.from, 'from'), endMs(req.to), { every: req.every || 1 }) });
