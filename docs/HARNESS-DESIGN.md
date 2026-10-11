@@ -142,8 +142,9 @@ Further safeguards:
   configured bar and state directories. It allows subagents only by role
   name (`Agent(risk-manager)` and the other harness roles). The rule approves
   whichever agent Qwen resolves for that name, and Qwen prefers a session,
-  project, or user agent (`~/.qwen/agents/`) over the extension's: keep no
-  agent of a harness role's name there. Qwen's built-in
+  project (`workspace/.qwen/agents/`), or user agent (`~/.qwen/agents/`)
+  over the extension's, matching names in any letter case: keep no agent of
+  a harness role's name in either. Qwen's built-in
   agents, including `claude-code` and `codex`, which run another CLI under
   its own permissions, still need approval and so never run headless.
   Headless Qwen 0.25 keeps its shell off under this allowlist: it turns the
