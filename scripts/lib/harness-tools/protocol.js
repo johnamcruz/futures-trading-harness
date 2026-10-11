@@ -19,7 +19,7 @@
  * error. Over 256 KB the result is refused (isError, saying how to narrow
  * it), never truncated. Tool calls run one at a time, in order.
  *
- * createServer({ env, root, write }) -> { handleLine(line), oversize(), idle() }
+ * createServer({ env, root, write, call }) -> { handleLine(line), oversize(), idle() }   (call: callTool, replaceable in tests)
  * callTool(name, input, { env, root }) -> MCP tool result
  * boundedLines(onLine, onOversize, max) -> { push(chunk), flush() }
  */
@@ -120,7 +120,7 @@ function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
 
 const validId = id => (typeof id === 'string' && id.length <= 256) || (typeof id === 'number' && Number.isFinite(id));
 
-function createServer({ env = process.env, root = ROOT, write }) {
+function createServer({ env = process.env, root = ROOT, write, call = callTool }) {
   let queue = Promise.resolve();
   const error = (id, code, message) => write({ jsonrpc: '2.0', id, error: { code, message } });
   const reply = (id, res) => write({ jsonrpc: '2.0', id, result: res });
@@ -153,7 +153,7 @@ function createServer({ env = process.env, root = ROOT, write }) {
     if (method === 'tools/list') return reply(id, { tools: listTools() });
     if (method === 'tools/call') {
       if (typeof params.name !== 'string' || !BY_NAME.has(params.name)) return error(id, -32602, `unknown tool: ${String(params.name).slice(0, 64)}`);
-      const run = () => callTool(params.name, params.arguments, { env, root })
+      const run = () => call(params.name, params.arguments, { env, root })
         .catch(err => result(`[harness] ${err && err.message}\n`, true))
         .then(res => reply(id, res));
       queue = queue.then(run, run);

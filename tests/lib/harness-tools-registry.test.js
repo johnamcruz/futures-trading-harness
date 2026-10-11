@@ -67,6 +67,9 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
   ok('strategies_scan', { bars: '/tmp/fth/MNQ-3m.json', symbol: 'MNQ', record: true });
   bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol: 'MNQ', now: '2026-01-01T00:00:00Z' }, /"now": unknown argument/);
   bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol: 'mnq' }, /symbol: must match/);
+  for (const symbol of ['MNQ\n../x', 'X\nMNQ', 'MNQ\n']) bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol }, /symbol: must match/);
+  bad('reconcile', { day: '2026-10-07\nx' }, /day: must match/);
+  bad('combine_status', { account: 'topstep_50k\n../../x' }, /account: must match/);
   bad('strategies_recent', { bars: '/tmp/fth/a.json', symbol: 'MNQ', count: 51 }, /at most 50/);
   ok('market_snapshot', { bars: '/tmp/fth/a.json', params: { emaSlow: 30 } });
   bad('market_snapshot', { bars: '/tmp/fth/a.json', params: { bogus: 1 } }, /"params.bogus": unknown argument/);

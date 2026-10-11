@@ -67,6 +67,35 @@ test('protocol: invalid arguments are an isError result naming the problem, not 
   assert.match(n.result.content[0].text, /must be an object/);
 });
 
+test('protocol: tool calls run one at a time, in the order they arrived, and answer in that order', async () => {
+  const out = [];
+  const log = [];
+  let running = 0;
+  const call = async name => {
+    running += 1;
+    assert.strictEqual(running, 1, 'never two at once');
+    log.push(`start ${name}`);
+    await new Promise(r => setTimeout(r, name === 'lessons' ? 30 : 1)); // the first is the slow one
+    log.push(`end ${name}`);
+    running -= 1;
+    return { content: [{ type: 'text', text: name }] };
+  };
+  const s = createServer({ env: {}, write: m => out.push(m), call });
+  s.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'lessons' } }));
+  s.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'blackouts_list' } }));
+  s.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }));
+  await s.idle();
+  assert.deepStrictEqual(log, ['start lessons', 'end lessons', 'start blackouts_list', 'end blackouts_list']);
+  assert.deepStrictEqual(out.filter(m => m.id !== 3).map(m => m.id), [1, 2]);
+  // A call that throws still answers, and the next one runs.
+  const out2 = [];
+  const s2 = createServer({ env: {}, write: m => out2.push(m), call: async name => { if (name === 'lessons') throw new Error('boom'); return { content: [{ type: 'text', text: 'ok' }] }; } });
+  s2.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'lessons' } }));
+  s2.handleLine(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'blackouts_list' } }));
+  await s2.idle();
+  assert.deepStrictEqual(out2.map(m => [m.id, m.result.isError === true, m.result.content[0].text]), [[1, true, '[harness] boom\n'], [2, false, 'ok']]);
+});
+
 test('callTool: success is the CLI text plus stderr notes; a failure is [script] message; a refused bars path never runs', async () => {
   const home = tmpDir();
   const ok = await callTool('lessons', {}, { env: { FTH_HOME: home, FTH_JOURNAL: path.join(home, 'none.jsonl') } });

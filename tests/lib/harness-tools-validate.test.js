@@ -33,6 +33,8 @@ test('validate: each rule refuses what breaks it', () => {
   assert.match(validate(schema, JSON.parse('{"name":"abc","__proto__":{"n":1}}')).join(), /"__proto__": unknown argument/);
   assert.match(validate(schema, JSON.parse('{"name":"abc","constructor":1}')).join(), /"constructor": unknown argument/);
   assert.match(errs({ name: 'ABC' }), /name: must match/);
+  // Anchors hold for the whole string: a newline can't smuggle a second line past the pattern.
+  for (const v of ['abc\nzz', 'zz\nabc', 'abc\n']) assert.match(errs({ name: v }), /name: must match/, JSON.stringify(v));
   assert.match(errs({ name: 'a' }), /at least 2 characters/);
   assert.match(errs({ name: 'abcdef' }), /at most 5 characters/);
   assert.match(errs({ name: 'abc', n: 1.5 }), /n: must be an integer/);

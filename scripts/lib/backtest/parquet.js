@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const zlib = require('zlib');
+const { createBudget } = require('./decode-budget');
 
 const TYPE = { BOOLEAN: 0, INT32: 1, INT64: 2, INT96: 3, FLOAT: 4, DOUBLE: 5, BYTE_ARRAY: 6, FIXED_LEN_BYTE_ARRAY: 7 };
 const ENC = { PLAIN: 0, PLAIN_DICTIONARY: 2, RLE: 3, BIT_PACKED: 4, DELTA_BINARY_PACKED: 5, DELTA_LENGTH_BYTE_ARRAY: 6, DELTA_BYTE_ARRAY: 7, RLE_DICTIONARY: 8, BYTE_STREAM_SPLIT: 9 };
@@ -115,9 +116,10 @@ class Reader {
 
 // ── decompression ──────────────────────────────────────────────────────────
 
-function snappy(input, outLen) {
+function snappy(input, outLen, budget = createBudget()) {
   const r = new Reader(input);
   const len = Number(r.varint());
+  budget.take('parquet', len); // before allocating what the header claims
   const out = Buffer.alloc(len);
   let o = 0;
   let p = r.pos;
@@ -147,7 +149,8 @@ function snappy(input, outLen) {
   return out;
 }
 
-function lz4Raw(input, outLen) {
+function lz4Raw(input, outLen, budget = createBudget()) {
+  budget.take('parquet', outLen);
   const out = Buffer.alloc(outLen);
   let p = 0; let o = 0;
   while (p < input.length) {
@@ -167,16 +170,17 @@ function lz4Raw(input, outLen) {
   return out;
 }
 
-function decompress(codec, buf, outLen) {
+/** A page's bytes; what every page of one file decompresses to counts against `budget` (decode-budget.js). */
+function decompress(codec, buf, outLen, budget) {
   switch (codec) {
     case 0: return buf;
-    case 1: return snappy(buf, outLen);
-    case 2: return zlib.gunzipSync(buf);
-    case 4: return zlib.brotliDecompressSync(buf);
+    case 1: return snappy(buf, outLen, budget);
+    case 2: return budget.inflate('parquet', max => zlib.gunzipSync(buf, { maxOutputLength: max }));
+    case 4: return budget.inflate('parquet', max => zlib.brotliDecompressSync(buf, { maxOutputLength: max }));
     case 6:
       if (typeof zlib.zstdDecompressSync !== 'function') throw new Error('parquet: ZSTD needs Node 22.15+ (or rewrite the file with snappy)');
-      return zlib.zstdDecompressSync(buf);
-    case 7: return lz4Raw(buf, outLen);
+      return budget.inflate('parquet', max => zlib.zstdDecompressSync(buf, { maxOutputLength: max }));
+    case 7: return lz4Raw(buf, outLen, budget);
     default: throw new Error(`parquet: compression codec ${codec} is not supported (use snappy, gzip, zstd, brotli, or none)`);
   }
 }
@@ -352,7 +356,7 @@ function columnsOf(meta) {
   return cols;
 }
 
-function readColumnChunk(buf, chunk, col) {
+function readColumnChunk(buf, chunk, col, budget) {
   const md = chunk[3];
   const codec = md[4];
   const total = Number(md[5]);
@@ -369,12 +373,14 @@ function readColumnChunk(buf, chunk, col) {
     const type = header[1];
     pos = dataStart + compressed;
     if (type === PAGE.DICTIONARY) {
-      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed);
+      budget.count('parquet', Number(header[7][1]));
+      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       dict = plain(page, 0, col.type, header[7][1], col.typeLength);
     } else if (type === PAGE.DATA) {
       const h = header[5];
       const n = h[1];
-      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed);
+      budget.count('parquet', Number(n)); // before decoding arrays of that many values
+      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       let p = 0;
       let defs = null;
       if (col.optional) {
@@ -390,13 +396,14 @@ function readColumnChunk(buf, chunk, col) {
     } else if (type === PAGE.DATA_V2) {
       const h = header[8];
       const n = h[1];
+      budget.count('parquet', Number(n));
       const nulls = h[2] || 0;
       const defLen = h[5] || 0;
       const repLen = h[6] || 0;
       const levels = dataStart + repLen;
       const defs = col.optional && defLen ? rleHybrid(buf, levels, levels + defLen, bitWidth(1), n) : null;
       const body = buf.subarray(dataStart + repLen + defLen, dataStart + compressed);
-      const page = h[7] === false ? body : decompress(codec, body, uncompressed - repLen - defLen);
+      const page = h[7] === false ? body : decompress(codec, body, uncompressed - repLen - defLen, budget);
       const vals = decodeValues(page, 0, page.length, h[4], col, n - nulls, dict);
       let k = 0;
       for (let j = 0; j < n; j += 1) values.push(defs && defs[j] === 0 ? null : vals[k++]);
@@ -432,7 +439,7 @@ function convert(col, v) {
 }
 
 /** Read a Parquet file into { columns: [names], rows: [{ name: value }] }. */
-function readParquet(file) {
+function readParquet(file, { budget = createBudget() } = {}) {
   const buf = fs.readFileSync(file);
   const meta = readMetadata(buf);
   const cols = columnsOf(meta);
@@ -441,7 +448,7 @@ function readParquet(file) {
     const chunks = rg[1];
     cols.forEach((col, k) => {
       const chunk = chunks.find(c => c[3] && c[3][3] && c[3][3].map(x => x.toString('utf8')).join('.') === col.name) || chunks[k];
-      for (const v of readColumnChunk(buf, chunk, col)) data[k].push(convert(col, v));
+      for (const v of readColumnChunk(buf, chunk, col, budget)) data[k].push(convert(col, v));
     });
   }
   const n = data.length ? data[0].length : 0;
@@ -454,4 +461,4 @@ function readParquet(file) {
   return { columns: cols.map(c => c.name), rows };
 }
 
-module.exports = { readParquet, snappy, rleHybrid, deltaBinary };
+module.exports = { readParquet, snappy, rleHybrid, deltaBinary, decompress };

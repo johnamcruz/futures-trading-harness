@@ -263,28 +263,51 @@ test('harness-tools server: the replay clock is honored for a replay broker and 
   }
 });
 
+/** Resolves with fn's result, or rejects after ms (a protocol regression fails fast instead of hanging CI). */
+const within = (ms, what, promise) => {
+  let timer;
+  return Promise.race([promise, new Promise((_r, reject) => { timer = setTimeout(() => reject(new Error(`${what}: nothing after ${ms} ms`)), ms); })])
+    .finally(() => clearTimeout(timer));
+};
+
 test('harness-tools server: a line over 1 MB is refused and the next request still answered', { timeout: 60000 }, async () => {
   const { spawn } = require('child_process');
   const child = spawn(process.execPath, [SERVER], { env: envFor(fixtureHome()), stdio: ['pipe', 'pipe', 'pipe'] });
-  const replies = [];
-  let buf = '';
-  const done = new Promise(resolve => {
-    child.stdout.on('data', c => {
-      buf += c;
-      const parts = buf.split('\n');
-      buf = parts.pop();
-      replies.push(...parts.filter(Boolean).map(l => JSON.parse(l)));
-      if (replies.length >= 2) resolve();
+  try {
+    const replies = [];
+    let buf = '';
+    const done = new Promise(resolve => {
+      child.stdout.on('data', c => {
+        buf += c;
+        const parts = buf.split('\n');
+        buf = parts.pop();
+        replies.push(...parts.filter(Boolean).map(l => JSON.parse(l)));
+        if (replies.length >= 2) resolve();
+      });
     });
-  });
-  // Multibyte: 600 K characters, 1.2 MB.
-  child.stdin.write(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{"pad":"${'é'.repeat(600 * 1024)}"}}\n`);
-  child.stdin.write('{"jsonrpc":"2.0","id":2,"method":"ping"}\n');
-  await done;
-  child.stdin.end();
-  child.kill();
-  assert.deepStrictEqual(replies[0], { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request: a line over 1 MB is refused' } });
-  assert.deepStrictEqual(replies[1], { jsonrpc: '2.0', id: 2, result: {} });
+    // Multibyte: 600 K characters, 1.2 MB.
+    child.stdin.write(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{"pad":"${'é'.repeat(600 * 1024)}"}}\n`);
+    child.stdin.write('{"jsonrpc":"2.0","id":2,"method":"ping"}\n');
+    await within(20000, 'two replies', done);
+    assert.deepStrictEqual(replies[0], { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request: a line over 1 MB is refused' } });
+    assert.deepStrictEqual(replies[1], { jsonrpc: '2.0', id: 2, result: {} });
+  } finally {
+    child.stdin.end();
+    child.kill();
+  }
+});
+
+test('harness-tools server: when its client goes away (stdout closed), it exits cleanly', { timeout: 60000 }, async () => {
+  const { spawn } = require('child_process');
+  const child = spawn(process.execPath, [SERVER], { env: envFor(fixtureHome()), stdio: ['pipe', 'pipe', 'pipe'] });
+  try {
+    const exited = new Promise(resolve => child.on('exit', (code, signal) => resolve({ code, signal })));
+    child.stdout.destroy(); // the reading end: the server's next write fails with EPIPE
+    for (let i = 1; i <= 5; i += 1) child.stdin.write(`{"jsonrpc":"2.0","id":${i},"method":"tools/list"}\n`);
+    assert.deepStrictEqual(await within(20000, 'the server to exit', exited), { code: 0, signal: null });
+  } finally {
+    child.kill();
+  }
 });
 
 test('harness-tools server main: only protocol messages reach stdout; anything else printed goes to stderr', async () => {

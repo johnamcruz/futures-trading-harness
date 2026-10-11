@@ -10,9 +10,10 @@
 
 const fs = require('fs');
 const zlib = require('zlib');
+const { createBudget } = require('./decode-budget');
 
-/** { name: Buffer } for every file in a zip archive. */
-function unzip(buf) {
+/** { name: Buffer } for every file in a zip archive; what they inflate to counts against `budget` (decode-budget.js). */
+function unzip(buf, budget = createBudget()) {
   let eocd = -1;
   for (let p = buf.length - 22; p >= Math.max(0, buf.length - 65557); p -= 1) {
     if (buf.readUInt32LE(p) === 0x06054b50) { eocd = p; break; }
@@ -33,8 +34,10 @@ function unzip(buf) {
     p += 46 + nameLen + extraLen + commentLen;
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(start, start + compSize);
-    if (method === 0) files[name] = raw;
-    else if (method === 8) files[name] = zlib.inflateRawSync(raw);
+    if (method === 0) {
+      budget.take('xlsx', raw.length);
+      files[name] = raw;
+    } else if (method === 8) files[name] = budget.inflate('xlsx', max => zlib.inflateRawSync(raw, { maxOutputLength: max }));
     else throw new Error(`xlsx: zip compression method ${method} is not supported`);
   }
   return files;
@@ -66,8 +69,8 @@ function columnIndex(ref) {
  * Read a worksheet (default: the first) into { rows: [[cell...]], date1904 }.
  * Cells are numbers, strings, booleans, or null.
  */
-function readXlsx(file, { sheet = null } = {}) {
-  const files = unzip(fs.readFileSync(file));
+function readXlsx(file, { sheet = null, budget = createBudget() } = {}) {
+  const files = unzip(fs.readFileSync(file), budget);
   const xml = name => (files[name] ? files[name].toString('utf8') : null);
   const workbook = xml('xl/workbook.xml');
   if (!workbook) throw new Error('xlsx: no xl/workbook.xml (is this an Excel workbook?)');
