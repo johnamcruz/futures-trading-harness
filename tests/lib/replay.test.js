@@ -139,7 +139,7 @@ test('replay env: the run home, the replay broker and clock; no path overrides; 
   const { barsDirs } = require('../../scripts/lib/harness-tools/paths');
   assert.strictEqual(scratchDir(env), path.join(h, 'bars-scratch'));
   assert.notStrictEqual(scratchDir(env), scratchDir(w.env));
-  assert.ok(barsDirs(env).includes(path.join(h, 'bars-scratch')) && !barsDirs(env).some(d => d === scratchDir(w.env) || d.startsWith('/tmp/fth')), barsDirs(env).join());
+  assert.ok(barsDirs(env).includes(path.join(h, 'bars-scratch')) && !barsDirs(env).some(d => d === scratchDir(w.env) || /^(\/private)?\/tmp\/fth(\/|$)/.test(d)), barsDirs(env).join());
   // A live broker, a broker without its own journal, or one that shares a live server: refused.
   assert.match(brokerErrors({ ...env, FTH_BROKER: 'live' }, w.run).join(' '), /not "sim"[\s\S]*not a replay broker/);
   fs.writeFileSync(path.join(w.run.paths.runHome, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/live/server.js'], replay: true, journalEnv: 'SIM_JOURNAL' }, live: { command: [process.execPath, '/opt/live/server.js'] } } }));
