@@ -28,6 +28,11 @@
  *   setPrice(file, contract, p)    move the market (triggers stops and limits)
  *   settle(file)                   fill the closes held by holdCloses
  *   handle(file, tool, args, env)  a broker MCP tool call -> its result
+ *
+ * As a replay broker (the replay driver's end-to-end test): MOCK_CLOCK_FILE sets
+ * the exchange's time from the driver's clock file on every call, MOCK_REPLAY=1
+ * makes get_server_config report replay: true, and MOCK_STATE_DIR (instead of
+ * MOCK_STATE) holds the state, created on first use from MOCK_INIT (JSON overrides).
  */
 
 const fs = require('fs');
@@ -189,7 +194,7 @@ function closeOrder(s, contractId, partial) {
 const NO_REPLY = { noReply: true };
 
 const HANDLERS = {
-  get_server_config: (s, a, env) => ({ tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
+  get_server_config: (s, a, env) => ({ ...(env.MOCK_REPLAY === '1' ? { replay: true } : {}), tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
   list_accounts: s => {
     if (s.failBalance) throw new Error('HTTP 503 service unavailable');
     return [{ id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true, mcpTradingAllowed: true }];
@@ -257,6 +262,8 @@ const HANDLERS = {
 function handle(file, tool, args = {}, env = process.env) {
   let thrown = null;
   const out = update(file, s => {
+    // A replay broker's clock (MOCK_CLOCK_FILE, { now }), re-read on every call as a replay server does.
+    if (env.MOCK_CLOCK_FILE) s.nowMs = Date.parse(JSON.parse(fs.readFileSync(env.MOCK_CLOCK_FILE, 'utf8')).now);
     // With whether a position was open when the call came (an order cancelled while one was, say).
     s.calls.push({ tool, args, open: s.positions.length > 0 });
     if (!HANDLERS[tool]) throw new Error(`unknown tool ${tool}`);

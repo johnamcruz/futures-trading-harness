@@ -1,0 +1,105 @@
+'use strict';
+
+/**
+ * The live runner wired to the harness: the broker adapter, the harness home's
+ * files (bars, records, logs, journal), the strategies, and the prompt's
+ * context sources. scripts/autotrader.js uses it for the long-running loop
+ * and, under a replay clock, for one pass per process (`--once`), so a
+ * replayed cycle is built exactly as a live one.
+ *
+ *   openRunnerBroker({ cfg, root, env })   the adapter, verified; throws when a live run can't manage positions
+ *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
+ *                loadState, saveState, killSwitchFile, log, event })   createRunner(...) with every dependency
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { createRunner } = require('./runner');
+const { openAdapter, tradingBlocked } = require('./broker/adapter');
+const { dayKey } = require('./autotrader');
+const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
+const { premarketPlan, newsLine } = require('./trading/session-context');
+const { readBlackouts } = require('./trading/check-order');
+const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
+const { loadStrategies, scan } = require('./trading/strategies');
+const { scanRecord, appendJsonl } = require('./trading/scan-log');
+const { loadConfig } = require('./trading/config');
+const { writeJsonAtomic, entryOrders } = require('./harness-run');
+const { writeMtfRecord } = require('./trading/mtf-state');
+const { buildSignals, writeSignals } = require('./trading/signal-state');
+const { digest, recentTrades, formSummary } = require('./trading/instincts');
+const { resolveJournalPath, readJournal } = require('./trading/journal');
+
+/** The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades. */
+async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter }) {
+  const client = open({ root, env });
+  try {
+    await client.verify();
+    // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those.
+    const why = !cfg.paper && cfg.account ? tradingBlocked(await client.serverConfig(), cfg.account) : null;
+    if (why) throw new Error(why);
+    return client;
+  } catch (err) {
+    client.close();
+    throw err;
+  }
+}
+
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
+  const strategies = () => loadStrategies(root, env).strategies;
+  const journal = () => readJournal(resolveJournalPath(env));
+  return createRunner({
+    cfg,
+    prop,
+    root,
+    client,
+    clock: { now },
+    runCycle,
+    isKillSwitchOn: () => fs.existsSync(killSwitchFile),
+    createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
+    loadState,
+    saveState,
+    writeBars: (sym, bars) => {
+      const file = path.join(dataDir, `${sym.symbol}-${cfg.timeframe}m.json`);
+      writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
+      return file;
+    },
+    recordMtf: (sym, bars) => writeMtfRecord(home, sym.symbol, bars, { now: now() }).line,
+    // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
+    trackRecord: (name, { regime, at, entries }) => describeRecord({
+      backtest: readRecord(home, name), live: liveRecord(entries || journal(), name, regime), regime, at,
+      file: (strategies().find(s => s.name === name) || {}).file || null,
+    }),
+    // The day so far (trading/day-context.js), one line for the prompt; levels on the contract's tick.
+    dayContext: (sym, bars) => {
+      const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
+      const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
+      // In RTH the day so far; outside it, the overnight session against the prior day.
+      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round }) || describeOvernight(bars, { symbol: sym.symbol, round });
+    },
+    // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
+    // the last reviewed trades' record on their own line.
+    lessons: ({ entries } = {}) => digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false }),
+    recentTrades: ({ entries } = {}) => recentTrades(entries || journal(), 10),
+    tradesSummary: ({ entries } = {}) => formSummary(entries || journal(), 10),
+    premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
+    news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),
+    journalEntries: journal,
+    tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
+    recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
+    scanFor: (symbol, bars) => {
+      // Only strategies that trade this bar's timeframe can be judged from these bars.
+      const sameTf = strategies().filter(s => s.timeframe === `${cfg.timeframe}m`);
+      return scan(sameTf, { bars }, { symbol, now: now() });
+    },
+    log,
+    // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
+    scanLog: rec => appendJsonl(path.join(home, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
+    // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
+    event,
+    entryOrders: () => entryOrders(home),
+    strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
+  });
+}
+
+module.exports = { openRunnerBroker, wireRunner };

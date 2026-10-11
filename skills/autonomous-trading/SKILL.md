@@ -65,7 +65,7 @@ description: Rules for running the trading harness unattended (headless, schedul
    `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`,
    `bars.js`, `reconcile.js`, `lessons.js`, and `combine.js status`.
    Starting, stopping, or recording a prop attempt,
-   backtests, and training are the user's.
+   backtests, replays (`replay.js`), and training are the user's.
 
 ## Examples
 

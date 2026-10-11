@@ -9,7 +9,21 @@
 const { TOOLS } = require('../../scripts/lib/broker/interface');
 const exchange = require('./mock-exchange');
 
-const file = process.env.MOCK_STATE;
+const fs = require('fs');
+const path = require('path');
+
+// MOCK_STATE, or a replay run's state folder (MOCK_STATE_DIR), whose state starts from MOCK_INIT.
+const file = process.env.MOCK_STATE || path.join(process.env.MOCK_STATE_DIR, 'state.json');
+if (!process.env.MOCK_STATE && !fs.existsSync(file)) {
+  const tmp = `${file}.${process.pid}.init`;
+  exchange.initState(tmp, JSON.parse(process.env.MOCK_INIT || '{}'));
+  try {
+    fs.linkSync(tmp, file); // exclusive: another copy of the server may be starting too
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
+  }
+  fs.unlinkSync(tmp);
+}
 const tools = Object.keys(TOOLS).map(name => ({
   name,
   inputSchema: { type: 'object', properties: Object.fromEntries(Object.keys(TOOLS[name].input).map(k => [k, {}])) },

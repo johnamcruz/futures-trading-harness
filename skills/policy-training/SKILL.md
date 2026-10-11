@@ -118,6 +118,13 @@ evaluation is logged, per family and harness-wide (`<FTH_HOME>/rl/oos_looks.json
 by policy strategy, data, and window); the bundle records how many looks there
 were. Report it, and treat a policy shipped after several looks with suspicion.
 
+The policy learns from the rules strategies' simulated setups. To measure the
+reasoning trader itself (the whole live harness, not a policy), use the
+`replay` skill: it runs the live runner and harness over history on a replay
+broker and reports month by month; its records are the labels a later student
+policy would learn from. The same window
+rules apply: don't choose a trader on the window you report it on.
+
 ## Examples
 
 ```text

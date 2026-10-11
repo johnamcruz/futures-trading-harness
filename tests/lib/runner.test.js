@@ -516,6 +516,13 @@ test('the event log records cycles, account reads, managed positions, stops move
   const eod = await trailSim({ tape: {}, until: et(15, 52) });
   assert.ok(eod.events.some(e => e.kind === 'flatten' && e.why === 'end of day' && e.contractId === 'MNQ'));
   assert.ok(eod.events.some(e => e.kind === 'eod' && e.ok === true && e.day));
+  assert.deepStrictEqual(eod.cycles.filter(c => c === 'eod'), ['eod'], 'the agents\' review run by default');
+  // eodReview false (replay): end of day still flattens and finishes, with no agents' run.
+  const quiet = await trailSim({ tape: {}, until: et(15, 52), cfgOver: { eodReview: false } });
+  assert.ok(quiet.events.some(e => e.kind === 'flatten' && e.why === 'end of day' && e.contractId === 'MNQ'));
+  assert.ok(quiet.events.some(e => e.kind === 'eod' && e.ok === true && e.day));
+  assert.deepStrictEqual(quiet.cycles.filter(c => c === 'eod'), []);
+  assert.throws(() => validateConfig({ eodReview: 'no' }), /eodReview: true or false/);
 });
 
 test('trailing: prices from before a mid-bar fill do not count toward the peak', async () => {

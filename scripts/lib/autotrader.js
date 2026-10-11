@@ -37,6 +37,7 @@ const DEFAULTS = {
   sessions: ['18:00-15:50@America/New_York'],
   premarketAt: '18:05@America/New_York', // briefing at the start of the trading day (before the 08:30 ET data)
   eodAt: '15:50@America/New_York', // flatten everything; required, no later than the 16:00 ET close
+  eodReview: true, // false: end of day flattens and records the close without the agents' review run (replay uses it)
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
@@ -240,6 +241,7 @@ function validateConfig(raw) {
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
+  if (typeof cfg.eodReview !== 'boolean') errors.push('eodReview: true or false');
   if (!cfg.eodAt) errors.push('eodAt: required ("HH:MM@Zone", no later than 16:00 ET): every position is flattened before the close');
   if (!errors.length) errors.push(...marketHoursErrors(cfg));
   if (!errors.length && cfg.eodAt && sessionPastEod(cfg)) {

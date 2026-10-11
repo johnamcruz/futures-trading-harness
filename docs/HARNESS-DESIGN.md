@@ -159,6 +159,16 @@ with `FTH_REPLAY_NOW` set, and never takes the test suite's `FTH_TEST_NOW`.
 Pure log timestamps (cycle logs, the gate log, heartbeats) stay on the wall
 clock.
 
+Under an honored replay clock, `autotrader.js --once` (not `--dry-run`) runs
+one pass of the live loop (`runner.step()`, wired as the long-running loop by
+`scripts/lib/runner-wiring.js`) at the replayed time, with the home's runner
+state: the bars, records, scan, verdicts, account and prompt are built as live,
+and the runner's own schedule decides whether that pass is premarket, a bar's
+cycle, or end of day. Without one, `--once` is the manual run it always was.
+The replay driver (`scripts/replay.js`, `scripts/lib/replay/`, the `replay`
+skill) runs it once per decision time in a fresh home of its own, moving the
+replay broker's clock between them (docs/REASONING-TRADER-DESIGN.md).
+
 ## Autonomous runner
 
 `scripts/autotrader.js` holds an exclusive lock, keeps a per-day state
