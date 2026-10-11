@@ -640,6 +640,9 @@ test('driver: refuses while the live runner runs or another driver holds the run
   // A live autotrader (a stand-in whose command line names it) holds the live lock: refused.
   const runner = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'scripts/autotrader.js'], { stdio: 'ignore' });
   try {
+    // Right after spawn, Linux's /proc/<pid>/cmdline can still be empty (the child mid-exec): wait for its command line.
+    const { processCommand } = require('../../scripts/lib/runner-lock');
+    for (let i = 0; i < 200 && !/autotrader\.js/.test(processCommand(runner.pid) || ''); i += 1) await new Promise(r => setTimeout(r, 25));
     fs.writeFileSync(path.join(w.live, 'autotrader.lock'), JSON.stringify({ pid: runner.pid }));
     await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), new RegExp(`the live runner is running \\(pid ${runner.pid}`));
   } finally {

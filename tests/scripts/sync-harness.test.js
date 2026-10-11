@@ -79,3 +79,16 @@ test('sync writes missing files and removes orphans', () => {
   assert.deepStrictEqual(syncHarness(root, { check: true }), []);
   assert.ok(fs.statSync(path.join(root, 'qwen-extension', 'rules')).isDirectory());
 });
+
+test('generation does not depend on the order a file system lists a folder in (Linux lists unsorted)', () => {
+  const sorted = expectedFiles(ROOT);
+  const real = fs.readdirSync;
+  for (const order of [list => [...list].reverse(), list => [...list].sort((a, b) => (String(a).length - String(b).length) || (String(a) < String(b) ? 1 : -1))]) {
+    fs.readdirSync = (...args) => order(real(...args));
+    try {
+      assert.deepStrictEqual(expectedFiles(ROOT), sorted);
+    } finally {
+      fs.readdirSync = real;
+    }
+  }
+});
