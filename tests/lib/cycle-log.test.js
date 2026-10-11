@@ -35,6 +35,58 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
   assert.strictEqual(cycleResult(claudeStream([])), 'CYCLE RESULT: executed - orb long 1 MNQ');
 });
 
+// A real Qwen Code replay cycle (--output-format json: a warning line, then one JSON array), trimmed and
+// anonymized; every MCP tool went through Qwen's tool_call bridge, refused once until tool_search reviewed
+// it. The bridged place_order at its end is added (the real cycle stood aside): refused once by the bridge
+// (never reached the gate), then sent (refused by the gate: still an order the model sent).
+const QWEN_CYCLE = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'qwen-cycle-transcript.txt'), 'utf8');
+
+test('summarize: a Qwen transcript counts tools and orders reached through the tool_call bridge', () => {
+  const s = summarize(QWEN_CYCLE);
+  assert.deepStrictEqual(s.tools, {
+    skill: 3,
+    mcp__broker__get_server_config: 1,
+    mcp__harness__strategies_scan: 1,
+    mcp__broker__journal_add: 1,
+    mcp__broker__place_order: 1,
+    tool_search: 4,
+    read_file: 1,
+  }, 'each bridged tool once (its bridge refusal never reached it), the wrapper never as a tool');
+  assert.ok(!('tool_call' in s.tools));
+  assert.deepStrictEqual(s.skills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library']);
+  assert.deepStrictEqual(s.orders, [{ contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale: 'setup:supertrend long, stop 30827.5 (15 points = 60 ticks)' }]);
+  assert.deepStrictEqual(s.missingSkills, [], 'the skills were loaded (Qwen\'s skill tool)');
+  // The bridged call's own arguments, not the wrapper's.
+  const scan = toolCalls(QWEN_CYCLE).find(c => c.name === 'mcp__harness__strategies_scan');
+  assert.deepStrictEqual(Object.keys(scan.input).sort(), ['bars', 'symbol']);
+  // Without its skills, a bridged entry is an entry without them.
+  const noSkills = QWEN_CYCLE.replace(/"name":"skill"/g, '"name":"noop"').replace(/"skill":"futures-trading-harness:[a-z-]+"/g, '"x":"y"');
+  assert.deepStrictEqual(summarize(noSkills).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library']);
+  // A bridged shell command and an unanswered bridged order count (sent, its answer unknown); a string arguments field is parsed.
+  const ev = (name, input, id) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+  const more = JSON.stringify([
+    ev('tool_call', { name: 'run_shell_command', arguments: { command: 'node -e 1' } }, 'a'),
+    ev('tool_call', { name: 'mcp__broker__place_order', arguments: JSON.stringify({ contractId: 'MES', side: 'sell', size: 2, type: 'market', rationale: '[exit] flat' }) }, 'b'),
+    ev('tool_call', { arguments: {} }, 'c'),
+  ]);
+  const m = summarize(more);
+  assert.deepStrictEqual(m.commands, ['node -e 1']);
+  assert.deepStrictEqual(m.orders.map(o => [o.contractId, o.size, o.rationale]), [['MES', 2, '[exit] flat']]);
+  assert.strictEqual(m.tools.tool_call, 1, 'a wrapper call that names no tool counts as the wrapper');
+  // Only the bridge's own refusal hides a call: an error reply that starts with it. A real order whose reply
+  // carries the words (its rationale echoed, a gate refusal quoting it, a success) is still an order sent.
+  const res = (id, isError, content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content }] } });
+  const order = rationale => ({ name: 'mcp__broker__place_order', arguments: { contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale } });
+  const sneaky = JSON.stringify([
+    ev('tool_call', order('setup:orb long [tool_call bridge refused]'), 'o1'), res('o1', false, '{"success":true,"rationale":"setup:orb long [tool_call bridge refused]"}'),
+    ev('tool_call', order('setup:orb long b'), 'o2'), res('o2', true, 'order gate: refused [plan-required]; you wrote "[tool_call bridge refused]"'),
+    ev('tool_call', order('setup:orb long c'), 'o3'), res('o3', false, '[tool_call bridge refused] Deferred tool'),
+    ev('tool_call', order('setup:orb long d'), 'o4'), res('o4', true, [{ type: 'text', text: '  [tool_call bridge refused] Deferred tool "mcp__broker__place_order"' }]),
+  ]);
+  assert.deepStrictEqual(summarize(sneaky).orders.map(o => o.rationale.slice(-1)), [']', 'b', 'c'], 'only the error reply that is the bridge\'s refusal (text blocks too) is dropped');
+  assert.deepStrictEqual(summarize(sneaky).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'], 'the entries still raise the missing-skills alarm');
+});
+
 test('writeCycleLog: the whole cycle (prompt, transcript, summary) and one summary line a day', () => {
   const home = tmpDir();
   const at = new Date('2026-10-07T14:03:05Z');

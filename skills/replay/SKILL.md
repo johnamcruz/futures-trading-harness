@@ -71,6 +71,29 @@ broker.
    replay's plumbing, counted apart). It also writes `report.md` in the run's
    folder.
 
+8. **Stops.** The run stops, saying why, after `maxConsecutiveErrors` failed
+   cycles in a row, when a step can't run, and while the run's kill switch
+   (`<run home>/STOP`) is on: the runner sets it when a cycle changed the
+   workspace's operator files or settings (the file's latest line says
+   why). As live, the day under way still runs with no trade cycle, its
+   housekeeping and end of day included (flat at the close); the run stops
+   before the next day. Review the change, remove the file, and run again
+   to resume there. A queued end-of-day retry is kept across any stop (the
+   error limit included) and runs first on resume; a time already recorded
+   never runs again. A day whose end of day was never verified flat waits
+   for that resume: the runner flattens it before the next day trades. The
+   settings-format stamp (`"$version"`) Qwen Code writes into the workspace
+   `.qwen/settings.json` on start is not a change.
+9. **The prop policy.** A policy strategy (for example `prop_portfolio`,
+   `account: topstep_100k`) names a prop account; with an account in the
+   runner config, every pass logs "topstep_100k: no attempt is started" until
+   an attempt runs in the run home. The warning never stops a cycle, and
+   without an attempt the policy owns no setups (its component strategies
+   trade as before), so leaving it is a replay without the prop policy. To
+   replay the policy, start an attempt in the run home at the replayed time
+   after the first step created the home (`run --max-cycles 1`), then resume:
+   `FTH_HOME=<workDir>/<runId> FTH_BROKERS_FILE=<workDir>/<runId>/brokers.json FTH_BROKER=<replay broker> FTH_REPLAY_NOW=<start, UTC> node scripts/combine.js start --account topstep_100k`.
+
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
 next run resumes. One driver runs a run at a time (a lock in its folder).

@@ -56,8 +56,13 @@ description: Rules for running the trading harness unattended (headless, schedul
    the file (you can't read it). If an entry is refused with `[kill-switch]`,
    manage or flatten open positions only, and end.
 6. **Leave a trail.** Every cycle ends with a journal `note` (or plan, review)
-   so the next cycle and the human can see what happened, and a final line:
-   `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`.
+   so the next cycle and the human can see what happened. **Your last line
+   must be exactly:**
+   `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`
+   (one outcome word, then ` - ` and the reason, as in the examples below).
+   The runner reads only that line, from your final message: a summary, a
+   table, or "Decision: NO TRADE" in its place is logged as "none reported",
+   even when the cycle did its work. Write it last, after every tool call.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
    one plan, at most one entry. A tool that fails twice ends the cycle as
    `error` (after confirming any open position has its stop).

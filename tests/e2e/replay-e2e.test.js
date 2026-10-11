@@ -126,3 +126,44 @@ test('replay refuses a live broker, and a run home that is the live harness home
   assert.match(home.stderr, /overlaps the live harness home/);
   assert.deepStrictEqual(fs.readdirSync(w.live), ['brokers.json']);
 });
+
+test('replay every Nth bar with Qwen: a cycle at each decision time; the $version Qwen stamps on its settings is no workspace change', { timeout: 300000 }, () => {
+  const w = setup();
+  // A stand-in `qwen` on PATH (the runner starts Qwen by name) that stamps the workspace settings as Qwen Code does.
+  const bin = path.join(w.user, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'qwen'), `#!/bin/sh\nexec "${process.execPath}" "${HARNESS}" "$@"\n`, { mode: 0o755 });
+  const cfg = JSON.parse(fs.readFileSync(w.config, 'utf8'));
+  const { command: _c, ...autotrader } = cfg.autotrader;
+  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, end: '2026-10-07T13:50:00Z', everyNthBar: 2, autotrader: { ...autotrader, harness: 'qwen' } }));
+  const { FAKE_HARNESS_ORDERS: _o, ...env } = w.env;
+  // The first cycle ends with a summary instead of its result line: logged as none reported, and the run goes on.
+  w.env = { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_QWEN_SETTINGS_VERSION: '4', FAKE_HARNESS_NO_RESULT: '(2026-10-07T13:36:02.000Z)' };
+
+  const pts = replay(w, ['points', '--config', w.config]);
+  assert.strictEqual(pts.status, 0, pts.stderr);
+  assert.match(pts.stdout, /2026-10-07 {2}0 premarket, 3 trade, 0 eod/);
+  const run = replay(w, ['run', '--config', w.config]);
+  assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.doesNotMatch(run.stdout, /no cycle/);
+  const recs = lines(path.join(w.runDir, '2026-10-07.jsonl'));
+  // Every second 3-minute bar of the session (09:30, 09:36, 09:42, 09:48 ET), inside the window.
+  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:36:02.000Z', '2026-10-07T13:42:02.000Z', '2026-10-07T13:48:02.000Z']);
+  assert.deepStrictEqual(recs.map(r => r.ran.map(x => [x.action, x.ok, x.result])), [
+    [['trade', true, 'CYCLE RESULT: (none reported)']],
+    [['trade', true, 'CYCLE RESULT: no-trade - fake harness']],
+    [['trade', true, 'CYCLE RESULT: no-trade - fake harness']],
+  ]);
+  for (const r of recs) {
+    // The repository's paper prop policy names an account with no attempt started in the run home: a warning each pass, never a stop.
+    assert.ok(r.errors.some(e => /topstep_100k: no attempt is started/.test(e)), JSON.stringify(r.errors));
+    const cycle = JSON.parse(fs.readFileSync(r.cycles[0].file, 'utf8'));
+    assert.strictEqual(cycle.context.symbols[0].bar.t, new Date(Date.parse(r.t) - 2000 - 180000).toISOString(), 'the bar that just closed, after the skipped ones');
+  }
+  // Qwen stamped its settings, and the run went on: no kill switch in the run home.
+  const settings = JSON.parse(fs.readFileSync(path.join(w.runHome, 'workspace', '.qwen', 'settings.json'), 'utf8'));
+  assert.strictEqual(settings.$version, 4);
+  assert.ok(Array.isArray(settings.permissions.allow));
+  const stop = path.join(w.runHome, 'STOP');
+  assert.ok(!fs.existsSync(stop), fs.existsSync(stop) ? fs.readFileSync(stop, 'utf8') : '');
+});

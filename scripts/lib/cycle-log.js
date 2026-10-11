@@ -15,35 +15,51 @@
  *       the skills an entry needed but the model never loaded
  *
  * Transcripts: Claude Code runs with --output-format stream-json (one JSON
- * event per line, tool calls included); Codex with --json; others as text.
- * The parser reads what it recognizes and never throws.
+ * event per line, tool calls included); Codex with --json; Qwen Code with
+ * --output-format json (one array, tool calls included, often through its
+ * tool_call bridge: counted as the tool reached); others as text. The parser
+ * (transcript.js) reads what it recognizes and never throws.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
+const { documents, unwrap, bridgeRefused, SHELL_TOOLS } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 
-/** Every tool call in a stream-json / JSONL transcript: [{ name, input }]. */
+/**
+ * Every tool call in a transcript (Claude stream-json, Codex --json, Qwen's JSON array): [{ name, input }].
+ * A call through a bridge wrapper (Qwen's tool_call, transcript.js BRIDGE_TOOLS) counts as the tool it
+ * reaches, with that tool's arguments; one the bridge refused never reached the tool and isn't counted.
+ */
 function toolCalls(output) {
   const calls = [];
-  for (const line of String(output || '').split('\n')) {
-    const t = line.trim();
-    if (!t.startsWith('{')) continue;
-    let ev;
-    try { ev = JSON.parse(t); } catch (_err) { continue; }
-    // Claude Code: { type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } }
-    const content = ev && ev.message && Array.isArray(ev.message.content) ? ev.message.content : [];
-    for (const c of content) if (c && c.type === 'tool_use') calls.push({ name: String(c.name || ''), input: c.input || {} });
-    // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }
-    const item = ev && ev.item;
-    if (item && item.type === 'command_execution') calls.push({ name: 'Bash', input: { command: item.command } });
-    if (item && item.type === 'mcp_tool_call') calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {} });
+  const byId = new Map();
+  for (const doc of documents(output)) {
+    for (const ev of Array.isArray(doc) ? doc : [doc]) {
+      if (!ev || typeof ev !== 'object') continue;
+      // Claude Code and Qwen Code: { type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } },
+      // answered by { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id, content }] } }.
+      const content = ev.message && Array.isArray(ev.message.content) ? ev.message.content : [];
+      for (const c of content) {
+        if (c && c.type === 'tool_use') {
+          const call = unwrap(String(c.name || ''), c.input);
+          calls.push(call);
+          if (c.id !== undefined && c.id !== null) byId.set(c.id, call);
+        } else if (c && c.type === 'tool_result' && byId.has(c.tool_use_id)) {
+          if (bridgeRefused(byId.get(c.tool_use_id), c)) byId.get(c.tool_use_id).refused = true;
+        }
+      }
+      // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }
+      const item = ev.item;
+      if (item && item.type === 'command_execution') calls.push({ name: 'Bash', input: { command: item.command } });
+      if (item && item.type === 'mcp_tool_call') calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {} });
+    }
   }
-  return calls;
+  return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {} }));
 }
 
 /** The parsed summary of one cycle's transcript. */
@@ -51,10 +67,10 @@ function summarize(output) {
   const calls = toolCalls(output);
   const tools = {};
   for (const c of calls) tools[c.name] = (tools[c.name] || 0) + 1;
-  const skills = [...new Set(calls.filter(c => c.name === 'Skill').map(c => skillName(c.input.skill || c.input.command || c.input.name)).filter(Boolean))];
+  const skills = [...new Set(calls.filter(c => c.name === 'Skill' || c.name === 'skill').map(c => skillName(c.input.skill || c.input.command || c.input.name)).filter(Boolean))];
   // Plain-text or single-JSON transcripts: skill names written as "skill": "<name>".
   for (const m of String(output || '').matchAll(/"skill"\s*:\s*"([^"]+)"/g)) if (!skills.includes(skillName(m[1]))) skills.push(skillName(m[1]));
-  const commands = calls.filter(c => c.name === 'Bash' && c.input.command).map(c => String(c.input.command).slice(0, 300));
+  const commands = calls.filter(c => SHELL_TOOLS.has(c.name) && c.input.command).map(c => String(c.input.command).slice(0, 300));
   const orders = calls.filter(c => ENTRY_TOOL.test(c.name)).map(c => ({
     contractId: c.input.contractId, side: c.input.side, size: c.input.size, type: c.input.type, rationale: String(c.input.rationale || '').slice(0, 200),
   }));

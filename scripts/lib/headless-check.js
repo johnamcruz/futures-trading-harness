@@ -33,6 +33,8 @@ const { qwenWorkspaceSettings } = require('./install');
 const { harnessHome } = require('./paths');
 const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
+// Transcript parsing and the bridge wrappers (Qwen's tool_call), shared with the cycle log.
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS } = require('./transcript');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
 const PROBE_TOOLS = ['blackouts_list', 'strategies_list'];
@@ -99,48 +101,12 @@ function probeCommand(harness, root, env = process.env, { bin = null, config = {
   return { argv, cwd: path.resolve(root, cfg.workdir), env: childEnv(cfg, root, env) };
 }
 
-/** Every JSON value in a transcript: one document (Qwen's JSON array), or one per line (stream-json, Codex events). */
-function documents(text) {
-  const s = String(text || '').trim();
-  try {
-    return [JSON.parse(s)];
-  } catch (_err) {
-    return s.split('\n').map(l => { try { return JSON.parse(l); } catch (_e) { return null; } }).filter(v => v !== null);
-  }
-}
-
-const SHELL_TOOLS = new Set(['Bash', 'run_shell_command', 'shell', 'exec_command', 'local_shell']);
 const AGENT_TOOLS = new Set(['Agent', 'Task', 'agent', 'task', 'spawn_agent']);
-const parsed = v => {
-  if (typeof v !== 'string') return v;
-  try { return JSON.parse(v); } catch (_err) { return null; }
-};
 const roleOf = input => {
   const i = parsed(input);
   return i && typeof i === 'object' ? String(i.subagent_type || i.agent_type || i.agent_name || i.agent || i.role || '') : '';
 };
 const textOf = v => (typeof v === 'string' ? v : JSON.stringify(v === undefined ? '' : v));
-
-/**
- * Bridge wrappers: a harness that defers its MCP tools reaches them through one generic tool whose
- * input names the real tool. Each entry: the wrapper's tool name, the real tool's name and arguments
- * from its input, and how the wrapper says it refused (a refusal is never an answer, is_error or not).
- *   Qwen Code (0.25+): tool_call {"name": "mcp__harness__blackouts_list", "arguments": {...}};
- *   refused until tool_search reviewed the schema: "[tool_call bridge refused] Deferred tool ...".
- */
-const BRIDGE_TOOLS = [
-  { name: 'tool_call', target: i => i.name, args: i => i.arguments, refused: /\[tool_call bridge refused\]/ },
-];
-
-/** A tool_use as the tool it reaches: the real tool behind a bridge wrapper, else itself. */
-function unwrap(name, input) {
-  const bridge = BRIDGE_TOOLS.find(b => b.name === name);
-  const i = bridge ? parsed(input) : null;
-  const target = i && typeof i === 'object' ? bridge.target(i) : null;
-  if (typeof target !== 'string' || !target) return { name, input: input || {} };
-  const args = bridge.args(i);
-  return { name: target, input: parsed(args) || {}, bridge };
-}
 
 /** What the probe reached, from a transcript. */
 function analyze(text) {
@@ -164,7 +130,7 @@ function analyze(text) {
       const call = { id: v.id, ...unwrap(v.name, v.input) };
       calls.push(call);
       if (v.id !== undefined && v.id !== null) latest.set(v.id, call);
-    } else if (v.type === 'tool_result' && latest.has(v.tool_use_id)) latest.get(v.tool_use_id).result = { isError: v.is_error === true, text: textOf(v.content) };
+    } else if (v.type === 'tool_result' && latest.has(v.tool_use_id)) latest.get(v.tool_use_id).result = { isError: v.is_error === true, text: resultText(v.content) };
     else if (v.type === 'mcp_tool_call') {
       item(v, { name: `mcp__${v.server}__${v.tool}`, input: v.arguments || {}, done: pending(v.status) ? null : { isError: v.status !== 'completed' || Boolean(v.error), text: textOf(v.error || v.result) } });
     } else if (v.type === 'command_execution') {

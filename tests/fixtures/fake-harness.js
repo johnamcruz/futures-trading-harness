@@ -3,9 +3,21 @@
 // Stand-in for a harness CLI: echoes the prompt and a cycle result, or fails on demand.
 // With FAKE_HARNESS_ORDERS=1 it also acts through the harness's order gateway, as an
 // agent's broker tools do: an entry (which the gate refuses: no plan) and a close of MNQ.
+const fs = require('fs');
 const path = require('path');
 
 const prompt = process.argv.slice(2).join(' ');
+// FAKE_QWEN_SETTINGS_VERSION=N: as Qwen Code does on start, stamp the workspace settings file it loads
+// (.qwen/settings.json in its working directory) with "$version": N when it has none, and write it back.
+if (process.env.FAKE_QWEN_SETTINGS_VERSION) {
+  const file = path.join(process.cwd(), '.qwen', 'settings.json');
+  try {
+    const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!('$version' in settings)) fs.writeFileSync(file, `${JSON.stringify({ ...settings, $version: Number(process.env.FAKE_QWEN_SETTINGS_VERSION) }, null, 2)}\n`);
+  } catch (_err) {
+    // no settings file: nothing to migrate
+  }
+}
 // The headless probe prints only its transcript.
 if (!prompt.includes('FTH-HEADLESS-PROBE')) process.stdout.write(`cwd=${process.cwd()} FTH_ROOT=${process.env.FTH_ROOT}\nprompt=${prompt}\n`);
 if (prompt.includes('FAIL')) process.exit(3);
@@ -72,7 +84,9 @@ if (prompt.includes('FTH-HEADLESS-PROBE')) {
   });
 } else {
   (process.env.FAKE_HARNESS_ORDERS === '1' ? orders() : Promise.resolve()).then(() => {
-    process.stdout.write('CYCLE RESULT: no-trade - fake harness\n');
+    // FAKE_HARNESS_NO_RESULT=<text>: a prompt with that text gets a summary instead of the result line.
+    const noResult = process.env.FAKE_HARNESS_NO_RESULT && prompt.includes(process.env.FAKE_HARNESS_NO_RESULT);
+    process.stdout.write(noResult ? '**Cycle Complete:** Decision: NO TRADE (stand aside)\n' : 'CYCLE RESULT: no-trade - fake harness\n');
   }, err => {
     process.stdout.write(`fake harness: ${err.message}\n`);
     process.exit(4);

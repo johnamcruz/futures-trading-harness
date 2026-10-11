@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, runResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
@@ -54,7 +54,7 @@ const { appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
 const { harnessNow, resolveClock } = require('./lib/trading/harness-now');
 const runnerNow = () => harnessNow(process.env, { testClock: false }); // never FTH_TEST_NOW: the runner trades live
-const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
+const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFiles, fileDigest } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
@@ -157,7 +157,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const res = await runOnce(cfg, argv, timeoutMs);
-  const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
+  const result = runResult(res);
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
   process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
@@ -208,7 +208,8 @@ function writeQwenSettings(cfg, dataDir, opts) {
   if (cfg.harness !== 'qwen' || opts.dryRun) return;
   const file = path.resolve(ROOT, cfg.workdir, '.qwen', 'settings.json');
   const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome() }), null, 2)}\n`;
-  if (readJson(file, null) !== null && fs.readFileSync(file, 'utf8') === content) return;
+  // The same allowlist but for the $version stamp Qwen Code writes on start (fileDigest): left as it is.
+  if (readJson(file, null) !== null && fileDigest('.qwen/settings.json', fs.readFileSync(file)) === fileDigest('.qwen/settings.json', content)) return;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
   process.stdout.write(`[autotrader] wrote the Qwen autonomous allowlist to ${file}\n`);

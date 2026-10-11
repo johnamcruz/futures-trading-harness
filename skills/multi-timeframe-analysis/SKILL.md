@@ -80,9 +80,10 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
 Where it is enforced:
 
 - `strategies_scan`: a trend strategy that fires against it is not a
-  `candidate`; `filtersFailed` says `mtf: against the prevailing 4h down
-  trend ...`. Every result has `mtf` (frames, `prevailing`, `longAllowed`,
-  `shortAllowed`).
+  candidate; its why-not (`filtersFailed` in its full result) says `mtf:
+  against the prevailing 4h down trend ...`. The summary names the frames
+  and the prevailing trend; every full result has `mtf` (frames,
+  `prevailing`, `longAllowed`, `shortAllowed`).
 - The backtester and RL training use the same scan, so their trades obey it.
 - The order gate (`mtf-trend`, hard: nothing switches it off) refuses a trend
   strategy's entry against the trend recorded in

@@ -72,8 +72,24 @@ const journal = [
   { ts: '2026-10-07T14:04:30.000Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 21480', data: { result: { success: true } } },
 ];
 
-/** Where a tool's message names its arguments rather than the script's flags. */
+const { scanSummary, recentLines } = require('../../scripts/lib/harness-tools/compact');
+const { readBarsArg } = require('../../scripts/lib/backtest/data');
+const { normalizeBars } = require('../../scripts/lib/trading/indicators');
+
+const lastBar = file => normalizeBars(readBarsArg(file)).at(-1).t;
+const oneLine = s => `${JSON.stringify(JSON.parse(s))}\n`;
+
+/**
+ * Where a tool's message names its arguments rather than the script's flags, and the tools' compact
+ * forms (harness-tools/compact.js): the same result as the script's, made smaller.
+ */
 const TOOL_WORDING = {
+  'strategies list json': oneLine,
+  'strategies scan summary': s => scanSummary(JSON.parse(s), { symbol: 'MNQ', bar: lastBar(path.join(PARITY, 'NQ-3m.csv')) }),
+  'strategies scan one': s => `${JSON.stringify(JSON.parse(s).find(r => r.name === 'orb'), null, 2)}\n`,
+  'strategies recent lines': s => recentLines(JSON.parse(s), { symbol: 'MNQ' }),
+  'market snapshot': oneLine,
+  'market snapshot params': oneLine,
   'combine status none': () => 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n',
   'mtf record no symbol': s => s.replace('--record needs --symbol=<ROOT> (e.g. MNQ)', 'record needs symbol (a contract root, e.g. MNQ)'),
   'bars fetch daily record': s => s.replace('--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'),
@@ -86,10 +102,13 @@ const CASES = [
   ['strategies show', 'strategies.js', () => ['show', 'orb'], 'strategies_show', () => ({ name: 'orb' })],
   ['strategies show unknown', 'strategies.js', () => ['show', 'nope'], 'strategies_show', () => ({ name: 'nope' })],
   ['strategies validate', 'strategies.js', () => ['validate'], 'strategies_validate', () => ({})],
-  ['strategies scan', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ' })],
-  ['strategies scan record', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--record'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', record: true })],
-  ['strategies recent', 'strategies.js', b => ['recent', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--bars', '3'], 'strategies_recent', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', count: 3 })],
-  ['strategies recent default', 'strategies.js', b => ['recent', `${b}/RTY-3m.csv`, '--symbol', 'RTY'], 'strategies_recent', b => ({ bars: `${b}/RTY-3m.csv`, symbol: 'RTY' })],
+  ['strategies scan', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', detail: true })],
+  ['strategies scan summary', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ' })],
+  ['strategies scan one', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', name: 'orb' })],
+  ['strategies scan record', 'strategies.js', b => ['scan', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--record'], 'strategies_scan', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', record: true, detail: true })],
+  ['strategies recent', 'strategies.js', b => ['recent', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--bars', '3'], 'strategies_recent', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', count: 3, json: true })],
+  ['strategies recent lines', 'strategies.js', b => ['recent', `${b}/NQ-3m.csv`, '--symbol', 'MNQ', '--bars', '3'], 'strategies_recent', b => ({ bars: `${b}/NQ-3m.csv`, symbol: 'MNQ', count: 3 })],
+  ['strategies recent default', 'strategies.js', b => ['recent', `${b}/RTY-3m.csv`, '--symbol', 'RTY'], 'strategies_recent', b => ({ bars: `${b}/RTY-3m.csv`, symbol: 'RTY', json: true })],
   ['market snapshot', 'market-snapshot.js', b => [`${b}/NQ-3m.csv`], 'market_snapshot', b => ({ bars: `${b}/NQ-3m.csv` })],
   ['market snapshot params', 'market-snapshot.js', b => [`${b}/NQ-3m.csv`, '--orbMinutes=15', '--emaSlow', '30'], 'market_snapshot', b => ({ bars: `${b}/NQ-3m.csv`, params: { orbMinutes: 15, emaSlow: 30 } })],
   ['mtf', 'mtf.js', b => [`${b}/NQ-3m.csv`], 'mtf_read', b => ({ bars: `${b}/NQ-3m.csv` })],

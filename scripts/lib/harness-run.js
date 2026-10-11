@@ -91,10 +91,31 @@ const TRUSTED_WORKSPACE_FILES = [
   '.qwen/settings.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml',
 ];
 
+/**
+ * A trusted file's fingerprint (sha256 hex). Qwen Code stamps the settings file it loads with its
+ * settings-format version ("$version": an integer) and writes it back on every start: for
+ * .qwen/settings.json that one key, and JSON whitespace, are not part of the fingerprint; every
+ * other key and value is, in order. Anything that isn't a JSON object is fingerprinted as bytes.
+ */
+function fileDigest(name, content) {
+  const hash = data => crypto.createHash('sha256').update(data).digest('hex');
+  if (name === '.qwen/settings.json') {
+    let v = null;
+    try { v = JSON.parse(String(content)); } catch (_err) { /* not JSON: as bytes */ }
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      // Safe because the harness writes only permissions lists there, which no Qwen version migration
+      // rewrites (tests pin it); a key such a migration moves (legacy scalars, tools.core, modelProviders) would reopen it.
+      const { $version: version, ...rest } = v;
+      if (version === undefined || Number.isInteger(version)) return hash(`json:${JSON.stringify(rest)}`);
+    }
+  }
+  return hash(content);
+}
+
 function workspaceFingerprint(dir) {
   return Object.fromEntries(TRUSTED_WORKSPACE_FILES.map(f => {
     try {
-      return [f, crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex')];
+      return [f, fileDigest(f, fs.readFileSync(path.join(dir, f)))];
     } catch (_err) {
       return [f, null];
     }
@@ -112,4 +133,4 @@ function entryOrders(stateDir) {
   return (Array.isArray(list) ? list : []).filter(e => e && Number.isFinite(Number(e.orderId)));
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, workspaceFingerprint, changedFiles };
+module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, fileDigest, workspaceFingerprint, changedFiles };
