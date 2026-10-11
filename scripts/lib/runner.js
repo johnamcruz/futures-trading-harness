@@ -162,7 +162,12 @@ function createRunner(deps) {
     try {
       checkSpec(partner, await client.activeContract(partner));
     } catch (err) {
-      log(`${partner}: contract lookup failed (${err.message}); entries that size into ${partner} are refused until the broker's tick specs for it are recorded`, 'error');
+      // Once per partner and trading day: a prop entry that may size into it is refused until its specs are recorded.
+      const key = `partner:${partner}:${dayKey(clock.now())}`;
+      if (!specSaid.has(key)) {
+        specSaid.add(key);
+        log(`${partner}: contract lookup failed (${err.message}); a prop entry that may size into ${partner} is refused until the broker's tick specs for it are recorded`, 'error');
+      }
     }
   }
 
@@ -179,7 +184,7 @@ function createRunner(deps) {
       return { ...sym, lookupFailedAt: now.getTime() };
     }
     checkSpec(String(sym.symbol).toUpperCase(), c);
-    await lookUpPartner(String(sym.symbol).toUpperCase());
+    lookUpPartner(String(sym.symbol).toUpperCase()); // not awaited: it never holds up the symbol's poll (it catches its own errors)
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
       return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };

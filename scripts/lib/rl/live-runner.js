@@ -20,7 +20,7 @@
 const { loadAccounts } = require('../trading/accounts');
 const { contractRoot } = require('../trading/journal');
 const { familyOf } = require('../trading/contracts');
-const { liveSpecs, noSpecsMessage } = require('../trading/broker-specs');
+const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const { loadBundle, bundleMismatch } = require('./policy-bundle');
 const live = require('./live');
@@ -177,7 +177,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const cs = account && stateOf(account);
         let verdict;
         if ((bundle && bundle.error) || !cs || unspecified) {
-          const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : noSpecsMessage(unspecified));
+          const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : whyNoSpec(specOf, unspecified));
           verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
           verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now, specOf });

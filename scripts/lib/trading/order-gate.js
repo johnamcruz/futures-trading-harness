@@ -22,7 +22,7 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
-const { brokerSpecs, contractsFileFor, noSpecsMessage } = require('./broker-specs');
+const { brokerSpecs, contractsFileFor, whyNoSpec } = require('./broker-specs');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -267,9 +267,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       if (fired) violations.push({ check: 'trigger-fired', message: fired });
     }
   }
-  // Hard rule: an entry is checked and sized with the broker's tick specs; none recorded, no entry.
+  // Hard rule: an entry is checked and sized with the broker's tick specs; none recorded (or unlike the table), no entry.
   const specRoot = contractRoot(input.contractId);
-  if (!specOf(specRoot)) violations.push({ check: 'contract-specs', message: `${noSpecsMessage(specRoot)}.` });
+  if (!specOf(specRoot)) violations.push({ check: 'contract-specs', message: `${whyNoSpec(specOf, specRoot)}.` });
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf }));
   } else {

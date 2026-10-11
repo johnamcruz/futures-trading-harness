@@ -16,7 +16,7 @@ const path = require('path');
 const combine = require('./combine');
 const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf } = require('./contracts');
-const { noSpecsMessage } = require('./broker-specs');
+const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
@@ -264,7 +264,11 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   // Every contract the budget may pick (the micro and the mini of a family) needs its specs.
   const fam = familyOf(root);
   const missing = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => !specOf(x));
-  if (missing) return { error: specOf === specFor ? `no tick specs for ${missing}` : noSpecsMessage(missing) };
+  if (missing) return { error: specOf === specFor ? `no tick specs for ${missing}` : whyNoSpec(specOf, missing) };
+  // One stop in ticks sizes both legs: the family's contracts must agree on the tick size.
+  if (fam && Math.abs(specOf(fam.micro).tickSize - specOf(fam.mini).tickSize) > 1e-12) {
+    return { error: `${fam.micro} and ${fam.mini} have different tick sizes (${specOf(fam.micro).tickSize}, ${specOf(fam.mini).tickSize}): no size can be worked out` };
+  }
   if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return { error: 'a combine entry needs stopLossBracket.ticks (the gate sizes the trade from its stop)' };
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
   const { legs, ratio, mode } = legsFor(account, root, specOf);

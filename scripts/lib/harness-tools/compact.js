@@ -22,7 +22,7 @@
  * points only, and the line says to fetch the contract.
  */
 
-const { noSpecsMessage } = require('../trading/broker-specs');
+const { whyNoSpec } = require('../trading/broker-specs');
 const { stopTicks, targetTicks, ticksText, distanceText, targetFor } = require('../trading/order-plan');
 
 const num = x => (Number.isFinite(x) ? String(Math.round(x * 1e4) / 1e4) : '-');
@@ -69,7 +69,7 @@ function stopAndTarget(r, symbol, specOf) {
     const t = targetFor(r.exit, sTicks, null, tick).ticks;
     if (t) parts.push(`target ${r.exit.targetR}R = ${ticksText(t, symbol, spec)}`);
   }
-  if (!spec) parts.push(symbol ? noSpecsMessage(symbol) : 'no tick specs: no symbol given');
+  if (!spec) parts.push(symbol ? whyNoSpec(specOf, symbol) : 'no tick specs: no symbol given');
   return parts.join(', ');
 }
 

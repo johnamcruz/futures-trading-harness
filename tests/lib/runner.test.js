@@ -875,5 +875,6 @@ test('the broker\'s tick specs at the contract lookup: the family\'s other contr
   assert.strictEqual(said.length, 1, logs.join('\n'));
   assert.ok(!logs.some(m => /^NQ: the broker's tick spec/.test(m)), 'NQ agrees with the table');
   assert.strictEqual(logs.filter(m => /^MES: the broker's contract has no usable tick specs \(no tick specs from the broker for MES yet/.test(m)).length, 1, logs.join('\n'));
-  assert.ok(logs.some(m => /^ES: contract lookup failed \(HTTP 500\); entries that size into ES are refused until the broker's tick specs for it are recorded/.test(m)), logs.join('\n'));
+  assert.strictEqual(logs.filter(m => /^ES: contract lookup failed \(HTTP 500\); a prop entry that may size into ES is refused until the broker's tick specs for it are recorded/.test(m)).length, 1, `once a day, however often it is retried: ${logs.join('\n')}`);
+  assert.ok(asked.filter(s => s === 'ES').length >= 2, 'retried at the re-checks');
 });

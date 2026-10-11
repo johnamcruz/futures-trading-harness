@@ -36,7 +36,7 @@ const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { loadConfig } = require('../trading/config');
-const { liveSpecs, noSpecsMessage } = require('../trading/broker-specs');
+const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
 const { resolveJournalPath, readJournal, entriesSince } = require('../trading/journal');
@@ -66,7 +66,7 @@ function rulesPlan(c, s, { results, root, want, home, specOf }) {
   }
   const r = candidateOf(results, s.name, root, want);
   const spec = specOf(root);
-  if (!spec) throw new Error(`${noSpecsMessage(root)}; no order`);
+  if (!spec) throw new Error(`${whyNoSpec(specOf, root)}; no order`);
   const stop = stopTicks(r.stopDistance, spec.tickSize);
   if (!stop) throw new Error(`${s.name} has no stop distance on this bar (risk.stop ${JSON.stringify(s.risk.stop)}): its stop comes from STRATEGY.md, not from order_plan`);
   const perContract = stop * spec.tickValue;

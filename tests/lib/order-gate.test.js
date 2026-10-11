@@ -834,8 +834,14 @@ test('contract-specs: prices are checked on the broker\'s tick, not the static t
   const limit = entryOrder({ type: 'limit', limitPrice: 21500.1, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480.1, target 21540.1' });
   recordBrokerSpecs(home, { roots: ['MNQ'] }); // 0.25: 21500.1 is off the tick
   assert.match(evaluate(limit, [plan()], { config: cfg }).violations.find(v => v.check === 'order-consistency').message, /limitPrice 21500\.1 is not on the 0\.25 tick/);
-  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickSize: 0.1 } } }); // the broker says 0.1: on the tick
-  assert.deepStrictEqual(evaluate(limit, [plan()], { config: cfg }).violations, []);
+  // A broker that says 0.1 (unlike the table): not trusted either way; the entry is refused.
+  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickSize: 0.1 } } });
+  assert.match(evaluate(limit, [plan()], { config: cfg }).violations.find(v => v.check === 'contract-specs').message, /^MNQ: the broker's tick spec \(0\.1 = \$0\.50\) differs from the static table .*no entries on it until they agree\.$/);
+  // A root the table lacks: the broker's spec is the only one, and its tick is the one checked.
+  recordBrokerSpecs(home, { roots: [], specs: { ZZ: { tickSize: 0.1, tickValue: 1 } } });
+  const zz = { ...limit, contractId: 'ZZ' };
+  assert.deepStrictEqual(evaluate(zz, [plan(10, { contractId: 'ZZ' })], { config: cfg }).violations, []);
+  assert.match(evaluate({ ...zz, limitPrice: 21500.15 }, [plan(10, { contractId: 'ZZ' })], { config: cfg }).violations.find(v => v.check === 'order-consistency').message, /limitPrice 21500\.15 is not on the 0\.1 tick/);
 });
 
 test('contract-specs: a prop entry is sized in dollars with the broker\'s tick value (MNQ vs NQ: same ticks, 10x the dollars)', () => {
@@ -857,9 +863,13 @@ test('contract-specs: a prop entry is sized in dollars with the broker\'s tick v
   assert.match(run('MNQ', 20, both)[0].message, /20 MNQ is not within the account's size budget for a 40-tick stop \(19 MNQ at \$20\.74/);
   assert.deepStrictEqual(run('NQ', 1, both), []);
   assert.match(run('NQ', 2, both)[0].message, /2 NQ is not within the account's size budget for a 40-tick stop \(1 NQ at \$202\.80/);
-  // A broker that says NQ ticks are worth $10 (the table: $5): 40 ticks = $400 + $2.80 > the $400 budget, so nothing fits.
-  const dear = setupHome({ roots: ['MNQ', 'NQ'], specs: { MNQ: { tickValue: 1 }, NQ: { tickValue: 10 } } });
-  assert.match(run('MNQ', 19, dear)[0].message, /19 MNQ is not within the account's size budget for a 40-tick stop \(9 MNQ at \$40\.74/);
+  // A broker that says NQ ticks are worth $0.50 (a units mix-up; the table: $5) would size 19 NQ ($3,853 of real risk):
+  // unlike the table, so the entry is refused (fail closed), the gate's own check as well as the budget's.
+  const cheap = setupHome({ roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0.5 } } });
+  const refused = evaluateOrder({ input: entryOrder({ contractId: 'NQ', size: 19 }), entries: [plan(10, { contractId: 'NQ' })], now: NOW, config: { ...config, home: cheap, skipChecks: new Set(['strategy']) }, strategies: [propStrategy({ contracts: 'mini' })], accounts: [ACCT] }).violations;
+  assert.ok(['combine', 'contract-specs'].every(c => refused.some(v => v.check === c)), JSON.stringify(refused));
+  assert.match(refused.find(v => v.check === 'contract-specs').message, /^NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table/);
+  assert.match(run('MNQ', 1, cheap)[0].message, /mini: NQ: the broker's tick spec .*no entries on it until they agree/, 'a micro entry whose budget may size into NQ too');
   // The family's other contract without specs: the budget can't be worked out, so the entry is refused, saying which.
   const half = setupHome({ roots: ['MNQ'] });
   assert.match(run('MNQ', 1, half)[0].message, /mini: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);

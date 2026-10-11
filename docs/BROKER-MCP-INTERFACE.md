@@ -110,7 +110,8 @@ reply whose `tickSize` is not a number above 0, or whose `tickValue` is not a
 number from 0.01 to 10,000 (USD per tick per contract), records nothing. A
 server's spec that differs from the harness's static table (which backtests
 and training use offline) is reported, since training would then not equal
-live.
+live, and for a contract the table has, entries on it are refused until the
+two agree (a units mix-up must not size a trade ten times too large).
 
 ## Tools
 

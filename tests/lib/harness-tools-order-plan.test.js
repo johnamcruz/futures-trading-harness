@@ -61,11 +61,13 @@ test('order_plan: the tick specs are the broker\'s; none recorded for the contra
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), none);
   recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 0 } } });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), none);
-  // The broker's numbers, not the table's: MNQ reported at $5 a tick prices the same 18 ticks at $90.
+  // A broker spec unlike the static table (MNQ at $5 a tick): neither can be trusted, so no plan.
   recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 5 } } });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), /MNQ: the broker's tick spec \(0\.25 = \$5\.00\) differs from the static table .*; no entries on it until they agree; no order/);
+  // Recorded and agreeing: planned at the broker's numbers.
+  recordBrokerSpecs(home, { roots: ['MNQ'] });
   const r = plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx);
-  assert.match(r.text, /4\.4283 pts = 18 ticks \(\$90\.00\/MNQ contract\)/);
-  assert.strictEqual(r.plan.riskUsd, 90);
+  assert.match(r.text, /4\.4283 pts = 18 ticks \(\$9\.00\/MNQ contract\)/);
 });
 
 test('order_plan: units follow the instrument (MES $1.25 a tick on the same distance)', () => {
@@ -212,13 +214,12 @@ test('order_plan: a policy strategy is sized with the broker\'s tick values, and
   const go = () => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
   recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ'] });
   assert.throws(go, /topstep_100k: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);
-  // NQ at the broker's $5 a tick: $900 budget / ($90 + $2.80) = 9 NQ (as with the table); at $10 a tick, $180 + $2.80: 4 NQ.
+  // NQ at the broker's $5 a tick: $900 budget / ($90 + $2.80) = 9 NQ.
   recordBrokerSpecs(home, { broker: 'mock', roots: ['NQ'] });
   assert.strictEqual(go().args.size, 9);
-  recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ', 'NQ'], specs: { MNQ: { tickValue: 1 }, NQ: { tickValue: 10 } } });
-  const r = go();
-  assert.deepStrictEqual([r.args.contractId, r.args.size], ['NQ', 4]);
-  assert.match(r.args.rationale, /4 NQ risks \$720\.00$/);
+  // NQ recorded at $0.50 (a units mix-up): unlike the table, so refused, never sized at 10x.
+  recordBrokerSpecs(home, { broker: 'mock', roots: ['NQ'], specs: { NQ: { tickValue: 0.5 } } });
+  assert.throws(go, /topstep_100k: NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table .*no entries on it until they agree/);
 });
 
 test('order_plan: the CLI (strategies.js plan) takes the same arguments', () => {

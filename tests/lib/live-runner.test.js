@@ -178,13 +178,14 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
     assert.deepStrictEqual([vb.action, vb.maxSize], ['skip', 0]);
     assert.match(vb.reason, new RegExp(`no tick specs from the broker for ${roots.length ? 'NQ' : 'MNQ'} yet: call get_contract or search_contracts`));
   }
-  // Sized with the broker's tick values: MNQ at $1 a tick (NQ at $10) makes a 40-tick micro $40 + $0.74 fees: 10 micros, 1 mini.
-  const dear = setup({ policy: null, contracts: 'auto', specs: false });
-  recordBrokerSpecs(dear.home, { roots: ['MNQ', 'NQ'], specs: { MNQ: { tickValue: 1 }, NQ: { tickValue: 10 } } });
-  await dear.hooks.snapshot(now);
-  dear.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-  const vd = prop.latestVerdict(dear.home, 'prop_x', 'NQ');
-  assert.deepStrictEqual([vd.contract, vd.maxSize], ['NQ', 1]);
+  // A broker spec unlike the static table (NQ at $0.50, a units mix-up): a skip, never a 10x size.
+  const odd = setup({ policy: null, contracts: 'auto', specs: false });
+  recordBrokerSpecs(odd.home, { roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0.5 } } });
+  await odd.hooks.snapshot(now);
+  odd.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const vo = prop.latestVerdict(odd.home, 'prop_x', 'MNQ');
+  assert.deepStrictEqual([vo.action, vo.maxSize], ['skip', 0]);
+  assert.match(vo.reason, /^NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table/);
   // A bundle trained for another policy strategy, account, sizing, or contract mode never decides.
   for (const [meta, why] of [[{ strategy: 'other_prop' }, /trained for other_prop/], [{ components: ['trendy'] }, /different observation/], [{ account: 'topstep_100k' }, /account topstep_100k/],
     [{ sizing: { cushion_frac: 0.5 } }, /sizing/], [{ symbol: 'MES' }, /trained on MES/], [{ contracts: 'auto' }, /contracts: auto/]]) {

@@ -12,7 +12,8 @@
  *
  *   validSpec(c)                           { tickSize, tickValue } when both are sane numbers, else null
  *   brokerSpecFor(file, root)              the recorded spec of a root, or null
- *   brokerSpecs(file)                      root -> spec or null (a spec source for prop-state, order_plan)
+ *   brokerSpecs(file)                      root -> spec or null (none, or unlike the static table); .why(root)
+ *   whyNoSpec(specOf, root)                the reason a source has none
  *   contractsFileFor(home, env)            the selected broker's file under a harness home, or null
  *   liveSpecs(env)                         the spec source of the selected broker (FTH_HOME, FTH_BROKER)
  *   noSpecsMessage(root)                   the refusal when none is recorded
@@ -53,7 +54,26 @@ function brokerSpecFor(file, root) {
   };
 }
 
-const brokerSpecs = file => root => brokerSpecFor(file, root);
+/**
+ * The spec source live code trades with: a root's recorded broker spec, or null when there is none or
+ * when it differs from the static table (a broker fault, or a table that drifted: either way neither
+ * number can be trusted to size a trade, so entries fail closed). source.why(root) says which.
+ */
+function brokerSpecs(file) {
+  const source = root => {
+    const spec = brokerSpecFor(file, root);
+    return spec && !specMismatch(root, spec) ? spec : null;
+  };
+  source.why = root => {
+    const spec = brokerSpecFor(file, root);
+    const differs = spec && specMismatch(root, spec);
+    return differs ? `${differs}; no entries on it until they agree` : noSpecsMessage(root);
+  };
+  return source;
+}
+
+/** Why a spec source has no spec for a root (the source's own reason, else the missing-spec message). */
+const whyNoSpec = (specOf, root) => (specOf && typeof specOf.why === 'function' ? specOf.why(root) : noSpecsMessage(root));
 
 /** The selected broker's contracts file under `home` (the env picks the broker), or null when no broker is configured. */
 function contractsFileFor(home, env = process.env) {
@@ -87,4 +107,4 @@ function specMismatch(root, spec) {
     + `(${table.tickSize} = ${money(table.tickValue)}, scripts/lib/trading/contracts.js): training does not equal live; fix the table or the broker`;
 }
 
-module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch };
+module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, whyNoSpec, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch };
