@@ -230,6 +230,19 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
   const broker = { activeContract: async () => assert.fail('the broker is not asked') };
   await assert.rejects(() => fetchBarsToFile({ client: broker, symbol: 'MNQ', timeframe: 7, count: 10, out: path.join(outDir, 'MNQ-7m-x.json'), outDir, tool: true }), /^Error: the bars file: a \.json file under .* \(not a regular file: /);
   assert.match(outError(path.join(outDir, 'MNQ-7m-x.json'), outDir), /^--out: /, 'the script names its flag');
+  // Through the tool itself (the operation passes `tool` on): its own file a directory, with the fake broker configured.
+  const fakeHome = tmpDir();
+  fs.writeFileSync(path.join(fakeHome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
+  fs.mkdirSync('/tmp/fth', { recursive: true, mode: 0o700 });
+  const mine = `/tmp/fth/MNQ-7m-t${process.pid}.json`;
+  fs.mkdirSync(mine, { recursive: true });
+  try {
+    const viaTool = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10, name: `t${process.pid}` }, { env: { ...process.env, FTH_HOME: fakeHome, FTH_ENV_FILE: path.join(fakeHome, 'none.env'), FTH_REPLAY_NOW: '' } });
+    assert.strictEqual(viaTool.isError, true);
+    assert.match(viaTool.content[0].text, /^\[bars\] the bars file: a \.json file under \/tmp\/fth\/ \(not a regular file: /m);
+  } finally {
+    fs.rmSync(mine, { recursive: true, force: true });
+  }
   // combine_status with no attempt: starting one is the user's (the script's own line stays as it was).
   const none = await callTool('combine_status', {}, { env: { FTH_HOME: home } });
   assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n');

@@ -183,13 +183,13 @@ function recordEndOfDay(home, account, balance, dayKey) {
  */
 function combineBlock(home, accountName, now = new Date()) {
   const r = readAttempt(home, accountName);
-  if (!r) return `no ${accountName} attempt is started (node scripts/combine.js start --account ${accountName})`;
+  if (!r) return `no ${accountName} attempt is started (starting one is the user's: node scripts/combine.js start --account ${accountName})`;
   if (r.missedClose) {
     const missed = missedOf(r);
     const day = missed[0] || r.missedClose;
     const more = missed.length > 1 ? ` (also ${missed.slice(1).join(', ')}: record each)` : '';
-    return `the close of ${day} was never recorded, so the trailing floor is unknown; record the account's closing balance that day `
-      + `(node scripts/combine.js record-day --account ${accountName} --day ${day} --balance <dollars>)${more}`;
+    const record = `the user records it: node scripts/combine.js record-day --account ${accountName} --day ${day} --balance <dollars>`;
+    return `the close of ${day} was never recorded, so the trailing floor is unknown; the account's closing balance that day is needed (${record})${more}`;
   }
   const s = r.snapshot;
   const age = now.getTime() - Date.parse(s && s.at);

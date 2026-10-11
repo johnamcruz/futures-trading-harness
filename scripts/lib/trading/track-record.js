@@ -145,7 +145,7 @@ function describeRecord({ backtest = null, live = null, regime = null, at = null
       if (h && h.trades >= MIN_SLICE) parts.push(`at ${String(p.hour).padStart(2, '0')}:00 ET: ${h.trades} trades, E ${sR(h.meanR)}`);
     }
   } else {
-    parts.push('no backtest recorded (backtest.js --record)');
+    parts.push('no backtest recorded (the user records one: backtest.js --record)');
   }
   if (live && live.trades) {
     parts.push(`live: ${live.trades} reviewed, ${live.wins}W/${live.losses}L, E ${sR(live.meanR)}${live.inRegime && live.inRegime.trades >= LIVE_SLICE ? ` (in ${regime}: ${live.inRegime.trades}, E ${sR(live.inRegime.meanR)})` : ''}`);

@@ -338,10 +338,12 @@ test('skills: messages an agent reads from the gate and the hooks name the harne
       if (AGENT_RUN_SCRIPT.test(line) || /node <root>\/scripts\//.test(line)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
       // A message a tool can return names the caller's words: say(c, '--flag ...', 'argument ...') or a tool flag,
       // never a bare script flag. Exempt: argv parsing, lines marked `// cli-only:` (the tool's schema refuses first).
-      const toolPath = f.startsWith('scripts/lib/harness-tools') || f === 'scripts/lib/bars-fetch.js';
-      const flagString = /(['"`])[^'"`]*--[a-z][^'"`]*\1|`[^`]*--[a-z]/.test(line);
+      // Messages a tool or the gate returns: the harness tools' own, and the gate's and the briefing's (scripts/lib/trading, hooks).
+      const toolPath = true;
+      const flagString = /(['"`])[^'"`]*--(?:[a-z]|\$\{)[^'"`]*\1|`[^`]*--(?:[a-z]|\$\{)/.test(line);
       const parsing = /flag ===|\ba === '--|options\(|o\['--|argv/.test(line);
-      if (toolPath && flagString && !parsing && !/say\(c,|\btool \?|\/\/ cli-only: /.test(line)) bad.push(`${f}:${i + 1}: a script flag in a message: ${line.trim().slice(0, 100)}`);
+      // A user-only command may be named, as the user's (the line says so).
+      if (toolPath && flagString && !parsing && !/say\(c,|\btool \?|\/\/ cli-only: |the user/.test(line)) bad.push(`${f}:${i + 1}: a script flag in a message: ${line.trim().slice(0, 100)}`);
     });
   }
   assert.deepStrictEqual(bad, []);

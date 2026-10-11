@@ -394,7 +394,7 @@ test('combine: a close the runner missed stops entries until it is recorded', ()
   prop.snapshot(home, MINI, 50300, new Date(NOW.getTime() - 60000)); // Wednesday
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 50, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
   const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
-  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded.*record-day --account mini --day 2026-10-06/);
+  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded.*the user records it: .*record-day --account mini --day 2026-10-06/);
   prop.recordEndOfDay(home, MINI, 50300, '2026-10-06');
   prop.snapshot(home, MINI, 50300, new Date(NOW.getTime() - 30000));
   assert.deepStrictEqual(ev().violations, []);
