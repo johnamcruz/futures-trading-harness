@@ -23,9 +23,11 @@ inside one run.
 ### 0. Load the skills
 
 Before any decision, load `trade-session` (this skill),
-`multi-timeframe-analysis`, and `strategy-library` (Claude Code: the Skill
-tool). The order gate refuses an entry from a session that hasn't (Claude
-transcripts). Load the others as a step names them.
+`multi-timeframe-analysis`, and `strategy-library` with the skill tool. The
+order gate refuses an entry from a session whose transcript doesn't show each
+one loaded (a load that returned an error, such as a skill not found, doesn't
+count: load it again by the name the error lists). Load the others as a step
+names them.
 
 ### 1. State first
 
