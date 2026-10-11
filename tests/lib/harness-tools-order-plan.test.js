@@ -82,6 +82,22 @@ test('order_plan: the caller chooses; it refuses, with the reason, rather than p
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'anytime', side: 'long' }, { ...ctx, root }), /anytime is a manual strategy: order_plan plans a rules strategy's candidate or a policy strategy's verdict/);
 });
 
+test('order_plan: only the strategy\'s own, current bars - another timeframe, a bar not closed, or stale bars are refused', () => {
+  const { file, home, ctx } = setup();
+  const bars = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // The same bars relabelled one minute apart: bos trades 3m bars.
+  const end = Date.parse(bars.at(-1).t);
+  const oneMin = path.join(home, 'MNQ-1m.json');
+  fs.writeFileSync(oneMin, JSON.stringify(bars.map((b, i) => ({ ...b, t: new Date(end - (bars.length - 1 - i) * 60000).toISOString() }))));
+  assert.throws(() => plan({ file: oneMin, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 70000) }), /the bars are 1-minute; the strategy trades 3m bars/);
+  // The last bar still open at the harness clock.
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 179000) }), /hasn't closed/);
+  // Older than the gate's signal age (10 min by default; FTH_SIGNAL_MAX_AGE_MIN).
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 11 * 60000) }), /more than 10 min before the harness clock .*fetch current bars/);
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 9 * 60000) }).args.size, 1, 'within the age');
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, env: { ...ctx.env, FTH_SIGNAL_MAX_AGE_MIN: '5' }, now: () => new Date(end + 180000 + 6 * 60000) }), /more than 5 min/);
+});
+
 test('order_plan: a stop over the strategy\'s risk.max_risk_usd is refused, never shrunk', () => {
   const { file, home } = setup();
   const root = path.join(home, 'plugin');

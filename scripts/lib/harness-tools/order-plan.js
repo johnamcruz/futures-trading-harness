@@ -28,7 +28,9 @@
 const { readBarsArg } = require('../backtest/data');
 const { loadStrategies, scan } = require('../trading/strategies');
 const { loadAccounts } = require('../trading/accounts');
-const { exitPlan } = require('../trading/evaluator');
+const { exitPlan, timeframeMs } = require('../trading/evaluator');
+const { normalizeBars } = require('../trading/indicators');
+const { loadConfig } = require('../trading/config');
 const { specFor } = require('../trading/contracts');
 const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
@@ -100,6 +102,23 @@ function policyPlan(c, s, { results, root, want, home, now }) {
   };
 }
 
+/**
+ * The bars must be the strategy's own and current, as the gate's trigger record is: bars on its
+ * timeframe (the step between the last bars, as scan's record measures it), the last one closed at
+ * the harness clock and no older than the gate's signal age (FTH_SIGNAL_MAX_AGE_MIN). Else a refusal.
+ */
+function checkBars(bars, timeframe, now, env) {
+  const norm = normalizeBars(bars);
+  const want = timeframeMs(timeframe);
+  const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
+  const step = diffs.length ? Math.min(...diffs) : NaN;
+  if (!(step === want)) throw new Error(`the bars are ${Number.isFinite(step) ? `${step / 60000}-minute` : 'of an unknown timeframe'}; the strategy trades ${timeframe} bars: plan it on its own timeframe's bars`);
+  const closedAt = Date.parse(norm[norm.length - 1].t) + step;
+  const maxAgeMin = loadConfig(env).signalMaxAgeMin;
+  if (closedAt > now.getTime()) throw new Error(`the last bar closes at ${new Date(closedAt).toISOString()}, after the harness clock (${now.toISOString()}): it hasn't closed`);
+  if (now.getTime() - closedAt > maxAgeMin * 60000) throw new Error(`the last bar closed at ${new Date(closedAt).toISOString()}, more than ${maxAgeMin} min before the harness clock (${now.toISOString()}): fetch current bars`);
+}
+
 function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const c = context(ctx);
   const root = String(symbol || '').toUpperCase();
@@ -114,7 +133,9 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   if (!s.valid) throw new Error(`strategies/${name}/STRATEGY.md is invalid (${s.errors[0]})`);
   if (!s.instruments.includes(root)) throw new Error(`${name} does not trade ${root} (instruments: ${s.instruments.join(', ')})`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
-  const results = scan(strategies, readBarsArg(file), { symbol: root, now });
+  const bars = readBarsArg(file);
+  checkBars(bars, s.timeframe, now, c.env);
+  const results = scan(strategies, bars, { symbol: root, now });
   const inputs = { results, root, want, home: harnessHome(c.env), now };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });
@@ -131,4 +152,4 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
 
 const OPS = { plan };
 
-module.exports = { OPS, plan, candidateOf };
+module.exports = { OPS, plan, candidateOf, checkBars };
