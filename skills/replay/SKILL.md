@@ -219,5 +219,5 @@ month    times  cycles  failed  stand-aside  trades  win rate  mean R (n)  expec
 Combine verdict: topstep_100k (the policy strategies' account (prop_flow_1m, prop_portfolio)); each month a fresh attempt from $100000.00: ...
 2024-03  NOT YET: profit $357.96 of $6000.00 ($5642.04 to go), 14 of 21 day(s) traded
          max loss used $612.50 of $3000.00 (closest to the floor on 2024-03-12); intraday from MAE on 38 of 38 closing fill(s)
-Year: 0 passed, 0 failed, 1 not yet, of 1 month(s).
+Summary: 0 passed, 0 failed, 1 not yet, of 1 month(s).
 ```

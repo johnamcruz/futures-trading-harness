@@ -39,7 +39,8 @@
  *     so is a position opened later that day (the firm would refuse it) and
  *     one carried in from before the month (it belongs to no fresh attempt).
  *   - a fill whose side, size, P&L or fees can't be read is skipped and
- *     counted (the output says the verdict may be wrong).
+ *     counted (the output says the verdict may be wrong); its contract's
+ *     position is then unknown, and assumed flat from the next month (said).
  *
  *   evaluate(days, account, { daysDone, why })   { why, account, months, summary }
  *   resolveAccount({ override, runnerAccount, strategies, accounts })   { name, why }
@@ -106,7 +107,7 @@ function fillsOf(days) {
 
 function blankMonth(key, account) {
   return {
-    key, s: combine.start(account), days: [], events: [], excluded: [], unreadable: 0,
+    key, s: combine.start(account), days: [], events: [], excluded: [], notes: [], unreadable: 0,
     worstCushion: account.max_loss, worstDay: null, passDay: null, fail: null, intradayChecked: 0, closes: 0, traded: new Set(),
   };
 }
@@ -125,8 +126,11 @@ function applyFill(m, f) {
   if (!f.closing) {
     s = combine.applyClose(s, f.net);
     lowWater(m, s.balance - s.floor, f.day);
+    // A fee that took the day to the firm's limit stops it there too: the account is flattened.
+    const stopped = !m.s.dayStopped && s.dayStopped && s.status === 'active';
+    if (stopped) m.events.push({ day: f.day, text: `daily loss limit ($${s.dailyLimit}) hit by an opening fill's fee: flattened there; no trading until the next session` });
     m.s = s;
-    return false;
+    return stopped;
   }
   m.closes += 1;
   if (f.mae !== null) m.intradayChecked += 1;
@@ -143,7 +147,7 @@ function applyFill(m, f) {
     m.fail = { rule: 'max-loss', day: f.day, how: `equity ${intraday ? 'reached' : 'closed at'} $${round2(s.balance + worst)}${intraday ? ' (from the trade\'s MAE)' : ''}, floor $${s.floor}` };
     return false;
   }
-  if (!s.dayStopped && combine.dailyBreached(s, worst)) return dailyStop(m, f, worst);
+  // (When the floor is as near as the daily limit or nearer, a loss that misses the floor misses the limit too.)
   m.s = combine.applyClose(s, f.net);
   lowWater(m, m.s.balance - m.s.floor, f.day);
   return false;
@@ -180,6 +184,7 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
   const done = daysDone ? new Set(daysDone) : null;
   const pos = new Map(); // contract -> signed size, across the whole run
   const left = new Map(); // contract -> why its position is left out, until it is flat
+  const unknown = new Map(); // contract -> the day an unreadable fill left its position unknown
   const byDay = new Map();
   for (const f of fills) byDay.set(f.day, [...(byDay.get(f.day) || []), f]);
   // A day known only from a fill's time, before the last day done, is done too.
@@ -191,13 +196,21 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
     if (!m || m.key !== key) {
       if (m) months.push(m);
       m = blankMonth(key, account);
+      // A position whose size an unreadable fill made unknown: assumed flat for the new month (said so).
+      for (const [c, d] of unknown) {
+        pos.set(c, 0);
+        left.delete(c);
+        m.notes.push(`${c}: position unknown after an unreadable fill on ${d}; assumed flat from the start of the month`);
+      }
+      unknown.clear();
       // A position carried in from last month belongs to no fresh attempt.
       for (const [c, q] of pos) if (q !== 0) left.set(c, 'carried in from the month before');
     }
     for (const f of byDay.get(day) || []) {
       // A fill whose side, size or money can't be read: position tracking and the balance would both be guesses.
       if (f.delta === null || !Number.isFinite(f.net)) {
-        if (m.s.status === 'active') m.unreadable += 1;
+        m.unreadable += 1;
+        unknown.set(f.contract, day);
         continue;
       }
       const prev = pos.get(f.contract) || 0;
@@ -239,7 +252,7 @@ function finishMonth(m, account) {
     bestDay: round2(Math.max(0, ...m.days.map(d => d.pnl))),
     daysTraded: m.traded.size, daysReplayed: m.days.length,
     maxLossUsed: round2(Math.min(account.max_loss, Math.max(0, account.max_loss - m.worstCushion))), maxLoss: account.max_loss, worstDay: m.worstDay,
-    days: m.days, events: m.events, excluded: m.excluded, unreadable: m.unreadable,
+    days: m.days, events: m.events, excluded: m.excluded, notes: m.notes, unreadable: m.unreadable,
     closes: m.closes, intradayChecked: m.intradayChecked, openDay: m.openDay || null,
     pastSessions: m.days.length > account.sessions ? account.sessions : null,
   };
@@ -265,8 +278,8 @@ function headLine(v) {
 const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
-  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, against the balance when it closed (trades open together are not added up); a trade without MAE is seen only at its close.',
-  'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before.',
+  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, against the balance when it closed (trades open together are not added up); a trade without MAE is seen only at its close; after partial exits the MAE may also count loss already realized (on the safe side).',
+  'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',
 ];
 
 const dayPath = r => r.days.map(d => `${d.day.slice(5)} ${signed(d.pnl)}`).join(', ');
@@ -279,13 +292,14 @@ function monthDetail(r) {
   for (const e of r.events) out.push(`${e.day}: ${e.text}`);
   if (r.excluded.length) out.push(`left out: ${r.excluded.map(x => `${x.day} ${x.contract} ${signed(x.net)} (${x.why})`).join('; ')}`);
   if (r.unreadable) out.push(`${r.unreadable} fill(s) with no readable side, size, P&L or fees were skipped: the verdict may be wrong`);
+  for (const n of r.notes) out.push(n);
   if (r.pastSessions) out.push(`more days than the account's training length (${r.pastSessions} sessions): training would stop there (timeout); the replay runs the month on, as a live attempt does`);
   return out;
 }
 
 function summaryLine(v) {
   const s = v.summary;
-  return `Year: ${s.passed} passed, ${s.failed} failed, ${s.notYet} not yet, of ${s.months} month(s).`;
+  return `Summary: ${s.passed} passed, ${s.failed} failed, ${s.notYet} not yet, of ${s.months} month(s).`;
 }
 
 function verdictText(v) {
@@ -306,6 +320,7 @@ function verdictMarkdown(v) {
     ...r.excluded.map(x => `- ${r.key}, ${x.day}: left out ${x.contract} ${signed(x.net)} (${x.why})`),
     ...(r.openDay ? [`- ${r.key}: ${r.openDay.day} is still being replayed (${signed(r.openDay.pnl)} so far): no end of day for it yet`] : []),
     ...(r.unreadable ? [`- ${r.key}: ${r.unreadable} fill(s) with no readable side, size, P&L or fees were skipped`] : []),
+    ...r.notes.map(n => `- ${r.key}: ${n}`),
     ...(r.pastSessions ? [`- ${r.key}: more days than the account's training length (${r.pastSessions} sessions); training would stop there, the replay runs the month on`] : [])]);
   return ['## Combine verdict', '', headLine(v), '', `| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows, '',
     summaryLine(v), '', ...(extra.length ? [...extra, ''] : []), ...NOTES.map(n => `- ${n}`), ''].join('\n');

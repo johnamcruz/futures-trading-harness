@@ -180,7 +180,7 @@ test('verdict: months are CME trading days; each is a fresh attempt; a carried p
   assert.strictEqual(may.profit, net(300), 'fresh from $100000, without the carried MES close');
   assert.deepStrictEqual(may.excluded.map(x => x.why), ['carried in from the month before']);
   assert.deepStrictEqual(v.summary, { months: 3, passed: 1, failed: 1, notYet: 1 });
-  assert.match(verdictText(v), /Year: 1 passed, 1 failed, 1 not yet, of 3 month\(s\)\./);
+  assert.match(verdictText(v), /Summary: 1 passed, 1 failed, 1 not yet, of 3 month\(s\)\./);
   const md = verdictMarkdown(v);
   assert.match(md, /## Combine verdict[\s\S]*\| 2026-04 \| FAIL on 2026-04-02: max-loss/);
   assert.match(md, /Fresh each month/);
@@ -213,6 +213,41 @@ test('verdict: a day still being replayed gets no end of day; unreadable fills a
   assert.strictEqual(fillsOf(days).length, 5);
 });
 
+test('verdict: an unreadable fill leaves its position unknown; the next month assumes it flat and says so', () => {
+  const days = run([['2026-03-02', 100, { openOnly: true }]]);
+  days['2026-03-02'][0].trades.push({ id: 90, contractId: 'MNQ', creationTimestamp: '2026-03-02T15:30:00Z', profitAndLoss: 100, fees: FEE, side: null, size: 1 });
+  Object.assign(days, run([['2026-04-01', 3000], ['2026-04-02', 3000], ['2026-04-03', 1000]].map(([d, p]) => [d, p, {}])));
+  // run() numbers ids from 1 again: give April's fills their own.
+  for (const d of ['2026-04-01', '2026-04-02', '2026-04-03']) for (const f of days[d][0].trades) f.id = `${d}-${f.id}`;
+  const v = evaluate(days, ACCOUNT);
+  const [mar, apr] = v.months;
+  assert.strictEqual(mar.unreadable, 1);
+  assert.deepStrictEqual([apr.verdict, apr.passDay, apr.excluded.length], ['PASS', '2026-04-03', 0]);
+  assert.match(apr.notes[0], /MNQ: position unknown after an unreadable fill on 2026-03-02; assumed flat/);
+  assert.match(verdictText(v), /assumed flat from the start of the month/);
+});
+
+test('verdict: an opening fee that reaches the daily limit flattens the account too', () => {
+  const t = ms => new Date(Date.parse('2026-03-02T15:00:00Z') + ms * 60000).toISOString();
+  const days = run([['2026-03-02', -1999, { at: t(0) }]]);
+  days['2026-03-02'].push({ t: t(5), day: '2026-03-02', kind: 'trade', trades: [
+    { id: 10, contractId: 'MNQ', creationTimestamp: t(2), profitAndLoss: null, fees: 1, side: 0, size: 1 },
+    { id: 11, contractId: 'MNQ', creationTimestamp: t(3), profitAndLoss: -500, fees: FEE, side: 1, size: 1 },
+  ] });
+  const m = evaluate(days, { ...ACCOUNT, max_loss_mode: 'static', max_loss: 5000 }).months[0];
+  assert.deepStrictEqual(m.days.map(d => d.pnl), [-2000.74]);
+  assert.deepStrictEqual(m.excluded.map(x => x.why), ['flattened at the daily loss limit']);
+  assert.match(m.events[0].text, /hit by an opening fill's fee/);
+});
+
+test('verdict: a day known only from a fill, before the last day done, gets its end of day', () => {
+  // 03-03's trade is filed under 03-04 (no 03-03 file); the run has finished 03-04.
+  const days = run([['2026-03-03', 200, { recordDay: '2026-03-04' }], ['2026-03-04', 100]]);
+  const m = evaluate(days, ACCOUNT, { daysDone: ['2026-03-04'] }).months[0];
+  assert.deepStrictEqual(m.days.map(d => d.day), ['2026-03-03', '2026-03-04']);
+  assert.strictEqual(m.openDay, null);
+});
+
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {
   const accounts = [{ name: 'topstep_50k' }, { name: 'topstep_100k' }];
   const strategies = [{ name: 'p1', signal: 'policy', account: 'topstep_50k' }, { name: 'orb', signal: 'rules' }];
@@ -232,7 +267,7 @@ test('verdict on the opencode-e2e-2 replay (one day, two trades): NOT YET, far f
   assert.match(out, /Combine verdict: topstep_100k \(the policy strategies' account/);
   assert.match(out, /2026-06 {2}NOT YET: profit \$0\.02 of \$6000\.00 \(\$5999\.98 to go\), 1 of 1 day\(s\) traded/);
   assert.match(out, /max loss used \$15\.74 of \$3000\.00 \(closest to the floor on 2026-06-02\); intraday from MAE on 2 of 2/);
-  assert.match(out, /Year: 0 passed, 0 failed, 1 not yet, of 1 month\(s\)\./);
+  assert.match(out, /Summary: 0 passed, 0 failed, 1 not yet, of 1 month\(s\)\./);
   assert.match(fs.readFileSync(path.join(dir, 'report.md'), 'utf8'), /## Combine verdict[\s\S]*\| 2026-06 \| NOT YET/);
   const named = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'report', dir, '--account', 'topstep_50k'], { env: { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir }, encoding: 'utf8' });
   assert.match(named, /Combine verdict: topstep_50k \(--account\)/);
