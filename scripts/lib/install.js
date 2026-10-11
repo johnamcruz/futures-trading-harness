@@ -5,7 +5,8 @@
  * commands, hooks) are installed by each harness's own plugin/extension
  * command; this module writes what those can't: always-on rules (Claude), the
  * broker MCP server (named `broker`, the one in the broker config) behind the
- * order gateway with absolute paths, the chosen server's entry, agent
+ * order gateway with absolute paths, the harness-tools MCP server (named
+ * `harness`: the harness's own operations as tools), the chosen server's entry, agent
  * roles (Codex), and the autonomous-run permission allowlist (Qwen, scoped to
  * workspace/). Every write is idempotent and confined to a marked block or
  * keyed entries owned by the harness. A file's first backup is never overwritten.
@@ -16,7 +17,9 @@ const path = require('path');
 const { loadAgents, codexAgentsTable } = require('./harness-sync');
 const { NEWS_DOMAINS } = require('./autotrader');
 const { SERVER_NAME } = require('./broker/config');
+const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const MARK_BEGIN = '# >>> futures-trading-harness >>>';
 const MARK_END = '# <<< futures-trading-harness <<<';
 // Order-gate settings the gateway reads; Codex forwards only listed variables.
@@ -25,6 +28,8 @@ const FTH_ENV = [
   'FTH_NO_ENTRY_WINDOWS', 'FTH_ENTRY_HOURS', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_LOSS_COOLDOWN_MIN',
   'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS',
   'FTH_HOME', 'FTH_REPLAY_NOW',
+  // The exchange calendar the runner configures (closedDates, earlyCloseDates): the gate's session checks read it.
+  'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES',
 ];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
@@ -37,6 +42,20 @@ function gatewayArgs(root) {
 /** Variables a harness must forward to the gateway: the broker server's own, then the harness's. */
 function forwardedEnv(broker) {
   return [...new Set([...broker.env, ...[broker.entryEnv, broker.journalEnv].filter(Boolean), 'FTH_BROKER', 'FTH_BROKERS_FILE', ...FTH_ENV])];
+}
+
+/** The harness-tools server: scripts/harness-tools-mcp.js. */
+function harnessToolsArgs(root) {
+  return [path.join(root, 'scripts', 'harness-tools-mcp.js')];
+}
+
+/**
+ * Variables a harness must forward to the harness-tools server: the gateway's (bars_fetch asks the
+ * broker; the clock and the autonomous lock-down are the gate's), plus where the runner's bars are
+ * and the exchange calendar the runner sets.
+ */
+function harnessToolsEnv(broker) {
+  return [...new Set([...forwardedEnv(broker), 'FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES'])];
 }
 
 /**
@@ -92,15 +111,48 @@ function codexConfigBlock(root, broker) {
     '# Forward credentials, guardrails, and order-gate settings from the launching environment.',
     `env_vars = [${forwardedEnv(broker).map(v => JSON.stringify(v)).join(', ')}]`,
     '',
+    '# The harness\'s own operations as tools (strategies, bars, snapshot, blackouts...); none places an order.',
+    `[mcp_servers.${HARNESS_SERVER}]`,
+    'command = "node"',
+    `args = [${harnessToolsArgs(root).map(a => JSON.stringify(a)).join(', ')}]`,
+    'startup_timeout_sec = 30',
+    'default_tools_approval_mode = "approve"',
+    '# The clock, the autonomous lock-down, the state and bars directories, and bars_fetch\'s broker settings.',
+    `env_vars = [${harnessToolsEnv(broker).map(v => JSON.stringify(v)).join(', ')}]`,
+    '',
     codexAgentsTable(loadAgents(root), path.join(root, '.codex', 'agents').split(path.sep).join('/')),
   ].join('\n');
+}
+
+/**
+ * Whether Codex TOML (outside the harness block) defines mcp_servers.<name> in any form: a table
+ * ([mcp_servers.x], quoted, or a subtable), a dotted key, a key under [mcp_servers], or an inline table.
+ */
+function codexDefines(text, name) {
+  const key = `(?:${name}|"${name}"|'${name}')`;
+  const tbl = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')';
+  let inServers = false;
+  for (const raw of String(text).split('\n')) {
+    const l = raw.trim();
+    if (l.startsWith('[')) {
+      if (new RegExp(`^\\[\\s*${tbl}\\s*\\.\\s*${key}\\s*[\\].]`).test(l)) return true;
+      inServers = new RegExp(`^\\[\\s*${tbl}\\s*\\]`).test(l);
+      continue;
+    }
+    if (new RegExp(`^${tbl}\\s*\\.\\s*${key}\\s*[.=]`).test(l)) return true;
+    if (new RegExp(`^${tbl}\\s*=\\s*\\{.*[{,\\s]${key}\\s*[.=]`).test(l)) return true;
+    if (inServers && new RegExp(`^${key}\\s*[.=]`).test(l)) return true;
+  }
+  return false;
 }
 
 function planCodex({ root, home, broker }) {
   const file = path.join(home, '.codex', 'config.toml');
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  if (new RegExp(`^\\s*\\[mcp_servers\\.${SERVER_NAME}\\]`, 'm').test(outsideBlock(current))) {
-    throw new Error(`${file} already defines [mcp_servers.${SERVER_NAME}] outside the harness block; remove it first`);
+  for (const name of [SERVER_NAME, HARNESS_SERVER]) {
+    if (codexDefines(outsideBlock(current), name)) {
+      throw new Error(`${file} already defines [mcp_servers.${name}] outside the harness block; remove it first`);
+    }
   }
   return {
     writes: [{ file, content: upsertBlock(current, codexConfigBlock(root, broker)) }],
@@ -118,7 +170,8 @@ function planCodex({ root, home, broker }) {
 const isOurHook = group => (group.hooks || []).some(h => /run-with-flags\.js"? (pre|session-start|stop):trading:/.test(String(h.command || '')));
 
 /**
- * User-level Qwen settings: the broker MCP server behind the gateway. Hooks
+ * User-level Qwen settings: the broker MCP server behind the gateway, and the
+ * harness-tools server (a foreign `harness` entry is refused, as for `broker`). Hooks
  * come from the extension (qwen-extension/hooks); any harness hooks an older
  * install merged here are removed so they don't run twice, and so is the
  * gateway an older install registered under another name.
@@ -141,24 +194,34 @@ function mergeQwenSettings(settings, root) {
   }
   const servers = { ...(settings.mcpServers || {}) };
   for (const [name, server] of Object.entries(servers)) if (name !== SERVER_NAME && isGateway(server)) delete servers[name];
-  next.mcpServers = { ...servers, [SERVER_NAME]: { ...(existing || {}), ...ours } };
+  const isTools = s => Boolean(s) && (s.args || []).some(a => String(a).endsWith('harness-tools-mcp.js'));
+  const existingTools = settings.mcpServers && settings.mcpServers[HARNESS_SERVER];
+  if (existingTools && !isTools(existingTools)) {
+    throw new Error(`settings.json already has an mcpServers.${HARNESS_SERVER} that is not the harness tools server; remove it first`);
+  }
+  // Ours alone: nothing of an older entry (an env that unsets the lock-down, an httpUrl Qwen would prefer,
+  // a tool filter) carries over, except whether the user trusts it.
+  const tools = { command: 'node', args: harnessToolsArgs(root), timeout: 60000, ...(existingTools && typeof existingTools.trust === 'boolean' ? { trust: existingTools.trust } : {}) };
+  next.mcpServers = { ...servers, [SERVER_NAME]: { ...(existing || {}), ...ours }, [HARNESS_SERVER]: tools };
   return next;
 }
 
 /**
  * Project settings for workspace/ (where autonomous Qwen runs start): allow the
- * broker tools, reading, scratch files, and the harness's own scripts; deny
+ * broker tools, the harness tools, the harness's own agent roles by name
+ * (Agent(<role>), so Qwen's built-in and forked agents stay unapproved),
+ * reading, scratch files, and the harness's own scripts; deny
  * edits to the harness, its state, and harness configs, so a run can't loosen
  * its own limits.
  */
-function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl') } = {}) {
+function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl'), roles = loadAgents(PLUGIN_ROOT).map(a => a.name) } = {}) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
   const h = p => abs(path.join(home, p));
   const state = stateDir === path.join(home, '.futures-trading-harness') ? [] : [`Edit(${abs(stateDir)}/**)`];
   return {
     permissions: {
       allow: [
-        `mcp__${SERVER_NAME}`, 'Skill', 'Agent', 'web_search',
+        `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', ...roles.map(r => `Agent(${r})`), 'web_search',
         ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
         `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs('/tmp/fth')}/**)`,
         'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
@@ -241,12 +304,14 @@ function planClaude({ root, home, broker }) {
   const writes = fs.readdirSync(rulesDir).filter(f => f.endsWith('.md')).sort()
     .map(f => ({ file: path.join(home, '.claude', 'rules', 'trading', f), content: fs.readFileSync(path.join(rulesDir, f), 'utf8') }));
   const mcp = [`claude mcp add ${SERVER_NAME} --scope user`, '--', 'node', ...gatewayArgs(root).map(a => JSON.stringify(a))].join(' ');
+  const tools = [`claude mcp add ${HARNESS_SERVER} --scope user`, '--', 'node', ...harnessToolsArgs(root).map(a => JSON.stringify(a))].join(' ');
   return {
     writes,
     next: [
       `/plugin marketplace add ${root}`,
       '/plugin install futures-trading-harness@futures-trading-harness',
       mcp,
+      tools,
       credentialsStep(broker),
       'Merge mcp-configs/settings.example.json into ~/.claude/settings.json (order tools on "ask" until you trust the setup).',
     ],
@@ -277,7 +342,10 @@ module.exports = {
   TARGETS,
   upsertBlock,
   codexConfigBlock,
+  codexDefines,
   forwardedEnv,
+  harnessToolsArgs,
+  harnessToolsEnv,
   planBrokerEntry,
   mergeQwenSettings,
   qwenWorkspaceSettings,

@@ -174,6 +174,34 @@ test('callTool: a Parquet or Excel file under the bars directory is refused by e
   }
 });
 
+test('callTool: record is refused while an autonomous runner holds its lock, whatever the server\'s environment', async () => {
+  const { spawn } = require('child_process');
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
+  fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(home, 'bars', 'NQ-3m.csv'));
+  const bars = path.join(home, 'bars', 'NQ-3m.csv');
+  const env = { FTH_HOME: home }; // no FTH_AUTONOMOUS: as if a harness hadn't passed it on
+  // A stand-in runner: a live process whose command line names the autotrader.
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
+  try {
+    fs.writeFileSync(path.join(home, 'autotrader.lock'), JSON.stringify({ pid: runner.pid, startedAt: new Date().toISOString() }));
+    for (const [tool, args, tag] of [['strategies_scan', { bars, symbol: 'MNQ', record: true }, 'strategies'], ['mtf_read', { bars, symbol: 'MNQ', record: true }, 'mtf'], ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, 'bars']]) {
+      const r = await callTool(tool, args, { env });
+      assert.strictEqual(r.isError, true, tool);
+      assert.match(r.content[0].text, new RegExp(`\\[${tag}\\] --record: an autonomous runner is running \\(pid ${runner.pid}\\): it records the reads and signals of the symbols it trades, and record is refused while it runs\\n$`));
+    }
+    assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
+    assert.strictEqual((await callTool('mtf_read', { bars }, { env })).isError, undefined, 'without record it runs');
+    // A lock whose pid is another program (a reused pid), or gone, doesn't refuse.
+    for (const pid of [process.pid, 2 ** 30]) {
+      fs.writeFileSync(path.join(home, 'autotrader.lock'), JSON.stringify({ pid }));
+      assert.match((await callTool('mtf_read', { bars, record: true }, { env })).content[0].text, /\[mtf\] --record needs --symbol/, String(pid));
+    }
+  } finally {
+    runner.kill();
+  }
+});
+
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {
   const root = tmpDir();
   fs.mkdirSync(path.join(root, 'strategies', 'big'), { recursive: true });

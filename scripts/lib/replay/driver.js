@@ -37,6 +37,7 @@ const { specFor } = require('../trading/contracts');
 const { sessionMinute, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
+const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
@@ -151,8 +152,8 @@ async function runReplay(opts) {
   const { run, baseEnv = process.env } = opts;
   // A live runner on this machine shares the scripts' scratch files (/tmp/fth) with the replay's agents.
   for (const home of new Set([harnessHome(baseEnv), harnessHome({})])) {
-    const liveLock = readJson(path.join(home, 'autotrader.lock'), null);
-    if (liveLock && alive(liveLock.pid)) throw new Error(`replay refused: the live runner is running (pid ${liveLock.pid}, ${home}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
+    const pid = liveRunner({ FTH_HOME: home });
+    if (pid) throw new Error(`replay refused: the live runner is running (pid ${pid}, ${home}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
   }
   const release = lockRun(run.paths);
   try {

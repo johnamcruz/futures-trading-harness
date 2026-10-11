@@ -61,7 +61,7 @@ read-only calls.
 | Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
 | Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
 
-### Harness tools server (not yet registered)
+### Harness tools server
 
 `node scripts/harness-tools-mcp.js` is an MCP server named `harness` (stdio,
 newline-delimited JSON-RPC) that offers the scripts agents run as tools, for
@@ -79,10 +79,28 @@ CLI does). The only paths are bars files: regular `.json` or `.csv` files (never
 Parquet or Excel: those readers trust their file) of at most 50 MB under `FTH_BARS_DIR` (default
 `<FTH_HOME>/bars`) or `/tmp/fth`, with no symlink and one hard link, in
 directories only the user owns and can write (`paths.js`). Only `bars_fetch`
-loads the user's `.env` (into a copy), as only `bars.js` does. `record` stays refused in autonomous runs. A reply over 256 KB is
+loads the user's `.env` (into a copy), as only `bars.js` does. `record` stays refused in autonomous runs (`FTH_AUTONOMOUS=1`, which every
+harness hands its MCP servers: Claude and Qwen pass their environment, Codex
+forwards it), and whenever a live runner holds its lock
+(`<FTH_HOME>/autotrader.lock`, its pid an autotrader's), whatever the
+server's environment; the scripts refuse it the same way. A reply over 256 KB is
 refused with how to narrow it, never truncated. No tool places, modifies or
-cancels an order, and the order-gate hook matches none of them. The server is
-not registered with any harness yet, and no allowlist or skill names it.
+cancels an order, and the order-gate hook matches none of them. The installer
+registers it as `harness` for every harness, as it registers `broker` (Claude:
+`claude mcp add harness`; Codex: `[mcp_servers.harness]`, pre-approved, with
+the clock, state, bars directory and calendar variables forwarded; Qwen: user
+settings and the extension manifest). Autonomous runs allow `mcp__harness`; the
+runner sets `FTH_BARS_DIR` to its bar directory and, at start, checks that this
+checkout's server answers `tools/list` with the registry's tools (it can't see
+which server a harness's own settings register as `harness`; the headless
+check probes that). On a failure a manual trade or premarket run is refused, a
+manual end of day only warns, and the live loop turns trading off with the kill
+switch while end of day and housekeeping keep running. `node scripts/check-headless.js` runs
+one real headless probe per harness (harness tools, a subagent by role, a shell
+attempt, in paper mode with the broker narrowed to its read tools: no order
+or journal-write tool on any harness) and reports what each reached; Qwen runs on the
+runner's workspace allowlist (`--write-qwen-allowlist` writes it, with no
+runner trading: a running runner treats the change as a workspace change).
 
 ## Order gate
 
@@ -225,7 +243,22 @@ Further safeguards:
   directory.
 - **Qwen allowlist.** For Qwen the runner rewrites the
   `workspace/.qwen/settings.json` allowlist at start, so it matches the
-  configured bar and state directories.
+  configured bar and state directories. It allows `mcp__broker` and
+  `mcp__harness`, and subagents only by name: one `Agent(<role>)` rule per
+  role in `agents/` (Qwen's subagent tool is `agent`, aliases `Agent` and
+  `Task`; the name in brackets must equal the call's `subagent_type`), so
+  Qwen's built-in agents (fork, general-purpose, Explore, claude-code, codex)
+  stay unapproved headless. A rule approves whichever agent Qwen resolves for
+  that name: keep no session, project or user agent named like a harness role,
+  in any letter case. The generated roles (`qwen-extension/agents/*.md`) carry
+  `approvalMode: default`, so a role asks (and headless, is refused) for any
+  tool the allowlist doesn't allow, and `background: false`: Qwen runs a named
+  subagent in the background unless the call or its definition says
+  otherwise, and the head trader must wait for each role's result. A
+  permissive parent mode (yolo, auto, auto-edit, e.g. through the runner
+  config's `extraArgs`) overrides a role's `approvalMode`: the runner passes
+  `--approval-mode default`, and the allowlist holds only in that mode. The extension's `QWEN.md` embeds every
+  `rules/trading/*.md`, so the rules are not linked into the extension.
 - **Codex blackouts.** Codex runs may also write the news-blackouts
   directory (`<FTH_HOME>/blackouts`), and nothing else of the harness state.
 - **Leftover orders.** Before each bar's cycle, the runner cancels working

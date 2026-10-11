@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
 const { SERVER_NAME, activeBroker } = require('./broker/config');
+const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
@@ -79,7 +80,7 @@ const abs = p => `/${p}`;
  */
 function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   return [
-    `mcp__${SERVER_NAME}`, 'Skill', 'Agent', 'WebSearch',
+    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
@@ -400,10 +401,12 @@ function prompts(cfg, now, root = '') {
   };
 }
 
-/** Environment for a harness run: root, autonomous lock-down, and paper mode. */
+/** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env) {
   // The gate learns the exchange calendar from the runner's config.
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
+  // The harness tools read bars files from the runner's bar directory (harness-tools/paths.js).
+  env.FTH_BARS_DIR = resolveDataDir(cfg, os.homedir(), base);
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -530,7 +533,48 @@ function cycleResult(output) {
   return matches ? matches[matches.length - 1].trim() : null;
 }
 
+const RUNNER_VALUE_FLAGS = ['--config', '--once', '--symbol', '--stale-minutes'];
+const RUNNER_BOOL_FLAGS = ['--dry-run', '--status'];
+const RUNNER_USAGE = 'usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run] | --status [--stale-minutes N]';
+
+/**
+ * The runner's argv, checked: only its own flags (--flag value or --flag=value), each once, nothing else.
+ * A typo (--dryrun, --ONCE, --dry-run=true) must never fall through to the live autonomous loop.
+ * Returns the argv in the --flag value form.
+ */
+function runnerArgv(argv) {
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < argv.length; i += 1) {
+    const [flag, inline] = String(argv[i]).split(/=(.*)/s);
+    const twice = () => new Error(`${flag} given twice (${RUNNER_USAGE})`);
+    if (RUNNER_VALUE_FLAGS.includes(flag)) {
+      const value = inline !== undefined ? inline : argv[i + 1];
+      if (inline === undefined) i += 1;
+      if (value === undefined || value === '' || String(value).startsWith('--')) throw new Error(`${flag} needs a value (${RUNNER_USAGE})`);
+      if (seen.has(flag)) throw twice();
+      seen.add(flag);
+      out.push(flag, String(value));
+    } else if (RUNNER_BOOL_FLAGS.includes(flag) && inline === undefined) {
+      if (seen.has(flag)) throw twice();
+      seen.add(flag);
+      out.push(flag);
+    } else {
+      throw new Error(`unknown argument: ${String(argv[i]).slice(0, 60)} (${RUNNER_USAGE})`);
+    }
+  }
+  const once = out[out.indexOf('--once') + 1];
+  if (seen.has('--once') && !['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
+  // Flags that only mean something with another: alone they would be ignored and the live loop would start.
+  if (seen.has('--symbol') && !seen.has('--once')) throw new Error(`--symbol goes with --once (one manual cycle) (${RUNNER_USAGE})`);
+  if (seen.has('--stale-minutes') && !seen.has('--status')) throw new Error(`--stale-minutes goes with --status (${RUNNER_USAGE})`);
+  const others = ['--config', '--once', '--symbol', '--dry-run'].filter(f => seen.has(f));
+  if (seen.has('--status') && others.length) throw new Error(`--status checks the running runner and takes only --stale-minutes, not ${others.join(', ')} (${RUNNER_USAGE})`);
+  return out;
+}
+
 module.exports = {
+  runnerArgv,
   accountText,
   historyText,
   endOfDayAt,

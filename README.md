@@ -287,9 +287,23 @@ plugin. It prints the remaining native commands:
 
 | Harness | Installer writes | You run |
 |---|---|---|
-| Qwen Code | `broker` MCP (via gateway) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
-| Codex | marked block in `~/.codex/config.toml`: `broker` MCP (via gateway, tools pre-approved so `codex exec` can use them, the broker's variables forwarded) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
-| Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the printed `claude mcp add` command |
+| Qwen Code | `broker` MCP (via gateway) and `harness` MCP (the harness tools) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
+| Codex | marked block in `~/.codex/config.toml`: `broker` MCP (via gateway, tools pre-approved so `codex exec` can use them, the broker's variables forwarded), `harness` MCP (the harness tools, pre-approved) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
+| Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the two printed `claude mcp add` commands (`broker` and `harness`) |
+
+Check each harness headless afterwards (one real run per harness, in paper
+mode with the broker read-only: it calls the harness tools, delegates to a
+harness role, and tries a shell command, then prints what each reached):
+
+```bash
+node scripts/check-headless.js                      # claude, codex and qwen
+node scripts/check-headless.js --harness claude     # one harness
+node scripts/check-headless.js --config autotrader.json   # the runner's harness and settings
+```
+
+Qwen runs on the workspace allowlist the runner writes at start; without it
+the Qwen probe says so (`--write-qwen-allowlist` writes it, while no runner
+is trading).
 
 The broker server's credentials and guardrails (its `env` in the broker
 config) go in `~/.futures-trading-harness/.env`,

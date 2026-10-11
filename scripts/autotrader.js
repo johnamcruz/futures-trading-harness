@@ -45,7 +45,8 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
+const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -58,6 +59,7 @@ const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
+const { lockHolderAlive } = require('./lib/runner-lock');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -67,26 +69,6 @@ const LOCK_FILE = path.join(HOME_DIR, 'autotrader.lock');
 function arg(argv, name) {
   const i = argv.indexOf(name);
   return i === -1 ? undefined : argv[i + 1];
-}
-
-function processCommand(pid) {
-  try {
-    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
-  } catch (_err) {
-    return null; // no /proc (macOS) or no such process
-  }
-}
-
-/** A lock holder is live only if the pid exists and (where /proc exists) is an autotrader. */
-function lockHolderAlive(lock) {
-  if (!lock || !Number.isInteger(lock.pid) || lock.pid <= 0 || lock.pid === process.pid) return false;
-  try {
-    process.kill(lock.pid, 0);
-  } catch (err) {
-    if (err.code !== 'EPERM') return false;
-  }
-  const cmd = processCommand(lock.pid);
-  return cmd === null || cmd.includes('autotrader');
 }
 
 /** One runner per machine: an exclusive lock file holding our pid and start time. */
@@ -306,7 +288,8 @@ async function replayStep(cfg, dataDir, opts, asked) {
   }
 }
 
-async function main(argv) {
+async function main(rawArgv) {
+  const argv = runnerArgv(rawArgv); // only the runner's own flags: a typo never starts the live loop
   if (argv.includes('--status')) {
     // The watchdog: for cron / launchd / a monitor. Exit 1 pages someone.
     const stale = arg(argv, '--stale-minutes') !== undefined ? Number(arg(argv, '--stale-minutes')) : 10;
@@ -327,13 +310,16 @@ async function main(argv) {
   checkStrategies(cfg);
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
+  // The harness tools server the cycles use answers with the registry's tools; else no trading (harness-tools/preflight.js).
+  const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once, killSwitchFile });
+  // A replay step is a pass of the live loop: like it, a failure turns trading off and end of day still runs.
+  if (!opts.dryRun && arg(argv, '--once')) await preflight(resolveClock(process.env, { testClock: false }).replay ? null : arg(argv, '--once'));
   // Codex may write the blackouts directory from its sandbox, but can't create it.
   fs.mkdirSync(path.dirname(loadConfig(process.env).blackoutsFile), { recursive: true });
   workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
 
   const once = arg(argv, '--once');
   if (once) {
-    if (!['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
     // A replay broker's clock: the live loop's pass at that time (its schedule decides what runs), not a manual run.
     if (!opts.dryRun && resolveClock(process.env, { testClock: false }).replay) return replayStep(cfg, dataDir, opts, once);
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
@@ -356,6 +342,7 @@ async function main(argv) {
 
   if (process.env.FTH_REPLAY_NOW) throw new Error('FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock. Replay drives one cycle per process (--once or --dry-run, a fresh run per cycle with the time set by the replay driver).');
   holdLock();
+  await preflight(null); // the live loop: only once it holds the lock (a second start must not switch off the first)
   const log = runnerLog(createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` }));
   // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
   let client;

@@ -10,6 +10,14 @@
       ],
       "cwd": "${extensionPath}",
       "timeout": 60000
+    },
+    "harness": {
+      "command": "node",
+      "args": [
+        "${extensionPath}${/}scripts${/}harness-tools-mcp.js"
+      ],
+      "cwd": "${extensionPath}",
+      "timeout": 60000
     }
   }
 }
