@@ -10,7 +10,11 @@
  *   anything else  a new entry                           -> every check below
  * An entry's tick specs are the broker's, as the contract translator recorded
  * them (broker-specs.js, local state); an entry on a contract with none is
- * refused (contract-specs). Exits and protective orders never need them.
+ * refused (contract-specs). An entry's size must be within the broker
+ * server's maxOrderSize as recorded from get_server_config (max-order-size;
+ * none recorded, refused) and its dollar risk within the named strategy's
+ * risk.max_risk_usd where set (max-risk; order-limits.js). Exits and
+ * protective orders never need specs and are never size- or risk-checked.
  * The MCP server still enforces its own size and loss limits on all of them.
  */
 
@@ -22,7 +26,8 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
-const { brokerSpecs, contractsFileFor, whyNoSpec } = require('./broker-specs');
+const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit } = require('./broker-specs');
+const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -222,7 +227,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
 
   const rationale = String(input.rationale || '');
   // The broker's tick specs: the translator's file of the selected broker under this harness home.
-  const specOf = brokerSpecs(config.contractsFile !== undefined ? config.contractsFile : contractsFileFor(config.home));
+  const contractsFile = config.contractsFile !== undefined ? config.contractsFile : contractsFileFor(config.home);
+  const specOf = brokerSpecs(contractsFile);
   const dayStart = tradingDayStart(now);
   const dayEntries = entriesSince(entries, dayStart);
   const skip = config.skipChecks || new Set();
@@ -270,6 +276,14 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // Hard rule: an entry is checked and sized with the broker's tick specs; none recorded (or unlike the table), no entry.
   const specRoot = contractRoot(input.contractId);
   if (!specOf(specRoot)) violations.push({ check: 'contract-specs', message: `${whyNoSpec(specOf, specRoot)}.` });
+  // Hard rules: the size within the broker server's own max order size (its get_server_config answer, as the
+  // translator recorded it; none recorded, no entry), and the dollar risk within the named strategy's
+  // risk.max_risk_usd where it sets one (for a policy strategy, its own; order-limits.js).
+  const sizeMsg = checkOrderSize(input, brokerOrderLimit(contractsFile));
+  if (sizeMsg) violations.push({ check: 'max-order-size', message: sizeMsg });
+  const stopM = STOP_PRICE.exec(rationale);
+  const riskMsg = checkRiskLimit({ input, stopPrice: stopM ? Number(stopM[1].replace(/,/g, '')) : null, strategy: named, specOf });
+  if (riskMsg) violations.push({ check: 'max-risk', message: riskMsg });
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf }));
   } else {

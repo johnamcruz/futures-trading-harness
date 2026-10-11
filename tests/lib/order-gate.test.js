@@ -801,6 +801,7 @@ const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
 
 test('contract-specs: an entry with no tick specs from the broker is refused (hard, unskippable); exits, protective orders and stop moves never need them', () => {
   const bare = { ...config, home: trendHome(undefined, { specs: false }) };
+  recordBrokerSpecs(bare.home, { roots: [], server: {} }); // the server's limits, no specs
   const r = evaluate(entryOrder(), [plan()], { config: bare });
   assert.deepStrictEqual(checks(r), ['contract-specs']);
   assert.strictEqual(r.violations[0].message, 'no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first (the harness records the broker\'s tick size and value), then try again.');
@@ -820,7 +821,7 @@ test('contract-specs: an entry with no tick specs from the broker is refused (ha
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bare })), ['contract-specs']);
   recordBrokerSpecs(bare.home, { roots: ['MNQ'], specs: { MNQ: { tickSize: -0.25, tickValue: 0.5 } } });
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bare })), ['contract-specs']);
-  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...bare, contractsFile: null } })), ['contract-specs'], 'no broker configured');
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...bare, contractsFile: null } })), ['contract-specs', 'max-order-size'], 'no broker configured');
   // Recorded: allowed.
   recordBrokerSpecs(bare.home, { roots: ['MNQ'] });
   assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: bare }).violations, []);
@@ -873,4 +874,127 @@ test('contract-specs: a prop entry is sized in dollars with the broker\'s tick v
   // The family's other contract without specs: the budget can't be worked out, so the entry is refused, saying which.
   const half = setupHome({ roots: ['MNQ'] });
   assert.match(run('MNQ', 1, half)[0].message, /mini: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);
+});
+
+// --- Size and dollar-risk caps on entries (order-limits.js): the broker's maxOrderSize and the strategy's risk.max_risk_usd. ---
+const limitsHome = (server = { maxOrderSize: 5 }) => {
+  const home = trendHome();
+  recordBrokerSpecs(home, { server });
+  return home;
+};
+// A manual strategy tagged setup:orb (no trigger record needed) with a per-trade cap.
+const capped = (cap, extra = {}) => ({ name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ', 'NQ'], signal: 'manual', compiledRules: null, risk: { stop: 'manual', min_rr: 2, max_risk_usd: cap }, ...extra });
+const ALL_SKIPPED = new Set(['strategy', 'order-consistency', 'plan-required', 'stop-defined', 'setup-tag', 'time-window', 'blackout', 'skills-loaded', 'max-order-size', 'max-risk']);
+const RISK_REDUCING_ORDERS = [
+  { rationale: '[exit] flatten the 27', side: 'sell', type: 'market', size: 27 },
+  { rationale: '[exit] scale out at the target', side: 'sell', type: 'limit', limitPrice: 21540, size: 27 },
+  { rationale: '[protect] stop for the 27-lot long at 21480', side: 'sell', type: 'stop', stopPrice: 21480, size: 27 },
+];
+
+test('max-order-size: an entry over the broker\'s max order size is refused (hard, unskippable); at or under it passes', () => {
+  const cfg = { ...config, home: limitsHome() };
+  assert.deepStrictEqual(evaluate(entryOrder({ size: 5 }), [plan()], { config: cfg }).violations, []);
+  const r = evaluate(entryOrder({ size: 27 }), [plan()], { config: cfg });
+  assert.deepStrictEqual(checks(r), ['max-order-size']);
+  assert.strictEqual(r.violations[0].message, 'size 27 over the broker\'s max order size 5 (get_server_config maxOrderSize): reduce the size to 5 or less. Never split an entry into several orders to get under it.');
+  assert.deepStrictEqual(checks(evaluate(entryOrder({ size: 6 }), [plan()], { config: { ...cfg, skipChecks: ALL_SKIPPED } })), ['max-order-size'], 'no setting turns it off');
+  // A size that is no whole number of contracts.
+  for (const size of [0, 1.5, -2, 'lots', undefined]) {
+    assert.match(evaluate(entryOrder({ size }), [plan()], { config: cfg }).violations.find(v => v.check === 'max-order-size').message, /is not a whole number of contracts/, String(size));
+  }
+});
+
+test('max-order-size: no max order size recorded from the broker (or an invalid one) refuses an entry, saying to call get_server_config', () => {
+  const home = trendHome(undefined, { specs: false });
+  recordBrokerSpecs(home, { server: false }); // specs, no get_server_config answer yet
+  const cfg = { ...config, home };
+  const r = evaluate(entryOrder(), [plan()], { config: cfg });
+  assert.deepStrictEqual(checks(r), ['max-order-size']);
+  assert.strictEqual(r.violations[0].message, 'the broker server\'s max order size is not recorded yet: call get_server_config (the harness records its maxOrderSize), then try again.');
+  recordBrokerSpecs(home, { server: { maxOrderSize: null } });
+  assert.match(evaluate(entryOrder(), [plan()], { config: cfg }).violations[0].message, /last get_server_config answer had no valid maxOrderSize/);
+  recordBrokerSpecs(home, { server: { maxOrderSize: 1 } });
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: cfg }).violations, []);
+  assert.deepStrictEqual(checks(evaluate(entryOrder({ size: 2 }), [plan()], { config: cfg })), ['max-order-size']);
+});
+
+test('max-risk: an entry over its strategy\'s risk.max_risk_usd is refused with the fix (hard, unskippable); within it passes', () => {
+  const cfg = { ...config, home: limitsHome({ maxOrderSize: 50 }), skipChecks: new Set(['strategy']) };
+  const run = (input, cap = 50, c = cfg) => evaluateOrder({ input, entries: [plan(10, { contractId: input.contractId })], now: NOW, config: c, strategies: [capped(cap)] });
+  // MNQ, 40-tick bracket: $20 a contract.
+  assert.deepStrictEqual(run(entryOrder({ size: 2 })).violations, []);
+  const over = run(entryOrder({ size: 3 }));
+  assert.deepStrictEqual(checks(over), ['max-risk']);
+  assert.strictEqual(over.violations[0].message, 'risk $60.00 (size 3 x 40-tick stop x $0.50 a tick on MNQ) over setup:orb\'s risk.max_risk_usd $50.00: reduce the size to 2 or less, or tighten to a stop of at most 33 ticks at size 3 (use order_plan: it gives the strategy\'s own stop, which is never moved just to fit).');
+  assert.deepStrictEqual(checks(run(entryOrder({ size: 3 }), 50, { ...cfg, skipChecks: ALL_SKIPPED })), ['max-risk'], 'no setting turns it off');
+  // NQ: the same 40 ticks are $200 a contract.
+  assert.match(run(entryOrder({ contractId: 'NQ', size: 1 })).violations.find(v => v.check === 'max-risk').message, /^risk \$200\.00 \(size 1 x 40-tick stop x \$5\.00 a tick on NQ\).*no size fits at a 40-tick stop/);
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'NQ', size: 1 }), 200).violations, []);
+  // No cap: no dollar check (the size check still holds).
+  const uncapped = { ...capped(50), risk: { stop: 'manual', min_rr: 2 } };
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ size: 50 }), entries: [plan()], now: NOW, config: cfg, strategies: [uncapped] }).violations, []);
+});
+
+test('max-risk: the stop only in the rationale - measured from a limit entry\'s price; a market entry\'s is not computable (refused)', () => {
+  const cfg = { ...config, home: limitsHome({ maxOrderSize: 50 }), skipChecks: new Set(['strategy']) };
+  const run = (input, cap) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg, strategies: [capped(cap)] }).violations;
+  // Buy limit 21500, stop 21480: 80 ticks = $40 a contract.
+  const limit = entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined, rationale: 'setup:orb long at 21500, stop 21480, target 21540' });
+  assert.deepStrictEqual(run(limit, 40), []);
+  assert.match(run({ ...limit, size: 2 }, 40).find(v => v.check === 'max-risk').message, /^risk \$80\.00 \(size 2 x 80-tick stop/);
+  // The replayed 27-lot: market, no bracket, the stop only in the rationale.
+  const replayed = entryOrder({ size: 27, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480, target 21540' });
+  const v = run(replayed, 50);
+  assert.deepStrictEqual(v.map(x => x.check).sort(), ['max-risk']);
+  assert.match(v[0].message, /^setup:orb caps risk at \$50\.00 \(risk\.max_risk_usd\) but this entry's risk can't be computed: a market entry with its stop only in the rationale .*add stopLossBracket\.ticks/);
+});
+
+test('max-risk: with a cap, unknown tick specs or an unmeasurable stop refuse the entry (fail closed)', () => {
+  const home = trendHome(undefined, { specs: false });
+  recordBrokerSpecs(home, { roots: [], server: {} });
+  const run = (input, h = home) => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home: h, skipChecks: new Set(['strategy']) }, strategies: [capped(50)] }).violations;
+  const noSpecs = run(entryOrder());
+  assert.deepStrictEqual(noSpecs.map(x => x.check).sort(), ['contract-specs', 'max-risk']);
+  assert.match(noSpecs.find(x => x.check === 'max-risk').message, /can't be computed: no usable tick specs from the broker for MNQ/);
+  // A table/broker mismatch is no usable spec either.
+  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 0.05 } } });
+  assert.ok(run(entryOrder()).some(x => x.check === 'max-risk'));
+  const ok = limitsHome({ maxOrderSize: 50 });
+  assert.match(run(entryOrder({ stopLossBracket: { ticks: 2.5, type: 'stop' } }), ok).find(x => x.check === 'max-risk').message, /stopLossBracket\.ticks 2\.5 is not a whole number/);
+  assert.match(run(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb long, no stop yet' }), ok).find(x => x.check === 'max-risk').message, /no stop to measure its risk from/);
+  // A malformed cap (a strategy the registry marks invalid, its check skipped): refused, never read as no cap.
+  const bad = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: ok, skipChecks: new Set(['strategy']) }, strategies: [capped('50', { valid: false })] }).violations;
+  assert.match(bad.find(x => x.check === 'max-risk').message, /risk\.max_risk_usd \("50"\) is not a positive number/);
+});
+
+test('max-order-size and max-risk: exits, protective orders and stop moves are never refused, whatever their size or risk', () => {
+  // A home with a max order size of 1 and a $5 cap, and one with nothing recorded at all.
+  for (const home of [limitsHome({ maxOrderSize: 1 }), trendHome(undefined, { specs: false })]) {
+    for (const o of RISK_REDUCING_ORDERS) {
+      const input = entryOrder({ ...o, stopLossBracket: undefined });
+      const r = evaluateOrder({ input, entries: [], now: NOW, config: { ...config, home }, strategies: [capped(5)] });
+      assert.deepStrictEqual([r.intent, r.violations], ['risk-reducing', []], o.rationale);
+    }
+    assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 21470, reason: '[protect] trail' }, config: { ...config, home } }).violations, []);
+    assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, size: 1, reason: '[protect] cut after a partial exit' }, config: { ...config, home } }).violations, []);
+  }
+});
+
+test('max-risk: a policy strategy\'s entry is checked against its own cap, not its components\' (prop sizing sizes it)', () => {
+  // The mini account at $50,000: budget $400; 19 micros at a 40-tick stop ($20.74 each) fit it.
+  const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const run = policyRisk => {
+    const home = limitsHome({ maxOrderSize: 50 });
+    prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, { strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+    // The component caps a trade at $20; 19 micros risk $380.
+    const component = { ...capped(20), name: 'ema_cross' };
+    return evaluateOrder({ input: entryOrder({ size: 19 }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts: 'micro', ...(policyRisk ? { risk: { stop: 'strategy', min_rr: 2, max_risk_usd: policyRisk } } : {}) }), component], accounts: [acct] }).violations;
+  };
+  assert.deepStrictEqual(run(null), [], 'within the prop budget; the component\'s cap does not apply');
+  assert.deepStrictEqual(run(400), []);
+  const v = run(300);
+  assert.deepStrictEqual(v.map(x => x.check), ['max-risk']);
+  assert.match(v[0].message, /^risk \$380\.00 \(size 19 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:orb's risk\.max_risk_usd \$300\.00: reduce the size to 15 or less/);
 });

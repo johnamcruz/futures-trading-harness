@@ -37,12 +37,24 @@ description: Size futures trades from the stop distance, tick value, and the rem
    shrink the stop to make the size work.
 5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros until the setup has 30+
-   reviewed trades with positive expectancy.
+   reviewed trades with positive expectancy. The order gate enforces two
+   of them on every entry: the size at most `maxOrderSize` (the harness
+   records it from `get_server_config`, and refuses entries until it has),
+   and, when the strategy sets `risk.max_risk_usd`, size × stop ticks ×
+   tickValue at most that cap. It measures the stop from
+   `stopLossBracket.ticks`, or from a limit or stop entry's price to the
+   rationale's stop price (a part tick counts as a whole one); a market
+   entry with its stop only in the rationale can't be measured, so a
+   strategy with a cap is refused unless you send `stopLossBracket.ticks`.
+   Over a cap, reduce the size (never split the entry into several orders,
+   never shrink the stop to fit).
 6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
    policy strategy, the verdict's contract (micro or mini), size, and stop
    ticks were sized from the attempt's budget (`combine_status`); place at
    most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
-   checks the verdict, not these caps. Everything else (stop first, protective
+   checks the verdict, not these caps; it still refuses a size over the
+   broker's `maxOrderSize`, and over the policy strategy's own
+   `risk.max_risk_usd` if it sets one (its components' caps don't apply). Everything else (stop first, protective
    stop always working) still applies.
 7. **Half size** (a `mixed` multi-timeframe read): `floor(size / 2)`; if
    that is 0, skip the trade. Never round a half up.

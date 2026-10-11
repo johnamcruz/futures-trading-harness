@@ -134,6 +134,15 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
     await gw.call('search_contracts', { searchText: 'MNQ' });
     const recorded = JSON.parse(fs.readFileSync(path.join(w.home, 'contracts-mock.json'), 'utf8')).specs.MNQ;
     assert.deepStrictEqual([recorded.tickSize, recorded.tickValue, recorded.id, recorded.name], [0.25, 0.5, MNQ_ID, 'MNQZ6']);
+    // No max order size from the server yet either: refused until get_server_config records it (the exchange's is 5).
+    const noLimit = await attempt(gw, 'place_order', entry);
+    assert.ok(!noLimit.ok && /\[max-order-size\] the broker server's max order size is not recorded yet: call get_server_config/.test(noLimit.error), noLimit.error);
+    await gw.call('get_server_config', {});
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(w.home, 'contracts-mock.json'), 'utf8')).server.maxOrderSize, 5);
+    // Over it: refused by the gate, never sent to the broker.
+    const big = await attempt(gw, 'place_order', { ...entry, size: 6 });
+    assert.ok(!big.ok && /\[max-order-size\] size 6 over the broker's max order size 5 .*reduce the size to 5 or less/.test(big.error), big.error);
+    assert.ok(!exchange.read(w.state).calls.some(c => c.tool === 'place_order'));
     // 1. The entry: allowed, filled at the market, with its bracket stop and target working.
     const placed = await attempt(gw, 'place_order', entry);
     assert.ok(placed.ok, placed.error);

@@ -31,7 +31,9 @@ names them.
 
 ### 1. State first
 
-- `get_server_config`. Trading disabled → plan-only mode.
+- `get_server_config`. Trading disabled → plan-only mode. The harness
+  records its `maxOrderSize`: the gate refuses any entry until it has, and
+  any entry over it (exits and stops are never held back by it).
 - **Know the account before deciding anything**: balance, today's realized
   P&L and room to the daily limits, open positions, working orders, and, if a
   prop attempt is running, its floor, cushion, progress to the target,
