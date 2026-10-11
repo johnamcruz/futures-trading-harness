@@ -167,7 +167,8 @@ function confluence(results, setupName, sign) {
 // trend rule and volume profile, the clock, the account state and sizing, the live builders, and the label
 // dataset's reconstruction. Any edit to one is another observation version.
 const OBSERVATION_SOURCES = ['rl/observation.js', 'rl/live.js', 'rl/label-dataset.js', 'trading/indicators.js', 'trading/mtf.js',
-  'trading/volume-profile.js', 'trading/clock.js', 'trading/combine.js', 'trading/prop-state.js'];
+  'trading/volume-profile.js', 'trading/clock.js', 'trading/combine.js', 'trading/prop-state.js', 'trading/contracts.js',
+  'backtest/engine.js', 'trading/evaluator.js', 'replay/labels.js', 'trading/open-trades.js'];
 
 /**
  * The observation's version for a policy strategy: sha256 of its fields, the

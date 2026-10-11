@@ -186,7 +186,8 @@ test('what live would observe differently is excluded, never built: a screened s
   // A scan a running policy screened (live-runner screen: components rewritten, the policy's own row).
   const screened = SCAN_RESULTS.map(r => (r.name === 'orb' ? { ...r, candidate: false, note: 'traded through pp' } : r));
   assert.deepStrictEqual(build([{ runDir: makeRun({ scanResults: screened }).runDir }]).summary.excluded, { 'scan screened by a running policy (not read yet)': 1 });
-  const policyRow = [...SCAN_RESULTS, { name: 'pp', signal: 'policy', candidate: false }];
+  // The policy's own row as the scans log keeps it (scan-log.js summarizeResult: name, candidate, verdict; no signal).
+  const policyRow = [...SCAN_RESULTS, { name: 'pp', candidate: false, verdict: { action: 'skip', maxSize: 0, contract: 'MNQ', reason: 'r' } }];
   assert.deepStrictEqual(build([{ runDir: makeRun({ scanResults: policyRow }).runDir }], { mode: 'env' }).summary.excluded, { 'scan screened by a running policy (not read yet)': 1 });
   // In a trade: the risk from the working stop (open-trades.js note), no initial stop, or the policy's own trade.
   const tradeWith = over => {
