@@ -709,14 +709,14 @@ test('CLI: the runner never takes the test suite\'s FTH_TEST_NOW, keeps its stat
 
 test('opencode: validated, run headless with JSON events in the workspace it names, the model only when set', () => {
   const oc = validateConfig({ harness: 'opencode' });
-  assert.deepStrictEqual(buildCommand(oc, 'PROMPT', '/fth'), ['opencode', 'run', '--format', 'json', '--dir', '/fth/workspace', 'PROMPT']);
-  const withModel = buildCommand(validateConfig({ harness: 'opencode', model: 'mlx/mlx-community/Qwen3.5-9B-4bit', extraArgs: ['--variant', 'high'] }), 'PROMPT', '/fth');
-  assert.deepStrictEqual(withModel.slice(6), ['--model', 'mlx/mlx-community/Qwen3.5-9B-4bit', '--variant', 'high', 'PROMPT']);
+  assert.deepStrictEqual(buildCommand(oc, 'PROMPT', '/fth'), ['opencode', 'run', '--format', 'json', '--dir', '/fth/workspace', '--agent', 'fth-head-trader', 'PROMPT']);
+  const withModel = buildCommand(validateConfig({ harness: 'opencode', model: 'local/some-model', extraArgs: ['--variant', 'high'] }), 'PROMPT', '/fth');
+  assert.deepStrictEqual(withModel.slice(8), ['--model', 'local/some-model', '--variant', 'high', 'PROMPT']);
   assert.ok(!buildCommand(oc, 'P', '/fth').some(a => /^--(auto|attach)/.test(a)), 'never auto-approve');
   assert.strictEqual(buildCommand(validateConfig({ harness: 'opencode', workdir: '/srv/ws' }), 'P', '/fth')[5], '/srv/ws');
   assert.throws(() => validateConfig({ harness: 'opencode', model: 'qwen3' }), /<provider>\/<model>/);
-  for (const extraArgs of [['--auto'], ['--auto=true'], ['--attach', 'http://localhost:4096']]) {
-    assert.throws(() => validateConfig({ harness: 'opencode', extraArgs }), /not --(auto|attach)/, extraArgs.join(' '));
+  for (const extraArgs of [['--auto'], ['--auto=true'], ['--yolo'], ['--dangerously-skip-permissions'], ['--attach', 'http://localhost:4096'], ['--dir', '/x'], ['--agent', 'build']]) {
+    assert.throws(() => validateConfig({ harness: 'opencode', extraArgs }), /extraArgs: not --/, extraArgs.join(' '));
   }
   // Another harness's flags of the same name are its own business.
   assert.ok(validateConfig({ harness: 'custom', command: ['x', '{prompt}', '--auto'] }));
@@ -751,6 +751,9 @@ test('cycleResult: opencode\'s final text counts; one followed by more work, thi
   assert.strictEqual(cycleResult(JSON.stringify({ type: 'error', timestamp: 1, sessionID: 's', error: { name: 'ProviderError' } })), null);
   // A plain-text run's echoed JSON with type "text" (no opencode envelope) never hides its result line.
   assert.strictEqual(cycleResult(`${JSON.stringify({ type: 'text', text: 'echo' })}\nCYCLE RESULT: managed - trailed the stop`), 'CYCLE RESULT: managed - trailed the stop');
+  // The final step's text parts together: a whitespace part after the line, or one split around reasoning.
+  assert.strictEqual(cycleResult([call, text('CYCLE RESULT: no-trade - quiet'), text('\n\n')].join('\n')), 'CYCLE RESULT: no-trade - quiet');
+  assert.strictEqual(cycleResult([call, text('Done.'), ev('reasoning', { type: 'reasoning', text: 'x' }), text('CYCLE RESULT: planned - orb')].join('\n')), 'CYCLE RESULT: planned - orb');
   // Warning lines between events are skipped.
   assert.strictEqual(cycleResult(`INFO starting\n${call}\n! permission requested: webfetch; auto-rejecting\n${text('Done.\nCYCLE RESULT: blocked - gate refused')}`), 'CYCLE RESULT: blocked - gate refused');
 });

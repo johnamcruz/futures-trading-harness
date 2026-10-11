@@ -246,9 +246,10 @@ function validateConfig(raw) {
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
-    // --auto approves every permission not denied; --attach runs on a server the runner didn't configure.
-    const unsafe = (Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []).map(String).filter(a => /^--(auto|attach)(=|$)/.test(a));
-    if (unsafe.length) errors.push(`extraArgs: not ${unsafe.join(', ')} for opencode (an unattended run gets only what the workspace config and the runner allow)`);
+    // Only a model variant and logging: --auto (and its aliases) approves every permission not denied,
+    // --attach runs on a server the runner didn't configure, --dir or --agent run elsewhere or as another agent.
+    const unsafe = opencode.badExtraArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
+    if (unsafe.length) errors.push(`extraArgs: not ${unsafe.join(', ')} for opencode (only ${Object.keys(opencode.EXTRA_ARGS).join(', ')}: an unattended run gets only what the workspace config and the runner allow)`);
   }
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
@@ -427,8 +428,8 @@ function childEnv(cfg, root, base = process.env) {
   }
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
-    const roles = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..')).map(a => a.name);
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), roles, dir: path.resolve(root, cfg.workdir) });
+    const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir) });
   }
   return env;
 }
@@ -458,7 +459,8 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       // JSON events (cycle-log.js). Headless, anything workspace/opencode.json doesn't allow is refused;
       // the model is the user's opencode default unless the config names one (provider/model).
       // --dir: opencode takes its project directory from PWD, not the working directory the runner sets.
-      return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), ...(model ? ['--model', model] : []), ...extra, prompt];
+      // --agent: the harness's head trader, whose permissions no user config for opencode's own agents changes.
+      return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), '--agent', opencode.HEAD_AGENT, ...(model ? ['--model', model] : []), ...extra, prompt];
     default:
       return cfg.command.map(a => String(a).replace('{prompt}', prompt));
   }
@@ -558,19 +560,21 @@ const TRANSCRIPT_EVENT = /^(?:system|assistant|user|result|(?:item|turn|thread)\
 /**
  * The run's final message: { structured, final }. `structured`: the output is a harness transcript
  * (Claude stream-json, Qwen JSON, Codex --json events, opencode JSON events); `final`: its final message
- * (Claude's and Qwen's { type: 'result', result }, Codex's last agent message, opencode's last text when
- * no step or tool call came after it), or null when it has none (a run cut short).
+ * (Claude's and Qwen's { type: 'result', result }, Codex's last agent message, opencode's text parts after
+ * its last step start or tool call), or null when it has none (a run cut short).
  */
 function finalMessage(output) {
   let final = null;
   let structured = false;
+  let texts = []; // opencode: the text parts since its last step start or tool call
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
       if (isOpencodeEvent(ev)) {
         structured = true;
         // The model's own text (not one opencode added); a later step or tool call means it went on after it.
-        if (ev.type === 'text' && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) final = ev.part.text;
-        else if (ev.type === 'tool_use' || ev.type === 'step_start') final = null;
+        if (ev.type === 'text' && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) texts.push(ev.part.text);
+        else if (ev.type === 'tool_use' || ev.type === 'step_start') texts = [];
+        final = texts.length ? texts.join('\n') : null;
         continue;
       }
       if (!ev || typeof ev !== 'object' || !TRANSCRIPT_EVENT.test(ev.type)) continue;

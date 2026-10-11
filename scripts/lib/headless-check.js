@@ -36,7 +36,6 @@ const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 // Transcript parsing and the bridge wrappers (Qwen's tool_call), shared with the cycle log.
 const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall } = require('./transcript');
 const { denyTools } = require('./opencode');
-const { loadAgents } = require('./harness-sync');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
 const PROBE_TOOLS = ['blackouts_list', 'strategies_list'];
@@ -94,8 +93,8 @@ function readOnlyBroker(harness, argv) {
   return out;
 }
 
-/** opencode's broker narrowed in its per-run config: the tools denied for the session and every role (merged last). */
-const readOnlyOpencode = env => denyTools(env, PROBE_DENIED.map(n => `${BROKER_SERVER}_${n}`), loadAgents(path.resolve(__dirname, '..', '..')).map(a => a.name));
+/** opencode's broker narrowed in its per-run config: the tools denied for the session, the head trader and every role (merged last). */
+const readOnlyOpencode = env => denyTools(env, PROBE_DENIED.map(n => `${BROKER_SERVER}_${n}`));
 
 function probeCommand(harness, root, env = process.env, { bin = null, config = {} } = {}) {
   const cfg = probeConfig(harness, config);

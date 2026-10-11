@@ -72,24 +72,36 @@ headless, anything not allowed is refused): the session denies everything,
 then allows the broker and harness tools (orders through the gateway), skills,
 the harness's roles by name (`task`), reading (never a `.env`), and web
 search; `bash`, `edit` and `webfetch` (which opencode can't limit to the
-calendar sites) are denied by name too. opencode's built-in agents (`general`,
-`explore`, `plan`) are disabled. Each role denies everything, then allows its
-own tools (Claude names translated: `mcp__broker__x` → `broker_x`, `Read` →
-`read` and `list`); a role's shell, edits and web fetch are never granted, so
-only `trade-executor` holds order tools. The roles live in the one file, not
+calendar sites) are denied by name too. opencode evaluates an agent's own
+rules after the top-level ones, so the session runs as the harness's own
+primary agent, `fth-head-trader` (`--agent`, `default_agent`), with the same
+permissions; opencode's agents (`build`, `general`, `explore`, `plan`) are
+disabled, and a user's rules for them never apply. Each role denies
+everything, then names every broker and harness tool (its own allowed, the
+rest denied, so no user rule for the role grants one), then allows its other
+tools (Claude names translated: `mcp__broker__x` → `broker_x`, `Read` →
+`read` and `list`); a role's shell, edits, web fetch and delegation are never
+granted, so only `trade-executor` holds order tools. Language servers,
+formatters and snapshots are off. The roles live in the one file, not
 in `.opencode/agents/`: opencode installs npm packages into every `.opencode/`
 folder it loads (running its `package.json`), so the harness keeps none, and
 the workspace guard fingerprints `.opencode/` whole (absent).
 
-The runner passes per run (`OPENCODE_CONFIG_CONTENT`, merged last) the
-session's permissions again, so a run never depends on finding the project
-file, and the directories outside the project it may read (the harness root,
+The runner passes per run (`OPENCODE_CONFIG_CONTENT`, merged last) every
+permission again (the session's, the head trader's, each role's), so a run is
+locked down without the project file, and the directories outside the project it may read (the harness root,
 the bar directory, the runner's logs, the bars scratch directory), for the
 session and every role. It names the workspace with `--dir` and `PWD`
 (opencode takes its project from `PWD`, not the working directory), turns off
-the update check, sharing, and Claude Code and external skills, and drops
-`OPENCODE_PERMISSION` and `OPENCODE_DISABLE_PROJECT_CONFIG` from the
-environment. `--auto` and `--attach` are refused in `extraArgs`. The model is
+the update check, sharing, Claude Code and external skills, and language
+server downloads, and drops `OPENCODE_PERMISSION`,
+`OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_CONFIG_DIR` from the
+environment. `extraArgs` may only be `--variant`, `--thinking`,
+`--print-logs` and `--log-level` (not `--auto` or its aliases, `--attach`,
+`--dir`, `--agent`, or a session to continue). opencode also loads project
+config (`opencode.json`, `.opencode/`) from the folders above the workspace up
+to the repository's top: keep none in the repository (no autonomous run of
+any harness can write there). The model is
 opencode's default unless the runner config's `model` names one
 (`<provider>/<model>`). opencode's JSON events carry the main session's own
 calls only: a subagent's calls (the trade-executor's orders) are not in the

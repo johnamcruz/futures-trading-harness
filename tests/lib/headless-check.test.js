@@ -258,14 +258,14 @@ test('probe: opencode runs as the runner runs it, with every order tool denied f
   const env = { FTH_HOME: '/srv/fth', PATH: '/bin', PWD: '/somewhere/else' };
   const oc = hc.probeCommand('opencode', ROOT, env);
   assert.deepStrictEqual(oc.argv.slice(0, 5), ['opencode', 'run', '--format', 'json', '--dir']);
-  assert.strictEqual(oc.argv[5], path.join(ROOT, 'workspace'));
+  assert.deepStrictEqual(oc.argv.slice(5, 8), [path.join(ROOT, 'workspace'), '--agent', 'fth-head-trader']);
   assert.strictEqual(oc.argv[oc.argv.length - 1], hc.probePrompt());
   assert.deepStrictEqual([oc.cwd, oc.env.PWD, oc.env.FTH_AUTONOMOUS, oc.env.FTH_PAPER], [path.join(ROOT, 'workspace'), path.join(ROOT, 'workspace'), '1', '1']);
   const run = JSON.parse(oc.env.OPENCODE_CONFIG_CONTENT);
   const { loadAgents } = require('../../scripts/lib/harness-sync');
   for (const o of hc.PROBE_DENIED) {
     assert.strictEqual(run.permission[`broker_${o}`], 'deny', o);
-    for (const a of loadAgents(ROOT)) assert.strictEqual(run.agent[a.name].permission[`broker_${o}`], 'deny', `${a.name}: ${o}`);
+    for (const a of [...loadAgents(ROOT).map(x => x.name), 'fth-head-trader']) assert.strictEqual(run.agent[a].permission[`broker_${o}`], 'deny', `${a}: ${o}`);
   }
   assert.strictEqual(run.permission.broker_get_bars, undefined, 'read tools stay as the workspace config has them');
   assert.ok(hc.HARNESSES.includes('opencode'));
