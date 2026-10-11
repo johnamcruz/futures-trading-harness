@@ -145,10 +145,10 @@ plus at least one tick of slippage, targets at the target price, stops at
 the stop price less slippage (a gap through the stop fills at the bar's
 open), stop first when a bar reaches both, flat at the end of day.
 
-New work: today that logic is inlined in `engine.js`'s bar loop, and it has
-no resting limit or stop entry orders. Replay needs it extracted into a
-simulated-broker module (tested on its own, used by the engine and the
-replay alike), and pending entry orders added. Until then the teacher is
+That logic is the simulated-broker module
+(`scripts/lib/backtest/sim-broker.js`, tested on its own, driven bar by bar
+by the engine and, later, the replay). New work: it has no resting limit or
+stop entry orders yet; replay needs them added. Until then the teacher is
 limited to market entries.
 
 ### Leakage: the model may remember the market

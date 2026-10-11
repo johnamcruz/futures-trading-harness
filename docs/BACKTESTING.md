@@ -78,6 +78,10 @@ bars (`MNQ` on `NQ` data), as the original bot does.
 
 ### Each bar
 
+The fills (entries, stop and target, trail, time stop, P&L) are the simulated
+broker's, `scripts/lib/backtest/sim-broker.js`, one per market; the engine
+(`engine.js`) drives it bar by bar.
+
 | Step | What happens |
 |---|---|
 | Broker | The resting stop and target are checked against the bar. The stop wins if both are touched. A stop fills at its price, or at the open if the bar gapped through it. A target fills at its price, or at a better open. |
