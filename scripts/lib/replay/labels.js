@@ -17,7 +17,8 @@
  * One label per decision time and symbol (one with symbol null when a line
  * names none), in time order:
  *   decision  flat | in-trade (a trade or manage cycle ran for the symbol: the teacher decided),
- *             no-cycle (a trade time with no cycle for it: not a teacher decision),
+ *             no-cycle (a trade time with no cycle for it: not a teacher decision), kill-switch (a trade
+ *             time while the run's kill switch was on: no cycle could run),
  *             housekeeping (premarket, end of day)
  *   teacher   { action: none | long | short (flat), hold | tighten | exit (in a trade), setup,
  *               stop: { ticks, points, atr, multiple (nearest of STOP_ATR_MULTIPLES), ratio },
@@ -33,8 +34,9 @@
  *             primary one (the backtester's pick: the first candidate with a stop distance)
  *
  * Orders: the gate's log holds every place_order and modify_order (hook and gateway) and every
- * cancel_order and partial_close_position (gateway); close_position isn't gated, so an exit by it is
- * seen only in a transcript the cycle log parses (Claude stream-json, Codex --json, Qwen JSON).
+ * cancel_order and partial_close_position (gateway); close_position isn't gated ('ungated'), so an exit
+ * by it is seen only in a transcript the cycle log parses (Claude stream-json, Codex --json, Qwen JSON,
+ * opencode JSON).
  *
  * No lookahead: the stop's ATR uses only bars closed at or before t, the
  * candidates only scans logged at or before t, the position what the cycle's
@@ -71,11 +73,15 @@ const STOP_ATR_MULTIPLES = [0.5, 0.75, 1, 1.5, 2, 3];
 const STOP_ATR_RANGE = [0.375, 4.5];
 const SIZE_STEPS = [0.25, 0.5, 0.75, 1];
 const ATR_PERIOD = 20; // the RL observation's ATR (rl/observation.js atr20)
-const ATR_WINDOW = 100; // closed bars the ATR is computed over: a fixed window, so older bars never change it
 const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)(?:\s+(long|short|buy|sell))?\b/i;
 const SIDE = { long: 'buy', buy: 'buy', short: 'sell', sell: 'sell' };
 const GATE_SLACK_MS = 2000;
+// Order tools neither the hook nor the gateway gates (mcp-gateway.js ORDER_TOOL): risk-reducing, never logged.
+const UNGATED = new Set(['close_position']);
+// A flat label with one of these reasons is no skip (nor a stand-aside, nor a hold in a trade): the teacher
+// touched an order, or what it did is unknown.
+const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out']);
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const round = (x, d = 4) => (x === null ? null : Number(x.toFixed(d)));
@@ -131,7 +137,10 @@ function loadBars(home, symbol, tf) {
   return [...byT.entries()].sort((a, b) => a[0] - b[0]).map(([ms, b]) => ({ ...b, ms }));
 }
 
-/** ATR(20) over the last ATR_WINDOW bars closed at or before t (ms), or null. */
+/**
+ * ATR(20) on the bars closed at or before t (ms), or null: Wilder's, over every such bar, as the student's
+ * observation computes it (rl/observation.js marketFeatures atr20), so a label's multiple is the student's.
+ */
 function atrAt(bars, tfMs, t) {
   let hi = -1;
   for (let lo = 0, top = bars.length - 1; lo <= top;) {
@@ -139,7 +148,7 @@ function atrAt(bars, tfMs, t) {
     if (bars[mid].ms + tfMs <= t) { hi = mid; lo = mid + 1; } else top = mid - 1;
   }
   if (hi + 1 < ATR_PERIOD) return null;
-  const a = ind.atr(bars.slice(Math.max(0, hi + 1 - ATR_WINDOW), hi + 1), ATR_PERIOD);
+  const a = ind.atr(bars.slice(0, hi + 1), ATR_PERIOD);
   const v = a[a.length - 1];
   return Number.isFinite(v) && v > 0 ? v : null;
 }
@@ -245,24 +254,28 @@ function normalizeOrder(tool, args, gate) {
     setup: m ? m[1].toLowerCase() : null, riskReducing: isRiskReducing(rationale), rationale: rationale || null,
     argsKnown: Boolean(args),
     broker: { decision: 'unknown', orderId: null, reason: null },
-    gate: gate ? { decision: gate.decision === 'allowed' ? 'allowed' : 'refused', source: gate.source || null, checks: (gate.violations || []).map(v => v.check) } : { decision: 'not-logged', source: null, checks: [] },
+    gate: gate ? { decision: gate.decision === 'allowed' ? 'allowed' : 'refused', source: gate.source || null, checks: (gate.violations || []).map(v => v.check) }
+      // close_position is never gated (it only reduces risk): no record is expected.
+      : { decision: UNGATED.has(tool) ? 'ungated' : 'not-logged', source: null, checks: [] },
+    orderId: a.orderId !== undefined && a.orderId !== null ? a.orderId : null,
   };
 }
 
 const PAIR_MS = 1000;
-// The checks the gateway's order tracker refuses with after the gate allowed the call (order-tracker.js).
-const TRACKER_CHECKS = new Set(['order-pending', 'account-required']);
+// The order tracker's own refusals after the gate allowed the call (order-tracker.js beforeSend,
+// order-markers.js prepareSend), told from the gate's own order-pending (markers.pendingMessage) by message.
+const TRACKER_REFUSAL = /^(customTag .* is in use by an order of unknown outcome|The gateway could not record the order before sending it|place_order needs an accountId)/;
 /**
  * One place_order can leave two gateway records: allowed by the gate, then blocked when the gateway's
  * order tracker refuses to send it (mcp-gateway.js). Such a pair (same tool, contract and rationale,
- * a block naming only tracker checks within PAIR_MS) is one refused order: the allowed record is dropped.
+ * the block the tracker's own refusal, within PAIR_MS) is one refused order: the allowed record is dropped.
  * Any other block after an allowed record is another call (a retry), kept.
  */
 function collapsePairs(records) {
   const drop = new Set();
   records.forEach((b, i) => {
-    const checks = (Array.isArray(b.violations) ? b.violations : []).map(v => v && v.check);
-    if (b.source !== 'gateway' || b.decision !== 'blocked' || !checks.length || !checks.every(c => TRACKER_CHECKS.has(c))) return;
+    const vs = Array.isArray(b.violations) ? b.violations.filter(isObj) : [];
+    if (b.source !== 'gateway' || b.decision !== 'blocked' || vs.length !== 1 || !TRACKER_REFUSAL.test(String(vs[0].message || ''))) return;
     for (let j = i - 1; j >= 0; j -= 1) {
       const a = records[j];
       if (drop.has(a) || a.source !== 'gateway' || a.decision !== 'allowed') continue;
@@ -360,6 +373,12 @@ function teacherAction(orders, inTrade) {
     || (o.tool === 'place_order' && /^\s*\[protect\]/i.test(o.rationale || '')));
   if (tightens.length) {
     if (tightens.some(o => !o.argsKnown)) reasons.push('order arguments unknown');
+    // Never widen a stop (rules/trading/risk-management.md): against the working stop the teacher saw.
+    for (const o of tightens.filter(x => x.tool === 'modify_order' && x.argsKnown)) {
+      const next = o.stopPrice ?? o.trailPrice;
+      if (!inTrade.side || !Number.isFinite(inTrade.stop) || next === null) reasons.push('stop change unknown');
+      else if ((inTrade.side === 'long' ? 1 : -1) * (next - inTrade.stop) < 0) reasons.push('stop widened');
+    }
     return { action: 'tighten', order: tightens[0], reasons };
   }
   if (orders.some(o => o.tool === 'modify_order')) reasons.push('target change');
@@ -477,10 +496,20 @@ function brokerOrders(file, familyOfBrokerId = () => null) {
 }
 
 /**
+ * @param opts.barsSource { SYMBOL: sha256 } of the --bars files, for provenance (else 'run home')
  * @param opts.unfinished label a run that isn't finished (writeLabels allows it only into a folder outside the run home)
  */
-function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false } = {}) {
-  const dir = path.resolve(runDir);
+/** A run dir as stored (symlinks resolved), so its run home is the real one two levels up. */
+function realDir(runDir) {
+  try {
+    return fs.realpathSync.native(path.resolve(runDir));
+  } catch (_err) {
+    return path.resolve(runDir);
+  }
+}
+
+function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false, barsSource = null } = {}) {
+  const dir = realDir(runDir);
   const { manifest, days } = readRun(dir);
   // Labels hold what came after each decision (outcomes, counterfactuals). A run that will go on would let
   // its teacher read them on resume (the run home is its harness home): only a finished run is labelled in place.
@@ -568,13 +597,18 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const signal = { close: scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : null, fired };
       const draft = { rec, t, symbol, fam, barT, candidates, refPrice, signal, cyc, ctx: cyc && cyc.ctx };
       if (!isTradeTime) draft.decision = 'housekeeping';
-      else if (!cyc) draft.decision = 'no-cycle';
+      // The run's kill switch was on (the runner starts no trade cycle): its own kind, no teacher decision.
+      else if (!cyc) draft.decision = rec.killSwitch ? 'kill-switch' : 'no-cycle';
       else {
+        // An order naming no contract (modify, cancel): its order id's contract (the broker's journal), else
+        // the line's only symbol; with several symbols and no id to resolve, every label of the cycle says so.
+        const familyOf = o => familyOfId(o.contractId) || (o.orderId !== null ? (journal.find(e => e.orderId !== null && String(e.orderId) === String(o.orderId) && e.ms <= t) || {}).family || null : null);
         const mine = cyc.orders.filter(o => {
-          const of = familyOfId(o.contractId);
+          const of = familyOf(o);
           if (of) return of === fam;
-          return famsInLine.length === 1; // no contract named (modify, cancel): the cycle's only symbol
+          return famsInLine.length === 1;
         });
+        const unresolved = famsInLine.length > 1 && cyc.orders.some(o => !familyOf(o));
         const pos = positionAt(fam, cyc.ctx, fills, t);
         draft.position = pos;
         draft.decision = pos.side ? 'in-trade' : 'flat';
@@ -593,8 +627,11 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
             o.broker = { decision: 'refused', orderId: null, reason: 'the call returned an error' };
           }
         }
-        draft.act = teacherAction(mine, Boolean(pos.side));
+        // In a trade: its side and the working stop the cycle's context showed (open-trades.js), for a modify.
+        const open = pos.side ? objs(cyc.ctx && cyc.ctx.openTrades).find(x => familyOfId(x.contractId) === fam) : null;
+        draft.act = teacherAction(mine, pos.side ? { side: pos.side, stop: open && Number.isFinite(open.stop) ? open.stop : null } : false);
         if (cyc.unknown) draft.act.reasons.push('no cycle log');
+        if (unresolved) draft.act.reasons.push('unattributed order');
         // A failed or timed-out cycle's silence is no decision: never a skip, never cloned.
         if (cyc.failed) draft.act.reasons.push(cyc.failed);
       }
@@ -678,7 +715,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       if (o) {
         const by = refusedBy(o);
         // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
-        gate = { decision: by ? 'refused' : o.gate.decision === 'not-logged' ? 'not-logged' : 'allowed', by, checks: o.gate.checks, ...(by === 'broker' ? { brokerReason: o.broker.reason } : {}) };
+        gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' ? { brokerReason: o.broker.reason } : {}) };
         if (gate.decision === 'not-logged') reasons.push('no gate record');
       }
       reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
@@ -693,7 +730,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
           : { filled: false, result: gate.decision === 'refused' ? 'refused' : 'not logged' };
       }
       // A skip: flat, nothing sent, no working order touched (a cancel or a modify is a decision of its own).
-      const skip = d.decision === 'flat' && d.act.action === 'none' && !d.act.reasons.some(r => r === 'order cancel' || r === 'working-order change');
+      const skip = d.decision === 'flat' && d.act.action === 'none' && !d.act.reasons.some(r => NOT_A_SKIP.has(r));
       counterfactualFor = isEntry ? ({ allowed: 'taken', refused: 'refused intent' }[gate.decision] || null) : skip ? 'skip' : null;
       if (isEntry && gate.decision === 'allowed') {
         counterfactuals = [fromFills(outcome, { stopPoints: stop && stop.points, targetTicks: o.targetTicks, spec: ospec, bars: futureBars(d.symbol), tfMs, strategy: o.setup, direction: d.act.action })];
@@ -708,6 +745,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       d.position = positionAt(d.fam, null, fills, d.t);
       if (d.candidates.length && d.barT && !d.position.side) counterfactuals = simulated(d, spec);
     }
+    else if (d.decision === 'kill-switch') reasons.push('kill switch on');
     else reasons.push('not a trade decision');
     if (rec.interrupted) reasons.push('interrupted');
     const cyc = d.cyc && d.cyc.c;
@@ -721,7 +759,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       counterfactual: counterfactuals.length ? pickCounterfactual(d, counterfactuals) : null, counterfactuals, counterfactualFor: counterfactuals.length ? counterfactualFor : null,
       clone: { ok: Boolean(teacher) && reasons.length === 0, reasons: [...new Set(reasons)] },
       result: d.cyc ? d.cyc.result : ((rec.ran || [])[0] || {}).result || null,
-      provenance: { harness: manifest.harness || null, model: manifest.model || null, configHash: manifest.hash || null, strategiesHash, promptHash, cycleFile: cyc ? relCycle(home, cyc.file) : null },
+      provenance: { harness: manifest.harness || null, model: manifest.model || null, configHash: manifest.hash || null, strategiesHash, bars: barsSource || 'run home', promptHash, cycleFile: cyc ? relCycle(home, cyc.file) : null },
     });
   }
   const summary = summarize(labels, {
@@ -741,7 +779,7 @@ function summarize(labels, extra) {
   const taken = l => entry(l) && l.gate.decision === 'allowed';
   const decisions = n(decision);
   const cloneable = n(l => decision(l) && l.clone.ok);
-  const touched = l => l.clone.reasons.includes('order cancel') || l.clone.reasons.includes('working-order change');
+  const touched = l => l.clone.reasons.some(r => NOT_A_SKIP.has(r));
   const skipped = l => l.decision === 'flat' && !l.cycleFailed && !touched(l) && l.teacher.action === 'none' && l.candidates.length > 0;
   const cf = (f, result) => n(l => f(l) && l.counterfactual && l.counterfactual.result === result);
   const noCycleCands = l => l.decision === 'no-cycle' && l.candidates.length > 0;
@@ -752,7 +790,7 @@ function summarize(labels, extra) {
     entries: n(entry), taken: n(taken), refused: n(l => decision(l) && l.gate.decision === 'refused'),
     skipped: n(skipped),
     standAside: n(l => l.decision === 'flat' && !l.cycleFailed && !touched(l) && l.teacher.action === 'none' && !l.candidates.length),
-    holds: n(l => decision(l) && l.teacher.action === 'hold'), tightens: n(l => decision(l) && l.teacher.action === 'tighten'), exits: n(l => decision(l) && l.teacher.action === 'exit'),
+    holds: n(l => decision(l) && !touched(l) && l.teacher.action === 'hold'), tightens: n(l => decision(l) && l.teacher.action === 'tighten'), exits: n(l => decision(l) && l.teacher.action === 'exit'),
     wins: n(l => taken(l) && l.outcome && l.outcome.result === 'win'), losses: n(l => taken(l) && l.outcome && l.outcome.result === 'loss'),
     scratches: n(l => taken(l) && l.outcome && l.outcome.result === 'scratch'), unfilled: n(l => taken(l) && l.outcome && l.outcome.result === 'unfilled'),
     open: n(l => taken(l) && l.outcome && l.outcome.result === 'open'),
@@ -761,7 +799,7 @@ function summarize(labels, extra) {
     unfinished: extra.unfinished,
     unsized: n(l => entry(l) && l.teacher.size && l.teacher.size.step === null),
     noCycle: n(l => l.decision === 'no-cycle'), noCycleWithCandidates: n(l => l.decision === 'no-cycle' && l.candidates.length > 0),
-    housekeeping: n(l => l.decision === 'housekeeping'), interrupted: n(l => l.interrupted),
+    housekeeping: n(l => l.decision === 'housekeeping'), killSwitch: n(l => l.decision === 'kill-switch'), interrupted: n(l => l.interrupted),
     // Counterfactuals (by each label's primary candidate): a skilful skip avoided a loser, an overly cautious one missed a winner.
     takenWon: cf(taken, 'win'), takenLost: cf(taken, 'loss'),
     skippedWouldWin: cf(skipped, 'win'), skippedWouldLose: cf(skipped, 'loss'), skippedNoTrade: cf(skipped, 'no-trade'),
@@ -814,7 +852,7 @@ function outcomeBarsFrom(file, tf) {
  *   outside the run home (its teacher, on resume, must not read what came after its decisions)
  */
 function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], barsFiles = {}, outDir = null } = {}) {
-  const dir = path.resolve(runDir);
+  const dir = realDir(runDir);
   const out = outDir ? path.resolve(expandHome(outDir)) : dir;
   const home = path.resolve(dir, '..', '..');
   if (root && (inside(dir, root) || inside(out, root))) throw new Error(`${inside(out, root) ? out : dir} is inside the repository (${root}): labels are written to the run's own folder or --out, never the repository`);
@@ -822,7 +860,9 @@ function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], b
   const tf = Number((readJson(path.join(dir, 'autotrader.json'), {}) || {}).timeframe) || null;
   if (Object.keys(barsFiles).length && !tf) throw new Error(`${dir}: no runner timeframe (autotrader.json) to read the bars at`);
   const outcomeBars = Object.fromEntries(Object.entries(barsFiles).map(([sym, f]) => [sym, outcomeBarsFrom(f, tf)]));
-  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, outcomeBars: Object.keys(outcomeBars).length ? outcomeBars : null, unfinished: Boolean(outDir) });
+  // Which data the labels read (--bars): each file's sha256, for the labels' provenance.
+  const barsSource = Object.keys(barsFiles).length ? Object.fromEntries(Object.entries(barsFiles).sort().map(([sym, f]) => [sym, crypto.createHash('sha256').update(fs.readFileSync(path.resolve(expandHome(f)))).digest('hex')])) : null;
+  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, outcomeBars: Object.keys(outcomeBars).length ? outcomeBars : null, unfinished: Boolean(outDir), barsSource });
   fs.mkdirSync(out, { recursive: true });
   const file = path.join(out, 'labels.jsonl');
   const tmp = `${file}.${process.pid}.tmp`;
@@ -836,4 +876,4 @@ const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'skipped', 'refused', 'win
   'takenWon', 'takenLost', 'skippedWouldWin', 'skippedWouldLose', 'refusedWouldWin', 'refusedWouldLose', 'noCycleWouldWin', 'noCycleWouldLose', 'unsimulated', 'brokerRefused', 'priorRefusals', 'cycleFailed'];
 const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : s[k]}`).join(', ')}\n${Object.keys(s.uncloneableBy).length ? `uncloneable by reason: ${Object.entries(s.uncloneableBy).map(([k, v]) => `${k} ${v}`).join(', ')}\n` : ''}`;
 
-module.exports = { VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, ATR_WINDOW, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec };
+module.exports = { VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec };

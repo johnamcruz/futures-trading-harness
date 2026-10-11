@@ -112,7 +112,11 @@ broker.
    `--bars MNQ=<file>`, else the run home's bars). Label a run only once
    it is finished: the labels hold what came after each decision, and the
    command refuses an unfinished run unless `--out` names a folder outside
-   its run home. A refused try followed by one that went through is one
+   its run home. A run counts as finished once the driver ran every
+   decision time of its window (`finished` in its manifest); a run made
+   before the driver recorded that has no flag and can only be labelled
+   with `--out` (resuming it is refused once skills changed: they are in
+   its config hash). A refused try followed by one that went through is one
    decision (the refused tries counted); an intent the gate or the broker
    refused gets its candidates' counterfactual too. Decisions the student can't express (limit or
    stop entries, a target other than the strategy's own exit as

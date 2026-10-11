@@ -331,16 +331,20 @@ fills). One label per decision time and symbol:
   symbol: the teacher decided; the position is what the cycle's context
   showed, else the fills through t), `no-cycle` (a trade time with no cycle
   for it: counted, not a teacher decision), `housekeeping` (premarket, end
-  of day). Interrupted lines are labelled and flagged; torn lines counted. A
-  failed or timed-out cycle is flagged (`cycleFailed`), never cloned and
+  of day), `kill-switch` (a trade time while the run's kill switch was on).
+  Interrupted lines are labelled and flagged; torn lines counted. A failed
+  or timed-out cycle, or one with no cycle log line, is never cloned and
   never a skip.
 - `candidates`: what the scan fired on the decision's bar, with direction
   (only scans logged by t).
 - `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
-  and no entry is a skip), `hold` / `tighten` / `exit` in a trade; the
+  and no entry is a skip), `hold` / `tighten` / `exit` in a trade (a
+  modify that widens the working stop the context showed is flagged, one
+  against an unknown stop too); the
   setup tag; the stop in ticks, points, and the nearest of 0.5, 0.75, 1,
-  1.5, 2, 3 x ATR(20) on bars closed by t (null and counted when the run
-  home has too few, or when the stop is under 0.375 or over 4.5 ATR: out
+  1.5, 2, 3 x ATR(20) on bars closed by t, the student's own ATR
+  (`rl/observation.js` atr20: Wilder over the whole series; null and
+  counted when there are too few, or when the stop is under 0.375 or over 4.5 ATR: out
   of range, never snapped to an end bucket), from the order alone (never its fill); the size as a
   step (0.25, 0.5, 0.75, 1) of the budget given with `--budget` (a prop
   attempt's budget needs its whole state at t, which the run doesn't
@@ -354,8 +358,14 @@ fills). One label per decision time and symbol:
   in the cycle's window (place, modify, cancel, partial close) joined to
   the transcript's calls for their arguments; an order the gate allowed and
   the gateway's order tracker then refused is one refused order;
-  `close_position` isn't gated, so an exit by it is seen only in a parsed
-  transcript. Gate records outside every cycle are counted.
+  `close_position` isn't gated (`ungated`), so an exit by it is seen only in
+  a parsed transcript. A modify or cancel naming no contract goes to its
+  order id's contract (the broker's journal), else, with several symbols,
+  every label of the cycle is flagged. Gate records outside every cycle are
+  counted. The strategies are the caller's (the repository's and its
+  `FTH_STRATEGIES_DIRS`): run it with the run's settings (the hash is in the
+  provenance). A fill that reverses a position through flat is read as its
+  close only (round trips don't split it).
 - `gate`: allowed, refused (with checks, and `by`: the gate, or the broker
   with its reason: the replay broker's journal, matched by rationale,
   contract and replayed time, or a call that came back an error with no
@@ -376,11 +386,11 @@ fills). One label per decision time and symbol:
   and max bars at the close; flat at the end-of-day bar's close), on the
   run's bars or the data the run replayed (`--bars`). It is its own walk,
   not a backtest run (no gate, no other positions). For a taken entry the
-  same fields come from its fills (MAE/MFE from bars opening at or after
-  the bars wholly inside the trade and its exit price when the broker sends
-  none). A no-cycle bar while a position is open (by the fills) gets none. The one standing for the label is a
-  taken trade's own, a refused intent's own setup and side, else the first
-  candidate with a stop distance. So a skilful skip (a loser
+  same fields come from its fills (MAE/MFE, when the broker sends none,
+  from the bars wholly inside the trade and its exit price). A no-cycle bar
+  while a position is open (by the fills) gets none. The one standing for
+  the label is a taken trade's own, a refused intent's own setup and side,
+  else the first candidate with a stop distance. So a skilful skip (a loser
   avoided) can be told from a cautious one (a winner missed). What can't be
   simulated is marked and counted.
 - `clone`: whether the student can express it (limit or stop entries, a

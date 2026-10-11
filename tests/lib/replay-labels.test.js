@@ -58,11 +58,14 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
       const transcript = c.transcript !== undefined ? c.transcript : (c.orders || []).map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${i}-${j}`, name: `mcp__broker__${o.tool}`, input: o.input }] } })).join('\n');
       const result = c.result || 'CYCLE RESULT: done';
       const account = c.noAccount ? null : { id: 7, balance: 50000, positions: c.positions || [], attempts: c.attempts || [] };
-      if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account }, transcript }));
+      // The open trades the runner read (open-trades.js): each position's working stop, 10 points away unless given.
+      const openTrades = (c.positions || []).map(p => ({ contractId: p.contractId, side: p.side, stop: 'stop' in c ? c.stop : p.averagePrice - (p.side === 'long' ? 10 : -10) }));
+      if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account, openTrades }, transcript }));
       rec.ran.push({ action: 'trade', ok: c.ok !== false && c.ranOk !== false, timedOut: Boolean(c.timedOut), result, symbols });
       if (!c.noLog) rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
       for (const [j, o] of (c.orders || []).entries()) {
-        if (o.gate === 'none') continue;
+        // close_position is never gated: no record, as live.
+        if (o.gate === 'none' || (o.tool === 'close_position' && !o.gate)) continue;
         for (const g of [].concat(o.gate || { source: 'gateway', decision: 'allowed', violations: [] })) {
           gate.push({ ts: iso(wall + (o.atMs ?? 1000 + j * 100)), tool: g.source === 'hook' ? undefined : o.tool, ...g, contractId: o.input.contractId, rationale: o.input.rationale });
         }
@@ -134,7 +137,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
   assert.deepStrictEqual(L[0].clone, { ok: true, reasons: [] });
   assert.strictEqual(L[0].result, 'CYCLE RESULT: long MNQ');
   const { strategiesHash, ...prov } = L[0].provenance;
-  assert.deepStrictEqual(prov, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
+  assert.deepStrictEqual(prov, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), bars: 'run home', promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
   assert.match(strategiesHash, /^[0-9a-f]{64}$/);
   assert.notStrictEqual(labelRun(runDir, { budgetUsd: 40, strategies: [{ ...STRATEGIES[0], risk: { min_rr: 3 } }] }).labels[0].provenance.strategiesHash, strategiesHash, 'another exit, another hash');
   assert.strictEqual(L[0].teacher.orders[0].args, undefined);
@@ -143,7 +146,8 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
   // Managed: tighten, hold, exit, each in the open trade (its outcome attached).
   assert.deepStrictEqual([L[1].decision, L[1].teacher.action, L[1].gate.decision, L[1].clone.ok], ['in-trade', 'tighten', 'allowed', true]);
   assert.deepStrictEqual([L[2].decision, L[2].teacher.action, L[2].gate.decision], ['in-trade', 'hold', 'none']);
-  assert.deepStrictEqual([L[3].decision, L[3].teacher.action, L[3].clone.ok], ['in-trade', 'exit', true]);
+  // The close has no gate record (close_position is never gated): ungated, and cloneable.
+  assert.deepStrictEqual([L[3].decision, L[3].teacher.action, L[3].gate.decision, L[3].clone.ok], ['in-trade', 'exit', 'ungated', true]);
   assert.strictEqual(L[3].outcome.result, 'win');
   assert.deepStrictEqual(L[1].position, { side: 'long', size: 1, source: 'context' });
 
@@ -381,7 +385,10 @@ test('labels: teacher actions', () => {
 
 // Review findings: each test fails without the code it names.
 
-const BLOCK = check => ({ source: 'gateway', decision: 'blocked', violations: [{ check, message: check }] });
+const BLOCK = (check, message = check) => ({ source: 'gateway', decision: 'blocked', violations: [{ check, message }] });
+// The gateway's order tracker refusing a call the gate allowed (order-markers.js prepareSend), and the gate's own order-pending.
+const TRACKER = BLOCK('order-pending', 'customTag "fth-1" is in use by an order of unknown outcome on this account. Send the entry with another customTag (or none).');
+const GATE_PENDING = BLOCK('order-pending', 'The outcome of an order is unknown: buy 1 MNQ sent 1 s ago (customTag fth-1). The broker may hold a position...');
 const order = (rationale, x = {}) => ({ tool: 'place_order', input: { ...LONG.input, rationale, ...x } });
 
 test('labels: refused tries, then a retry that fills - the retry is the action, not "several entries"', () => {
@@ -443,7 +450,7 @@ test('labels: a skip\'s counterfactual is the backtester\'s pick - the first can
 
 test('labels: an order the gate allowed and the gateway then refused (its order tracker) is one refused order', () => {
   const o = order('setup:orb long, stop 19990');
-  const run = makeRun({ steps: [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [{ ...o, gate: [{ source: 'gateway', decision: 'allowed', violations: [] }, BLOCK('order-pending')] }] } }] });
+  const run = makeRun({ steps: [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [{ ...o, gate: [{ source: 'gateway', decision: 'allowed', violations: [] }, TRACKER] }] } }] });
   const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
   assert.strictEqual(labels[0].teacher.orders.length, 1);
   assert.deepStrictEqual([labels[0].gate.decision, labels[0].gate.checks, labels[0].outcome.result, summary.taken], ['refused', ['order-pending'], 'refused', 0]);
@@ -577,10 +584,11 @@ test('labels: a trade cycle with no cycle log line is a decision whose orders ar
   assert.deepStrictEqual([L.decision, L.clone.reasons], ['flat', ['no cycle log']]);
 });
 
-test('labels: ATR over a fixed window of closed bars (a bar 100+ bars back no longer counts)', () => {
-  const list = bars(160).map((b, i) => (i === 5 ? { ...b, h: 120000, l: 1 } : b)).map(b => ({ ...b, ms: Date.parse(b.t) }));
-  assert.strictEqual(atrAt(list, 180000, Date.parse(list[150].t)), 10);
-  assert.ok(atrAt(list, 180000, Date.parse(list[60].t)) > 10, 'inside the window it does');
+test('labels: the stop\'s ATR is the student\'s (rl/observation.js atr20 over the whole series), bar for bar', () => {
+  const { marketFeatures } = require('../../scripts/lib/rl/observation');
+  const list = bars(160).map((b, i) => ({ ...b, h: b.h + (i % 7), l: b.l - (i % 5), c: b.c + (i % 3) })).map(b => ({ ...b, ms: Date.parse(b.t) }));
+  const atr20 = marketFeatures(list).atr20;
+  for (const i of [19, 60, 120, 159]) assert.ok(Math.abs(atrAt(list, 180000, list[i].ms + 180000) - atr20[i]) < 1e-9, `bar ${i}`);
 });
 
 test('labels: a stop for a limit or stop entry is measured from its own price; on the wrong side it is no stop', () => {
@@ -641,8 +649,11 @@ test('labels: an allowed order then a gate-check block of the same call is two o
   const retry = labelsOf([allowed, BLOCK('max-position')]);
   assert.deepStrictEqual([retry.teacher.orders.map(x => x.gate.decision), retry.gate.decision, retry.teacher.priorRefusals], [['allowed', 'refused'], 'allowed', 1]);
   // A tracker block more than a second later is another call too.
-  const late = labelRun(makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...o, gate: allowed, atMs: 1000 }, { ...o, gate: BLOCK('order-pending'), atMs: 2500 }] } }] }).runDir, { budgetUsd: 40 }).labels[0];
+  const late = labelRun(makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...o, gate: allowed, atMs: 1000 }, { ...o, gate: TRACKER, atMs: 2500 }] } }] }).runDir, { budgetUsd: 40 }).labels[0];
   assert.deepStrictEqual(late.teacher.orders.map(x => x.gate.decision), ['allowed', 'refused']);
+  // The gate's own order-pending (a second identical call while the first is in flight) is another call: the first stands.
+  const parallel = labelsOf([allowed, GATE_PENDING]);
+  assert.deepStrictEqual([parallel.teacher.orders.map(x => x.gate.decision), parallel.gate.decision], [['allowed', 'refused'], 'allowed']);
 });
 
 test('labels: --bars data gives the stop its ATR when the run home has too few bars', () => {
@@ -655,6 +666,8 @@ test('labels: --bars data gives the stop its ATR when the run home has too few b
 test('labels: the folder guards - a child named "..x" is inside; letter case and symlinks reach the same folder', () => {
   const run = makeRun({ manifest: { daysDone: [] }, steps: [{ k: 0, cycle: {} }] });
   assert.throws(() => writeLabels(run.runDir, { outDir: path.join(run.home, '..x') }), /inside the run home/);
+  // Its parent is not inside it.
+  assert.ok(writeLabels(run.runDir, { outDir: path.dirname(run.home) }).file.startsWith(path.dirname(run.home)));
   // The repository guard: a run dir under the repository in a folder named "..x".
   const repo = tmpDir();
   const inner = path.join(repo, '..x', 'replays', RUN);
@@ -752,4 +765,69 @@ test('labels: a call that came back an error (no broker record) never became an 
   ].join('\n');
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
   assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'broker', 'the call returned an error']);
+});
+
+// Review round 3 findings.
+
+test('labels: with several symbols, a modify naming no contract is resolved by its order id; else every label of the cycle says so', () => {
+  const modify = id => ({ tool: 'modify_order', input: { accountId: 7, orderId: id, stopPrice: 20000 } });
+  const resolved = makeRun({ symbols: ['MES', 'MNQ'], steps: [
+    { k: 0, cycle: { orders: [order('setup:orb long, stop 19990')] }, journal: [{ kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 19990', data: { request: {}, result: { orderId: 2, success: true } } }] },
+    { k: 1, cycle: { positions: LONG_POS, orders: [modify(2)] } },
+  ] });
+  const r = labelRun(resolved.runDir).labels.filter(l => l.t === iso(at(1)));
+  assert.deepStrictEqual(r.map(l => [l.symbol, l.teacher.action, l.clone.reasons]), [['MES', 'none', []], ['MNQ', 'tighten', []]]);
+  const unknown = makeRun({ symbols: ['MES', 'MNQ'], steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { orders: [modify(9)] } }] });
+  const { labels, summary } = labelRun(unknown.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual(labels.map(l => [l.symbol, l.clone.reasons, l.counterfactual]), [['MES', ['unattributed order'], null], ['MNQ', ['unattributed order'], null]]);
+  assert.deepStrictEqual([summary.skipped, summary.standAside, summary.holds], [0, 0, 0]);
+  // In a trade too: never counted as a hold.
+  const inTrade = labelRun(makeRun({ symbols: ['MES', 'MNQ'], steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [modify(9)] } }] }).runDir);
+  assert.deepStrictEqual([inTrade.labels[1].teacher.action, inTrade.labels[1].clone.reasons, inTrade.summary.holds], ['hold', ['unattributed order'], 0]);
+});
+
+test('labels: a symlinked run dir reads (and guards) its real run home', () => {
+  const run = makeRun({ manifest: { daysDone: [] }, steps: [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [LONG] } }] });
+  const link = path.join(tmpDir(), 'run-link');
+  fs.symlinkSync(run.runDir, link);
+  const { labels } = labelRun(link, { budgetUsd: 40, unfinished: true });
+  assert.deepStrictEqual([labels[0].teacher.action, labels[0].gate.decision, labels[0].candidates.length], ['long', 'allowed', 1]);
+  assert.throws(() => writeLabels(link, { outDir: path.join(run.home, 'out') }), /inside the run home/);
+});
+
+test('labels: a trade time while the kill switch was on is its own kind', () => {
+  const run = makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }] }] });
+  const dayFile = path.join(run.runDir, `${DAY}.jsonl`);
+  fs.writeFileSync(dayFile, `${JSON.stringify({ ...JSON.parse(fs.readFileSync(dayFile, 'utf8')), killSwitch: 'on' })}\n`);
+  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual([labels[0].decision, labels[0].clone.reasons, labels[0].counterfactual, summary.killSwitch, summary.noCycle], ['kill-switch', ['kill switch on'], null, 1, 0]);
+});
+
+test('labels: --bars files are named in the provenance by their hash', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: {} }] });
+  const file = path.join(path.dirname(run.home), 'MNQ-3m.json');
+  fs.writeFileSync(file, JSON.stringify(bars()));
+  writeLabels(run.runDir, { barsFiles: { MNQ: file } });
+  const L = JSON.parse(fs.readFileSync(path.join(run.runDir, 'labels.jsonl'), 'utf8').trim());
+  assert.deepStrictEqual(L.provenance.bars, { MNQ: require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') });
+});
+
+test('labels: a trade cycle with no cycle log line is no skip', () => {
+  const { labels, summary } = labelRun(makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { noLog: true } }] }).runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual([labels[0].counterfactual, summary.skipped, summary.skippedWouldWin], [null, 0, 0]);
+});
+
+test('labels: a modify that widens the stop is flagged, never cloned; one against an unknown stop is unknown', () => {
+  const modify = stopPrice => ({ tool: 'modify_order', input: { accountId: 7, orderId: 2, stopPrice } });
+  const run = makeRun({ steps: [
+    // The long's working stop is 19990 (open-trades): 19980 widens it, 19995 tightens it.
+    { k: 0, cycle: { positions: LONG_POS, orders: [modify(19980)] } },
+    { k: 1, cycle: { positions: LONG_POS, orders: [modify(19995)] } },
+    { k: 2, cycle: { positions: SHORT_POS, orders: [modify(20015)] } },
+    { k: 3, cycle: { positions: SHORT_POS, stop: null, orders: [modify(20005)] } },
+  ] });
+  const L = labelRun(run.runDir).labels;
+  assert.deepStrictEqual(L.map(l => [l.teacher.action, l.clone.reasons]), [
+    ['tighten', ['stop widened']], ['tighten', []], ['tighten', ['stop widened']], ['tighten', ['stop change unknown']],
+  ]);
 });

@@ -243,6 +243,12 @@ test('driver: one step per decision time at its time, a line each, end of day re
   assert.deepStrictEqual(lines.map(l => l.since.slice(11, 19)), ['19:40:00', '19:42:02', '19:45:02', '19:48:02', '19:50:00']);
   assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.daysDone, ['2026-10-07']);
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
+  // A run left with nothing to do (all ran, its flag lost): marked finished on that pass too.
+  const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));
+  delete m.finished;
+  fs.writeFileSync(w.run.paths.manifest, JSON.stringify(m));
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).done, true);
+  assert.strictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).finished, true);
 });
 
 test('driver: a time whose step started but whose line was never written is recorded as interrupted, never run twice', async () => {
