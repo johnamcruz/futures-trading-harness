@@ -31,15 +31,27 @@ test('process: the hard rule is where every coding agent reads it, and the PR te
   assert.match(rule, /\*\*Adversarial review\.\*\* A reviewer other than the author/);
   assert.match(rule, /Never open a pull request with a failing regression or an unaddressed\s+confirmed finding/);
   // Documents only get a soundness review; anything agents act on keeps the full round.
-  assert.match(rule, /A change to documents only[\s\S]*not the full\s+adversarial round/);
+  const exception = /A change to documents only \(([^)]*)\)[\s\S]*?not\s+the full adversarial round/.exec(rule);
+  assert.ok(exception, 'the documents-only exception');
+  assert.match(exception[1].replace(/\s+/g, ' '), /^Markdown under `docs\/`, `README\.md`, `CONTRIBUTING\.md`, and nothing else$/, 'its scope is a closed list');
   assert.match(rule, /Skills, agents, commands, rules, strategies, and\s+accounts are instructions agents act on: they get the full round/);
+  // Every document agents are pointed to is named as getting the full round: a new pointer can't slip into the exception.
+  const walk = d => fs.readdirSync(path.join(REPO, d), { withFileTypes: true })
+    .flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const pointed = new Set(['skills', 'agents', 'commands', 'rules', 'strategies', 'hooks'].filter(d => fs.existsSync(path.join(REPO, d)))
+    .flatMap(walk).flatMap(f => read(f).match(/docs\/[A-Za-z0-9_-]+\.md/g) || []));
+  const fullRound = rule.slice(rule.indexOf('they get the full round'), rule.indexOf('Never open a pull request'));
+  for (const doc of pointed) assert.ok(fullRound.includes(`\`${doc}\``), `${doc} is pointed to by an instruction file: name it in CLAUDE.md as getting the full round`);
+  assert.ok(pointed.has('docs/BROKER-MCP-INTERFACE.md'));
   // Codex and other agents read AGENTS.md, Qwen Code reads QWEN.md: both point at it.
   for (const f of ['AGENTS.md', 'QWEN.md']) {
     assert.match(read(f), /CLAUDE\.md/, `${f} points to CLAUDE.md`);
     assert.match(read(f), /adversarial review/i, `${f} names the review`);
   }
   assert.match(read('CONTRIBUTING.md'), /## Before a pull request \(hard rule\)/);
+  assert.match(read('CONTRIBUTING.md'), /still runs the regression/);
   const template = read('.github/pull_request_template.md');
   assert.match(template, /## Regression \(required\)[\s\S]*npm run verify/);
   assert.match(template, /## Adversarial review \(required\)/);
+  assert.match(template, /Documents only .*not a document agents are pointed to.*the regression still ran/);
 });
