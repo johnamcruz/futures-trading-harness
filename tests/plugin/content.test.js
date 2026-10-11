@@ -130,3 +130,25 @@ test('every harness manifest agrees on name and version, and its paths exist', (
   assert.ok(fs.existsSync(path.join(ROOT, codex.hooks)), 'codex hooks path');
   for (const d of ['agents', 'commands', 'skills', 'hooks']) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', d)), `qwen-extension/${d}`);
 });
+
+// A cycle that waits for a fill burns its context (a replayed broker fills a market order at the next bar, and live
+// fills can lag): every doc that places or verifies an order checks it once, and an unfilled one ends the cycle.
+test('order docs check a new order once and never wait or poll for a fill; the cycle result is plain text', () => {
+  const docs = {
+    'skills/broker-mcp/SKILL.md': [/check a new order once; never wait for a fill/i, /read its status once/, /Still working[^]*?journal that\s+it is working[^]*?end the cycle/, /Never wait or poll for a fill/, /closing is acting,\s+not waiting/,
+      /Still working without a stop bracket[^]*?`cancel_order` it[^]*?`list_open_positions` once[^]*?`\[protect\]` stop/],
+    'skills/trade-session/SKILL.md': [/`list_open_orders` once/, /Not filled yet[^]*?journal\s+a note that the entry is working[^]*?end the cycle/, /Never wait or poll for the fill/,
+      /Without a stop bracket, the trade-executor cancels the entry/],
+    'agents/trade-executor.md': [/Check the entry's status once/, /don't\s+wait\. With its stop bracket attached[^]*?report `EXECUTED` with the entry working/, /Never poll for a fill/,
+      /Without a stop bracket \(step 4\): `cancel_order` the entry[^]*?`list_open_positions` once[^]*?`\[protect\]` stop/],
+    'skills/autonomous-trading/SKILL.md': [/Never wait\s+within a cycle/, /journalled as working and the cycle\s+ends/, /as plain text in your final message: never as a tool call/,
+      /unfilled entry without a\s+stop bracket is cancelled, not left working/],
+    'skills/end-of-day/SKILL.md': [/close again until\s+the position is gone/, /Don't wait for a close to\s+fill/, /runner keeps closing until it reads flat/],
+  };
+  for (const [rel, wants] of Object.entries(docs)) {
+    const text = read(rel);
+    for (const want of wants) assert.match(text, want, `${rel}: ${want}`);
+  }
+  // The generated copies carry it too (node scripts/sync-harness.js).
+  assert.match(read('qwen-extension/agents/trade-executor.md'), /Never poll for a fill/);
+});

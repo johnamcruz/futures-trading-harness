@@ -59,6 +59,24 @@ guide resource once per session if it has one.
   bracket covers the filled quantity. Cancel the unfilled rest when the plan
   no longer wants it, and size any `[protect]` stop to the position, not to
   the order.
+- **Check a new order once; never wait for a fill**: after `place_order`,
+  read its status once (`list_open_orders` and `list_open_positions`, or
+  `get_account_snapshot`). Filled: carry on (its stop, its journal entry).
+  Still working (a limit or stop entry not reached, or a market order the
+  broker hasn't filled yet; a replayed broker fills market orders at the next
+  bar, and live fills can lag) with its stop bracket attached: journal that
+  it is working and end the cycle (the bracket protects it once it fills).
+  Still working without a stop bracket (brackets rejected): don't leave it,
+  since it would fill with no stop. `cancel_order` it (cancelling an entry
+  only reduces risk), read `list_open_positions` once (a fill can beat the
+  cancel: then place its `[protect]` stop, or close it), journal why, and end
+  the cycle; plan again next cycle. The next cycle checks a working entry's
+  fill and manages the position: the autonomous runner starts a cycle while
+  an order is working or a position is open; interactively, the next check. Never wait or poll for a fill: no repeated `get_bars`,
+  `get_quote`, `list_open_orders`, or snapshot reads to see it fill. A
+  position you must leave (no working stop, end of day) is still closed with
+  `close_position` and re-read as the steps for it say: closing is acting,
+  not waiting.
 - **Stop vs rationale**: the rationale's stop price and
   `stopLossBracket.ticks` must say the same stop (ticks =
   `ceil(|entry - stop| / tickSize)`). The harness tool `order_plan` works

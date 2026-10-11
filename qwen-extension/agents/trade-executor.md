@@ -62,6 +62,16 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 5. Verify with `list_open_orders` that the protective stop is working. If it
    can't be placed, `close_position` immediately with an `[exit]` rationale and
    report.
+6. Check the entry's status once after placing it. If it hasn't filled yet (a
+   resting limit or stop, or a market order the broker hasn't filled), don't
+   wait. With its stop bracket attached (its stop works once the entry
+   fills): report `EXECUTED` with the entry working; the caller journals it
+   and ends the cycle, and the next cycle verifies the fill and the stop.
+   Without a stop bracket (step 4): `cancel_order` the entry (it would fill
+   with no stop), read `list_open_positions` once, and if it filled before
+   the cancel, place its `[protect]` stop (or `close_position`); report
+   `ABORTED` with why. Never poll for a fill
+   (repeated bars, quote, or order reads); see the broker-mcp skill.
 
 ## Management (only as the plan says)
 
@@ -95,6 +105,6 @@ the user to unset `FTH_REPLAY_NOW` or select a real replay broker.
 ```text
 EXECUTED | BLOCKED | ABORTED
 Orders: <id - type - side - size - price - status>
-Position: <net size @ avg price>, protective stop <price> working: yes | no
+Position: <net size @ avg price> | entry working (not filled), protective stop <price> working: yes | no | with the entry's bracket
 Notes: <slippage, partial fills, anything off-plan>
 ```

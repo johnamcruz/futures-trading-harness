@@ -288,12 +288,19 @@ On `APPROVE`, hand the plan and verdict line to `trade-executor`. If the order
 gate, the MCP gateway, or the server blocks it, report the block and end.
 Never retry around a block.
 
-After the fill: read `get_account_snapshot` and `list_open_orders`. Check the
-filled size (a partial fill is a smaller position: its stop covers what
-filled; cancel the rest of the entry if the plan doesn't still want it), the
-fill price, and that the protective stop is working at the planned level. A
-position without a working stop is fixed before anything else (the
-trade-executor places it, or closes the position).
+After placing: read `get_account_snapshot` and `list_open_orders` once.
+Filled: check the filled size (a partial fill is a smaller position: its stop
+covers what filled; cancel the rest of the entry if the plan doesn't still
+want it), the fill price, and that the protective stop is working at the
+planned level. A position without a working stop is fixed before anything
+else (the trade-executor places it, or closes the position). Not filled yet
+(a resting limit or stop, or a market order the broker hasn't filled): with
+its stop bracket attached, journal a note that the entry is working, report
+it, and end the cycle; the next cycle verifies the fill and the stop first.
+Without a stop bracket, the trade-executor cancels the entry (it would fill
+with no stop), places a `[protect]` stop or closes it if it filled before the
+cancel, and you journal why and end the cycle; plan again next cycle.
+Never wait or poll for the fill (broker-mcp skill, Order mechanics).
 
 ### 7. Report
 

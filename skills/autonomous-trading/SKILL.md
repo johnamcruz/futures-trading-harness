@@ -62,10 +62,18 @@ description: Rules for running the trading harness unattended (headless, schedul
    (one outcome word, then ` - ` and the reason, as in the examples below).
    The runner reads only that line, from your final message: a summary, a
    table, or "Decision: NO TRADE" in its place is logged as "none reported",
-   even when the cycle did its work. Write it last, after every tool call.
+   even when the cycle did its work. Write it last, after every tool call,
+   as plain text in your final message: never as a tool call or a tool's
+   arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
    one plan, at most one entry. A tool that fails twice ends the cycle as
-   `error` (after confirming any open position has its stop).
+   `error` (after confirming any open position has its stop). Never wait
+   within a cycle: bars and fills may not move until the next one. An order
+   that hasn't filled at its one check is journalled as working and the cycle
+   ends (`executed` or `managed`, saying it is working); the next cycle checks
+   the fill (broker-mcp skill, Order mechanics). An unfilled entry without a
+   stop bracket is cancelled, not left working (it would fill with no stop);
+   journal why and plan again next cycle.
 8. **Harness tools, not scripts.** Bars, scans, the snapshot, the
    multi-timeframe read, blackouts, the prop status, lessons, and reconcile
    are tools on the `harness` MCP server (the `harness-tools` skill): call
