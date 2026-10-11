@@ -21,7 +21,7 @@ const { fetchBarsToFile } = require('../bars-fetch');
 const { withAdapter } = require('../broker/adapter');
 const { writeMtfRecord, recordFile } = require('../trading/mtf-state');
 const { harnessHome } = require('../paths');
-const { context, withTextAsync } = require('./cli');
+const { context, say, withTextAsync } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out file] [--record]';
@@ -33,11 +33,12 @@ async function fetch(args = {}, ctx) {
   const o = { symbol: pick('symbol', null), timeframe: pick('timeframe', 3), daily: pick('daily', false), count: pick('count', null), out: pick('out', null), record: pick('record', false) };
   // Bars up to the harness clock: a replay broker's replayed time, else the wall clock.
   const now = c.now();
-  if (o.record && o.daily) throw new Error('--record reads trigger bars (minutes), not daily bars');
-  if (o.record && c.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
+  const record = say(c, '--record', 'record');
+  if (o.record && o.daily) throw new Error(say(c, '--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'));
+  if (o.record && c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records the read itself`);
   const pid = o.record ? liveRunner(c.env) : null;
-  if (pid) throw new Error(`--record: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
-  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now }));
+  if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
+  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, tool: c.tool }));
   let text = `wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`;
   if (!o.record) return { text };
   return withTextAsync(text, async () => {

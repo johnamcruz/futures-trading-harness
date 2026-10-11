@@ -61,11 +61,12 @@ description: Rules for running the trading harness unattended (headless, schedul
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
    one plan, at most one entry. A tool that fails twice ends the cycle as
    `error` (after confirming any open position has its stop).
-8. **Allowed scripts.** Only these run, by absolute path:
-   `strategies.js`, `market-snapshot.js`, `mtf.js`, `blackouts.js`,
-   `bars.js`, `reconcile.js`, `lessons.js`, and `combine.js status`.
-   Starting, stopping, or recording a prop attempt,
-   backtests, replays (`replay.js`), and training are the user's.
+8. **Harness tools, not scripts.** Bars, scans, the snapshot, the
+   multi-timeframe read, blackouts, the prop status, lessons, and reconcile
+   are tools on the `harness` MCP server (the `harness-tools` skill): call
+   them; don't run the harness's scripts from a shell. Starting, stopping, or
+   recording a prop attempt, backtests, replays (`replay.js`), and training
+   are the user's.
 
 ## Examples
 

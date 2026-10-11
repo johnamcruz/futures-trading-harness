@@ -5,5 +5,5 @@ argument-hint: "<name> <description | path to code>"
 
 Use the `strategy-authoring` skill (with the `strategy-researcher` agent role for
 code or backtests) to create the strategy: $ARGUMENTS
-Finish by running `node <root>/scripts/strategies.js validate` and showing
+Finish by validating with the harness tool `strategies_validate` and showing
 the result.

@@ -342,7 +342,7 @@ function historyText(history) {
 
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const where = root ? ` Harness root (FTH_ROOT): ${root}; run its scripts as \`node ${root}/scripts/<script>\`. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
   const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
   return {
@@ -396,7 +396,7 @@ function prompts(cfg, now, root = '') {
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
       const catchUp = d !== dayKey(now) ? ` (a catch-up: that day's end of day did not run; review and reconcile ${d}, not today)` : '';
-      return `${head}${accountText(state)} Run the end-of-day skill${acct} for the trading day ending ${d}${catchUp}, on ${cfg.timeframe}-minute bars (reconcile.js --day ${d} --timeframe ${cfg.timeframe}): flatten every position and cancel working orders without asking, then review and summarize.`;
+      return `${head}${accountText(state)} Run the end-of-day skill${acct} for the trading day ending ${d}${catchUp}, on ${cfg.timeframe}-minute bars (the reconcile tool with day ${d} and timeframe ${cfg.timeframe}): flatten every position and cancel working orders without asking, then review and summarize.`;
     },
   };
 }

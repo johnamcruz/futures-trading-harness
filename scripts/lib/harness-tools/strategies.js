@@ -24,7 +24,7 @@ const { buildSignals, writeSignals } = require('../trading/signal-state');
 const { timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
-const { context, withText, options } = require('./cli');
+const { context, say, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]';
@@ -66,17 +66,18 @@ function scan({ file, symbol, now: at, record = false } = {}, ctx) {
   // The harness clock (a replay broker's replayed time), refused when unusable even with --now.
   const clock = c.now();
   const now = at ? new Date(at) : clock;
-  if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`);
+  if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`); // cli-only: the tool takes no time
   const results = scanStrategies(strategies, bars, { symbol, now });
   const text = `${JSON.stringify(results, null, 2)}\n`;
   if (!record) return { text };
   return withText(text, () => {
-    if (c.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records every bar itself');
+    const record = say(c, '--record', 'record');
+    if (c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records every bar itself`);
     const pid = liveRunner(c.env);
-    if (pid) throw new Error(`--record: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
-    if (!symbol) throw new Error('--record needs --symbol <ROOT>');
+    if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
+    if (!symbol) throw new Error(say(c, '--record needs --symbol <ROOT>', 'record needs symbol (a contract root)'));
     // The record's file is named after it: a contract root only (as mtf and bars take it).
-    if (!/^[A-Z0-9]+$/.test(String(symbol).toUpperCase())) throw new Error('--record needs --symbol <ROOT>: a contract root, e.g. MNQ');
+    if (!/^[A-Z0-9]+$/.test(String(symbol).toUpperCase())) throw new Error(say(c, '--record needs --symbol <ROOT>: a contract root, e.g. MNQ', 'record needs symbol: a contract root, e.g. MNQ'));
     const norm = normalizeBars(bars);
     const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
     const stepMs = Math.min(...diffs);
@@ -92,7 +93,7 @@ function recent({ file, symbol, count: raw } = {}, ctx) {
   const { strategies } = load(c);
   if (!file) throw new Error('recent needs a bars file');
   const count = raw === undefined ? 5 : Number(raw);
-  if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error('--bars: 1 to 50');
+  if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error(say(c, '--bars: 1 to 50', 'count: 1 to 50'));
   return { text: `${JSON.stringify(recentSignals(strategies, readBarsArg(file), { symbol, count }), null, 2)}\n` };
 }
 

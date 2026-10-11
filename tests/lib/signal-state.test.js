@@ -58,7 +58,7 @@ test('checkTrigger: only the strategy that fired, on its side, on a recent bar; 
   assert.match(check({ strategy: 'cisd_ote' }), /setup:cisd_ote long did not fire.*a different setup tag doesn't make it one/);
   assert.match(check({ now: new Date('2026-10-07T14:20:00Z') }), /closed 23 min ago \(limit 10, FTH_SIGNAL_MAX_AGE_MIN\): the setup has expired/);
   assert.match(check({ now: new Date('2026-10-07T13:30:00Z') }), /after now/);
-  assert.match(checkTrigger(tmpDir(), { root: 'MNQ', side: 'buy', strategy: 'orb', now }), /No 3m signal record for MNQ.*strategies\.js scan .* --record/);
+  assert.match(checkTrigger(tmpDir(), { root: 'MNQ', side: 'buy', strategy: 'orb', now }), /No 3m signal record for MNQ.*bars_fetch \{"symbol": "MNQ", "timeframe": 3\}.*strategies_scan \{"bars": "<that file>", "symbol": "MNQ", "record": true\}/);
   const broken = tmpDir();
   fs.mkdirSync(path.join(broken, 'signals'));
   fs.writeFileSync(path.join(broken, 'signals', 'MNQ-3m.json'), '{');

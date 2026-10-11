@@ -1,6 +1,6 @@
 ---
 name: prop-challenge-pacing
-description: Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md, scripts/combine.js) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
+description: Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md; the harness tool combine_status, and the user's combine.js to start or stop one) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
 ---
 
 # Prop Challenge Pacing
@@ -25,7 +25,7 @@ The harness tracks the attempt and enforces it:
 - In autonomous runs the cycle prompt carries each running attempt's state
   (balance, floor, cushion, profit, the day, sessions left, the size budget,
   any entry block) and the live verdicts, from the runner's latest snapshot.
-- `node <root>/scripts/combine.js status` (`<root>`: the harness root, FTH_ROOT) shows the balance, floor, cushion,
+- The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;
   quote it in the `plan` entry. The size budget is per policy strategy (each
@@ -52,8 +52,8 @@ The harness tracks the attempt and enforces it:
   none can be skipped): no started attempt
   (`node <root>/scripts/combine.js start --account <name>`, the user's call); a
   snapshot older than 10 minutes or dated in the future (a clock that
-  stepped back: tell the user); a missed close (record it:
-  `combine.js record-day`); a passed or finished attempt; the soft or firm
+  stepped back: tell the user); a missed close (the user records it with
+  `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
   daily limit; a size over the budget; any entry that doesn't match the
   verdict; any position already open on the account, or any order working
   on it (a resting entry on another market could fill next to it); any entry once another
@@ -102,7 +102,7 @@ Write the day's numbers into the `plan` entry so reviews can grade pacing.
 ## Examples
 
 ```text
-$ node <root>/scripts/combine.js status
+combine_status {}
 topstep_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
 day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries allowed
 

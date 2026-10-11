@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: Compute indicators, key levels, and the market regime from the broker MCP server's get_bars output with a deterministic script instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
+description: Compute indicators, key levels, and the market regime from closed bars with the harness tool market_snapshot (deterministic code) instead of mental math. Use whenever an analysis needs EMA, ATR, ADX, SuperTrend, Keltner, VWAP, the volume profile (POC, value area, volume nodes), swings, opening range, prior-day or overnight levels.
 ---
 
 # Market Snapshot
@@ -16,28 +16,28 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 ## How It Works
 
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
-   file (the prompt names it). Otherwise:
-   `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --count 2000`
-   writes `/tmp/fth/MNQ-3m.json` and prints when its last bar closed
-   (`--out` takes another `.json` file under `/tmp/fth/`; any other path,
-   or a symlink there, is refused).
-   Don't paste a `get_bars` reply into a file: 2000 bars are far more than a
-   tool reply can carry. 2000 bars are enough for EMA(200), prior-day levels, and the
-   1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,
+   file (the prompt names it). Otherwise the harness tool `bars_fetch`
+   (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)
+   writes `/tmp/fth/MNQ-3m.json` and says when its last bar closed (see the
+   `harness-tools` skill).
+   Don't paste a `get_bars` reply into a file: thousands of bars are far more
+   than a tool reply can carry. The default is enough for EMA(200), prior-day
+   levels, and the multi-timeframe read up to the 4-hour trend (its EMA50
+   vote needs about 4000 3-minute bars). The windowed pieces (cisd_ote,
    the regime) read their own trailing 500 bars, as their source did.
    3-minute bars match the strategy parameters (1-minute for the flow
    strategies).
-2. (The file is the broker's `get_bars` JSON; CSV and Parquet files work too.)
-3. Run the script from the harness root (`<root>`, an absolute path; see the
-   `strategy-library` skill for how to find it):
+2. (The file is the broker's `get_bars` JSON; a CSV file works too. The
+   tools read only JSON and CSV.)
+3. Call the harness tool `market_snapshot` with the file:
 
-   ```bash
-   node <root>/scripts/market-snapshot.js /tmp/fth/MNQ-3m.json
+   ```text
+   market_snapshot {"bars": "/tmp/fth/MNQ-3m.json"}
    ```
 
-   Override parameters with flags, e.g. `--orbMinutes=30 --emaSlow=50`, or
-   the volume profile's: `--vpRowSize 0.25` (one-tick rows on the price grid,
-   so levels are tick prices), `--vpRows`, `--vpValueArea`, `--vpLookback`
+   Override parameters with `params`, e.g. `{"orbMinutes": 30, "emaSlow": 50}`,
+   or the volume profile's: `vpRowSize` 0.25 (one-tick rows on the price grid,
+   so levels are tick prices), `vpRows`, `vpValueArea`, `vpLookback`
    (bars in the rolling profile). Use the same settings as the strategy you
    are judging (its `params`).
 4. Read the JSON:
@@ -92,13 +92,13 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 5. Check the last bar's time (`last.t`, UTC): older than one bar of the timeframe
    (plus a minute) at the time you read it means stale data; say so and
    don't plan from it.
-6. Never quote a number the script did not produce or a tool did not return.
+6. Never quote a number the snapshot did not produce or a tool did not return.
 
 ## Examples
 
 ```text
 adx 24.1, adxSlope +3.2, regime trend-up
-→ trending; strategy triggers come from `strategies.js scan` (each STRATEGY.md's rules).
+→ trending; strategy triggers come from `strategies_scan` (each STRATEGY.md's rules).
 
 referenceStop.long = 21481.37 → round down to tick 0.25 → 21481.25
 ```

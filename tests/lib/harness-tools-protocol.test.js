@@ -188,18 +188,67 @@ test('callTool: record is refused while an autonomous runner holds its lock, wha
     for (const [tool, args, tag] of [['strategies_scan', { bars, symbol: 'MNQ', record: true }, 'strategies'], ['mtf_read', { bars, symbol: 'MNQ', record: true }, 'mtf'], ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, 'bars']]) {
       const r = await callTool(tool, args, { env });
       assert.strictEqual(r.isError, true, tool);
-      assert.match(r.content[0].text, new RegExp(`\\[${tag}\\] --record: an autonomous runner is running \\(pid ${runner.pid}\\): it records the reads and signals of the symbols it trades, and record is refused while it runs\\n$`));
+      assert.match(r.content[0].text, new RegExp(`\\[${tag}\\] record: an autonomous runner is running \\(pid ${runner.pid}\\): it records the reads and signals of the symbols it trades, and record is refused while it runs\\n$`));
     }
     assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
     assert.strictEqual((await callTool('mtf_read', { bars }, { env })).isError, undefined, 'without record it runs');
     // A lock whose pid is another program (a reused pid), or gone, doesn't refuse.
     for (const pid of [process.pid, 2 ** 30]) {
       fs.writeFileSync(path.join(home, 'autotrader.lock'), JSON.stringify({ pid }));
-      assert.match((await callTool('mtf_read', { bars, record: true }, { env })).content[0].text, /\[mtf\] --record needs --symbol/, String(pid));
+      assert.match((await callTool('mtf_read', { bars, record: true }, { env })).content[0].text, /\[mtf\] record needs symbol \(a contract root/, String(pid));
     }
   } finally {
     runner.kill();
   }
+});
+
+test('callTool: refusals name the tool\'s arguments, never the script\'s flags', async () => {
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
+  fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(home, 'bars', 'NQ-3m.csv'));
+  const bars = path.join(home, 'bars', 'NQ-3m.csv');
+  const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
+  const cases = [
+    ['strategies_scan', { bars, symbol: 'MNQ', record: true }, auto, /^\[strategies\] record: the autonomous runner records every bar itself$/m],
+    ['mtf_read', { bars, symbol: 'MNQ', record: true }, auto, /^\[mtf\] record: the autonomous runner records the read itself$/m],
+    ['mtf_read', { bars, record: true }, { FTH_HOME: home }, /^\[mtf\] record needs symbol \(a contract root, e.g\. MNQ\)$/m],
+    ['bars_fetch', { symbol: 'MNQ', timeframe: 'daily', record: true }, { FTH_HOME: home }, /^\[bars\] record reads trigger bars \(minutes\), not timeframe "daily"$/m],
+    ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, auto, /^\[bars\] record: the autonomous runner records the read itself$/m],
+    // An impossible date that fits the pattern reaches the operation.
+    ['blackouts_add', { start: '2999-02-30T10:00:00Z', end: '2999-02-30T09:00:00Z', reason: 'x' }, { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'b.json') }, /^\[blackouts\] start and end must be ISO times with end after start$/m],
+  ];
+  for (const [tool, args, env, why] of cases) {
+    const text = (await callTool(tool, args, { env })).content[0].text;
+    assert.match(text, why, tool);
+    assert.doesNotMatch(text.split('\n').filter(l => l.startsWith('[')).join('\n'), /--[a-z]/, `${tool}: no script flag in the refusal`);
+  }
+  // bars_fetch has no output argument: a refused bars file is named as the file, not as --out (refused before the broker is asked).
+  const { fetchBarsToFile, outError } = require('../../scripts/lib/bars-fetch');
+  const outDir = path.join(home, 'fth');
+  fs.mkdirSync(path.join(outDir, 'MNQ-7m-x.json'), { recursive: true, mode: 0o700 });
+  fs.chmodSync(outDir, 0o700);
+  const broker = { activeContract: async () => assert.fail('the broker is not asked') };
+  await assert.rejects(() => fetchBarsToFile({ client: broker, symbol: 'MNQ', timeframe: 7, count: 10, out: path.join(outDir, 'MNQ-7m-x.json'), outDir, tool: true }), /^Error: the bars file: a \.json file under .* \(not a regular file: /);
+  assert.match(outError(path.join(outDir, 'MNQ-7m-x.json'), outDir), /^--out: /, 'the script names its flag');
+  // Through the tool itself (the operation passes `tool` on): its own file a directory, with the fake broker configured.
+  const fakeHome = tmpDir();
+  fs.writeFileSync(path.join(fakeHome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
+  fs.mkdirSync('/tmp/fth', { recursive: true, mode: 0o700 });
+  const mine = `/tmp/fth/MNQ-7m-t${process.pid}.json`;
+  fs.mkdirSync(mine, { recursive: true });
+  try {
+    const viaTool = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10, name: `t${process.pid}` }, { env: { ...process.env, FTH_HOME: fakeHome, FTH_ENV_FILE: path.join(fakeHome, 'none.env'), FTH_REPLAY_NOW: '' } });
+    assert.strictEqual(viaTool.isError, true);
+    assert.match(viaTool.content[0].text, /^\[bars\] the bars file: a \.json file under \/tmp\/fth\/ \(not a regular file: /m);
+  } finally {
+    fs.rmSync(mine, { recursive: true, force: true });
+  }
+  // combine_status with no attempt: starting one is the user's (the script's own line stays as it was).
+  const none = await callTool('combine_status', {}, { env: { FTH_HOME: home } });
+  assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n');
+  // The scripts keep their own wording.
+  const mtf = require('../../scripts/lib/harness-tools/mtf');
+  assert.throws(() => mtf.mtf({ file: bars, record: true }, { env: { FTH_HOME: home } }), /^Error: --record needs --symbol=<ROOT> \(e\.g\. MNQ\)$/);
 });
 
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {

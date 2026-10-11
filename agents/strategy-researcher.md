@@ -1,7 +1,7 @@
 ---
 name: strategy-researcher
 description: Turns strategy code, backtests, or a written trading idea into a STRATEGY.md document (code-checked frontmatter plus an agent-readable body), validates it, and keeps strategies in sync with their source code. Use for /new-strategy or when a strategy's code or parameters change.
-tools: Read, Grep, Glob, Bash, Write, Edit, Skill
+tools: Read, Grep, Glob, Bash, Write, Edit, Skill, mcp__harness__strategies_validate, mcp__harness__strategies_list, mcp__harness__strategies_show
 model: inherit
 ---
 
@@ -28,5 +28,5 @@ Load the skills `strategy-authoring` and `strategy-library`.
 5. If the trigger needs something the rules language can't express, add a
    series to `scripts/lib/trading/rules.js` (as `cisd_ote_dir` does), with
    tests, and write the strategy's rules with it.
-6. Run `node <root>/scripts/strategies.js validate` and
-   `node <root>/tests/run-all.js` (when working in the repo) and report.
+6. Validate with the harness tool `strategies_validate`, run
+   `node <root>/tests/run-all.js` (when working in the repo), and report.

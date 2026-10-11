@@ -346,7 +346,7 @@ test('combine: every missed close is flagged, not only the first, so the floor i
   prop.snapshot(home, MINI, 52500, new Date('2026-10-06T19:00:00Z')); // Tue, close never recorded
   prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000)); // Wed
   const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
-  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: record each\)/);
+  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: the user records each\)/);
   prop.recordEndOfDay(home, MINI, 50500, '2026-10-05');
   assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded/, 'recording the first one alone does not clear the block');
   prop.recordEndOfDay(home, MINI, 52500, '2026-10-06');
@@ -394,7 +394,7 @@ test('combine: a close the runner missed stops entries until it is recorded', ()
   prop.snapshot(home, MINI, 50300, new Date(NOW.getTime() - 60000)); // Wednesday
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 50, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
   const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
-  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded.*record-day --account mini --day 2026-10-06/);
+  assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded.*the user records it: .*record-day --account mini --day 2026-10-06/);
   prop.recordEndOfDay(home, MINI, 50300, '2026-10-06');
   prop.snapshot(home, MINI, 50300, new Date(NOW.getTime() - 30000));
   assert.deepStrictEqual(ev().violations, []);

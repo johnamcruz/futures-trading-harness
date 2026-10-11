@@ -64,7 +64,7 @@ test('prompts name the skill, symbol, account, and paper mode', () => {
   const p = prompts(validateConfig({ account: '123', paper: true }), et(10, 0));
   assert.match(p.trade('MNQ'), /autonomous-trading skill[\s\S]*trade-session skill for MNQ on account 123 in paper mode/);
   assert.match(p.premarket('MES'), /premarket skill for MES/);
-  assert.match(p.eod(), /end-of-day skill on account 123 for the trading day ending \d{4}-\d\d-\d\d, on \d+-minute bars \(reconcile\.js --day \d{4}-\d\d-\d\d --timeframe \d+\): flatten/);
+  assert.match(p.eod(), /end-of-day skill on account 123 for the trading day ending \d{4}-\d\d-\d\d, on \d+-minute bars \(the reconcile tool with day \d{4}-\d\d-\d\d and timeframe \d+\): flatten/);
 });
 
 test('schedule: premarket, then trade cycles at the interval, then end of day once', () => {
@@ -122,7 +122,9 @@ test('child env locks the gate and paper mode disables trading', () => {
   require('fs').writeFileSync(require('path').join(home, 'brokers.json'), JSON.stringify({ broker: 'other', brokers: { other: { command: ['x'], paperEnv: { OTHER_LIVE: 'no' } } } }));
   const other = childEnv(validateConfig({ paper: true }), '/r', { FTH_HOME: home });
   assert.deepStrictEqual([other.OTHER_LIVE, other.PROJECTX_TRADING_ENABLED], ['no', undefined]);
-  assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; run its scripts as `node \/r\/scripts/);
+  assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; its operations are the `harness` MCP server's tools, not scripts\./);
+  assert.doesNotMatch(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /node \/r\/scripts/);
+  assert.match(prompts(cfg, et(16, 0), '/r').eod(), /the reconcile tool with day \d{4}-\d{2}-\d{2} and timeframe \d+/);
 });
 
 test('trade prompt carries the closed bar and its data file', () => {
@@ -451,7 +453,7 @@ test('the end-of-day prompt names the trading day it closes (a catch-up says so)
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
   const today = prompts(cfg, new Date('2026-10-08T19:50:30Z'), '/r').eod({ day: '2026-10-08' });
-  assert.match(today, /end-of-day skill on account 1 for the trading day ending 2026-10-08, on 3-minute bars \(reconcile\.js --day 2026-10-08 --timeframe 3\): flatten/);
+  assert.match(today, /end-of-day skill on account 1 for the trading day ending 2026-10-08, on 3-minute bars \(the reconcile tool with day 2026-10-08 and timeframe 3\): flatten/);
   assert.doesNotMatch(today, /catch-up/);
   const late = prompts(cfg, new Date('2026-10-09T13:00:00Z'), '/r').eod({ day: '2026-10-08' });
   assert.match(late, /for the trading day ending 2026-10-08 \(a catch-up: that day's end of day did not run; review and reconcile 2026-10-08, not today\)/);

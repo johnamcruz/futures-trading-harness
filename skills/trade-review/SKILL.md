@@ -23,9 +23,9 @@ description: Review closed futures trades against their plan - R multiple, plan 
      `orders`), then its record in `logs/cycles/<day>/`: the prompt (the last
      10 bars, what fired and its confluence, the trend rule, your last 10
      decisions) and what you did. Interactive: the plan entry. Then the bars
-     after the entry (`bars.js`, or the runner's file): was the read wrong,
+     after the entry (the harness tool `bars_fetch` with `name`: "review", or the runner's file): was the read wrong,
      or the execution?
-   - **Your last 10 trades.** `node <root>/scripts/lessons.js` (it starts
+   - **Your last 10 trades.** The harness tool `lessons` (it starts
      with the form of the last 10: record, expectancy, repeated mistakes)
      and `journal_read {kind:"review", tag:"setup:<name>"}` for this
      setup's last reviews. Is this a mistake you already made? If the same
@@ -45,7 +45,7 @@ description: Review closed futures trades against their plan - R multiple, plan 
      symbol; `r:<R net of fees>` (e.g. `r:-1.11`); any `mistake:<kind>`
      (`mistake:chased`, `mistake:no-stop`, `mistake:moved-stop`,
      `mistake:early-exit`, `mistake:oversize`, `mistake:rule-break`).
-   These tags are how the desk learns: `node <root>/scripts/lessons.js`
+   These tags are how the desk learns: the `lessons` tool
    turns them into instincts (each setup's record by regime, recurring
    mistakes) that every later cycle sees. A review without them teaches
    nothing.

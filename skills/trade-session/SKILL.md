@@ -37,7 +37,7 @@ transcripts). Load the others as a step names them.
   positions, working orders, and any attempt's numbers (as read just before
   the run); it does not carry today's P&L or the room to the daily limit, so
   read `get_account_snapshot` (`remainingBeforeLimit`) every cycle that may
-  enter, and `node <root>/scripts/combine.js status` for an attempt. Every
+  enter, and the harness tool `combine_status` for an attempt. Every
   decision below (take, skip, size, manage, stand down) is made with these
   numbers.
 - **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`), apply
@@ -48,7 +48,7 @@ transcripts). Load the others as a step names them.
   already moved the stop on this bar: don't touch it unless you are exiting.
   **Interactive, no runner:** nobody else manages the trade, so run this
   skill again after every closed bar while the position is open (fetch the
-  bar with `bars.js`). On each: from `trailActivateR` of open profit, move the
+  bar with `bars_fetch`). On each: from `trailActivateR` of open profit, move the
   stop to `trailGivebackR` behind the best price since entry, rounded to the
   tick, toward the market only; if the bar already traded through that new
   level, close at market instead; after `maxBars` bars in the trade, close at
@@ -77,21 +77,23 @@ transcripts). Load the others as a step names them.
   first: the order may have reached the exchange. `get_bars` allows 50
   requests per 30 s across all agents: use the bars file, don't refetch. If
   account state can't be read, place nothing new; report and end.
-- **Bars, interactively** (no runner bars file): `node <root>/scripts/bars.js
-  --symbol <SYMBOL> --timeframe <3 or 1> --record` writes 2000 closed bars to
-  `/tmp/fth/<SYMBOL>-<tf>m.json` and records the multi-timeframe read for the
-  gate. Never paste a long `get_bars` reply into a file.
+- **Bars, interactively** (no runner bars file): the harness tool
+  `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <3 or 1>, "record": true}`)
+  writes the runner's default count of closed bars (5000 3-minute, 15000
+  1-minute) to `/tmp/fth/<SYMBOL>-<tf>m.json` and records the
+  multi-timeframe read for the gate (the `harness-tools` skill). Never paste
+  a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 
 **Every cycle, first:** the multi-timeframe read on the bars file
-(`node <root>/scripts/mtf.js <bars file>`, the `multi-timeframe-analysis`
+(`mtf_read` with the bars file, the `multi-timeframe-analysis`
 skill). **The trend rule is enforced:** a trend strategy never enters
 against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
 only a strategy with `mtf: reversal` may fade it. The scan already drops
 such candidates and the order gate refuses them. In autonomous runs the
-prompt states the recorded rule; interactively, `bars.js --record` (or
-`mtf.js <bars file> --record --symbol <SYMBOL>`) records it (the gate refuses
+prompt states the recorded rule; interactively, `bars_fetch` with `record`
+(or `mtf_read` with `record` and `symbol`) records it (the gate refuses
 trend entries unless the recorded bar closed less than 15 minutes ago: fetch
 fresh bars, re-recording an old file doesn't help). Never
 argue a trend strategy into a counter-trend trade. For the candidate's side: `aligned` → the strategy's normal size;
@@ -104,24 +106,24 @@ A policy verdict (below) is already sized: don't halve it.
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
 gate refuses a rules strategy's entry unless that strategy fired, on that
 side, on a bar that closed less than 10 minutes ago, per the signal record
-(the runner records every bar; interactively, `node <root>/scripts/strategies.js
-scan <bars file> --symbol <SYMBOL> --record`). A different setup tag on the
+(the runner records every bar; interactively, `strategies_scan` with the
+bars file, `symbol`, and `record: true`). A different setup tag on the
 same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
-order: step 1, the multi-timeframe read, market-snapshot and
-`strategies.js scan` on the bars file, and the blackouts
-(`node <root>/scripts/blackouts.js list`). No candidate → note and end. A
+order: step 1, the multi-timeframe read, `market_snapshot` and
+`strategies_scan` on the bars file, and the blackouts
+(`blackouts_list`). No candidate → note and end. A
 candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
 with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
 
 **Full cycle** (default):
 
 If the prompt names a bars file (the autonomous runner writes the bars that
-just closed, e.g. `~/.futures-trading-harness/bars/MNQ-3m.json`), pass its path to every analyst:
-they run market-snapshot and `strategies.js scan` on it instead of fetching
-that timeframe again. Other timeframes they fetch with `bars.js`.
+just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass its path to every analyst:
+they run `market_snapshot` and `strategies_scan` on it instead of fetching
+that timeframe again. Other timeframes they fetch with `bars_fetch`.
 
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
@@ -137,7 +139,7 @@ current time.
 | `market-structure-analyst` | Bias, swings, levels, structure strategies in play |
 | `trend-momentum-analyst` | Regime, indicator values, strategy scan results |
 | `volume-liquidity-analyst` | VWAP, participation, liquidity, sweeps |
-| `news-calendar-analyst` | Today's events, proposed blackouts. Premarket only: on trade cycles read `node <root>/scripts/blackouts.js list` instead, and run it only when no blackout was recorded for today's scheduled events |
+| `news-calendar-analyst` | Today's events, proposed blackouts. Premarket only: on trade cycles read `blackouts_list` instead, and run the analyst only when no blackout was recorded for today's scheduled events |
 | `risk-manager` (phase 1) | Account state, limits, budget, stand-down conditions |
 
 ### 3. Head-trader synthesis (you)
@@ -145,11 +147,11 @@ current time.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (`regime` in market-snapshot, the same value
-  `strategies.js scan` reports): trend-up, trend-down, range, or transition,
+  `strategies_scan` reports): trend-up, trend-down, range, or transition,
   plus volatility. Don't override it with a narrative; if the analysts disagree
   with it, say why in the plan.
 - **A prop attempt with a policy strategy is running** (the prompt lists
-  verdicts, or `combine.js status` names a policy strategy): the policy's
+  verdicts, or `combine_status` names a policy strategy): the policy's
   verdict is the only trade. Plan exactly the verdict (`setup:<policy
   strategy>`, its contract and side, at most its size, its stop ticks) per the
   `prop-challenge-pacing` skill, or no trade when there is none or it says

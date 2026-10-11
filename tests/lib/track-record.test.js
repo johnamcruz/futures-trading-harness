@@ -37,7 +37,7 @@ test('a backtest report becomes a track record: overall, by regime, by hour', ()
   assert.strictEqual(line, 'track record: backtest 16 trades: win 50%, E +0.25R, edge anecdotal (under 30 trades); in trend-up: 12 trades, E +0.67R; at 10:00 ET: 12 trades, E +0.67R; live: no reviewed trades yet');
   assert.ok(MIN_SLICE > 4);
   assert.doesNotMatch(describeRecord({ backtest: rec, regime: 'range', at: '2026-10-08T18:30:00.000Z' }), /in range|at 14:00/, 'under MIN_SLICE trades: not shown');
-  assert.match(describeRecord({}), /no backtest recorded \(backtest\.js --record\); live: no reviewed trades yet/);
+  assert.match(describeRecord({}), /no backtest recorded \(the user records one: backtest\.js --record\); live: no reviewed trades yet/);
 });
 
 test('live record: the journal\'s reviewed trades of the setup, paper excluded, and those in this regime', () => {

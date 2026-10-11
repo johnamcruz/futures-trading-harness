@@ -97,6 +97,12 @@ test('registry: arguments map to the operation\'s own', () => {
   assert.deepStrictEqual(args('mtf_read', { bars: '/b.json', timeframes: [15], daily: '/d.json', symbol: 'MNQ', record: true }), { file: '/b.json', tf: [15], daily: '/d.json', symbol: 'MNQ', json: false, record: true });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily' }), { symbol: 'MNQ', timeframe: 3, daily: true, record: false });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 5, count: 10 }), { symbol: 'MNQ', timeframe: 5, daily: false, count: 10, record: false });
+  // A role's own file: the default name with its suffix, under /tmp/fth.
+  assert.strictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 15, name: 'trend' }).out, '/tmp/fth/MNQ-15m-trend.json');
+  assert.strictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily', name: 'structure' }).out, '/tmp/fth/MNQ-1d-structure.json');
+  for (const name of ['../x', 'Trend', 'a/b', 'a.json', '', '-x', 'x'.repeat(25)]) {
+    assert.match(validate(BY_NAME.get('bars_fetch').inputSchema, { symbol: 'MNQ', timeframe: 3, name }).join(), /name: (must match|at least)/, name);
+  }
   assert.deepStrictEqual(args('market_snapshot', { bars: '/b.json' }), { file: '/b.json', params: {} });
   assert.deepStrictEqual(args('reconcile', { day: '2026-10-07' }), { day: '2026-10-07', json: false });
 });

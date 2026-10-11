@@ -64,7 +64,7 @@ function readSignals(home, root, timeframe) {
  */
 function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe = '3m', now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN, minConfluence = 1 }) {
   const fam = familyRoot(root);
-  const how = `Fetch fresh ${timeframe} bars (node <root>/scripts/bars.js --symbol ${root} --timeframe ${parseInt(timeframe, 10) || '<minutes>'}), then scan and record them: node <root>/scripts/strategies.js scan <that file> --symbol ${root} --record. The autonomous runner records every bar; while it runs, recording yourself is refused.`;
+  const how = `Fetch fresh ${timeframe} bars (the harness tool bars_fetch {"symbol": "${root}", "timeframe": ${parseInt(timeframe, 10) || '<minutes>'}}), then scan and record them: strategies_scan {"bars": "<that file>", "symbol": "${root}", "record": true}. The autonomous runner records every bar; while it runs, recording yourself is refused.`;
   const rec = readSignals(home, root, timeframe);
   if (!rec) return `No ${timeframe} signal record for ${fam}: setup:${strategy} is a rules strategy, and the gate needs to see its trigger fire. ${how}`;
   if (rec.error || !Array.isArray(rec.candidates) || !rec.closedAt) return `The signal record for ${fam} is unreadable (${rec.error || 'missing fields'}). ${how}`;

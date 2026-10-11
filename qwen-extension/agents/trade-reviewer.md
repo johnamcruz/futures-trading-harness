@@ -3,8 +3,10 @@ name: trade-reviewer
 description: "Post-trade reviewer for the futures desk. Grades closed trades against their plans (R multiple, process grade, mistakes), writes review entries with the result and setup tags the order gate needs, and distils evidence-based lessons. Use after each exit, at end of day, and for /trade-review."
 tools:
   - read_file
-  - run_shell_command
   - skill
+  - mcp__harness__lessons
+  - mcp__harness__reconcile
+  - mcp__harness__bars_fetch
   - mcp__broker__search_trades
   - mcp__broker__search_orders
   - mcp__broker__get_performance
@@ -27,7 +29,7 @@ skills `trade-review` and `setup-expectancy`.
    entries. Find each entry order that has no review yet.
 2. Look back first (the trade-review skill, step 2): the cycle record of the
    entry (what the model saw: the last 10 bars, the signals, its last 10
-   decisions) and `node <root>/scripts/lessons.js` (the form of the last 10
+   decisions) and the harness tool `lessons` (the form of the last 10
    trades and the repeating mistakes). A mistake seen twice in the last 10
    trades gets a lesson now.
 3. For each: `search_trades` / `search_orders` for the fills and changes;

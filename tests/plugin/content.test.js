@@ -43,9 +43,11 @@ test('agents declare name, description, tools, model; only the executor can writ
     assert.strictEqual(data.name, name, `${file}: name must match file`);
     for (const k of ['description', 'tools', 'model']) assert.ok(data[k], `${file}: missing ${k}`);
     const tools = String(data.tools).split(',').map(t => t.trim());
+    const { BY_NAME: HARNESS_TOOLS } = require('../../scripts/lib/harness-tools/registry');
     for (const t of tools.filter(x => x.startsWith('mcp__'))) {
       const m = /^mcp__broker__(\w+)$/.exec(t);
-      assert.ok(m && BROKER_TOOLS.has(m[1]), `${file}: unknown MCP tool ${t}`);
+      const h = /^mcp__harness__(\w+)$/.exec(t);
+      assert.ok((m && BROKER_TOOLS.has(m[1])) || (h && HARNESS_TOOLS.has(h[1])), `${file}: unknown MCP tool ${t}`);
     }
     const writes = tools.filter(t => WRITE_TOOLS.some(w => t === `mcp__broker__${w}`));
     if (name === 'trade-executor') assert.ok(writes.includes('mcp__broker__place_order'));

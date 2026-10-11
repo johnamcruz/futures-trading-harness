@@ -39,8 +39,8 @@ well-known economic calendars.
 ```text
 ## Events: <date> for <SYMBOL>
 - <HH:MM ET> (<HH:MM UTC>) <event> - impact <high|medium> - source <domain>
-Proposed blackouts (the head trader adds each with
-`node <root>/scripts/blackouts.js add --start <ISO UTC> --end <ISO UTC> --reason "<event>"`;
+Proposed blackouts (the head trader adds each with the harness tool
+`blackouts_add` {start: <ISO UTC>, end: <ISO UTC>, reason: "<event>"};
 never edit blackouts.json):
 - <ISO UTC start> to <ISO UTC end>: <event>
 Calendar: <holiday or early close today (13:00 ET), with source | none found>
