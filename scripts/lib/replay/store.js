@@ -69,7 +69,7 @@ function remaining(manifest, points, recorded = new Set()) {
   const done = new Set(manifest.daysDone || []);
   // The last time recorded: the manifest's, or a line written just before a stop kept the manifest from saying so.
   let last = manifest.lastT ? Date.parse(manifest.lastT) : -Infinity;
-  for (const t of recorded) last = Math.max(last, Date.parse(t)); // a loop: a long run has too many times to spread
+  for (const t of recorded) if (Number.isFinite(Date.parse(t))) last = Math.max(last, Date.parse(t)); // a loop: a long run has too many times to spread
   return points.filter(p => !done.has(p.day) && p.t.getTime() > last);
 }
 
