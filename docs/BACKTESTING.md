@@ -48,6 +48,14 @@ Bars come from files:
 - **Excel** (`.xlsx`, `.xlsm`): the first sheet, or `sheet` in the config.
 - **CSV** and **JSON** (the broker's `get_bars` output).
 
+The Parquet and Excel readers trust the file: they are for your own data,
+through the CLIs (backtests, training). They bound what a file decompresses
+to (512 MB), refuse malformed page and encoding headers, and reject cells
+past column XFD, but a crafted file can still make them slow or large (the
+sheet's regular expressions, a wide row or a long dictionary fanning out,
+unbounded rows, cells and shared strings). The agents' tools (the `harness`
+MCP server) read only JSON and CSV bars files.
+
 The table needs a header with a time column (`time`, `timestamp`,
 `datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
 `high`, `low`, `close`, and optionally `volume` (needed for the order-flow

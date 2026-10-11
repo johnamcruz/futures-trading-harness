@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const zlib = require('zlib');
+const { createBudget } = require('./decode-budget');
 
 const TYPE = { BOOLEAN: 0, INT32: 1, INT64: 2, INT96: 3, FLOAT: 4, DOUBLE: 5, BYTE_ARRAY: 6, FIXED_LEN_BYTE_ARRAY: 7 };
 const ENC = { PLAIN: 0, PLAIN_DICTIONARY: 2, RLE: 3, BIT_PACKED: 4, DELTA_BINARY_PACKED: 5, DELTA_LENGTH_BYTE_ARRAY: 6, DELTA_BYTE_ARRAY: 7, RLE_DICTIONARY: 8, BYTE_STREAM_SPLIT: 9 };
@@ -38,7 +39,8 @@ class Reader {
   varint() {
     let result = 0n;
     let shift = 0n;
-    for (;;) {
+    for (let n = 0; ; n += 1) {
+      if (n === 10) throw new Error('parquet: a varint longer than 10 bytes');
       const b = this.byte();
       result |= BigInt(b & 0x7f) << shift;
       if ((b & 0x80) === 0) return result;
@@ -55,8 +57,14 @@ class Reader {
     return Number(this.zigzag());
   }
 
+  /** Bytes left: no list, map or binary can claim more elements than that. */
+  left() {
+    return this.buf.length - this.pos;
+  }
+
   binary() {
     const len = Number(this.varint());
+    if (len > this.left()) throw new Error('parquet: unexpected end of metadata');
     const out = this.buf.subarray(this.pos, this.pos + len);
     this.pos += len;
     return out;
@@ -83,6 +91,7 @@ class Reader {
     let size = head >> 4;
     const type = head & 0x0f;
     if (size === 15) size = Number(this.varint());
+    if (size > this.left()) throw new Error('parquet: a metadata list longer than the file');
     const out = [];
     for (let k = 0; k < size; k += 1) out.push(type === 1 || type === 2 ? this.byte() === 1 : this.value(type));
     return out;
@@ -93,7 +102,10 @@ class Reader {
     const out = [];
     if (size === 0) return out;
     const types = this.byte();
-    for (let k = 0; k < size; k += 1) out.push([this.value(types >> 4), this.value(types & 0x0f)]);
+    if (size > this.left()) throw new Error('parquet: a metadata map longer than the file');
+    // In a map (as in a list) a boolean is a byte of its own.
+    const item = t => (t === 1 || t === 2 ? this.byte() === 1 : this.value(t));
+    for (let k = 0; k < size; k += 1) out.push([item(types >> 4), item(types & 0x0f)]);
     return out;
   }
 
@@ -115,9 +127,10 @@ class Reader {
 
 // ── decompression ──────────────────────────────────────────────────────────
 
-function snappy(input, outLen) {
+function snappy(input, outLen, budget = createBudget()) {
   const r = new Reader(input);
   const len = Number(r.varint());
+  budget.take('parquet', len); // before allocating what the header claims
   const out = Buffer.alloc(len);
   let o = 0;
   let p = r.pos;
@@ -147,13 +160,15 @@ function snappy(input, outLen) {
   return out;
 }
 
-function lz4Raw(input, outLen) {
+function lz4Raw(input, outLen, budget = createBudget()) {
+  budget.take('parquet', outLen);
   const out = Buffer.alloc(outLen);
   let p = 0; let o = 0;
   while (p < input.length) {
     const token = input[p++];
     let lit = token >> 4;
     if (lit === 15) { let b; do { b = input[p++]; lit += b; } while (b === 255); }
+    if (o + lit > outLen || p + lit > input.length) throw new Error('parquet: LZ4 data past its page');
     input.copy(out, o, p, p + lit);
     o += lit; p += lit;
     if (p >= input.length) break;
@@ -161,22 +176,24 @@ function lz4Raw(input, outLen) {
     let m = token & 15;
     if (m === 15) { let b; do { b = input[p++]; m += b; } while (b === 255); }
     m += 4;
+    if (o + m > outLen || offset === 0 || offset > o) throw new Error('parquet: LZ4 data past its page');
     for (let k = 0; k < m; k += 1) out[o + k] = out[o - offset + k];
     o += m;
   }
   return out;
 }
 
-function decompress(codec, buf, outLen) {
+/** A page's bytes; what every page of one file decompresses to counts against `budget` (decode-budget.js). */
+function decompress(codec, buf, outLen, budget) {
   switch (codec) {
     case 0: return buf;
-    case 1: return snappy(buf, outLen);
-    case 2: return zlib.gunzipSync(buf);
-    case 4: return zlib.brotliDecompressSync(buf);
+    case 1: return snappy(buf, outLen, budget);
+    case 2: return budget.inflate('parquet', max => zlib.gunzipSync(buf, { maxOutputLength: max }));
+    case 4: return budget.inflate('parquet', max => zlib.brotliDecompressSync(buf, { maxOutputLength: max }));
     case 6:
       if (typeof zlib.zstdDecompressSync !== 'function') throw new Error('parquet: ZSTD needs Node 22.15+ (or rewrite the file with snappy)');
-      return zlib.zstdDecompressSync(buf);
-    case 7: return lz4Raw(buf, outLen);
+      return budget.inflate('parquet', max => zlib.zstdDecompressSync(buf, { maxOutputLength: max }));
+    case 7: return lz4Raw(buf, outLen, budget);
     default: throw new Error(`parquet: compression codec ${codec} is not supported (use snappy, gzip, zstd, brotli, or none)`);
   }
 }
@@ -185,6 +202,7 @@ function decompress(codec, buf, outLen) {
 
 /** RLE / bit-packed hybrid: `count` values of `width` bits from buf[pos..end). */
 function rleHybrid(buf, pos, end, width, count) {
+  if (!(Number.isInteger(width) && width >= 0 && width <= 32)) throw new Error('parquet: a bit width over 32');
   const out = new Array(count);
   const r = new Reader(buf, pos);
   const byteWidth = Math.ceil(width / 8);
@@ -198,15 +216,18 @@ function rleHybrid(buf, pos, end, width, count) {
       r.pos += byteWidth;
       for (let k = 0; k < run && n < count; k += 1) out[n++] = v;
     } else {
-      const total = (header >> 1) * 8;
-      let bit = 0;
+      const groups = Math.floor(header / 2);
       const start = r.pos;
-      for (let k = 0; k < total; k += 1) {
+      // The groups must be in the data; decode only the values still wanted.
+      if (start + groups * width > end) throw new Error('parquet: truncated level or index data');
+      const take = Math.min(groups * 8, count - n);
+      let bit = 0;
+      for (let k = 0; k < take; k += 1) {
         let v = 0;
         for (let b = 0; b < width; b += 1, bit += 1) if (buf[start + (bit >> 3)] & (1 << (bit & 7))) v |= 1 << b;
-        if (n < count) out[n++] = v;
+        out[n++] = v;
       }
-      r.pos = start + (header >> 1) * width;
+      r.pos = start + groups * width;
     }
   }
   if (n < count) throw new Error('parquet: truncated level or index data');
@@ -219,12 +240,18 @@ function bitWidth(max) {
   return w;
 }
 
-/** DELTA_BINARY_PACKED: returns { values (BigInt), pos }. */
-function deltaBinary(buf, pos) {
+/** DELTA_BINARY_PACKED: returns { values (BigInt), pos }; at most `max` values (the page's count). */
+function deltaBinary(buf, pos, max = Infinity) {
   const r = new Reader(buf, pos);
   const blockSize = Number(r.varint());
   const miniblocks = Number(r.varint());
   const total = Number(r.varint());
+  // The format's own bounds (block size a multiple of 128, miniblocks of a multiple of 32 values), and no
+  // more values than the page says it holds.
+  if (!(blockSize > 0 && blockSize % 128 === 0 && blockSize <= 1 << 20 && miniblocks > 0 && blockSize % miniblocks === 0 && (blockSize / miniblocks) % 32 === 0)) {
+    throw new Error('parquet: a malformed delta encoding header');
+  }
+  if (!(Number.isInteger(total) && total >= 0 && total <= max)) throw new Error('parquet: a delta encoding with more values than its page');
   let last = r.zigzag();
   const values = total > 0 ? [last] : [];
   const perMini = blockSize / miniblocks;
@@ -232,8 +259,11 @@ function deltaBinary(buf, pos) {
     const minDelta = r.zigzag();
     const widths = [];
     for (let k = 0; k < miniblocks; k += 1) widths.push(r.byte());
+    if (r.pos > buf.length) throw new Error('parquet: truncated delta encoding');
     for (let m = 0; m < miniblocks; m += 1) {
       const w = widths[m];
+      if (w > 64) throw new Error('parquet: a delta bit width over 64');
+      if (r.pos + (perMini * w) / 8 > buf.length) throw new Error('parquet: truncated delta encoding');
       const start = r.pos;
       for (let k = 0; k < perMini; k += 1) {
         let v = 0n;
@@ -272,7 +302,7 @@ function plain(buf, pos, type, count, typeLength) {
   return out;
 }
 
-function decodeValues(buf, pos, end, encoding, col, count, dict) {
+function decodeValues(buf, pos, end, encoding, col, count, dict, budget = createBudget()) {
   switch (encoding) {
     case ENC.PLAIN: return plain(buf, pos, col.type, count, col.typeLength);
     case ENC.PLAIN_DICTIONARY:
@@ -285,22 +315,24 @@ function decodeValues(buf, pos, end, encoding, col, count, dict) {
       if (col.type !== TYPE.BOOLEAN) throw new Error('parquet: RLE values are only supported for booleans');
       return rleHybrid(buf, pos + 4, end, 1, count).map(Boolean);
     case ENC.DELTA_BINARY_PACKED: {
-      const v = deltaBinary(buf, pos).values;
+      const v = deltaBinary(buf, pos, count).values;
       return col.type === TYPE.INT32 ? v.map(Number) : v;
     }
     case ENC.DELTA_LENGTH_BYTE_ARRAY: {
-      const { values: lens, pos: p0 } = deltaBinary(buf, pos);
+      const { values: lens, pos: p0 } = deltaBinary(buf, pos, count);
       let p = p0;
       return lens.map(l => { const n = Number(l); const s = buf.subarray(p, p + n); p += n; return s; });
     }
     case ENC.DELTA_BYTE_ARRAY: {
-      const { values: prefix, pos: p1 } = deltaBinary(buf, pos);
-      const { values: suffix, pos: p2 } = deltaBinary(buf, p1);
+      const { values: prefix, pos: p1 } = deltaBinary(buf, pos, count);
+      const { values: suffix, pos: p2 } = deltaBinary(buf, p1, count);
       let p = p2;
       let prev = Buffer.alloc(0);
       return prefix.map((pl, k) => {
         const n = Number(suffix[k]);
-        const v = Buffer.concat([prev.subarray(0, Number(pl)), buf.subarray(p, p + n)]);
+        const keep = Math.max(0, Math.min(Number(pl), prev.length));
+        budget.take('parquet', keep + Math.min(n, Math.max(0, buf.length - p))); // each value is a new buffer
+        const v = Buffer.concat([prev.subarray(0, keep), buf.subarray(p, p + n)]);
         p += n;
         prev = v;
         return v;
@@ -308,9 +340,11 @@ function decodeValues(buf, pos, end, encoding, col, count, dict) {
     }
     case ENC.BYTE_STREAM_SPLIT: {
       const width = { [TYPE.FLOAT]: 4, [TYPE.DOUBLE]: 8, [TYPE.INT32]: 4, [TYPE.INT64]: 8 }[col.type] || col.typeLength;
-      const tmp = Buffer.alloc(width);
+      if (!(Number.isInteger(width) && width > 0 && pos + width * count <= end)) throw new Error('parquet: BYTE_STREAM_SPLIT data past its page');
       const out = new Array(count);
       for (let k = 0; k < count; k += 1) {
+        // A buffer per value: a fixed-length value is a view of it, so it can't be shared.
+        const tmp = Buffer.alloc(width);
         for (let b = 0; b < width; b += 1) tmp[b] = buf[pos + b * count + k];
         out[k] = plain(tmp, 0, col.type, 1, col.typeLength)[0];
       }
@@ -352,7 +386,7 @@ function columnsOf(meta) {
   return cols;
 }
 
-function readColumnChunk(buf, chunk, col) {
+function readColumnChunk(buf, chunk, col, budget) {
   const md = chunk[3];
   const codec = md[4];
   const total = Number(md[5]);
@@ -367,14 +401,22 @@ function readColumnChunk(buf, chunk, col) {
     const compressed = header[3];
     const uncompressed = header[2];
     const type = header[1];
+    // Sizes from the file: never negative, and every page moves forward inside the file.
+    if (!(Number.isInteger(compressed) && compressed >= 0 && Number.isInteger(uncompressed) && uncompressed >= 0)) throw new Error('parquet: a page with a negative size');
+    if (dataStart + compressed > buf.length || dataStart + compressed <= pos) throw new Error('parquet: a page outside the file');
     pos = dataStart + compressed;
     if (type === PAGE.DICTIONARY) {
-      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed);
+      const entries = header[7] && header[7][1];
+      if (!(Number.isInteger(entries) && entries >= 0)) throw new Error('parquet: a page whose value count is out of range');
+      budget.count('parquet', entries);
+      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       dict = plain(page, 0, col.type, header[7][1], col.typeLength);
     } else if (type === PAGE.DATA) {
       const h = header[5];
       const n = h[1];
-      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed);
+      if (!(Number.isInteger(n) && n >= 0)) throw new Error('parquet: a page whose value count is out of range');
+      budget.count('parquet', Number(n)); // before decoding arrays of that many values
+      const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       let p = 0;
       let defs = null;
       if (col.optional) {
@@ -383,21 +425,24 @@ function readColumnChunk(buf, chunk, col) {
         p = 4 + len;
       }
       const present = defs ? defs.filter(d => d === 1).length : n;
-      const vals = decodeValues(page, p, page.length, h[2], col, present, dict);
+      const vals = decodeValues(page, p, page.length, h[2], col, present, dict, budget);
       let k = 0;
       for (let j = 0; j < n; j += 1) values.push(defs && defs[j] === 0 ? null : vals[k++]);
       seen += n;
     } else if (type === PAGE.DATA_V2) {
       const h = header[8];
       const n = h[1];
+      if (!(Number.isInteger(n) && n >= 0)) throw new Error('parquet: a page whose value count is out of range');
       const nulls = h[2] || 0;
+      if (!(Number.isInteger(nulls) && nulls >= 0 && nulls <= n)) throw new Error('parquet: a page whose null count is out of range');
+      budget.count('parquet', n);
       const defLen = h[5] || 0;
       const repLen = h[6] || 0;
       const levels = dataStart + repLen;
       const defs = col.optional && defLen ? rleHybrid(buf, levels, levels + defLen, bitWidth(1), n) : null;
       const body = buf.subarray(dataStart + repLen + defLen, dataStart + compressed);
-      const page = h[7] === false ? body : decompress(codec, body, uncompressed - repLen - defLen);
-      const vals = decodeValues(page, 0, page.length, h[4], col, n - nulls, dict);
+      const page = h[7] === false ? body : decompress(codec, body, uncompressed - repLen - defLen, budget);
+      const vals = decodeValues(page, 0, page.length, h[4], col, n - nulls, dict, budget);
       let k = 0;
       for (let j = 0; j < n; j += 1) values.push(defs && defs[j] === 0 ? null : vals[k++]);
       seen += n;
@@ -432,7 +477,7 @@ function convert(col, v) {
 }
 
 /** Read a Parquet file into { columns: [names], rows: [{ name: value }] }. */
-function readParquet(file) {
+function readParquet(file, { budget = createBudget() } = {}) {
   const buf = fs.readFileSync(file);
   const meta = readMetadata(buf);
   const cols = columnsOf(meta);
@@ -441,7 +486,7 @@ function readParquet(file) {
     const chunks = rg[1];
     cols.forEach((col, k) => {
       const chunk = chunks.find(c => c[3] && c[3][3] && c[3][3].map(x => x.toString('utf8')).join('.') === col.name) || chunks[k];
-      for (const v of readColumnChunk(buf, chunk, col)) data[k].push(convert(col, v));
+      for (const v of readColumnChunk(buf, chunk, col, budget)) data[k].push(convert(col, v));
     });
   }
   const n = data.length ? data[0].length : 0;
@@ -454,4 +499,4 @@ function readParquet(file) {
   return { columns: cols.map(c => c.name), rows };
 }
 
-module.exports = { readParquet, snappy, rleHybrid, deltaBinary };
+module.exports = { readParquet, snappy, rleHybrid, deltaBinary, decompress, Reader };

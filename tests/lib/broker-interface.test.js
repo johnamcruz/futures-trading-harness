@@ -78,6 +78,9 @@ test('the MCP client: a tool error is thrown with its text; a server that exits 
   try {
     await assert.rejects(() => mcp.call('get_quote', { contractId: MNQ }), /get_quote: unknown tool get_quote/);
     assert.strictEqual((await mcp.listTools()).length, 19);
+    const raw = await mcp.request('tools/call', { name: 'get_quote', arguments: { contractId: MNQ } });
+    assert.strictEqual(raw.isError, true, 'request returns the raw result, isError included');
+    assert.strictEqual((await mcp.request('tools/list')).tools.length, 19);
   } finally {
     mcp.close();
   }

@@ -11,6 +11,7 @@
  *     .call(name, args)         tools/call -> the result's JSON (content[0].text,
  *                               parsed), or throws with the server's text on
  *                               isError or a JSON-RPC error
+ *     .request(method, params)  any request -> its raw result (throws on a JSON-RPC error)
  *     .close()
  *
  * The server starts on the first request (initialize, then
@@ -112,6 +113,10 @@ function createMcpClient({ command, args = [], env = process.env, cwd = undefine
       await connected();
       const res = await send('tools/list', {});
       return (res && res.tools) || [];
+    },
+    async request(method, params = {}) {
+      await connected();
+      return send(method, params);
     },
     async call(name, args = {}) {
       await connected();

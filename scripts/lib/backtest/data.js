@@ -65,7 +65,73 @@ function columnsSeen(names) {
 }
 
 /** JSON.parse without the cause: V8's message quotes the text. */
+/**
+ * Shapes no bars file has, refused before parsing (JSON.parse and split hold everything at once, so a
+ * crafted 50 MB file could take gigabytes): JSON nested deeper than 32 levels or with a value every few
+ * bytes, a CSV with more than 1000 columns or a line every few bytes. Real bars use 4+ bytes a value
+ * and 20+ a line, whatever the file's size.
+ */
+const MAX_DEPTH = 32;
+const MAX_COLUMNS = 1000;
+function checkJsonShape(text, label) {
+  let depth = 0;
+  let values = 0;
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text.charCodeAt(i);
+    if (inString) {
+      if (ch === 92) i += 1; // backslash: skip the escaped character
+      else if (ch === 34) inString = false;
+    } else if (ch === 34) inString = true;
+    else if (ch === 91 || ch === 123) { // [ {
+      depth += 1;
+      values += 1;
+      if (depth > MAX_DEPTH) throw new Error(`${label}: JSON nested deeper than ${MAX_DEPTH} levels (not a bars file)`);
+    } else if (ch === 93 || ch === 125) depth -= 1;
+    else if (ch === 44) values += 1; // ,
+  }
+  if (values > text.length / 3 + 16) throw new Error(`${label}: more JSON values than a bars file of its size holds (not a bars file)`);
+}
+
+/** A UTF-8 byte order mark (Excel and some exporters write one) is not part of the data. */
+const stripBom = text => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+
+/**
+ * Bars from parsed JSON (get_bars output, or an array of bars as pandas to_json(orient='records') writes):
+ * numeric times are epochs (s, ms, us or ns by magnitude, as in CSV). A file whose bars all fail to
+ * read is refused, never loaded as no bars.
+ */
+function jsonBars(parsed, label) {
+  const raw = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.bars) ? parsed.bars : null;
+  // Records with other column names (timestamp, Date, Open...: a pandas index, yfinance) read as a table, as CSV
+  // does, when no record has a t or time key (then the column names come from the first record that has a time column).
+  const objects = raw ? raw.filter(b => b && typeof b === 'object' && !Array.isArray(b)) : [];
+  if (objects.length && !objects.some(b => 't' in b || 'time' in b)) {
+    const named = objects.find(b => Object.keys(b).some(k => TIME_NAMES.includes(String(k).trim().toLowerCase()))) || objects[0];
+    let bars;
+    try {
+      bars = normalizeBars(tableToBars(Object.keys(named), objects));
+    } catch (err) {
+      throw new Error(`${label}: ${err.message}`, { cause: err });
+    }
+    if (!bars.length) throw new Error(`${label}: none of its ${objects.length} bars has a readable time, open, high, low and close`);
+    return bars;
+  }
+  const epoch = b => {
+    const t = b && typeof b === 'object' ? (b.t ?? b.time) : undefined;
+    if (typeof t !== 'number' || !Number.isFinite(t)) return b;
+    const ms = epochMs(t);
+    // Past what a date can hold: left as is, for the bar to be dropped like any unreadable time.
+    return Math.abs(ms) <= 8.64e15 ? { ...b, t: new Date(ms).toISOString(), time: undefined } : b;
+  };
+  const rows = raw ? raw.map(epoch) : null;
+  const bars = normalizeBars(rows ? (Array.isArray(parsed) ? rows : { ...parsed, bars: rows }) : parsed);
+  if (rows && rows.length && !bars.length) throw new Error(`${label}: none of its ${rows.length} bars has a readable time, open, high, low and close`);
+  return bars;
+}
+
 function parseJson(text, label) {
+  checkJsonShape(text, label);
   try {
     return JSON.parse(text);
   } catch (_err) {
@@ -100,9 +166,15 @@ function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
 }
 
 function parseCsv(text) {
+  let count = 0;
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) count += 1;
+  if (count > text.length / 8 + 16) throw new Error('csv: more lines than a bars file of its size holds (not a bars file)');
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length === 0) return [];
-  return tableToBars(lines[0].split(','), lines.slice(1).map(l => l.split(',')));
+  const header = lines[0].split(',', MAX_COLUMNS + 1);
+  if (header.length > MAX_COLUMNS) throw new Error(`csv: more than ${MAX_COLUMNS} columns (not a bars file)`);
+  // A row's cells past the header's columns are never read: don't split them out.
+  return tableToBars(header, lines.slice(1).map(l => l.split(',', header.length)));
 }
 
 /** Raw bars from any supported file. */
@@ -119,9 +191,9 @@ function readTable(file, { sheet = null } = {}) {
     return tableToBars(rows[start], rows.slice(start + 1).filter(r => r.some(x => x !== null)), { excel: true, date1904 });
   }
   if (ext === '.xls') throw new Error(`${file}: legacy .xls is not supported; save it as .xlsx`);
-  const text = fs.readFileSync(file, 'utf8');
+  const text = stripBom(fs.readFileSync(file, 'utf8'));
   const trimmed = text.trimStart();
-  return trimmed.startsWith('[') || trimmed.startsWith('{') ? normalizeBars(parseJson(text, file)) : parseCsv(text);
+  return trimmed.startsWith('[') || trimmed.startsWith('{') ? jsonBars(parseJson(text, file), file) : parseCsv(text);
 }
 
 /** Load and clean bars from a Parquet, Excel, CSV, or JSON file. */
@@ -141,7 +213,7 @@ function loadBars(file, opts = {}) {
  * array); anything else is a file loadBars reads (JSON, CSV, Parquet, Excel).
  */
 function readBarsArg(file) {
-  if (file === '-') return normalizeBars(parseJson(fs.readFileSync(0, 'utf8'), 'stdin'));
+  if (file === '-') return jsonBars(parseJson(stripBom(fs.readFileSync(0, 'utf8')), 'stdin'), 'stdin');
   return loadBars(path.resolve(file));
 }
 
