@@ -16,6 +16,7 @@ const { resolveJournalPath, readJournalWindow } = require('./journal');
 const { evaluateOrder, evaluateModify, formatBlock } = require('./order-gate');
 const { loadStrategies } = require('./strategies');
 const { loadAccounts } = require('./accounts');
+const { harnessNow, recordNow, ReplayClockError } = require('./harness-now');
 
 function readBlackouts(file) {
   let text;
@@ -34,17 +35,29 @@ function readBlackouts(file) {
 }
 
 /**
- * Returns { allowed, intent, violations, message }. `tool` is the broker tool
- * being called: place_order (default) or modify_order.
+ * Returns { allowed, intent, violations, message, now }. `tool` is the broker tool
+ * being called: place_order (default), modify_order, cancel_order, or
+ * partial_close_position. `now` defaults to the harness clock (harness-now.js);
+ * `now` in the result is the time the checks ran at (null when refused for the clock).
  */
-function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), tool = 'place_order', transcriptPath = null } = {}) {
+function checkOrder(input, { env = process.env, pluginRoot, now = null, tool = 'place_order', transcriptPath = null } = {}) {
+  // FTH_REPLAY_NOW without a replay broker, or unparseable: every gated call is refused, whatever `now` was passed.
+  let clockNow;
+  try {
+    clockNow = harnessNow(env);
+  } catch (err) {
+    if (!(err instanceof ReplayClockError)) throw err;
+    const violations = [{ check: 'replay-clock', message: `${err.message} Meanwhile close_position still flattens a position.` }];
+    return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations), now: null };
+  }
+  if (!now) now = clockNow;
   const config = loadConfig(env);
   // cancel_order and partial_close_position need live account data; only the gateway checks them (account-gate.js).
-  if (tool === 'cancel_order' || tool === 'partial_close_position') return { allowed: true, intent: tool === 'cancel_order' ? 'cancel' : 'risk-reducing', violations: [], message: '' };
+  if (tool === 'cancel_order' || tool === 'partial_close_position') return { allowed: true, intent: tool === 'cancel_order' ? 'cancel' : 'risk-reducing', violations: [], message: '', now };
   if (tool === 'modify_order') {
     const r = evaluateModify({ input: input || {}, config });
     const ok = r.violations.length === 0;
-    return { allowed: ok, intent: r.intent, violations: r.violations, message: ok ? '' : formatBlock(r.violations) };
+    return { allowed: ok, intent: r.intent, violations: r.violations, message: ok ? '' : formatBlock(r.violations), now };
   }
   let journalPath;
   try {
@@ -52,7 +65,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
   } catch (err) {
     // A broken broker config: no journal to read, so no order (fails closed), but say how to get flat.
     const violations = [{ check: 'broker-config', message: `${err.message}. Fix the broker config; meanwhile close_position still flattens a position.` }];
-    return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations) };
+    return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations), now };
   }
   const journal = readJournalWindow(journalPath);
   const result = evaluateOrder({
@@ -67,7 +80,7 @@ function checkOrder(input, { env = process.env, pluginRoot, now = new Date(), to
     transcriptPath,
   });
   const allowed = result.violations.length === 0;
-  return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations) };
+  return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now };
 }
 
 function gateLogPath(env = process.env) {
@@ -87,4 +100,5 @@ function logDecision(entry, env = process.env) {
   }
 }
 
-module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision };
+// The gate's clock too (harness-now.js), so the gateway takes its time where it takes its checks.
+module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, harnessNow, recordNow };

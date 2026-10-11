@@ -23,6 +23,7 @@ const path = require('path');
 const { withAdapter } = require('./lib/broker/adapter');
 const { writeMtfRecord, recordFile } = require('./lib/trading/mtf-state');
 const { harnessHome } = require('./lib/paths');
+const { harnessNow } = require('./lib/trading/harness-now');
 
 function parse(argv) {
   const o = { symbol: null, timeframe: 3, daily: false, count: null, out: null, record: false };
@@ -42,12 +43,14 @@ function parse(argv) {
 
 async function main(argv) {
   const o = parse(argv);
+  // Bars up to the harness clock: a replay broker's replayed time, else the wall clock.
+  const now = harnessNow();
   if (o.record && o.daily) throw new Error('--record reads trigger bars (minutes), not daily bars');
   if (o.record && process.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
-  const r = await withAdapter({ root: path.resolve(__dirname, '..'), env: process.env }, broker => fetchBarsToFile({ client: broker, ...o }));
+  const r = await withAdapter({ root: path.resolve(__dirname, '..'), env: process.env }, broker => fetchBarsToFile({ client: broker, ...o, now }));
   process.stdout.write(`wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`);
   if (o.record) {
-    const rec = writeMtfRecord(harnessHome(), o.symbol, r.bars, { source: r.file });
+    const rec = writeMtfRecord(harnessHome(), o.symbol, r.bars, { source: r.file, now });
     process.stdout.write(`${rec.line} (recorded for the order gate: ${recordFile(harnessHome(), o.symbol)})\n`);
   }
   return 0;

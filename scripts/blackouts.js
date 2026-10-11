@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadConfig } = require('./lib/trading/config');
+const { harnessNow } = require('./lib/trading/harness-now');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -42,7 +43,7 @@ function addWindow(list, { start, end, reason }, now = new Date()) {
   return kept.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
-function run(argv, { env = process.env, now = new Date(), out = s => process.stdout.write(s) } = {}) {
+function run(argv, { env = process.env, now = harnessNow(env), out = s => process.stdout.write(s) } = {}) {
   const [cmd, ...args] = argv;
   const file = loadConfig(env).blackoutsFile;
   if (cmd === 'list') {

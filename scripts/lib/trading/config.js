@@ -52,19 +52,6 @@ function listEnv(env, name) {
   );
 }
 
-const STARTED_AT = Date.now();
-
-/**
- * The gate's clock. The test suite (NODE_ENV=test) may shift it with
- * FTH_TEST_NOW (an ISO time the process starts at); never otherwise, and
- * never in autonomous runs, where the gate is locked.
- */
-function gateNow(env = process.env) {
-  const t = Date.parse(String(env.FTH_TEST_NOW || ''));
-  if (env.NODE_ENV !== 'test' || env.FTH_AUTONOMOUS === '1' || !Number.isFinite(t)) return new Date();
-  return new Date(Date.now() + (t - STARTED_AT));
-}
-
 function loadConfig(env = process.env) {
   return {
     planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', 120, { min: 1 }),
@@ -111,7 +98,6 @@ function loadConfig(env = process.env) {
 }
 
 module.exports = {
-  gateNow,
   DEFAULT_NO_ENTRY_WINDOWS,
   DEFAULT_ENTRY_HOURS,
   GATE_CHECKS,

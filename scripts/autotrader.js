@@ -52,6 +52,7 @@ const { createPropHooks } = require('./lib/rl/live-runner');
 const { loadStrategies, scan } = require('./lib/trading/strategies');
 const { scanRecord, appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
+const { harnessNow } = require('./lib/trading/harness-now');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
@@ -195,7 +196,7 @@ function loadState(cfg) {
   if (state === null && fs.existsSync(STATE_FILE)) {
     // Unreadable state: don't guess. Manage-only cycles today; end of day still runs.
     process.stderr.write(`[autotrader] ${STATE_FILE} is unreadable; only manage-only cycles until tomorrow\n`);
-    return { day: dayKey(new Date()), premarketDone: true, eodDone: false, cycles: cfg.maxCyclesPerDay, lastCycleAt: null };
+    return { day: dayKey(harnessNow()), premarketDone: true, eodDone: false, cycles: cfg.maxCyclesPerDay, lastCycleAt: null };
   }
   return state;
 }
@@ -208,10 +209,6 @@ function checkStrategies(cfg) {
   if (usable.length === 0) {
     throw new Error(`trigger "signal" with timeframe ${cfg.timeframe}: no active mechanical strategy uses ${tf}, so only open positions would ever start a cycle. Use trigger "bar" or a matching timeframe.`);
   }
-}
-
-function resolveDataDir(cfg) {
-  return dataDirFor(cfg);
 }
 
 /** Claude settings that would silently refuse order tools in an unattended run. */
@@ -252,7 +249,9 @@ async function main(argv) {
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run]');
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
-  const dataDir = resolveDataDir(cfg);
+  const dataDir = dataDirFor(cfg);
+  // The harness clock (trading/harness-now.js): FTH_REPLAY_NOW without a replay broker, or unparseable, stops the run here.
+  harnessNow();
   const opts = { dryRun: argv.includes('--dry-run') };
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   checkStrategies(cfg);
@@ -267,7 +266,7 @@ async function main(argv) {
     if (!['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
     if (once !== 'eod' && fs.existsSync(killSwitchFile)) throw new Error(`kill switch is on (${killSwitchFile})`);
-    const p = prompts(cfg, new Date(), ROOT);
+    const p = prompts(cfg, harnessNow(), ROOT);
     // A manual trade run reads nothing for the prompt: it says so instead of claiming an empty journal.
     const manual = { journalRead: false, unavailable: ['a manual run (--once): no bars, account, journal, news, premarket plan, or strategy scan were read; read them yourself'] };
     const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })), manual)] : symbols.map(s => p.premarket(s));
@@ -278,7 +277,7 @@ async function main(argv) {
   }
 
   if (opts.dryRun) {
-    const { action } = decide(cfg, loadState(cfg), new Date(), { killSwitch: fs.existsSync(killSwitchFile) });
+    const { action } = decide(cfg, loadState(cfg), harnessNow(), { killSwitch: fs.existsSync(killSwitchFile) });
     process.stdout.write(`next action now: ${action || 'none'}${action === 'trade' || action === 'manage' ? ' (on the next closed bar)' : ''}\n`);
     return 0;
   }
@@ -331,7 +330,7 @@ async function main(argv) {
     prop: prop.accounts().length ? prop : null,
     root: ROOT,
     client,
-    clock: { now: () => new Date() },
+    clock: { now: () => harnessNow() },
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     isKillSwitchOn: () => fs.existsSync(killSwitchFile),
     createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
@@ -342,7 +341,7 @@ async function main(argv) {
       writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
       return file;
     },
-    recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars).line,
+    recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars, { now: harnessNow() }).line,
     // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
     trackRecord: (name, { regime, at, entries }) => describeRecord({
       backtest: readRecord(HOME_DIR, name), live: liveRecord(entries || readJournal(resolveJournalPath(process.env)), name, regime), regime, at,
@@ -364,12 +363,12 @@ async function main(argv) {
     news: now => newsLine(readBlackouts(loadConfig(process.env).blackoutsFile), now),
     journalEntries: () => readJournal(resolveJournalPath(process.env)),
     tradeHistory: t => excursionNote(readRecord(HOME_DIR, t.setup), t),
-    recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000 })),
+    recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: harnessNow() })),
     scanFor: (symbol, bars) => {
       // Only strategies that trade this bar's timeframe can be judged from these bars.
       const { strategies } = loadStrategies(ROOT, process.env);
       const sameTf = strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
-      return scan(sameTf, { bars }, { symbol, now: new Date() });
+      return scan(sameTf, { bars }, { symbol, now: harnessNow() });
     },
     log,
     // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).

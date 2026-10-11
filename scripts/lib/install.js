@@ -24,7 +24,7 @@ const FTH_ENV = [
   'FTH_AUTONOMOUS', 'FTH_PAPER', 'FTH_KILL_SWITCH_FILE', 'FTH_STRATEGIES_DIRS', 'FTH_BLACKOUTS_FILE', 'FTH_GATE_LOG',
   'FTH_NO_ENTRY_WINDOWS', 'FTH_ENTRY_HOURS', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_LOSS_COOLDOWN_MIN',
   'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS',
-  'FTH_HOME',
+  'FTH_HOME', 'FTH_REPLAY_NOW',
 ];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];

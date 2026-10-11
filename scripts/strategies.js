@@ -5,7 +5,7 @@
  *   node scripts/strategies.js list [--json]
  *   node scripts/strategies.js show <name>
  *   node scripts/strategies.js validate
- *   node scripts/strategies.js scan <bars file|-> --symbol MNQ [--now ISO] [--record]
+ *   node scripts/strategies.js scan <bars file|-> --symbol MNQ [--now ISO] [--record]   (default now: the harness clock)
  *   node scripts/strategies.js recent <bars file> --symbol MNQ [--bars 5]   what fired on each of the last bars
  *
  * scan --record also records which rules strategies fired on the last closed
@@ -24,6 +24,7 @@ const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { timeframeMs } = require('./lib/trading/evaluator');
 const { normalizeBars } = require('./lib/trading/indicators');
 const { harnessHome } = require('./lib/paths');
+const { harnessNow } = require('./lib/trading/harness-now');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -72,7 +73,9 @@ function run(argv, { env = process.env, out = s => process.stdout.write(s) } = {
     const o = options(args, ['--symbol', '--now'], ['--record']);
     if (!o._[0]) throw new Error('scan needs a bars file (get_bars JSON, CSV, Parquet) or -');
     const bars = readBarsArg(o._[0]);
-    const now = o['--now'] ? new Date(o['--now']) : new Date();
+    // The harness clock (a replay broker's replayed time), refused when unusable even with --now.
+    const clock = harnessNow(env);
+    const now = o['--now'] ? new Date(o['--now']) : clock;
     if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${o['--now']})`);
     const results = scan(strategies, bars, { symbol: o['--symbol'], now });
     out(`${JSON.stringify(results, null, 2)}\n`);

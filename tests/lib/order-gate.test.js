@@ -265,15 +265,6 @@ test('exchange calendar: the built-in CME calendar applies with nothing configur
   assert.ok(at('2028-11-24T18:10:00Z', extended).includes('market-hours'), 'the day after Thanksgiving 2028, 13:10 ET: after the early close');
 });
 
-test('the test clock (FTH_TEST_NOW) works only under the test suite, never in autonomous runs', () => {
-  const { gateNow } = require('../../scripts/lib/trading/config');
-  const far = '2020-01-01T00:00:00Z';
-  const near = t => Math.abs(t.getTime() - Date.now()) < 60000;
-  assert.ok(near(gateNow({ FTH_TEST_NOW: far })), 'ignored without NODE_ENV=test');
-  assert.ok(near(gateNow({ FTH_TEST_NOW: far, NODE_ENV: 'test', FTH_AUTONOMOUS: '1' })), 'ignored in autonomous runs');
-  assert.ok(!near(gateNow({ FTH_TEST_NOW: far, NODE_ENV: 'test' })));
-});
-
 // --- Prop challenge: the hard `combine` and `policy` checks (trading/prop-state.js). ---
 const prop = require('../../scripts/lib/trading/prop-state');
 const { tmpDir } = require('../helpers');
@@ -674,4 +665,81 @@ test('partial_close_position: the hook passes it (it needs the account), the gat
   assert.strictEqual(orderTool(call('partial_close_position')), 'partial_close_position');
   assert.strictEqual(orderTool(call('close_position')), null);
   assert.strictEqual(orderTool(call('mcp__broker__close_position')), null);
+});
+
+// --- The replay clock (trading/harness-now.js): FTH_REPLAY_NOW, honored only with a replay broker. ---
+
+/** A plugin root whose one strategy trades MNQ at any hour, and a home whose broker ("sim") is a replay broker or not. */
+function replaySetup({ replay = true, journalAt = '2026-10-07T14:25:00.000Z' } = {}) {
+  const path = require('path');
+  const fs = require('fs');
+  const root = tmpDir();
+  fs.mkdirSync(path.join(root, 'strategies', 'anytime'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'strategies', 'anytime', 'STRATEGY.md'), [
+    '---', 'name: anytime', 'description: Test strategy that is valid at any time of day for MNQ only.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1', '---',
+    '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  const home = trendHome(undefined, { closedAt: '2026-10-07T14:27:00.000Z' });
+  const journal = require('../helpers').writeJournal(home, [{ ts: journalAt, kind: 'plan', contractId: CONTRACT, text: 'plan' }]);
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+  const env = {
+    FTH_HOME: home, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
+    FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
+  };
+  return { root, env };
+}
+const ANYTIME = entryOrder({ rationale: 'setup:anytime long, stop 21480, target 21540, risk $40' });
+
+test('replay clock: with a replay broker every check runs at FTH_REPLAY_NOW, not the wall clock', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { root, env } = replaySetup();
+  const wednesday = '2026-10-07T14:30:00.000Z'; // 10:30 ET, in session; plan 5 min old, trend read 3 min old
+  const saturday = '2026-10-10T15:00:00.000Z'; // market closed
+  // The wall clock (the test suite's, FTH_TEST_NOW) on Saturday, the replayed time on Wednesday: allowed.
+  const replayed = checkOrder(ANYTIME, { env: { ...env, FTH_TEST_NOW: saturday, FTH_REPLAY_NOW: wednesday }, pluginRoot: root });
+  assert.deepStrictEqual(replayed.violations, []);
+  assert.strictEqual(replayed.now.toISOString(), wednesday, 'the time the checks ran at');
+  // The same order on the wall clock alone: market closed, the plan and the trend read stale.
+  const live = checkOrder(ANYTIME, { env: { ...env, FTH_TEST_NOW: saturday }, pluginRoot: root });
+  assert.ok(['market-hours', 'plan-required', 'mtf-trend'].every(c => live.violations.some(v => v.check === c)), live.message);
+  // And the other way round: a replayed Saturday is closed whatever the wall clock says (the override never relaxes a check).
+  const closed = checkOrder(ANYTIME, { env: { ...env, FTH_TEST_NOW: wednesday, FTH_REPLAY_NOW: saturday }, pluginRoot: root });
+  assert.ok(closed.violations.some(v => v.check === 'market-hours'), closed.message);
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...env, FTH_TEST_NOW: wednesday }, pluginRoot: root }).violations, []);
+});
+
+test('replay clock: FTH_REPLAY_NOW without a replay broker, or unparseable, refuses every gated call (unskippable, also autonomous)', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const live = replaySetup({ replay: false });
+  const sim = replaySetup();
+  const calls = [
+    ['place_order', ANYTIME],
+    ['place_order', { ...entryOrder({ rationale: '[exit] flatten' }), side: 'sell' }],
+    ['modify_order', { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }],
+    ['cancel_order', { accountId: 1, orderId: 9 }],
+    ['partial_close_position', { accountId: 1, contractId: CONTRACT, size: 1 }],
+  ];
+  const envs = [
+    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z' }, /"sim" is not a replay broker/],
+    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z', FTH_AUTONOMOUS: '1' }, /not a replay broker/],
+    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z', FTH_ORDER_GATE_SKIP: 'replay-clock,market-hours,plan-required' }, /not a replay broker/],
+    [sim, { FTH_REPLAY_NOW: 'yesterday' }, /not an ISO 8601 UTC time/],
+  ];
+  for (const [s, extra, why] of envs) {
+    for (const [tool, input] of calls) {
+      // Even with a time passed in (as a replay worker may): the clock's refusal comes first.
+      for (const now of [undefined, NOW]) {
+        const r = checkOrder(input, { env: { ...s.env, FTH_TEST_NOW: '2026-10-07T14:30:00Z', ...extra }, pluginRoot: s.root, tool, now });
+        assert.strictEqual(r.allowed, false, `${tool} ${JSON.stringify(extra)}`);
+        assert.deepStrictEqual(r.violations.map(v => v.check), ['replay-clock']);
+        assert.match(r.message, why);
+        assert.match(r.message, /close_position still flattens/);
+        assert.strictEqual(r.now, null);
+      }
+    }
+  }
+  // Control: the same calls without the override are judged normally.
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00Z' }, pluginRoot: live.root }).violations, []);
+  assert.strictEqual(checkOrder(calls[3][1], { env: live.env, pluginRoot: live.root, tool: 'cancel_order' }).allowed, true);
 });

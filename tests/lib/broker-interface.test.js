@@ -243,3 +243,20 @@ test('the conformance checker: search_trades must honour a past startTimestamp (
   assert.match((await verdict(a => (a.startTimestamp ? [] : today))).problems.join(), /narrowed or ignored/);
   assert.match((await verdict(() => [older, fill(0, '2026-09-01T15:00:00Z'), ...today])).problems.join(), /startTimestamp is ignored/);
 });
+
+test('the contract translator dates its front-month lookups by the harness clock: a replay broker\'s replayed day', async () => {
+  const day = async (env) => {
+    const home = tmpDir();
+    fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], ...env.brokerExtra } } }));
+    const client = createAdapter({ mcp: translated({ FTH_HOME: home, FTH_REPLAY_NOW: env.now }) });
+    try {
+      await client.activeContract('MNQ');
+    } finally {
+      client.close();
+    }
+    return JSON.parse(fs.readFileSync(path.join(home, 'contracts-fake.json'), 'utf8')).front.MNQ.day;
+  };
+  assert.strictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: { replay: true } }), '2026-03-04');
+  // Not a replay broker: the override is refused for checks; lookups go on, on the wall clock.
+  assert.notStrictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: {} }), '2026-03-04');
+});

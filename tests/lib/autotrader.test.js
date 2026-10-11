@@ -418,3 +418,29 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   assert.match(f, /MNQ Trend rule: up; trend strategies may not go short \(recorded for the order gate, which enforces it\)\. MNQ premarket plan \(09:05 ET\): bias long\. /);
   assert.match(f, /a 3-minute bar just closed \(opened 15:30 ET\);/);
 });
+
+test('CLI: the runner decides on the harness clock: a replay broker\'s FTH_REPLAY_NOW, refused with a live broker', () => {
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'] }));
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], replay: true } } }));
+  const cli = path.join(ROOT, 'scripts', 'autotrader.js');
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  const at = (now, extra = {}) => spawnSync(process.execPath, [cli, '--config', config, '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: now, ...extra } });
+  const premarket = at('2026-10-07T12:00:00Z'); // Wednesday 08:00 ET
+  assert.strictEqual(premarket.status, 0, premarket.stderr);
+  const weekend = at('2026-10-10T15:00:00Z'); // Saturday
+  assert.strictEqual(weekend.status, 0, weekend.stderr);
+  assert.notStrictEqual(premarket.stdout, weekend.stdout, 'the action depends on the replayed time');
+  assert.match(weekend.stdout, /next action now: none/);
+  const live = at('2026-10-07T12:00:00Z', { FTH_BROKER: 'topstepx' });
+  assert.strictEqual(live.status, 1);
+  assert.match(live.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  // The live loop too: refused before the lock, the broker, or the first cycle.
+  const loop = spawnSync(process.execPath, [cli, '--config', config], { encoding: 'utf8', env: { ...env, FTH_BROKER: 'topstepx', FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, timeout: 20000 });
+  assert.strictEqual(loop.status, 1);
+  assert.match(loop.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  const garbage = at('soon');
+  assert.strictEqual(garbage.status, 1);
+  assert.match(garbage.stderr, /not an ISO 8601 UTC time/);
+});

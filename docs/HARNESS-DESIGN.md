@@ -100,11 +100,40 @@ is the authoritative layer. A blocked call never reaches the server.
 | `batch` | Order calls go one at a time: a JSON-RPC batch containing one is refused whole | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
 
+| `replay-clock` | `FTH_REPLAY_NOW` set while the selected broker is not a replay broker, or not an ISO 8601 UTC time: every gated call is refused (Replay clock, below). Hard: not skippable | yes | yes |
+
 Malformed or oversized input, unreadable state, invalid config, a failed
 account query, a position whose size isn't a whole number of contracts, or a
 crash blocks the order. In autonomous runs
 (`FTH_AUTONOMOUS=1`) the gate can't be skipped, dry-run, or disabled.
 Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`.
+
+### Replay clock
+
+Replay runs the live harness (runner, harness CLI, agents, skills, scripts,
+gate, broker interface) on replayed history; only data, clock, and fills are
+simulated, by a replay broker: an MCP server configured in `brokers.json` like
+any other, with `"replay": true`. Its clock reaches the harness through one
+variable, `FTH_REPLAY_NOW` (an ISO 8601 UTC time such as
+`2026-03-02T15:30:00Z`), read by one function, `harnessNow(env)` in
+`scripts/lib/trading/harness-now.js`. Everything that takes "now" for a
+trading decision takes it from there: the gate in the hook and the gateway
+(market hours, windows, blackouts, plan and record ages, the trading day's
+journal, prop snapshot ages), the session-start and stop hooks, the scripts
+agents run (`strategies.js scan` without `--now`, `bars.js`, `mtf.js --record`,
+`combine.js`, `blackouts.js`), the runner's clock in `autotrader.js`, and the
+contract translator's front-month day. Unset, it is the wall clock.
+
+It fails closed and is replay-only: with `FTH_REPLAY_NOW` set and a selected
+broker (`FTH_BROKER` / `brokers.json`) that isn't a replay broker, or a value
+that isn't an ISO 8601 UTC time, or a broker config that can't be read, every
+gated order call is refused (`replay-clock`, also with `FTH_AUTONOMOUS=1`;
+`close_position` still goes) and the scripts and the runner exit with the
+error: a replayed time is never used against a live broker. The override never
+relaxes a check; it only moves the time checks run at. A process's environment
+is fixed when it starts, so a session sees the time it was started with: a
+replay driver sets it per cycle. Pure
+log timestamps (cycle logs, the gate log, heartbeats) stay on the wall clock.
 
 ## Autonomous runner
 

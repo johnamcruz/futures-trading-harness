@@ -73,7 +73,8 @@ live attempt in a shared home would refuse every replayed entry. The worker's
 home holds a journal, the gate's records, the combine state, a blackouts file
 rebuilt from the historical calendar for that day, and no kill switch. Every
 check is evaluated at the bar's time (`now`), as `check-order.js` already
-accepts.
+accepts; the full mode's harness processes get it as `FTH_REPLAY_NOW` with a
+replay broker (HARNESS-DESIGN.md, Replay clock).
 
 ### The decision prompt
 

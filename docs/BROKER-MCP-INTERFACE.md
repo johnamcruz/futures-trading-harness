@@ -46,6 +46,7 @@ harness (agents, skills, order gate, runner, CLIs)
   | `journal` / `journalEnv` | The journal file it writes (the variable wins) |
   | `env` | The variables it reads (credentials, guardrails), forwarded by harnesses |
   | `paperEnv` | What a paper run sets so the server refuses every order |
+  | `replay` | `true` only for a simulated broker that replays history: the harness then takes its clock from `FTH_REPLAY_NOW` (see [HARNESS-DESIGN.md](HARNESS-DESIGN.md), Replay clock). A broker the defaults ship without it stays live whatever an override says |
 
   Switching brokers is a config change. Its settings go in
   `~/.futures-trading-harness/.env`, which the gateway loads.
