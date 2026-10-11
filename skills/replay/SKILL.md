@@ -121,7 +121,8 @@ broker.
    refused gets its candidates' counterfactual too. Decisions the student can't express (limit or
    stop entries, a target other than the strategy's own exit as
    `order_plan` places it, adds, partial exits) are counted, not cloned.
-   Read the printed counts (taken, skipped, refused, wins, losses,
+   Read the printed counts (taken, unknownOutcome (an entry whose call
+   timed out with no broker record or fill: never counted as taken), skipped, refused, wins, losses,
    skipped-would-have-won and -lost, uncloneable, unmapped, unsimulated)
    before training on a run. An exit by `close_position` shows only when
    the harness's transcript names tool calls (Claude Code, Codex, Qwen

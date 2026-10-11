@@ -317,16 +317,22 @@ function cycleOrders(c, doc, gateLog, untilMs) {
   const to = Math.min(Number.isFinite(c.durationMs) ? from + c.durationMs + GATE_SLACK_MS : Infinity, untilMs);
   const gates = collapsePairs(gateLog.filter(e => gateTool(e) && e.ms >= from && e.ms < to));
   for (const e of gateLog) if (e.ms >= from && e.ms < to) e.inCycle = true;
-  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name) && !x.stopped).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), error: x.error || '', used: false })) : [];
+  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name) && !x.stopped).map((x, at) => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), error: x.error || '', used: false, at })) : [];
   const out = gates.map(g => {
     const tool = gateTool(g);
     const call = calls.find(x => !x.used && x.tool === tool && String(x.input.rationale ?? '') === String(g.rationale ?? '')
       && (!x.input.contractId || !g.contractId || String(x.input.contractId) === String(g.contractId)));
     if (call) call.used = true;
-    return { ...normalizeOrder(tool, call ? call.input : null, g), callFailed: Boolean(call && call.failed), callError: call && call.failed ? call.error || '' : null };
+    return { order: { ...normalizeOrder(tool, call ? call.input : null, g), callFailed: Boolean(call && call.failed), callError: call && call.failed ? call.error || '' : null }, at: call ? call.at : null };
   });
-  for (const x of calls.filter(y => !y.used)) out.push({ ...normalizeOrder(x.tool, x.input, null), callFailed: Boolean(x.failed), callError: x.failed ? x.error || '' : null });
-  return out;
+  // A call no gate record names (close_position, ungated) goes in transcript order: before the first gated
+  // order the transcript shows after it, so "the last" exit is the last the teacher sent.
+  for (const x of calls.filter(y => !y.used)) {
+    const i = out.findIndex(e => e.at !== null && e.at > x.at);
+    const item = { order: { ...normalizeOrder(x.tool, x.input, null), callFailed: Boolean(x.failed), callError: x.failed ? x.error || '' : null }, at: x.at };
+    if (i === -1) out.push(item); else out.splice(i, 0, item);
+  }
+  return out.map(e => e.order);
 }
 
 /** The position in a family at t: from the cycle's context (what the teacher saw), else the fills through t. */
@@ -769,7 +775,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         orders: d.orders.map(({ argsKnown, ...rest }) => ({ ...rest, argsKnown })),
       };
       if (o) {
-        if (o.broker && o.broker.timeout) reasons.push('outcome unknown: client timeout');
+        // A client timeout with nothing to show (an entry no fill joined): what the broker did is unknown.
+        if (o.broker && o.broker.timeout && !rt) reasons.push('outcome unknown: client timeout');
         const by = refusedBy(o);
         // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
         gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' ? { brokerReason: o.broker.reason } : {}) };
@@ -783,12 +790,13 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         const open = trips.find(x => x.family === d.fam && (x.openMs === null || x.openMs <= d.t) && (x.closeMs === null || x.closeMs >= d.t)) || null;
         outcome = open ? outcomeOf(open, null, contractCache) : null;
       } else if (isEntry) {
-        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks, contractCache) : { filled: false, result: 'unfilled' })
+        // Allowed, no fill: unfilled, unless the call timed out (it may have been placed, or not): unknown, never taken.
+        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks, contractCache) : o.broker && o.broker.timeout ? { filled: null, result: 'unknown' } : { filled: false, result: 'unfilled' })
           : { filled: false, result: gate.decision === 'refused' ? 'refused' : 'not logged' };
       }
       // A skip: flat, nothing sent, no working order touched (a cancel or a modify is a decision of its own).
       const skip = d.decision === 'flat' && d.act.action === 'none' && !d.act.reasons.some(r => NOT_A_SKIP.has(r));
-      counterfactualFor = isEntry ? ({ allowed: 'taken', refused: 'refused intent' }[gate.decision] || null) : skip ? 'skip' : null;
+      counterfactualFor = isEntry ? (outcome.result === 'unknown' ? 'outcome unknown' : { allowed: 'taken', refused: 'refused intent' }[gate.decision] || null) : skip ? 'skip' : null;
       if (isEntry && gate.decision === 'allowed') {
         counterfactuals = [fromFills(outcome, { stopPoints: stop && stop.points, targetTicks: o.targetTicks, spec: ospec, bars: futureBars(d.symbol), tfMs, strategy: o.setup, direction: d.act.action })];
       } else if (d.decision === 'flat' && (counterfactualFor === 'skip' || counterfactualFor === 'refused intent') && d.candidates.length && !d.cyc.failed) {
@@ -834,7 +842,9 @@ function summarize(labels, extra) {
   const n = f => labels.filter(f).length;
   const decision = l => l.decision === 'flat' || l.decision === 'in-trade';
   const entry = l => l.decision === 'flat' && (l.teacher.action === 'long' || l.teacher.action === 'short');
-  const taken = l => entry(l) && l.gate.decision === 'allowed';
+  // An allowed entry whose outcome is unknown (a client timeout, nothing to show) is not taken: counted apart.
+  const allowedEntry = l => entry(l) && l.gate.decision === 'allowed';
+  const taken = l => allowedEntry(l) && !(l.outcome && l.outcome.result === 'unknown');
   const decisions = n(decision);
   const cloneable = n(l => decision(l) && l.clone.ok);
   const touched = l => l.clone.reasons.some(r => NOT_A_SKIP.has(r));
@@ -845,7 +855,7 @@ function summarize(labels, extra) {
   return {
     v: VERSION, runId: extra.runId, strategiesHash: extra.strategiesHash, labels: labels.length, decisions,
     flat: n(l => l.decision === 'flat'), inTrade: n(l => l.decision === 'in-trade'),
-    entries: n(entry), taken: n(taken), refused: n(l => decision(l) && l.gate.decision === 'refused'),
+    entries: n(entry), taken: n(taken), unknownOutcome: n(l => allowedEntry(l) && l.outcome && l.outcome.result === 'unknown'), refused: n(l => decision(l) && l.gate.decision === 'refused'),
     skipped: n(skipped),
     standAside: n(l => l.decision === 'flat' && !l.cycleFailed && !touched(l) && l.teacher.action === 'none' && !l.candidates.length),
     holds: n(l => decision(l) && !touched(l) && l.teacher.action === 'hold'), tightens: n(l => decision(l) && l.teacher.action === 'tighten'), exits: n(l => decision(l) && l.teacher.action === 'exit'),
@@ -929,7 +939,7 @@ function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], b
   return { file, summary };
 }
 
-const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'skipped', 'refused', 'wins', 'losses', 'uncloneable', 'unmapped', 'unsized', 'noCycle', 'noCycleWithCandidates', 'interrupted', 'coverage',
+const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'unknownOutcome', 'skipped', 'refused', 'wins', 'losses', 'uncloneable', 'unmapped', 'unsized', 'noCycle', 'noCycleWithCandidates', 'interrupted', 'coverage',
   'takenWon', 'takenLost', 'skippedWouldWin', 'skippedWouldLose', 'refusedWouldWin', 'refusedWouldLose', 'noCycleWouldWin', 'noCycleWouldLose', 'unsimulated', 'brokerRefused', 'priorRefusals', 'cycleFailed', 'unattributedOrders', 'unmatchedOpenings'];
 const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : s[k]}`).join(', ')}\n${Object.keys(s.uncloneableBy).length ? `uncloneable by reason: ${Object.entries(s.uncloneableBy).map(([k, v]) => `${k} ${v}`).join(', ')}\n` : ''}`;
 

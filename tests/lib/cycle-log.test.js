@@ -182,3 +182,11 @@ test('toolCalls: calls that came back an error are failed in every format; a cal
   const rejected = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: {}, error: 'The user rejected permission to use this specific tool call.' } } });
   assert.strictEqual(toolCalls(rejected)[0].stopped, true);
 });
+
+test('toolCalls: Codex items with no event type count; an opencode call that errored keeps its error text', () => {
+  const item = { type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: { size: 1 }, status: 'completed' };
+  assert.deepStrictEqual(toolCalls(JSON.stringify({ item })).map(c => c.name), ['mcp__broker__place_order'], 'no id, no type');
+  assert.deepStrictEqual(toolCalls(JSON.stringify({ item: { ...item, id: 'x' } })).map(c => c.name), ['mcp__broker__place_order'], 'an id, no type');
+  const oc = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_close_position', state: { status: 'error', input: {}, error: 'PositionNotFound: no open position' } } });
+  assert.deepStrictEqual(toolCalls(oc).map(c => [c.name, c.failed, c.error]), [['mcp__broker__close_position', true, 'PositionNotFound: no open position']]);
+});

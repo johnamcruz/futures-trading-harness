@@ -197,7 +197,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
     [summary.takenWon, summary.takenLost, summary.skippedWouldWin, summary.skippedWouldLose, summary.noCycleWouldWin, summary.noCycleWouldLose, summary.unsimulated],
     [1, 1, 1, 0, 0, 1, 0],
   );
-  assert.match(summaryText(summary), /decisions 8, taken 3, skipped 1, refused 1, wins 1, losses 1, uncloneable 1, unmapped 0/);
+  assert.match(summaryText(summary), /decisions 8, taken 3, unknownOutcome 0, skipped 1, refused 1, wins 1, losses 1, uncloneable 1, unmapped 0/);
 });
 
 test('labels: no ATR (too few bars closed by t) leaves the stop unmapped and counts it', () => {
@@ -991,4 +991,65 @@ test('labels: a hook block that mentions a timeout is the hook\'s refusal', () =
   ].join('\n');
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
   assert.deepStrictEqual([L.gate.decision, L.gate.by], ['refused', 'hook']);
+});
+
+// Review round 8: points round 7 left untested.
+
+const claudeCall = (tool, input, error) => [
+  JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: `mcp__broker__${tool}`, input }] } }),
+  JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: error }] } }),
+].join('\n');
+
+test('labels: an entry the gate allowed whose call timed out, with no journal record and no fill, is unknown, not taken', () => {
+  const run = makeRun({ steps: [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { transcript: claudeCall('place_order', LONG.input, 'MCP error -32001: Request timed out'), orders: [LONG] } },
+    { k: 1, cycle: {} },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  const L = labels[0];
+  assert.deepStrictEqual([L.teacher.action, L.gate.decision, L.gate.by, L.outcome.result, L.counterfactualFor, L.counterfactual.reason], ['long', 'allowed', null, 'unknown', 'outcome unknown', 'outcome unknown']);
+  assert.deepStrictEqual([L.clone.ok, L.clone.reasons], [false, ['outcome unknown: client timeout']]);
+  assert.deepStrictEqual([summary.entries, summary.taken, summary.unknownOutcome, summary.unfilled, summary.refused], [1, 0, 1, 0, 0]);
+  assert.match(summaryText(summary), /taken 0, unknownOutcome 1,/);
+});
+
+test('labels: an entry whose call timed out but whose fill joined is taken, its outcome known', () => {
+  const run = makeRun({ steps: [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { transcript: claudeCall('place_order', LONG.input, 'Request timed out'), orders: [LONG] } },
+    { k: 1, cycle: { positions: LONG_POS }, trades: [fill(1, 0, 20000, null)] },
+    { k: 2, cycle: {}, trades: [fill(5, 1, 20010, 20)] },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  assert.deepStrictEqual([labels[0].outcome.result, labels[0].clone.reasons, summary.taken, summary.unknownOutcome], ['win', [], 1, 0]);
+});
+
+test('labels: a failed close stays refused by the broker unless a closing fill on its family comes by the next decision time', () => {
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
+  const label = trades => labelRun(makeRun({ steps: [
+    { k: 0, cycle: { positions: LONG_POS, transcript: claudeCall('close_position', close.input, 'PositionNotFound'), orders: [close] } },
+    { k: 1, cycle: { positions: LONG_POS }, trades: trades.k1 || [] },
+    { k: 2, cycle: { positions: LONG_POS }, trades: trades.k2 || [] },
+  ] }).runDir).labels[0];
+  const refused = L => [L.teacher.action, L.gate.decision, L.gate.by, L.gate.brokerReason];
+  // A closing fill after the next decision time (k=1 at 3 minutes): another close's.
+  assert.deepStrictEqual(refused(label({ k2: [fill(4, 1, 20010, 20)] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  // An opening fill (no profitAndLoss) by the next decision time.
+  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 20010, null)] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  // A closing fill on another family.
+  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 5000, 20, { contractId: 'MES' })] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  // The control: a closing fill on MNQ by the next decision time.
+  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 20010, 20)] })).slice(0, 3), ['exit', 'ungated', null]);
+});
+
+test('labels: of two exits that both went through, the last is the action', () => {
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [close, order('[exit] flatten what is left')] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.teacher.action, L.gate.decision, L.teacher.priorRefusals], ['exit', 'allowed', 0]);
+  const R = labelRun(makeRun({ steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [order('[exit] flatten'), close] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([R.teacher.action, R.gate.decision], ['exit', 'ungated']);
+});
+
+test('labels: a hook\'s refusal carries its text', () => {
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript: claudeCall('place_order', LONG.input, 'PreToolUse hook error: blocked by policy'), orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'hook', 'PreToolUse hook error: blocked by policy']);
 });

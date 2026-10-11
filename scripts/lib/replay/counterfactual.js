@@ -121,7 +121,7 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
 /** A taken trade's counterfactual fields from its real fills (MAE/MFE from the bars when the broker sends none). */
 function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null, bars = [], tfMs = 0, strategy = null, direction = null } = {}) {
   const base = { strategy, direction, source: 'fills' };
-  if (!outcome || !outcome.filled || outcome.entryPrice === null) return unsimulated(base, outcome && outcome.result === 'refused' ? 'refused' : 'not filled');
+  if (!outcome || !outcome.filled || outcome.entryPrice === null) return unsimulated(base, outcome && outcome.result === 'refused' ? 'refused' : outcome && outcome.result === 'unknown' ? 'outcome unknown' : 'not filled');
   const sign = outcome.side === 'buy' ? 1 : -1;
   const tick = spec ? spec.tickSize : null;
   const stop = stopPoints && tick ? onTick(outcome.entryPrice - sign * stopPoints, tick) : null;

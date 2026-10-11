@@ -105,7 +105,7 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   // Labels (stage 2) from the same run: one per decision time, joined to the gate's log and the fills.
   const lab = replay(w, ['labels', w.runDir]);
   assert.strictEqual(lab.status, 0, lab.stderr);
-  assert.match(lab.stdout, /labels 3, decisions 3, taken 0, skipped 0, refused 2, wins 0, losses 0, uncloneable 3/);
+  assert.match(lab.stdout, /labels 3, decisions 3, taken 0, unknownOutcome 0, skipped 0, refused 2, wins 0, losses 0, uncloneable 3/);
   const labels = lines(path.join(w.runDir, 'labels.jsonl'));
   assert.deepStrictEqual(labels.map(l => l.t), recs.map(r => r.t));
   // First: the replay account's long is open (the cycle's context): an entry on top of it, refused, keeps it out of cloning.
