@@ -39,6 +39,30 @@ test('codex block wires the gateway and every agent role', () => {
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 
+test('codex block registers the harness tools server, pre-approved, with the clock, bars and calendar forwarded', () => {
+  const block = codexConfigBlock(ROOT, BROKER);
+  const section = block.slice(block.indexOf('[mcp_servers.harness]'), block.indexOf('[agents.'));
+  assert.ok(section.startsWith('[mcp_servers.harness]'));
+  assert.ok(section.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'harness-tools-mcp.js'))}]`));
+  assert.match(section, /^default_tools_approval_mode = "approve"$/m);
+  const vars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(section)[1]);
+  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY']) {
+    assert.ok(vars.includes(v), v);
+  }
+  const brokerVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);
+  for (const v of brokerVars) assert.ok(vars.includes(v), `${v}: everything the broker block forwards`);
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, '.codex'));
+  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness]\ncommand = "node"\n');
+  assert.throws(() => planCodex({ root: ROOT, home, broker: BROKER }), /already defines \[mcp_servers\.harness\]/);
+});
+
+test('claude plan prints the harness tools server registration', () => {
+  const next = planClaude({ root: ROOT, home: tmpDir(), broker: BROKER }).next;
+  assert.ok(next.includes(`claude mcp add harness --scope user -- node ${JSON.stringify(path.join(ROOT, 'scripts', 'harness-tools-mcp.js'))}`));
+  assert.ok(next.some(l => l.startsWith('claude mcp add broker --scope user -- node ')));
+});
+
 test('codex refuses to clobber a user-defined broker server', () => {
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.codex'));
@@ -60,6 +84,9 @@ test('qwen settings merge is idempotent, keeps user entries, and removes old har
   assert.ok(once.mcpServers.broker.args[0].endsWith('mcp-gateway.js'));
   assert.strictEqual(once.mcpServers.oldname, undefined, 'the old gateway entry is replaced');
   assert.throws(() => mergeQwenSettings({ mcpServers: { broker: { command: 'node', args: ['/x/index.js'] } } }, ROOT), /does not use the harness gateway/);
+  assert.deepStrictEqual(once.mcpServers.harness, { command: 'node', args: [path.join(ROOT, 'scripts', 'harness-tools-mcp.js')], timeout: 60000 });
+  assert.throws(() => mergeQwenSettings({ mcpServers: { harness: { command: 'node', args: ['/x/other.js'] } } }, ROOT), /mcpServers\.harness that is not the harness tools server/);
+  assert.ok(mergeQwenSettings({ mcpServers: { harness: { command: 'node', args: ['/old/scripts/harness-tools-mcp.js'], trust: true } } }, ROOT).mcpServers.harness.trust, 'our own entry is updated in place');
   // A server of the user's own (not the harness gateway) is kept.
   assert.ok(mergeQwenSettings({ mcpServers: { oldname: { command: 'node', args: ['/x/index.js'] } } }, ROOT).mcpServers.oldname);
 });
@@ -70,7 +97,11 @@ test('qwen workspace permissions allow harness scripts and deny edits to the har
   assert.ok(p.allow.includes('Bash(node /fth/scripts/mtf.js *)') && p.allow.includes('Bash(node /fth/scripts/combine.js status *)'));
   assert.ok(p.allow.includes('Read(//home/u/.futures-trading-harness/logs/**)'));
   assert.ok(p.deny.includes('Read(//home/u/.futures-trading-harness/.env)'));
-  assert.ok(p.allow.includes('mcp__broker'));
+  assert.ok(p.allow.includes('mcp__broker') && p.allow.includes('mcp__harness'));
+  // Subagents: only the harness roles, by name (Qwen's built-in, forked and other-CLI agents stay unapproved).
+  const roles = fs.readdirSync(path.join(ROOT, 'agents')).filter(f => f.endsWith('.md')).map(f => f.replace(/\.md$/, '')).sort();
+  assert.deepStrictEqual(p.allow.filter(r => /^(Agent|Task|agent|task)\b/.test(r)), roles.map(r => `Agent(${r})`));
+  assert.ok(!p.allow.includes('Agent'), 'no bare Agent allow');
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
   assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
   assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
