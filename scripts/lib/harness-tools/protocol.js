@@ -75,7 +75,8 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
     text = `${(err instanceof OpError && err.text) || ''}${notes}[${tool.script}] ${(err && err.message) || String(err)}\n`;
     isError = true;
   }
-  const bytes = Buffer.byteLength(text);
+  // Measured as it goes out: JSON-encoded in the reply (quotes, newlines and control characters grow).
+  const bytes = Buffer.byteLength(JSON.stringify(text));
   if (bytes > MAX_OUTPUT_BYTES) {
     return result(`[harness] ${tool.name}: the output is ${Math.ceil(bytes / 1024)} KB, over the ${MAX_OUTPUT_BYTES / 1024} KB a reply may carry, so none of it is returned (anything the call records was recorded). Narrow it: ${tool.narrow}.\n`, true);
   }
@@ -117,7 +118,7 @@ function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
   };
 }
 
-const validId = id => typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id));
+const validId = id => (typeof id === 'string' && id.length <= 256) || (typeof id === 'number' && Number.isFinite(id));
 
 function createServer({ env = process.env, root = ROOT, write }) {
   let queue = Promise.resolve();
@@ -128,7 +129,7 @@ function createServer({ env = process.env, root = ROOT, write }) {
     if (msg === null || typeof msg !== 'object') return error(null, -32600, 'invalid request: not a JSON-RPC object');
     if (Array.isArray(msg)) return error(null, -32600, 'invalid request: batches are not supported; send one request per line');
     const hasId = Object.prototype.hasOwnProperty.call(msg, 'id');
-    if (hasId && !validId(msg.id)) return error(null, -32600, 'invalid request: id must be a string or a number');
+    if (hasId && !validId(msg.id)) return error(null, -32600, 'invalid request: id must be a string (at most 256 characters) or a number');
     if (typeof msg.method !== 'string') {
       // A response to nothing (the server sends no requests): ignore it.
       if (!hasId || (msg.jsonrpc === '2.0' && ('result' in msg || 'error' in msg))) return undefined;

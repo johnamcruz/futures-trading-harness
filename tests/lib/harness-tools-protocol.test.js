@@ -49,6 +49,7 @@ test('protocol: notifications get no reply; ping, tools/list; unknown methods, b
   assert.strictEqual(await code('null'), -32600);
   assert.strictEqual(await code({ jsonrpc: '2.0', id: { a: 1 }, method: 'ping' }), -32600);
   assert.strictEqual(await code({ jsonrpc: '2.0', id: null, method: 'ping' }), -32600);
+  assert.strictEqual(await code({ jsonrpc: '2.0', id: 'x'.repeat(257), method: 'ping' }), -32600);
   assert.strictEqual(await code({ jsonrpc: '1.0', id: 6, method: 'ping' }), -32600);
   assert.strictEqual(await code({ jsonrpc: '2.0', id: 7 }), -32600);
   assert.strictEqual(await code({ jsonrpc: '2.0', id: 8, method: 'tools/list', params: [] }), -32602);
@@ -132,6 +133,11 @@ test('callTool: output over 256 KB is refused whole, with how to narrow it', asy
   assert.strictEqual(r.isError, true);
   assert.match(r.content[0].text, /output is 25\d KB, over the 256 KB .* none of it is returned/);
   assert.ok(r.content[0].text.length < 1000);
+  // Measured JSON-encoded: 200 KB of control characters is 1.2 MB in the reply.
+  fs.writeFileSync(path.join(root, 'strategies', 'big', 'STRATEGY.md'), `---\nname: big\n---\n${'\u0001'.repeat(200 * 1024)}\n`);
+  const encoded = await callTool('strategies_show', { name: 'big' }, { env: { FTH_HOME: tmpDir() }, root });
+  assert.strictEqual(encoded.isError, true);
+  assert.match(encoded.content[0].text, /over the 256 KB/);
 });
 
 test('boundedLines: complete lines pass; a line over the limit is dropped whole and reported once', () => {
