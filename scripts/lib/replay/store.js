@@ -4,7 +4,8 @@
  * A replay run's records, local and never in the repository:
  *
  *   <run home>/replay/<run id>/manifest.json     the run: id, config hash, harness command,
- *       broker, window, created, the last decision time done, and the days done
+ *       broker, window, created, the last decision time done, the days done, and finished (true once
+ *       every decision time of the window ran: driver.js)
  *   <run home>/replay/<run id>/<trading day>.jsonl   one line per decision time:
  *       { v, t, day, kind, asked, ran: [{ action, ok, timedOut, result, symbols }], step: { code, timedOut },
  *         cycles: [{ action, at, ok, timedOut, durationMs, result, promptHash, promptChars, skills,

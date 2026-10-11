@@ -318,10 +318,11 @@ coverage.
 `node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file] [--out dir]`
 (`scripts/lib/replay/labels.js`, `counterfactual.js`) writes
 `<run dir>/labels.jsonl` and `labels-summary.json`, in the run's own folder
-(refused inside the repository; a run not yet finished is labelled only
-with `--out` outside its run home: the labels hold what came after each
-decision, which a resumed teacher could read there), and prints the
-coverage. Model-neutral: it
+(refused inside the repository; a run the driver hasn't marked finished,
+`finished` in its manifest once every decision time of the window ran, is
+labelled only with `--out` outside its run home: the labels hold what came
+after each decision, which a resumed teacher could read there), and prints
+the coverage. Model-neutral: it
 reads only what every replay writes (the day files, the cycle files'
 context and transcript, the gate's log, the scans log, the bars, the
 fills). One label per decision time and symbol:
@@ -356,8 +357,12 @@ fills). One label per decision time and symbol:
   `close_position` isn't gated, so an exit by it is seen only in a parsed
   transcript. Gate records outside every cycle are counted.
 - `gate`: allowed, refused (with checks, and `by`: the gate, or the broker
-  with its reason from the replay broker's journal), none; refused intents
-  are kept and flagged, for the cloning config to decide.
+  with its reason: the replay broker's journal, matched by rationale,
+  contract and replayed time, or a call that came back an error with no
+  journal record), not-logged (a call no gate record names: never taken,
+  never cloned), none; refused intents are kept and flagged, for the
+  cloning config to decide. Flat, a modify or a cancel of a working order
+  is a decision of its own: never a skip, never cloned.
 - `outcome`: the round trip from the broker's fills (P&L, net of every
   fill's fees, R from the initial stop, MAE and MFE in R when the broker
   sends them, win or loss).
@@ -372,7 +377,8 @@ fills). One label per decision time and symbol:
   run's bars or the data the run replayed (`--bars`). It is its own walk,
   not a backtest run (no gate, no other positions). For a taken entry the
   same fields come from its fills (MAE/MFE from bars opening at or after
-  the fill when the broker sends none). The one standing for the label is a
+  the bars wholly inside the trade and its exit price when the broker sends
+  none). A no-cycle bar while a position is open (by the fills) gets none. The one standing for the label is a
   taken trade's own, a refused intent's own setup and side, else the first
   candidate with a stop distance. So a skilful skip (a loser
   avoided) can be told from a cautious one (a winner missed). What can't be

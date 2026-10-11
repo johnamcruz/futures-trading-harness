@@ -245,7 +245,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
-    return { cycles: 0, stopped: null, done: true };
+    return finished(paths, manifest, 0);
   }
   log(`${todo.length} of ${points.length} decision times left (${run.cfg.harness}, ${cfg.symbols.join(',')} ${cfg.timeframe}m)`);
   const writeClock = at => writeJsonAtomic(paths.clockFile, { now: at.toISOString() });
@@ -335,6 +335,18 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     }
     const nextPoint = queue[0];
     if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);
+  }
+  return finished(paths, manifest, cycles);
+}
+
+/**
+ * Every decision time of the run's window ran: the manifest says so (`finished`), the one sign a run is
+ * done (a stop at a day's boundary leaves every day so far done), which its labels wait for (labels.js).
+ */
+function finished(paths, manifest, cycles) {
+  if (manifest.finished !== true) {
+    manifest.finished = true;
+    writeJsonAtomic(paths.manifest, manifest);
   }
   return { cycles, stopped: null, done: true };
 }

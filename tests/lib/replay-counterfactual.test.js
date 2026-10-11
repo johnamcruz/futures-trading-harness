@@ -84,6 +84,9 @@ test('counterfactual: a taken trade\'s same fields from its fills (MAE/MFE from 
   // A fill in the middle of a bar: that bar's extremes may come before it, so it is left out.
   const mid = fromFills({ ...out, entryTime: new Date(S0 + TF + 60000).toISOString() }, { stopPoints: 5, spec: MNQ, bars, tfMs: TF });
   assert.deepStrictEqual([mid.maeR, mid.mfeR], [-0.2, 1.2]);
+  // An exit inside a bar: that bar's extremes may come after the exit, so it is left out; the exit price counts.
+  const early = fromFills({ ...out, exitTime: new Date(S0 + 2 * TF + 60000).toISOString(), exitPrice: 99 }, { stopPoints: 5, spec: MNQ, bars, tfMs: TF });
+  assert.deepStrictEqual([early.maeR, early.mfeR], [-0.4, 0.6]);
 });
 
 test('counterfactual: the stop is ceiled to ticks where rounding would tighten it', () => {

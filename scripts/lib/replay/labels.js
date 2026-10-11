@@ -54,7 +54,7 @@ const { gateLogPath } = require('../trading/check-order');
 const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
-const { parseStandardName } = require('../broker/translator');
+const { parseStandardName, standardRoot } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
 const { readRun, readLines } = require('./store');
@@ -249,16 +249,20 @@ function normalizeOrder(tool, args, gate) {
   };
 }
 
-const PAIR_MS = 5000;
+const PAIR_MS = 1000;
+// The checks the gateway's order tracker refuses with after the gate allowed the call (order-tracker.js).
+const TRACKER_CHECKS = new Set(['order-pending', 'account-required']);
 /**
  * One place_order can leave two gateway records: allowed by the gate, then blocked when the gateway's
  * order tracker refuses to send it (mcp-gateway.js). Such a pair (same tool, contract and rationale,
- * the block within PAIR_MS) is one refused order: the allowed record is dropped.
+ * a block naming only tracker checks within PAIR_MS) is one refused order: the allowed record is dropped.
+ * Any other block after an allowed record is another call (a retry), kept.
  */
 function collapsePairs(records) {
   const drop = new Set();
   records.forEach((b, i) => {
-    if (b.source !== 'gateway' || b.decision !== 'blocked') return;
+    const checks = (Array.isArray(b.violations) ? b.violations : []).map(v => v && v.check);
+    if (b.source !== 'gateway' || b.decision !== 'blocked' || !checks.length || !checks.every(c => TRACKER_CHECKS.has(c))) return;
     for (let j = i - 1; j >= 0; j -= 1) {
       const a = records[j];
       if (drop.has(a) || a.source !== 'gateway' || a.decision !== 'allowed') continue;
@@ -279,15 +283,15 @@ function cycleOrders(c, doc, gateLog, untilMs) {
   const to = Math.min(Number.isFinite(c.durationMs) ? from + c.durationMs + GATE_SLACK_MS : Infinity, untilMs);
   const gates = collapsePairs(gateLog.filter(e => gateTool(e) && e.ms >= from && e.ms < to));
   for (const e of gateLog) if (e.ms >= from && e.ms < to) e.inCycle = true;
-  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name)).map(x => ({ tool: toolName(x.name), input: x.input, used: false })) : [];
+  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name)).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), used: false })) : [];
   const out = gates.map(g => {
     const tool = gateTool(g);
     const call = calls.find(x => !x.used && x.tool === tool && String(x.input.rationale ?? '') === String(g.rationale ?? '')
       && (!x.input.contractId || !g.contractId || String(x.input.contractId) === String(g.contractId)));
     if (call) call.used = true;
-    return normalizeOrder(tool, call ? call.input : null, g);
+    return { ...normalizeOrder(tool, call ? call.input : null, g), callFailed: Boolean(call && call.failed) };
   });
-  for (const x of calls.filter(y => !y.used)) out.push(normalizeOrder(x.tool, x.input, null));
+  for (const x of calls.filter(y => !y.used)) out.push({ ...normalizeOrder(x.tool, x.input, null), callFailed: Boolean(x.failed) });
   return out;
 }
 
@@ -329,6 +333,8 @@ function teacherAction(orders, inTrade) {
   const cancels = orders.filter(o => o.tool === 'cancel_order');
   if (cancels.length) reasons.push('order cancel');
   if (!inTrade) {
+    // Flat, a modify moves a working order (a resting entry): a decision the student can't express, never a skip.
+    if (orders.some(o => o.tool === 'modify_order')) reasons.push('working-order change');
     if (!entries.length) return { action: 'none', order: null, reasons, priorRefusals: 0 };
     // The entry that counts: the last one the broker accepted, else the last one the gate let through and
     // the broker didn't refuse, else the last one sent. Refused tries before it (by the gate or the broker)
@@ -444,21 +450,26 @@ function eodOf(cfg, t) {
 function unfinishedWhy(manifest, days) {
   const open = Object.keys(days).filter(d => !(manifest.daysDone || []).includes(d));
   if (manifest.pending) return `a step at ${manifest.pending.t} was interrupted`;
-  return open.length ? `day ${open[0]} is not done` : null;
+  if (open.length) return `day ${open[0]} is not done`;
+  // The driver marks a run finished when it ran every decision time to the run's end (driver.js): a stop
+  // at a day's boundary (--max-cycles, the kill switch, the error limit) leaves every day done but not the run.
+  return manifest.finished === true ? null : 'the driver has not finished the run (it stopped before the run\'s end)';
 }
 
 /**
  * The broker's own record of each order (the replay broker's journal, BROKER-MCP-INTERFACE: order_placed
- * with its result, order_blocked by its guardrails), at the replayed time: [{ ms, rationale, accepted, orderId, reason }].
+ * with its result, order_blocked by its guardrails), at the replayed time: [{ ms, family, rationale, accepted, orderId, reason }].
+ * The journal names the broker's own contract id: its family comes from the run home's translator cache
+ * (or a standard name), null when unknown.
  */
-function brokerOrders(file) {
+function brokerOrders(file, familyOfBrokerId = () => null) {
   return readLines(file).filter(isObj).filter(e => e.kind === 'order_placed' || e.kind === 'order_blocked').map(e => {
     const result = isObj(e.data) && isObj(e.data.result) ? e.data.result : {};
     const text = String(e.text || '');
     const cut = text.indexOf(' | rationale: ');
     const placed = e.kind === 'order_placed';
     return {
-      ms: Date.parse(e.ts), rationale: placed ? text : cut === -1 ? null : text.slice(cut + ' | rationale: '.length),
+      ms: Date.parse(e.ts), family: familyOfBrokerId(e.contractId), rationale: placed ? text : cut === -1 ? null : text.slice(cut + ' | rationale: '.length),
       accepted: placed && result.success === true, orderId: placed && result.orderId !== undefined ? result.orderId : null,
       reason: placed ? (result.success === true ? null : result.errorMessage || result.errorName || 'refused') : (cut === -1 ? text : text.slice(0, cut)),
     };
@@ -506,7 +517,11 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const fills = allFills(lines);
   const trips = roundTrips(fills);
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
-  const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'));
+  const contractCache = path.join(home, `contracts-${manifest.broker || ''}.json`);
+  const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'), id => {
+    const root = id ? standardRoot(id, contractCache) || (parseStandardName(String(id)) || {}).root : null;
+    return root ? familyRoot(root) : null;
+  });
   const journalUsed = new Set();
   const lineTimes = lines.map(r => Date.parse(r.t));
 
@@ -567,10 +582,16 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         // What the broker did with each entry the gate let through: its journal at the replayed time
         // (from t to the next decision time), matched by rationale, in order.
         for (const o of mine.filter(x => x.tool === 'place_order' && x.gate.decision === 'allowed')) {
-          const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale);
-          if (!j) continue;
-          journalUsed.add(j);
-          o.broker = { decision: j.accepted ? 'accepted' : 'refused', orderId: j.orderId, reason: j.reason };
+          const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
+            && (e.family === null || e.family === familyOfId(o.contractId)));
+          if (j) {
+            journalUsed.add(j);
+            o.broker = { decision: j.accepted ? 'accepted' : 'refused', orderId: j.orderId, reason: j.reason };
+          } else if (o.callFailed) {
+            // No journal record, and the call came back an error (a broker refusal sets isError; so does a
+            // server that rejected its arguments): it never became an order.
+            o.broker = { decision: 'refused', orderId: null, reason: 'the call returned an error' };
+          }
         }
         draft.act = teacherAction(mine, Boolean(pos.side));
         if (cyc.unknown) draft.act.reasons.push('no cycle log');
@@ -587,7 +608,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   // Pass 2: each allowed entry gets the round trip that opened after it on its family and side, the
   // same trading day (the latest entry before an opening takes it: a market order fills first).
   const entryOf = new Map();
-  const takenEntries = drafts.filter(d => d.decision === 'flat' && d.act && d.act.order && !refusedBy(d.act.order) && d.act.order.side);
+  const takenEntries = drafts.filter(d => d.decision === 'flat' && d.act && d.act.order && d.act.order.gate.decision === 'allowed' && !refusedBy(d.act.order) && d.act.order.side);
   // The broker's order id first (its journal names it, its fills carry it), then the time rule.
   for (const rt of trips.filter(x => x.openMs !== null && x.opens[0].orderId !== undefined && x.opens[0].orderId !== null)) {
     const d = takenEntries.find(x => !entryOf.has(x) && x.act.order.broker.orderId !== null && String(x.act.order.broker.orderId) === String(rt.opens[0].orderId)
@@ -596,13 +617,15 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   }
   const joined = new Set(entryOf.values());
   for (const rt of trips.filter(x => x.openMs !== null && !joined.has(x))) {
-    const cands = takenEntries.filter(d => !entryOf.has(d) && d.fam === rt.family && d.act.order.side === rt.side && d.t <= rt.openMs
+    // Only an entry whose broker order id is unknown: one with a known id took its own opening (or none).
+    const cands = takenEntries.filter(d => !entryOf.has(d) && d.act.order.broker.orderId === null && d.fam === rt.family && d.act.order.side === rt.side && d.t <= rt.openMs
       && tradingDayKey(new Date(d.t)) === tradingDayKey(new Date(rt.openMs)));
     if (cands.length) entryOf.set(cands[cands.length - 1], rt);
   }
   const matchedTrips = new Set(entryOf.values());
 
-  // Counterfactuals walk forward on future bars (by design): only ever written into outcome fields.
+  // The data the run replayed (--bars), else the run home's bars. Counterfactuals walk forward on them
+  // (by design, only into outcome fields); the stop's ATR reads only the bars closed by t.
   const futureBars = sym => (outcomeBars && Array.isArray(outcomeBars[sym]) ? outcomeBars[sym] : barsFor(sym));
   const byName = new Map((strategies || []).filter(x => x && x.name && x.valid !== false).map(x => [x.name, x]));
   const simulated = (d, spec) => d.signal.fired.map(r => simulate({
@@ -635,7 +658,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const rt = isEntry ? entryOf.get(d) || null : null;
       // Decision-time fields read only the order and what was there at t (never its fill).
       const ospec = isEntry ? contractSpec(o.contractId, d.symbol) : spec;
-      const atr = isEntry ? atrAt(barsFor(d.symbol), tfMs, d.t) : null;
+      // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
+      const atr = isEntry ? atrAt(futureBars(d.symbol), tfMs, d.t) : null;
       const stop = isEntry ? stopOf(o, ospec, d.refPrice, atr) : null;
       const size = isEntry ? sizeOf(o, ospec, stop, budgetFor(budgetUsd)) : null;
       // A target bracket is the strategy's own exit when it is what order_plan places for the setup
@@ -653,7 +677,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       };
       if (o) {
         const by = refusedBy(o);
-        gate = { decision: by ? 'refused' : 'allowed', by, checks: o.gate.checks, ...(by === 'broker' ? { brokerReason: o.broker.reason } : {}) };
+        // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
+        gate = { decision: by ? 'refused' : o.gate.decision === 'not-logged' ? 'not-logged' : 'allowed', by, checks: o.gate.checks, ...(by === 'broker' ? { brokerReason: o.broker.reason } : {}) };
+        if (gate.decision === 'not-logged') reasons.push('no gate record');
       }
       reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
       if (isEntry && !stop.points) reasons.push('no stop');
@@ -662,8 +688,13 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       if (d.decision === 'in-trade') {
         const open = trips.find(x => x.family === d.fam && (x.openMs === null || x.openMs <= d.t) && (x.closeMs === null || x.closeMs >= d.t)) || null;
         outcome = open ? outcomeOf(open, null) : null;
-      } else if (isEntry) outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks) : { filled: false, result: 'unfilled' }) : { filled: false, result: 'refused' };
-      counterfactualFor = isEntry ? (gate.decision === 'allowed' ? 'taken' : 'refused intent') : d.decision === 'flat' && d.act.action === 'none' ? 'skip' : null;
+      } else if (isEntry) {
+        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks) : { filled: false, result: 'unfilled' })
+          : { filled: false, result: gate.decision === 'refused' ? 'refused' : 'not logged' };
+      }
+      // A skip: flat, nothing sent, no working order touched (a cancel or a modify is a decision of its own).
+      const skip = d.decision === 'flat' && d.act.action === 'none' && !d.act.reasons.some(r => r === 'order cancel' || r === 'working-order change');
+      counterfactualFor = isEntry ? ({ allowed: 'taken', refused: 'refused intent' }[gate.decision] || null) : skip ? 'skip' : null;
       if (isEntry && gate.decision === 'allowed') {
         counterfactuals = [fromFills(outcome, { stopPoints: stop && stop.points, targetTicks: o.targetTicks, spec: ospec, bars: futureBars(d.symbol), tfMs, strategy: o.setup, direction: d.act.action })];
       } else if (d.decision === 'flat' && (counterfactualFor === 'skip' || counterfactualFor === 'refused intent') && d.candidates.length && !d.cyc.failed) {
@@ -673,7 +704,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     } else if (d.decision === 'no-cycle') {
       reasons.push('no cycle');
       counterfactualFor = 'no cycle';
-      if (d.candidates.length && d.barT) counterfactuals = simulated(d, spec);
+      // A candidate's flat entry only while flat (the fills through t; no cycle context to read).
+      d.position = positionAt(d.fam, null, fills, d.t);
+      if (d.candidates.length && d.barT && !d.position.side) counterfactuals = simulated(d, spec);
     }
     else reasons.push('not a trade decision');
     if (rec.interrupted) reasons.push('interrupted');
@@ -708,7 +741,8 @@ function summarize(labels, extra) {
   const taken = l => entry(l) && l.gate.decision === 'allowed';
   const decisions = n(decision);
   const cloneable = n(l => decision(l) && l.clone.ok);
-  const skipped = l => l.decision === 'flat' && !l.cycleFailed && l.teacher.action === 'none' && l.candidates.length > 0;
+  const touched = l => l.clone.reasons.includes('order cancel') || l.clone.reasons.includes('working-order change');
+  const skipped = l => l.decision === 'flat' && !l.cycleFailed && !touched(l) && l.teacher.action === 'none' && l.candidates.length > 0;
   const cf = (f, result) => n(l => f(l) && l.counterfactual && l.counterfactual.result === result);
   const noCycleCands = l => l.decision === 'no-cycle' && l.candidates.length > 0;
   const refusedIntent = l => entry(l) && l.gate.decision === 'refused';
@@ -717,7 +751,7 @@ function summarize(labels, extra) {
     flat: n(l => l.decision === 'flat'), inTrade: n(l => l.decision === 'in-trade'),
     entries: n(entry), taken: n(taken), refused: n(l => decision(l) && l.gate.decision === 'refused'),
     skipped: n(skipped),
-    standAside: n(l => l.decision === 'flat' && !l.cycleFailed && l.teacher.action === 'none' && !l.candidates.length),
+    standAside: n(l => l.decision === 'flat' && !l.cycleFailed && !touched(l) && l.teacher.action === 'none' && !l.candidates.length),
     holds: n(l => decision(l) && l.teacher.action === 'hold'), tightens: n(l => decision(l) && l.teacher.action === 'tighten'), exits: n(l => decision(l) && l.teacher.action === 'exit'),
     wins: n(l => taken(l) && l.outcome && l.outcome.result === 'win'), losses: n(l => taken(l) && l.outcome && l.outcome.result === 'loss'),
     scratches: n(l => taken(l) && l.outcome && l.outcome.result === 'scratch'), unfilled: n(l => taken(l) && l.outcome && l.outcome.result === 'unfilled'),
@@ -753,11 +787,12 @@ function inside(dir, root) {
   const real = p => {
     const abs = path.resolve(p);
     for (let dir = abs, rest = ''; ; rest = path.join(path.basename(dir), rest), dir = path.dirname(dir)) {
-      try { return path.join(fs.realpathSync(dir), rest); } catch (_err) { if (dir === path.dirname(dir)) return abs; }
+      // .native: the name as stored, letter case included (a case-insensitive volume reaches one folder by many spellings).
+      try { return path.join(fs.realpathSync.native(dir), rest); } catch (_err) { if (dir === path.dirname(dir)) return abs; }
     }
   };
   const rel = path.relative(real(root), real(dir));
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
 /**

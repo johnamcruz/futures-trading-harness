@@ -37,7 +37,7 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(path.join(home, 'logs', 'cycles', '2026-10-10'), { recursive: true });
   fs.mkdirSync(path.join(home, 'bars'), { recursive: true });
-  fs.writeFileSync(path.join(runDir, 'manifest.json'), JSON.stringify({ v: 1, runId: RUN, hash: 'c'.repeat(64), harness: 'custom', model: 'teacher-1', daysDone: [DAY], ...manifest }));
+  fs.writeFileSync(path.join(runDir, 'manifest.json'), JSON.stringify({ v: 1, runId: RUN, hash: 'c'.repeat(64), harness: 'custom', model: 'teacher-1', daysDone: [DAY], finished: true, ...manifest }));
   fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ symbols, timeframe: 3, account: '7' }));
   const journal = [];
   fs.writeFileSync(path.join(home, 'bars', 'MNQ-3m.json'), JSON.stringify({ contractId: 'MNQ', bars: barList }));
@@ -59,7 +59,7 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
       const result = c.result || 'CYCLE RESULT: done';
       const account = c.noAccount ? null : { id: 7, balance: 50000, positions: c.positions || [], attempts: c.attempts || [] };
       if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account }, transcript }));
-      rec.ran.push({ action: 'trade', ok: c.ok !== false, timedOut: Boolean(c.timedOut), result, symbols });
+      rec.ran.push({ action: 'trade', ok: c.ok !== false && c.ranOk !== false, timedOut: Boolean(c.timedOut), result, symbols });
       if (!c.noLog) rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
       for (const [j, o] of (c.orders || []).entries()) {
         if (o.gate === 'none') continue;
@@ -248,9 +248,9 @@ test('labels: future bars change counterfactuals only, never a decision-time fie
   assert.strictEqual(before.filter(early).length, 6);
   assert.deepStrictEqual(after.filter(early).map(decisionTime), before.filter(early).map(decisionTime));
   assert.deepStrictEqual([before[4].counterfactual.result, after[4].counterfactual.result], ['win', 'loss'], 'the counterfactual did see the change');
-  // Bars given for the outcomes (the data the run replayed) are read for counterfactuals only.
+  // The data the run replayed (--bars), when given, is the series both read: the original bars give the original labels.
   const other = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES, outcomeBars: { MNQ: bars().map(b => ({ ...b, ms: Date.parse(b.t) })) } }).labels;
-  assert.deepStrictEqual(other.map(decisionTime), after.map(decisionTime));
+  assert.deepStrictEqual(other.map(decisionTime), before.map(decisionTime));
   assert.strictEqual(other[4].counterfactual.result, 'win');
   // Without the strategy file the counterfactual can't be simulated: counted.
   const none = labelRun(run.runDir, { budgetUsd: 40 });
@@ -623,4 +623,133 @@ test('labels: an opencode transcript gives the orders their arguments', () => {
   const transcript = JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'completed', input: LONG.input } } });
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
   assert.deepStrictEqual([L.teacher.orders[0].argsKnown, L.teacher.size.step, L.clone.reasons], [true, 0.5, []]);
+});
+
+// Review round 2 findings.
+
+test('labels: a run stopped at a day\'s boundary (every day so far done) is not finished: refused in place', () => {
+  const run = makeRun({ manifest: { finished: undefined }, steps: [{ k: 0, cycle: {} }] });
+  assert.throws(() => labelRun(run.runDir), /the driver has not finished the run/);
+  assert.throws(() => writeLabels(run.runDir), /not finished/);
+});
+
+test('labels: an allowed order then a gate-check block of the same call is two orders; only a tracker block within a second pairs', () => {
+  const o = order('setup:orb long, stop 19990');
+  const allowed = { source: 'gateway', decision: 'allowed', violations: [] };
+  const labelsOf = gate => labelRun(makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...o, gate }] } }] }).runDir, { budgetUsd: 40 }).labels[0];
+  // A retry the gate refused (max-position): the allowed one stands.
+  const retry = labelsOf([allowed, BLOCK('max-position')]);
+  assert.deepStrictEqual([retry.teacher.orders.map(x => x.gate.decision), retry.gate.decision, retry.teacher.priorRefusals], [['allowed', 'refused'], 'allowed', 1]);
+  // A tracker block more than a second later is another call too.
+  const late = labelRun(makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...o, gate: allowed, atMs: 1000 }, { ...o, gate: BLOCK('order-pending'), atMs: 2500 }] } }] }).runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual(late.teacher.orders.map(x => x.gate.decision), ['allowed', 'refused']);
+});
+
+test('labels: --bars data gives the stop its ATR when the run home has too few bars', () => {
+  const run = makeRun({ barList: bars(10), steps: [{ k: 0, cycle: { orders: [LONG] } }] });
+  assert.strictEqual(labelRun(run.runDir).labels[0].teacher.stop.multiple, null);
+  const L = labelRun(run.runDir, { outcomeBars: { MNQ: bars().map(b => ({ ...b, ms: Date.parse(b.t) })) } }).labels[0];
+  assert.deepStrictEqual([L.teacher.stop.atr, L.teacher.stop.multiple], [10, 1]);
+});
+
+test('labels: the folder guards - a child named "..x" is inside; letter case and symlinks reach the same folder', () => {
+  const run = makeRun({ manifest: { daysDone: [] }, steps: [{ k: 0, cycle: {} }] });
+  assert.throws(() => writeLabels(run.runDir, { outDir: path.join(run.home, '..x') }), /inside the run home/);
+  // The repository guard: a run dir under the repository in a folder named "..x".
+  const repo = tmpDir();
+  const inner = path.join(repo, '..x', 'replays', RUN);
+  fs.mkdirSync(path.dirname(inner), { recursive: true });
+  fs.cpSync(run.home, inner, { recursive: true });
+  assert.throws(() => writeLabels(path.join(inner, 'replay', RUN), { root: repo, outDir: path.join(tmpDir(), 'o') }), /inside the repository/);
+  // A symlink to the run home.
+  const link = path.join(tmpDir(), 'link');
+  fs.symlinkSync(run.home, link);
+  assert.throws(() => writeLabels(run.runDir, { outDir: path.join(link, 'x') }), /inside the run home/);
+  // Another letter case, where the volume folds case.
+  const upper = run.home.toUpperCase();
+  if (upper !== run.home && fs.existsSync(upper)) assert.throws(() => writeLabels(run.runDir, { outDir: path.join(upper, 'x') }), /inside the run home/);
+});
+
+test('labels: entries join round trips by the broker\'s order id; a known id never takes another order\'s opening', () => {
+  const a = order('setup:orb long A, stop 19990');
+  const b = order('setup:orb long B, stop 19990');
+  const placed = (o, id) => ({ kind: 'order_placed', text: o.input.rationale, data: { request: {}, result: { orderId: id, success: true } } });
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [a] }, journal: [placed(a, 5)] },
+    { k: 1, cycle: { orders: [b] }, journal: [placed(b, 6)] },
+    { k: 2, cycle: { positions: LONG_POS }, trades: [fill(4, 0, 20000, null, { orderId: 5 })] },
+    { k: 3, cycle: {}, trades: [fill(8, 1, 20010, 20)] },
+    // An accepted order (id 8) that never filled, then an opening by order 7 nobody's journal names.
+    { k: 4, cycle: { orders: [order('setup:orb long C, stop 19990')] }, journal: [placed(order('setup:orb long C, stop 19990'), 8)] },
+    { k: 5, cycle: { positions: LONG_POS }, trades: [fill(13, 0, 20000, null, { id: 'o7', orderId: 7 })] },
+  ] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels;
+  assert.deepStrictEqual([L[0].outcome.result, L[1].outcome.result, L[4].outcome.result], ['win', 'unfilled', 'unfilled']);
+});
+
+test('labels: the broker\'s journal is read from t to the next decision time only', () => {
+  const r0 = order('setup:orb long zero, stop 19990');
+  const r1 = order('setup:orb long one, stop 19990');
+  const placed = o => ({ kind: 'order_placed', text: o.input.rationale, data: { request: {}, result: { orderId: 9, success: true } } });
+  // Each order's record sits in the other decision's window.
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [r0] }, journal: [placed(r1)] }, { k: 1, cycle: { orders: [r1] }, journal: [placed(r0)] }] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels;
+  assert.deepStrictEqual(L.map(l => l.teacher.orders[0].broker.decision), ['unknown', 'unknown']);
+});
+
+test('labels: the entry the broker accepted is the action, even when another went through after it', () => {
+  const a = order('setup:orb long accepted, stop 19990');
+  const b = order('setup:orb long unknown fate, stop 19990', { stopLossBracket: { ticks: 60, type: 'stop' } });
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [a, b] }, journal: [{ kind: 'order_placed', text: a.input.rationale, data: { request: {}, result: { orderId: 5, success: true } } }] }] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([L.teacher.stop.ticks, L.clone.reasons], [40, ['several entries']]);
+});
+
+test('labels: a cycle the step reports failed (its ran record) is failed though its log line says ok', () => {
+  const run = makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { ranOk: false } }] });
+  const L = labelRun(run.runDir, { strategies: STRATEGIES }).labels[0];
+  assert.deepStrictEqual([L.cycleFailed, L.counterfactual], ['cycle failed', null]);
+});
+
+test('labels: an order the gate never logged is neither taken nor cloned', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...LONG, gate: 'none' }] }, scan: [{ name: 'orb', direction: 'long' }] }] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual([labels[0].gate.decision, labels[0].outcome.result, labels[0].clone.reasons, labels[0].counterfactual, summary.taken], ['not-logged', 'not logged', ['no gate record'], null, 0]);
+});
+
+test('labels: flat, a modify of a working order is no skip and never cloned', () => {
+  const run = makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { orders: [{ tool: 'modify_order', input: { accountId: 7, orderId: 3, limitPrice: 19995 } }] } }] });
+  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual([labels[0].teacher.action, labels[0].clone.reasons, labels[0].counterfactual, summary.skipped], ['none', ['working-order change'], null, 0]);
+});
+
+test('labels: the broker\'s journal is matched on the contract too', () => {
+  const r = 'setup:orb long, stop 19990';
+  const mnq = order(r);
+  const mes = order(r, { contractId: 'MES' });
+  const run = makeRun({ symbols: ['MES', 'MNQ'], steps: [{ k: 0, cycle: { orders: [mnq, mes] }, journal: [
+    { kind: 'order_blocked', contractId: 'MNQ', text: `size too big | rationale: ${r}` },
+    { kind: 'order_placed', contractId: 'MES', text: r, data: { request: {}, result: { orderId: 4, success: true } } },
+  ] }] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels;
+  assert.deepStrictEqual(L.map(l => [l.symbol, l.gate.decision, l.gate.by]), [['MES', 'allowed', null], ['MNQ', 'refused', 'broker']]);
+});
+
+test('labels: a no-cycle bar while in a position gets no flat-entry counterfactual', () => {
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [LONG] } },
+    { k: 1, scan: [{ name: 'orb', direction: 'long' }], trades: [fill(1, 0, 20000, null)] },
+    { k: 2, scan: [{ name: 'orb', direction: 'long' }], trades: [fill(5, 1, 20010, 20)] },
+  ] });
+  const L = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES }).labels;
+  assert.deepStrictEqual(L.slice(1).map(l => [l.decision, l.position.side, l.counterfactualFor]), [['no-cycle', 'long', null], ['no-cycle', null, 'no cycle']]);
+});
+
+test('labels: a call that came back an error (no broker record) never became an order', () => {
+  const transcript = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'mcp__broker__place_order', input: LONG.input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'invalid arguments' }] } }),
+  ].join('\n');
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'broker', 'the call returned an error']);
 });

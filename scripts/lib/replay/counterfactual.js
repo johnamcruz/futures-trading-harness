@@ -119,7 +119,7 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
 }
 
 /** A taken trade's counterfactual fields from its real fills (MAE/MFE from the bars when the broker sends none). */
-function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null, bars = [], strategy = null, direction = null } = {}) {
+function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null, bars = [], tfMs = 0, strategy = null, direction = null } = {}) {
   const base = { strategy, direction, source: 'fills' };
   if (!outcome || !outcome.filled || outcome.entryPrice === null) return unsimulated(base, outcome && outcome.result === 'refused' ? 'refused' : 'not filled');
   const sign = outcome.side === 'buy' ? 1 : -1;
@@ -128,18 +128,16 @@ function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null
   const target = targetTicks && tick ? onTick(outcome.entryPrice + sign * targetTicks * tick, tick) : null;
   const size = outcome.size || 1;
   let { maeR, mfeR } = outcome;
-  if ((maeR === null || mfeR === null) && stopPoints && outcome.exitTime && bars.length) {
+  if ((maeR === null || mfeR === null) && stopPoints && outcome.exitTime && outcome.exitPrice !== null) {
     const from = Date.parse(outcome.entryTime);
     const to = Date.parse(outcome.exitTime);
-    // Bars opening at or after the fill and before the exit: a mid-bar fill's bar is left out (its high
-    // and low may come before the fill), as a next-open fill's bar starts at the fill.
-    const span = bars.filter(b => b.ms >= from && b.ms < to);
-    if (span.length) {
-      const fav = Math.max(...span.map(b => sign * ((sign > 0 ? b.h : b.l) - outcome.entryPrice)));
-      const adv = Math.min(...span.map(b => sign * ((sign > 0 ? b.l : b.h) - outcome.entryPrice)));
-      if (mfeR === null) mfeR = round(Math.max(0, fav) / stopPoints);
-      if (maeR === null) maeR = round(Math.min(0, adv) / stopPoints);
-    }
+    // Bars wholly inside the trade (opening at or after the fill, closing by the exit: an edge bar's
+    // extremes may fall outside it), and the exit price itself.
+    const span = bars.filter(b => b.ms >= from && b.ms + tfMs <= to);
+    const fav = Math.max(sign * (outcome.exitPrice - outcome.entryPrice), ...span.map(b => sign * ((sign > 0 ? b.h : b.l) - outcome.entryPrice)));
+    const adv = Math.min(sign * (outcome.exitPrice - outcome.entryPrice), ...span.map(b => sign * ((sign > 0 ? b.l : b.h) - outcome.entryPrice)));
+    if (mfeR === null) mfeR = round(Math.max(0, fav) / stopPoints);
+    if (maeR === null) maeR = round(Math.min(0, adv) / stopPoints);
   }
   const closed = outcome.exitTime !== null && outcome.result !== 'open';
   return {
