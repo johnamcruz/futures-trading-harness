@@ -103,9 +103,15 @@ const stripBom = text => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
  */
 function jsonBars(parsed, label) {
   const raw = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.bars) ? parsed.bars : null;
+  // Records with other column names (timestamp, Date, Open...: a pandas index, yfinance) read as a table, as CSV does.
+  const first = raw && raw.find(b => b && typeof b === 'object');
+  if (first && !Array.isArray(first) && !('t' in first) && !('time' in first)) return normalizeBars(tableToBars(Object.keys(first), raw.filter(b => b && typeof b === 'object')));
   const epoch = b => {
     const t = b && typeof b === 'object' ? (b.t ?? b.time) : undefined;
-    return typeof t === 'number' && Number.isFinite(t) ? { ...b, t: new Date(epochMs(t)).toISOString(), time: undefined } : b;
+    if (typeof t !== 'number' || !Number.isFinite(t)) return b;
+    const ms = epochMs(t);
+    // Past what a date can hold: left as is, for the bar to be dropped like any unreadable time.
+    return Math.abs(ms) <= 8.64e15 ? { ...b, t: new Date(ms).toISOString(), time: undefined } : b;
   };
   const rows = raw ? raw.map(epoch) : null;
   const bars = normalizeBars(rows ? (Array.isArray(parsed) ? rows : { ...parsed, bars: rows }) : parsed);

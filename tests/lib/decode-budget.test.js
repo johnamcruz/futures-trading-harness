@@ -275,6 +275,12 @@ test('JSON bars: a byte order mark is skipped; numeric epoch times (pandas to_js
   assert.strictEqual(loadBars(path.join(dir, 'bom.csv')).length, 1);
   fs.writeFileSync(path.join(dir, 'unreadable.json'), JSON.stringify([{ time: 'soon', open: 1, high: 2, low: 0, close: 1 }, { foo: 1 }]));
   assert.throws(() => loadBars(path.join(dir, 'unreadable.json')), /unreadable\.json: none of its 2 bars has a readable time, open, high, low and close$/);
+  // An epoch past what a date holds drops that bar, not the file.
+  fs.writeFileSync(path.join(dir, 'far.json'), JSON.stringify([{ time: 1e30, open: 1, high: 2, low: 0.5, close: 1 }, { time: t0, open: 1, high: 2, low: 0.5, close: 1 }]));
+  assert.strictEqual(loadBars(path.join(dir, 'far.json')).length, 1);
+  // Records with a pandas index or yfinance columns (timestamp, Date, Open...) read as CSV would.
+  fs.writeFileSync(path.join(dir, 'pandas-index.json'), JSON.stringify(rows.map(r => ({ timestamp: r.time, Open: r.open, High: r.high, Low: r.low, Close: r.close, Volume: r.volume }))));
+  assert.strictEqual(loadBars(path.join(dir, 'pandas-index.json')).length, 5);
   fs.writeFileSync(path.join(dir, 'empty.json'), '[]');
   assert.deepStrictEqual(loadBars(path.join(dir, 'empty.json')), [], 'an empty file is empty, not an error');
 });
