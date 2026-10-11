@@ -165,6 +165,28 @@ test('order gate: with a Claude transcript, an entry needs the trading skills lo
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate: with a Qwen Code chat transcript (parts format), the skills loaded let an entry through; missing or failed loads do not', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const call = (id, skill) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ text: 'loading' }, { functionCall: { id, name: 'skill', args: { skill: `futures-trading-harness:${skill}` } } }] } });
+  const answer = (id, response, status) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'skill', response } }] }, toolCallResult: { callId: id, status } });
+  const load = (id, skill) => [call(id, skill), answer(id, { output: `Base directory for this skill: /x/${skill}` }, 'success')];
+  const transcript = path.join(dir, 'chats', 'session.jsonl');
+  fs.mkdirSync(path.dirname(transcript), { recursive: true });
+  fs.writeFileSync(transcript, load('a', 'trade-session').join('\n'));
+  const none = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(none.code, 2);
+  assert.match(none.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
+  const failedLoad = [call('c', 'strategy-library'), answer('c', { error: 'Skill "strategy-library" not found.' }, 'error')];
+  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...failedLoad].join('\n'));
+  const failed = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(failed.code, 2);
+  assert.match(failed.stderr, /\[skills-loaded\] .*not loaded in this session: strategy-library\./);
+  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...failedLoad, ...load('d', 'strategy-library')].join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+  assert.doesNotMatch(ok.stderr, /skills-loaded/);
+});
+
 test('order gate: a trend strategy is refused when another strategy fired the other side on the bar', () => {
   const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
   const fired = [{ name: 'crossing', direction: 'long', confluence: { with: [], against: ['other'] } }, { name: 'other', direction: 'short', confluence: { with: [], against: ['crossing'] } }];

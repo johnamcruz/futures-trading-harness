@@ -1,19 +1,30 @@
 'use strict';
 
 /**
- * Were the trading skills loaded before an entry? Claude Code loads a skill
- * only when the model calls the Skill tool, and its hooks get the session's
+ * Were the trading skills loaded before an entry? A harness loads a skill
+ * only when the model calls its skill tool, and its hooks get the session's
  * transcript (transcript_path), so the order gate can check that the model
  * read how to trade before it trades: trade-session (the cycle),
  * multi-timeframe-analysis (the trend rule), and strategy-library (the
- * strategy it names). Codex and Qwen Code carry the skills in the workspace
- * instructions (AGENTS.md / QWEN.md) and pass no Claude transcript, so for
- * them the check doesn't apply.
+ * strategy it names). Two transcript shapes are read:
  *
- * A subagent's transcript (…/<session>/subagents/agent-*.jsonl) is read
+ *   - message.content[] items {type:'tool_use', name:'Skill', input:{skill}}
+ *     (Claude Code), and slash commands of skills: the call counts.
+ *   - message.parts[] items {functionCall:{id, name:'skill'|'Skill', args:{skill}}}
+ *     in a role 'model' message (Qwen Code's chat file, chats/<session>.jsonl,
+ *     which it passes as transcript_path): the call counts only once a role
+ *     'user' {functionResponse:{id, name, response:{output}}} with no error
+ *     answers it, since a skill that wasn't found or wasn't permitted was
+ *     never read.
+ *
+ * A harness that passes no transcript (Codex) carries the skills in the
+ * workspace instructions (AGENTS.md); for it the check doesn't apply.
+ *
+ * A Claude subagent's transcript (…/<session>/subagents/agent-*.jsonl) is read
  * together with its session's main transcript (…/<session>.jsonl), where the
  * head trader loaded the skills before handing the order to the
- * trade-executor.
+ * trade-executor. Qwen Code passes a subagent's hooks the session's main
+ * chat file (chats/<session>.jsonl), so it needs no pairing.
  */
 
 const fs = require('fs');
@@ -36,28 +47,53 @@ function transcriptFiles(transcriptPath) {
   return files;
 }
 
-/** Skill names loaded in a transcript's text (Skill tool calls, or slash commands of skills). */
+const SKILL_TOOLS = new Set(['skill', 'Skill']);
+const isId = v => typeof v === 'string' && v.length > 0;
+
+/** A functionResponse that answers its call as loaded: an output, no error, and a successful toolCallResult when one is given. */
+function loadedResponse(ev, fr) {
+  const r = fr.response;
+  if (!r || typeof r !== 'object' || Object.prototype.hasOwnProperty.call(r, 'error')) return false;
+  if (typeof r.output !== 'string' || !r.output) return false;
+  const tcr = ev.toolCallResult;
+  return !(tcr && typeof tcr === 'object' && tcr.callId === fr.id && tcr.status !== 'success');
+}
+
+/** Skill names loaded in a transcript's text (skill tool calls, or slash commands of skills). */
 function skillsInTranscript(text) {
   const out = new Set();
+  const calls = new Map(); // parts format: functionCall id -> skill name
+  const loaded = new Set(); // parts format: functionCall ids answered as loaded
   for (const line of String(text || '').split('\n')) {
-    if (!line.includes('Skill') && !line.includes('command-name')) continue;
+    if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function')) continue;
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
-    const content = ev && ev.message && ev.message.content;
+    if (!ev || typeof ev !== 'object') continue;
+    const msg = ev.message && typeof ev.message === 'object' ? ev.message : {};
+    const content = msg.content;
     if (Array.isArray(content)) {
       for (const c of content) if (c && c.type === 'tool_use' && c.name === 'Skill') out.add(skillName(c.input && (c.input.skill || c.input.command)));
     }
     // A slash command the user typed (/trade-session): its skill text is in the session.
     const text2 = typeof content === 'string' ? content : '';
     for (const mm of text2.matchAll(/<command-name>\/?([^<]+)<\/command-name>/g)) out.add(skillName(mm[1]));
+    // Parts format: the model's skill call, and the tool's answer to it.
+    for (const p of Array.isArray(msg.parts) ? msg.parts : []) {
+      const fc = p && typeof p === 'object' ? p.functionCall : null;
+      const fr = p && typeof p === 'object' ? p.functionResponse : null;
+      if (msg.role === 'model' && fc && typeof fc === 'object' && SKILL_TOOLS.has(fc.name) && isId(fc.id)
+        && fc.args && typeof fc.args === 'object' && typeof fc.args.skill === 'string') calls.set(fc.id, skillName(fc.args.skill));
+      if (msg.role === 'user' && fr && typeof fr === 'object' && SKILL_TOOLS.has(fr.name) && isId(fr.id) && calls.has(fr.id) && loadedResponse(ev, fr)) loaded.add(fr.id);
+    }
   }
+  for (const id of loaded) out.add(calls.get(id));
   out.delete(null);
   return out;
 }
 
 /**
  * The gate's check: a message naming the skills not loaded yet, or null. No
- * transcript (another harness, or none passed) -> null.
+ * transcript (a harness that passes none) -> null.
  */
 function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
   if (!transcriptPath) return null;
@@ -80,7 +116,7 @@ function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
   if (!readAny) return null;
   const missing = required.filter(s => !loaded.has(s));
   return missing.length
-    ? `Load the trading skills before an entry; not loaded in this session: ${missing.join(', ')}. Call the Skill tool for each (they say how to read the trend, the trigger, and the strategy), then plan again.`
+    ? `Load the trading skills before an entry; not loaded in this session: ${missing.join(', ')}. Load each with the skill tool (they say how to read the trend, the trigger, and the strategy), then plan again.`
     : null;
 }
 

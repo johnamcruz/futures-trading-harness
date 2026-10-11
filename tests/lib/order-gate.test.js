@@ -775,3 +775,22 @@ test('replay clock: a broker labelled replay that looks live is refused (same se
   withSim({ env: ['SIM_SPEED'] });
   assert.deepStrictEqual(checkOrder(ANYTIME, { env: at, pluginRoot: root }).violations, []);
 });
+
+test('skills-loaded: a parts-format (Qwen Code chat) transcript with the skills loaded passes; a failed load is refused', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const file = path.join(require('../helpers').tmpDir(), 'chats', 'session.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const call = (id, skill) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'skill', args: { skill: `futures-trading-harness:${skill}` } } }] } });
+  const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'skill', response } }] } });
+  const lines = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].flatMap((s, i) => [call(`c${i}`, s), answer(`c${i}`, { output: `# ${s}` })]);
+  const run = input => evaluateOrder({ input, entries: [plan()], now: NOW, config, transcriptPath: file });
+  fs.writeFileSync(file, lines.join('\n'));
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  fs.writeFileSync(file, [...lines.slice(0, 4), call('c2', 'strategy-library'), answer('c2', { error: 'Skill "strategy-library" not found.' })].join('\n'));
+  const r = run(entryOrder());
+  assert.deepStrictEqual(checks(r), ['skills-loaded']);
+  assert.match(r.violations[0].message, /not loaded in this session: strategy-library\./);
+  // A risk-reducing order is never held back by it.
+  assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
+});
