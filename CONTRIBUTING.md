@@ -43,8 +43,9 @@ by someone other than the change's author found nothing left to fix (each
 confirmed finding fixed, the regression re-run, the fixes reviewed again). A
 change to documents only (Markdown under `docs/`, the README, this file, and
 nothing else) still runs the regression, with a review that it is sound and
-its claims about the code are true instead of the full round; a document a
-skill or agent points to (the broker interface, backtesting, and RL design
-docs) gets the full round. Say both in the pull request (the template asks). See `CLAUDE.md`.
+its claims about the code are true instead of the full round. A document
+that a skill, agent, command, rule, strategy, account, hook, or script
+points to (today the backtesting, broker interface, and RL design docs) gets
+the full round. Say both in the pull request (the template asks). See `CLAUDE.md`.
 
 Use conventional commit messages.
