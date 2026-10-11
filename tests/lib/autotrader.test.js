@@ -706,3 +706,84 @@ test('CLI: the runner never takes the test suite\'s FTH_TEST_NOW, keeps its stat
   assert.match(loop.stderr, /FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock.*--once or --dry-run/);
   assert.ok(!fs.existsSync(path.join(dir, 'autotrader.lock')) && !fs.existsSync(path.join(dir, 'logs')), 'nothing started');
 });
+
+test('opencode: validated, run headless with JSON events in the workspace it names, the model only when set', () => {
+  const oc = validateConfig({ harness: 'opencode' });
+  assert.deepStrictEqual(buildCommand(oc, 'PROMPT', '/fth'), ['opencode', 'run', '--format', 'json', '--dir', '/fth/workspace', '--agent', 'fth-head-trader', 'PROMPT']);
+  const withModel = buildCommand(validateConfig({ harness: 'opencode', model: 'local/some-model', extraArgs: ['--variant', 'high'] }), 'PROMPT', '/fth');
+  assert.deepStrictEqual(withModel.slice(8), ['--model', 'local/some-model', '--variant', 'high', 'PROMPT']);
+  assert.ok(!buildCommand(oc, 'P', '/fth').some(a => /^--(auto|attach)/.test(a)), 'never auto-approve');
+  assert.strictEqual(buildCommand(validateConfig({ harness: 'opencode', workdir: '/srv/ws' }), 'P', '/fth')[5], '/srv/ws');
+  assert.throws(() => validateConfig({ harness: 'opencode', model: 'qwen3' }), /<provider>\/<model>/);
+  for (const extraArgs of [['--auto'], ['--auto=true'], ['--yolo'], ['--dangerously-skip-permissions'], ['--attach', 'http://localhost:4096'], ['--dir', '/x'], ['--agent', 'build']]) {
+    assert.throws(() => validateConfig({ harness: 'opencode', extraArgs }), /extraArgs: not --/, extraArgs.join(' '));
+  }
+  // Another harness's flags of the same name are its own business.
+  assert.ok(validateConfig({ harness: 'custom', command: ['x', '{prompt}', '--auto'] }));
+});
+
+test('opencode: the run\'s environment locks it down and lets it read the runner\'s directories', () => {
+  const env = childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), '/r', { FTH_HOME: '/srv/fth', PWD: '/elsewhere', OPENCODE_PERMISSION: '{"*":"allow"}', OPENCODE_DISABLE_PROJECT_CONFIG: '1' });
+  assert.deepStrictEqual([env.FTH_ROOT, env.FTH_AUTONOMOUS, env.PWD], ['/r', '1', '/r/workspace']);
+  assert.ok(!('OPENCODE_PERMISSION' in env) && !('OPENCODE_DISABLE_PROJECT_CONFIG' in env));
+  for (const k of ['OPENCODE_DISABLE_AUTOUPDATE', 'OPENCODE_DISABLE_SHARE', 'OPENCODE_DISABLE_CLAUDE_CODE', 'OPENCODE_DISABLE_EXTERNAL_SKILLS']) assert.strictEqual(env[k], '1');
+  const run = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  assert.deepStrictEqual(Object.keys(run.permission.external_directory), ['*', '/r/*', '/data/bars/*', '/srv/fth/logs/*', '/srv/fth/bars-scratch/*']);
+  assert.strictEqual(run.permission.bash, 'deny');
+  assert.strictEqual(run.agent['risk-manager'].permission.external_directory['/data/bars/*'], 'allow');
+  // Other harnesses get none of it.
+  assert.ok(!Object.keys(childEnv(validateConfig({ harness: 'claude' }), '/r', {})).some(k => k.startsWith('OPENCODE_')));
+});
+
+test('cycleResult: opencode\'s final text counts; one followed by more work, thinking, or a look-alike JSON line does not', () => {
+  const ev = (type, part) => JSON.stringify({ type, timestamp: 1, sessionID: 's', part });
+  const text = t => ev('text', { type: 'text', text: t, time: { start: 1, end: 2 } });
+  const call = ev('tool_use', { type: 'tool', tool: 'harness_strategies_scan', state: { status: 'completed', input: {} } });
+  assert.strictEqual(cycleResult([ev('step_start', { type: 'step-start' }), call, text('CYCLE RESULT: no-trade - nothing fired'), ev('step_finish', { type: 'step-finish', reason: 'stop' })].join('\n')), 'CYCLE RESULT: no-trade - nothing fired');
+  // Text, then the model went on (a tool call or a new step) and was cut short: no result.
+  assert.strictEqual(cycleResult([text('CYCLE RESULT: no-trade - early'), call].join('\n')), null);
+  assert.strictEqual(cycleResult([text('CYCLE RESULT: no-trade - early'), ev('step_start', { type: 'step-start' })].join('\n')), null);
+  // Reasoning and text opencode added itself are not the model's answer.
+  assert.strictEqual(cycleResult([call, ev('reasoning', { type: 'reasoning', text: 'CYCLE RESULT: executed - thinking' })].join('\n')), null);
+  assert.strictEqual(cycleResult([call, ev('text', { type: 'text', text: 'CYCLE RESULT: executed - injected', synthetic: true })].join('\n')), null);
+  // The prompt's template is no result; an error event alone is a transcript with none.
+  assert.strictEqual(cycleResult(text('CYCLE RESULT: <no-trade | planned> - <reason>')), null);
+  assert.strictEqual(cycleResult(JSON.stringify({ type: 'error', timestamp: 1, sessionID: 's', error: { name: 'ProviderError' } })), null);
+  // A plain-text run's echoed JSON with type "text" (no opencode envelope) never hides its result line.
+  assert.strictEqual(cycleResult(`${JSON.stringify({ type: 'text', text: 'echo' })}\nCYCLE RESULT: managed - trailed the stop`), 'CYCLE RESULT: managed - trailed the stop');
+  // The final step's text parts together: a whitespace part after the line, or one split around reasoning.
+  assert.strictEqual(cycleResult([call, text('CYCLE RESULT: no-trade - quiet'), text('\n\n')].join('\n')), 'CYCLE RESULT: no-trade - quiet');
+  assert.strictEqual(cycleResult([call, text('Done.'), ev('reasoning', { type: 'reasoning', text: 'x' }), text('CYCLE RESULT: planned - orb')].join('\n')), 'CYCLE RESULT: planned - orb');
+  // Warning lines between events are skipped.
+  assert.strictEqual(cycleResult(`INFO starting\n${call}\n! permission requested: webfetch; auto-rejecting\n${text('Done.\nCYCLE RESULT: blocked - gate refused')}`), 'CYCLE RESULT: blocked - gate refused');
+});
+
+test('the workspace guard fingerprints opencode\'s config and any .opencode folder (agents, plugins, packages)', () => {
+  const { workspaceFingerprint, changedFiles, TRUSTED_WORKSPACE_FILES } = require('../../scripts/lib/harness-run');
+  assert.ok(TRUSTED_WORKSPACE_FILES.includes('opencode.json') && TRUSTED_WORKSPACE_FILES.includes('opencode.jsonc'));
+  const dir = tmpDir();
+  fs.writeFileSync(path.join(dir, 'opencode.json'), '{"permission":{"*":"deny"}}');
+  const before = workspaceFingerprint(dir);
+  assert.strictEqual(before['.opencode/'], null, 'absent');
+  assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), []);
+  fs.writeFileSync(path.join(dir, 'opencode.json'), '{"permission":{"*":"allow"}}');
+  assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), ['opencode.json']);
+  fs.writeFileSync(path.join(dir, 'opencode.json'), '{"permission":{"*":"deny"}}');
+  fs.writeFileSync(path.join(dir, 'opencode.jsonc'), '{}');
+  assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), ['opencode.jsonc']);
+  fs.unlinkSync(path.join(dir, 'opencode.jsonc'));
+  // A .opencode folder, and anything changed under it, nested or a link.
+  fs.mkdirSync(path.join(dir, '.opencode', 'plugins'), { recursive: true });
+  const created = workspaceFingerprint(dir);
+  assert.deepStrictEqual(changedFiles(before, created), ['.opencode/']);
+  fs.writeFileSync(path.join(dir, '.opencode', 'plugins', 'x.js'), 'export default async () => ({})');
+  const plugin = workspaceFingerprint(dir);
+  assert.deepStrictEqual(changedFiles(created, plugin), ['.opencode/']);
+  fs.writeFileSync(path.join(dir, '.opencode', 'plugins', 'x.js'), 'export default async () => ({ x: 1 })');
+  assert.deepStrictEqual(changedFiles(plugin, workspaceFingerprint(dir)), ['.opencode/']);
+  fs.symlinkSync('/etc', path.join(dir, '.opencode', 'link'));
+  const linked = workspaceFingerprint(dir);
+  assert.notStrictEqual(linked['.opencode/'], plugin['.opencode/']);
+  fs.rmSync(path.join(dir, '.opencode'), { recursive: true });
+  assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), []);
+});

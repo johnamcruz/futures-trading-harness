@@ -253,3 +253,42 @@ test('runProbe: the raw transcript is kept under FTH_HOME/logs and its path repo
   // A harness that isn't installed has no transcript.
   assert.strictEqual(hc.runProbe({ harness: 'codex', root: ROOT, env, spawn: () => ({ error: Object.assign(new Error('x'), { code: 'ENOENT' }) }) }).transcript, undefined);
 });
+
+test('probe: opencode runs as the runner runs it, with every order tool denied for the session and every role', () => {
+  const env = { FTH_HOME: '/srv/fth', PATH: '/bin', PWD: '/somewhere/else' };
+  const oc = hc.probeCommand('opencode', ROOT, env);
+  assert.deepStrictEqual(oc.argv.slice(0, 5), ['opencode', 'run', '--format', 'json', '--dir']);
+  assert.deepStrictEqual(oc.argv.slice(5, 8), [path.join(ROOT, 'workspace'), '--agent', 'fth-head-trader']);
+  assert.strictEqual(oc.argv[oc.argv.length - 1], hc.probePrompt());
+  assert.deepStrictEqual([oc.cwd, oc.env.PWD, oc.env.FTH_AUTONOMOUS, oc.env.FTH_PAPER], [path.join(ROOT, 'workspace'), path.join(ROOT, 'workspace'), '1', '1']);
+  const run = JSON.parse(oc.env.OPENCODE_CONFIG_CONTENT);
+  const { loadAgents } = require('../../scripts/lib/harness-sync');
+  for (const o of hc.PROBE_DENIED) {
+    assert.strictEqual(run.permission[`broker_${o}`], 'deny', o);
+    for (const a of [...loadAgents(ROOT).map(x => x.name), 'fth-head-trader']) assert.strictEqual(run.agent[a].permission[`broker_${o}`], 'deny', `${a}: ${o}`);
+  }
+  assert.strictEqual(run.permission.broker_get_bars, undefined, 'read tools stay as the workspace config has them');
+  assert.ok(hc.HARNESSES.includes('opencode'));
+  // The runner's own runs are untouched.
+  const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), ROOT, env).OPENCODE_CONFIG_CONTENT).permission.broker_place_order, undefined);
+});
+
+test('analyze: opencode JSON events (the real transcript): MCP tools by server, the role through task, the refused shell', () => {
+  const a = hc.analyze(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'opencode-probe-transcript.jsonl'), 'utf8'));
+  assert.deepStrictEqual(a.tools, { blackouts_list: 'answered', strategies_list: 'answered' });
+  assert.deepStrictEqual([a.subagent.role, a.subagent.harnessRole, a.subagent.ok, a.subagent.replied], ['risk-manager', true, true, true]);
+  assert.match(a.shell, /^refused \(Model tried to call unavailable tool/);
+  assert.ok(hc.passed({ analysis: a, error: null }));
+  // A shell that ran is reported as ran; a role that errored is no answer; an errored tool is not answered.
+  const ev = (tool, input, state) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, callID: tool, state: { input, ...state } } });
+  const b = hc.analyze([
+    ev('harness_blackouts_list', {}, { status: 'error', error: 'boom' }),
+    ev('task', { subagent_type: 'risk-manager', prompt: 'x' }, { status: 'error', error: 'The user rejected permission' }),
+    ev('bash', { command: 'node -e 1' }, { status: 'completed', output: '' }),
+  ].join('\n'));
+  assert.deepStrictEqual(b.tools, { blackouts_list: 'errored', strategies_list: 'not called' });
+  assert.deepStrictEqual([b.subagent.ok, b.shell], [false, 'ran']);
+  // A JSON line that only looks like an event (no opencode envelope) is not a call.
+  assert.strictEqual(hc.analyze(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'harness_blackouts_list', state: { status: 'completed' } } })).tools.blackouts_list, 'not called');
+});

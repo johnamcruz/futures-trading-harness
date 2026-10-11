@@ -8,7 +8,7 @@ broker MCP server that implements the broker MCP interface
 
 1. **One canonical tree, many harnesses** (the [ECC](https://github.com/affaan-m/ECC)
    architecture). `agents/`, `skills/`,
-   `commands/`, `rules/`, `hooks/` are written once. Codex and Qwen adapters
+   `commands/`, `rules/`, `hooks/` are written once. Codex, Qwen and opencode adapters
    are generated (`scripts/sync-harness.js`) and checked for drift in CI.
 2. **Enforcement lives in code below the model.** Anything that protects the
    account is deterministic and fails closed: the order gate runs as a hook
@@ -50,16 +50,62 @@ read-only calls.
 
 ## Harness support
 
-| Capability | Claude Code | Codex | Qwen Code | Other MCP clients |
-|---|---|---|---|---|
-| Package | `.claude-plugin/` | `.codex-plugin/` + `.agents/plugins/marketplace.json` | `qwen-extension/` (linked) | n/a |
-| Skills | plugin `skills/` | plugin `skills/` | extension `skills/` | read `skills/*/SKILL.md` |
-| Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen-extension/agents/*.md` (tool ids translated) | play roles from `agents/*.md` |
-| Commands | `commands/` | (use skills) | `qwen-extension/commands/` (`{{args}}`) | n/a |
-| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md`, extension `QWEN.md` | `workspace/AGENTS.md` |
-| Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (Codex sets CLAUDE_PLUGIN_ROOT; exit 2 blocks) | extension `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}` substituted) | none |
-| Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
-| Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
+| Capability | Claude Code | Codex | Qwen Code | opencode | Other MCP clients |
+|---|---|---|---|---|---|
+| Package | `.claude-plugin/` | `.codex-plugin/` + `.agents/plugins/marketplace.json` | `qwen-extension/` (linked) | `workspace/opencode.json` (project config) | n/a |
+| Skills | plugin `skills/` | plugin `skills/` | extension `skills/` | `skills.paths`: `{env:FTH_ROOT}/skills` | read `skills/*/SKILL.md` |
+| Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen-extension/agents/*.md` (tool ids translated) | `agent.<role>` in `workspace/opencode.json` (subagents, permission keys translated) | play roles from `agents/*.md` |
+| Commands | `commands/` | (use skills) | `qwen-extension/commands/` (`{{args}}`) | (use skills) | n/a |
+| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md`, extension `QWEN.md` | `workspace/AGENTS.md` | `workspace/AGENTS.md` |
+| Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (Codex sets CLAUDE_PLUGIN_ROOT; exit 2 blocks) | extension `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}` substituted) | none | none |
+| Order gate | hook + gateway | hook + gateway | hook + gateway | gateway | gateway |
+| Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | `opencode run --format json --dir <workspace>`, the project's permissions plus the runner's per-run config | custom argv |
+
+### opencode
+
+`workspace/opencode.json` is generated from `agents/` (`scripts/lib/opencode.js`)
+and names no provider or model: those stay in the user's own opencode config.
+It registers `broker` (the gateway) and `harness` as local MCP servers started
+from `{env:FTH_ROOT}` (unset, they don't start), which inherit opencode's
+environment. Permissions follow opencode's rule (the last matching rule wins;
+headless, anything not allowed is refused): the session denies everything,
+then allows the broker and harness tools (orders through the gateway), skills,
+the harness's roles by name (`task`), reading (never a `.env`), and web
+search; `bash`, `edit` and `webfetch` (which opencode can't limit to the
+calendar sites) are denied by name too. opencode evaluates an agent's own
+rules after the top-level ones, so the session runs as the harness's own
+primary agent, `fth-head-trader` (`--agent`, `default_agent`), with the same
+permissions; opencode's agents (`build`, `general`, `explore`, `plan`) are
+disabled, and a user's rules for them never apply. Each role denies
+everything, then names every broker and harness tool (its own allowed, the
+rest denied, so no user rule for the role grants one), then allows its other
+tools (Claude names translated: `mcp__broker__x` → `broker_x`, `Read` →
+`read` and `list`); a role's shell, edits, web fetch and delegation are never
+granted, so only `trade-executor` holds order tools. Language servers,
+formatters and snapshots are off. The roles live in the one file, not
+in `.opencode/agents/`: opencode installs npm packages into every `.opencode/`
+folder it loads (running its `package.json`), so the harness keeps none, and
+the workspace guard fingerprints `.opencode/` whole (absent).
+
+The runner passes per run (`OPENCODE_CONFIG_CONTENT`, merged last) every
+permission again (the session's, the head trader's, each role's), so a run is
+locked down without the project file, and the directories outside the project it may read (the harness root,
+the bar directory, the runner's logs, the bars scratch directory), for the
+session and every role. It names the workspace with `--dir` and `PWD`
+(opencode takes its project from `PWD`, not the working directory), turns off
+the update check, sharing, Claude Code and external skills, and language
+server downloads, and drops `OPENCODE_PERMISSION`,
+`OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_CONFIG_DIR` from the
+environment. `extraArgs` may only be `--variant`, `--thinking`,
+`--print-logs` and `--log-level` (not `--auto` or its aliases, `--attach`,
+`--dir`, `--agent`, or a session to continue). opencode also loads project
+config (`opencode.json`, `.opencode/`) from the folders above the workspace up
+to the repository's top: keep none in the repository (no autonomous run of
+any harness can write there). The model is
+opencode's default unless the runner config's `model` names one
+(`<provider>/<model>`). opencode's JSON events carry the main session's own
+calls only: a subagent's calls (the trade-executor's orders) are not in the
+cycle log.
 
 ### Harness tools server
 
@@ -84,7 +130,7 @@ harness home's own, so a replay's run home and the live runner never share
 fetched bars), with no symlink and one hard link, in
 directories only the user owns and can write (`paths.js`). Only `bars_fetch`
 loads the user's `.env` (into a copy), as only `bars.js` does. `record` is never honoured in autonomous runs (`FTH_AUTONOMOUS=1`, which every
-harness hands its MCP servers: Claude and Qwen pass their environment, Codex
+harness hands its MCP servers: Claude, Qwen and opencode pass their environment, Codex
 forwards it): the call succeeds with its result and a `note: record ignored`
 line, and writes no record (the runner writes the gate's records). It is
 refused whenever a live runner holds its lock
@@ -95,7 +141,8 @@ cancels an order, and the order-gate hook matches none of them. The installer
 registers it as `harness` for every harness, as it registers `broker` (Claude:
 `claude mcp add harness`; Codex: `[mcp_servers.harness]`, pre-approved, with
 the clock, state, bars directory and calendar variables forwarded; Qwen: user
-settings and the extension manifest). Autonomous runs allow `mcp__harness`; the
+settings and the extension manifest; opencode: the generated
+`workspace/opencode.json`). Autonomous runs allow `mcp__harness`; the
 runner sets `FTH_BARS_DIR` to its bar directory and, at start, checks that this
 checkout's server answers `tools/list` with the registry's tools (it can't see
 which server a harness's own settings register as `harness`; the headless
@@ -127,7 +174,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `stop-defined` | `stopLossBracket`, or `stop <price>` in the rationale | yes | yes |
 | `mtf-trend` | The multi-timeframe trend rule: a trend strategy (anything without `mtf: reversal`; a policy strategy is judged by the component its verdict trades) never enters against the prevailing trend (the highest of 4h, 1h, 15m with one) in `<FTH_HOME>/mtf/<ROOT>.json`, which the runner writes every bar and `mtf.js --record` interactively; a missing record, or one more than `FTH_MTF_MAX_AGE_MIN` (15) past its bar's close, refuses trend entries. Hard: not skippable. The scan, backtester, and RL env apply the same rule to candidates | yes | yes |
 | `trigger-fired` | A rules strategy enters only on its own trigger: the signal record (`<FTH_HOME>/signals/<ROOT>.json`, written by the runner every bar and by `strategies.js scan --record`) shows it fired on the ordered side, on a bar that closed less than `FTH_SIGNAL_MAX_AGE_MIN` (10) minutes ago. A relabelled setup tag or a stale signal is refused. Hard | yes | yes |
-| `skills-loaded` | The session transcript (the hook's `transcript_path`, and its main session's for a Claude subagent) shows the skill tool loaded `trade-session`, `multi-timeframe-analysis`, and `strategy-library` before an entry: a Claude Code `Skill` call, or in Qwen Code's chat file a `skill` call that its answer shows loaded (a failed load doesn't count). Codex passes no transcript: not applicable | yes | no |
+| `skills-loaded` | The session transcript (the hook's `transcript_path`, and its main session's for a Claude subagent) shows the skill tool loaded `trade-session`, `multi-timeframe-analysis`, and `strategy-library` before an entry: a Claude Code `Skill` call, or in Qwen Code's chat file a `skill` call that its answer shows loaded (a failed load doesn't count). Codex passes no transcript, and opencode runs no hook: not applicable | yes | no |
 | `order-consistency` | The order agrees with its rationale: the side named after the tag (`long`/`short`/`buy`/`sell`) is the order side; the stop and target sit on the right sides of a limit or stop entry's price and of each other; known-contract prices are on the tick; bracket ticks are whole and match the rationale's prices within a tick (a market order: stop + target ticks within two of the stop-to-target distance) | yes | yes |
 | `plan-required` | A journal `plan` with this `contractId` within `FTH_PLAN_MAX_AGE_MIN` | yes | yes |
 | `contract-specs` | An entry is checked and sized with the broker's tick size and value, as the contract translator recorded them from the broker's `search_contracts` / `get_contract` answers (`specs` in `<FTH_HOME>/contracts-<broker>.json`; `scripts/lib/trading/broker-specs.js`). None recorded for the contract (a reply with a tick size not above 0 or a tick value outside $0.01-$10,000 records none) refuses the entry, saying to look the contract up first; so does a recorded spec that differs from the static table for a contract the table has (training would not equal live, and a units mix-up would size the trade wrong); a prop entry also needs its micro/mini partner's. Exits and protective orders never need them. Hard: not skippable | yes | yes |
@@ -245,7 +292,8 @@ Further safeguards:
 
 - **Workspace fingerprint.** The runner fingerprints the workspace's
   instructions and project settings (`AGENTS.md`, `CLAUDE.md`, `QWEN.md`,
-  `.qwen/`, `.claude/`, `.codex/`) before and after every run. A change
+  `.qwen/`, `.claude/`, `.codex/`, `opencode.json`, and any `.opencode/`
+  folder, whole) before and after every run. A change
   creates the kill switch, because a Codex run can write its working
   directory.
 - **Qwen allowlist.** For Qwen the runner rewrites the

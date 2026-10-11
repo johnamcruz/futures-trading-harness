@@ -17,8 +17,8 @@
 - Agents: `agents/<name>.md` with `name`, `description`, `tools`, `model`; fewest
   tools that work; order tools belong to `trade-executor` only.
 - Commands: a shim that says "Use the `<skill>` skill for: $ARGUMENTS".
-- Then run `node scripts/sync-harness.js` to regenerate the Codex, Qwen, and
-  workspace files, and commit them.
+- Then run `node scripts/sync-harness.js` to regenerate the Codex, Qwen,
+  opencode, and workspace files, and commit them.
 
 ## Changing the order gate, hooks, gateway, or runner
 

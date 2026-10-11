@@ -9,9 +9,9 @@ A replay is the live harness run on replayed data. Nothing about the trader
 changes: the runner builds each cycle as it does live (bars through the broker
 adapter, the bars file, the trend and signal records, the strategy scan, a
 policy's verdicts, the account), the harness CLI the runner config selects
-(Qwen Code, Claude Code, Codex, or a custom one) runs the cycle with the same
-agents and skills, and every order goes through the same order gate to the
-broker. Only the data, the clock and the fills are simulated, by a replay
+(Qwen Code, Claude Code, Codex, opencode, or a custom one) runs the cycle with
+the same agents and skills, and every order goes through the same order gate
+to the broker. Only the data, the clock and the fills are simulated, by a replay
 broker.
 
 ## When to Use

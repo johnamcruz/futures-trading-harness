@@ -13,6 +13,9 @@
  *   resultText(content)      a tool_result's content as text (a string, or its text blocks)
  *   bridgeRefused(call, result)  the bridge refused this call (it never reached the tool)
  *   SHELL_TOOLS              shell tool names across harnesses
+ *   isOpencodeEvent(ev)      an opencode `run --format json` event
+ *   opencodeCall(part)       an opencode tool part as { name, input, result }, MCP tools named
+ *                            mcp__<server>__<tool> as on the other harnesses
  *
  * Never throws on a malformed transcript: what it can't parse it skips.
  */
@@ -64,6 +67,34 @@ function resultText(content) {
 /** A bridged call the bridge itself refused: an error result that starts with the bridge's refusal. */
 const bridgeRefused = (call, result) => Boolean(call && call.bridge && result && result.is_error === true && call.bridge.refused.test(resultText(result.content)));
 
-const SHELL_TOOLS = new Set(['Bash', 'run_shell_command', 'shell', 'exec_command', 'local_shell']);
+const SHELL_TOOLS = new Set(['Bash', 'run_shell_command', 'shell', 'exec_command', 'local_shell', 'bash']);
 
-module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS };
+/**
+ * opencode `run --format json`: one event per line for the main session (a subagent's own calls are
+ * not in it), { type, timestamp, sessionID, part } (or { ..., error } for an error). Recognized by that
+ * whole envelope, so another JSON line with a "type" (an echoed broker reply) stays plain text.
+ */
+const OPENCODE_EVENTS = new Set(['text', 'tool_use', 'step_start', 'step_finish', 'reasoning', 'error']);
+const isOpencodeEvent = ev => Boolean(ev) && typeof ev === 'object' && !Array.isArray(ev) && OPENCODE_EVENTS.has(ev.type)
+  && typeof ev.sessionID === 'string' && Number.isFinite(ev.timestamp)
+  && (ev.type === 'error' ? ev.error !== undefined : Boolean(ev.part) && typeof ev.part === 'object');
+
+/** The MCP servers the harness registers: opencode names their tools <server>_<tool>. */
+const OPENCODE_SERVERS = [require('./broker/config').SERVER_NAME, require('./harness-tools/registry').SERVER_NAME];
+
+/**
+ * A tool part (a tool_use event's part: { tool, state: { status, input, output | error } }) as
+ * { name, input, result: { isError, text } | null }: completed answered, error errored (a refused
+ * permission included), anything else has no result yet.
+ */
+function opencodeCall(part) {
+  const tool = String((part && part.tool) || '');
+  const server = OPENCODE_SERVERS.find(s => tool.startsWith(`${s}_`) && tool.length > s.length + 1);
+  const state = (part && part.state) || {};
+  const input = state.input && typeof state.input === 'object' ? state.input : {};
+  const result = state.status === 'completed' ? { isError: false, text: resultText(state.output) }
+    : state.status === 'error' ? { isError: true, text: resultText(state.error) } : null;
+  return { name: server ? `mcp__${server}__${tool.slice(server.length + 1)}` : tool, input, result };
+}
+
+module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, OPENCODE_SERVERS };

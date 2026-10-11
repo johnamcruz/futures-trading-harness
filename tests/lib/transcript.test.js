@@ -43,3 +43,18 @@ test('unwrap: a bridge call is the tool it reaches, with its arguments; anything
   assert.strictEqual(hc.BRIDGE_TOOLS, BRIDGE_TOOLS);
   assert.ok(SHELL_TOOLS.has('Bash') && SHELL_TOOLS.has('run_shell_command') && !SHELL_TOOLS.has('tool_call'));
 });
+
+test('opencode: events are recognized by their whole envelope; tool parts name MCP tools as the other harnesses do', () => {
+  const { isOpencodeEvent, opencodeCall } = require('../../scripts/lib/transcript');
+  const ev = { type: 'text', timestamp: 1, sessionID: 'ses_1', part: { type: 'text', text: 'hi' } };
+  assert.ok(isOpencodeEvent(ev));
+  assert.ok(isOpencodeEvent({ type: 'error', timestamp: 1, sessionID: 'ses_1', error: { name: 'APIError' } }));
+  for (const bad of [{ ...ev, sessionID: undefined }, { ...ev, timestamp: '1' }, { ...ev, part: null }, { ...ev, type: 'result' }, { type: 'error', timestamp: 1, sessionID: 's' }, [ev], null, 'text'])
+    assert.ok(!isOpencodeEvent(bad), JSON.stringify(bad));
+  assert.deepStrictEqual(opencodeCall({ tool: 'broker_place_order', state: { status: 'completed', input: { size: 1 }, output: 'ok' } }), { name: 'mcp__broker__place_order', input: { size: 1 }, result: { isError: false, text: 'ok' } });
+  assert.deepStrictEqual(opencodeCall({ tool: 'harness_strategies_list', state: { status: 'error', input: {}, error: 'boom' } }), { name: 'mcp__harness__strategies_list', input: {}, result: { isError: true, text: 'boom' } });
+  assert.deepStrictEqual(opencodeCall({ tool: 'skill', state: { status: 'running', input: { name: 'trade-session' } } }), { name: 'skill', input: { name: 'trade-session' }, result: null });
+  assert.deepStrictEqual(opencodeCall({ tool: 'broker_', state: {} }).name, 'broker_', 'a server prefix alone is not a tool');
+  assert.deepStrictEqual(opencodeCall({ tool: 'brokerage_x', state: { input: 'x' } }), { name: 'brokerage_x', input: {}, result: null });
+  assert.ok(SHELL_TOOLS.has('bash'));
+});

@@ -9,7 +9,7 @@ operator instructions.
 
 An LLM-agnostic futures trading harness: canonical agents, skills, commands,
 rules, and hooks, with generated adapters for Claude
-Code, Codex, and Qwen Code; strategies as `STRATEGY.md` documents; an order gate
+Code, Codex, Qwen Code, and opencode; strategies as `STRATEGY.md` documents; an order gate
 enforced by hooks and by an MCP gateway; and an autonomous runner.
 
 ## Layout
@@ -44,9 +44,10 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 - `hooks/hooks.json`: every hook runs through `scripts/hooks/run-with-flags.js`.
 - `scripts/lib/`: pure logic (frontmatter, harness-sync, install, autotrader,
   trading/*). CLIs and hooks stay thin.
-- Generated, never edit by hand: `workspace/*.md`, `.codex/agents/*.toml`, and
-  `qwen-extension/` (manifest, `QWEN.md`, agents, commands, symlinks). Run
-  `node scripts/sync-harness.js`.
+- Generated, never edit by hand: `workspace/*.md`, `workspace/opencode.json`
+  (opencode's project config: roles, permissions; `scripts/lib/opencode.js`),
+  `.codex/agents/*.toml`, and `qwen-extension/` (manifest, `QWEN.md`, agents,
+  commands, symlinks). Run `node scripts/sync-harness.js`.
 - `tests/`: `node:test` files named `*.test.js`; `rl/tests/` (Python `unittest`) runs
   through `tests/lib/python-rl.test.js` when Python has numpy and gymnasium.
 

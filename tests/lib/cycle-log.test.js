@@ -122,3 +122,23 @@ test('skills-loaded: names, transcript files (a subagent reads its session too),
   assert.strictEqual(checkSkillsLoaded(null), null, 'no transcript (Codex, Qwen): not applicable');
   assert.strictEqual(checkSkillsLoaded(path.join(dir, 'missing.jsonl')), null);
 });
+
+// opencode `run --format json`: one event per line (tests/fixtures/opencode-probe-transcript.jsonl is a real
+// probe; this cycle is synthetic in the same format): MCP tools by server, a skill that failed to load,
+// an order the gate refused and the one it took, a refused shell, a warning line between events.
+const OPENCODE_CYCLE = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'opencode-cycle-transcript.jsonl'), 'utf8');
+
+test('summarize: an opencode transcript counts its tools, its orders (refused ones too), and only the skills it loaded', () => {
+  const s = summarize(OPENCODE_CYCLE);
+  assert.deepStrictEqual(s.tools, { skill: 3, mcp__harness__strategies_scan: 1, task: 1, mcp__broker__place_order: 2, mcp__broker__journal_add: 1, Bash: 1 });
+  assert.deepStrictEqual(s.skills, ['trade-session', 'multi-timeframe-analysis'], 'the failed load is not a load');
+  assert.deepStrictEqual(s.missingSkills, ['strategy-library']);
+  assert.deepStrictEqual(s.orders.map(o => [o.contractId, o.side, o.size, o.type]), [['MNQ', 0, 1, 2], ['MNQ', 0, 1, 2]]);
+  assert.deepStrictEqual(s.commands, ['node -e 1']);
+  assert.deepStrictEqual(toolCalls(OPENCODE_CYCLE).find(c => c.name === 'mcp__harness__strategies_scan').input, { symbol: 'MNQ', timeframe: '3m' });
+  assert.strictEqual(cycleResult(OPENCODE_CYCLE), 'CYCLE RESULT: executed - orb long MNQ 1 after the plan was journaled');
+  // Another server's tool keeps its opencode name; nothing outside the envelope counts.
+  const other = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'github_create_issue', state: { status: 'completed', input: {} } } });
+  assert.deepStrictEqual(toolCalls(other).map(c => c.name), ['github_create_issue']);
+  assert.deepStrictEqual(toolCalls(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'broker_place_order', state: { input: {} } } })), []);
+});

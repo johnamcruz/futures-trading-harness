@@ -89,7 +89,35 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
 const TRUSTED_WORKSPACE_FILES = [
   'AGENTS.md', 'CLAUDE.md', 'QWEN.md', '.mcp.json',
   '.qwen/settings.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml',
+  // opencode's project config (generated; it holds the roles and every permission) and the names it also loads.
+  'opencode.json', 'opencode.jsonc',
 ];
+/**
+ * Folders fingerprinted whole (every file's path and bytes, symlinks as their target): opencode loads
+ * agents, commands, plugins (code it runs) and configs from `.opencode/`, and installs npm packages there
+ * (running its package.json). The harness generates none, so the folder is absent and must stay so.
+ */
+const TRUSTED_WORKSPACE_DIRS = ['.opencode'];
+
+/** A folder's fingerprint: null when absent, else a digest of every entry under it, in order. */
+function dirDigest(dir) {
+  const hash = crypto.createHash('sha256');
+  const walk = (abs, rel) => {
+    const st = fs.lstatSync(abs);
+    if (st.isSymbolicLink()) hash.update(`link:${rel}:${fs.readlinkSync(abs)}\n`);
+    else if (st.isDirectory()) {
+      hash.update(`dir:${rel}\n`);
+      for (const name of fs.readdirSync(abs).sort()) walk(path.join(abs, name), rel ? `${rel}/${name}` : name);
+    } else hash.update(`file:${rel}:${crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex')}\n`);
+  };
+  try {
+    walk(dir, '');
+  } catch (err) {
+    if (err.code === 'ENOENT' && !fs.existsSync(dir)) return null;
+    return `unreadable:${err.code || err.message}`;
+  }
+  return hash.digest('hex');
+}
 
 /**
  * A trusted file's fingerprint (sha256 hex). Qwen Code stamps the settings file it loads with its
@@ -113,13 +141,16 @@ function fileDigest(name, content) {
 }
 
 function workspaceFingerprint(dir) {
-  return Object.fromEntries(TRUSTED_WORKSPACE_FILES.map(f => {
-    try {
-      return [f, fileDigest(f, fs.readFileSync(path.join(dir, f)))];
-    } catch (_err) {
-      return [f, null];
-    }
-  }));
+  return {
+    ...Object.fromEntries(TRUSTED_WORKSPACE_FILES.map(f => {
+      try {
+        return [f, fileDigest(f, fs.readFileSync(path.join(dir, f)))];
+      } catch (_err) {
+        return [f, null];
+      }
+    })),
+    ...Object.fromEntries(TRUSTED_WORKSPACE_DIRS.map(d => [`${d}/`, dirDigest(path.join(dir, d))])),
+  };
 }
 
 /** Files whose fingerprint differs. */
@@ -133,4 +164,4 @@ function entryOrders(stateDir) {
   return (Array.isArray(list) ? list : []).filter(e => e && Number.isFinite(Number(e.orderId)));
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, fileDigest, workspaceFingerprint, changedFiles };
+module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, TRUSTED_WORKSPACE_DIRS, fileDigest, dirDigest, workspaceFingerprint, changedFiles };

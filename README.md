@@ -3,9 +3,9 @@
 An LLM-agnostic agent harness that trades futures through a broker MCP
 server: any broker or prop firm whose server implements one interface
 ([Brokers](#brokers)). It runs on
-**Claude Code, Codex, or Qwen Code** (any model those harnesses can drive,
-including Qwen through DashScope, vLLM, or Ollama), and it can trade on its own
-on a schedule.
+**Claude Code, Codex, Qwen Code, or opencode** (any model those harnesses can
+drive, including Qwen through DashScope, vLLM, or Ollama, and local models
+through opencode), and it can trade on its own on a schedule.
 
 Strategies are Markdown documents: drop a `STRATEGY.md` into `strategies/` and
 the agents can trade it, and the order gate enforces its instruments, sessions,
@@ -34,7 +34,7 @@ generates each harness's own format from it:
 | Domain documents | The harness's own documents in the same style | `strategies/<name>/STRATEGY.md`, `accounts/<name>/ACCOUNT.md` |
 
 Code reads each document's frontmatter; agents read its body. Adapters for
-Codex, Qwen Code, and the shared workspace are generated
+Codex, Qwen Code, opencode, and the shared workspace are generated
 (`node scripts/sync-harness.js`) and never edited by hand. Logic lives in
 `scripts/lib/` (pure, tested), CLIs and hooks stay thin, and anything that
 must hold (the gate, the account rules, a policy's promotion gate) is
@@ -52,7 +52,7 @@ account document, and its workflows are skills.
 ## How it fits together
 
 ```text
- scripts/autotrader.js  ──(schedule, kill switch)──▶  claude -p | codex exec | qwen -p
+ scripts/autotrader.js  ──(schedule, kill switch)──▶  claude -p | codex exec | qwen -p | opencode run
         or you, interactively                                   │
                                                                 ▼
  skills: trade-session / premarket / end-of-day / autonomous-trading
@@ -105,7 +105,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 | Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
-| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads incl. the home's `bars-scratch`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads incl. the home's `bars-scratch`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. opencode: the same in the generated `workspace/opencode.json` (everything denied, then the broker and harness tools, skills, the roles, reading; no shell, edits or web fetch), the runner's directories and the same lock-down passed per run. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
 Always register the `broker` server **through the gateway** (the installer
@@ -258,7 +258,7 @@ strategies are ported from an earlier Python trading bot.
 | `rules/trading/` | Always-on rules |
 | `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
 | `scripts/` | Hook runtime, MCP gateway, broker adapter and conformance check, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
-| `workspace/` | Generated `AGENTS.md` / `CLAUDE.md` / `QWEN.md`: the operator instructions every harness reads |
+| `workspace/` | Generated `AGENTS.md` / `CLAUDE.md` / `QWEN.md`: the operator instructions every harness reads; `opencode.json`: opencode's project config (MCP servers, roles as subagents, permissions) |
 | `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/` | Claude Code and Codex plugin manifests |
 | `qwen-extension/` | Qwen Code extension: generated manifest, `QWEN.md`, Qwen-format agents and commands, symlinks to the shared skills, scripts, strategies, hooks |
 | `.codex/agents/` | Generated Codex agent roles |
@@ -290,6 +290,7 @@ plugin. It prints the remaining native commands:
 | Qwen Code | `broker` MCP (via gateway) and `harness` MCP (the harness tools) in `~/.qwen/settings.json`; autonomous allowlist in `workspace/.qwen/settings.json` | `qwen extensions link <repo>/qwen-extension` (link, not install) |
 | Codex | marked block in `~/.codex/config.toml`: `broker` MCP (via gateway, tools pre-approved so `codex exec` can use them, the broker's variables forwarded), `harness` MCP (the harness tools, pre-approved) + agent roles | `codex plugin marketplace add <repo>` then `codex plugin add futures-trading-harness@futures-trading-harness`; trust hooks in `/hooks` |
 | Claude Code | rules in `~/.claude/rules/trading/` | `/plugin marketplace add <repo>`, `/plugin install futures-trading-harness@futures-trading-harness`, and the two printed `claude mcp add` commands (`broker` and `harness`) |
+| opencode | nothing: `workspace/opencode.json` is generated and committed (the `broker` and `harness` MCP servers, started from `FTH_ROOT`; every role as a subagent; the permissions) | `npm install -g opencode-ai` (1.x) and your model provider in `~/.config/opencode/opencode.json` (the harness names no provider or model) |
 
 Check each harness headless afterwards (one real run per harness, in paper
 mode with the broker read-only: it calls the harness tools, delegates to a
@@ -302,7 +303,7 @@ Each run's raw transcript is kept at
 failure can be diagnosed without another run:
 
 ```bash
-node scripts/check-headless.js                      # claude, codex and qwen
+node scripts/check-headless.js                      # claude, codex, qwen and opencode
 node scripts/check-headless.js --harness claude     # one harness
 node scripts/check-headless.js --config autotrader.json   # the runner's harness and settings
 ```
@@ -338,7 +339,7 @@ Interactive, from `workspace/` so every harness reads the operator instructions:
 
 ```bash
 cd workspace
-qwen      # or: codex, claude --plugin-dir ..
+qwen      # or: codex, claude --plugin-dir .., FTH_ROOT=$(cd .. && pwd) opencode
 > /premarket MNQ
 > /trade-session MNQ paper
 ```
@@ -414,7 +415,9 @@ follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (broker tools, reading, and the
 harness scripts by absolute path), Qwen Code runs in default approval mode
-with the allowlist in `workspace/.qwen/settings.json`, and Codex runs in its
+with the allowlist in `workspace/.qwen/settings.json`, opencode runs
+`opencode run --format json` on the generated `workspace/opencode.json` (no
+`--auto`: anything it doesn't allow is refused), and Codex runs in its
 `workspace-write` sandbox. Start with `"paper": true` and tight server limits
 (max position 1, a small daily loss limit, a practice account as the only
 allowed account).
@@ -636,7 +639,7 @@ only checks that they really reduce the position.
 npm install
 npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content, e2e (+ rl/tests when Python has numpy)
 npm run lint                     # eslint + markdownlint
-node scripts/sync-harness.js     # regenerate Codex/Qwen/workspace files after editing agents, commands, rules, skills
+node scripts/sync-harness.js     # regenerate Codex/Qwen/opencode/workspace files after editing agents, commands, rules, skills
 ```
 
 `tests/e2e/mock-trading-e2e.test.js` trades end to end on a mock exchange

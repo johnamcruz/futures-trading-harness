@@ -4,7 +4,7 @@
  * Pure scheduling and command-building logic for the autonomous runner.
  * The runner never trades itself: on every closed bar of the configured
  * timeframe (see bar-clock.js) it starts one headless harness run (Claude
- * Code, Codex, Qwen Code, or any CLI agent), and every order still passes the
+ * Code, Codex, Qwen Code, opencode, or any CLI agent), and every order still passes the
  * order gate and the broker MCP server's guardrails.
  */
 
@@ -19,7 +19,8 @@ const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 const { et: etTime, etStamp } = require('./trading/session-context');
-const { documents } = require('./transcript');
+const { documents, isOpencodeEvent } = require('./transcript');
+const opencode = require('./opencode');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -58,7 +59,7 @@ const DEFAULTS = {
   model: '',
   extraArgs: [],
 };
-const HARNESSES = ['claude', 'codex', 'qwen', 'custom'];
+const HARNESSES = ['claude', 'codex', 'qwen', 'opencode', 'custom'];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
 /** Economic-calendar and exchange sites the news analyst may fetch; nothing else. */
@@ -242,6 +243,14 @@ function validateConfig(raw) {
   if (cfg.dataDir !== null && !(typeof cfg.dataDir === 'string' && /^(\/|~\/)/.test(cfg.dataDir))) errors.push('dataDir: an absolute path or ~/...');
   if ('cycleMinutes' in (raw || {})) errors.push('cycleMinutes was replaced by timeframe (cycles now follow bar closes)');
   if (!Array.isArray(cfg.extraArgs)) errors.push('extraArgs: an array');
+  if (cfg.harness === 'opencode') {
+    // opencode names a model provider/model (the provider is the user's own opencode config).
+    if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
+    // Only a model variant and logging: --auto (and its aliases) approves every permission not denied,
+    // --attach runs on a server the runner didn't configure, --dir or --agent run elsewhere or as another agent.
+    const unsafe = opencode.badExtraArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
+    if (unsafe.length) errors.push(`extraArgs: not ${unsafe.join(', ')} for opencode (only ${Object.keys(opencode.EXTRA_ARGS).join(', ')}: an unattended run gets only what the workspace config and the runner allow)`);
+  }
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
   if (typeof cfg.eodReview !== 'boolean') errors.push('eodReview: true or false');
@@ -417,6 +426,11 @@ function childEnv(cfg, root, base = process.env) {
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
     Object.assign(env, activeBroker(env).paperEnv);
   }
+  // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
+  if (cfg.harness === 'opencode') {
+    const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir) });
+  }
   return env;
 }
 
@@ -441,6 +455,12 @@ function buildCommand(cfg, prompt, root, env = process.env) {
       // permissions (written by the installer and refreshed by the runner) run headless.
       return ['qwen', '-p', prompt, '--approval-mode', 'default', '--output-format', 'json', '--max-session-turns', '80',
         ...(model ? ['--model', model] : []), ...extra];
+    case 'opencode':
+      // JSON events (cycle-log.js). Headless, anything workspace/opencode.json doesn't allow is refused;
+      // the model is the user's opencode default unless the config names one (provider/model).
+      // --dir: opencode takes its project directory from PWD, not the working directory the runner sets.
+      // --agent: the harness's head trader, whose permissions no user config for opencode's own agents changes.
+      return ['opencode', 'run', '--format', 'json', '--dir', path.resolve(root, cfg.workdir), '--agent', opencode.HEAD_AGENT, ...(model ? ['--model', model] : []), ...extra, prompt];
     default:
       return cfg.command.map(a => String(a).replace('{prompt}', prompt));
   }
@@ -532,20 +552,31 @@ function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = f
   return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
 
-// A harness transcript's event types (Claude stream-json and Qwen JSON; Codex --json): any other JSON line
-// (an echoed order, a stderr warning) is plain text, so it never hides a plain-text run's result line.
+// A harness transcript's event types (Claude stream-json and Qwen JSON; Codex --json; opencode's by its whole
+// envelope, transcript.js isOpencodeEvent): any other JSON line (an echoed order, a stderr warning) is plain
+// text, so it never hides a plain-text run's result line.
 const TRANSCRIPT_EVENT = /^(?:system|assistant|user|result|(?:item|turn|thread)\.[a-z_.]+)$/;
 
 /**
  * The run's final message: { structured, final }. `structured`: the output is a harness transcript
- * (Claude stream-json, Qwen JSON, Codex --json events); `final`: its final message (Claude's and Qwen's
- * { type: 'result', result }, Codex's last agent message), or null when it has none (a run cut short).
+ * (Claude stream-json, Qwen JSON, Codex --json events, opencode JSON events); `final`: its final message
+ * (Claude's and Qwen's { type: 'result', result }, Codex's last agent message, opencode's text parts after
+ * its last step start or tool call), or null when it has none (a run cut short).
  */
 function finalMessage(output) {
   let final = null;
   let structured = false;
+  let texts = []; // opencode: the text parts since its last step start or tool call
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
+      if (isOpencodeEvent(ev)) {
+        structured = true;
+        // The model's own text (not one opencode added); a later step or tool call means it went on after it.
+        if (ev.type === 'text' && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) texts.push(ev.part.text);
+        else if (ev.type === 'tool_use' || ev.type === 'step_start') texts = [];
+        final = texts.length ? texts.join('\n') : null;
+        continue;
+      }
       if (!ev || typeof ev !== 'object' || !TRANSCRIPT_EVENT.test(ev.type)) continue;
       structured = true;
       if (ev.type === 'result' && typeof ev.result === 'string') final = ev.result;

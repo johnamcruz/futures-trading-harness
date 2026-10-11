@@ -8,7 +8,8 @@
  * order gateway with absolute paths, the harness-tools MCP server (named
  * `harness`: the harness's own operations as tools), the chosen server's entry, agent
  * roles (Codex), and the autonomous-run permission allowlist (Qwen, scoped to
- * workspace/). Every write is idempotent and confined to a marked block or
+ * workspace/). opencode needs nothing written: its project config is generated
+ * (workspace/opencode.json). Every write is idempotent and confined to a marked block or
  * keyed entries owned by the harness. A file's first backup is never overwritten.
  */
 
@@ -317,7 +318,23 @@ function planClaude({ root, home, broker }) {
   };
 }
 
-const TARGETS = { claude: planClaude, codex: planCodex, qwen: planQwen };
+/**
+ * opencode: nothing to write. Its project config (workspace/opencode.json: the MCP servers, the roles,
+ * every permission) is generated and committed; the model provider is the user's own opencode config.
+ */
+function planOpencode({ root, broker }) {
+  return {
+    writes: [],
+    next: [
+      'npm install -g opencode-ai   (the 1.x line), then add your model provider to ~/.config/opencode/opencode.json (a local OpenAI-compatible server or any provider opencode supports)',
+      credentialsStep(broker),
+      `Run sessions from ${path.join(root, 'workspace')} with FTH_ROOT=${root} set (workspace/opencode.json starts the MCP servers from it); the runner sets it: "harness": "opencode".`,
+      'Check it: node scripts/check-headless.js --harness opencode',
+    ],
+  };
+}
+
+const TARGETS = { claude: planClaude, codex: planCodex, qwen: planQwen, opencode: planOpencode };
 
 function applyPlan(plan) {
   for (const w of plan.writes) {
@@ -352,5 +369,6 @@ module.exports = {
   planClaude,
   planCodex,
   planQwen,
+  planOpencode,
   applyPlan,
 };

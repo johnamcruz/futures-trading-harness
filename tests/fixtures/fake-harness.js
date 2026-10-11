@@ -45,7 +45,7 @@ async function orders() {
 /**
  * The headless check's probe (scripts/lib/headless-check.js): calls the real harness tools server
  * from FTH_ROOT with the run's environment, and prints a transcript in the format the argv asks for
- * (Claude stream-json, Codex --json events, Qwen JSON). FAKE_PROBE=no-role skips the delegation.
+ * (Claude stream-json, Codex --json events, Qwen JSON, opencode JSON events). FAKE_PROBE=no-role skips the delegation.
  */
 async function probe(argv) {
   const root = process.env.FTH_ROOT;
@@ -58,7 +58,21 @@ async function probe(argv) {
     tools.close();
   }
   const role = process.env.FAKE_PROBE !== 'no-role';
-  const format = argv[0] === 'exec' ? 'codex' : argv.includes('stream-json') ? 'claude' : 'qwen';
+  const format = argv[0] === 'exec' ? 'codex' : argv[0] === 'run' ? 'opencode' : argv.includes('stream-json') ? 'claude' : 'qwen';
+  if (format === 'opencode') {
+    // As opencode 1.x prints with run --format json (tests/fixtures/opencode-probe-transcript.jsonl is a real one).
+    // The run's own config must deny the order tools (the probe's read-only broker), or there is no run.
+    const run = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
+    if (!run.permission || run.permission.broker_place_order !== 'deny' || run.agent['trade-executor'].permission.broker_place_order !== 'deny') throw new Error('order tools not denied');
+    const ev = (type, part) => process.stdout.write(`${JSON.stringify({ type, timestamp: Date.now(), sessionID: 'ses_fake', part: { sessionID: 'ses_fake', ...part } })}\n`);
+    const call = (tool, input, done) => ev('tool_use', { type: 'tool', tool, callID: tool, state: { input, ...done } });
+    ev('step_start', { type: 'step-start' });
+    for (const [t, r] of Object.entries(results)) call(`harness_${t}`, {}, r.isError ? { status: 'error', error: JSON.stringify(r.content) } : { status: 'completed', output: r.content.map(c => c.text).join('\n') });
+    if (role) call('task', { description: 'probe', prompt: 'Reply exactly PROBE-ROLE-OK', subagent_type: 'risk-manager' }, { status: 'completed', output: '<task_result>\nPROBE-ROLE-OK\n</task_result>' });
+    call('bash', { command: 'node -e 1' }, { status: 'error', error: "Model tried to call unavailable tool 'invalid'." });
+    ev('text', { type: 'text', text: 'PROBE DONE', time: { start: 1, end: 2 } });
+    return;
+  }
   if (format === 'codex') {
     const item = x => process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: x })}\n`);
     for (const [t, r] of Object.entries(results)) item({ type: 'mcp_tool_call', server: 'harness', tool: t, status: r.isError ? 'failed' : 'completed', result: r });
