@@ -5,7 +5,7 @@
  * the file, so the path must not reach the journal, the harness state, a
  * harness's settings, or credentials.
  *
- * Allowed: an existing regular .json, .csv, .parquet or .xlsx file of at most
+ * Allowed: an existing regular .json or .csv file of at most
  * 50 MB, by absolute path, inside the bars directory (FTH_BARS_DIR, default
  * <FTH_HOME>/bars: the runner's default bars directory; a runner with another
  * dataDir sets FTH_BARS_DIR to it) or /tmp/fth (where bars_fetch
@@ -25,7 +25,8 @@ const path = require('path');
 const { OUT_DIR, lstat, realish, inside } = require('../bars-fetch');
 const { harnessHome, expandHome } = require('../paths');
 
-const EXTENSIONS = ['.json', '.csv', '.parquet', '.xlsx'];
+// JSON and CSV only: the Parquet and Excel readers trust their file (the user's own data, through the CLIs).
+const EXTENSIONS = ['.json', '.csv'];
 const MAX_BYTES = 50 * 1024 * 1024;
 
 /** The directories bars files may come from: the bars directory and /tmp/fth. */

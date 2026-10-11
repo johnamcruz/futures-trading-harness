@@ -22,7 +22,7 @@ const { PARAMS } = require('../trading/market-snapshot');
 
 const SERVER_NAME = 'harness';
 const SYMBOL = { type: 'string', pattern: '^[A-Z0-9]{1,8}$', description: 'A contract root, upper case (e.g. MNQ, MES).' };
-const BARS = { type: 'string', minLength: 1, maxLength: 1024, description: 'A bars file by absolute path (.json, .csv, .parquet or .xlsx, at most 50 MB) under the bars directory (FTH_BARS_DIR, default <FTH_HOME>/bars) or /tmp/fth (where bars_fetch writes).' };
+const BARS = { type: 'string', minLength: 1, maxLength: 1024, description: 'A bars file by absolute path (.json or .csv, at most 50 MB) under the bars directory (FTH_BARS_DIR, default <FTH_HOME>/bars) or /tmp/fth (where bars_fetch writes).' };
 const JSON_FLAG = { type: 'boolean', description: 'The full result as JSON instead of text.' };
 const RECORD = { type: 'boolean', description: 'Also record the result for the order gate (refused in autonomous runs, where the runner records it).' };
 const ISO = { type: 'string', maxLength: 40, pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$' };

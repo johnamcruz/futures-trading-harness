@@ -154,6 +154,26 @@ test('callTool: an invalid call names the first ten problems, never thousands', 
   assert.ok(items.content[0].text.length < 2000);
 });
 
+test('callTool: a Parquet or Excel file under the bars directory is refused by every tool that reads bars, without being opened', async () => {
+  const home = tmpDir();
+  const dir = path.join(home, 'bars');
+  fs.mkdirSync(dir, { mode: 0o700 });
+  fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(dir, 'NQ-3m.csv'));
+  const env = { FTH_HOME: home };
+  for (const ext of ['parquet', 'xlsx', 'xls', 'pq', 'xlsm']) {
+    const file = path.join(dir, `b.${ext}`);
+    fs.writeFileSync(file, 'x');
+    fs.chmodSync(file, 0o000); // opening it would fail with EACCES: the refusal must come first
+    for (const [tool, args] of [['strategies_scan', { bars: file, symbol: 'MNQ' }], ['strategies_recent', { bars: file, symbol: 'MNQ' }],
+      ['market_snapshot', { bars: file }], ['mtf_read', { bars: file }], ['mtf_read', { bars: path.join(dir, 'NQ-3m.csv'), daily: file }]]) {
+      const r = await callTool(tool, args, { env });
+      assert.strictEqual(r.isError, true, `${tool} ${ext}`);
+      assert.match(r.content[0].text, /^\[harness\] (bars|daily): a bars file \(\.json, \.csv, at most 50 MB\).*not a bars file type/, `${tool} ${ext}`);
+    }
+    fs.chmodSync(file, 0o600);
+  }
+});
+
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {
   const root = tmpDir();
   fs.mkdirSync(path.join(root, 'strategies', 'big'), { recursive: true });

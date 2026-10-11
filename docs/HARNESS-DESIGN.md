@@ -75,8 +75,8 @@ with the operation's stderr notes appended, or on failure `isError` with
 (`registry.js`; unknown arguments refused); no tool takes an environment, a
 working directory, an output path, or a time (the harness clock, read per call
 from the server's environment, decides; a refused replay clock refuses as the
-CLI does). The only paths are bars files: regular `.json`/`.csv`/`.parquet`/
-`.xlsx` files of at most 50 MB under `FTH_BARS_DIR` (default
+CLI does). The only paths are bars files: regular `.json` or `.csv` files (never
+Parquet or Excel: those readers trust their file) of at most 50 MB under `FTH_BARS_DIR` (default
 `<FTH_HOME>/bars`) or `/tmp/fth`, with no symlink and one hard link, in
 directories only the user owns and can write (`paths.js`). Only `bars_fetch`
 loads the user's `.env` (into a copy), as only `bars.js` does. `record` stays refused in autonomous runs. A reply over 256 KB is

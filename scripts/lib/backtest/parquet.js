@@ -39,7 +39,8 @@ class Reader {
   varint() {
     let result = 0n;
     let shift = 0n;
-    for (;;) {
+    for (let n = 0; ; n += 1) {
+      if (n === 10) throw new Error('parquet: a varint longer than 10 bytes');
       const b = this.byte();
       result |= BigInt(b & 0x7f) << shift;
       if ((b & 0x80) === 0) return result;
@@ -56,8 +57,14 @@ class Reader {
     return Number(this.zigzag());
   }
 
+  /** Bytes left: no list, map or binary can claim more elements than that. */
+  left() {
+    return this.buf.length - this.pos;
+  }
+
   binary() {
     const len = Number(this.varint());
+    if (len > this.left()) throw new Error('parquet: unexpected end of metadata');
     const out = this.buf.subarray(this.pos, this.pos + len);
     this.pos += len;
     return out;
@@ -84,6 +91,7 @@ class Reader {
     let size = head >> 4;
     const type = head & 0x0f;
     if (size === 15) size = Number(this.varint());
+    if (size > this.left()) throw new Error('parquet: a metadata list longer than the file');
     const out = [];
     for (let k = 0; k < size; k += 1) out.push(type === 1 || type === 2 ? this.byte() === 1 : this.value(type));
     return out;
@@ -94,7 +102,10 @@ class Reader {
     const out = [];
     if (size === 0) return out;
     const types = this.byte();
-    for (let k = 0; k < size; k += 1) out.push([this.value(types >> 4), this.value(types & 0x0f)]);
+    if (size > this.left()) throw new Error('parquet: a metadata map longer than the file');
+    // In a map (as in a list) a boolean is a byte of its own.
+    const item = t => (t === 1 || t === 2 ? this.byte() === 1 : this.value(t));
+    for (let k = 0; k < size; k += 1) out.push([item(types >> 4), item(types & 0x0f)]);
     return out;
   }
 
@@ -157,6 +168,7 @@ function lz4Raw(input, outLen, budget = createBudget()) {
     const token = input[p++];
     let lit = token >> 4;
     if (lit === 15) { let b; do { b = input[p++]; lit += b; } while (b === 255); }
+    if (o + lit > outLen || p + lit > input.length) throw new Error('parquet: LZ4 data past its page');
     input.copy(out, o, p, p + lit);
     o += lit; p += lit;
     if (p >= input.length) break;
@@ -164,6 +176,7 @@ function lz4Raw(input, outLen, budget = createBudget()) {
     let m = token & 15;
     if (m === 15) { let b; do { b = input[p++]; m += b; } while (b === 255); }
     m += 4;
+    if (o + m > outLen || offset === 0 || offset > o) throw new Error('parquet: LZ4 data past its page');
     for (let k = 0; k < m; k += 1) out[o + k] = out[o - offset + k];
     o += m;
   }
@@ -327,9 +340,11 @@ function decodeValues(buf, pos, end, encoding, col, count, dict, budget = create
     }
     case ENC.BYTE_STREAM_SPLIT: {
       const width = { [TYPE.FLOAT]: 4, [TYPE.DOUBLE]: 8, [TYPE.INT32]: 4, [TYPE.INT64]: 8 }[col.type] || col.typeLength;
-      const tmp = Buffer.alloc(width);
+      if (!(Number.isInteger(width) && width > 0 && pos + width * count <= end)) throw new Error('parquet: BYTE_STREAM_SPLIT data past its page');
       const out = new Array(count);
       for (let k = 0; k < count; k += 1) {
+        // A buffer per value: a fixed-length value is a view of it, so it can't be shared.
+        const tmp = Buffer.alloc(width);
         for (let b = 0; b < width; b += 1) tmp[b] = buf[pos + b * count + k];
         out[k] = plain(tmp, 0, col.type, 1, col.typeLength)[0];
       }
@@ -397,6 +412,7 @@ function readColumnChunk(buf, chunk, col, budget) {
     } else if (type === PAGE.DATA) {
       const h = header[5];
       const n = h[1];
+      if (!(Number.isInteger(n) && n >= 0)) throw new Error('parquet: a page whose value count is out of range');
       budget.count('parquet', Number(n)); // before decoding arrays of that many values
       const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       let p = 0;
@@ -416,6 +432,7 @@ function readColumnChunk(buf, chunk, col, budget) {
       const n = h[1];
       budget.count('parquet', Number(n));
       const nulls = h[2] || 0;
+      if (!(Number.isInteger(n) && n >= 0 && Number.isInteger(nulls) && nulls >= 0 && nulls <= n)) throw new Error('parquet: a page whose null count is out of range');
       const defLen = h[5] || 0;
       const repLen = h[6] || 0;
       const levels = dataStart + repLen;

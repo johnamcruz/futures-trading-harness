@@ -57,6 +57,11 @@ test('paths: everything else is refused, and no refusal carries the file content
     [path.join(dir, 'up', 'outside.json'), /up is a symlink/],
     [path.join(dir, 'missing.json'), /no such file/],
     [path.join(dir, 'MNQ-3m.txt'), /not a bars file type/],
+    // Parquet and Excel are the user's (their readers trust the file): never through the tools.
+    [path.join(dir, 'MNQ-3m.parquet'), /not a bars file type/],
+    [path.join(dir, 'MNQ-3m.xlsx'), /not a bars file type/],
+    [path.join(dir, 'MNQ-3m.xls'), /not a bars file type/],
+    [path.join(dir, 'MNQ-3m.pq'), /not a bars file type/],
     [big, /larger than 50 MB/],
     ['MNQ-3m.json', /not an absolute path/],
     ['-', /not an absolute path/],
