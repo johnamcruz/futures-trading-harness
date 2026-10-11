@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
 const { SERVER_NAME, activeBroker } = require('./broker/config');
+const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
@@ -79,7 +80,7 @@ const abs = p => `/${p}`;
  */
 function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
   return [
-    `mcp__${SERVER_NAME}`, 'Skill', 'Agent', 'WebSearch',
+    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
@@ -400,10 +401,12 @@ function prompts(cfg, now, root = '') {
   };
 }
 
-/** Environment for a harness run: root, autonomous lock-down, and paper mode. */
+/** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env) {
   // The gate learns the exchange calendar from the runner's config.
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
+  // The harness tools read bars files from the runner's bar directory (harness-tools/paths.js).
+  env.FTH_BARS_DIR = resolveDataDir(cfg, os.homedir(), base);
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.

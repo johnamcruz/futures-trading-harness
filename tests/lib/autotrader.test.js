@@ -49,6 +49,8 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   // The broker server's journal folder can't be edited (the order gate reads the journal).
   assert.ok(claudeDenied('/r', { home: '/h', journal: '/h/.broker-mcp/journal.jsonl' }).includes('Edit(//h/.broker-mcp/journal.jsonl)'));
   assert.ok(claudeTools('/r', { home: '/h' }).includes('mcp__broker'));
+  // The harness tools server, all its tools (none places an order).
+  assert.ok(tools.includes('mcp__harness') && claudeTools('/r', { home: '/h' }).includes('mcp__harness'));
   const codex = buildCommand(validateConfig({ harness: 'codex' }), p, '/fth');
   assert.deepStrictEqual([codex[0], codex[1], codex[codex.length - 1]], ['codex', 'exec', 'PROMPT']);
   const qwen = buildCommand(cfg, p, '/fth');
@@ -110,6 +112,9 @@ test('a previous day that never finished end of day is flattened first', () => {
 test('child env locks the gate and paper mode disables trading', () => {
   const live = childEnv(validateConfig({}), '/r', { PATH: '/bin' });
   assert.deepStrictEqual([live.FTH_ROOT, live.FTH_AUTONOMOUS, live.FTH_PAPER], ['/r', '1', undefined]);
+  // The harness tools read the runner's bar directory: its dataDir, else <FTH_HOME>/bars; never a stale FTH_BARS_DIR.
+  assert.strictEqual(childEnv(validateConfig({}), '/r', { FTH_HOME: '/srv/fth', FTH_BARS_DIR: '/elsewhere' }).FTH_BARS_DIR, '/srv/fth/bars');
+  assert.strictEqual(childEnv(validateConfig({ dataDir: '/data/bars' }), '/r', {}).FTH_BARS_DIR, '/data/bars');
   const paper = childEnv(validateConfig({ paper: true }), '/r', {});
   assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
   // The broker server's own off switch comes from the broker config (paperEnv), whatever the broker.
@@ -169,6 +174,28 @@ test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run 
   const eod = spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod', '--dry-run'], { encoding: 'utf8', env });
   assert.strictEqual(eod.status, 0, eod.stderr);
   assert.match(eod.stdout, /end-of-day skill/);
+});
+
+test('CLI start: a harness tools server that does not offer the registry\'s tools refuses a run; a manual end of day only warns', { timeout: 120000 }, () => {
+  // A copy of the harness whose tools server is a foreign MCP server (the fake broker).
+  const root = tmpDir();
+  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'models', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
+  fs.writeFileSync(path.join(root, 'scripts', 'harness-tools-mcp.js'), `require(${JSON.stringify(path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js'))});\n`);
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'] }));
+  const env = { ...process.env, HOME: dir, FTH_HOME: path.join(dir, '.futures-trading-harness'), FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  delete env.FTH_REPLAY_NOW;
+  const cli = path.join(root, 'scripts', 'autotrader.js');
+  const trade = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--symbol', 'MES'], { encoding: 'utf8', env });
+  assert.strictEqual(trade.status, 1);
+  assert.match(trade.stderr, /the harness tools server \(.*harness-tools-mcp\.js\) does not offer the harness's tools/);
+  assert.doesNotMatch(trade.stdout, /CYCLE RESULT/, 'no cycle ran');
+  const eod = spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod'], { encoding: 'utf8', env });
+  assert.strictEqual(eod.status, 0, eod.stderr);
+  assert.match(eod.stderr, /\[autotrader\] warning: the harness tools server/);
+  assert.match(eod.stdout, /CYCLE RESULT: no-trade - fake harness/, 'flattening needs only the broker: the end of day runs');
 });
 
 test('codex runs may write the news-blackouts directory and nothing else of the harness state', () => {

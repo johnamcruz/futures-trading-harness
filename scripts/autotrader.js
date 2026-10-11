@@ -46,6 +46,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
+const { checkToolsServer } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -327,6 +328,14 @@ async function main(argv) {
   checkStrategies(cfg);
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
+  // The harness tools the cycles use: the server they will start answers with the registry's tools, or nothing runs
+  // (a manual end of day only warns: flattening needs only the broker).
+  if (!opts.dryRun) {
+    await checkToolsServer({ root: ROOT, env: childEnv(cfg, ROOT) }).catch(err => {
+      if (arg(argv, '--once') !== 'eod') throw err;
+      process.stderr.write(`[autotrader] warning: ${err.message}\n`);
+    });
+  }
   // Codex may write the blackouts directory from its sandbox, but can't create it.
   fs.mkdirSync(path.dirname(loadConfig(process.env).blackoutsFile), { recursive: true });
   workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
