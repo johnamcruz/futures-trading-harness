@@ -192,6 +192,11 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   assert.strictEqual(trade.status, 1);
   assert.match(trade.stderr, /the harness tools server \(.*harness-tools-mcp\.js\) does not offer the harness's tools/);
   assert.doesNotMatch(trade.stdout, /CYCLE RESULT/, 'no cycle ran');
+  // A bad --once is refused before the start check runs.
+  const bogus = spawnSync(process.execPath, [cli, '--config', config, '--once', 'bogus'], { encoding: 'utf8', env });
+  assert.strictEqual(bogus.status, 1);
+  assert.match(bogus.stderr, /--once must be premarket, trade, or eod/);
+  assert.doesNotMatch(bogus.stderr, /harness tools server/);
   const eod = spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod'], { encoding: 'utf8', env });
   assert.strictEqual(eod.status, 0, eod.stderr);
   assert.match(eod.stderr, /\[autotrader\] warning: the harness tools server/);

@@ -43,7 +43,18 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   const denied = claude.argv[claude.argv.indexOf('--disallowedTools') + 1].split(',');
   for (const o of orderTools) assert.ok(denied.includes(`mcp__broker__${o}`), `Claude denies ${o}`);
   const codex = hc.probeCommand('codex', ROOT, env).argv;
-  assert.strictEqual(codex[codex.indexOf('exec') + 2], `mcp_servers.broker.disabled_tools=${JSON.stringify(hc.PROBE_DENIED)}`);
+  assert.strictEqual(codex[codex.length - 2], `mcp_servers.broker.disabled_tools=${JSON.stringify(hc.PROBE_DENIED)}`);
+  // The config's extra arguments can't re-widen it: the narrowing comes after them.
+  const widen = { claude: ['--allowedTools', 'mcp__broker'], codex: ['-c', 'mcp_servers.broker.disabled_tools=[]'], qwen: ['--allowed-tools', 'mcp__broker__place_order'] };
+  for (const [h, extraArgs] of Object.entries(widen)) {
+    const a = hc.probeCommand(h, ROOT, env, { config: { harness: h, extraArgs } }).argv;
+    const theirs = a.indexOf(h === 'qwen' ? extraArgs[0] : extraArgs[1]);
+    assert.ok(theirs > 0, `${h}: the extra arguments are passed`);
+    const ours = h === 'claude' ? a.lastIndexOf('--disallowedTools') : h === 'codex' ? a.lastIndexOf(`mcp_servers.broker.disabled_tools=${JSON.stringify(hc.PROBE_DENIED)}`) : a.lastIndexOf('--exclude-tools');
+    assert.ok(ours > theirs, `${h}: the narrowing comes after the extra arguments`);
+  }
+  const lastDeny = cfgClaude => cfgClaude[cfgClaude.lastIndexOf('--disallowedTools') + 1].split(',');
+  assert.deepStrictEqual(lastDeny(hc.probeCommand('claude', ROOT, env, { config: { harness: 'claude', extraArgs: widen.claude } }).argv), hc.PROBE_DENIED.map(o => `mcp__broker__${o}`));
   assert.strictEqual(codex[codex.length - 1], hc.probePrompt(), 'Codex: the prompt stays last');
   const qwenArgv = hc.probeCommand('qwen', ROOT, env).argv;
   assert.deepStrictEqual(qwenArgv.slice(qwenArgv.indexOf('--exclude-tools') + 1), hc.PROBE_DENIED.map(o => `mcp__broker__${o}`));

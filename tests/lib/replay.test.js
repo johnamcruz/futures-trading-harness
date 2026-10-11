@@ -358,16 +358,24 @@ test('driver: refuses while the live runner runs or another driver holds the run
   const w = userWorld();
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });
   const ok = { serverCheck: async () => null, trades: async () => [] };
-  fs.writeFileSync(path.join(w.live, 'autotrader.lock'), JSON.stringify({ pid: process.pid }));
-  await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /the live runner is running/);
-  fs.unlinkSync(path.join(w.live, 'autotrader.lock'));
+  // A live autotrader (a stand-in whose command line names it) holds the live lock: refused.
+  const runner = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'scripts/autotrader.js'], { stdio: 'ignore' });
+  try {
+    fs.writeFileSync(path.join(w.live, 'autotrader.lock'), JSON.stringify({ pid: runner.pid }));
+    await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), new RegExp(`the live runner is running \\(pid ${runner.pid}`));
+  } finally {
+    runner.kill();
+  }
   const lock = path.join(w.run.paths.runDir, 'driver.lock');
   const sleeper = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)']);
   try {
+    // A live lock whose pid is another program (a reused pid) is not a runner: the replay goes on to its own lock.
+    fs.writeFileSync(path.join(w.live, 'autotrader.lock'), JSON.stringify({ pid: process.pid }));
     fs.writeFileSync(lock, JSON.stringify({ pid: sleeper.pid }));
     await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /another replay driver/);
   } finally {
     sleeper.kill();
+    fs.unlinkSync(path.join(w.live, 'autotrader.lock'));
   }
   fs.writeFileSync(lock, JSON.stringify({ pid: 999999 })); // a dead holder: taken over
   const broken = { ...ok, step: async p => ({ code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [], errors: ['MNQ: HTTP 503'], bars: [{ symbol: 'MNQ', lastBarT: null }] })}` }) };

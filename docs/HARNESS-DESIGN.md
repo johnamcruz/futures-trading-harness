@@ -254,7 +254,10 @@ Further safeguards:
   `approvalMode: default`, so a role asks (and headless, is refused) for any
   tool the allowlist doesn't allow, and `background: false`: Qwen runs a named
   subagent in the background unless the call or its definition says
-  otherwise, and the head trader must wait for each role's result. The extension's `QWEN.md` embeds every
+  otherwise, and the head trader must wait for each role's result. A
+  permissive parent mode (yolo, auto, auto-edit, e.g. through the runner
+  config's `extraArgs`) overrides a role's `approvalMode`: the runner passes
+  `--approval-mode default`, and the allowlist holds only in that mode. The extension's `QWEN.md` embeds every
   `rules/trading/*.md`, so the rules are not linked into the extension.
 - **Codex blackouts.** Codex runs may also write the news-blackouts
   directory (`<FTH_HOME>/blackouts`), and nothing else of the harness state.

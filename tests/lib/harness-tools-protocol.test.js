@@ -172,6 +172,7 @@ test('callTool: a Parquet or Excel file under the bars directory is refused by e
     }
     fs.chmodSync(file, 0o600);
   }
+});
 
 test('callTool: record is refused while an autonomous runner holds its lock, whatever the server\'s environment', async () => {
   const { spawn } = require('child_process');
@@ -181,7 +182,7 @@ test('callTool: record is refused while an autonomous runner holds its lock, wha
   const bars = path.join(home, 'bars', 'NQ-3m.csv');
   const env = { FTH_HOME: home }; // no FTH_AUTONOMOUS: as if a harness hadn't passed it on
   // A stand-in runner: a live process whose command line names the autotrader.
-  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'autotrader-stand-in'], { stdio: 'ignore' });
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
   try {
     fs.writeFileSync(path.join(home, 'autotrader.lock'), JSON.stringify({ pid: runner.pid, startedAt: new Date().toISOString() }));
     for (const [tool, args, tag] of [['strategies_scan', { bars, symbol: 'MNQ', record: true }, 'strategies'], ['mtf_read', { bars, symbol: 'MNQ', record: true }, 'mtf'], ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, 'bars']]) {

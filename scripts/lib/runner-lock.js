@@ -7,7 +7,7 @@
  * while one runs: it records every bar's read and signals itself).
  *
  *   processCommand(pid, { spawn })   the process's command line, '' when it is gone, null when unknown
- *   lockHolderAlive(lock, { self })  the pid exists and (where its command can be read) is an autotrader
+ *   lockHolderAlive(lock, { self })  the pid exists and (where its command can be read) runs scripts/autotrader.js
  *   liveRunner(env)                  the live runner's pid from its lock, or null
  */
 
@@ -15,6 +15,9 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { harnessHome } = require('./paths');
+
+// The runner's own script on its command line (node .../scripts/autotrader.js ...), not any mention of the word.
+const AUTOTRADER = /scripts[\\/]autotrader\.js(\s|$)/;
 
 const lockFile = env => path.join(harnessHome(env), 'autotrader.lock');
 
@@ -27,7 +30,9 @@ function processCommand(pid, { spawn = spawnSync } = {}) {
   try {
     const r = spawn('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8', timeout: 5000 });
     if (r.error || r.status === null) return null;
-    return r.status === 0 ? String(r.stdout).trim() : ''; // ps exits 1 for no such process
+    if (r.status === 0) return String(r.stdout).trim();
+    // ps exits 1, silently, for no such process; anything it says on the way is an unknown (assumed live).
+    return String(r.stderr || '').trim() ? null : '';
   } catch (_err) {
     return null;
   }
@@ -42,7 +47,7 @@ function lockHolderAlive(lock, { self = process.pid, command = processCommand } 
     if (err.code !== 'EPERM') return false;
   }
   const cmd = command(lock.pid);
-  return cmd === null || cmd.includes('autotrader');
+  return cmd === null || AUTOTRADER.test(cmd);
 }
 
 function liveRunner(env = process.env, opts = {}) {

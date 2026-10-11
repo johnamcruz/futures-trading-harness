@@ -78,8 +78,11 @@ function readOnlyBroker(harness, argv) {
     out[a] = out[a].split(',').flatMap(t => (t === `mcp__${BROKER_SERVER}` ? PROBE_BROKER_TOOLS.map(n => `mcp__${BROKER_SERVER}__${n}`) : [t])).join(',');
     const d = out.indexOf('--disallowedTools') + 1;
     out[d] = [out[d], ...PROBE_DENIED.map(n => `mcp__${BROKER_SERVER}__${n}`)].filter(Boolean).join(',');
+    // Again after the config's extra arguments, so none of them re-allows an order tool (deny beats allow).
+    out.push('--disallowedTools', PROBE_DENIED.map(n => `mcp__${BROKER_SERVER}__${n}`).join(','));
   } else if (harness === 'codex') {
-    out.splice(out.indexOf('exec') + 1, 0, '-c', `mcp_servers.${BROKER_SERVER}.disabled_tools=${JSON.stringify(PROBE_DENIED)}`);
+    // After the config's extra arguments (a later -c wins), before the prompt, which stays last.
+    out.splice(out.length - 1, 0, '-c', `mcp_servers.${BROKER_SERVER}.disabled_tools=${JSON.stringify(PROBE_DENIED)}`);
   } else if (harness === 'qwen') {
     out.push('--exclude-tools', ...PROBE_DENIED.map(n => `mcp__${BROKER_SERVER}__${n}`));
   }
