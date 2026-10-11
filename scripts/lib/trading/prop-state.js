@@ -19,6 +19,7 @@ const { specFor, familyOf } = require('./contracts');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
+const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
 const VERDICT_KEEP = 500;
 
 const combineFile = (home, account) => path.join(home, 'combine', `${account}.json`);
@@ -191,7 +192,9 @@ function combineBlock(home, accountName, now = new Date()) {
       + `(node scripts/combine.js record-day --account ${accountName} --day ${day} --balance <dollars>)${more}`;
   }
   const s = r.snapshot;
-  if (!s || !(now.getTime() - Date.parse(s.at) <= SNAPSHOT_MAX_AGE_MS)) return `the ${accountName} account snapshot is missing or older than ${SNAPSHOT_MAX_AGE_MS / 60000} minutes (the runner updates it each bar)`;
+  const age = now.getTime() - Date.parse(s && s.at);
+  // A snapshot from the future (a clock stepped back) can't be trusted to hold the latest entries.
+  if (!s || !(age <= SNAPSHOT_MAX_AGE_MS) || age < -SNAPSHOT_FUTURE_TOLERANCE_MS) return `the ${accountName} account snapshot is missing or older than ${SNAPSHOT_MAX_AGE_MS / 60000} minutes, or dated in the future (the runner updates it each bar)`;
   if (s.open > 0) {
     const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
     return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
@@ -200,6 +203,29 @@ function combineBlock(home, accountName, now = new Date()) {
     return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
   }
   return s.block || null;
+}
+
+const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
+
+/**
+ * Why an entry must wait for the next snapshot, or null: an entry order went
+ * through at or after the snapshot was taken, so its `open` count (and the
+ * cushion every size is worked out from) doesn't hold that trade yet. With
+ * several markets, two setups on one bar would otherwise each be sized from
+ * the whole cushion. One position at a time across the account, as trained.
+ */
+function entrySinceSnapshot(home, accountName, entries = []) {
+  const r = readAttempt(home, accountName);
+  const at = Date.parse(r && r.snapshot && r.snapshot.at);
+  if (!Number.isFinite(at)) return null; // combineBlock refuses a missing snapshot
+  const since = (entries || []).filter(e => e && e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
+    && !RISK_REDUCING.test(String(e.text || '')) && !(entryTime(e) < at));
+  if (!since.length) return null;
+  const ids = [...new Set(since.map(e => e.contractId).filter(Boolean))];
+  const unreadable = since.some(e => !Number.isFinite(entryTime(e)));
+  return `an entry${ids.length ? ` (${ids.join(', ')})` : ''} went in at or after the account snapshot of ${r.snapshot.at}, which doesn't hold it yet; `
+    + (unreadable ? 'its journal entry has an unreadable time (ts), so it is counted as since the snapshot until it leaves the journal window; tell the user'
+      : 'a prop attempt trades one position at a time: wait for the next bar\'s snapshot');
 }
 
 const feeOf = (account, root) => (account.fees_per_side && account.fees_per_side[root]) ?? (specFor(root) || {}).feesPerSide ?? 0.37;
@@ -253,7 +279,7 @@ function latestVerdict(home, strategy, root) {
  *   policy:  a fresh verdict from the strategy's policy for this contract and
  *            side said half or full, and the size is within it.
  */
-function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [] }) {
+function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries }) {
   const out = [];
   const root = contractRoot(input.contractId);
   const size = Number(input.size);
@@ -265,7 +291,8 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
   // The verdict says full or half; the budget is checked at that size (a half can fall from minis to micros).
   const verdictNow = strategy.signal === 'policy' ? latestVerdict(home, strategy.name, root) : null;
   const fraction = verdictNow && verdictNow.action === 'half' ? 0.5 : 1;
-  const block = combineBlock(home, account.name, now);
+  // `journal`: every entry, unfiltered, so one with an unreadable time still counts as since the snapshot.
+  const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
   else {
     const b = budgetPlan(home, account, strategy, root, ticks, fraction);
@@ -334,6 +361,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
 };

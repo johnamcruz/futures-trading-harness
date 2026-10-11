@@ -248,11 +248,11 @@ test('mock trading: no entry on an exchange holiday, after an early close, or pa
  * The runner on the real adapter against the mock exchange, on a simulated
  * clock (the exchange's clock follows it). A stand-in for the agents answers
  * every run. With `prop`, the runner keeps the prop attempt of the policy
- * strategy prop_portfolio_3m (account topstep_100k) as scripts/autotrader.js
+ * strategy prop_portfolio (account topstep_100k) as scripts/autotrader.js
  * wires it; its day state is kept in <home>/runner-state.json, as the
  * autotrader keeps it across restarts.
  */
-const PROP_STRATEGY = 'prop_portfolio_3m';
+const PROP_STRATEGY = 'prop_portfolio';
 const PROP_ACCOUNT = 'topstep_100k';
 const propAccount = () => loadAccounts(ROOT, {}).accounts.find(a => a.name === PROP_ACCOUNT);
 

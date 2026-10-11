@@ -294,8 +294,8 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, rules 
   fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), src);
   const strategiesDir = path.join(dir, 'strategies');
   fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio_3m', 'STRATEGY.md'), 'utf8')
-    .replace('name: prop_portfolio_3m', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace('account: topstep_100k', 'account: tiny'));
+  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace('account: topstep_100k', 'account: tiny'));
   const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
   const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_bos' };
   const { report, runDir } = runBacktest(base, { root: ROOT, outRoot: dir, env });
@@ -309,6 +309,26 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, rules 
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: .*needs prop/);
   assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /training needs a policy strategy|signal: rules/);
   assert.throws(() => runBacktest({ ...base, bundle: 'missing' }, { root: ROOT, outRoot: dir, env }), /not found/);
+  // Every market of the run is checked against the bundle: one trained on MNQ alone decides nothing on MES.
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { observationFields } = require('../../scripts/lib/rl/observation');
+  const { BUNDLE_FORMAT, BUNDLE_VERSION } = require('../../scripts/lib/rl/policy-bundle');
+  const { ACTIONS } = require('../../scripts/lib/rl/challenge-env');
+  const { optionsFromParams } = require('../../scripts/lib/trading/volume-profile');
+  const ps = loadStrategies(ROOT, env).strategies.find(x => x.name === 'prop_bos');
+  const fields = observationFields(['bos']);
+  const dim = fields.length;
+  const models = path.join(dir, 'models');
+  fs.mkdirSync(models, { recursive: true });
+  fs.writeFileSync(path.join(models, 'mnq_only.json'), JSON.stringify({
+    format: BUNDLE_FORMAT, version: BUNDLE_VERSION, name: 'mnq_only', strategy: 'prop_bos', components: ['bos'], strategies: ['bos'], account: 'tiny', symbols: ['MNQ'], timeframe: 3,
+    sizing: ps.sizing, contracts: ps.contracts, exit: ps.exit, obsFields: fields, profile: optionsFromParams(ps.params || {}), actions: ACTIONS,
+    network: { obsDim: dim, actionN: 3, hidden: [], actor: { sizes: [dim, 3], layers: [{ W: new Array(3 * dim).fill(0), b: [0, 0, 10] }] }, normalizer: { mean: new Array(dim).fill(0), var: new Array(dim).fill(1), count: 1, clip: 5 } },
+    validated: false, engine: { gate: true, slippageTicks: 1, fill: 'next-open' },
+  }));
+  const benv = { ...env, FTH_MODELS_DIRS: models };
+  const two = { ...base, symbols: ['MNQ', 'MES'], data: { ...base.data, MES: base.data.MNQ }, bundle: 'mnq_only' };
+  assert.throws(() => runBacktest(two, { root: ROOT, outRoot: dir, env: benv }), /bundle mnq_only was trained on MNQ.*not MES/);
 });
 
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {

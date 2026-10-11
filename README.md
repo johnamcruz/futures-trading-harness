@@ -494,15 +494,17 @@ out of time.
 The prop challenge is a strategy: a **policy strategy** (`signal: policy`)
 trades the setups of every rules strategy it lists on a prop account, and a
 trained policy learns which to take, at what size, and when to bank a trade
-(`strategies/prop_portfolio_3m/STRATEGY.md`):
+(`strategies/prop_portfolio/STRATEGY.md`):
 
 ```yaml
 signal: policy
+instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account, one position at a time
+timeframe: 3m                # the one bar-size setting; a bundle trades only the timeframe it was trained on
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
 contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)
-policy: { bundle: prop_portfolio_3m_topstep_100k }   # models/<bundle>.json, once one passes the gate
+policy: { bundle: prop_portfolio_topstep_100k }   # models/<bundle>.json, once one passes the gate
 ```
 
 - `node scripts/combine.js start --account topstep_100k` starts an attempt;
@@ -516,13 +518,16 @@ policy: { bundle: prop_portfolio_3m_topstep_100k }   # models/<bundle>.json, onc
   side. It is trained
   in Python (`pip install -r rl/requirements.txt`) with MaskablePPO on the
   harness's own backtester, so training, backtests, and live trading run the
-  same rules. Each config family is JSON:
+  same rules. One policy trains on several markets at once (`symbols` in the
+  config: NQ, ES, YM, and RTY, the shipped family as minis) against one
+  account, one position at a time across them, as a real combine. Each config
+  family is JSON:
 
   ```bash
-  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_3m_topstep_100k_v1.json --dry-run
-  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_3m_topstep_100k_v1.json     # Optuna over the search space
-  python rl/retrain.py --config rl/configs/retrain/prop_portfolio_3m_topstep_100k_v1.json   # best trial, more seeds
-  python rl/ship.py    --config rl/configs/ship/prop_portfolio_3m_topstep_100k_v1.json      # out of sample, gate, promote
+  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_topstep_100k_v1.json --dry-run
+  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_topstep_100k_v1.json     # Optuna over the search space
+  python rl/retrain.py --config rl/configs/retrain/prop_portfolio_topstep_100k_v1.json   # best trial, more seeds
+  python rl/ship.py    --config rl/configs/ship/prop_portfolio_topstep_100k_v1.json      # out of sample, gate, promote
   ```
 
 - The sweep ranks recipes by pass rate plus win rate (any blow is
@@ -530,7 +535,7 @@ policy: { bundle: prop_portfolio_3m_topstep_100k }   # models/<bundle>.json, onc
   blow-free on the selection window and, out of sample, it has zero blows in
   every month and a pass rate of at least 40% over 20+ attempts (and a win
   rate floor, if `min_win_rate` is set); live trading refuses any other.
-- `node scripts/backtest.js --config <file> --prop prop_portfolio_3m [--bundle <name>]`
+- `node scripts/backtest.js --config <file> --prop prop_portfolio [--bundle <name>]`
   runs combine attempts from every start day: pass, blow, and timeout rates.
 
 See [docs/RL-DESIGN.md](docs/RL-DESIGN.md).

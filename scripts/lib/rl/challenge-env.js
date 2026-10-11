@@ -31,19 +31,27 @@ const DEFAULT_REWARD = {
 };
 const DAY_MS = 86400000;
 
+/** The trading-day starts with a bar in any of the books (markets), in order: every market's days, not the first's. */
+function tradingDays(books) {
+  const set = new Set();
+  for (const book of books) {
+    let last = null;
+    for (const b of book.bars) {
+      const d = tradingDayStart(new Date(b.ms + 1)).getTime();
+      if (d !== last) { set.add(d); last = d; }
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
 /**
- * Prepare an environment over markets (one symbol is typical) and strategies,
+ * Prepare an environment over markets (one or several, sharing one account) and strategies,
  * with the account profile and the engine's options (gate, sessions, eodAt,
  * calendar). Reusable for many episodes.
  */
 function createEnv({ markets, strategies, account, sizing = null, prop = null, engine = {}, reward = {} }) {
   const prepared = prepare(markets, strategies, { ...engine, prop });
-  const book = prepared.books[0];
-  const days = [];
-  for (const b of book.bars) {
-    const d = tradingDayStart(new Date(b.ms + 1)).getTime();
-    if (days[days.length - 1] !== d) days.push(d);
-  }
+  const days = tradingDays(prepared.books);
   return {
     prepared, markets, strategies, account, sizing, prop, engine, reward: { ...DEFAULT_REWARD, ...reward }, days,
     /** Trading-day starts in [from, to) leaving room for a whole attempt before `to`. */
@@ -143,4 +151,4 @@ function policyHook(policy) {
   };
 }
 
-module.exports = { ACTIONS, ACTION_N, MASKS, OBS_DIM, DEFAULT_REWARD, createEnv, runAttempt, outcomeReward, denseReward, tradeReward, evaluate, policyHook };
+module.exports = { ACTIONS, ACTION_N, MASKS, OBS_DIM, DEFAULT_REWARD, tradingDays, createEnv, runAttempt, outcomeReward, denseReward, tradeReward, evaluate, policyHook };

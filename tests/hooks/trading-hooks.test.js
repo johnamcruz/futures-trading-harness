@@ -852,6 +852,38 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.ok(fs.existsSync(dir));
 });
 
+test('order gate hook: an entry on another market since the account snapshot holds a prop entry, even with the checks skipped', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const journal = extra => [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: order.contractId, text: 'plan' }, ...extra];
+  const base = setup(journal([]), { FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_ORDER_GATE_SKIP: 'combine,policy' });
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  prop.startAttempt(base.env.FTH_HOME, account);
+  prop.snapshot(base.env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 90000));
+  prop.appendVerdict(base.env.FTH_HOME, {
+    strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+    policy: null, at: new Date(Date.parse(TEST_NOW) - 30000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+  });
+  assert.strictEqual(gate(orderPayload(order), base.env).code, 0);
+  const other = setup(journal([{ ts: minutesAgo(1, new Date(TEST_NOW)), kind: 'order_placed', contractId: 'MES', text: 'setup:propped long', data: { result: { success: true } } }]),
+    { FTH_HOME: base.env.FTH_HOME, FTH_ACCOUNTS_DIRS: base.env.FTH_ACCOUNTS_DIRS, FTH_ORDER_GATE_SKIP: 'combine,policy,review-before-next-entry' });
+  const r = gate(orderPayload(order), other.env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[combine\] topstep_50k: an entry \(MES\) went in at or after the account snapshot/);
+  // An entry whose time can't be read counts as since the snapshot (fails closed), and says why.
+  const garbled = setup(journal([{ ts: 'not a time', kind: 'order_placed', contractId: 'MES', text: 'setup:propped long', data: { result: { success: true } } }]),
+    { FTH_HOME: base.env.FTH_HOME, FTH_ACCOUNTS_DIRS: base.env.FTH_ACCOUNTS_DIRS, FTH_ORDER_GATE_SKIP: 'combine,policy,review-before-next-entry' });
+  const g = gate(orderPayload(order), garbled.env);
+  assert.strictEqual(g.code, 2);
+  assert.match(g.stderr, /went in at or after the account snapshot.*unreadable time/);
+  // A snapshot dated more than a minute in the future (the clock stepped back) is refused.
+  prop.snapshot(base.env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) + 2 * 60000));
+  const f = gate(orderPayload(order), base.env);
+  assert.strictEqual(f.code, 2);
+  assert.match(f.stderr, /dated in the future/);
+});
+
 test('MCP gateway: while a prop attempt runs, no entry while any position is open on the account', async () => {
   const { spawn } = require('child_process');
   const prop = require('../../scripts/lib/trading/prop-state');
@@ -875,4 +907,29 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   const r = JSON.parse(out.trim().split('\n')[0]);
   assert.strictEqual(r.result.isError, true);
   assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: MES is open/);
+});
+
+test('MCP gateway: while a prop attempt runs, no entry while an order is working on another market', async () => {
+  const { spawn } = require('child_process');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const dir = tmpDir();
+  const home = tmpDir();
+  prop.startAttempt(home, accountNamed(REPO, 'topstep_50k', {}));
+  const env = {
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
+    FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'MES', type: 1, side: 0, size: 1, limitPrice: 5000 }]),
+    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } })}\n`);
+  gw.stdin.end();
+  assert.strictEqual(await new Promise(resolve => gw.on('close', resolve)), 0);
+  const r = JSON.parse(out.trim().split('\n')[0]);
+  assert.strictEqual(r.result.isError, true);
+  assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: an order is working on MES/);
 });

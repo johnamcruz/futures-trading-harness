@@ -76,9 +76,10 @@ trades the setups of the rules strategies it lists on a prop account, and a
 trained policy decides which to take, at what size (in micros or minis), and
 when to bank a trade.
 
-- `prop_portfolio_3m`: every 3-minute strategy (ema_cross, supertrend,
+- `prop_portfolio`: every 3-minute strategy (ema_cross, supertrend,
   keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area,
-  value_area_reentry, value_area_breakout) on `topstep_100k`.
+  value_area_reentry, value_area_breakout) on NQ, ES, YM, and RTY (micros or
+  minis), one `topstep_100k` attempt and one position at a time across them.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
   A policy trades one timeframe.
 

@@ -1,10 +1,19 @@
 {
-  "name": "prop_portfolio_3m_topstep_100k",
-  "strategy": "prop_portfolio_3m",
-  "symbol": "MNQ",
+  "name": "prop_portfolio_topstep_100k",
+  "strategy": "prop_portfolio",
+  "symbols": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
   "data": {
-    "MNQ": "../../data/MNQ_1min.csv"
+    "MNQ": "../../data/NQ_1min.csv",
+    "MES": "../../data/ES_1min.csv",
+    "MYM": "../../data/YM_1min.csv",
+    "M2K": "../../data/RTY_1min.csv"
   },
+  "contracts": "mini",
   "windows": {
     "train": [
       "2021-01-01",
@@ -26,7 +35,7 @@
     3
   ],
   "total_timesteps": 300000,
-  "n_envs": 4,
+  "n_envs": 2,
   "hidden": [
     64,
     64

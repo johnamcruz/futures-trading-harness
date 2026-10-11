@@ -14,7 +14,7 @@ description: Pace a prop-firm evaluation or funded account - profit target, trai
 
 ### Harness-tracked attempts (a policy strategy)
 
-A policy strategy (`signal: policy`, e.g. `prop_portfolio_3m`) is the prop
+A policy strategy (`signal: policy`, e.g. `prop_portfolio`) is the prop
 challenge as a strategy: it trades the setups of the rules strategies it
 lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
 `topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
@@ -31,7 +31,7 @@ The harness tracks the attempt and enforces it:
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
 - At each setup the runner records a verdict: the strategy that fired, the
-  side, `skip` / `half` / `full`, the contract (MNQ or NQ, ...), the largest
+  side, `skip` / `half` / `full`, the contract (MNQ or NQ, MES or ES, ...), the largest
   size, and the stop in ticks. **Place exactly the verdict**: rationale
   `setup:<policy strategy> ...`, that contract and side, at most that size,
   `stopLossBracket.ticks` equal to its stop ticks. A verdict permits one
@@ -51,11 +51,23 @@ The harness tracks the attempt and enforces it:
 - The order gate refuses (`[combine]`, `[policy]`, `[prop-one-position]`;
   none can be skipped): no started attempt
   (`node <root>/scripts/combine.js start --account <name>`, the user's call); a
-  snapshot older than 10 minutes; a missed close (record it:
+  snapshot older than 10 minutes or dated in the future (a clock that
+  stepped back: tell the user); a missed close (record it:
   `combine.js record-day`); a passed or finished attempt; the soft or firm
   daily limit; a size over the budget; any entry that doesn't match the
-  verdict; any position already open on the account; and, while an attempt
-  runs, any entry from a strategy that isn't its policy strategy.
+  verdict; any position already open on the account, or any order working
+  on it (a resting entry on another market could fill next to it); any entry once another
+  went in since the latest account snapshot ("wait for the next bar's
+  snapshot"; one whose journal time is unreadable counts as since it: tell
+  the user); and, while an attempt runs, any entry from a strategy that
+  isn't its policy strategy.
+- **Several markets, one account** (a policy strategy over NQ, ES, YM, and
+  RTY trades one attempt): one position at a time across all of them. When
+  two markets have verdicts on the same bar, place one (the first listed in
+  the prompt, unless a verdict says skip) and stand aside on the other: the
+  gate refuses it until the account is flat again and a new verdict comes.
+  Never split the budget between markets; each verdict is sized from the
+  whole cushion.
 
 ### Pacing by judgment (no account profile)
 
@@ -92,12 +104,12 @@ Write the day's numbers into the `plan` entry so reviews can grade pacing.
 ```text
 $ node <root>/scripts/combine.js status
 topstep_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
-day $250, 4 sessions done, 26 left; prop_portfolio_3m size budget $975; entries allowed
+day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries allowed
 
-prop_portfolio_3m: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
+prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
-prop_portfolio_3m's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
+prop_portfolio's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
 drawdown from the peak). A 40-tick stop risks $20 + $0.74 fees = $20.74 a
 micro: 47 micros ($975 / $20.74), traded as 4 NQ (contracts: auto; NQ: $200 +
 $2.80 fees = $202.80 each, $811.20 in all). A `half` verdict: 23 micros, 2 NQ.

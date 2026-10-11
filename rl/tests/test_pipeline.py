@@ -75,6 +75,13 @@ class PipelineTest(unittest.TestCase):
                              else json.loads((sweep_logs / "sweep.run.json").read_text())["status"], "done")
             # The sweep never sees the out-of-sample window: nothing under ship/ yet.
             self.assertFalse((d / "out" / "ship").exists())
+            # Each trial checks the env it runs in against the one the study recorded.
+            env_rec = study.user_attrs["env"]
+            self.assertEqual((env_rec["symbols"], env_rec["timeframe"], env_rec["components"]), (["MNQ"], 3, ["ema_wide"]))
+            study.set_user_attr("env", {**env_rec, "timeframe": 1})
+            with self.assertRaisesRegex(ValueError, "was trained on another env \\(timeframe"):
+                pipeline.run_sweep(d / "sweep" / "f.json", n_trials=1)
+            study.set_user_attr("env", env_rec)
             if pipeline.best_trial(study) is None:
                 with self.assertRaisesRegex(ValueError, "no feasible trial"):
                     pipeline.run_retrain(d / "retrain" / "f.json")
@@ -95,7 +102,31 @@ class PipelineTest(unittest.TestCase):
             if not any(c["selection"]["blown"] for c in cands["seeds"].values()):
                 with self.assertRaisesRegex(ValueError, "another simulator"):
                     pipeline.run_ship(d / "ship" / "f.json")
+            # The env they were trained in (strategies, markets, bar size): an edited strategy document never ships them.
+            self.assertEqual(cands["env"]["symbols"], ["MNQ"])
+            self.assertEqual(cands["env"]["timeframe"], 3)
+            self.assertEqual(study.user_attrs["env"], cands["env"], "the study records the env its trials ran in")
+            other = {**cands["env"], "timeframe": 1}
+            cand_file.write_text(json.dumps({**json.loads(saved), "env": other}))
+            with self.assertRaisesRegex(ValueError, "another env \\(timeframe"):
+                pipeline.run_retrain(d / "retrain" / "f.json")
+            clean = {k: {**v, "selection": {**v["selection"], "blown": 0}} for k, v in json.loads(saved)["seeds"].items()}
+            cand_file.write_text(json.dumps({**json.loads(saved), "seeds": clean, "env": other}))
+            with self.assertRaisesRegex(ValueError, "another env \\(timeframe"):
+                pipeline.run_ship(d / "ship" / "f.json")
+            cand_file.write_text(json.dumps({k: v for k, v in json.loads(saved).items() if k != "env"}))
+            with self.assertRaisesRegex(ValueError, "from before retrain recorded their env"):
+                pipeline.run_retrain(d / "retrain" / "f.json")
+            cand_file.write_text(json.dumps({**{k: v for k, v in json.loads(saved).items() if k != "env"}, "seeds": clean}))
+            with self.assertRaisesRegex(ValueError, "records no env"):
+                pipeline.run_ship(d / "ship" / "f.json")
             cand_file.write_text(saved)
+            # A study whose recorded env differs (the strategy document edited after the sweep) doesn't retrain.
+            st = pipeline.make_study(pipeline.load_sweep(d / "sweep" / "f.json"), create=False)
+            st.set_user_attr("env", other)
+            with self.assertRaisesRegex(ValueError, "study synthetic_v1 was trained on another env"):
+                pipeline.run_retrain(d / "retrain" / "f.json")
+            st.set_user_attr("env", cands["env"])
             if any(c["selection"]["blown"] for c in cands["seeds"].values()):
                 with self.assertRaisesRegex(ValueError, "isn't robust"):
                     pipeline.run_ship(d / "ship" / "f.json")
@@ -116,6 +147,8 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("ship synthetic_policy", (d / "out" / "ship" / "logs" / "ship.log").read_text())
             self.assertEqual(bundle["strategy"], "prop_test")
             self.assertEqual(bundle["components"], ["ema_wide"])
+            self.assertEqual(bundle["symbols"], ["MNQ"])
+            self.assertNotIn("symbol", bundle)
             self.assertTrue(bundle["engine"]["gate"])
             # Another family on the same strategy, data, and window counts as another look.
             info = {"strategy": "prop_test", "data": bundle["data"]}
@@ -150,6 +183,36 @@ class PipelineConfigTest(unittest.TestCase):
         (d / "sweep" / "f.json").write_text(json.dumps(sweep))
         with environ(env), self.assertRaisesRegex(ValueError, "searched or anchored"):
             pipeline.load_sweep(d / "sweep" / "f.json")
+
+    def test_a_family_is_bound_to_the_env_it_trained_in(self):
+        info = {"strategy": "p", "components": ["a"], "account": "acct", "symbols": ["MNQ", "MES"], "timeframe": 3, "obsFields": ["x"], "engine": {}}
+        recorded = pipeline.check_env(None, info, "study s")
+        self.assertEqual(recorded, pipeline.env_identity(info))
+        self.assertEqual(pipeline.check_env(recorded, {**info, "engine": {"gate": True}}, "study s"), recorded, "fills are compared apart (FILL_KEYS)")
+        # The strategy document edited to 1-minute bars, or another market list: never mixed, never shipped under the new label.
+        with self.assertRaisesRegex(ValueError, "study s was trained on another env \\(timeframe"):
+            pipeline.check_env(recorded, {**info, "timeframe": 1}, "study s")
+        with self.assertRaisesRegex(ValueError, "symbols"):
+            pipeline.check_env(recorded, {**info, "symbols": ["MNQ"]}, "study s")
+        with self.assertRaisesRegex(ValueError, "components"):
+            pipeline.check_env(recorded, {**info, "components": ["a", "b"]}, "study s")
+        with self.assertRaisesRegex(ValueError, "exit"):
+            pipeline.check_env(recorded, {**info, "exit": {"trail_activate_r": 3}}, "study s")
+        self.assertIn("symbols", pipeline.FINGERPRINT_KEYS)
+
+    def test_a_study_from_before_symbols_keeps_its_fingerprint(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "bars.csv").write_text("x")
+        one = {"strategy": "p", "symbol": "MNQ", "data": {"MNQ": "bars.csv"}, "windows": {}}
+        key = {k: one.get(k) for k in ("strategy", "symbol", "data", "windows", "eval_every", "sessions", "eodAt", "slippageTicks", "closedDates", "earlyCloseDates")}
+        key["data"] = {"MNQ": str((d / "bars.csv").resolve())}
+        key["data_sha256"] = [pipeline.file_sha(d / "bars.csv")]
+        key["fills"] = pipeline.FILLS_VERSION
+        import hashlib
+        old = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
+        self.assertEqual(pipeline.fingerprint(one, d / "c.json"), old, "the hash a study made before symbols existed stored")
+        many = {**one, "symbol": None, "symbols": ["MNQ", "MES"]}
+        self.assertNotEqual(pipeline.fingerprint(many, d / "c.json"), pipeline.fingerprint({**many, "symbols": ["MNQ"]}, d / "c.json"))
 
     def test_search_keys_and_ranges_are_checked_before_any_trial(self):
         self.assertIn("whole value", pipeline.check_spec("hidden.0", {"type": "categorical", "choices": [64]}))

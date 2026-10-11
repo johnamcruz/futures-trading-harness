@@ -29,9 +29,9 @@ test('bundled strategies are all valid Markdown rules, the ported ones included'
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
   // Every strategy is rules, except the policy strategies, which trade the rules strategies' setups.
   for (const s of strategies.filter(x => x.signal !== 'policy')) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
-  const portfolio = strategies.find(s => s.name === 'prop_portfolio_3m');
+  const portfolio = strategies.find(s => s.name === 'prop_portfolio');
   const threeMinute = strategies.filter(s => s.signal === 'rules' && s.timeframe === '3m').map(s => s.name).sort();
-  assert.deepStrictEqual([...portfolio.strategies].sort(), threeMinute, 'prop_portfolio_3m trades every 3-minute rules strategy');
+  assert.deepStrictEqual([...portfolio.strategies].sort(), threeMinute, 'prop_portfolio trades every 3-minute rules strategy');
   assert.deepStrictEqual(strategies.find(s => s.name === 'prop_flow_1m').strategies.sort(), strategies.filter(s => s.signal === 'rules' && s.timeframe === '1m').map(s => s.name).sort());
   assert.strictEqual(portfolio.account, 'topstep_100k');
   for (const port of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
@@ -252,7 +252,7 @@ test('mtf: trend (the default) or reversal; a policy strategy takes it from its 
   const byName = Object.fromEntries(strategies.map(s => [s.name, s]));
   for (const n of ['crt_1h', 'crt_4h', 'cisd_ote', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
   for (const n of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'vwap_reclaim', 'ofi']) assert.strictEqual(byName[n].mtf, 'trend', n);
-  assert.strictEqual(byName.prop_portfolio_3m.mtf, undefined);
+  assert.strictEqual(byName.prop_portfolio.mtf, undefined);
 });
 
 test('scan: a trend strategy that fires against the prevailing trend is not a candidate; a reversal one is', () => {

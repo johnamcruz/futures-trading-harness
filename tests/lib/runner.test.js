@@ -833,7 +833,7 @@ test('under a policy, a failed account check means no verdict: named, and the co
 test('a prop account with no active policy: a failed account check leaves plain strategies tradable', async () => {
   const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
   for (const trigger of ['signal', 'bar']) {
-    // owners: no active policy owns anything on this contract (e.g. prop_portfolio_3m is paper).
+    // owners: no active policy owns anything on this contract (e.g. prop_portfolio is paper).
     const r = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: fakeProp({ owners: () => new Map() }), until: et(10, 10), trigger, accountFails: true });
     const p = r.prompts.find(x => /trade-session/.test(x));
     assert.ok(p, trigger);

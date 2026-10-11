@@ -250,6 +250,11 @@ def rfmt(x, sign=False):
     return "-" if x is None else (f"{x:+.2f}R" if sign else f"{x:.2f}R")
 
 
+def markets(m):
+    """The markets an env or bundle trains on: `symbols`, or one `symbol` (older)."""
+    return list(m.get("symbols") or ([m["symbol"]] if m.get("symbol") else []))
+
+
 def results_line(r):
     """An evaluation in one line: pass, blow, and win rate, average win and loss R, expectancy, profit, trades."""
     return (f"{r.get('attempts')} attempts: pass {pct(r.get('passRate'))}, blow {pct(r.get('blowRate'))}, win {pct(r.get('winRate'))}, "
@@ -268,7 +273,7 @@ def report_md(b):
         f"# Policy {b['name']}",
         "",
         f"{'VALIDATED' if b['validated'] else 'NOT VALIDATED'}: account {b['account']}, strategies {', '.join(b['strategies'])}, "
-        f"{b['symbol']} {b['timeframe']}m, seed {b['training']['chosenSeed']}.",
+        f"{', '.join(markets(b))} {b['timeframe']}m, seed {b['training']['chosenSeed']}.",
         "",
         f"Gate: zero blows in every out-of-sample month and a pass rate of at least {pct(gate['minPassRate'])}"
         + (f", a win rate of at least {pct(gate['minWinRate'])}." if gate.get("minWinRate") else "."),
@@ -351,7 +356,7 @@ def build_bundle(name, cfg, info, best, seeds_report, oos, baseline, fails, extr
         "contracts": info["contracts"],
         "exit": info["exit"],
         "engine": info["engine"],
-        "symbol": info["symbol"],
+        **({"symbols": info["symbols"]} if "symbols" in info else {"symbol": info.get("symbol")}),
         "timeframe": info["timeframe"],
         "sizing": info["sizing"],
         "data": info["data"],
@@ -404,7 +409,7 @@ def promote(out_dir, name, models_dir):
 def server_info(server):
     info = server.info()
     a = info["accountProfile"]
-    log(f"{info['strategy']} ({', '.join(info['components'])}; contracts {info['contracts']}) on {info['symbol']} {info['timeframe']}m, account {info['account']} "
+    log(f"{info['strategy']} ({', '.join(info['components'])}; contracts {info['contracts']}) on {', '.join(markets(info))} {info['timeframe']}m, account {info['account']} "
         f"(target ${a['profit_target']}, max loss ${a['max_loss']}, daily limit ${a.get('daily_loss_limit', 0)}), {info['days']} trading days")
     return info
 

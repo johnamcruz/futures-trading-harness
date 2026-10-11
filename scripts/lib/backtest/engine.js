@@ -26,7 +26,10 @@
  * a prop challenge: trades are sized from the account's cushion
  * (combine.js), equity touching the max-loss floor inside a bar is a blow,
  * the firm's daily limit flattens the day, and the run ends on pass, blow, or
- * timeout. With a `policy` (rl/policy-bundle.js) the policy decides, through the
+ * timeout. Several markets share the one account and trade one position at a
+ * time across it (as the live gateway enforces): a setup on one market waits
+ * while another's trade is open, so a stopped trade never reaches the floor or
+ * the daily limit. With a `policy` (rl/policy-bundle.js) the policy decides, through the
  * same code the live runner uses, whether to take each setup and at what
  * size, and whether to close a trade that is past its ratchet. The
  * challenge env (rl/challenge-env.js) trains on exactly this loop.
@@ -266,7 +269,12 @@ function runEngine(markets, strategies, opts = {}) {
   });
   if (books.length > 1) timeline.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 
-  for (const [, k, i] of timeline) {
+  // Bars that close together settle on every market first (fills, stops, targets, trails, end of
+  // day), then look for entries in market order, as live: the runner reads every symbol's closed
+  // bar and the account before the cycle. Otherwise a later market's stop-out at this bar would
+  // still block an earlier market's setup (one position at a time) that live would take.
+  const STOP = Symbol('stop');
+  const settle = (k, i) => {
     const book = books[k];
     const bar = book.bars[i];
     const closeAt = new Date(bar.ms + tfMs(book));
@@ -281,7 +289,7 @@ function runEngine(markets, strategies, opts = {}) {
         }
         if (cs) {
           cs = combine.endDay(cs);
-          if (cs.status !== 'active') break;
+          if (cs.status !== 'active') return STOP;
         }
       }
       day = dayKey;
@@ -335,7 +343,7 @@ function runEngine(markets, strategies, opts = {}) {
         // Equity reached the max-loss floor: the firm liquidates there.
         closeTrade(book, bar, priceForNet(book, p, cs.floor - cs.balance), 'blow');
         cs = combine.blow(cs);
-        break;
+        return STOP;
       } else if (cs && combine.dailyBreached(cs, worstNet)) {
         // The firm's daily loss limit: flattened there, no trading until tomorrow.
         closeTrade(book, bar, priceForNet(book, p, -cs.dailyLimit - cs.dayPnl), 'daily_limit');
@@ -371,29 +379,35 @@ function runEngine(markets, strategies, opts = {}) {
       managed = true;
       closeTrade(book, bar, bar.c, 'eod');
     }
-
+    return { book, bar, i, closeAt, afterEod, managed };
+  };
+  const enter = ({ book, bar, i, closeAt, afterEod, managed }) => {
     // 3. Flat: look for an entry, as the live loop does after each closed bar.
-    if (managed || book.pos || !book.usable.length) continue;
+    if (managed || book.pos || !book.usable.length) return;
     // Entries at the bar's close need market hours and time before end of day,
     // and the bar itself must lie in market hours.
-    if (afterEod || !inMarketHours(new Date(bar.ms))) continue;
-    if (cs && combine.entryBlock(cs)) continue;
+    if (afterEod || !inMarketHours(new Date(bar.ms))) return;
+    if (cs && combine.entryBlock(cs)) return;
+    // A prop attempt trades one position at a time across the whole account, as live (the gateway's
+    // prop-one-position check): each size assumes no other open risk, so with several markets a
+    // setup waits while another market's trade is open or about to fill.
+    if (cs && books.some(b => b.pos)) return;
     if (o.gate) {
-      if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) continue;
-      if (noEntry.some(w => inWindow(closeAt, w))) continue;
-      if (entryHours.length && !entryHours.some(w => inWindow(closeAt, w))) continue;
-      if (gateCfg.maxEntriesPerDay > 0 && entriesToday >= gateCfg.maxEntriesPerDay) continue;
+      if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) return;
+      if (noEntry.some(w => inWindow(closeAt, w))) return;
+      if (entryHours.length && !entryHours.some(w => inWindow(closeAt, w))) return;
+      if (gateCfg.maxEntriesPerDay > 0 && entriesToday >= gateCfg.maxEntriesPerDay) return;
       const losses = closesToday.filter(c => c.pnl < 0);
-      if (losses.length >= gateCfg.maxDailyLosses) continue;
-      if (o.maxDailyLoss > 0 && closesToday.reduce((a, c) => a + c.net, 0) <= -o.maxDailyLoss) continue;
+      if (losses.length >= gateCfg.maxDailyLosses) return;
+      if (o.maxDailyLoss > 0 && closesToday.reduce((a, c) => a + c.net, 0) <= -o.maxDailyLoss) return;
       // As the live gate: a loss extends the streak, a win ends it, a scratch neither.
       let streak = 0;
       for (let c = closesToday.length - 1; c >= 0 && closesToday[c].pnl <= 0; c -= 1) if (closesToday[c].pnl < 0) streak += 1;
       const lastLoss = [...closesToday].reverse().find(c => c.pnl < 0);
-      if (streak >= gateCfg.maxConsecutiveLosses && closeAt.getTime() - lastLoss.ts < gateCfg.lossCooldownMin * 60000) continue;
+      if (streak >= gateCfg.maxConsecutiveLosses && closeAt.getTime() - lastLoss.ts < gateCfg.lossCooldownMin * 60000) return;
     }
     const pick = book.setupAt(i);
-    if (!pick) continue;
+    if (!pick) return;
     const sign = pick.r.direction === 'long' ? 1 : -1;
     const entry = onTick(bar.c + sign * o.slippageTicks * book.tickSize, book.tickSize);
     const stopTicks = Math.max(1, roundHalfEven(pick.r.stopDistance / book.tickSize));
@@ -415,15 +429,15 @@ function runEngine(markets, strategies, opts = {}) {
         guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10,
       });
       let cp = sizeFor(1);
-      if (!cp) continue;
+      if (!cp) return;
       if (o.policy) {
         const mini = Boolean(fam && cp.root === fam.mini);
         // Confluence: the policy strategy's other strategies on this bar, as the live scan sees them.
         const others = book.usable.filter(s => s !== pick.s).map(s => ({ name: s.name, ...(r => ({ candidate: r.candidate, direction: r.direction }))(book.ev.at(s, i, { describe: false })) }));
         const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name, confluence: confluence(others, pick.s.name, sign) } });
-        if (action === 'skip') continue;
+        if (action === 'skip') return;
         if (action === 'half') cp = sizeFor(0.5);
-        if (!cp) continue;
+        if (!cp) return;
       }
       size = cp.size;
       leg = legs.micro.root === cp.root ? legs.micro : legs.mini;
@@ -449,7 +463,7 @@ function runEngine(markets, strategies, opts = {}) {
     if (plan.target && !plan.targetR && (book.pos.target === null || sign * (book.pos.target - entry) < book.tickSize - 1e-9
       || (book.pos.minRR > 0 && sign * (book.pos.target - entry) < book.pos.minRR * risk - 1e-9))) {
       book.pos = null;
-      continue;
+      return;
     }
     if (o.fill === 'next-open') {
       // Fills at the next bar's open (step 0 there). The stop keeps its distance from the
@@ -460,9 +474,21 @@ function runEngine(markets, strategies, opts = {}) {
         targetFrom: plan.targetR ? 'entry' : plan.target ? 'level' : null,
         targetTicks: plan.targetR ? Math.round((book.pos.target - entry) * sign / book.tickSize) : null,
       });
-      continue;
+      return;
     }
     entriesToday += 1;
+  };
+  for (let g = 0, stop = false; g < timeline.length && !stop;) {
+    let h = g + 1;
+    while (h < timeline.length && timeline[h][0] === timeline[g][0]) h += 1;
+    const ready = [];
+    for (let x = g; x < h && !stop; x += 1) {
+      const r = settle(timeline[x][1], timeline[x][2]);
+      if (r === STOP) stop = true;
+      else ready.push(r);
+    }
+    if (!stop) for (const r of ready) enter(r);
+    g = h;
   }
 
   // Settle anything still open at the end of the data, at the last close.
