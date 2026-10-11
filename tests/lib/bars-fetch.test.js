@@ -121,6 +121,27 @@ test('a link planted during the broker call is refused before mkdir can create d
   assert.deepStrictEqual(fs.readdirSync(victim), [], 'no directory created outside the bars directory');
 });
 
+test('a link planted after mkdir is refused by the check just before the write', async () => {
+  const outDir = tmpDir();
+  const victim = tmpDir();
+  const sub = path.join(outDir, 'sub');
+  const mkdirSync = fs.mkdirSync;
+  // The directories made, then the bars' directory swapped for a link before the write.
+  fs.mkdirSync = (p, o) => {
+    const r = mkdirSync(p, o);
+    if (path.resolve(p) === sub) { fs.rmdirSync(sub); fs.symlinkSync(victim, sub); }
+    return r;
+  };
+  try {
+    await assert.rejects(fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, out: path.join(sub, 'x.json'), outDir }), /--out/);
+  } finally {
+    fs.mkdirSync = mkdirSync;
+  }
+  assert.deepStrictEqual(fs.readdirSync(victim), [], 'nothing written through the link');
+  const made = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, out: path.join(outDir, 'new', 'x.json'), outDir });
+  assert.strictEqual(fs.statSync(path.dirname(made.file)).mode & 0o077, 0, 'new directories are private');
+});
+
 test('the real-path check refuses what the symlink walk cannot see, and the temp file is never an existing one', async () => {
   const outDir = tmpDir();
   const file = path.join(outDir, 'x.json');
@@ -167,7 +188,8 @@ test('a path given under the bars directory\'s real form (/private/tmp/fth on ma
   for (const bad of [path.join(realDir, 'x.txt'), path.join(realDir, 'link', 'x.json'), realDir, path.join(realDir, '..', 'x.json')]) {
     assert.match(outError(bad, outDir), /--out/, bad);
   }
-  if (fs.realpathSync('/tmp') !== '/tmp') assert.strictEqual(outError(path.join(fs.realpathSync('/tmp'), 'fth', 'MNQ-3m.json')), null);
+  const own = (() => { try { return fs.lstatSync('/tmp/fth').uid === process.getuid(); } catch (_err) { return true; } })();
+  if (fs.realpathSync('/tmp') !== '/tmp' && own) assert.strictEqual(outError(path.join(fs.realpathSync('/tmp'), 'fth', 'MNQ-3m.json')), null);
 });
 
 test('scripts/bars.js refuses an --out outside /tmp/fth before asking the broker', () => {

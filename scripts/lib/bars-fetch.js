@@ -118,7 +118,7 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   // and once more just before the write; the temp file is new, never followed.
   const again = outError(file, outDir);
   if (again) throw new Error(again);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); // new directories private: no one else plants links in them
   const late = outError(file, outDir);
   if (late) throw new Error(late);
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
