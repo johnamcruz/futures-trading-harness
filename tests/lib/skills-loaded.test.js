@@ -72,6 +72,18 @@ test('parts format: a skill named only in text, a tool result, or the wrong role
   assert.deepStrictEqual(names([junk, loaded('q')].join('\n')), []);
 });
 
+test('parts format: an id reused on a later turn (call_0) belongs to the call right before its answer', () => {
+  // A reused id's later, unanswered call does not inherit the earlier load.
+  assert.deepStrictEqual(names([call('call_0', 'strategy-library'), loaded('call_0'), call('call_0', 'trade-session')].join('\n')), ['strategy-library']);
+  // A failed load under a reused id neither counts nor erases the earlier load.
+  assert.deepStrictEqual(names([call('call_0', 'trade-session'), loaded('call_0'), call('call_1', 'multi-timeframe-analysis'), loaded('call_1'),
+    call('call_0', 'strategy-library'), failed('call_0')].join('\n')), ['multi-timeframe-analysis', 'trade-session']);
+  // Every skill loaded under the same id: all count.
+  assert.deepStrictEqual(names(REQUIRED_FOR_ENTRY.flatMap(s => [call('functions.skill:0', s), loaded('functions.skill:0')]).join('\n')), ALL);
+  // One answer loads one call: a second answer to the same id after it is not a second load.
+  assert.deepStrictEqual(names([call('a', 'trade-session'), loaded('a'), loaded('a')].join('\n')), ['trade-session']);
+});
+
 test('mixed transcripts: Claude Skill calls and parts-format loads together', () => {
   const claude = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'futures-trading-harness:trade-session' } }] } });
   const text = [claude, call('a', 'multi-timeframe-analysis'), loaded('a'), call('b', 'strategy-library'), failed('b')].join('\n');

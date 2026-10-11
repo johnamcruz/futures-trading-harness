@@ -62,8 +62,7 @@ function loadedResponse(ev, fr) {
 /** Skill names loaded in a transcript's text (skill tool calls, or slash commands of skills). */
 function skillsInTranscript(text) {
   const out = new Set();
-  const calls = new Map(); // parts format: functionCall id -> skill name
-  const loaded = new Set(); // parts format: functionCall ids answered as loaded
+  const calls = new Map(); // parts format: unanswered functionCall id -> skill name
   for (const line of String(text || '').split('\n')) {
     if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function')) continue;
     let ev;
@@ -83,10 +82,13 @@ function skillsInTranscript(text) {
       const fr = p && typeof p === 'object' ? p.functionResponse : null;
       if (msg.role === 'model' && fc && typeof fc === 'object' && SKILL_TOOLS.has(fc.name) && isId(fc.id)
         && fc.args && typeof fc.args === 'object' && typeof fc.args.skill === 'string') calls.set(fc.id, skillName(fc.args.skill));
-      if (msg.role === 'user' && fr && typeof fr === 'object' && SKILL_TOOLS.has(fr.name) && isId(fr.id) && calls.has(fr.id) && loadedResponse(ev, fr)) loaded.add(fr.id);
+      // Resolved when answered: a provider may reuse an id on a later turn (call_0), so an answer belongs to the call before it.
+      if (msg.role === 'user' && fr && typeof fr === 'object' && SKILL_TOOLS.has(fr.name) && isId(fr.id) && calls.has(fr.id)) {
+        if (loadedResponse(ev, fr)) out.add(calls.get(fr.id));
+        calls.delete(fr.id);
+      }
     }
   }
-  for (const id of loaded) out.add(calls.get(id));
   out.delete(null);
   return out;
 }
