@@ -953,3 +953,42 @@ test('labels: a close whose call came back an error but whose fill shows it went
   assert.deepStrictEqual([L[0].teacher.action, L[0].gate.decision, L[0].clone.reasons], ['exit', 'ungated', []], 'the fill shows the close');
   assert.deepStrictEqual([L[2].teacher.action, L[2].gate.decision, L[2].clone.reasons], ['exit', 'ungated', ['outcome unknown: client timeout']]);
 });
+
+// Review round 7 findings.
+
+test('labels: orders naming the broker\'s own contract id resolve through the run\'s translator cache', () => {
+  const bt = { ...LONG, input: { ...LONG.input, contractId: 'BT.MNQ' } };
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'BT.MNQ', reason: '[exit] done' } };
+  const run = makeRun({ manifest: { broker: 'backtester' }, steps: [
+    { k: 0, cycle: { orders: [bt] } },
+    { k: 1, cycle: { positions: LONG_POS, orders: [close] }, trades: [fill(1, 0, 20000, null, { contractId: 'BT.MNQ' })] },
+    { k: 2, cycle: {}, trades: [fill(4, 1, 20010, 20, { contractId: 'BT.MNQ' })] },
+  ] });
+  fs.writeFileSync(path.join(run.home, 'contracts-backtester.json'), JSON.stringify({ ids: { 'BT.MNQ': { root: 'MNQ', month: '2026-03' } }, front: {} }));
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual(labels.slice(0, 2).map(l => [l.decision, l.teacher.action, l.clone.reasons]), [['flat', 'long', []], ['in-trade', 'exit', []]]);
+  assert.deepStrictEqual([labels[0].outcome.result, labels[0].teacher.size.riskUsd, summary.unattributedOrders, summary.unmatchedOpenings], ['win', 20, 0, 0]);
+});
+
+test('labels: an order on a family the line hasn\'t (a mistyped id) flags every label of the cycle', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [{ tool: 'close_position', input: { accountId: 7, contractId: 'MNQZ9', reason: '[exit] x' } }] } }] });
+  const { labels, summary } = labelRun(run.runDir);
+  assert.deepStrictEqual([labels[0].teacher.action, labels[0].clone.reasons, summary.holds, summary.unattributedOrders], ['hold', ['unattributed order'], 0, 1]);
+  assert.match(summaryText(summary), /unattributedOrders 1, unmatchedOpenings 0/);
+});
+
+test('labels: several modifies in a cycle are compared step by step', () => {
+  const modify = stopPrice => ({ tool: 'modify_order', input: { accountId: 7, orderId: 2, stopPrice } });
+  // Working stop 19990: up to 19998 (tighter), then back to 19995 (wider than the step before, still above the start).
+  const run = makeRun({ steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [modify(19998), modify(19995)] } }] });
+  assert.deepStrictEqual(labelRun(run.runDir).labels[0].clone.reasons, ['stop widened']);
+});
+
+test('labels: a hook block that mentions a timeout is the hook\'s refusal', () => {
+  const transcript = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'mcp__broker__place_order', input: LONG.input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'PreToolUse hook error: the policy check timed out' }] } }),
+  ].join('\n');
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by], ['refused', 'hook']);
+});

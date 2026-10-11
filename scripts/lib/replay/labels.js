@@ -86,7 +86,16 @@ const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while 
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const round = (x, d = 4) => (x === null ? null : Number(x.toFixed(d)));
-const familyOfId = id => (id ? familyRoot((parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root) : null);
+/**
+ * A contract's family root (MNQ for MNQ, NQ, NQ:2026-03): a broker's own id (BT.MNQ, which the translator
+ * passes through) through the run's translator cache (`cache`, contracts-<broker>.json), else its standard
+ * name, else the id itself upper-cased (a family no symbol has).
+ */
+const familyOfId = (id, cache = null) => {
+  if (!id) return null;
+  const known = cache ? standardRoot(String(id), cache) : null;
+  return familyRoot(known || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root);
+};
 const nearest = (x, set) => set.reduce((best, s) => (Math.abs(s - x) < Math.abs(best - x) ? s : best), set[0]);
 const toolName = name => (ORDER_TOOL.exec(String(name || '')) || [])[1] || null;
 // The hook (place_order and modify_order) logs no tool name: an entry names a contract and a rationale, a modify neither.
@@ -105,7 +114,7 @@ const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
  * The one place specs are looked up.
  */
 function contractSpec(contractId, fallback = null, specsFile = null) {
-  const rootOf = id => (id ? (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
+  const rootOf = id => (id ? (specsFile && standardRoot(String(id), specsFile)) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
   for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
     const broker = specsFile ? brokerSpecFor(specsFile, root) : null;
     const table = specFor(root);
@@ -187,11 +196,11 @@ const relCycle = (home, file) => {
  * opened size. A closing fill with nothing open (a position from before the run) is a round trip
  * whose opening is unknown.
  */
-function roundTrips(fills) {
+function roundTrips(fills, cache = null) {
   const open = new Map();
   const out = [];
   for (const f of fills) {
-    const fam = familyOfId(f.contractId);
+    const fam = familyOfId(f.contractId, cache);
     const size = Math.abs(Number(f.size)) || 1;
     if (f.profitAndLoss === null || f.profitAndLoss === undefined) {
       let rt = open.get(fam);
@@ -321,17 +330,17 @@ function cycleOrders(c, doc, gateLog, untilMs) {
 }
 
 /** The position in a family at t: from the cycle's context (what the teacher saw), else the fills through t. */
-function positionAt(fam, ctx, fills, t) {
+function positionAt(fam, ctx, fills, t, cache = null) {
   const acct = ctx && ctx.account;
   if (acct && Array.isArray(acct.positions)) {
-    const net = acct.positions.filter(p => familyOfId(p.contractId) === fam)
+    const net = acct.positions.filter(p => familyOfId(p.contractId, cache) === fam)
       .reduce((n, p) => n + (p.side === 'long' ? 1 : p.side === 'short' ? -1 : 0) * (Math.abs(Number(p.size)) || 1), 0);
     return { side: net > 0 ? 'long' : net < 0 ? 'short' : null, size: Math.abs(net), source: 'context' };
   }
   // Fills alone: opening fills add their side, closing fills take it off; a position from before the run is unseen.
   let net = 0;
   for (const f of fills) {
-    if (f.ms > t || familyOfId(f.contractId) !== fam) continue;
+    if (f.ms > t || familyOfId(f.contractId, cache) !== fam) continue;
     const size = Math.abs(Number(f.size)) || 1;
     const s = sign(sideOf(f.side ?? f.sideName));
     net += f.profitAndLoss === null || f.profitAndLoss === undefined ? s * size : (net !== 0 ? s * Math.min(size, Math.abs(net)) : 0);
@@ -354,7 +363,7 @@ const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.b
 const HOOK_BLOCK = /\bhook\b/i;
 // The client gave up waiting (the broker may still have acted): the outcome is unknown, not a refusal.
 const CLIENT_TIMEOUT = /\btimed out\b|\btimeout\b/i;
-const failedCall = o => (CLIENT_TIMEOUT.test(o.callError || '') ? { decision: 'unknown', orderId: null, reason: o.callError, timeout: true } : callRefusal(o));
+const failedCall = o => (!HOOK_BLOCK.test(o.callError || '') && CLIENT_TIMEOUT.test(o.callError || '') ? { decision: 'unknown', orderId: null, reason: o.callError, timeout: true } : callRefusal(o));
 const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error', ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : {}) });
 
 /** The teacher's action for one symbol from its orders, and what keeps it out of cloning. */
@@ -401,10 +410,13 @@ function teacherAction(orders, inTrade) {
   if (tightens.length) {
     if (tightens.some(o => !o.argsKnown)) reasons.push('order arguments unknown');
     // Never widen a stop (rules/trading/risk-management.md): against the working stop the teacher saw.
+    // Step by step: each modify against the stop the one before it left (one refused leaves it as it was).
+    let stop = inTrade.side && Number.isFinite(inTrade.stop) ? inTrade.stop : null;
     for (const o of tightens.filter(x => x.tool === 'modify_order' && x.argsKnown)) {
       const next = o.stopPrice ?? o.trailPrice;
-      if (!inTrade.side || !Number.isFinite(inTrade.stop) || next === null) reasons.push('stop change unknown');
-      else if ((inTrade.side === 'long' ? 1 : -1) * (next - inTrade.stop) < 0) reasons.push('stop widened');
+      if (stop === null || next === null) reasons.push('stop change unknown');
+      else if ((inTrade.side === 'long' ? 1 : -1) * (next - stop) < 0) reasons.push('stop widened');
+      if (next !== null && !refusedBy(o)) stop = next;
     }
     const { o, priorRefusals } = pick(tightens);
     return { action: 'tighten', order: o, reasons, priorRefusals };
@@ -570,9 +582,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     return barsBySym.get(sym);
   };
   const fills = allFills(lines);
-  const trips = roundTrips(fills);
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
   const contractCache = path.join(home, `contracts-${manifest.broker || ''}.json`);
+  const trips = roundTrips(fills, contractCache);
   const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'), id => {
     const root = id ? standardRoot(id, contractCache) || (parseStandardName(String(id)) || {}).root : null;
     return root ? familyRoot(root) : null;
@@ -628,14 +640,19 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       else {
         // An order naming no contract (modify, cancel): its order id's contract (the broker's journal), else
         // the line's only symbol; with several symbols and no id to resolve, every label of the cycle says so.
-        const familyOf = o => familyOfId(o.contractId) || (o.orderId !== null ? (journal.find(e => e.orderId !== null && String(e.orderId) === String(o.orderId) && e.ms <= t) || {}).family || null : null);
+        const familyOf = o => familyOfId(o.contractId, contractCache) || (o.orderId !== null ? (journal.find(e => e.orderId !== null && String(e.orderId) === String(o.orderId) && e.ms <= t) || {}).family || null : null);
         const mine = cyc.orders.filter(o => {
           const of = familyOf(o);
           if (of) return of === fam;
           return famsInLine.length === 1;
         });
-        const unresolved = famsInLine.length > 1 && cyc.orders.some(o => !familyOf(o));
-        const pos = positionAt(fam, cyc.ctx, fills, t);
+        // An order no symbol of the line can take: none named and several symbols, or a family the line hasn't
+        // (another market, a mistyped id): every label of the cycle says so, never a clean skip or hold.
+        const unresolved = cyc.orders.some(o => {
+          const f = familyOf(o);
+          return f ? !famsInLine.includes(f) : famsInLine.length > 1;
+        });
+        const pos = positionAt(fam, cyc.ctx, fills, t, contractCache);
         draft.position = pos;
         draft.decision = pos.side ? 'in-trade' : 'flat';
         draft.orders = mine;
@@ -648,12 +665,12 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
             // nothing to show is unknown; anything else never changed the account.
             if (!o.callFailed) continue;
             const exit = o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && o.riskReducing);
-            const closed = exit && fills.some(f => familyOfId(f.contractId) === fam && f.ms > t && f.ms <= nextT && f.profitAndLoss !== null && f.profitAndLoss !== undefined);
+            const closed = exit && fills.some(f => familyOfId(f.contractId, contractCache) === fam && f.ms > t && f.ms <= nextT && f.profitAndLoss !== null && f.profitAndLoss !== undefined);
             o.broker = closed ? { decision: 'accepted', orderId: null, reason: null, seen: 'fills' } : failedCall(o);
             continue;
           }
           const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
-            && (e.family === null || e.family === familyOfId(o.contractId)));
+            && (e.family === null || e.family === familyOfId(o.contractId, contractCache)));
           if (j) {
             journalUsed.add(j);
             o.broker = { decision: j.accepted ? 'accepted' : 'refused', orderId: j.orderId, reason: j.reason };
@@ -664,7 +681,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
           }
         }
         // In a trade: its side and the working stop the cycle's context showed (open-trades.js), for a modify.
-        const open = pos.side ? objs(cyc.ctx && cyc.ctx.openTrades).find(x => familyOfId(x.contractId) === fam) : null;
+        const open = pos.side ? objs(cyc.ctx && cyc.ctx.openTrades).find(x => familyOfId(x.contractId, contractCache) === fam) : null;
         draft.act = teacherAction(mine, pos.side ? { side: pos.side, stop: open && Number.isFinite(open.stop) ? open.stop : null } : false);
         if (cyc.unknown) draft.act.reasons.push('no cycle log');
         if (unresolved) draft.act.reasons.push('unattributed order');
@@ -782,7 +799,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       reasons.push('no cycle');
       counterfactualFor = 'no cycle';
       // A candidate's flat entry only while flat (the fills through t; no cycle context to read).
-      d.position = positionAt(d.fam, null, fills, d.t);
+      d.position = positionAt(d.fam, null, fills, d.t, contractCache);
       if (d.candidates.length && d.barT && !d.position.side) counterfactuals = simulated(d, spec);
     }
     else if (d.decision === 'kill-switch') reasons.push('kill switch on');
@@ -913,7 +930,7 @@ function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], b
 }
 
 const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'skipped', 'refused', 'wins', 'losses', 'uncloneable', 'unmapped', 'unsized', 'noCycle', 'noCycleWithCandidates', 'interrupted', 'coverage',
-  'takenWon', 'takenLost', 'skippedWouldWin', 'skippedWouldLose', 'refusedWouldWin', 'refusedWouldLose', 'noCycleWouldWin', 'noCycleWouldLose', 'unsimulated', 'brokerRefused', 'priorRefusals', 'cycleFailed'];
+  'takenWon', 'takenLost', 'skippedWouldWin', 'skippedWouldLose', 'refusedWouldWin', 'refusedWouldLose', 'noCycleWouldWin', 'noCycleWouldLose', 'unsimulated', 'brokerRefused', 'priorRefusals', 'cycleFailed', 'unattributedOrders', 'unmatchedOpenings'];
 const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : s[k]}`).join(', ')}\n${Object.keys(s.uncloneableBy).length ? `uncloneable by reason: ${Object.entries(s.uncloneableBy).map(([k, v]) => `${k} ${v}`).join(', ')}\n` : ''}`;
 
 module.exports = { VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec };
