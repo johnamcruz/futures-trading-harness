@@ -87,8 +87,8 @@ broker.
    floor is nearer is reached first); what was still open then, positions
    opened after it that day, and positions carried in from the month before
    are left out. Money is every fill's P&L less its fees.
-   Intraday equity is approximated from each round trip's MAE (said in the
-   output). Account: `--account <name>`, else the runner config's `account`
+   Intraday equity is approximated from each round trip's MAE, at its
+   `maeTime` when the broker sends one (said in the output). Account: `--account <name>`, else the runner config's `account`
    when it names an account profile, else the policy strategies'
    account, else `topstep_100k`; the output says which and why. Report the verdict
    as replayed, never as a guarantee of a live result.
