@@ -51,6 +51,8 @@ const SCAN_RESULTS = [
   { name: 'orb', candidate: true, direction: 'short', stopDistance: 8 },
   { name: 'bos', candidate: false, stopDistance: 9 },
   { name: 'other', candidate: true, direction: 'long', stopDistance: 5 },
+  // The policy's own row every raw scan has (strategies.js scan), as the scans log keeps it: never a sign of a screen.
+  { name: 'pp', candidate: false, note: 'a policy strategy: the runner screens the setups of orb, ema_cross, bos' },
 ];
 const OPEN_TRADE = { contractId: 'MNQ', side: 'long', sign: 1, size: 2, entry: 20010, openedAt: `${DAY2}T14:36:10.000Z`, setup: 'ema_cross', initialStop: 20000, risk: 10 };
 

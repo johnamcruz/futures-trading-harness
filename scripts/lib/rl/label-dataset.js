@@ -310,9 +310,11 @@ function runRows(input, opts) {
       if (!scan) { exclude(label, 'no scan logged for the bar by t'); continue; }
       const results = (Array.isArray(scan.results) ? scan.results : []).filter(isObj);
       // A scan a running policy screened (its components rewritten, its own row added) is not the raw scan live
-      // observes: not read yet (no replay starts an attempt today), never silently a bar without a setup. The scans log keeps
-      // name, verdict and note (scan-log.js summarizeResult), not the signal type.
-      if (results.some(r => r.name === strategy.name || r.verdict || /^traded through/.test(String(r.note || '')))) { exclude(label, 'scan screened by a running policy (not read yet)'); continue; }
+      // observes: not read yet (no replay starts an attempt today), never silently a bar without a setup. Only a screen adds a
+      // verdict (the policy's row, with a pick) or rewrites a component ("traded through"); every raw scan already has the
+      // policy's own row (strategies.js scan), so its name alone says nothing. A screen with no pick rewrites nothing:
+      // its observation equals the raw scan's.
+      if (results.some(r => r.verdict || /^traded through/.test(String(r.note || '')))) { exclude(label, 'scan screened by a running policy (not read yet)'); continue; }
       const byName = new Map(results.map(r => [r.name, r]));
       // As the live screen (live-runner.js): the first of the policy's strategies that fired with a stop.
       pick = strategy.strategies.map(n => byName.get(n)).find(r => r && r.candidate && r.direction && r.stopDistance > 0) || null;

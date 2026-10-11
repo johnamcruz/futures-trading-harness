@@ -168,7 +168,10 @@ function confluence(results, setupName, sign) {
 // dataset's reconstruction. Any edit to one is another observation version.
 const OBSERVATION_SOURCES = ['rl/observation.js', 'rl/live.js', 'rl/label-dataset.js', 'trading/indicators.js', 'trading/mtf.js',
   'trading/volume-profile.js', 'trading/clock.js', 'trading/combine.js', 'trading/prop-state.js', 'trading/contracts.js',
-  'backtest/engine.js', 'trading/evaluator.js', 'replay/labels.js', 'trading/open-trades.js'];
+  'backtest/engine.js', 'trading/evaluator.js', 'replay/labels.js', 'trading/open-trades.js', 'trading/broker-specs.js',
+  'broker/translator.js'];
+// The modules that compute the observation's values directly; their own dependencies (rules, regime, ...) are not
+// hashed: a full transitive closure would change the version on unrelated edits.
 
 /**
  * The observation's version for a policy strategy: sha256 of its fields, the
