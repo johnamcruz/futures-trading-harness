@@ -34,21 +34,19 @@
  * size, and whether to close a trade that is past its ratchet. The
  * challenge env (rl/challenge-env.js) trains on exactly this loop.
  *
- * Fills: by default (`fill: 'next-open'`) a market entry fills at the next
- * bar's open plus `slippageTicks` (1): live, the order goes in after the
- * cycle that read the closed bar, during the next bar. A setup whose fill bar
- * opens through its stop or (for a target level) its target, or falls in
- * another trading day or after end of day, expires untraded (`expired`).
- * `fill: 'close'` fills at the signal bar's close, as the original bot does.
- * Stops fill at the stop price (or the bar's open when it gapped through)
- * minus slippage; targets at the target price (or a better open); trailing
- * closes at the bar close. Results are in R (1R = the initial stop distance, before costs, as
- * the original bot reports) and in dollars after fees and slippage.
+ * Fills are the simulated broker's (sim-broker.js, one per market): by default
+ * (`fill: 'next-open'`) a market entry fills at the next bar's open plus
+ * `slippageTicks` (1), as live, where the order goes in during the next bar;
+ * `fill: 'close'` at the signal bar's close, as the original bot does. A setup
+ * whose fill bar opens through its stop or (for a target level) its target, or
+ * falls in another trading day or after end of day, expires untraded
+ * (`expired`). Results are in R (1R = the initial stop distance, before costs,
+ * as the original bot reports) and in dollars after fees and slippage.
  */
 
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
 const { exitPlan } = require('../trading/strategies');
-const { trailStep } = require('../trading/trail');
+const { createSimBroker, onTick } = require('./sim-broker');
 const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
@@ -98,8 +96,6 @@ function parseAt(spec) {
 }
 
 const round2 = x => Math.round(x * 100) / 100;
-/** A price on the tick grid, free of float noise (2045.1 - 0.2 is 2044.9, not 2044.8999999999999). */
-const onTick = (x, tick) => Math.round(Math.round(x / tick) * tick * 1e9) / 1e9;
 
 /**
  * @param markets [{ symbol, bars (normalized, timeframe bars), tickSize, tickValue, feesPerSide }]
@@ -188,8 +184,8 @@ function runEngine(markets, strategies, opts = {}) {
   const trades = [];
   const prepared = o.prepared || prepare(markets, strategies, o);
   const skipped = new Map(Object.entries(Object.fromEntries(prepared.skipped)));
-  // Run-local position state over the shared, prepared books.
-  const books = prepared.books.map(b => ({ ...b, pos: null, lastIndex: null }));
+  // Run-local position state over the shared, prepared books: each market's simulated broker.
+  const books = prepared.books.map(b => ({ ...b, broker: createSimBroker({ tickSize: b.tickSize, slippageTicks: o.slippageTicks }), lastIndex: null }));
   // The prop challenge, when the run has an account.
   const account = o.account;
   let cs = account ? combine.start(account) : null;
@@ -205,12 +201,8 @@ function runEngine(markets, strategies, opts = {}) {
   let expired = 0; // setups whose next-bar fill never happened (gap through the stop or target, new day, end of day)
 
   const tfMs = book => timeframeMs(`${o.timeframe}m`) || (book.bars[1] ? book.bars[1].ms - book.bars[0].ms : 60000);
-  const closeTrade = (book, bar, price, reason) => {
-    const p = book.pos;
-    const ticks = Math.round((p.sign * (price - p.entry)) / book.tickSize * 1e6) / 1e6;
-    const gross = ticks * p.tickValue * p.size;
-    const fees = 2 * p.fee * p.size;
-    const net = gross - fees;
+  // Records a broker exit ({ position, price, reason, gross, fees, net }) as a trade.
+  const closeTrade = (book, bar, { position: p, price, reason, gross, fees, net }) => {
     const t = {
       symbol: book.symbol, contract: p.contract, strategy: p.strategy, direction: p.sign > 0 ? 'long' : 'short',
       entryTime: p.entryTime, entry: p.entry, initialStop: p.initialStop, exitTime: new Date(bar.ms + tfMs(book)).toISOString(),
@@ -233,7 +225,6 @@ function runEngine(markets, strategies, opts = {}) {
     // dollar limit counts net.
     closesToday.push({ pnl: gross, net, ts: bar.ms + tfMs(book) });
     if (cs) cs = combine.applyClose(cs, net);
-    book.pos = null;
   };
   const feeOf = book => (account && account.fees_per_side && account.fees_per_side[book.symbol] !== undefined
     ? account.fees_per_side[book.symbol] : book.feesPerSide ?? 0.37);
@@ -244,15 +235,6 @@ function runEngine(markets, strategies, opts = {}) {
     const fee = account && account.fees_per_side && account.fees_per_side[root] !== undefined ? account.fees_per_side[root]
       : spec.feesPerSide ?? feeOf(book);
     return { root, tickValue: spec.tickValue, fee, max: (account && account.max_contracts && account.max_contracts[root]) || 0 };
-  };
-  // Dollars per point for an open position, and its net P&L at a price.
-  const perPoint = (book, p) => (p.tickValue / book.tickSize) * p.size;
-  const openNet = (book, p, price) => p.sign * (price - p.entry) * perPoint(book, p) - 2 * p.fee * p.size;
-  // The price at which the open position's net P&L equals `net` (rounded against the trade).
-  const priceForNet = (book, p, net) => {
-    const raw = p.entry + p.sign * ((net + 2 * p.fee * p.size) / perPoint(book, p));
-    const t = book.tickSize;
-    return p.sign > 0 ? Math.floor(raw / t + 1e-9) * t : Math.ceil(raw / t - 1e-9) * t;
   };
   const ask = (kind, book, i, closeAt, extra) => {
     const obs = buildObservation({ cs, account, book, i, closeAt, components: o.prop ? o.prop.components : [], ...extra });
@@ -284,8 +266,9 @@ function runEngine(markets, strategies, opts = {}) {
         // Nothing is carried into a new trading day: close what yesterday left
         // (data with no bar after the close) at its last bar.
         for (const b of books) {
-          if (b.pos && b.pos.pending && b.pos.tradingDay !== dayKey) { b.pos = null; expired += 1; }
-          if (b.pos && b.pos.tradingDay !== dayKey) closeTrade(b, b.bars[b.lastIndex], b.bars[b.lastIndex].c, 'eod');
+          const p = b.broker.position;
+          if (!p || p.tradingDay === dayKey) continue;
+          if (p.pending) { b.broker.cancel(); expired += 1; } else closeTrade(b, b.bars[b.lastIndex], b.broker.exit(b.bars[b.lastIndex].c, 'eod'));
         }
         if (cs) {
           cs = combine.endDay(cs);
@@ -307,83 +290,51 @@ function runEngine(markets, strategies, opts = {}) {
       || !inMarketHours(closeAt, { until: early ? EARLY_CLOSE_MIN : undefined });
 
     // 0. A setup from the previous bar fills at this bar's open (fill: next-open), or expires.
-    if (book.pos && book.pos.pending) {
-      const q = book.pos;
-      const entry = onTick(bar.o + q.sign * o.slippageTicks * book.tickSize, book.tickSize);
-      const stop = onTick(entry - q.sign * q.risk, book.tickSize);
-      const target = q.targetFrom === 'entry' ? onTick(entry + q.sign * q.targetTicks * book.tickSize, book.tickSize) : q.target;
-      // A target level the fill reached leaves no reward; one closer than the strategy's min_rr (risk.min_rr) isn't its trade either.
-      const gapped = q.sign * (entry - q.signalStop) <= 0 || (q.targetFrom === 'level'
-        && (q.sign * (target - entry) < book.tickSize - 1e-9 || (q.minRR > 0 && q.sign * (target - entry) < q.minRR * q.risk - 1e-9)));
-      if (gapped || afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) {
-        book.pos = null;
-        expired += 1;
-      } else {
-        Object.assign(q, { pending: false, entry, stop, initialStop: stop, target, entryTime: bar.t });
-        entriesToday += 1;
-      }
+    const broker = book.broker;
+    if (broker.position && broker.position.pending) {
+      const q = broker.position;
+      if (afterEod || !inMarketHours(new Date(bar.ms)) || q.tradingDay !== dayKey) broker.cancel();
+      else if (broker.fillAtOpen(bar)) q.entryTime = bar.t;
+      // Gapped through its stop, or a target level the fill reached (or under the strategy's min_rr): dropped.
+      if (broker.position) entriesToday += 1;
+      else expired += 1;
     }
 
-    // 1. Broker: the resting stop and target against this bar.
-    // Hard rule: no trade is carried past the close into the next trading
-    // day. If the data has no bar between end of day and this one, close at
-    // the previous bar's close.
-    const p = book.pos;
-    if (p && i > p.entryIndex) {
-      const slip = o.slippageTicks * book.tickSize;
-      const stopHit = p.sign > 0 ? bar.l <= p.stop : bar.h >= p.stop;
-      const targetHit = p.target !== null && (p.sign > 0 ? bar.h >= p.target : bar.l <= p.target);
-      p.peakR = Math.max(p.peakR, (p.sign * ((p.sign > 0 ? bar.h : bar.l) - p.entry)) / p.risk);
-      const stopFill = stopHit ? onTick((p.sign > 0 ? Math.min(bar.o, p.stop) : Math.max(bar.o, p.stop)) - p.sign * slip, book.tickSize) : null;
-      // The worst price the trade sees in this bar: its stop fill, or the bar's extreme.
-      const worst = stopHit ? stopFill : (p.sign > 0 ? bar.l : bar.h);
-      p.troughR = Math.min(p.troughR, (p.sign * (worst - p.entry)) / p.risk);
-      const worstNet = openNet(book, p, worst);
-      if (cs && combine.touches(cs, worstNet)) {
-        // Equity reached the max-loss floor: the firm liquidates there.
-        closeTrade(book, bar, priceForNet(book, p, cs.floor - cs.balance), 'blow');
-        cs = combine.blow(cs);
-        return STOP;
-      } else if (cs && combine.dailyBreached(cs, worstNet)) {
-        // The firm's daily loss limit: flattened there, no trading until tomorrow.
-        closeTrade(book, bar, priceForNet(book, p, -cs.dailyLimit - cs.dayPnl), 'daily_limit');
-        cs = { ...cs, dayStopped: true };
-      } else if (stopHit) {
-        closeTrade(book, bar, stopFill, p.stop === p.initialStop ? 'stop' : 'trail');
-      } else if (targetHit) {
-        closeTrade(book, bar, p.sign > 0 ? Math.max(bar.o, p.target) : Math.min(bar.o, p.target), 'target');
-      } else {
-        p.barsHeld += 1;
-      }
+    // 1. Broker: the resting stop and target against this bar (any position here was entered
+    // before this bar). A prop account's floor and daily limit act first, at the worst price
+    // the trade sees in the bar. Nothing is carried past the close into the next trading day
+    // (the day change above closes it at the previous bar's close).
+    const guard = cs && (worst => {
+      const worstNet = broker.netAt(worst);
+      // Equity reached the max-loss floor: the firm liquidates there.
+      if (combine.touches(cs, worstNet)) return { price: broker.priceForNet(cs.floor - cs.balance), reason: 'blow' };
+      // The firm's daily loss limit: flattened there, no trading until tomorrow.
+      if (combine.dailyBreached(cs, worstNet)) return { price: broker.priceForNet(-cs.dailyLimit - cs.dayPnl), reason: 'daily_limit' };
+      return null;
+    });
+    const settled = broker.onBar(bar, { guard });
+    if (settled) {
+      closeTrade(book, bar, settled);
+      if (settled.reason === 'blow') { cs = combine.blow(cs); return STOP; }
+      if (settled.reason === 'daily_limit') cs = { ...cs, dayStopped: true };
     }
 
     // 2. Manage an open trade at the bar's close. Like the original bot's
     // handle_bar, a bar that started with a trade open only manages it: a
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
-    let managed = false;
-    if (book.pos && i > book.pos.entryIndex) {
-      const q = book.pos;
-      managed = true;
-      const step = trailStep(q, bar, q.plan, book.tickSize);
-      q.stop = onTick(step.stop, book.tickSize);
-      q.peakR = step.peakR;
-      if (step.close) closeTrade(book, bar, step.close.price, 'trail');
-      else if (q.plan.maxBars && q.barsHeld >= q.plan.maxBars) closeTrade(book, bar, bar.c, 'max_bars');
-      else if (afterEod) closeTrade(book, bar, bar.c, 'eod');
-      else if (o.policy && q.plan.trailActivateR !== null && q.peakR >= q.plan.trailActivateR
-        && ask('position', book, i, closeAt, { pos: q }) === 'close') {
+    const q = broker.position;
+    if (q) {
+      const done = broker.manage(bar) || (afterEod ? broker.exit(bar.c, 'eod') : null)
         // Past the ratchet, the policy may bank the trade (before it, only the stop and trail run).
-        closeTrade(book, bar, bar.c, 'policy');
-      }
-    } else if (book.pos && afterEod) {
-      managed = true;
-      closeTrade(book, bar, bar.c, 'eod');
+        || (o.policy && q.plan.trailActivateR !== null && q.peakR >= q.plan.trailActivateR
+          && ask('position', book, i, closeAt, { pos: q }) === 'close' ? broker.exit(bar.c, 'policy') : null);
+      if (done) closeTrade(book, bar, done);
     }
-    return { book, bar, i, closeAt, afterEod, managed };
+    return { book, bar, i, closeAt, afterEod, managed: Boolean(q) };
   };
   const enter = ({ book, bar, i, closeAt, afterEod, managed }) => {
     // 3. Flat: look for an entry, as the live loop does after each closed bar.
-    if (managed || book.pos || !book.usable.length) return;
+    if (managed || book.broker.position || !book.usable.length) return;
     // Entries at the bar's close need market hours and time before end of day,
     // and the bar itself must lie in market hours.
     if (afterEod || !inMarketHours(new Date(bar.ms))) return;
@@ -391,7 +342,7 @@ function runEngine(markets, strategies, opts = {}) {
     // A prop attempt trades one position at a time across the whole account, as live (the gateway's
     // prop-one-position check): each size assumes no other open risk, so with several markets a
     // setup waits while another market's trade is open or about to fill.
-    if (cs && books.some(b => b.pos)) return;
+    if (cs && books.some(b => b.broker.position)) return;
     if (o.gate) {
       if (sessions.length && !sessions.some(w => inWindow(closeAt, w))) return;
       if (noEntry.some(w => inWindow(closeAt, w))) return;
@@ -409,7 +360,6 @@ function runEngine(markets, strategies, opts = {}) {
     const pick = book.setupAt(i);
     if (!pick) return;
     const sign = pick.r.direction === 'long' ? 1 : -1;
-    const entry = onTick(bar.c + sign * o.slippageTicks * book.tickSize, book.tickSize);
     const stopTicks = Math.max(1, roundHalfEven(pick.r.stopDistance / book.tickSize));
     const risk = onTick(stopTicks * book.tickSize, book.tickSize);
     // A policy strategy's trades all exit by its own exit block.
@@ -443,40 +393,22 @@ function runEngine(markets, strategies, opts = {}) {
       leg = legs.micro.root === cp.root ? legs.micro : legs.mini;
     }
     const fam = familyOf(book.symbol);
-    book.pos = {
-      strategy: pick.s.name, contract: leg.root, tickValue: leg.tickValue, fee: leg.fee, mini: Boolean(fam && leg.root === fam.mini),
-      sign, entry, risk, size, plan,
-      stop: onTick(entry - sign * risk, book.tickSize), initialStop: onTick(entry - sign * risk, book.tickSize),
+    const pos = book.broker.submitMarket({
+      sign, risk, size, tickValue: leg.tickValue, fee: leg.fee, plan,
       // As the original bot: target ticks from the unrounded stop distance.
-      target: plan.targetR ? onTick(entry + sign * Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) * book.tickSize, book.tickSize)
+      target: plan.targetR ? { ticks: Math.max(1, roundHalfEven((plan.targetR * pick.r.stopDistance) / book.tickSize)) }
         // exit.target: a level, the signal bar's close plus the distance (e.g. the far side of a CRT range);
-        // an entry whose fill is already at or past it is skipped below.
-        : plan.target && pick.r.targetDistance > 0
-          ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize)
+        // the broker refuses an entry whose fill is already at or past it, or under min_rr.
+        : plan.target ? { price: pick.r.targetDistance > 0 ? onTick(bar.c + sign * roundHalfEven(pick.r.targetDistance / book.tickSize) * book.tickSize, book.tickSize) : null }
           : null,
       minRR: plan.target && !plan.targetR ? pick.s.risk.min_rr || 0 : 0,
-      entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(), peakR: 0, troughR: 0, barsHeld: 0,
+      strategy: pick.s.name, contract: leg.root, mini: Boolean(fam && leg.root === fam.mini),
+      entryIndex: i, entryTime: closeAt.toISOString(), tradingDay: tradingDayStart(closeAt).getTime(),
       confluence: pick.confluence || 1, conflict: pick.against || 0,
       setup: setupOf(book, pick, i),
-    };
-    // A target level the fill already reached (slippage past it) leaves no reward: no trade; nor one under min_rr.
-    if (plan.target && !plan.targetR && (book.pos.target === null || sign * (book.pos.target - entry) < book.tickSize - 1e-9
-      || (book.pos.minRR > 0 && sign * (book.pos.target - entry) < book.pos.minRR * risk - 1e-9))) {
-      book.pos = null;
-      return;
-    }
-    if (o.fill === 'next-open') {
-      // Fills at the next bar's open (step 0 there). The stop keeps its distance from the
-      // fill; a fill at or through the signal's stop level means the setup is gone.
-      Object.assign(book.pos, {
-        pending: true,
-        signalStop: book.pos.initialStop,
-        targetFrom: plan.targetR ? 'entry' : plan.target ? 'level' : null,
-        targetTicks: plan.targetR ? Math.round((book.pos.target - entry) * sign / book.tickSize) : null,
-      });
-      return;
-    }
-    entriesToday += 1;
+    }, { price: bar.c, fill: o.fill === 'next-open' ? 'next-open' : 'close' });
+    // next-open: fills at the next bar's open (step 0 there).
+    if (pos && !pos.pending) entriesToday += 1;
   };
   for (let g = 0, stop = false; g < timeline.length && !stop;) {
     let h = g + 1;
@@ -493,10 +425,10 @@ function runEngine(markets, strategies, opts = {}) {
 
   // Settle anything still open at the end of the data, at the last close.
   for (const book of books) {
-    if (book.pos && book.pos.pending) { book.pos = null; expired += 1; }
-    if (book.pos) {
+    const p = book.broker.position;
+    if (p && p.pending) { book.broker.cancel(); expired += 1; } else if (p) {
       const last = book.bars[book.lastIndex];
-      closeTrade(book, last, last.c, 'end');
+      closeTrade(book, last, book.broker.exit(last.c, 'end'));
     }
   }
   return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions, expired };
