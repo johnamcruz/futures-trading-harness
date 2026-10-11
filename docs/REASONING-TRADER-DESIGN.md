@@ -335,12 +335,18 @@ fills). One label per decision time and symbol:
   Interrupted lines are labelled and flagged; torn lines counted. A failed
   or timed-out cycle, or one with no cycle log line, is never cloned and
   never a skip; so is a flat label with a resting order (`working order`:
-  the cycle ran for it) or of a manage-only cycle (`manage-only`: the day's
-  cycle cap was reached, no new entry allowed).
+  the cycle ran for it; the count is the account's, so while another
+  symbol holds a position its brackets explain it and no flag is set), of
+  a manage-only cycle (`manage-only`: the day's cycle cap was reached, no
+  new entry allowed), of a paper-mode run (`paper mode`: the gate refuses
+  every live entry; the teacher journals plans), or of a cycle whose
+  policy screen failed (`policy screen failed`: no verdict, the gate
+  refuses the policy's strategies).
 - `candidates`: what the scan fired on the decision's bar, with direction
   (only scans logged by t), that the teacher could trade: a strategy whose
   status isn't active (paper: the gate refuses its entries, the runner
-  starts no cycle for it) is left out unless the run is in paper mode, and
+  starts no cycle for it) is left out unless the run is in paper mode
+  (where no flat decision is a skip), and
   a no-cycle bar the runner's scan decided not to run on has none.
 - `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
   and no entry is a skip), `hold` / `tighten` / `exit` in a trade (a

@@ -82,7 +82,7 @@ const GATE_SLACK_MS = 2000;
 const UNGATED = new Set(['close_position']);
 // A flat label with one of these reasons is no skip (nor a stand-aside, nor a hold in a trade): the teacher
 // touched an order, or what it did is unknown.
-const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out', 'working order', 'manage-only']);
+const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out', 'working order', 'manage-only', 'paper mode', 'policy screen failed']);
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -724,10 +724,17 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         draft.act = teacherAction(mine, pos.side ? { side: pos.side, stop: open && Number.isFinite(open.stop) ? open.stop : null } : false);
         if (cyc.unknown) draft.act.reasons.push('no cycle log');
         if (!pos.side) {
-          // Flat with a resting order (the runner ran the cycle for it): the decision is about that order, never a skip.
-          if (Number(cyc.ctx && isObj(cyc.ctx.account) ? cyc.ctx.account.workingOrders : 0) > 0) draft.act.reasons.push('working order');
+          const acct = cyc.ctx && isObj(cyc.ctx.account) ? cyc.ctx.account : null;
+          // Flat with a resting order (the runner ran the cycle for it): the decision is about that order, never a
+          // skip. The count is the account's: while another family holds a position (this one is flat) its brackets explain it.
+          const elsewhere = acct && objs(acct.positions).length > 0;
+          if (acct && Number(acct.workingOrders) > 0 && !elsewhere) draft.act.reasons.push('working order');
           // A manage-only cycle (the day's cycle cap reached): no new entry was allowed, so standing aside is no skip.
           if (cyc.action === 'manage') draft.act.reasons.push('manage-only');
+          // Paper mode: the gate refuses every live entry (the teacher journals plans), so no flat decision is a skip.
+          if (cfg.paper === true) draft.act.reasons.push('paper mode');
+          // The policy's screen failed (runner.js policyFailed): its strategies had no verdict and the gate refused their entries.
+          if (symbol && cyc.ctx && Array.isArray(cyc.ctx.unavailable) && cyc.ctx.unavailable.some(u => String(u).startsWith(`${symbol} policy screen (`))) draft.act.reasons.push('policy screen failed');
         }
         if (unresolved) draft.act.reasons.push('unattributed order');
         // A failed or timed-out cycle's silence is no decision: never a skip, never cloned.
