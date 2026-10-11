@@ -170,6 +170,55 @@ test('cycleResult finds the last reported result', () => {
   assert.strictEqual(cycleResult('nothing'), null);
 });
 
+test('cycleResult: trivial formatting tolerated, nothing looser; only the final message of a transcript counts', () => {
+  const claude = (final, ...earlier) => [
+    JSON.stringify({ type: 'system', subtype: 'init' }),
+    ...earlier.map(text => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: text }] } })),
+    JSON.stringify({ type: 'result', result: final }),
+  ].join('\n');
+  const qwen = final => `Warning: long context\n${JSON.stringify([{ type: 'system', subtype: 'init' }, { type: 'result', subtype: 'success', result: final }])}\n`;
+  // Formatting: leading spaces, bold or code around the line or the label, a list dash.
+  for (const line of ['  CYCLE RESULT: no-trade - quiet', '**CYCLE RESULT: no-trade - quiet**', '**CYCLE RESULT:** no-trade - quiet', '`CYCLE RESULT: no-trade - quiet`', '- CYCLE RESULT: no-trade - quiet  ', '__CYCLE RESULT: no-trade - quiet__']) {
+    assert.strictEqual(cycleResult(claude(`Summary.\n${line}`)), 'CYCLE RESULT: no-trade - quiet', line);
+    assert.strictEqual(cycleResult(qwen(`Summary.\n${line}`)), 'CYCLE RESULT: no-trade - quiet', `qwen ${line}`);
+    assert.strictEqual(cycleResult(`text\n${line}\n`), 'CYCLE RESULT: no-trade - quiet', `plain ${line}`);
+  }
+  // A reason with quotes, in a final message, stays whole.
+  assert.strictEqual(cycleResult(claude('CYCLE RESULT: no-trade - "orb" skipped')), 'CYCLE RESULT: no-trade - "orb" skipped');
+  // Not looser: another label, another case, or the template is no result.
+  for (const final of ['cycle result: no-trade - x', 'CYCLE RESULTS: no-trade', 'Result: no-trade', 'Decision: NO TRADE (stand aside)',
+    'CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>']) {
+    assert.strictEqual(cycleResult(claude(final)), null, final);
+    assert.strictEqual(cycleResult(final), null, `plain ${final}`);
+  }
+  // A summary instead of the line: the skill text, the prompt, or a tool's output echoed earlier is never the result.
+  const skillText = 'CYCLE RESULT: no-trade - orb fired but relative volume 0.8x (skip rule)\nCYCLE RESULT: blocked - [loss-streak] cooldown 18 min';
+  assert.strictEqual(cycleResult(claude('**Cycle Complete:** NO TRADE (stand aside)', skillText)), null);
+  assert.strictEqual(cycleResult(claude('done\nCYCLE RESULT: managed - trailed', skillText)), 'CYCLE RESULT: managed - trailed');
+  // Codex --json: its last agent message.
+  const codex = [
+    { type: 'item.completed', item: { type: 'agent_message', text: 'CYCLE RESULT: executed - early' } },
+    { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'harness', tool: 'x', result: skillText } },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'Done.\n**CYCLE RESULT: flattened - eod**' } },
+  ].map(e => JSON.stringify(e)).join('\n');
+  assert.strictEqual(cycleResult(codex), 'CYCLE RESULT: flattened - eod');
+  // The real Qwen cycle that wrote a summary instead of the line.
+  const fixture = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'qwen-cycle-transcript.txt'), 'utf8');
+  assert.strictEqual(cycleResult(fixture), null);
+});
+
+test('every cycle prompt ends with the exact result line the runner reads', () => {
+  const cfg = validateConfig({ harness: 'claude', account: '1' });
+  const p = prompts(cfg, new Date('2026-10-07T14:03:02Z'), ROOT);
+  const line = 'Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>';
+  for (const text of [p.trade([{ symbol: 'MNQ' }]), p.premarket('MNQ'), p.eod()]) {
+    assert.ok(text.includes(line), text.slice(-300));
+    assert.ok(text.endsWith(`${line}.`), 'it is the prompt\'s last sentence');
+    // The prompt echoed into a run's output is never read as its result.
+    assert.strictEqual(cycleResult(`prompt=${text}\n`), null);
+  }
+});
+
 test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run prints the command', () => {
   const dir = tmpDir();
   const config = path.join(dir, 'auto.json');
@@ -411,7 +460,8 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
     lessons: Array.from({ length: 6 }, (_, k) => `(0.${9 - k}) a lesson of about a hundred characters, as the instincts digest writes them, number ${k}`),
     trades: Array.from({ length: 10 }, (_, k) => (k % 2 ? 'orb long win +1.8R in trend-up' : 'ema_cross short loss -1.02R in range [mistake:chased]')),
   });
-  assert.ok(p.length < 4500, `the prompt grew to ${p.length} characters`);
+  // 4600: 4500 plus the required last-line instruction (RESULT_LINE, ~130 characters).
+  assert.ok(p.length < 4600, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);

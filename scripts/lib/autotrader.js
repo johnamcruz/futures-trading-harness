@@ -18,6 +18,7 @@ const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 const { et: etTime, etStamp } = require('./trading/session-context');
+const { documents } = require('./transcript');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -340,13 +341,16 @@ function historyText(history) {
   return ` Your last ${list.length} cycle(s), oldest first: ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
 }
 
+// Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
+const RESULT_LINE = ' Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
   const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
   return {
-    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.`,
+    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.${RESULT_LINE}`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
@@ -391,12 +395,12 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.`;
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
       const catchUp = d !== dayKey(now) ? ` (a catch-up: that day's end of day did not run; review and reconcile ${d}, not today)` : '';
-      return `${head}${accountText(state)} Run the end-of-day skill${acct} for the trading day ending ${d}${catchUp}, on ${cfg.timeframe}-minute bars (the reconcile tool with day ${d} and timeframe ${cfg.timeframe}): flatten every position and cancel working orders without asking, then review and summarize.`;
+      return `${head}${accountText(state)} Run the end-of-day skill${acct} for the trading day ending ${d}${catchUp}, on ${cfg.timeframe}-minute bars (the reconcile tool with day ${d} and timeframe ${cfg.timeframe}): flatten every position and cancel working orders without asking, then review and summarize.${RESULT_LINE}`;
     },
   };
 }
@@ -527,10 +531,37 @@ function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = f
   return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
 
-/** Last "CYCLE RESULT: ..." line in a run's output, if any. */
+/**
+ * The run's final message, when its transcript has one: Claude stream-json's and Qwen JSON's
+ * { type: 'result', result }, Codex --json's last agent message. Null for a plain-text run.
+ */
+function finalMessage(output) {
+  let final = null;
+  for (const doc of documents(output)) {
+    for (const ev of Array.isArray(doc) ? doc : [doc]) {
+      if (ev && ev.type === 'result' && typeof ev.result === 'string') final = ev.result;
+      const item = ev && ev.type === 'item.completed' && ev.item;
+      if (item && (item.type === 'agent_message' || item.type === 'assistant_message') && typeof item.text === 'string') final = item.text;
+    }
+  }
+  return final;
+}
+
+/**
+ * The last "CYCLE RESULT: <outcome> - <reason>" line the model reported, if any: in its final message
+ * when the transcript has one (so a prompt, skill text, or tool output echoed earlier never counts), else
+ * anywhere in a plain-text run's output. Trivial formatting is tolerated (leading spaces, markdown bold,
+ * italics or code around the line or the label); the label is exact, and the template
+ * ("CYCLE RESULT: <no-trade | ...> - <reason>") is not a result.
+ */
 function cycleResult(output) {
-  const matches = String(output || '').match(/CYCLE RESULT:[^\n"\\]*/g);
-  return matches ? matches[matches.length - 1].trim() : null;
+  const final = finalMessage(output);
+  // In raw JSON text a line ends at an escaped newline or a closing quote; in a final message, at a newline.
+  const found = final === null
+    ? [...String(output || '').matchAll(/CYCLE RESULT:(?:[*_`]{1,3})?([^\n"\\]*)/g)]
+    : [...final.matchAll(/CYCLE RESULT:(?:[*_`]{1,3})?([^\n]*)/g)];
+  const results = found.map(m => m[1].replace(/[*_`\s]+$/, '').trim()).filter(body => !body.startsWith('<'));
+  return results.length ? `CYCLE RESULT: ${results[results.length - 1]}`.trim() : null;
 }
 
 const RUNNER_VALUE_FLAGS = ['--config', '--once', '--symbol', '--stale-minutes'];
