@@ -440,6 +440,17 @@ test('CLI: the runner decides on the harness clock: a replay broker\'s FTH_REPLA
   const loop = spawnSync(process.execPath, [cli, '--config', config], { encoding: 'utf8', env: { ...env, FTH_BROKER: 'topstepx', FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, timeout: 20000 });
   assert.strictEqual(loop.status, 1);
   assert.match(loop.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  // --once: the prompt is dated by the replayed clock; end of day still runs, at the wall clock, when the override is refused.
+  const once = (now, extra = {}) => spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: now, ...extra } });
+  const replayedEod = once('2026-03-04T20:30:00Z');
+  assert.strictEqual(replayedEod.status, 0, replayedEod.stderr);
+  assert.match(replayedEod.stdout, /trading day ending 2026-03-04/);
+  const refusedEod = once('2026-03-04T20:30:00Z', { FTH_BROKER: 'topstepx' });
+  assert.strictEqual(refusedEod.status, 0, refusedEod.stderr);
+  assert.doesNotMatch(refusedEod.stdout, /2026-03-04/, 'the wall clock\'s day');
+  const premarketOnce = spawnSync(process.execPath, [cli, '--config', config, '--once', 'premarket', '--symbol', 'MNQ', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T12:00:00Z' } });
+  assert.match(premarketOnce.stdout, /premarket skill for MNQ.*trading day ending 2026-03-04/);
+  assert.strictEqual(spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T20:30:00Z', FTH_BROKER: 'topstepx' } }).status, 1, 'any other run is refused');
   const garbage = at('soon');
   assert.strictEqual(garbage.status, 1);
   assert.match(garbage.stderr, /not an ISO 8601 UTC time/);

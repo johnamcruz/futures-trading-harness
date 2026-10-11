@@ -6,10 +6,10 @@
 // the gateway forwarded. FAKE_DELAY_MS delays those other replies; FAKE_DROP=<tool>
 // never answers that tool (a lost reply); FAKE_PLACE_ERROR=<text> answers place_order with an
 // isError result of that text; FAKE_ARGS=<file> logs each tools/call as a JSON line. When set, FAKE_SERVER_CONFIG,
-// FAKE_CONTRACTS and FAKE_PLACE_RESULT answer get_server_config, search_contracts and place_order.
+// FAKE_CONTRACTS, FAKE_PLACE_RESULT and FAKE_CLOSE_RESULT answer get_server_config, search_contracts, place_order and close_position.
 const fs = require('fs');
 const ACCOUNT = { list_open_positions: 'FAKE_POSITIONS', list_open_orders: 'FAKE_ORDERS', search_trades: 'FAKE_TRADES', search_orders: 'FAKE_SEARCH_ORDERS' };
-const OPTIONAL = { get_server_config: 'FAKE_SERVER_CONFIG', search_contracts: 'FAKE_CONTRACTS', place_order: 'FAKE_PLACE_RESULT' };
+const OPTIONAL = { get_server_config: 'FAKE_SERVER_CONFIG', search_contracts: 'FAKE_CONTRACTS', place_order: 'FAKE_PLACE_RESULT', close_position: 'FAKE_CLOSE_RESULT' };
 let buffer = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => {

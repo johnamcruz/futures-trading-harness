@@ -251,7 +251,7 @@ async function main(argv) {
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
   const dataDir = dataDirFor(cfg);
   // The harness clock (trading/harness-now.js): FTH_REPLAY_NOW without a replay broker, or unparseable, stops the run here.
-  runnerNow();
+  if (arg(argv, '--once') !== 'eod') runnerNow(); // a refused replay clock stops all but end of day (run at the wall clock)
   const opts = { dryRun: argv.includes('--dry-run') };
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   checkStrategies(cfg);
@@ -266,7 +266,7 @@ async function main(argv) {
     if (!['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
     if (once !== 'eod' && fs.existsSync(killSwitchFile)) throw new Error(`kill switch is on (${killSwitchFile})`);
-    const p = prompts(cfg, runnerNow(), ROOT);
+    const p = prompts(cfg, once === 'eod' ? require('./lib/trading/harness-now').recordNow(process.env, { testClock: false }) : runnerNow(), ROOT);
     // A manual trade run reads nothing for the prompt: it says so instead of claiming an empty journal.
     const manual = { journalRead: false, unavailable: ['a manual run (--once): no bars, account, journal, news, premarket plan, or strategy scan were read; read them yourself'] };
     const jobs = once === 'eod' ? [p.eod()] : once === 'trade' ? [p.trade(symbols.map(symbol => ({ symbol })), manual)] : symbols.map(s => p.premarket(s));

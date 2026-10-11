@@ -132,22 +132,29 @@ broker or reads a shipped live broker's variables (credentials, entry,
 journal). The gateway, which runs the server, honors the override only if the
 broker it started (never a server given on its command line) is a replay
 broker and the server's `get_server_config` reports `replay: true` and a
-`serverTime` within 5 minutes of `FTH_REPLAY_NOW`; it decides once, at its
-first gated call, and keeps that decision for its lifetime, so editing
-`brokers.json` mid-session changes nothing.
+`serverTime` within 5 minutes of `FTH_REPLAY_NOW`. The broker is the one
+resolved when the gateway starts; the decision is taken at the first order call
+(gated, or a `close_position`) and kept for the gateway's lifetime, so editing
+`brokers.json` after that changes nothing.
 
 It fails closed and is replay-only: when the override is refused (no real
 replay broker, an unparseable value, an unreadable broker config) the gate
 refuses every new entry (`replay-clock`, also with `FTH_AUTONOMOUS=1`) and
 judges exits, `[protect]` stops, stop moves, cancels and partial closes as
 usual at the wall clock (a refused override means a live broker);
-`close_position` always goes. The scripts and the runner exit with the error,
-and the stop hook says why it couldn't remind. The override never relaxes a
+`close_position` always goes. The scripts and the runner exit with the error
+(`autotrader.js --once eod` still runs, at the wall clock), and the stop hook
+says why it couldn't remind. The override never relaxes a
 check; it only moves the time checks run at.
 
 A process's environment is fixed when it starts, so replay drives one cycle per
 process: a fresh harness run (or `autotrader.js --once`) per cycle, with the
-time set by the replay driver. The runner's long-running loop refuses to start
+time set by the replay driver. Within one process the replayed time stands
+still (the gateway's 30 s ledger and its 2-minute grace for orders of unknown
+outcome don't elapse), so don't hold a long interactive session on one
+`FTH_REPLAY_NOW`. Replay runs in a harness home of its own (`FTH_HOME`), never
+the live one: the scripts write records, blackouts and attempts there at the
+replayed time. The runner's long-running loop refuses to start
 with `FTH_REPLAY_NOW` set, and never takes the test suite's `FTH_TEST_NOW`.
 Pure log timestamps (cycle logs, the gate log, heartbeats) stay on the wall
 clock.

@@ -1115,6 +1115,10 @@ test('MCP gateway with a replay broker: its ledger and orders of unknown outcome
   simHome(dir);
   const afterClose = await gatewayCfg(env, [call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }), exit(2)], { dir });
   assert.match(textOf(afterClose[2]), /\[exposure\] .*once recent orders fill/, 'the close still counts');
+  dir = tmpDir();
+  simHome(dir);
+  const confirmed = await gatewayCfg({ ...env, FAKE_CLOSE_RESULT: JSON.stringify({ success: true, errorCode: 0 }) }, [call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }), exit(2)], { dir });
+  assert.match(textOf(confirmed[2]), /\[exposure\] .*once recent orders fill/, 'a confirmed close still counts until the account shows it');
   // Orders of unknown outcome age on the replayed clock (the wall clock stays on Saturday throughout).
   dir = tmpDir();
   simHome(dir);
