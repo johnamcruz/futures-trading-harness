@@ -433,12 +433,34 @@ More runner settings:
   `eodAt`, and end of day closes positions directly before the agents'
   review run. It is done only once the account reads flat (a position whose
   size can't be read counts as open); otherwise it closes and cancels again
-  on the next pass.
+  on the next pass. `"eodReview": false` skips the agents' review run (end
+  of day still flattens and records the close; replays use it to save model
+  calls).
 - `cycleTimeoutMinutes` defaults to max(3, 2 x timeframe); a cycle stopped by
   the timeout makes the next one start by checking protective stops.
 - Bars go to `~/.futures-trading-harness/bars` (runner-owned) unless
   `dataDir` is set. With several `symbols`, one cycle covers every symbol
   whose bar closed, so none is starved.
+
+### Replay
+
+`scripts/replay.js` runs the live harness over history: the same runner,
+harness CLI, agents, skills, scripts, order gate and broker interface, one
+decision time per process, against a replay broker (a `brokers.json` entry
+with `"replay": true`, such as backtester-mcp) that simulates the data, the
+clock and the fills. Each run has its own harness home, never the live one.
+
+```bash
+cp mcp-configs/replay.example.json replay.json     # runner config, replay broker, window, runId, workDir
+node scripts/replay.js points --config replay.json # the decision times, nothing run
+node scripts/replay.js run --config replay.json    # run, or resume after the last decision time done
+node scripts/replay.js report <run home>/replay/<runId>
+```
+
+The report is month by month: cycles, trades, win rate, mean R, expectancy,
+stand-aside rate, the gate's refusals by check, and MAE/MFE when the broker
+reports them. See the `replay` skill and
+[docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md).
 
 ### Backtesting
 

@@ -1,6 +1,9 @@
 # Reasoning trader: replay, labels, and a policy that learns from it
 
-Status: design, not built. Owner review before any code.
+Status: stage 1 (replay) is built: the replay driver (`scripts/replay.js`,
+`scripts/lib/replay/`), the replay clock (`scripts/lib/trading/harness-now.js`)
+and the simulated-broker module the replay broker's fills are ported from.
+Stage 2 is design only, built if stage 1 shows an edge.
 
 ## The problem
 
@@ -11,7 +14,7 @@ so far, sessions, news windows, the account) and decides: no trade, long or
 short with a stop, target and size, or, in a trade, hold, tighten, or exit.
 It is not tied to one setup.
 
-Nothing measures or trains on that judgment today:
+Nothing measured or trained on that judgment:
 
 - The backtester (`scripts/lib/backtest/engine.js`) runs only rules
   strategies; it skips any `signal: manual` strategy ("manual strategies need
@@ -24,18 +27,20 @@ Nothing measures or trains on that judgment today:
   it can't learn how it trades, and live the model is reduced to placing the
   policy's verdict.
 
-So the reasoning is never measured over history, and nothing learns from it.
-
 ## The idea
 
 Two stages, each useful on its own.
 
-1. **Replay: the reasoning trader backtested.** Run the reasoning model over
-   historical data, cycle by cycle, as it trades live, with point-in-time data
-   only. Its orders go through the order gate and fill in a simulated broker
-   on the real bars. Every decision and trade is recorded with what the model
-   saw and what followed. The result answers the first question: does the
-   reasoning trader have an edge? And the records are the labels.
+1. **Replay: the live harness on replayed data.** The live harness runs over
+   history, cycle by cycle, exactly as it trades live: the same runner, the
+   same harness CLI (whichever the runner config selects: Qwen Code, Claude
+   Code, Codex, or a custom one), the same agents, skills, scripts, order gate
+   and broker interface. Only three things are simulated, by a **replay
+   broker** (an MCP server like any broker, e.g. backtester-mcp): the data,
+   the clock, and the fills. There is no separate prompt path and no direct
+   model call: what is measured is what trades. The result answers the first
+   question (does the reasoning trader have an edge?), and its records are
+   the labels.
 2. **Student: a policy trained on those records.** A policy with an action
    space that covers the teacher's decisions and an observation that carries
    what the skills read, trained first to imitate the recorded decisions
@@ -46,149 +51,148 @@ Two stages, each useful on its own.
 Stage 2 is built only if stage 1 shows an edge on the selection window
 (below): cloning a trader with none adds nothing.
 
-## Stage 1: replay
+## Stage 1: replay (built)
+
+### The pieces
+
+- **The replay broker** (its own repo; backtester-mcp is the first): the
+  broker MCP interface over local historical bars, with a clock file the
+  driver moves forward and simulated fills (ported from the harness's
+  `scripts/lib/backtest/sim-broker.js`, so replay, backtests and RL training
+  share one fill model). It is a `brokers.json` entry with `"replay": true`;
+  its `get_server_config` reports `replay: true` and the replayed
+  `serverTime`, and its `search_trades` adds round-trip metrics (R, MAE, MFE,
+  bars held, exit reason).
+- **The replay clock** (`trading/harness-now.js`, HARNESS-DESIGN.md, Replay
+  clock): `FTH_REPLAY_NOW` moves every trading decision's "now" (the gate,
+  the scripts, the runner) to the replayed time, honored only for a replay
+  broker whose server attests it; otherwise the gate refuses new entries.
+  It never relaxes a check.
+- **The replay driver** (`scripts/replay.js`, `scripts/lib/replay/`): for
+  each decision time, moves the broker's clock, runs one pass of the live
+  runner at that time in its own process, and records what happened.
 
 ### Decision points
 
-A decision at every closed bar of the sessions under study, as the runner's
-`trigger: bar` does live, not only at rules setups. A cycle is a decision
-whether flat (enter or not, and how) or in a trade (hold, tighten, exit).
-Holidays are skipped. The replay's end of day is the backtester's: 15:50 ET,
-12:50 ET on an early close.
+The live runner's own: after every closed bar of the runner's timeframe inside
+its sessions and the market session, polled `barDelaySeconds` after the close
+as the live runner polls it (optionally every Nth bar of a trading day);
+premarket at `premarketAt`; end of day at `eodAt` (`earlyCloseEodAt` on an
+early close), retried a minute later while the runner hasn't verified the
+account flat. Holidays, weekends and early closes come from the harness
+calendar; a year the built-in table lacks gets its holidays from the same CME
+rules (`exchange-calendar.js cmeHolidays`), passed to the runner and the gate
+as configured closed dates (`replay/schedule.js`).
+
+**One cycle per process.** A process's environment is fixed when it starts,
+so the driver starts `node scripts/autotrader.js --once <kind>` for every
+decision time with `FTH_REPLAY_NOW` set. Under a replay clock `--once` runs
+one pass of the live loop (`runner.step()`, wired by `runner-wiring.js`
+exactly as the long-running loop is): the bars through the broker adapter at
+the replayed time, the bars file, the multi-timeframe and signal records, the
+strategy scan, a policy's verdicts, the account and its open trades, the
+journal's plans, lessons and reviewed trades, then the harness cycle. The
+runner's day state (`autotrader-state.json`: cycles, premarket and end of day
+done, trailing stops, the model's last results) carries across processes in
+the run's home, so its schedule decides what runs, as live. Without a replay
+clock `--once` is unchanged (a manual run).
 
 **Days are not independent.** The account carries across days (a prop
 attempt's cushion, trailing floor, and sessions left; a plain account's
 balance, which sizes trades), and so does the prompt's own history (the
-strategies' track record, the lessons, the last decisions). Days in one
-account path run in order. Parallelism is across independent paths: separate
-combine attempts (each from its own start day, as the backtester's prop runs
-do) or separate windows.
+strategies' track record, the lessons, the last decisions). Days in one run
+are replayed in order. Parallelism is across independent runs (separate run
+ids, so separate homes and broker state): separate windows or start days.
 
 ### Isolation
 
-Each replay worker runs in its own freshly seeded harness home
-(`FTH_HOME`), never the user's: the gate keeps one record per symbol family
-(`<home>/mtf/`, `<home>/signals/`), prop state under `<home>/combine/`, and a
-live attempt in a shared home would refuse every replayed entry. The worker's
-home holds a journal, the gate's records, the combine state, a blackouts file
-rebuilt from the historical calendar for that day, and no kill switch. Every
-check is evaluated at the bar's time (`now`), as `check-order.js` already
-accepts; the full mode's harness processes get it as `FTH_REPLAY_NOW` with a
-replay broker (HARNESS-DESIGN.md, Replay clock).
+Each run has its own freshly seeded harness home (`FTH_HOME =
+<workDir>/<runId>`), never the user's: the driver refuses a run home that is
+or overlaps the default home, the caller's `FTH_HOME`, or the repository, and
+a non-empty folder that isn't a replay run. The home holds the runner's
+state, the gate's records (`mtf/`, `signals/`), prop state, logs, the bars, a
+copy of `brokers.json`, a copy of the workspace's operator files (the harness
+CLI runs there, so a replay never writes the live workspace or its Qwen
+allowlist), and, under `replay/<runId>/`, the broker's state folder, clock
+file and journal. Every process the run starts gets:
 
-### The decision prompt
+- `FTH_HOME`, `FTH_BROKER` (the replay broker), `FTH_REPLAY_NOW`, and the
+  broker's run variables (clock file, state folder, run id, window, journal);
+- every path override pinned inside the run home (`FTH_GATE_LOG`,
+  `FTH_BLACKOUTS_FILE`, `FTH_KILL_SWITCH_FILE`, `FTH_BROKERS_FILE`,
+  `FTH_ENV_FILE`) and the run flags set neutral (`FTH_PAPER`, `FTH_DRY_RUN`,
+  `FTH_ORDER_GATE_SKIP`, `FTH_TEST_NOW`): set, never just removed, because
+  a child's `.env` load fills a missing variable from the repository's `.env`;
+- every live broker's variables (credentials, server entry, journal: from
+  `brokers.json` and the shipped brokers) replaced by a dead value, so no
+  `.env` file can fill them in.
 
-Live, the agent loads the skills and calls tools each cycle (bars, the
-market snapshot, the scan, the journal, the broker), and a `full` cycle runs
-parallel analyst roles and a risk manager. Replay can't call live tools, and
-tool results from today would leak the future. Two modes:
+Before the first step the driver checks that the selected broker is a replay
+broker with a journal of its own and no live twin (`harness-now.js`), and
+that its server attests `replay: true` at the clock's time; every replay pass
+checks it again before reading anything, and the gateway before any order.
+The isolation checks follow symlinks and fold letter case where the
+filesystem does. The driver refuses to start while the live runner runs (its
+agents and a replay's share `/tmp/fth`), and one driver holds a run at a
+time.
 
-- **Compact (the label run).** One call per decision. The prompt is a fixed
-  part and a point-in-time part. The fixed part is the workspace
-  instructions (`workspace/AGENTS.md`, rules embedded), the trading skills,
-  and the strategies' documents, read from the canonical tree. The
-  point-in-time part is built by code from the data up to the bar:
-  - the last bars on each timeframe;
-  - `market-snapshot.js` (levels, VWAP, volatility, structure,
-    participation) and `mtf.js` (the trend rule);
-  - every strategy's scan;
-  - `day-context.js` and `volume-profile.js`;
-  - the session, the account, and the open trade (`open-trades.js`);
-  - the trader's own recent decisions.
+### The cycle: the live harness
 
-  The answer is a structured decision (below). The fixed part is cached.
-- **Full (a fidelity check).** On a small sample of days in the train
-  window, the real harness CLI headless, cycle by cycle, in the live `lean`
-  cycle mode (one trader, no parallel analysts), every tool served from the
-  point-in-time data, and no web or other live tool (the autonomous
-  allowlist's web search removed). Agreement between full and compact on the
-  same bars measures how much compact loses; low agreement means compact is
-  missing something the agent uses. The `full` cycle mode, with its analysts,
-  is out of scope for replay; the report says the replay measures a single
-  trader.
-
-### The decision
-
-Structured so it can be checked and learned:
-
-- flat: `none`, or `long` / `short` with an order type (market first; limit
-  and stop entries later, below), a stop (price, and its distance in ticks
-  and in ATR), an optional target, a size (contracts, micro or mini), and the
-  strategy it trades (`setup:<name>`);
-- in a trade: `hold`, `tighten <stop>`, or `exit`;
-- `reasons`: short tags for what drove it (for example `trend-aligned`,
-  `swept-liquidity`, `vwap-reclaim`, `value-area-edge`, `news-window`), from
-  a fixed list kept with the skills, plus one sentence.
+Whatever the runner config says: the harness CLI, its model, the cycle mode
+(`full` with parallel analysts, or `lean`), `trigger`, sessions, and the
+autonomous allowlists. The tools the agents call are the live tools: the
+scripts take the replayed time from the harness clock and the broker answers
+at its replayed time with bars closed by then, so nothing from after the
+decision time is visible. Web search and fetch remain in the allowlist; a
+replay of a past window can read today's web (news about that day): the
+report says a replay measures the trader with that caveat, and an owner who
+needs a sealed run removes web tools from the replay's runner config
+(`extraArgs`, or a custom harness command).
 
 ### The gate in replay
 
-Each order goes through the real order gate (`check-order.js` and the
-account checks in `account-gate.js` against the simulated broker's
-positions, orders, fills, and ledger). Each check is served one of three
-ways, and the report counts refusals only from the real ones:
-
-| Check | In replay |
-|---|---|
-| Market hours, holidays, early closes, the calendar's end | Real, at the bar's time |
-| Trend rule (`mtf-trend`), trigger fired, strategy status | Real, from records the worker writes as the runner does live |
-| Blackouts | Real, from the day's historical calendar |
-| Size, risk, order consistency, brackets, exposure, position and working orders, losses from fills, max entries | Real, against the simulated broker |
-| Prop checks (combine, policy) | Real, against the worker's attempt |
-| Plan required | Synthesized: the decision's plan is written to the journal before its order (the trader writes one live) |
-| Review before the next entry | Synthesized: after each closed trade the worker writes a graded review from the outcome, as the trade-review step does live |
-| Skills loaded | Not applicable (no transcript; the fixed part carries the skills) |
+Every check is real: the gate runs in the hook and the gateway as live, at
+the replayed time, against the replay broker's positions, orders, fills and
+journal: market hours, holidays, early closes and the calendar's end; the
+trend rule, the trigger and strategy status from the records the runner
+writes; blackouts the premarket agents record; size, risk, brackets,
+exposure, losses from fills, entries per day; prop checks against the run's
+attempt; the plan and the review before the next entry, which the agents
+write as they do live; skills loaded, from the harness's transcript. The
+report counts refusals by check; `replay-clock` refusals (the replay clock
+refused) are the replay's plumbing and counted apart.
 
 ### Fills
 
-The backtester's broker logic, so replay, RL training, and backtests share
-one fill model where they overlap: market entries at the next bar's open
-plus at least one tick of slippage, targets at the target price, stops at
-the stop price less slippage (a gap through the stop fills at the bar's
-open), stop first when a bar reaches both, flat at the end of day.
-
-That logic is the simulated-broker module
-(`scripts/lib/backtest/sim-broker.js`, tested on its own, driven bar by bar
-by the engine and, later, the replay). New work: it has no resting limit or
-stop entry orders yet; replay needs them added. Until then the teacher is
-limited to market entries.
+The replay broker's: market entries at the next one-minute bar's open plus
+slippage, stops at the stop less slippage (a gap fills at the open), targets
+at the target, stop first when a bar reaches both; the runner flattens at end
+of day as live. backtester-mcp's fill engine is ported from
+`sim-broker.js`, and it has limit and stop entries.
 
 ### Leakage: the model may remember the market
 
 The model has read about the markets in its training data. With real dates
-and prices it may recall what happened next, and the labels would look
-excellent on history and fail live. Two defences, the first one decisive:
+and prices it may recall what happened next, and the records would look
+excellent on history and fail live. The defence is **time**: the selection
+and out-of-sample windows start after the model's knowledge cutoff. Only the
+train window lies inside it, and only training (not any decision about the
+trader) uses it.
 
-1. **Time.** The selection and out-of-sample windows start after the
-   teacher model's knowledge cutoff. Only the train window lies inside it,
-   and only training (not any decision about the trader) uses it.
-2. **Anonymization**, for the train window:
-   - no calendar dates or years; the time of day (ET), the session, and the
-     weekday stay;
-   - one price offset per replayed day, applied to the whole lookback (daily
-     and 4-hour bars, prior-day levels, the prior profile) so levels don't
-     jump between days; a whole number of 100 points so round numbers stay
-     round and prices stay on the 0.25 tick; drawn across the instrument's
-     whole historical range, so the price level says nothing about the year;
-     shifted back for the gate and the fills;
-   - no headlines; news windows only as "a high-impact release at 08:30";
-   - the symbol kept (strategies are per instrument).
+Anonymization (no dates, a price offset per day) would need the replay
+broker to serve shifted prices and times consistently to every tool; it is
+not built, and the live tools show real times. If the train window needs it,
+it belongs in the replay broker, so the harness stays unchanged.
 
-   Volatility in points (ATR, the day's range) is kept: the strategies use
-   it. It hints at the era, which is why time, not anonymization, guards the
-   evaluation windows.
+**Leakage tests**, before relying on a train-window run:
 
-**Leakage tests**, before any label run:
-
-- **Cutoff gap:** the teacher on the train window (before its cutoff) and
-  the select window (after) with the same prompt. A large drop after the
-  cutoff, beyond what the market explains, means it recalls.
+- **Cutoff gap:** the same config on the train window (before the cutoff) and
+  the select window (after). A large drop after the cutoff, beyond what the
+  market explains, means it recalls.
 - **Placebo:** the same decisions scored against another day's continuation
   spliced on. A trader that does better on the true continuation than the
   placebo, beyond chance, on bars it can't have seen, has an edge; one that
   only does better before its cutoff recalls.
-- **Date canary:** from the anonymized prompt, the model names the year and
-  the month, on at least 200 sampled bars; it must not beat chance (1 in the
-  number of years in the window, 1 in 12).
 
 ### Windows
 
@@ -196,90 +200,101 @@ The RL pipeline's three windows, never overlapping: train, select, out of
 sample.
 
 - **Train** (may lie before the cutoff): the student's labels, and all
-  prompt and anonymizer iteration, including the one-month trial and the
-  fidelity sample.
+  prompt, skill and config iteration.
 - **Select** (after the cutoff): the go/no-go for stage 2 (does the teacher
   beat the rules baseline and the current policy?), and choosing among
   students.
 - **Out of sample** (after the cutoff, after select): looked at once, after
   the student exists, to validate it under the promotion gate. Replaying it
-  is allowed once per frozen prompt version and teacher model; each look is
-  logged in `<FTH_HOME>/rl/oos_looks.jsonl` under its own key (the teacher
-  model and the prompt version, next to the policy looks keyed by strategy,
-  window, and data).
+  is allowed once per frozen config (skills, strategies, harness and model);
+  each look is logged.
 
 ### Nondeterminism
 
-The teacher is called with a fixed temperature (and a seed where the API has
-one); every decision records the model id and settings. Its results on the
-select window are repeated on a sample of days to report their spread: a
-single replay is one draw of a stochastic trader.
+A replay is one draw of a stochastic trader. The run's manifest records the
+harness command and model; results on the select window are repeated on a
+sample of days (separate run ids) to report their spread.
 
 ### Store
 
-`<worker home>/replay/<run>/<path>/<day>.jsonl`, one line per decision: the
-symbol, the anonymized prompt's hash, the point-in-time features (stage 2's
-observation), the decision, the gate's verdict, the fill, and the trade's
-outcome, plus the model id, its settings, and the prompt version. Runs
-resume by day within a path. A changed prompt or model is a new run, never
-mixed into an old one.
+Local, never in the repository: `<run home>/replay/<runId>/`:
+
+- `manifest.json`: the run id, the config hash (the derived runner config,
+  window, decision points, broker, harness command and the gate's `FTH_*`
+  settings), the harness and model, the window, the last decision time done
+  and the days done;
+- `<trading day>.jsonl`, one line per decision time: the time, its kind,
+  what the runner ran (action, ok, result line, symbols), the cycle log's
+  summary (prompt hash, tool calls, skills loaded, orders sent, skills an
+  entry lacked, the cycle file), the gate's refusals in that step, and the
+  broker's fills since the previous time with every field it sends
+  (round-trip R, MAE, MFE when present);
+- `steps.log`: every step's output; `report.md`.
+
+The cycle files in the run home's `logs/cycles/` hold each whole prompt and
+transcript (what the model saw and did), for stage 2's features.
+
+**Resume** by day: a re-run skips the days done, and an unfinished day
+continues after its last recorded time (the broker's clock only moves
+forward). A time whose step started but whose line was never written (the
+driver stopped mid-step) is recorded as interrupted from what its process
+logged and never run twice. A changed config, harness, model, broker setting,
+gate setting, or strategy, account, model, skill, agent or rule file is a new
+run id; the driver refuses to mix them.
+
+**Per-process runner state.** The runner's day state is saved between
+processes, including the day whose end-of-day review ran (so a retry only
+flattens); its consecutive-error count isn't, so the driver counts failed
+cycles itself (a failed cycle, or a bar's pass that read no bar and logged
+errors) and stops the run after `maxConsecutiveErrors`.
 
 ### Report
 
-Month by month, on the select window (and once on out of sample), next to
-the rules-only baseline and the current policy: trades, win rate, mean R,
-pass and blow rates over combine attempts from every start day, the real
-gate refusals, and how often the trader stood aside. Which reason tags carry
-the edge, and the spread across repeated runs.
+`node scripts/replay.js report <run dir>`: month by month, decision times,
+cycles, failed cycles, the stand-aside rate (trade cycles reporting
+`no-trade`), trades (closed round trips, net of fees), win rate, mean R,
+expectancy, net, MAE and MFE in R when the broker reports them, and the
+gate's refusals by check. Next to the rules-only baseline and the current
+policy (from `scripts/backtest.js` on the same window) and pass and blow
+rates over combine attempts: later, with a prop attempt per run.
 
 ### Cost
 
-Per decision:
+Each trade decision time is a full live cycle with the model, so a replay
+costs what live trading the same bars would: decisions × the cost of a cycle
+(measured from the cycle logs: prompt size, tool calls, duration). The
+`lean` cycle mode, a narrower session, and every Nth bar lower it:
 
-- the fixed part, read from the cache: `workspace/AGENTS.md` (about 17.6k
-  characters), the 14 trading skills (about 80k), and the strategies'
-  documents (about 79k) come to about 177k characters, roughly 44k tokens;
-- a point-in-time part of about 4–8k tokens;
-- an answer of about 0.5–1k tokens.
-
-| Scope | Decisions a year (3-minute bars, ~250 days) |
+| Scope | Decision times a year (3-minute bars, ~250 days) |
 |---|---|
 | The whole session (18:00–15:50 ET) | ~110,000 |
-| The New York session (09:30–16:00 ET) | ~32,500 |
-| New York, a decision every other bar | ~16,000 |
+| The New York session (09:30–15:50 ET) | ~32,000 |
+| New York, every other bar | ~16,000 |
 
-The cost is decisions × (fixed tokens × cache-read price + point-in-time
-tokens × input price + answer tokens × output price), at the prices current
-when the run is planned. The replay CLI prints the estimate and asks before
-it spends; a budget cap stops a run cleanly. Batch requests and a cheaper
-teacher lower it further; the fidelity sample measures how much a cheaper
-teacher agrees with the strongest.
+`replay.js points` counts a window's decision times before a run;
+`--max-cycles` stops cleanly at a budget and the next run resumes.
 
 ### Multiple markets
 
-The runner trades several symbols, one cycle per symbol, and the gate's
-exposure and correlation checks read every position. The prop policy now
-trades NQ, ES, YM, and RTY on one combine, one position at a time across
-them (`docs/RL-DESIGN.md`, Markets). Replay keeps that: one account path
-holds every market on one timeline, a market waits while another's trade is
-open or filling in a prop attempt, and the store records the market on each
-decision. One price offset per index family per day (NQ with MNQ, ES with
-MES); offsets only shift levels, so each market's moves, and how the indices
-move together, are unchanged. The first runs use one market.
+The runner trades several symbols, one cycle covering every symbol whose bar
+closed, and the gate's exposure and correlation checks read every position.
+Replay keeps that: one run holds every market on one timeline, and the store
+records the symbols of each cycle.
 
-## Stage 2: the student policy
+## Stage 2: the student policy (design)
 
 ### Observation
 
-Everything the compact prompt carries, as numbers, scaled to the account and
-to the market's ATR as the current observation is (so one policy reads every
-market): the current RL observation (account, trade state, timeframes,
-confluence, VWAP, value area)
-widened with every strategy's signal as an input (not a gate), structure and
-liquidity levels as distances in ATR, the day context (opening type, IB, day
-type, ADR used), the session and time to the close, news windows, and the
-recent decisions. Where the student can't match the teacher, the observation
-is missing what the teacher used; the per-reason agreement says which.
+Everything the live cycle's context carries (the runner's prompt context in
+the cycle files: bars, trend, day context, what fired with its record, the
+account and open trades, the last results), as numbers, scaled to the account
+and to the market's ATR as the current observation is (so one policy reads
+every market): the current RL observation (account, trade state, timeframes,
+confluence, VWAP, value area) widened with every strategy's signal as an
+input (not a gate), structure and liquidity levels as distances in ATR, the
+day context (opening type, IB, day type, ADR used), the session and time to
+the close, news windows, and the recent decisions. Where the student can't
+match the teacher, the observation is missing what the teacher used.
 
 ### Actions
 
@@ -288,11 +303,12 @@ multiples and a size from the account's budget; in a trade: `hold` /
 `tighten` / `exit`. Masked as the current env masks (no entry outside the
 sessions, no size over the budget).
 
-Each label is mapped to the nearest student action (the stop to the nearest
-ATR multiple, the size to the budget's step). Labels the student can't
-express (limit or stop entries, targets) are kept out of cloning and
-counted; the report gives the coverage. Limit and stop entries join the
-student's actions once the simulated broker has them.
+The teacher's decisions are read from the records: the orders it sent (cycle
+log), what the gate let through, and the broker's fills. Each is mapped to
+the nearest student action (the stop to the nearest ATR multiple, the size
+to the budget's step). Decisions the student can't express (limit or stop
+entries, targets) are kept out of cloning and counted; the report gives the
+coverage.
 
 ### Training
 
@@ -319,40 +335,38 @@ live record.
 
 ## Where it fits (ECC)
 
-- Logic in `scripts/lib/replay/` (prompt builder, anonymizer, decision
-  schema and validator, gate serving, store, report) and the extracted
-  simulated broker in `scripts/lib/backtest/`, with unit tests in
-  `tests/lib/`; thin CLIs (`scripts/replay.js`, `scripts/replay-report.js`)
-  under 200 lines.
-- The model is called through one small module with no dependencies (Node's
-  `fetch`), configured by environment; keys never committed.
-- The fixed part of the prompt is the skills and strategies themselves, read
-  from the canonical tree, so a change to them is a new prompt version.
+- Stage 1: the driver's logic in `scripts/lib/replay/` (`schedule.js`
+  decision times, `config.js` the config, isolation and process environment,
+  `store.js` the records and resume, `report.js`, `driver.js` the loop) and
+  the runner's wiring in `scripts/lib/runner-wiring.js`, with unit tests in
+  `tests/lib/replay.test.js`; the thin CLI `scripts/replay.js`; an end-to-end
+  test (`tests/e2e/replay-e2e.test.js`) with the suite's fake harness against
+  a stub replay broker. No model is called by the harness: the harness CLI
+  is. The replay broker is its own repo, reached through the broker
+  interface.
+- The `replay` skill tells agents how to configure, run, resume and read a
+  replay (the user's to start); `policy-training` points to it.
 - Stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
   `scripts/lib/rl/` (observation, env server), with tests in both.
-- A `policy-training` skill section and a new `replay` skill tell agents how
-  to run and read it; `node scripts/sync-harness.js` syncs them.
-- E2E: a replay of a few days on the parity bars with a stub model, through
-  the gate and the fills, in an isolated home.
 
 ## Plan
 
-1. The simulated-broker module, extracted from the engine (no behaviour
-   change; the backtests and parity must not move).
-2. Isolation, the compact prompt, the anonymizer, and the gate serving, on
-   a stub model.
-3. Leakage tests (no label run until they pass).
-4. Baseline parity on the train window: given only the rules' setups, does
-   the teacher at least match the rules baseline? A cheap early check before
-   the full spend.
-5. One month of compact replay in the train window, the New York session,
-   with the report; the fidelity sample on a few of its days.
-6. The label run on the train window and the replay of the select window,
-   within the budget. **Decision point**, on the select window only: build
-   stage 2 if the reasoning trader beats the rules baseline and the current
-   policy there.
+1. The simulated-broker module, extracted from the engine. Done.
+2. The replay clock. Done.
+3. The replay broker (backtester-mcp, its own repo). Done.
+4. The replay driver, store and report. Done.
+5. Leakage tests, then one month in the train window, the New York session,
+   with the report.
+6. A replay of the select window. **Decision point**, on the select window
+   only: build stage 2 if the reasoning trader beats the rules baseline and
+   the current policy there.
 7. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
    then the one out-of-sample look.
+
+Not built yet: a prop attempt started per run (today a run's prop strategies
+see no attempt, so the gate refuses their entries; plain accounts trade), the
+blackouts rebuilt from the historical calendar for each day (the premarket
+agents record what they find), and anonymization in the replay broker.
 
 ## Open questions for the owner
 

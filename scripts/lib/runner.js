@@ -756,8 +756,9 @@ function createRunner(deps) {
       // Each job is built with the account as it is when that run starts.
       // Each job's prompt is dated when it starts (a second symbol's premarket runs after the first).
       // The agents' end-of-day run happens once a day: a retry (the account not yet verified flat) only flattens.
+      // With eodReview false (a replay saving model calls) end of day only flattens and records the close.
       const jobs = d.action === 'eod'
-        ? (eodRunDay === d.state.day ? [] : [{ symbol: null, build: (acct, at) => prompts(cfg, at, root).eod({ state: acct, day: d.state.day }) }])
+        ? (eodRunDay === d.state.day || d.state.eodReviewedDay === d.state.day || cfg.eodReview === false ? [] : [{ symbol: null, build: (acct, at) => prompts(cfg, at, root).eod({ state: acct, day: d.state.day }) }])
         : cfg.symbols.map(s => ({ symbol: s, build: (acct, at) => prompts(cfg, at, root).premarket(s, { state: acct }) }));
       const noTime = () => log(`${d.action}: no time left before ${d.action === 'eod' ? 'the close' : 'end of day'}; skipped`);
       for (const job of jobs) {
@@ -775,7 +776,11 @@ function createRunner(deps) {
         const r = await timedCycle(d.action, job.build(acct, clock.now()), { timeoutMs, context });
         if (d.action !== 'eod') ok = ok && r.ok;
       }
-      if (d.action === 'eod') eodRunDay = d.state.day;
+      if (d.action === 'eod') {
+        eodRunDay = d.state.day;
+        // Kept in the saved state too, so a restarted runner (or a replay's next process) doesn't review twice.
+        if (jobs.length) state = { ...state, eodReviewedDay: d.state.day };
+      }
       // Then check again: flatten whatever the run left open; done only once verified flat.
       if (d.action === 'eod') ok = (await eodBackstop()) && ok;
       // The day's closing balance, once flat (the trailing floor moves on it).

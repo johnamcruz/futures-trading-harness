@@ -1,0 +1,37 @@
+{
+  "runId": "mnq-ny-2024-03",
+  "workDir": "~/fth-replays",
+  "autotrader": {
+    "harness": "qwen",
+    "model": "",
+    "symbols": [
+      "MNQ"
+    ],
+    "account": "1",
+    "paper": false,
+    "timeframe": 3,
+    "trigger": "bar",
+    "cycle": "lean",
+    "sessions": [
+      "09:30-15:50@America/New_York"
+    ],
+    "premarketAt": "08:00@America/New_York",
+    "eodAt": "15:50@America/New_York",
+    "cycleTimeoutMinutes": 5,
+    "maxConsecutiveErrors": 3
+  },
+  "overrides": {},
+  "broker": "backtester",
+  "start": "2024-03-04T00:00:00Z",
+  "end": "2024-04-01T00:00:00Z",
+  "everyNthBar": 1,
+  "premarket": true,
+  "endOfDay": true,
+  "brokerEnv": {
+    "clockFile": "BACKTESTER_CLOCK_FILE",
+    "stateDir": "BACKTESTER_STATE_DIR",
+    "runId": "BACKTESTER_RUN_ID",
+    "start": "BACKTESTER_START",
+    "end": "BACKTESTER_END"
+  }
+}

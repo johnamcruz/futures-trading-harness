@@ -14,6 +14,10 @@
  *   node scripts/autotrader.js --config autotrader.json --dry-run  print the next action
  *   node scripts/autotrader.js --status [--stale-minutes 10]        watchdog: exit 1 if the runner is silent or stopped
  *
+ * With a replay broker's clock (FTH_REPLAY_NOW, trading/harness-now.js), --once
+ * runs one pass of the live loop at the replayed time instead of a manual run
+ * (scripts/replay.js drives it, one process per decision time).
+ *
  * Alerts: every runner error, and the kill switch tripping, goes to
  * <FTH_HOME>/logs/alerts-<day>.jsonl and, when configured, to alertWebhook /
  * alertCommand (scripts/lib/alerts.js).
@@ -41,27 +45,19 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { dayContextSeries, describeDay, describeOvernight } = require('./lib/trading/day-context');
-const { premarketPlan, newsLine } = require('./lib/trading/session-context');
-const { readBlackouts } = require('./lib/trading/check-order');
-const { readRecord, liveRecord, describeRecord, excursionNote } = require('./lib/trading/track-record');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
-const { createRunner } = require('./lib/runner');
-const { openAdapter, tradingBlocked } = require('./lib/broker/adapter');
+const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
-const { loadStrategies, scan } = require('./lib/trading/strategies');
-const { scanRecord, appendJsonl } = require('./lib/trading/scan-log');
+const { loadStrategies } = require('./lib/trading/strategies');
+const { appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
-const runnerNow = () => require('./lib/trading/harness-now').harnessNow(process.env, { testClock: false }); // never FTH_TEST_NOW: the runner trades live
-const { readJson, writeJsonAtomic, runHarness, entryOrders, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
+const { harnessNow, resolveClock } = require('./lib/trading/harness-now');
+const runnerNow = () => harnessNow(process.env, { testClock: false }); // never FTH_TEST_NOW: the runner trades live
+const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
-const { writeMtfRecord } = require('./lib/trading/mtf-state');
-const { buildSignals, writeSignals } = require('./lib/trading/signal-state');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
-const { digest, recentTrades, formSummary } = require('./lib/trading/instincts');
-const { resolveJournalPath, readJournal } = require('./lib/trading/journal');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -214,7 +210,7 @@ function checkStrategies(cfg) {
 /** Claude settings that would silently refuse order tools in an unattended run. */
 function checkClaudeSettings(cfg) {
   if (cfg.harness !== 'claude') return;
-  const files = [path.join(os.homedir(), '.claude', 'settings.json'), path.join(ROOT, cfg.workdir, '.claude', 'settings.json'), path.join(ROOT, cfg.workdir, '.claude', 'settings.local.json')];
+  const files = [path.join(os.homedir(), '.claude', 'settings.json'), path.resolve(ROOT, cfg.workdir, '.claude', 'settings.json'), path.resolve(ROOT, cfg.workdir, '.claude', 'settings.local.json')];
   const hits = claudeOrderToolConflicts(files.map(f => readJson(f, null)).filter(Boolean));
   if (hits.length) {
     throw new Error(`Claude settings would block order tools in unattended runs (${hits.join('; ')}). Remove these ask/deny rules for autonomous use; the order gate and the runner's allowlist still apply.`);
@@ -228,12 +224,86 @@ function checkClaudeSettings(cfg) {
  */
 function writeQwenSettings(cfg, dataDir, opts) {
   if (cfg.harness !== 'qwen' || opts.dryRun) return;
-  const file = path.join(ROOT, cfg.workdir, '.qwen', 'settings.json');
+  const file = path.resolve(ROOT, cfg.workdir, '.qwen', 'settings.json');
   const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome() }), null, 2)}\n`;
   if (readJson(file, null) !== null && fs.readFileSync(file, 'utf8') === content) return;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
   process.stdout.write(`[autotrader] wrote the Qwen autonomous allowlist to ${file}\n`);
+}
+
+/** The runner's lock, released on exit; a signal also stops the running harness. */
+function holdLock() {
+  acquireLock();
+  const stop = sig => {
+    if (activeChild) {
+      try {
+        process.kill(-activeChild.pid, sig);
+      } catch (_err) {
+        // already exited
+      }
+    }
+    releaseLock();
+    process.exit(130);
+  };
+  process.on('SIGINT', () => stop('SIGINT'));
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('exit', releaseLock);
+}
+
+// Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
+const runnerLog = alert => (msg, level) => {
+  const now = new Date();
+  const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
+  (level === 'error' ? process.stderr : process.stdout).write(line);
+  appendLog(now, line);
+  // Every error is an alert (throttled); a human hears about trouble while it matters.
+  if (level === 'error') alert(msg);
+};
+const writeEvent = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
+
+function buildRunner(cfg, dataDir, opts, client, log, event) {
+  const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: () => loadStrategies(ROOT, process.env).strategies, paper: cfg.paper, log });
+  if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policies screen setups)`);
+  return wireRunner({
+    cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event,
+    runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
+    loadState: () => loadState(cfg), saveState: s => writeJsonAtomic(STATE_FILE, s), killSwitchFile: loadConfig(process.env).killSwitchFile,
+  });
+}
+
+/**
+ * Replay (a replay broker's clock): one pass of the live loop at the replayed
+ * time, with this home's runner state, so the cycle is built as a live one
+ * (bars, records, scan, verdicts, account, prompt). What ran goes to stdout as
+ * one "REPLAY STEP {json}" line for the replay driver.
+ */
+async function replayStep(cfg, dataDir, opts, asked) {
+  holdLock();
+  const errors = [];
+  const log = runnerLog(msg => errors.push(String(msg).slice(0, 300)));
+  let client;
+  try {
+    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
+    const why = replayUnattested(await client.serverConfig(), runnerNow());
+    if (why) throw new Error(why);
+  } catch (err) {
+    if (client) client.close();
+    log(`broker: can't start (${err.message})`, 'error');
+    return 1;
+  }
+  const events = [];
+  try {
+    const runner = buildRunner(cfg, dataDir, opts, closedBarsOnly(client, runnerNow), log, ev => { events.push(ev); writeEvent(ev); });
+    await runner.step();
+    const ran = events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null }));
+    const kinds = [...new Set(events.map(e => e.kind))];
+    const bars = runner.symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null }));
+    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events: kinds, errors, bars, state: runner.state })}\n`);
+    return 0;
+  } finally {
+    client.close();
+  }
 }
 
 async function main(argv) {
@@ -264,6 +334,8 @@ async function main(argv) {
   const once = arg(argv, '--once');
   if (once) {
     if (!['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
+    // A replay broker's clock: the live loop's pass at that time (its schedule decides what runs), not a manual run.
+    if (!opts.dryRun && resolveClock(process.env, { testClock: false }).replay) return replayStep(cfg, dataDir, opts, once);
     const symbols = arg(argv, '--symbol') ? [arg(argv, '--symbol')] : cfg.symbols;
     if (once !== 'eod' && fs.existsSync(killSwitchFile)) throw new Error(`kill switch is on (${killSwitchFile})`);
     const p = prompts(cfg, once === 'eod' ? require('./lib/trading/harness-now').recordNow(process.env, { testClock: false }) : runnerNow(), ROOT);
@@ -283,105 +355,20 @@ async function main(argv) {
   }
 
   if (process.env.FTH_REPLAY_NOW) throw new Error('FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock. Replay drives one cycle per process (--once or --dry-run, a fresh run per cycle with the time set by the replay driver).');
-  acquireLock();
-  const stop = sig => {
-    if (activeChild) {
-      try {
-        process.kill(-activeChild.pid, sig);
-      } catch (_err) {
-        // already exited
-      }
-    }
-    releaseLock();
-    process.exit(130);
-  };
-  process.on('SIGINT', () => stop('SIGINT'));
-  process.on('SIGTERM', () => stop('SIGTERM'));
-  process.on('exit', releaseLock);
-
-  // Every runner line goes to the terminal and to the day's log file (with its level), so a session can be traced afterwards.
-  const alert = createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` });
-  const log = (msg, level) => {
-    const now = new Date();
-    const line = `[autotrader] ${now.toISOString()} ${level === 'error' ? 'ERROR' : 'INFO'} ${msg}\n`;
-    (level === 'error' ? process.stderr : process.stdout).write(line);
-    appendLog(now, line);
-    // Every error is an alert (throttled); a human hears about trouble while it matters.
-    if (level === 'error') alert(msg);
-  };
+  holdLock();
+  const log = runnerLog(createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` }));
   // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
   let client;
   try {
-    client = openAdapter({ root: ROOT, env: process.env });
-    await client.verify();
-    // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those.
-    const why = !cfg.paper && cfg.account ? tradingBlocked(await client.serverConfig(), cfg.account) : null;
-    if (why) throw new Error(why);
+    client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
   } catch (err) {
-    if (client) client.close();
     log(`broker: can't start (${err.message})`, 'error');
     return 1;
   }
   process.on('exit', () => client.close());
-  const strategiesNow = () => loadStrategies(ROOT, process.env).strategies;
-  const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: strategiesNow, paper: cfg.paper, log });
-  if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policies screen setups)`);
-  const runner = createRunner({
-    cfg,
-    prop: prop.accounts().length ? prop : null,
-    root: ROOT,
-    client,
-    clock: { now: () => runnerNow() },
-    runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
-    isKillSwitchOn: () => fs.existsSync(killSwitchFile),
-    createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
-    loadState: () => loadState(cfg),
-    saveState: s => writeJsonAtomic(STATE_FILE, s),
-    writeBars: (sym, bars) => {
-      const file = path.join(dataDir, `${sym.symbol}-${cfg.timeframe}m.json`);
-      writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
-      return file;
-    },
-    recordMtf: (sym, bars) => writeMtfRecord(HOME_DIR, sym.symbol, bars, { now: runnerNow() }).line,
-    // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
-    trackRecord: (name, { regime, at, entries }) => describeRecord({
-      backtest: readRecord(HOME_DIR, name), live: liveRecord(entries || readJournal(resolveJournalPath(process.env)), name, regime), regime, at,
-      file: (loadStrategies(ROOT, process.env).strategies.find(s => s.name === name) || {}).file || null,
-    }),
-    // The day so far (trading/day-context.js), one line for the prompt; levels on the contract's tick.
-    dayContext: (sym, bars) => {
-      const tick = sym.tickSize > 0 ? sym.tickSize : 0.25;
-      const round = x => Number((Math.round(x / tick) * tick).toFixed(6));
-      // In RTH the day so far; outside it, the overnight session against the prior day.
-      return describeDay(dayContextSeries(bars).day.at(-1), { symbol: sym.symbol, round }) || describeOvernight(bars, { symbol: sym.symbol, round });
-    },
-    // The prompt shows each fact once: mistakes and lessons here; live results in the track records;
-    // the last reviewed trades' record on their own line.
-    lessons: ({ entries } = {}) => digest(entries || readJournal(resolveJournalPath(process.env)), 5, { kinds: ['mistake', 'lesson'], form: false }),
-    recentTrades: ({ entries } = {}) => recentTrades(entries || readJournal(resolveJournalPath(process.env)), 10),
-    tradesSummary: ({ entries } = {}) => formSummary(entries || readJournal(resolveJournalPath(process.env)), 10),
-    premarketPlan: (symbol, entries, now) => premarketPlan(entries, symbol, now),
-    news: now => newsLine(readBlackouts(loadConfig(process.env).blackoutsFile), now),
-    journalEntries: () => readJournal(resolveJournalPath(process.env)),
-    tradeHistory: t => excursionNote(readRecord(HOME_DIR, t.setup), t),
-    recordSignals: (item, results) => writeSignals(HOME_DIR, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: runnerNow() })),
-    scanFor: (symbol, bars) => {
-      // Only strategies that trade this bar's timeframe can be judged from these bars.
-      const { strategies } = loadStrategies(ROOT, process.env);
-      const sameTf = strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
-      return scan(sameTf, { bars }, { symbol, now: runnerNow() });
-    },
-    log,
-    // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
-    scanLog: rec => appendJsonl(path.join(HOME_DIR, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
-    // The event log: cycles, account reads, positions managed, stops moved, closes, flattens, errors (logs/events-<day>.jsonl).
-    event: ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev),
-    entryOrders: () => entryOrders(HOME_DIR),
-    strategyNamed: name => loadStrategies(ROOT, process.env).strategies.find(s => s.name === name && s.valid) || null,
-  });
-  const event = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
-  event({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
-  process.on('exit', code => event({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
+  const runner = buildRunner(cfg, dataDir, opts, client, log, writeEvent);
+  writeEvent({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
+  process.on('exit', code => writeEvent({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   const beat = () => writeHeartbeat(HOME_DIR, { symbols: cfg.symbols, timeframe: cfg.timeframe, killSwitch: fs.existsSync(killSwitchFile) });
   for (;;) {
