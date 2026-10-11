@@ -10,6 +10,7 @@
  *   validate {}                                  code 1 when any strategy is invalid
  *   scan     { file, symbol, now, record, view, name }   file: bars file or '-'; now: ISO (default: the harness clock)
  *   recent   { file, symbol, count, format }     count: 1 to 50 (default 5)
+ *   plan     { file, symbol, strategy, side, accountId }   the order for a candidate (order-plan.js)
  *
  * The scripts print the full JSON. The harness tools ask for the compact forms
  * (compact.js) by default: scan view 'summary' (or 'one' with name: that
@@ -32,8 +33,9 @@ const { harnessHome } = require('../paths');
 const { context, say, ignoredRecord, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 const { scanSummary, recentLines } = require('./compact');
+const { plan } = require('./order-plan');
 
-const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]';
+const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5] | plan <bars file> --symbol <ROOT> --strategy <name> --side long|short [--account-id <id>]';
 
 const load = c => loadStrategies(c.root, c.env);
 
@@ -132,9 +134,14 @@ function parseArgv([cmd, ...rest]) {
     const o = options(rest, ['--symbol', '--bars'], []);
     return { op: 'recent', args: { file: o._[0], symbol: o['--symbol'], count: o['--bars'] } };
   }
+  if (cmd === 'plan') {
+    const o = options(rest, ['--symbol', '--strategy', '--side', '--account-id'], []);
+    const id = o['--account-id'];
+    return { op: 'plan', args: { file: o._[0], symbol: o['--symbol'], strategy: o['--strategy'], side: o['--side'], accountId: id === undefined ? undefined : Number(id) } };
+  }
   throw new Error(USAGE);
 }
 
-const OPS = { list, show, validate, scan, recent };
+const OPS = { list, show, validate, scan, recent, plan };
 
-module.exports = { OPS, USAGE, list, show, validate, scan, recent, parseArgv };
+module.exports = { OPS, USAGE, list, show, validate, scan, recent, plan, parseArgv };

@@ -12,7 +12,7 @@ const { OPERATIONS } = require('../../scripts/lib/harness-tools/index');
 const { validate } = require('../../scripts/lib/harness-tools/validate');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const NAMES = ['strategies_list', 'strategies_show', 'strategies_validate', 'strategies_scan', 'strategies_recent', 'market_snapshot', 'mtf_read',
+const NAMES = ['strategies_list', 'strategies_show', 'strategies_validate', 'strategies_scan', 'strategies_recent', 'order_plan', 'market_snapshot', 'mtf_read',
   'blackouts_list', 'blackouts_add', 'bars_fetch', 'combine_status', 'lessons', 'reconcile'];
 
 test('registry: the server is "harness", with one tool per operation', () => {
@@ -43,7 +43,7 @@ test('registry: every schema is a closed object; no environment, cwd, output, ti
     for (const p of props) if (t.inputSchema.properties[p].description && /absolute path/.test(t.inputSchema.properties[p].description)) assert.ok((t.bars || []).includes(p), `${t.name}.${p} is checked as a bars file`);
   }
   assert.deepStrictEqual(TOOLS.filter(t => t.bars).map(t => [t.name, t.bars]), [
-    ['strategies_scan', ['bars']], ['strategies_recent', ['bars']], ['market_snapshot', ['bars']], ['mtf_read', ['bars', 'daily']],
+    ['strategies_scan', ['bars']], ['strategies_recent', ['bars']], ['order_plan', ['bars']], ['market_snapshot', ['bars']], ['mtf_read', ['bars', 'daily']],
   ]);
 });
 
@@ -71,6 +71,14 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
   bad('reconcile', { day: '2026-10-07\nx' }, /day: must match/);
   bad('combine_status', { account: 'topstep_50k\n../../x' }, /account: must match/);
   bad('strategies_recent', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', count: 51 }, /at most 50/);
+  ok('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 });
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos' }, /side.*required|required.*side/);
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', side: 'long' }, /strategy.*required|required.*strategy/);
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos', side: 'buy' }, /side: must be one of/);
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: '../bos', side: 'long' }, /strategy: must match/);
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 0 }, /accountId: at least 1/);
+  bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos', side: 'long', size: 3 }, /"size": unknown argument/);
+  assert.deepStrictEqual(BY_NAME.get('order_plan').args({ bars: '/b.json', symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 }), { file: '/b.json', symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 });
   ok('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { emaSlow: 30 } });
   bad('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { bogus: 1 } }, /"params.bogus": unknown argument/);
   bad('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { emaSlow: '30' } }, /must be a number/);

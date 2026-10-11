@@ -50,9 +50,12 @@ test('scanSummary: the bar and trend, the candidates first with what a plan need
   const lines = text.trimEnd().split('\n');
   assert.strictEqual(lines[0], 'Scan of MNQ on the last closed bar (opened 2026-10-07T14:00:00.000Z): 10 strategies, 3 candidates. Regime trend-up. Trend 4h up, 1h up, 15m down, prevailing 4h up.');
   assert.strictEqual(lines[1], 'Candidates:');
-  assert.strictEqual(lines[2], '  orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5, exit: target 1.5R | with: ema_cross; against: none');
-  assert.strictEqual(lines[3], '  ema_cross long | paper (plan only: the gate refuses a live entry), 3m, rules, mtf trend | entryRef 21503.25, stopDistance 6, minRR 2, exit: trail from 2R giving back 0.5R, at most 40 bars | with: orb; against: keltner, bos');
+  // Distances in points and in ticks for the symbol (a stop rounded away from the entry, a target toward it), with a contract's dollars.
+  assert.strictEqual(lines[2], '  orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), target 1.5R = 31 ticks ($15.50/MNQ contract), minRR 1.5, exit: target 1.5R | with: ema_cross; against: none');
+  assert.strictEqual(lines[3], '  ema_cross long | paper (plan only: the gate refuses a live entry), 3m, rules, mtf trend | entryRef 21503.25, stop 6 pts = 24 ticks ($12.00/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R, at most 40 bars | with: orb; against: keltner, bos');
   assert.strictEqual(lines[4], '  value_area (manual: evaluate its trigger from STRATEGY.md) | active, 3m, manual, mtf trend | trend rule: long no, short no (4h: not enough candles for a trend)');
+  assert.strictEqual(lines[5], 'Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.');
+  lines.splice(5, 1);
   // A manual candidate says which sides the trend rule leaves open, so no plan takes a side the gate refuses.
   assert.match(scanSummary([{ name: 'm', status: 'active', timeframe: '3m', signal: 'manual', candidate: true, mtf }]), /\n {2}m \(manual: [^)]*\) \| active, 3m, manual, mtf trend \| trend rule: long ok, short no\n/);
   assert.match(scanSummary([{ name: 'm', status: 'active', signal: 'manual', candidate: true }]), /\| trend rule: unknown\n/);
@@ -66,6 +69,16 @@ test('scanSummary: the bar and trend, the candidates first with what a plan need
   assert.match(scanSummary([RESULTS[2]], {}), /^Scan: 1 strategies, 0 candidates\. Regime trend-up\. .*\nCandidates: none\.\n/);
   assert.match(scanSummary([], { symbol: 'MES' }), /^Scan of MES: 0 strategies, 0 candidates\.\nCandidates: none\.\nEvery strategy/);
   assert.match(scanSummary(null), /0 strategies/);
+});
+
+test('scanSummary: units per instrument - MES $1.25 a tick, a level target floored, no made-up ticks without specs', () => {
+  const r = { ...RESULTS[0], stopDistance: 8.4579, targetDistance: 12.6, exit: { targetR: null, target: 'level' } };
+  assert.match(scanSummary([r], { symbol: 'MES' }), /entryRef 21503\.25, stop 8\.4579 pts = 34 ticks \(\$42\.50\/MES contract\), target 12\.6 pts = 50 ticks \(\$62\.50\/MES contract\), minRR/);
+  assert.match(scanSummary([r], { symbol: 'MNQ' }), /stop 8\.4579 pts = 34 ticks \(\$17\.00\/MNQ contract\), target 12\.6 pts = 50 ticks \(\$25\.00\/MNQ contract\)/);
+  assert.match(scanSummary([r], { symbol: 'ZZZ' }), /stop 8\.4579 pts, target 12\.6 pts, no tick specs for ZZZ, minRR/);
+  assert.match(scanSummary([{ ...r, targetDistance: null }], { symbol: 'MNQ' }), /target none on this bar/);
+  // No rules candidate (only a manual one): no order_plan line.
+  assert.doesNotMatch(scanSummary([RESULTS[6]], { symbol: 'MNQ' }), /order_plan/);
 });
 
 test('recentLines: one line per bar, oldest first, none where nothing fired', () => {

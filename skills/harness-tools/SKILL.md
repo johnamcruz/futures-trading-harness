@@ -1,6 +1,6 @@
 ---
 name: harness-tools
-description: The harness's own operations as MCP tools on the `harness` server - strategies, bars, the market snapshot, the multi-timeframe read, news blackouts, prop challenge status, lessons, and reconcile - with their arguments and the command-line script each mirrors. Agents use the tools (autonomous and interactive); people run the scripts. Use whenever a skill or role says to read bars, scan strategies, snapshot indicators, record a read or a blackout, or check the prop attempt.
+description: The harness's own operations as MCP tools on the `harness` server - strategies, the order arithmetic for a chosen setup, bars, the market snapshot, the multi-timeframe read, news blackouts, prop challenge status, lessons, and reconcile - with their arguments and the command-line script each mirrors. Agents use the tools (autonomous and interactive); people run the scripts. Use whenever a skill or role says to read bars, scan strategies, snapshot indicators, record a read or a blackout, or check the prop attempt.
 ---
 
 # Harness Tools
@@ -30,8 +30,9 @@ scripts. None places, changes, or cancels an order.
 | `strategies_list` | `json`? | the registered strategies, one line each; `json`: every field (timeframe, sessions, file) as JSON on one line | `strategies.js list [--json]` |
 | `strategies_show` | `name` | one STRATEGY.md | `strategies.js show <name>` |
 | `strategies_validate` | none | each strategy ok or what is invalid | `strategies.js validate` |
-| `strategies_scan` | `bars`, `symbol`, `name`?, `detail`?, `record`? | the scan of the last closed bar, at the harness clock, as a summary: the candidates first (side, entry reference, stop distance, min R:R, exit, confluence), then one line per strategy (status, timeframe, direction, candidate, why not); `name`: that strategy's full result as JSON (each rule with `ok`, `detail`, `mtf`, `exit`); `detail`: every strategy's full result (large: prefer `name`); `record` also records the fired rules strategies | `strategies.js scan <bars> --symbol MNQ [--record]` (the full JSON) |
+| `strategies_scan` | `bars`, `symbol`, `name`?, `detail`?, `record`? | the scan of the last closed bar, at the harness clock, as a summary: the candidates first (side, entry reference, the stop and target in points and in whole ticks for the symbol with one contract's dollars, min R:R, exit, confluence), then one line per strategy (status, timeframe, direction, candidate, why not); `name`: that strategy's full result as JSON (each rule with `ok`, `detail`, `mtf`, `exit`); `detail`: every strategy's full result (large: prefer `name`); `record` also records the fired rules strategies | `strategies.js scan <bars> --symbol MNQ [--record]` (the full JSON) |
 | `strategies_recent` | `bars`, `symbol`, `count`? (1-50), `json`? | one line per bar (its open time, oldest first): each strategy and side that fired, or none; `json`: the same as JSON | `strategies.js recent <bars> --symbol MNQ --bars 5` |
+| `order_plan` | `bars`, `symbol`, `strategy`, `side`, `accountId`? | a calculator for the order of a trade you chose (strategy and side are yours; it never picks, ranks, or advises): when that strategy is a candidate on that side on the last closed bar (or, for a policy strategy, its live verdict), one line showing its working (entry reference, the stop and target in points and whole ticks, prices on the tick with a long's stop below the entry and a short's above, how the size was derived, $ risk) and the exact `place_order` arguments as JSON; refused, with the reason, when it isn't a candidate now or its rules fired the other side. It places nothing | `strategies.js plan <bars> --symbol MNQ --strategy bos --side long [--account-id 7]` |
 | `market_snapshot` | `bars`, `params`? | the indicator and level snapshot (JSON, on one line) | `market-snapshot.js <bars> [--name=value]` |
 | `mtf_read` | `bars`, `timeframes`?, `daily`?, `json`?, `record`?, `symbol`? | the multi-timeframe read; `record` (with `symbol`) records it | `mtf.js <bars> [--tf=15,60,240] [--daily=<file>] [--json] [--record --symbol MNQ]` |
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
@@ -87,12 +88,16 @@ market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-15m.
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ"}
 → Scan of MNQ on the last closed bar (opened 2026-10-07T13:57:00.000Z): 16 strategies, 1 candidate. Regime trend-up. Trend 4h up, 1h up, 15m up, prevailing 4h up.
   Candidates:
-    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5, exit: target 1.5R | with: none; against: none
+    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), target 1.5R = 31 ticks ($15.50/MNQ contract), minRR 1.5, exit: target 1.5R | with: none; against: none
+  Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
   Every strategy (name | status | timeframe | direction | candidate | why not):
     bos | active | 3m | - | no | no rule set fired (long: close crosses_above swing_high; short: close crosses_below swing_low)
     ...
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}
 → orb's full result as JSON
+order_plan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "strategy": "orb", "side": "long", "accountId": 7}
+→ orb long: 1 MNQ at market (entry ref 21503.25) | stop 21498.00, below the entry: 5.25 pts = 21 ticks ($10.50/MNQ contract), stopLossBracket.ticks 21 | target 21511.00 (1.5R): 31 ticks, takeProfitBracket.ticks 31 | risk $10.50 = 1 x 21 ticks x $0.50/tick (before fees) | size 1: the minimum; ...
+  place_order arguments: {"accountId":7,"contractId":"MNQ","side":"buy","type":"market","size":1,"stopLossBracket":{"ticks":21,"type":"stop"},"takeProfitBracket":{"ticks":31,"type":"limit"},"rationale":"setup:orb long at market from 21503.25 (the signal bar's close), stop 21498.00 (21 ticks), target 21511.00 (31 ticks), 1 MNQ risks $10.50"}
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "daily": "/home/u/.futures-trading-harness/bars-scratch/MNQ-1d.json"}
 blackouts_add {"start": "2026-10-07T12:25:00Z", "end": "2026-10-07T12:40:00Z", "reason": "CPI 08:30 ET"}
 combine_status {}

@@ -5,6 +5,7 @@ tools:
   - read_file
   - skill
   - mcp__harness__combine_status
+  - mcp__harness__order_plan
   - mcp__harness__strategies_show
   - mcp__harness__blackouts_list
   - mcp__harness__bars_fetch
@@ -89,7 +90,12 @@ Check, in order, and stop at the first failure:
 4. Entry, stop, and target are on the correct sides; prices are multiples of
    `tickSize` (from `get_contract`).
 5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
-   budget. Recompute; don't trust the plan's arithmetic.
+   budget. Recompute; don't trust the plan's arithmetic: call `order_plan`
+   with the plan's bars file, symbol, strategy, and side, and compare its stop
+   price, ticks, size, and $ risk with the plan's. Numbers that differ are a
+   VETO with order_plan's as the fix; its refusal (not a candidate now, the
+   other side) is a VETO. It does the arithmetic only: every judgement in
+   these checks stays yours.
 6. The strategy (`strategies_show` with its name) is `active`, trades this symbol,
    is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
    trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);

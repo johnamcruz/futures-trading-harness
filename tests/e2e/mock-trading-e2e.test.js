@@ -20,7 +20,7 @@
  * a raw server; an unreadable position; holidays, the early close and the
  * calendar's end; the runner's end of day against a broker that loses or
  * delays its closes or leaves bracket legs behind; losses counted from real
- * fills; malformed brackets; a prop attempt's daily close (recorded once
+ * fills; malformed brackets; order_plan's arguments sent as they are; a prop attempt's daily close (recorded once
  * flat, or missed and then refused); and a runner that crashed mid-day
  * catching up the next morning (and before a holiday).
  */
@@ -42,6 +42,7 @@ const { entryOrders } = require('../../scripts/lib/harness-run');
 const { createPropHooks } = require('../../scripts/lib/rl/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+const { plan: orderPlan } = require('../../scripts/lib/harness-tools/order-plan');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -162,6 +163,29 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
 
     // 6. Flat: the leftover-free account takes no exit; a cancel of an order that isn't there is the broker's refusal.
     assert.match((await attempt(gw, 'place_order', { ...entry, side: 'sell', type: 'market', stopLossBracket: undefined, takeProfitBracket: undefined, rationale: '[exit] flatten' })).error, /exposure|no open/i);
+  } finally {
+    gw.close();
+  }
+});
+
+test('mock trading: order_plan\'s place_order arguments, sent as they are, pass the gateway and fill with the stop where it said', async () => {
+  const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000).toISOString();
+  const w = world(at);
+  const sig = signalOnFiredBar(w);
+  const file = path.join(w.home, 'MNQ-3m.json');
+  fs.writeFileSync(file, JSON.stringify(BARS.filter(b => Date.parse(b.t) <= Date.parse(FIRED_BAR))));
+  const plan = orderPlan({ file, symbol: 'MNQ', strategy: 'bos', side: sig.side, accountId: 7 }, { root: ROOT, env: w.env, now: () => sig.now, tool: true });
+  assert.strictEqual(plan.args.stopLossBracket.ticks, sig.ticks, 'the same ticks as the stop distance, rounded away from the entry');
+  const gw = gatewayClient(w);
+  try {
+    // The other side is refused by order_plan itself; the side that fired goes through the real gate.
+    assert.throws(() => orderPlan({ file, symbol: 'MNQ', strategy: 'bos', side: 'short' }, { root: ROOT, env: w.env, now: () => sig.now }), /fired long/);
+    const placed = await attempt(gw, 'place_order', plan.args);
+    assert.ok(placed.ok, placed.error);
+    assert.deepStrictEqual([position(w).type, position(w).size], [1, 1]);
+    const stopLeg = working(w).find(o => o.type === 4);
+    assert.strictEqual(stopLeg.stopPrice, plan.plan.stopPrice, 'filled at the signal close: the bracket stop is the planned price');
+    assert.ok(stopLeg.stopPrice < position(w).averagePrice, 'a long\'s stop below the fill');
   } finally {
     gw.close();
   }

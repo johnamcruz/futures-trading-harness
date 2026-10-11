@@ -46,7 +46,17 @@ description: Size futures trades from the stop distance, tick value, and the rem
    stop always working) still applies.
 7. **Half size** (a `mixed` multi-timeframe read): `floor(size / 2)`; if
    that is 0, skip the trade. Never round a half up.
-8. Write entry, stop, size, and $ risk into the plan.
+8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
+   verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
+   for the strategy and side you chose and shows it: the stop in points and
+   whole ticks, the risk per contract, the size and where it came from (1 for
+   a rules strategy, the size-1 rule; the verdict's, within the attempt's
+   budget, for a policy strategy), and the dollar risk. Use its numbers
+   instead of computing them by hand. The budget (step 3) and the caps are
+   still your judgement: a budget below its risk is a skip, and a size you
+   are allowed to raise (30+ reviewed trades) changes only `size`, with the
+   risk scaling by it.
+9. Write entry, stop, size, and $ risk into the plan.
 
 ## Examples
 
@@ -55,4 +65,8 @@ MNQ long 21500.00, stop 21482.50 → 17.5 pts = 70 ticks × $0.50 = $35/contract
 remainingBeforeLimit $600 → 25% = $150; plan risk $75; cushion $1,800 → 10% = $180
 budget = $75 → size = floor(75 / 35) = 2 → capped to 1 (setup has 12 reviews)
 Plan: 1 MNQ, risk $35.
+
+order_plan for an orb long on MNQ, stop distance 5.25 pts:
+stop 5.25 pts = 21 ticks ($10.50/MNQ contract), size 1, risk $10.50 = 1 x 21 ticks x $0.50/tick
+(the same distance on MES: 21 ticks x $1.25 = $26.25)
 ```

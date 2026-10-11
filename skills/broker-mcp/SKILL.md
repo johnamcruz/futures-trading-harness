@@ -61,7 +61,8 @@ guide resource once per session if it has one.
   the order.
 - **Stop vs rationale**: the rationale's stop price and
   `stopLossBracket.ticks` must say the same stop (ticks =
-  `ceil(|entry - stop| / tickSize)`). After a market fill the bracket sits
+  `ceil(|entry - stop| / tickSize)`). The harness tool `order_plan` works
+  both out for the strategy and side you chose; send its arguments as given. After a market fill the bracket sits
   that many ticks from the fill price, not from the planned entry: read the
   working stop's price in `list_open_orders` and journal it if it differs.
 

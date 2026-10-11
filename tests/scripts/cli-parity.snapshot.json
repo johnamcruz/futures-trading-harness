@@ -92,12 +92,12 @@
   "strategies usage": {
     "status": 1,
     "stdout": "",
-    "stderr": "[strategies] usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]\n"
+    "stderr": "[strategies] usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5] | plan <bars file> --symbol <ROOT> --strategy <name> --side long|short [--account-id <id>]\n"
   },
   "strategies no command": {
     "status": 1,
     "stdout": "",
-    "stderr": "[strategies] usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]\n"
+    "stderr": "[strategies] usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5] | plan <bars file> --symbol <ROOT> --strategy <name> --side long|short [--account-id <id>]\n"
   },
   "market-snapshot": {
     "status": 0,

@@ -7,6 +7,8 @@
  *   node scripts/strategies.js validate
  *   node scripts/strategies.js scan <bars file|-> --symbol MNQ [--now ISO] [--record]   (default now: the harness clock)
  *   node scripts/strategies.js recent <bars file> --symbol MNQ [--bars 5]   what fired on each of the last bars
+ *   node scripts/strategies.js plan <bars file> --symbol MNQ --strategy <name> --side long|short [--account-id <id>]
+ *     the order arithmetic for the strategy and side you chose, when it is a candidate now (never placed)
  *
  * The operations live in scripts/lib/harness-tools/strategies.js.
  */
