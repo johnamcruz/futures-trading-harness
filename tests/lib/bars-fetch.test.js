@@ -258,11 +258,16 @@ test('scripts/bars.js refuses an --out outside the home\'s bars scratch director
   assert.strictEqual(run(['--out', path.join(scratch, 'sub', 'mine.json')]).status, 0, 'any .json file under it');
 });
 
-test('scripts/bars.js refuses unknown flags and --record in autonomous runs', () => {
+test('scripts/bars.js refuses unknown flags, and ignores --record (with a note) in autonomous runs', () => {
   const run = (args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'bars.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: tmpDir(), ...env } });
   const bad = run(['--symbol', 'MNQ', '--bogus']);
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr, /unknown argument: --bogus/);
-  const auto = run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1' });
-  assert.match(auto.stderr, /the autonomous runner records the read itself/);
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')] } } }));
+  const auto = run(['--symbol', 'MNQ', '--timeframe', '1', '--count', '10', '--record'], { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_REPLAY_NOW: '', FTH_ENV_FILE: path.join(home, 'none.env') });
+  assert.strictEqual(auto.status, 0, auto.stderr);
+  assert.match(auto.stdout, /^wrote \d+ 1-minute bars for MNQ /);
+  assert.ok(auto.stderr.includes('[bars] note: --record ignored - the autonomous runner records the read itself\n'), auto.stderr);
+  assert.ok(!fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
 });

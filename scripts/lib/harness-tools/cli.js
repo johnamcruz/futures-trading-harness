@@ -41,6 +41,16 @@ function context({ env = process.env, barsEnv = env, now, root = ROOT, tool = fa
 /** The script's wording or the tool's, for the caller in front of it. */
 const say = (c, cli, tool) => (c.tool ? tool : cli);
 
+/**
+ * A record request in an autonomous run (FTH_AUTONOMOUS=1): ignored, never honoured (the runner
+ * writes the order gate's records itself, so the model can't), and not a failure either: the
+ * operation returns its result with this note (`[tag] note: record ignored - why`). null otherwise.
+ */
+function ignoredRecord(c, tag, why) {
+  if (c.env.FTH_AUTONOMOUS !== '1') return null;
+  return `[${tag}] note: ${say(c, '--record', 'record')} ignored - ${why}\n`;
+}
+
 /** Run fn(); a failure becomes an OpError that keeps `text` (the stdout printed before it). */
 function withText(text, fn) {
   try {
@@ -88,4 +98,4 @@ async function runCli(tag, fn, { stdout = process.stdout, stderr = process.stder
   }
 }
 
-module.exports = { ROOT, OpError, context, say, withText, withTextAsync, options, runCli };
+module.exports = { ROOT, OpError, context, say, ignoredRecord, withText, withTextAsync, options, runCli };

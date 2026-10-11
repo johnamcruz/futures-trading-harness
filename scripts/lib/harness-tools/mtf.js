@@ -10,15 +10,15 @@
  *     tf      higher timeframes in minutes (default [15, 60, 240])
  *     daily   a daily bars file, the top timeframe (optional)
  *     json    the full read as JSON instead of one line per timeframe
- *     record  also record the read for the order gate (needs symbol; refused in
- *             autonomous runs, where the runner records it)
+ *     record  also record the read for the order gate (needs symbol; ignored in
+ *             autonomous runs, where the runner records it: the read comes back with a note)
  */
 
 const { mtfRead } = require('../trading/mtf');
 const { buildRecord, writeRecord } = require('../trading/mtf-state');
 const { harnessHome } = require('../paths');
 const { readBarsArg } = require('../backtest/data');
-const { context, say, withText } = require('./cli');
+const { context, say, ignoredRecord, withText } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: mtf.js <bars.json | bars.csv | -> [--tf=15,60,240] [--daily=<daily bars>] [--json] [--record --symbol=MNQ]';
@@ -30,10 +30,11 @@ function mtf({ file = null, tf = [15, 60, 240], daily = null, json = false, reco
   const read = mtfRead(bars, { timeframes: tf, daily: daily ? readBarsArg(daily) : null });
   const text = json ? `${JSON.stringify(read, null, 2)}\n` : `${read.lines.join('\n')}\n`;
   if (!record) return { text };
+  // In autonomous runs the runner records the read from the bars it hands the cycle.
+  const ignored = ignoredRecord(c, 'mtf', 'the autonomous runner records the read itself');
+  if (ignored) return { text, stderr: ignored };
   return withText(text, () => {
-    // In autonomous runs the runner records the read from the bars it hands the cycle.
     const record = say(c, '--record', 'record');
-    if (c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records the read itself`);
     const pid = liveRunner(c.env);
     if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
     if (!symbol || !/^[A-Z0-9]+$/i.test(symbol)) throw new Error(say(c, '--record needs --symbol=<ROOT> (e.g. MNQ)', 'record needs symbol (a contract root, e.g. MNQ)'));

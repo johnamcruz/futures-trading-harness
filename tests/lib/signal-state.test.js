@@ -65,7 +65,7 @@ test('checkTrigger: only the strategy that fired, on its side, on a recent bar; 
   assert.match(checkTrigger(broken, { root: 'MNQ', side: 'buy', strategy: 'orb', now }), /unreadable/);
 });
 
-test('strategies.js scan --record writes the signal record; strict flags; refused in autonomous runs', () => {
+test('strategies.js scan --record writes the signal record; strict flags; ignored (with a note) in autonomous runs', () => {
   const home = tmpDir();
   const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
   const run = (args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'strategies.js'), 'scan', csv, ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home, FTH_AUTONOMOUS: '', ...env } });
@@ -77,7 +77,13 @@ test('strategies.js scan --record writes the signal record; strict flags; refuse
   assert.match(run(['--symbol', 'MNQ', '--bogus']).stderr, /unknown argument: --bogus/);
   assert.match(run(['--symbol', 'MNQ', '--now', 'nope']).stderr, /--now: not a time/);
   assert.match(run(['--record']).stderr, /--record needs --symbol/);
-  assert.match(run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1' }).stderr, /the autonomous runner records every bar itself/);
+  // Autonomous: the scan prints, record is ignored with a note (exit 0), and no record is written.
+  const autoHome = tmpDir();
+  const auto = run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1', FTH_HOME: autoHome });
+  assert.strictEqual(auto.status, 0, auto.stderr);
+  assert.match(auto.stdout, /^\[/);
+  assert.strictEqual(auto.stderr, '[strategies] note: --record ignored - the autonomous runner records every bar itself\n');
+  assert.ok(!fs.existsSync(path.join(autoHome, 'signals')), 'nothing recorded');
 });
 
 test('checkTrigger: a trend strategy is refused on a conflicting bar; FTH_MIN_CONFLUENCE asks for agreement', () => {

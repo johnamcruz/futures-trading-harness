@@ -12,7 +12,8 @@
  *                (default <FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json)
  *     name       a suffix for the default file (<SYMBOL>-<tf>m-<name>.json): a file of the caller's own
  *     record     also record the multi-timeframe read for the order gate
- *                (refused for daily bars, and in autonomous runs, where the runner records it)
+ *                (refused for daily bars; ignored in autonomous runs, where the runner records it:
+ *                the bars are fetched and the reply notes it)
  *
  * Asks the configured broker through the adapter; bars up to the harness clock.
  * The text is one line (the file, the contract, the bar count, when the last
@@ -23,7 +24,7 @@ const { fetchBarsToFile } = require('../bars-fetch');
 const { withAdapter } = require('../broker/adapter');
 const { writeMtfRecord, recordFile } = require('../trading/mtf-state');
 const { harnessHome } = require('../paths');
-const { context, say, withTextAsync } = require('./cli');
+const { context, say, ignoredRecord, withTextAsync } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out file] [--record]';
@@ -36,13 +37,15 @@ async function fetch(args = {}, ctx) {
   // Bars up to the harness clock: a replay broker's replayed time, else the wall clock.
   const now = c.now();
   const record = say(c, '--record', 'record');
+  // In autonomous runs record is not honoured (the runner records the read): the fetch runs without it.
+  const ignored = o.record ? ignoredRecord(c, 'bars', 'the autonomous runner records the read itself') : null;
+  if (ignored) o.record = false;
   if (o.record && o.daily) throw new Error(say(c, '--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'));
-  if (o.record && c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records the read itself`);
   const pid = o.record ? liveRunner(c.env) : null;
   if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
   const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, env: c.barsEnv, tool: c.tool }));
   let text = `wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`;
-  if (!o.record) return { text };
+  if (!o.record) return ignored ? { text, stderr: ignored } : { text };
   return withTextAsync(text, async () => {
     const home = harnessHome(c.env);
     const rec = writeMtfRecord(home, o.symbol, r.bars, { source: r.file, now });
