@@ -57,7 +57,7 @@ const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { brokerSpecFor, specMismatch } = require('../trading/broker-specs');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
-const { parseStandardName, standardRoot } = require('../broker/translator');
+const { parseStandardName, readCache } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
 const { readRun, readLines } = require('./store');
@@ -82,18 +82,35 @@ const GATE_SLACK_MS = 2000;
 const UNGATED = new Set(['close_position']);
 // A flat label with one of these reasons is no skip (nor a stand-aside, nor a hold in a trade): the teacher
 // touched an order, or what it did is unknown.
-const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out']);
+const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out', 'working order', 'manage-only']);
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const round = (x, d = 4) => (x === null ? null : Number(x.toFixed(d)));
 /**
+ * The run's translator cache (contracts-<broker>.json), read once: { root(id) } a broker id's standard root,
+ * { spec(root) } the broker spec it recorded for a root (broker-specs.js brokerSpecFor, once per root).
+ */
+function translatorCache(file) {
+  const { ids } = readCache(file);
+  const specs = new Map();
+  return {
+    root: id => (Object.prototype.hasOwnProperty.call(ids, String(id ?? '')) && isObj(ids[String(id)]) ? ids[String(id)].root || null : null),
+    spec: root => {
+      if (!specs.has(root)) specs.set(root, brokerSpecFor(file, root));
+      return specs.get(root);
+    },
+  };
+}
+
+/**
  * A contract's family root (MNQ for MNQ, NQ, NQ:2026-03): a broker's own id (BT.MNQ, which the translator
- * passes through) through the run's translator cache (`cache`, contracts-<broker>.json), else its standard
+ * passes through) through the run's translator cache (`cache`, translatorCache), else its standard
  * name, else the id itself upper-cased (a family no symbol has).
  */
 const familyOfId = (id, cache = null) => {
   if (!id) return null;
-  const known = cache ? standardRoot(String(id), cache) : null;
+  const known = cache ? cache.root(String(id)) : null;
   return familyRoot(known || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root);
 };
 const nearest = (x, set) => set.reduce((best, s) => (Math.abs(s - x) < Math.abs(best - x) ? s : best), set[0]);
@@ -105,18 +122,17 @@ const sideOf = s => {
   return v === '0' || v === 'buy' || v === 'bid' ? 'buy' : v === '1' || v === 'sell' || v === 'ask' ? 'sell' : null;
 };
 const sign = side => (side === 'buy' ? 1 : side === 'sell' ? -1 : 0);
-const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 /**
  * A contract's tick specs { tickSize, tickValue, source } from its standard name (MNQ, NQ:2026-03), else
  * the fallback's (the label's symbol): the broker's, as the run recorded them (`specsFile`, the run home's
- * contracts-<broker>.json: what the run's gate and sizing traded with), else the static table ('table').
+ * contracts-<broker>.json through translatorCache: what the run's gate and sizing traded with), else the static table ('table').
  * The one place specs are looked up.
  */
 function contractSpec(contractId, fallback = null, specsFile = null) {
-  const rootOf = id => (id ? (specsFile && standardRoot(String(id), specsFile)) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
+  const rootOf = id => (id ? (specsFile && specsFile.root(String(id))) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
   for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
-    const broker = specsFile ? brokerSpecFor(specsFile, root) : null;
+    const broker = specsFile ? specsFile.spec(root) : null;
     const table = specFor(root);
     // As live (broker-specs.js brokerSpecs): a broker spec unlike the static table can't be trusted (live
     // refuses entries on it); measured with the table, flagged.
@@ -369,8 +385,13 @@ const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.b
 const HOOK_BLOCK = /\bhook\b/i;
 // The client gave up waiting (the broker may still have acted): the outcome is unknown, not a refusal.
 const CLIENT_TIMEOUT = /\btimed out\b|\btimeout\b/i;
+// A closing fill a bracket made (the backtester's round-trip reason): not a close the teacher sent.
+const BRACKET_EXIT = /^(stop|target|trail)$/i;
 const failedCall = o => (!HOOK_BLOCK.test(o.callError || '') && CLIENT_TIMEOUT.test(o.callError || '') ? { decision: 'unknown', orderId: null, reason: o.callError, timeout: true } : callRefusal(o));
-const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error', ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : {}) });
+// A gated tool's call with no gate record never reached the gateway (which logs every call it judges): the
+// client refused it (a permission denial, a server not connected), not the broker.
+const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error',
+  ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : o.gate.decision === 'not-logged' ? { by: 'client' } : {}) });
 
 /** The teacher's action for one symbol from its orders, and what keeps it out of cloning. */
 function teacherAction(orders, inTrade) {
@@ -565,6 +586,12 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const cfg = readJson(path.join(dir, 'autotrader.json'), {}) || {};
   const tf = Number(cfg.timeframe) || null;
   const tfMs = tf ? tf * 60000 : 0;
+  // A strategy's status: the scan's, else the caller's strategies' (unknown: kept).
+  const statusOf = new Map((strategies || []).filter(x => x && x.name).map(x => [x.name, x.status]));
+  const tradeable = r => {
+    const status = r.status ?? statusOf.get(r.name);
+    return cfg.paper === true || status === undefined || status === null || status === 'active';
+  };
   // Malformed lines (null, arrays, numbers) are skipped wherever a record is read.
   const objs = xs => (Array.isArray(xs) ? xs.filter(isObj) : []);
   const lines = Object.keys(days).sort().flatMap(d => days[d]).filter(r => isObj(r) && Number.isFinite(Date.parse(r.t)))
@@ -589,10 +616,10 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   };
   const fills = allFills(lines);
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
-  const contractCache = path.join(home, `contracts-${manifest.broker || ''}.json`);
+  const contractCache = translatorCache(path.join(home, `contracts-${manifest.broker || ''}.json`));
   const trips = roundTrips(fills, contractCache);
   const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'), id => {
-    const root = id ? standardRoot(id, contractCache) || (parseStandardName(String(id)) || {}).root : null;
+    const root = id ? contractCache.root(id) || (parseStandardName(String(id)) || {}).root : null;
     return root ? familyRoot(root) : null;
   });
   const journalUsed = new Set();
@@ -612,13 +639,13 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const until = cycleStarts.find(x => x > start) ?? Infinity;
       const ran = (rec.ran || []).filter(x => x.action === c.action)[(rec.cycles || []).slice(0, i).filter(x => x.action === c.action).length] || null;
       const failed = c.timedOut || (ran && ran.timedOut) ? 'cycle timed out' : c.ok === false || (ran && ran.ok === false) ? 'cycle failed' : null;
-      tradeCycles.push({ c, ctx, failed, orders: Number.isFinite(start) ? cycleOrders(c, doc, gateLog, until) : [], result: c.result || (ran && ran.result) || null, symbols: ctx && Array.isArray(ctx.symbols) ? objs(ctx.symbols).map(s => s.symbol) : null });
+      tradeCycles.push({ c, ctx, failed, action: c.action, orders: Number.isFinite(start) ? cycleOrders(c, doc, gateLog, until) : [], result: c.result || (ran && ran.result) || null, symbols: ctx && Array.isArray(ctx.symbols) ? objs(ctx.symbols).map(s => s.symbol) : null });
     }
     // A cycle that ran with no cycle log line: a decision whose orders are unknown.
     const ranTrade = (rec.ran || []).filter(x => x.action === 'trade' || x.action === 'manage');
     for (const x of ranTrade.slice(tradeCycles.length)) {
       const failed = x.timedOut ? 'cycle timed out' : x.ok === false ? 'cycle failed' : null;
-      tradeCycles.push({ c: null, ctx: null, failed, orders: [], unknown: true, result: x.result || null, symbols: Array.isArray(x.symbols) ? x.symbols : null });
+      tradeCycles.push({ c: null, ctx: null, failed, action: x.action, orders: [], unknown: true, result: x.result || null, symbols: Array.isArray(x.symbols) ? x.symbols : null });
     }
     const syms = [...new Set([
       ...(rec.bars || []).map(b => b && b.symbol), ...ranTrade.flatMap(x => x.symbols || []), ...tradeCycles.flatMap(x => x.symbols || []),
@@ -634,7 +661,11 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const barT = (ctxSym && ctxSym.bar && ctxSym.bar.t) || (barRec && barRec.lastBarT) || null;
       const scanList = (scans.get(`${symbol}|${barT}`) || []).filter(s => Date.parse(s.at) <= t);
       const scan = scanList[scanList.length - 1] || null;
-      const fired = scan ? (scan.results || []).filter(r => r.candidate && r.direction) : [];
+      // What the teacher could trade: a strategy whose status isn't active (paper) can't place a live entry
+      // (the gate refuses it; the runner starts no cycle for it) unless the run is in paper mode. A bar no
+      // cycle ran on where the runner's own scan decided not to run (decision.run false) has none.
+      const runnerPassed = !cyc && isObj(scan && scan.decision) && scan.decision.run === false;
+      const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r)) : [];
       const candidates = fired.map(r => ({ name: r.name, direction: r.direction }));
       const refPrice = scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : ctxSym && ctxSym.bar && num(ctxSym.bar.c) !== null ? ctxSym.bar.c : null;
       const isTradeTime = rec.kind === 'trade';
@@ -666,13 +697,15 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         // (from t to the next decision time), matched by rationale, in order.
         for (const o of mine.filter(x => x.gate.decision !== 'refused')) {
           if (o.tool !== 'place_order' || o.gate.decision !== 'allowed') {
-            // Not an entry the broker journals. A call that came back an error: an exit the fills show
-            // (a closing fill on its contract by the next decision) went through; a client timeout with
-            // nothing to show is unknown; anything else never changed the account.
+            // Not an entry the broker journals. A call that came back an error never changed the account,
+            // unless the client timed out (the broker may have acted): then an exit the fills show (a closing
+            // fill on its contract by the next decision, not a bracket's own) went through; else it is unknown.
             if (!o.callFailed) continue;
             const exit = o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && o.riskReducing);
-            const closed = exit && fills.some(f => familyOfId(f.contractId, contractCache) === fam && f.ms > t && f.ms <= nextT && f.profitAndLoss !== null && f.profitAndLoss !== undefined);
-            o.broker = closed ? { decision: 'accepted', orderId: null, reason: null, seen: 'fills' } : failedCall(o);
+            const fate = failedCall(o);
+            const closed = exit && fate.timeout && fills.some(f => familyOfId(f.contractId, contractCache) === fam && f.ms > t && f.ms <= nextT
+              && f.profitAndLoss !== null && f.profitAndLoss !== undefined && !BRACKET_EXIT.test(String((isObj(f.roundTrip) && f.roundTrip.reason) || f.exitReason || '')));
+            o.broker = closed ? { decision: 'accepted', orderId: null, reason: null, seen: 'fills' } : fate;
             continue;
           }
           const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
@@ -690,6 +723,12 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         const open = pos.side ? objs(cyc.ctx && cyc.ctx.openTrades).find(x => familyOfId(x.contractId, contractCache) === fam) : null;
         draft.act = teacherAction(mine, pos.side ? { side: pos.side, stop: open && Number.isFinite(open.stop) ? open.stop : null } : false);
         if (cyc.unknown) draft.act.reasons.push('no cycle log');
+        if (!pos.side) {
+          // Flat with a resting order (the runner ran the cycle for it): the decision is about that order, never a skip.
+          if (Number(cyc.ctx && isObj(cyc.ctx.account) ? cyc.ctx.account.workingOrders : 0) > 0) draft.act.reasons.push('working order');
+          // A manage-only cycle (the day's cycle cap reached): no new entry was allowed, so standing aside is no skip.
+          if (cyc.action === 'manage') draft.act.reasons.push('manage-only');
+        }
         if (unresolved) draft.act.reasons.push('unattributed order');
         // A failed or timed-out cycle's silence is no decision: never a skip, never cloned.
         if (cyc.failed) draft.act.reasons.push(cyc.failed);
@@ -779,8 +818,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         if (o.broker && o.broker.timeout && !rt) reasons.push('outcome unknown: client timeout');
         const by = refusedBy(o);
         // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
-        gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' ? { brokerReason: o.broker.reason } : {}) };
-        if (gate.decision === 'not-logged') reasons.push('no gate record');
+        gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' || by === 'client' ? { brokerReason: o.broker.reason } : {}) };
+        if (o.gate.decision === 'not-logged') reasons.push('no gate record');
       }
       reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
       if (isEntry && !stop.points) reasons.push('no stop');

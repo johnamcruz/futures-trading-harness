@@ -334,9 +334,14 @@ fills). One label per decision time and symbol:
   of day), `kill-switch` (a trade time while the run's kill switch was on).
   Interrupted lines are labelled and flagged; torn lines counted. A failed
   or timed-out cycle, or one with no cycle log line, is never cloned and
-  never a skip.
+  never a skip; so is a flat label with a resting order (`working order`:
+  the cycle ran for it) or of a manage-only cycle (`manage-only`: the day's
+  cycle cap was reached, no new entry allowed).
 - `candidates`: what the scan fired on the decision's bar, with direction
-  (only scans logged by t).
+  (only scans logged by t), that the teacher could trade: a strategy whose
+  status isn't active (paper: the gate refuses its entries, the runner
+  starts no cycle for it) is left out unless the run is in paper mode, and
+  a no-cycle bar the runner's scan decided not to run on has none.
 - `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
   and no entry is a skip), `hold` / `tighten` / `exit` in a trade (a
   modify that widens the working stop the context showed is flagged, one
@@ -372,9 +377,10 @@ fills). One label per decision time and symbol:
   provenance). A fill that reverses a position through flat is read as its
   close only (round trips don't split it).
 - `gate`: allowed, refused (with checks, and `by`: the gate, another hook,
-  or the broker with its reason (an exit whose call came back an error but
-  whose fill shows it went through is allowed; a client timeout with
-  nothing to show is unknown and never cloned, and an entry so is
+  the client (a gated call with no gate record never reached the gateway),
+  or the broker with its reason (an exit whose call timed out but whose
+  closing fill, not a bracket's, shows it went through is allowed; a client
+  timeout with nothing to show is unknown and never cloned, and an entry so is
   `outcome: unknown`, counted as `unknownOutcome`, never taken): the replay broker's journal, matched by rationale,
   contract and replayed time, or a call that came back an error with no
   journal record), not-logged (a call no gate record names: never taken,

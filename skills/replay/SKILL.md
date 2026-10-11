@@ -118,7 +118,10 @@ broker.
    with `--out` (resuming it is refused once skills changed: they are in
    its config hash). A refused try followed by one that went through is one
    decision (the refused tries counted); an intent the gate or the broker
-   refused gets its candidates' counterfactual too. Decisions the student can't express (limit or
+   refused gets its candidates' counterfactual too. Candidates are only
+   what the teacher could trade (a paper strategy is left out unless the
+   run is in paper mode); a flat cycle with a resting order or a
+   manage-only cycle is no skip. Decisions the student can't express (limit or
    stop entries, a target other than the strategy's own exit as
    `order_plan` places it, adds, partial exits) are counted, not cloned.
    Read the printed counts (taken, unknownOutcome (an entry whose call

@@ -51,18 +51,19 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
     const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: symbols.map(symbol => ({ symbol, lastBarT: barT })), trades: s.trades || [], since: iso(t - 180000) };
     for (const j of s.journal || []) journal.push({ ts: iso(t), accountId: 7, contractId: 'BT.MNQ', ...j });
     if (s.interrupted) Object.assign(rec, { interrupted: true, trades: null, bars: undefined });
-    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, stopDistance: x.stopDistance === undefined ? 10 : x.stopDistance })) });
+    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, ...(s.scanDecision ? { decision: s.scanDecision } : {}), candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, ...(x.status ? { status: x.status } : {}), stopDistance: x.stopDistance === undefined ? 10 : x.stopDistance })) });
     if (s.cycle) {
       const c = s.cycle;
       const file = path.join(home, 'logs', 'cycles', '2026-10-10', `${String(i).padStart(6, '0')}-trade.json`);
       const transcript = c.transcript !== undefined ? c.transcript : (c.orders || []).map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${i}-${j}`, name: `mcp__broker__${o.tool}`, input: o.input }] } })).join('\n');
       const result = c.result || 'CYCLE RESULT: done';
-      const account = c.noAccount ? null : { id: 7, balance: 50000, positions: c.positions || [], attempts: c.attempts || [] };
+      const account = c.noAccount ? null : { id: 7, balance: 50000, positions: c.positions || [], workingOrders: c.workingOrders || 0, attempts: c.attempts || [] };
+      const action = c.action || 'trade';
       // The open trades the runner read (open-trades.js): each position's working stop, 10 points away unless given.
       const openTrades = (c.positions || []).map(p => ({ contractId: p.contractId, side: p.side, stop: 'stop' in c ? c.stop : p.averagePrice - (p.side === 'long' ? 10 : -10) }));
-      if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account, openTrades }, transcript }));
-      rec.ran.push({ action: 'trade', ok: c.ok !== false && c.ranOk !== false, timedOut: Boolean(c.timedOut), result, symbols });
-      if (!c.noLog) rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
+      if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action, prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account, openTrades }, transcript }));
+      rec.ran.push({ action, ok: c.ok !== false && c.ranOk !== false, timedOut: Boolean(c.timedOut), result, symbols });
+      if (!c.noLog) rec.cycles.push({ action, at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
       for (const [j, o] of (c.orders || []).entries()) {
         // close_position is never gated: no record, as live.
         if (o.gate === 'none' || (o.tool === 'close_position' && !o.gate)) continue;
@@ -1023,22 +1024,27 @@ test('labels: an entry whose call timed out but whose fill joined is taken, its 
   assert.deepStrictEqual([labels[0].outcome.result, labels[0].clone.reasons, summary.taken, summary.unknownOutcome], ['win', [], 1, 0]);
 });
 
-test('labels: a failed close stays refused by the broker unless a closing fill on its family comes by the next decision time', () => {
+test('labels: a close that timed out went through only when a closing fill on its family, not a bracket\'s, comes by the next decision time', () => {
   const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
-  const label = trades => labelRun(makeRun({ steps: [
-    { k: 0, cycle: { positions: LONG_POS, transcript: claudeCall('close_position', close.input, 'PositionNotFound'), orders: [close] } },
+  const label = (trades, error = 'Request timed out') => labelRun(makeRun({ steps: [
+    { k: 0, cycle: { positions: LONG_POS, transcript: claudeCall('close_position', close.input, error), orders: [close] } },
     { k: 1, cycle: { positions: LONG_POS }, trades: trades.k1 || [] },
     { k: 2, cycle: { positions: LONG_POS }, trades: trades.k2 || [] },
   ] }).runDir).labels[0];
-  const refused = L => [L.teacher.action, L.gate.decision, L.gate.by, L.gate.brokerReason];
+  const fate = L => [L.teacher.action, L.gate.decision, L.gate.by, L.clone.reasons];
+  const unknown = ['exit', 'ungated', null, ['outcome unknown: client timeout']];
   // A closing fill after the next decision time (k=1 at 3 minutes): another close's.
-  assert.deepStrictEqual(refused(label({ k2: [fill(4, 1, 20010, 20)] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  assert.deepStrictEqual(fate(label({ k2: [fill(4, 1, 20010, 20)] })), unknown);
   // An opening fill (no profitAndLoss) by the next decision time.
-  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 20010, null)] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  assert.deepStrictEqual(fate(label({ k1: [fill(1, 1, 20010, null)] })), unknown);
   // A closing fill on another family.
-  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 5000, 20, { contractId: 'MES' })] })), ['exit', 'refused', 'broker', 'PositionNotFound']);
+  assert.deepStrictEqual(fate(label({ k1: [fill(1, 1, 5000, 20, { contractId: 'MES' })] })), unknown);
+  // The bracket stop's own fill (its round trip's reason).
+  assert.deepStrictEqual(fate(label({ k1: [fill(1, 1, 19990, -20, { roundTrip: { reason: 'stop' } })] })), unknown);
   // The control: a closing fill on MNQ by the next decision time.
-  assert.deepStrictEqual(refused(label({ k1: [fill(1, 1, 20010, 20)] })).slice(0, 3), ['exit', 'ungated', null]);
+  assert.deepStrictEqual(fate(label({ k1: [fill(1, 1, 20010, 20)] })), ['exit', 'ungated', null, []]);
+  // The broker's definite answer (no timeout): refused, whatever fill follows (the bracket's own).
+  assert.deepStrictEqual(fate(label({ k1: [fill(1, 1, 20010, 20)] }, 'OrderRejected: Trading is disabled')), ['exit', 'refused', 'broker', []]);
 });
 
 test('labels: of two exits that both went through, the last is the action', () => {
@@ -1052,4 +1058,66 @@ test('labels: of two exits that both went through, the last is the action', () =
 test('labels: a hook\'s refusal carries its text', () => {
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript: claudeCall('place_order', LONG.input, 'PreToolUse hook error: blocked by policy'), orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
   assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'hook', 'PreToolUse hook error: blocked by policy']);
+});
+
+test('labels: a failed call of a gated tool with no gate record never reached the gateway - refused by the client, not the broker', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: { transcript: claudeCall('place_order', LONG.input, 'Permission to use mcp__broker__place_order has been denied.'), orders: [{ ...LONG, gate: 'none' }] } }] });
+  const { labels, summary } = labelRun(run.runDir);
+  const L = labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason, L.clone.reasons.includes('no gate record'), summary.brokerRefused],
+    ['refused', 'client', 'Permission to use mcp__broker__place_order has been denied.', true, 0]);
+});
+
+test('labels: a paper strategy (the gate refuses its entries) is no candidate unless the run is in paper mode; a bar the runner passed on has none', () => {
+  const strategies = [...STRATEGIES, { name: 'crt_1h', valid: true, status: 'paper', signal: 'rules', risk: { min_rr: 2 }, exit: {} }].map(x => ({ status: 'active', ...x }));
+  const steps = [
+    { k: 4, scan: [{ name: 'crt_1h', direction: 'long' }, { name: 'orb', direction: 'short' }], cycle: {} },
+    // A no-cycle bar where only the paper strategy fired; then one where the runner's scan decided not to run.
+    { k: 5, scan: [{ name: 'crt_1h', direction: 'long' }] },
+    { k: 6, scan: [{ name: 'ghost', direction: 'long' }], scanDecision: { run: false, reason: 'no strategy fired and flat' } },
+    // The scan's own status first.
+    { k: 7, scan: [{ name: 'orb', direction: 'long', status: 'paper' }] },
+  ];
+  const { labels, summary } = labelRun(makeRun({ steps }).runDir, { strategies });
+  assert.deepStrictEqual(labels[0].candidates, [{ name: 'orb', direction: 'short' }]);
+  assert.deepStrictEqual([labels[0].counterfactualFor, labels[0].counterfactuals.length, labels[0].counterfactual.strategy], ['skip', 1, 'orb']);
+  assert.deepStrictEqual([labels[1].candidates, labels[2].candidates, labels[3].candidates, summary.noCycleWithCandidates], [[], [], [], 0]);
+  // Paper mode: the paper strategy is the teacher's to trade.
+  const paper = makeRun({ steps });
+  const cfgFile = path.join(paper.runDir, 'autotrader.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), paper: true }));
+  assert.deepStrictEqual(labelRun(paper.runDir, { strategies }).labels[0].candidates.map(c => c.name), ['crt_1h', 'orb']);
+});
+
+test('labels: flat with a working order, or in a manage-only cycle, standing aside is no skip and never cloned', () => {
+  const run = makeRun({ steps: [
+    { k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { workingOrders: 1 } },
+    { k: 5, scan: [{ name: 'orb', direction: 'short' }], cycle: { action: 'manage' } },
+    { k: 6, scan: [{ name: 'orb', direction: 'short' }], cycle: { action: 'manage', positions: LONG_POS } },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual(labels.map(l => [l.decision, l.teacher.action, l.clone.ok, l.clone.reasons, l.counterfactual]), [
+    ['flat', 'none', false, ['working order'], null], ['flat', 'none', false, ['manage-only'], null], ['in-trade', 'hold', true, [], null],
+  ]);
+  assert.deepStrictEqual([summary.skipped, summary.standAside, summary.holds], [0, 0, 1]);
+});
+
+test('labels: the run\'s translator cache is read once per root, not once per fill', () => {
+  const steps = [{ k: 0, cycle: { orders: [{ ...LONG, input: { ...LONG.input, contractId: 'BT.MNQ' } }] } }];
+  for (let k = 1; k < 12; k += 1) steps.push({ k, cycle: k % 2 ? { positions: LONG_POS } : {}, trades: [fill(3 * k - 2, k % 2 ? 0 : 1, 20000, k % 2 ? null : 1, { id: `f${k}`, contractId: 'BT.MNQ' })] });
+  const run = makeRun({ manifest: { broker: 'backtester' }, steps });
+  const cache = path.join(run.home, 'contracts-backtester.json');
+  fs.writeFileSync(cache, JSON.stringify({ ids: { 'BT.MNQ': { root: 'MNQ', month: '2026-03' } }, front: {} }));
+  const read = fs.readFileSync;
+  let n = 0;
+  fs.readFileSync = function counted(file, ...rest) {
+    if (String(file).endsWith(path.basename(cache))) n += 1;
+    return read.call(this, file, ...rest);
+  };
+  try {
+    labelRun(run.runDir, { budgetUsd: 40 });
+  } finally {
+    fs.readFileSync = read;
+  }
+  assert.ok(n > 0 && n <= 3, `read ${n} times`);
 });
