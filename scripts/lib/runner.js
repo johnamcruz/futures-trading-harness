@@ -34,7 +34,8 @@ const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = require('./autotrader');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
-const { familyRoot } = require('./trading/contracts');
+const { familyRoot, familyOf } = require('./trading/contracts');
+const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen } = require('./trading/positions');
 const { coverageError } = require('./trading/exchange-calendar');
 
@@ -143,6 +144,28 @@ function createRunner(deps) {
     if (timedOut) recover = true;
   }
 
+  // The broker's tick specs (the translator records them as it answers): a spec that differs from the
+  // static table is said loudly (training would not equal live), once per value.
+  const specSaid = new Set();
+  const checkSpec = (root, c) => {
+    const why = !validSpec(c) ? `${root}: the broker's contract has no usable tick specs (${noSpecsMessage(root)})` : specMismatch(root, c);
+    if (why && !specSaid.has(why)) {
+      specSaid.add(why);
+      log(why, 'error');
+    }
+  };
+  // The other contract of the family (NQ for MNQ): a prop budget may size into it, so its specs are recorded too.
+  async function lookUpPartner(root) {
+    const fam = familyOf(root);
+    const partner = fam && (fam.micro === root ? fam.mini : fam.micro);
+    if (!partner) return;
+    try {
+      checkSpec(partner, await client.activeContract(partner));
+    } catch (err) {
+      log(`${partner}: contract lookup failed (${err.message}); entries that size into ${partner} are refused until the broker's tick specs for it are recorded`, 'error');
+    }
+  }
+
   async function ensureContract(sym, now) {
     const day = dayKey(now);
     if (sym.contractId && sym.contractDay === day && sym.resyncs < RESYNCS_BEFORE_REROLL) return sym;
@@ -155,6 +178,8 @@ function createRunner(deps) {
       log(`${sym.symbol}: contract lookup failed (${err.message})${sym.contractId ? `; staying on ${sym.contractId}` : ''}`, 'error');
       return { ...sym, lookupFailedAt: now.getTime() };
     }
+    checkSpec(String(sym.symbol).toUpperCase(), c);
+    await lookUpPartner(String(sym.symbol).toUpperCase());
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
       return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };

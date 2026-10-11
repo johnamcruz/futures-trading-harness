@@ -6,6 +6,9 @@ const path = require('path');
 const { scanSummary, whyNot, recentLines } = require('../../scripts/lib/harness-tools/compact');
 const strategies = require('../../scripts/lib/harness-tools/strategies');
 const marketSnapshot = require('../../scripts/lib/harness-tools/market-snapshot');
+const { specFor } = require('../../scripts/lib/trading/contracts');
+// The broker's tick specs (as the translator records them); here, the values the broker reports for each root.
+const specOf = specFor;
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -54,7 +57,7 @@ test('scanSummary: a stop in ticks is rounded away from the entry (ceil), never 
 });
 
 test('scanSummary: the bar and trend, the candidates first with what a plan needs, then one line per strategy', () => {
-  const text = scanSummary(RESULTS, { symbol: 'MNQ', bar: '2026-10-07T14:00:00.000Z' });
+  const text = scanSummary(RESULTS, { symbol: 'MNQ', bar: '2026-10-07T14:00:00.000Z', specOf });
   const lines = text.trimEnd().split('\n');
   assert.strictEqual(lines[0], 'Scan of MNQ on the last closed bar (opened 2026-10-07T14:00:00.000Z): 10 strategies, 3 candidates. Regime trend-up. Trend 4h up, 1h up, 15m down, prevailing 4h up.');
   assert.strictEqual(lines[1], 'Candidates:');
@@ -81,12 +84,17 @@ test('scanSummary: the bar and trend, the candidates first with what a plan need
 
 test('scanSummary: units per instrument - MES $1.25 a tick, a level target floored, no made-up ticks without specs', () => {
   const r = { ...RESULTS[0], stopDistance: 8.4579, targetDistance: 12.6, exit: { targetR: null, target: 'level' } };
-  assert.match(scanSummary([r], { symbol: 'MES' }), /entryRef 21503\.25, stop 8\.4579 pts = 34 ticks \(\$42\.50\/MES contract\), target 12\.6 pts = 50 ticks \(\$62\.50\/MES contract\), minRR/);
-  assert.match(scanSummary([r], { symbol: 'MNQ' }), /stop 8\.4579 pts = 34 ticks \(\$17\.00\/MNQ contract\), target 12\.6 pts = 50 ticks \(\$25\.00\/MNQ contract\)/);
-  assert.match(scanSummary([r], { symbol: 'ZZZ' }), /stop 8\.4579 pts, target 12\.6 pts, no tick specs for ZZZ, minRR/);
-  assert.match(scanSummary([{ ...r, targetDistance: null }], { symbol: 'MNQ' }), /target none on this bar/);
+  assert.match(scanSummary([r], { symbol: 'MES', specOf }), /entryRef 21503\.25, stop 8\.4579 pts = 34 ticks \(\$42\.50\/MES contract\), target 12\.6 pts = 50 ticks \(\$62\.50\/MES contract\), minRR/);
+  assert.match(scanSummary([r], { symbol: 'MNQ', specOf }), /stop 8\.4579 pts = 34 ticks \(\$17\.00\/MNQ contract\), target 12\.6 pts = 50 ticks \(\$25\.00\/MNQ contract\)/);
+  // The units are the broker's: a broker that says MNQ ticks are worth $5 is taken at its word.
+  assert.match(scanSummary([r], { symbol: 'MNQ', specOf: x => (x === 'MNQ' ? { tickSize: 0.25, tickValue: 5 } : null) }), /stop 8\.4579 pts = 34 ticks \(\$170\.00\/MNQ contract\)/);
+  // No spec recorded from the broker (or a root it has none for): points only, and how to get them.
+  for (const [symbol, opts] of [['ZZZ', { specOf }], ['MNQ', {}]]) {
+    assert.match(scanSummary([r], { symbol, ...opts }), new RegExp(`stop 8\\.4579 pts, target 12\\.6 pts, no tick specs from the broker for ${symbol} yet: call get_contract or search_contracts for ${symbol} first`));
+  }
+  assert.match(scanSummary([{ ...r, targetDistance: null }], { symbol: 'MNQ', specOf }), /target none on this bar/);
   // No rules candidate (only a manual one): no order_plan line.
-  assert.doesNotMatch(scanSummary([RESULTS[6]], { symbol: 'MNQ' }), /order_plan/);
+  assert.doesNotMatch(scanSummary([RESULTS[6]], { symbol: 'MNQ', specOf }), /order_plan/);
 });
 
 test('recentLines: one line per bar, oldest first, none where nothing fired', () => {

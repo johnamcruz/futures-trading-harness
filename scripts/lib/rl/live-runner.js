@@ -13,11 +13,14 @@
  *
  * A bundle that can't be loaded (missing, retrained on another observation,
  * not validated) makes every verdict a skip: the gate then refuses the entry.
+ * Tick specs are the broker's (trading/broker-specs.js), as the gate sizes
+ * with them: a contract without one recorded gets a skip verdict.
  */
 
 const { loadAccounts } = require('../trading/accounts');
 const { contractRoot } = require('../trading/journal');
-const { specFor, familyOf } = require('../trading/contracts');
+const { familyOf } = require('../trading/contracts');
+const { liveSpecs, noSpecsMessage } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const { loadBundle, bundleMismatch } = require('./policy-bundle');
 const live = require('./live');
@@ -25,6 +28,7 @@ const combine = require('../trading/combine');
 
 function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {} }) {
   const bundles = new Map();
+  const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
   const warned = new Set();
   const warnOnce = (key, msg) => {
     if (warned.has(key)) return;
@@ -166,15 +170,17 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
           continue;
         }
         const account = accounts().find(a => a.name === s.account);
-        const spec = specFor(root);
+        const spec = specOf(root);
+        // The budget may pick either contract of the family: both need the broker's specs.
+        const unspecified = [root, ...(familyOf(root) ? [familyOf(root).micro, familyOf(root).mini] : [])].find(r => !specOf(r));
         const bundle = s.policy ? bundleFor(s, root) : null;
         const cs = account && stateOf(account);
         let verdict;
-        if ((bundle && bundle.error) || !cs || !spec) {
-          const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : `no tick specs for ${root}`);
+        if ((bundle && bundle.error) || !cs || unspecified) {
+          const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : noSpecsMessage(unspecified));
           verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
-          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now });
+          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now, specOf });
         }
         live.appendVerdict(home, verdict);
         log(`${symbol}: ${s.name} ${pick.direction} setup from ${pick.name}: ${s.policy ? `policy ${s.policy.bundle}` : 'sizing'} says ${verdict.action}`
@@ -198,13 +204,13 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       const bundle = bundleFor(strategy, root);
       const account = accounts().find(a => a.name === strategy.account);
       const cs = account && stateOf(account);
-      const spec = specFor(root);
+      const spec = specOf(root);
       const entered = live.readVerdicts(home).filter(v => v.strategy === strategy.name && v.contract === root && v.action !== 'skip').pop();
       if (bundle.error || !cs || !spec || !entered) {
         warnOnce(`pos:${strategy.name}`, `${strategy.name}: policy ${strategy.policy.bundle} can't decide in a trade (${bundle.error || (!entered ? 'no verdict for this trade' : 'no attempt or tick specs')}); the trail manages it alone`);
         return null;
       }
-      return live.decidePosition({ bundle, account, cs, strategy, rawBars: bars, spec, pos: { ...pos, contract: root, component: entered.component } });
+      return live.decidePosition({ bundle, account, cs, strategy, rawBars: bars, spec, specOf, pos: { ...pos, contract: root, component: entered.component } });
     },
   };
 }

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome } = require('../helpers');
+const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
 const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
@@ -150,7 +150,7 @@ test('max entries per trading day', () => {
 });
 
 test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
-  const skipping = loadConfig({ FTH_ORDER_GATE_SKIP: 'plan-required, setup-tag' });
+  const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'plan-required, setup-tag' }), home: config.home };
   const r = evaluate(entryOrder({ rationale: 'long, stop 21480 because reasons' }), [], { config: skipping });
   assert.deepStrictEqual(r.violations, []);
 });
@@ -683,6 +683,7 @@ function replaySetup({ replay = true, journalAt = '2026-10-07T14:25:00.000Z' } =
   const home = trendHome(undefined, { closedAt: '2026-10-07T14:27:00.000Z' });
   const journal = require('../helpers').writeJournal(home, [{ ts: journalAt, kind: 'plan', contractId: CONTRACT, text: 'plan' }]);
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+  recordBrokerSpecs(home, { broker: 'sim' }); // the replay broker's tick specs, as its translator records them
   const env = {
     FTH_HOME: home, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
@@ -793,4 +794,73 @@ test('skills-loaded: a parts-format (Qwen Code chat) transcript with the skills 
   assert.match(r.violations[0].message, /not loaded in this session: strategy-library\./);
   // A risk-reducing order is never held back by it.
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
+});
+
+// --- Tick specs: the broker's, as the translator recorded them (broker-specs.js). ---
+const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+
+test('contract-specs: an entry with no tick specs from the broker is refused (hard, unskippable); exits, protective orders and stop moves never need them', () => {
+  const bare = { ...config, home: trendHome(undefined, { specs: false }) };
+  const r = evaluate(entryOrder(), [plan()], { config: bare });
+  assert.deepStrictEqual(checks(r), ['contract-specs']);
+  assert.strictEqual(r.violations[0].message, 'no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first (the harness records the broker\'s tick size and value), then try again.');
+  // No setting turns it off.
+  const skipping = { ...bare, skipChecks: new Set(['contract-specs', 'order-consistency', 'plan-required', 'strategy']) };
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: skipping })), ['contract-specs']);
+  // Risk-reducing orders go through whatever the specs.
+  for (const rationale of ['[exit] flatten the long', '[protect] stop for the long at 21480']) {
+    const o = evaluate(entryOrder({ rationale, side: 'sell', type: 'stop', stopPrice: 21480.1 }), [], { config: bare });
+    assert.deepStrictEqual([o.intent, o.violations], ['risk-reducing', []], rationale);
+  }
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }, config: bare }).violations, []);
+  // Another root's spec, a malformed one, a broker without a file: still none for MNQ.
+  recordBrokerSpecs(bare.home, { roots: ['MES'] });
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bare })), ['contract-specs']);
+  recordBrokerSpecs(bare.home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 0 } } });
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bare })), ['contract-specs']);
+  recordBrokerSpecs(bare.home, { roots: ['MNQ'], specs: { MNQ: { tickSize: -0.25, tickValue: 0.5 } } });
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bare })), ['contract-specs']);
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...bare, contractsFile: null } })), ['contract-specs'], 'no broker configured');
+  // Recorded: allowed.
+  recordBrokerSpecs(bare.home, { roots: ['MNQ'] });
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: bare }).violations, []);
+  // An id nothing names (no root) has no specs either.
+  assert.ok(checks(evaluate(entryOrder({ contractId: 'CON.F.US.ZZZ.Z26' }), [plan()], { config: bare })).includes('contract-specs'));
+});
+
+test('contract-specs: prices are checked on the broker\'s tick, not the static table\'s', () => {
+  const home = trendHome(undefined, { specs: false });
+  const cfg = { ...config, home };
+  const limit = entryOrder({ type: 'limit', limitPrice: 21500.1, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480.1, target 21540.1' });
+  recordBrokerSpecs(home, { roots: ['MNQ'] }); // 0.25: 21500.1 is off the tick
+  assert.match(evaluate(limit, [plan()], { config: cfg }).violations.find(v => v.check === 'order-consistency').message, /limitPrice 21500\.1 is not on the 0\.25 tick/);
+  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickSize: 0.1 } } }); // the broker says 0.1: on the tick
+  assert.deepStrictEqual(evaluate(limit, [plan()], { config: cfg }).violations, []);
+});
+
+test('contract-specs: a prop entry is sized in dollars with the broker\'s tick value (MNQ vs NQ: same ticks, 10x the dollars)', () => {
+  const ACCT = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const run = (contractId, size, home, contracts = contractId === 'NQ' ? 'mini' : 'micro') => evaluateOrder({
+    input: entryOrder({ contractId, size }), entries: [plan(10, { contractId })], now: NOW, config: { ...config, home, skipChecks: new Set(['strategy']) },
+    strategies: [propStrategy({ contracts })], accounts: [ACCT],
+  }).violations.filter(v => v.check === 'combine');
+  const setupHome = specs => {
+    const home = trendHome(undefined, { specs: false });
+    if (specs) recordBrokerSpecs(home, specs);
+    prop.startAttempt(home, ACCT, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, ACCT, 50000, new Date(NOW.getTime() - 60000));
+    return home;
+  };
+  // Budget $400 (0.2 x $2,000). 40 ticks: MNQ $20 + $0.74 = $20.74 (19 micros); NQ $200 + $2.80 = $202.80 (1 mini).
+  const both = setupHome({ roots: ['MNQ', 'NQ'] });
+  assert.deepStrictEqual(run('MNQ', 19, both), []);
+  assert.match(run('MNQ', 20, both)[0].message, /20 MNQ is not within the account's size budget for a 40-tick stop \(19 MNQ at \$20\.74/);
+  assert.deepStrictEqual(run('NQ', 1, both), []);
+  assert.match(run('NQ', 2, both)[0].message, /2 NQ is not within the account's size budget for a 40-tick stop \(1 NQ at \$202\.80/);
+  // A broker that says NQ ticks are worth $10 (the table: $5): 40 ticks = $400 + $2.80 > the $400 budget, so nothing fits.
+  const dear = setupHome({ roots: ['MNQ', 'NQ'], specs: { MNQ: { tickValue: 1 }, NQ: { tickValue: 10 } } });
+  assert.match(run('MNQ', 19, dear)[0].message, /19 MNQ is not within the account's size budget for a 40-tick stop \(9 MNQ at \$40\.74/);
+  // The family's other contract without specs: the budget can't be worked out, so the entry is refused, saying which.
+  const half = setupHome({ roots: ['MNQ'] });
+  assert.match(run('MNQ', 1, half)[0].message, /mini: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);
 });

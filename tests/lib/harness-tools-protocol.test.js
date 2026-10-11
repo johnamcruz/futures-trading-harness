@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const { createServer, callTool, boundedLines, PROTOCOL_VERSIONS, MAX_OUTPUT_BYTES } = require('../../scripts/lib/harness-tools/protocol');
 
 function server(env = { FTH_HOME: tmpDir() }, root) {
@@ -242,6 +242,11 @@ test('callTool: order_plan through the server - the working and the place_order 
   const bars = path.join(home, 'bars', 'MNQ-3m.json');
   fs.writeFileSync(bars, JSON.stringify(readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).filter(b => Date.parse(b.t) <= Date.parse(fired))), { mode: 0o600 });
   const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: new Date(Date.parse(fired) + 200000).toISOString() };
+  // No tick specs from the broker yet: refused, saying to look the contract up.
+  const unspecified = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 }, { env });
+  assert.strictEqual(unspecified.isError, true);
+  assert.match(unspecified.content[0].text, /no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first/);
+  recordBrokerSpecs(home); // as the translator records them from the broker's answer
   const r = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 }, { env });
   assert.ok(!r.isError, r.content[0].text);
   const [line, json] = r.content[0].text.split('\n');

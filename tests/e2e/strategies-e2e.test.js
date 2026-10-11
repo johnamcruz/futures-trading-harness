@@ -19,7 +19,7 @@ const { spawnSync } = require('child_process');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { tmpDir, writeJournal } = require('../helpers');
+const { tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
@@ -49,6 +49,7 @@ for (const s of ACTIVE) {
     const i = firstFire(s);
     assert.ok(i > 0, `${s.name} never fires on the NQ fixture`);
     const home = tmpDir();
+    recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
     const file = path.join(home, 'MNQ-3m.json');
     fs.writeFileSync(file, JSON.stringify({ contractId: CONTRACT, bars: BARS.slice(0, i + 1) }));
     const closeMs = Date.parse(BARS[i].t) + STEP;
@@ -116,6 +117,7 @@ test('every strategy with rules provides its context on every scanned bar; a pap
   const paper = ALL.find(s => s.name === 'vwap_reclaim');
   assert.strictEqual(paper.status, 'paper');
   const home = tmpDir();
+  recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const env = { FTH_HOME: home, PROJECTX_JOURNAL_PATH: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
   const res = node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], env,
     JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:vwap_reclaim long, stop 27400' } }));

@@ -218,3 +218,79 @@ test('canonicalName: every name for a contract becomes its one standard name (th
   assert.strictEqual(canonicalName('CON.F.US.XYZ', cache), 'CON.F.US.XYZ');
   assert.strictEqual(canonicalName(undefined, cache), undefined);
 });
+
+test('tick specs: each contract the broker describes records its root\'s tickSize and tickValue in the local file', async () => {
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const { call } = fakeBroker();
+  const t = createTranslator({ call, cacheFile, now: () => NOW });
+  await t.toBroker('MNQ'); // search_contracts MNQ: the front month's spec is kept, not the later month's
+  const { brokerSpecFor } = require('../../scripts/lib/trading/broker-specs');
+  const mnq = JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs.MNQ;
+  assert.deepStrictEqual(mnq, { tickSize: 0.25, tickValue: 0.5, name: 'MNQZ6', description: null, id: 'b-101', active: true, readAt: NOW.toISOString() });
+  assert.strictEqual(brokerSpecFor(cacheFile, 'MNQ').tickValue, 0.5);
+  assert.strictEqual(brokerSpecFor(cacheFile, 'NQ'), null, 'NQ not described yet');
+  // get_contract for an id first seen in a result records its root's spec too.
+  await t.translateResult('list_open_positions', [{ contractId: 'b-201', size: 1 }]);
+  assert.deepStrictEqual([brokerSpecFor(cacheFile, 'NQ').tickSize, brokerSpecFor(cacheFile, 'NQ').tickValue, brokerSpecFor(cacheFile, 'NQ').id], [0.25, 5, 'b-201']);
+  // A contract with no ticker records nothing (b-301 has no specs either).
+  assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs).sort(), ['MNQ', 'NQ']);
+});
+
+test('tick specs: a malformed reply records nothing and never replaces a good spec; an old file without specs still works', async () => {
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  // A file from before specs: ids and front months only.
+  fs.writeFileSync(cacheFile, JSON.stringify({ ids: { 'b-102': { root: 'MNQ', month: '2027-03' } }, front: { MNQ: { id: 'b-101', month: '2026-12', day: '2026-10-07' } } }));
+  const bad = [
+    { id: 'm-1', name: 'MESZ6', tickSize: 0.25, tickValue: 0, activeContract: true },
+    { id: 'm-2', name: 'ESZ6', tickSize: -0.25, tickValue: 12.5, activeContract: true },
+    { id: 'm-3', name: 'RTYZ6', tickSize: 0.1, tickValue: 5e9, activeContract: true },
+    { id: 'm-4', name: 'YMZ6', tickSize: '1', tickValue: 'five', activeContract: true },
+    { id: 'm-5', name: 'M2KZ6', activeContract: true },
+  ];
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  let list = bad;
+  const t = createTranslator({ call: async () => reply(list), cacheFile, now: () => NOW });
+  assert.strictEqual(await t.toBroker('MNQ'), 'b-101', 'the old file\'s front month still translates');
+  assert.strictEqual(await t.toBroker('MNQ:2027-03'), 'b-102');
+  const named = await t.translateResult('search_contracts', bad);
+  assert.deepStrictEqual(named.map(c => c.id), ['MES', 'ES', 'RTY', 'YM', 'M2K'], 'still translated: only the spec is dropped');
+  const { brokerSpecFor } = require('../../scripts/lib/trading/broker-specs');
+  for (const r of ['MES', 'ES', 'RTY', 'YM', 'M2K']) assert.strictEqual(brokerSpecFor(cacheFile, r), null, r);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs, {});
+  // A good reply records; a later malformed one leaves it as it was.
+  list = [{ id: 'm-1', name: 'MESZ6', tickSize: 0.25, tickValue: 1.25, activeContract: true }];
+  await t.translateResult('search_contracts', list);
+  assert.strictEqual(brokerSpecFor(cacheFile, 'MES').tickValue, 1.25);
+  await t.translateResult('get_contract', { id: 'm-1', name: 'MESZ6', tickSize: 0.25, tickValue: 0 });
+  assert.strictEqual(brokerSpecFor(cacheFile, 'MES').tickValue, 1.25);
+  // A hand-edited, poisoned file is not believed by the reader either.
+  const raw = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  raw.specs.MES.tickValue = 0;
+  fs.writeFileSync(cacheFile, JSON.stringify(raw));
+  assert.strictEqual(brokerSpecFor(cacheFile, 'MES'), null);
+});
+
+test('tick specs: a spec that differs from the static table is said on stderr, once; the later read wins across processes', async () => {
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  const odd = [{ id: 'x-1', name: 'MNQZ6', tickSize: 0.25, tickValue: 2, activeContract: true }];
+  const writes = [];
+  const orig = process.stderr.write;
+  process.stderr.write = s => { writes.push(String(s)); return true; };
+  try {
+    const t = createTranslator({ call: async () => reply(odd), cacheFile, now: () => NOW });
+    await t.translateResult('search_contracts', odd);
+    await t.translateResult('search_contracts', odd);
+  } finally {
+    process.stderr.write = orig;
+  }
+  const said = writes.filter(w => /WARNING MNQ: the broker's tick spec \(0\.25 = \$2\.00\) differs from the static table/.test(w));
+  assert.strictEqual(said.length, 1, writes.join(''));
+  // An older read (another process) never replaces a newer one in the shared file.
+  const older = createTranslator({ call: async () => reply([]), cacheFile, now: () => new Date(NOW.getTime() - 60000) });
+  await older.translateResult('search_contracts', [{ id: 'x-1', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]);
+  assert.strictEqual(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs.MNQ.tickValue, 2);
+  const newer = createTranslator({ call: async () => reply([]), cacheFile, now: () => new Date(NOW.getTime() + 60000) });
+  await newer.translateResult('search_contracts', [{ id: 'x-1', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]);
+  assert.strictEqual(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs.MNQ.tickValue, 0.5);
+});

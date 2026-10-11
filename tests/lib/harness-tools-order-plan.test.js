@@ -12,15 +12,17 @@ const strategiesOps = require('../../scripts/lib/harness-tools/strategies');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // The parity bar where bos (and ema_cross) fired long (tests/e2e/mock-trading-e2e.test.js), and just after it closed.
 const FIRED_BAR = '2026-04-28T04:09:00.000Z';
 const NOW = new Date(Date.parse(FIRED_BAR) + 180000 + 20000);
 
-function setup() {
+function setup({ specs = true } = {}) {
   const home = tmpDir();
+  // The broker's tick specs, as the translator records them (the default broker's, and the mock's of the policy test).
+  if (specs) for (const broker of ['topstepx', 'mock']) recordBrokerSpecs(home, { broker });
   const bars = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))
     .filter(b => Date.parse(b.t) <= Date.parse(FIRED_BAR)).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
   const file = path.join(home, 'MNQ-3m.json');
@@ -48,6 +50,22 @@ test('order_plan: a rules candidate on the side it fired - the working shown, th
   assert.match(summary, /\n {2}bos long \| .*entryRef 27427\.5, stop 4\.4283 pts = 18 ticks \(\$9\.00\/MNQ contract\)/);
   // Without accountId: the arguments say to add it.
   assert.match(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx).text, /\nplace_order arguments \(add "accountId": the account's id\): \{"contractId":"MNQ"/);
+});
+
+test('order_plan: the tick specs are the broker\'s; none recorded for the contract is a refusal saying to fetch it', () => {
+  const { file, home, ctx } = setup({ specs: false });
+  const none = /no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first .*; no order/;
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), none);
+  // Another root's spec doesn't do; a malformed one (a zero tick value) records nothing usable.
+  recordBrokerSpecs(home, { roots: ['MES'] });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), none);
+  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 0 } } });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), none);
+  // The broker's numbers, not the table's: MNQ reported at $5 a tick prices the same 18 ticks at $90.
+  recordBrokerSpecs(home, { roots: ['MNQ'], specs: { MNQ: { tickValue: 5 } } });
+  const r = plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx);
+  assert.match(r.text, /4\.4283 pts = 18 ticks \(\$90\.00\/MNQ contract\)/);
+  assert.strictEqual(r.plan.riskUsd, 90);
 });
 
 test('order_plan: units follow the instrument (MES $1.25 a tick on the same distance)', () => {
@@ -179,6 +197,28 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   fs.writeFileSync(path.join(home, 'journal.jsonl'), `${JSON.stringify({ ts: new Date(NOW.getTime() + 1000).toISOString(), kind: 'order_placed', contractId: 'NQ', text: 'setup:prop_portfolio long', data: { result: { success: true } } })}\n`);
   const later = { ...ctx, now: () => new Date(NOW.getTime() + 5000) };
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, later), /the order gate would refuse this entry: \[combine\] .*since the snapshot|the order gate would refuse this entry: .*\[policy\] .*already used/);
+});
+
+test('order_plan: a policy strategy is sized with the broker\'s tick values, and refused while either contract of the family has none', () => {
+  const { file, home, ctx } = setup({ specs: false });
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, '/nonexistent'], journal: path.join(home, 'journal.jsonl') } } }));
+  const account = accountNamed(ROOT, 'topstep_100k', {});
+  prop.startAttempt(home, account, NOW);
+  prop.snapshot(home, account, 100000, NOW);
+  prop.appendVerdict(home, {
+    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
+    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', policy: null, action: 'full', contract: 'NQ', maxSize: 12,
+  });
+  const go = () => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
+  recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ'] });
+  assert.throws(go, /topstep_100k: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);
+  // NQ at the broker's $5 a tick: $900 budget / ($90 + $2.80) = 9 NQ (as with the table); at $10 a tick, $180 + $2.80: 4 NQ.
+  recordBrokerSpecs(home, { broker: 'mock', roots: ['NQ'] });
+  assert.strictEqual(go().args.size, 9);
+  recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ', 'NQ'], specs: { MNQ: { tickValue: 1 }, NQ: { tickValue: 10 } } });
+  const r = go();
+  assert.deepStrictEqual([r.args.contractId, r.args.size], ['NQ', 4]);
+  assert.match(r.args.rationale, /4 NQ risks \$720\.00$/);
 });
 
 test('order_plan: the CLI (strategies.js plan) takes the same arguments', () => {

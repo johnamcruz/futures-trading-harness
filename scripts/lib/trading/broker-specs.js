@@ -1,0 +1,90 @@
+'use strict';
+
+/**
+ * A contract's tick size and tick value, as the broker reports them. The
+ * contract translator (broker/translator.js) records them in its local file
+ * (<FTH_HOME>/contracts-<broker>.json, `specs`, one per root) whenever the
+ * broker's server answers search_contracts or get_contract; this module only
+ * reads that file, so the order gate and hooks may use it (local state, no
+ * network). Live and replay trading take their specs from here; offline code
+ * (backtests, training) keeps the static table in contracts.js, and a broker
+ * spec that differs from it is reported (training would not equal live).
+ *
+ *   validSpec(c)                           { tickSize, tickValue } when both are sane numbers, else null
+ *   brokerSpecFor(file, root)              the recorded spec of a root, or null
+ *   brokerSpecs(file)                      root -> spec or null (a spec source for prop-state, order_plan)
+ *   contractsFileFor(home, env)            the selected broker's file under a harness home, or null
+ *   liveSpecs(env)                         the spec source of the selected broker (FTH_HOME, FTH_BROKER)
+ *   noSpecsMessage(root)                   the refusal when none is recorded
+ *   specMismatch(root, spec)               a message when the broker's spec differs from the static table, else null
+ */
+
+const { specFor } = require('./contracts');
+const { harnessHome } = require('../paths');
+
+// Sanity bounds: a reply outside them (a zero, a unit mix-up) is recorded as nothing.
+const TICK_SIZE_MAX = 1e4;
+const TICK_VALUE_MIN = 0.01;
+const TICK_VALUE_MAX = 1e4;
+
+const num = x => (typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN);
+
+/** { tickSize, tickValue } from a broker's contract (or a recorded spec) when both are sane, else null. */
+function validSpec(c) {
+  if (!c || typeof c !== 'object') return null;
+  const tickSize = num(c.tickSize);
+  const tickValue = num(c.tickValue);
+  if (!(Number.isFinite(tickSize) && tickSize > 0 && tickSize <= TICK_SIZE_MAX)) return null;
+  if (!(Number.isFinite(tickValue) && tickValue >= TICK_VALUE_MIN && tickValue <= TICK_VALUE_MAX)) return null;
+  return { tickSize, tickValue };
+}
+
+/** The broker's recorded spec of a root (fees from the static table), or null. */
+function brokerSpecFor(file, root) {
+  if (!file) return null;
+  const r = String(root || '').toUpperCase();
+  const rec = require('../broker/translator').readCache(file).specs[r]; // lazy: the translator requires this module
+  const v = validSpec(rec);
+  if (!v) return null;
+  const fees = (specFor(r) || {}).feesPerSide;
+  return {
+    ...v, ...(fees !== undefined ? { feesPerSide: fees } : {}),
+    name: rec.name || null, description: rec.description || null, id: rec.id || null, readAt: rec.readAt || null, source: 'broker',
+  };
+}
+
+const brokerSpecs = file => root => brokerSpecFor(file, root);
+
+/** The selected broker's contracts file under `home` (the env picks the broker), or null when no broker is configured. */
+function contractsFileFor(home, env = process.env) {
+  try {
+    const { activeBroker, contractsCacheFile } = require('../broker/config');
+    const at = { ...env, FTH_HOME: home }; // the home's brokers.json picks the broker, as for its translator
+    return contractsCacheFile(activeBroker(at).name, at);
+  } catch (_err) {
+    return null; // no broker config: no specs, so entries are refused
+  }
+}
+
+const liveSpecs = (env = process.env) => brokerSpecs(contractsFileFor(harnessHome(env), env));
+
+function noSpecsMessage(root) {
+  const r = String(root || '').toUpperCase() || 'this contract';
+  return `no tick specs from the broker for ${r} yet: call get_contract or search_contracts for ${r} first (the harness records the broker's tick size and value), then try again`;
+}
+
+const money = x => `$${Number(x).toFixed(2)}`;
+
+/** A message when the broker's spec of a root differs from the static table (backtests, training), else null. */
+function specMismatch(root, spec) {
+  const r = String(root || '').toUpperCase();
+  const table = specFor(r);
+  const b = validSpec(spec);
+  if (!table || !b) return null;
+  const same = (x, y) => Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(y));
+  if (same(b.tickSize, table.tickSize) && same(b.tickValue, table.tickValue)) return null;
+  return `${r}: the broker's tick spec (${b.tickSize} = ${money(b.tickValue)}) differs from the static table backtests and training use `
+    + `(${table.tickSize} = ${money(table.tickValue)}, scripts/lib/trading/contracts.js): training does not equal live; fix the table or the broker`;
+}
+
+module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch };

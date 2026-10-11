@@ -61,6 +61,24 @@ test('the conformance checker: a conforming server passes; a missing tool or new
   } finally {
     bad.close();
   }
+  // The harness trades with the broker's tick specs: an unusable one fails; one unlike the static table (training) is a warning.
+  const zero = fake({ FAKE_TICK: JSON.stringify({ tickValue: 0 }) });
+  try {
+    const r = await checkConformance(zero);
+    assert.strictEqual(r.ok, false);
+    assert.ok(r.results.some(x => !x.ok && /^get_contract: tickSize above 0 and tickValue/.test(x.check) && x.problems.includes('tickSize 0.25, tickValue 0')), JSON.stringify(r.results));
+  } finally {
+    zero.close();
+  }
+  const odd = fake({ FAKE_TICK: JSON.stringify({ tickValue: 2 }) });
+  try {
+    const r = await checkConformance(odd);
+    assert.ok(r.ok, JSON.stringify(r.results.filter(x => !x.ok)));
+    const warn = r.results.find(x => /tick specs match the static table \(warning: training would not equal live\)/.test(x.check));
+    assert.match(warn.problems[0], /^MNQ: the broker's tick spec \(0\.25 = \$2\.00\) differs from the static table/);
+  } finally {
+    odd.close();
+  }
   const newest = fake({ FAKE_NEWEST_FIRST: '1' });
   try {
     assert.ok((await checkConformance(newest)).results.some(x => x.problems.includes('bars are not oldest first')));

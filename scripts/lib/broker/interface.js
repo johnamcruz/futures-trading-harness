@@ -18,7 +18,7 @@
 const field = (type, required = false, note = '') => ({ type, required, note });
 const outcome = { success: field('boolean', true), errorCode: field('number', true), errorName: field('string', true), errorMessage: field('string|null') };
 const order = { '[].id': field('number', true), '[].contractId': field('string', true), '[].type': field('number', true, 'order type code'), '[].side': field('number', true, '0 buy, 1 sell'), '[].size': field('number', true), '[].status': field('number', true), '[].stopPrice': field('number|null'), '[].limitPrice': field('number|null') };
-const contract = { id: field('string', true), name: field('string', true, 'ticker, e.g. MNQZ6'), tickSize: field('number', true), tickValue: field('number', true, 'USD per tick per contract'), activeContract: field('boolean', true, 'the front month') };
+const contract = { id: field('string', true), name: field('string', true, 'ticker, e.g. MNQZ6'), tickSize: field('number', true, 'above 0; the harness trades with the broker\'s tick specs'), tickValue: field('number', true, 'USD per tick per contract, 0.01 to 10,000'), activeContract: field('boolean', true, 'the front month') };
 const listOf = fields => Object.fromEntries([['[]', field('array', true)], ...Object.entries(fields).map(([k, f]) => [`[].${k}`, f])]);
 
 const TOOLS = {

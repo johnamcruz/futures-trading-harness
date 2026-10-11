@@ -20,7 +20,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { profileSeries } = require('../../scripts/lib/trading/volume-profile');
-const { tmpDir, writeJournal } = require('../helpers');
+const { tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -45,6 +45,7 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
   const poc = profileSeries(BARS, 'prior_rth').poc[FIRE];
   assert.ok(Math.abs(poc - 27414.32) < 0.01, `prior POC ${poc}`);
   const home = tmpDir();
+  recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const file = path.join(home, 'MNQ-3m.json');
   fs.writeFileSync(file, JSON.stringify({ contractId: CONTRACT, bars: BARS.slice(0, FIRE + 1) }));
   const now = new Date(Date.parse(BARS[FIRE].t) + STEP + 30000).toISOString();

@@ -12,6 +12,7 @@ const { buildObservation, marketFeatures, confluence } = require('./observation'
 const { timeframeMs } = require('../trading/evaluator');
 const { roundHalfEven } = require('../backtest/engine');
 const state = require('../trading/prop-state');
+const { specFor } = require('../trading/contracts');
 
 /** The bars as the env sees them: normalized, with the policy's market features. */
 function liveBook(rawBars, spec, params = {}) {
@@ -25,15 +26,16 @@ function liveBook(rawBars, spec, params = {}) {
  * scan: the component strategy's scan result (candidate, direction,
  * stopDistance); component: that strategy's name. bundle: the trained policy,
  * or null to take every setup as sized. The order gate checks the verdict.
+ * specOf: root -> tick spec, the broker's live (as the gate sizes); the static table by default.
  */
-function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date() }) {
+function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date(), specOf = specFor }) {
   const book = liveBook(rawBars, spec, strategy.params);
   const i = book.bars.length - 1;
   const tf = timeframeMs(strategy.timeframe) || 60000;
   const closeAt = new Date(Date.parse(book.bars[i].t) + tf);
   const stopTicks = Math.max(1, roundHalfEven(scan.stopDistance / spec.tickSize)); // as the engine
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
-  const { legs, ratio, mode } = state.legsFor(account, symbol);
+  const { legs, ratio, mode } = state.legsFor(account, symbol, specOf);
   const plan = fraction => combine.contractPlan({
     dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
   });
@@ -60,12 +62,12 @@ function decideSetup({ bundle, account, cs, strategy, component, symbol, contrac
  * hold / close for an open trade past its ratchet. pos: { sign, entry, risk
  * (price), size, contract, component, peakR, troughR, barsHeld }.
  */
-function decidePosition({ bundle, account, cs, strategy, rawBars, spec, pos }) {
+function decidePosition({ bundle, account, cs, strategy, rawBars, spec, pos, specOf = specFor }) {
   const book = liveBook(rawBars, spec, strategy.params);
   const i = book.bars.length - 1;
   const closeAt = new Date(Date.parse(book.bars[i].t) + (timeframeMs(strategy.timeframe) || 60000));
-  const leg = state.legOf(account, pos.contract);
-  const { legs } = state.legsFor(account, pos.contract);
+  const leg = state.legOf(account, pos.contract, specOf);
+  const { legs } = state.legsFor(account, pos.contract, specOf);
   const p = { ...pos, tickValue: leg ? leg.tickValue : spec.tickValue, mini: Boolean(legs.mini && legs.mini.root === pos.contract), strategy: pos.component };
   return bundle.decide('position', buildObservation({ cs, account, book, i, closeAt, components: strategy.strategies, pos: p }));
 }

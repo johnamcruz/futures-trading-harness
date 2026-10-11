@@ -14,6 +14,11 @@
  * e.g. NQZ5 or MNQH26. Answers are cached per broker (contracts-<broker>.json
  * in the harness home). The front month is looked up once per trading day, so
  * a name never changes meaning during a session (the harness is flat overnight).
+ * Each contract the broker describes also records its root's tick spec there
+ * (`specs`: { tickSize, tickValue, name, description, id, readAt }), the one
+ * source of tick specs for live and replay trading (trading/broker-specs.js
+ * reads it); a reply without sane numbers records nothing, and a spec that
+ * differs from the static table (backtests, training) is reported on stderr.
  *
  * createTranslator({ call, cacheFile, now })
  *   .toBroker(name)               standard name -> broker id (throws when not found)
@@ -69,12 +74,15 @@ function parseTicker(name, now = new Date()) {
   return { root: m[1], month: `${year}-${String(monthNum).padStart(2, '0')}` };
 }
 
+const plainObject = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+
 function readCache(file) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return { ids: data.ids || {}, front: data.front || {} };
+    // A file from before specs were recorded has none: every root then has no spec.
+    return { ids: plainObject(data.ids), front: plainObject(data.front), specs: plainObject(data.specs) };
   } catch (_err) {
-    return { ids: {}, front: {} };
+    return { ids: {}, front: {}, specs: {} };
   }
 }
 
@@ -88,6 +96,11 @@ function mergeCache(into, from) {
   const valid = f => Boolean(f && f.id && typeof f.day === 'string');
   for (const [root, f] of Object.entries(from.front)) {
     if (valid(f) && (!valid(into.front[root]) || f.day >= into.front[root].day)) into.front[root] = f;
+  }
+  // Per root, the spec read later wins (a process's older read never replaces a newer one).
+  const read = sp => Boolean(sp && typeof sp.readAt === 'string');
+  for (const [root, sp] of Object.entries(from.specs || {})) {
+    if (read(sp) && (!read(into.specs[root]) || sp.readAt >= into.specs[root].readAt)) into.specs[root] = sp;
   }
   return into;
 }
@@ -143,11 +156,32 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   };
   const notTicker = new Set(); // ids the broker described with a name that is no futures ticker
 
+  const warned = new Set();
   const remember = c => {
     const t = c && c.id ? parseTicker(c.name, now()) : null;
     if (!t) return null;
     cache.ids[c.id] = { root: t.root, month: t.month };
+    recordSpec(t.root, c);
     return t;
+  };
+  // The broker's tick spec for the root; a reply without sane numbers records nothing.
+  const recordSpec = (root, c) => {
+    const { validSpec, specMismatch } = require('../trading/broker-specs');
+    const v = validSpec(c);
+    if (!v) return;
+    const readAt = now().toISOString();
+    const active = c.activeContract === true;
+    // In one answer listing several months, the front month's spec is the one kept.
+    const had = cache.specs[root];
+    if (had && had.readAt === readAt && had.active && !active) return;
+    cache.specs[root] = {
+      ...v, name: String(c.name), description: typeof c.description === 'string' ? c.description : null, id: String(c.id), active, readAt,
+    };
+    const why = specMismatch(root, v);
+    if (why && !warned.has(why)) {
+      warned.add(why);
+      process.stderr.write(`[contract-translator] WARNING ${why}\n`);
+    }
   };
 
   /** The contracts of a root, from search_contracts; refreshes its front month. */

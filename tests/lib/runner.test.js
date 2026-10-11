@@ -859,3 +859,21 @@ test('a prop account with no active policy: a failed account check leaves plain 
   assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
   assert.match(p, /plain long(?! \(its policy)/);
 });
+
+test('the broker\'s tick specs at the contract lookup: the family\'s other contract is looked up too, and a spec unlike the static table (training) is said once', async () => {
+  const clockRef = { t: et(10, 0) };
+  const asked = [];
+  const logs = [];
+  const SPECS = { MNQ: { tickSize: 0.25, tickValue: 2 }, NQ: { tickSize: 0.25, tickValue: 5 }, MES: {} };
+  const runner = bareRunner({
+    cfg: { timeframe: 3, symbols: ['MNQ', 'MES'] }, clockRef, logs,
+    client: { async activeContract(s) { asked.push(s); if (s === 'ES') throw new Error('HTTP 500'); return { id: s, ...SPECS[s] }; }, async closedBars() { return []; } },
+  });
+  while (clockRef.t < et(10, 30)) clockRef.t += await runner.step();
+  assert.ok(asked.includes('NQ') && asked.includes('ES'), `the partners are looked up (${asked.join(', ')})`);
+  const said = logs.filter(m => /^MNQ: the broker's tick spec \(0\.25 = \$2\.00\) differs from the static table .*training does not equal live/.test(m));
+  assert.strictEqual(said.length, 1, logs.join('\n'));
+  assert.ok(!logs.some(m => /^NQ: the broker's tick spec/.test(m)), 'NQ agrees with the table');
+  assert.strictEqual(logs.filter(m => /^MES: the broker's contract has no usable tick specs \(no tick specs from the broker for MES yet/.test(m)).length, 1, logs.join('\n'));
+  assert.ok(logs.some(m => /^ES: contract lookup failed \(HTTP 500\); entries that size into ES are refused until the broker's tick specs for it are recorded/.test(m)), logs.join('\n'));
+});

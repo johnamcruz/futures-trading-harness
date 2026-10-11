@@ -10,7 +10,8 @@
  * the newest closed seconds ago), FAKE_FLAT (no position or order),
  * FAKE_CALLS (a file it appends each tool call's name to), FAKE_ARGS (a file it
  * appends each call's name and arguments to, as JSON lines), FAKE_TRADING_OFF
- * (get_server_config reports trading disabled).
+ * (get_server_config reports trading disabled), FAKE_TICK (JSON merged into the
+ * MNQ contracts: another tickSize or tickValue).
  */
 
 const fs = require('fs');
@@ -23,7 +24,7 @@ const state = {
   contracts: [
     { id: MNQ, name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
     { id: 'CON.F.US.MNQ.H27', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: false },
-  ],
+  ].map(c => ({ ...c, ...JSON.parse(process.env.FAKE_TICK || '{}') })),
   positions: process.env.FAKE_FLAT ? [] : [{ id: 1, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', type: 1, size: 1, averagePrice: 21500 }],
   orders: process.env.FAKE_FLAT ? [] : [{ id: 9, accountId: 7, contractId: MNQ, status: 1, type: 4, side: 1, size: 1, stopPrice: 21480, limitPrice: null }],
   fills: [{ id: 3, orderId: 8, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', price: 21500, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false }],

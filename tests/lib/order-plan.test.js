@@ -110,7 +110,7 @@ test('buildPlan: its place_order arguments pass the order gate\'s consistency ch
     for (const side of ['long', 'short']) {
       for (const exit of [TARGET_2R, TRAIL, { targetR: 1.5 }]) {
         const { args } = buildPlan(base({ contract, spec: specFor(contract), entryRef, side, exit, stop: 21 }));
-        assert.strictEqual(checkConsistency(args, args.rationale), null, `${contract} ${side} ${JSON.stringify(exit)}`);
+        assert.strictEqual(checkConsistency(args, args.rationale, specFor), null, `${contract} ${side} ${JSON.stringify(exit)}`);
         assert.ok(Number.isInteger(args.stopLossBracket.ticks) && args.stopLossBracket.ticks > 0);
         assert.match(args.rationale, new RegExp(`^setup:supertrend ${side} `), 'the setup tag and side the gate reads, first');
       }

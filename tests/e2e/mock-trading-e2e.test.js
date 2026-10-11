@@ -43,7 +43,7 @@ const { createPropHooks } = require('../../scripts/lib/rl/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { plan: orderPlan } = require('../../scripts/lib/harness-tools/order-plan');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
@@ -53,9 +53,13 @@ const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.c
 // The parity bar where bos fired long (tests/e2e/trading-e2e.test.js), and the moment just after it closed.
 const FIRED_BAR = '2026-04-28T04:09:00.000Z';
 
-/** A harness home wired to the mock exchange as its broker. */
-function world(at, over = {}) {
+/**
+ * A harness home wired to the mock exchange as its broker, with the broker's tick specs recorded
+ * (as the translator does at the runner's contract lookup); specs: false leaves them to be looked up.
+ */
+function world(at, over = {}, { specs = true } = {}) {
   const home = tmpDir();
+  if (specs) recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   const state = path.join(home, 'exchange.json');
   const journal = path.join(home, 'journal.jsonl');
   fs.writeFileSync(journal, '');
@@ -111,7 +115,7 @@ function signalOnFiredBar(w) {
 
 test('mock trading: a trade\'s whole life through the gateway, from a real signal to a flat account', async () => {
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000).toISOString();
-  const w = world(at);
+  const w = world(at, {}, { specs: false });
   const sig = signalOnFiredBar(w);
   assert.strictEqual(sig.side, 'long');
   const stop = sig.price - sig.ticks * 0.25;
@@ -122,6 +126,14 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
   };
   const gw = gatewayClient(w);
   try {
+    // 0. No tick specs from the broker yet: the entry is refused, nothing reaches the broker. The
+    // contract looked up (search_contracts through the gateway and the translator) records them.
+    const early = await attempt(gw, 'place_order', entry);
+    assert.ok(!early.ok && /\[contract-specs\] no tick specs from the broker for MNQ yet/.test(early.error), early.error);
+    assert.ok(!exchange.read(w.state).calls.some(c => c.tool === 'place_order'));
+    await gw.call('search_contracts', { searchText: 'MNQ' });
+    const recorded = JSON.parse(fs.readFileSync(path.join(w.home, 'contracts-mock.json'), 'utf8')).specs.MNQ;
+    assert.deepStrictEqual([recorded.tickSize, recorded.tickValue, recorded.id, recorded.name], [0.25, 0.5, MNQ_ID, 'MNQZ6']);
     // 1. The entry: allowed, filled at the market, with its bracket stop and target working.
     const placed = await attempt(gw, 'place_order', entry);
     assert.ok(placed.ok, placed.error);

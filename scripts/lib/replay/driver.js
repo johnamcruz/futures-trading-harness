@@ -37,7 +37,7 @@ const { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FI
 const { loadBrokers } = require('../broker/config');
 const { withAdapter } = require('../broker/adapter');
 const { contractRoot } = require('../trading/journal');
-const { specFor } = require('../trading/contracts');
+const { liveSpecs } = require('../trading/broker-specs');
 const { sessionMinute, tradingDayKey, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
@@ -76,11 +76,14 @@ function seedRunHome(run, { root, userEnv = process.env }) {
   return true;
 }
 
-/** An opening fill matched to the entry the gateway recorded (its strategy and stop), for R. */
-function withEntry(fill, entries) {
+/**
+ * An opening fill matched to the entry the gateway recorded (its strategy and stop), for R, at the
+ * tick value the replay broker reported (specOf: the run's recorded broker specs), as the gate sized it.
+ */
+function withEntry(fill, entries, specOf = () => null) {
   const e = fill.profitAndLoss === null || fill.profitAndLoss === undefined ? entries.find(x => String(x.orderId) === String(fill.orderId)) : null;
   if (!e) return fill;
-  const spec = specFor(contractRoot(fill.contractId));
+  const spec = specOf(contractRoot(fill.contractId));
   return { ...fill, entry: { setup: e.setup || null, stopTicks: e.stopTicks || null, tickValue: spec ? spec.tickValue : null } };
 }
 
@@ -125,7 +128,8 @@ function defaultDeps(run, root) {
     async trades(env, account, since, until) {
       const fills = await withAdapter({ root, env }, a => a.fillsSince(account, since));
       const entries = entryOrders(run.paths.runHome);
-      return fills.filter(f => Date.parse(f.creationTimestamp) > since.getTime() && Date.parse(f.creationTimestamp) <= until.getTime()).map(f => withEntry(f, entries));
+      const specOf = liveSpecs(env); // the run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER)
+      return fills.filter(f => Date.parse(f.creationTimestamp) > since.getTime() && Date.parse(f.creationTimestamp) <= until.getTime()).map(f => withEntry(f, entries, specOf));
     },
   };
 }

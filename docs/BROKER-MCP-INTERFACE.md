@@ -93,9 +93,24 @@ by asking that same server:
 - an id to a name: from those answers, else `get_contract`.
 
 A contract's root and month come from its `name`, the exchange ticker: root +
-month code + year (`NQZ5`, `MNQH26`). That is all a server has to provide; its
-ids can be anything. Lookups are cached per broker
-(`~/.futures-trading-harness/contracts-<broker>.json`).
+month code + year (`NQZ5`, `MNQH26`). Its ids can be anything. Lookups are
+cached per broker (`~/.futures-trading-harness/contracts-<broker>.json`).
+
+## Tick specs
+
+The harness takes every contract's tick size and tick value from the server:
+`tickSize` and `tickValue` are required in every `search_contracts` and
+`get_contract` reply. The translator records them per root in the same file
+(`specs`) whenever the server describes a contract, and live and replay
+trading use only those: the order gate checks prices on the tick and sizes
+prop entries in dollars with them, and refuses an entry on a contract whose
+specs it has none of (fetch the contract with `get_contract` or
+`search_contracts` first). Exits and protective orders never need them. A
+reply whose `tickSize` is not a number above 0, or whose `tickValue` is not a
+number from 0.01 to 10,000 (USD per tick per contract), records nothing. A
+server's spec that differs from the harness's static table (which backtests
+and training use offline) is reported, since training would then not equal
+live.
 
 ## Tools
 
@@ -143,8 +158,9 @@ Result:
 
 Input: **`searchText`** (non-empty, e.g. `MNQ`), `live` (false).
 
-Result: up to 20 of `{ id, name (e.g. MNQZ6), description, tickSize,
-tickValue (USD per tick per contract), activeContract (the front month) }`.
+Result: up to 20 of `{ id, name (e.g. MNQZ6), description, tickSize
+(required, above 0), tickValue (required, USD per tick per contract, 0.01 to
+10,000), activeContract (the front month) }`. See Tick specs.
 
 #### `get_contract` (read)
 
