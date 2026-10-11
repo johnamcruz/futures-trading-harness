@@ -18,7 +18,7 @@ const USAGE = 'usage: market-snapshot.js <bars.json | -> [--param=value ...]';
 function paramValue(name, raw) {
   if (!(name in PARAMS)) throw new Error(`unknown parameter --${name} (known: ${Object.keys(PARAMS).join(', ')})`);
   const n = Number(raw);
-  if (!Number.isFinite(n)) throw new Error(`--${name} must be a number`);
+  if (!Number.isFinite(n)) throw new Error(`--${name} must be a number`); // cli-only: the tool's schema refuses this first
   return n;
 }
 

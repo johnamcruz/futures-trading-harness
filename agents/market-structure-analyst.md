@@ -27,7 +27,7 @@ never paste a long `get_bars` reply into a file.
 1. Load the skills `market-structure`, `multi-timeframe-analysis`,
    `liquidity-concepts`, `market-snapshot`, `strategy-library`, and
    `harness-tools`.
-2. Bars: the 3m file (2000 bars) and, with `bars_fetch`, 60m (120) and 15m
+2. Bars: the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 60m (120) and 15m
    (160). One request per timeframe (the rate limit is shared). Run
    `market_snapshot` and `mtf_read` on the 3m file.
 3. Per timeframe: the last swing highs/lows (`liquidity.swingHighs` /

@@ -188,18 +188,43 @@ test('callTool: record is refused while an autonomous runner holds its lock, wha
     for (const [tool, args, tag] of [['strategies_scan', { bars, symbol: 'MNQ', record: true }, 'strategies'], ['mtf_read', { bars, symbol: 'MNQ', record: true }, 'mtf'], ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, 'bars']]) {
       const r = await callTool(tool, args, { env });
       assert.strictEqual(r.isError, true, tool);
-      assert.match(r.content[0].text, new RegExp(`\\[${tag}\\] --record: an autonomous runner is running \\(pid ${runner.pid}\\): it records the reads and signals of the symbols it trades, and record is refused while it runs\\n$`));
+      assert.match(r.content[0].text, new RegExp(`\\[${tag}\\] record: an autonomous runner is running \\(pid ${runner.pid}\\): it records the reads and signals of the symbols it trades, and record is refused while it runs\\n$`));
     }
     assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
     assert.strictEqual((await callTool('mtf_read', { bars }, { env })).isError, undefined, 'without record it runs');
     // A lock whose pid is another program (a reused pid), or gone, doesn't refuse.
     for (const pid of [process.pid, 2 ** 30]) {
       fs.writeFileSync(path.join(home, 'autotrader.lock'), JSON.stringify({ pid }));
-      assert.match((await callTool('mtf_read', { bars, record: true }, { env })).content[0].text, /\[mtf\] --record needs --symbol/, String(pid));
+      assert.match((await callTool('mtf_read', { bars, record: true }, { env })).content[0].text, /\[mtf\] record needs symbol \(a contract root/, String(pid));
     }
   } finally {
     runner.kill();
   }
+});
+
+test('callTool: refusals name the tool\'s arguments, never the script\'s flags', async () => {
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
+  fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(home, 'bars', 'NQ-3m.csv'));
+  const bars = path.join(home, 'bars', 'NQ-3m.csv');
+  const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
+  const cases = [
+    ['strategies_scan', { bars, symbol: 'MNQ', record: true }, auto, /^\[strategies\] record: the autonomous runner records every bar itself$/m],
+    ['mtf_read', { bars, symbol: 'MNQ', record: true }, auto, /^\[mtf\] record: the autonomous runner records the read itself$/m],
+    ['mtf_read', { bars, record: true }, { FTH_HOME: home }, /^\[mtf\] record needs symbol \(a contract root, e.g\. MNQ\)$/m],
+    ['bars_fetch', { symbol: 'MNQ', timeframe: 'daily', record: true }, { FTH_HOME: home }, /^\[bars\] record reads trigger bars \(minutes\), not timeframe "daily"$/m],
+    ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, auto, /^\[bars\] record: the autonomous runner records the read itself$/m],
+    // An impossible date that fits the pattern reaches the operation.
+    ['blackouts_add', { start: '2999-02-30T10:00:00Z', end: '2999-02-30T09:00:00Z', reason: 'x' }, { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'b.json') }, /^\[blackouts\] start and end must be ISO times with end after start$/m],
+  ];
+  for (const [tool, args, env, why] of cases) {
+    const text = (await callTool(tool, args, { env })).content[0].text;
+    assert.match(text, why, tool);
+    assert.doesNotMatch(text.split('\n').filter(l => l.startsWith('[')).join('\n'), /--[a-z]/, `${tool}: no script flag in the refusal`);
+  }
+  // The scripts keep their own wording.
+  const mtf = require('../../scripts/lib/harness-tools/mtf');
+  assert.throws(() => mtf.mtf({ file: bars, record: true }, { env: { FTH_HOME: home } }), /^Error: --record needs --symbol=<ROOT> \(e\.g\. MNQ\)$/);
 });
 
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {

@@ -17,16 +17,18 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
    file (the prompt names it). Otherwise the harness tool `bars_fetch`
-   (`{"symbol": "MNQ", "timeframe": 3, "count": 2000}`) writes
-   `/tmp/fth/MNQ-3m.json` and says when its last bar closed (see the
+   (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)
+   writes `/tmp/fth/MNQ-3m.json` and says when its last bar closed (see the
    `harness-tools` skill).
-   Don't paste a `get_bars` reply into a file: 2000 bars are far more than a
-   tool reply can carry. 2000 bars are enough for EMA(200), prior-day levels, and the
-   1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,
+   Don't paste a `get_bars` reply into a file: thousands of bars are far more
+   than a tool reply can carry. The default is enough for EMA(200), prior-day
+   levels, and the multi-timeframe read up to the 4-hour trend (its EMA50
+   vote needs about 4000 3-minute bars). The windowed pieces (cisd_ote,
    the regime) read their own trailing 500 bars, as their source did.
    3-minute bars match the strategy parameters (1-minute for the flow
    strategies).
-2. (The file is the broker's `get_bars` JSON; CSV and Parquet files work too.)
+2. (The file is the broker's `get_bars` JSON; a CSV file works too. The
+   tools read only JSON and CSV.)
 3. Call the harness tool `market_snapshot` with the file:
 
    ```text

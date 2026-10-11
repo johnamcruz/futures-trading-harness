@@ -55,7 +55,7 @@ Check, in order, and stop at the first failure:
    a policy strategy, a live verdict matches the plan. Otherwise VETO. (The
    gate checks rules strategies' triggers from the signal record; a manual
    strategy's trigger only you check: read the plan's bars file, or fetch
-   them with `bars_fetch`, with `market_snapshot`.)
+   them with `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "name": "risk"}`, your own file), with `market_snapshot`.)
 1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
    on the side the prevailing trend allows (the plan quotes the `Trend rule:`
    line of the multi-timeframe read, or the scan's `mtf`). Against it, VETO: the gate refuses

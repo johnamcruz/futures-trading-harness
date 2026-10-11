@@ -25,10 +25,10 @@ function readList(file) {
 }
 
 /** Merge a new window into the list; returns the list to write. */
-function addWindow(list, { start, end, reason }, now = new Date()) {
+function addWindow(list, { start, end, reason }, now = new Date(), { tool = false } = {}) {
   const s = Date.parse(start);
   const e = Date.parse(end);
-  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) throw new Error('--start and --end must be ISO times with end after start');
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) throw new Error(`${tool ? 'start and end' : '--start and --end'} must be ISO times with end after start`);
   if (e - s > MAX_WINDOW_MS) throw new Error('a blackout window may be at most 12 hours');
   if (e < now.getTime()) throw new Error('that window has already ended');
   const kept = list.filter(b => !(Date.parse(b && b.end) < now.getTime() - DAY_MS));
@@ -48,7 +48,7 @@ function list(_args, ctx) {
 function add({ start, end, reason } = {}, ctx) {
   const c = context(ctx);
   const file = loadConfig(c.env).blackoutsFile;
-  const next = addWindow(readList(file), { start, end, reason }, c.now());
+  const next = addWindow(readList(file), { start, end, reason }, c.now(), { tool: c.tool });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);

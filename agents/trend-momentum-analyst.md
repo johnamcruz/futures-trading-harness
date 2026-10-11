@@ -21,7 +21,7 @@ never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trend-momentum-indicators`, `market-snapshot`,
    `strategy-library`, and `harness-tools`.
-2. Bars: the 3m file (2000 bars) and, with `bars_fetch`, 15m (160). Run
+2. Bars: the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
    `market_snapshot` on each, and `mtf_read` on the 3m file (its
    `Trend rule:` line is enforced by the scan and the gate).
 3. Regime: report the computed `regime` from the snapshot (primary,

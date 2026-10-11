@@ -23,7 +23,7 @@ description: Review closed futures trades against their plan - R multiple, plan 
      `orders`), then its record in `logs/cycles/<day>/`: the prompt (the last
      10 bars, what fired and its confluence, the trend rule, your last 10
      decisions) and what you did. Interactive: the plan entry. Then the bars
-     after the entry (the harness tool `bars_fetch`, or the runner's file): was the read wrong,
+     after the entry (the harness tool `bars_fetch` with `name`: "review", or the runner's file): was the read wrong,
      or the execution?
    - **Your last 10 trades.** The harness tool `lessons` (it starts
      with the form of the last 10: record, expectancy, repeated mistakes)

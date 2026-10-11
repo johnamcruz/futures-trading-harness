@@ -227,29 +227,73 @@ test('agents: every mcp__harness__ tool a role lists exists; analysts, risk-mana
   for (const [role, list] of Object.entries(tools)) assert.ok(!list.includes('mcp__harness__blackouts_add'), `${role}: blackouts_add is the head trader's`);
 });
 
-test('skills: every harness tool call a doc writes uses the tool\'s own argument names and types; tool-like names exist', () => {
+// A valid value per argument, for a placeholder (<SYMBOL>, <minutes>) in a documented call.
+const SAMPLE = {
+  symbol: 'MNQ', bars: '/tmp/fth/a.json', daily: '/tmp/fth/a.json', timeframe: 3, count: 5, timeframes: [15], start: '2026-01-02T10:00:00Z',
+  end: '2026-01-02T10:30:00Z', reason: 'x', account: 'topstep_50k', day: '2026-01-02', top: 5, json: true, record: true, params: {},
+};
+const sampleFor = (tool, key) => (key === 'name' ? (tool === 'strategies_show' ? 'orb' : 'trend') : SAMPLE[key]);
+
+/** The balanced {...} at the start of text (after spaces), or null. */
+function leadingObject(text) {
+  const i = text.search(/\S/);
+  if (i === -1 || text[i] !== '{') return null;
+  let depth = 0;
+  let inString = false;
+  for (let k = i; k < text.length; k += 1) {
+    const ch = text[k];
+    if (inString) {
+      if (ch === '\\') k += 1;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(i, k + 1);
+    }
+  }
+  return null;
+}
+
+/** A documented call's object as a value: unquoted keys quoted, placeholders (<...>) replaced by valid samples. */
+function callObject(tool, raw) {
+  const json = raw.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":').replace(/:\s*<[^>]*>/g, ': "<placeholder>"');
+  let obj;
+  try {
+    obj = JSON.parse(json);
+  } catch (_err) {
+    return { error: `not a readable object: ${raw.slice(0, 60)}` };
+  }
+  const fill = (o, top) => {
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === 'string' && v.includes('<')) o[k] = top ? sampleFor(tool, k) : 1;
+      else if (v && typeof v === 'object' && !Array.isArray(v)) fill(v, false);
+    }
+    return o;
+  };
+  return { obj: fill(obj, true) };
+}
+
+test('skills: every harness tool call a doc writes is valid for the tool (names, types, ranges, required); tool-like names exist', () => {
   const { validate } = require('../../scripts/lib/harness-tools/validate');
-  const names = [...HARNESS_NAMES];
   const bad = [];
-  const typeOf = raw => (/^"/.test(raw) ? 'string' : /^(true|false)$/.test(raw) ? 'boolean' : /^-?\d+(\.\d+)?$/.test(raw) ? 'number' : /^\[/.test(raw) ? 'array' : null);
   for (const d of DOCS) {
-    for (const name of names) {
+    for (const name of HARNESS_NAMES) {
       const schema = BY_NAME_SCHEMA(name);
-      for (const m of d.text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))) {
-        const rest = d.text.slice(m.index + name.length, m.index + name.length + 400);
+      for (const m of d.text.matchAll(new RegExp(`(?<![A-Za-z0-9])(?:mcp__harness__)?${name}(?![A-Za-z0-9_])`, 'g'))) {
+        const rest = d.text.slice(m.index + m[0].length, m.index + m[0].length + 600);
         const where = `${d.rel}: ${name}`;
-        // `tool {...}`, `tool` `{...}`, `tool` with `{...}`, `tool` (`{...}`)
-        const obj = /^`?\s*(?:with\s+)?\(?`?\s*(\{[^}]*\})/.exec(rest);
-        if (obj) {
-          for (const kv of obj[1].matchAll(/[{,]\s*"?([A-Za-z_]+)"?\s*:\s*("[^"]*"|-?\d+(?:\.\d+)?|true|false|\[[^\]]*\]|<[^>]*>)?/g)) {
-            const [, key, raw] = kv;
-            if (!schema.properties[key]) { bad.push(`${where} {${key}}: no such argument`); continue; }
-            const t = raw === undefined ? null : typeOf(raw);
-            if (t === null) continue; // a placeholder
-            const value = t === 'string' ? raw.slice(1, -1) : t === 'boolean' ? raw === 'true' : t === 'number' ? Number(raw) : JSON.parse(raw);
-            const errs = validate(schema.properties[key], value).filter(e => /must be (a|an) /.test(e));
-            if (errs.length) bad.push(`${where} {${key}: ${raw}}: ${errs.join('; ')}`);
+        // `tool {...}`, `tool` `{...}`, `tool`: `{...}`, `tool` with (arguments) `{...}`, `tool` (`{...}`), and a fenced block after it.
+        const lead = /^`?\s*:?\s*(?:with\s+(?:arguments\s+)?)?\(?(?:`(?!``))?\s*(?:```(?:json)?\s*\n)?/.exec(rest);
+        const raw = leadingObject(rest.slice(lead[0].length));
+        if (raw) {
+          const { obj, error } = callObject(name, raw);
+          if (error) {
+            bad.push(`${where}: ${error}`);
+            continue;
           }
+          const errs = validate(schema, obj);
+          if (errs.length) bad.push(`${where} ${raw.slice(0, 80)}: ${errs.join('; ')}`);
           continue;
         }
         // `tool` with `arg`, `arg: value` and `arg` (to the end of the clause)
@@ -275,13 +319,16 @@ function BY_NAME_SCHEMA(name) {
 }
 
 test('skills: messages an agent reads from the gate and the hooks name the harness tools, not the scripts', () => {
-  const files = ['scripts/lib/trading', 'scripts/hooks'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).map(f => path.join(dir, f)));
-  assert.ok(files.length > 20);
+  const files = ['scripts/lib/trading', 'scripts/hooks', 'scripts/lib/harness-tools'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).map(f => path.join(dir, f)));
+  assert.ok(files.length > 30);
   const bad = [];
   for (const f of files) {
     fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').forEach((line, i) => {
       if (/^\s*(\*|\/\/|\/\*)/.test(line)) return; // comments are for people
+      if (/USAGE|usage:/.test(line)) return; // a script's own usage line (its argv parsing; no tool reaches it)
       if (AGENT_RUN_SCRIPT.test(line) || /node <root>\/scripts\//.test(line)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
+      // An operation's refusal names the caller's words: say(c, '--flag ...', 'argument ...'), never a bare script flag.
+      if (f.startsWith('scripts/lib/harness-tools') && /throw new Error\((['`])--/.test(line) && !/\/\/ cli-only: /.test(line)) bad.push(`${f}:${i + 1}: a flag-only message: ${line.trim().slice(0, 100)}`);
     });
   }
   assert.deepStrictEqual(bad, []);

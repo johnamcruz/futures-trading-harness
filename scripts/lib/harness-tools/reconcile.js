@@ -22,8 +22,8 @@ const USAGE = 'usage: reconcile.js --day YYYY-MM-DD [--timeframe 3] [--json]';
 
 function reconcile({ day = null, timeframe = 3, json = false } = {}, ctx) {
   const { env } = context(ctx);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || ''))) throw new Error('--day YYYY-MM-DD (the trading day, by the date it ends on)');
-  if (!(Number.isInteger(timeframe) && timeframe > 0)) throw new Error('--timeframe: minutes per bar');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || ''))) throw new Error('--day YYYY-MM-DD (the trading day, by the date it ends on)'); // cli-only: the tool's schema refuses this first
+  if (!(Number.isInteger(timeframe) && timeframe > 0)) throw new Error('--timeframe: minutes per bar'); // cli-only: the tool's schema refuses this first
   const file = path.join(harnessHome(env), 'logs', `scans-${day}.jsonl`);
   if (!fs.existsSync(file)) throw new Error(`no decision log for ${day} (${file}); the autonomous runner writes one every trading day it runs`);
   const scans = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (_err) { return null; } }).filter(Boolean);

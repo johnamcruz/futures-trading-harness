@@ -72,6 +72,12 @@ const journal = [
   { ts: '2026-10-07T14:04:30.000Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 21480', data: { result: { success: true } } },
 ];
 
+/** Where a tool's message names its arguments rather than the script's flags. */
+const TOOL_WORDING = {
+  'mtf record no symbol': s => s.replace('--record needs --symbol=<ROOT> (e.g. MNQ)', 'record needs symbol (a contract root, e.g. MNQ)'),
+  'bars fetch daily record': s => s.replace('--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'),
+};
+
 /** [label, CLI script, CLI args(bars dir), tool, tool arguments(bars dir), before(home)] in order: later cases read earlier state. */
 const CASES = [
   ['strategies list', 'strategies.js', () => ['list'], 'strategies_list', () => ({})],
@@ -133,6 +139,8 @@ test('harness-tools server: handshake, tools, and each tool\'s text equal to the
     for (const [label, script, cliArgs, tool, toolArgs, before] of CASES) {
       if (before) { before(cliHome); before(srvHome); }
       const want = runCli(cliHome, script, cliArgs(path.join(cliHome, 'bars')));
+      // The tools name their arguments where the scripts name their flags: otherwise the same text.
+      if (TOOL_WORDING[label]) want.text = TOOL_WORDING[label](want.text);
       const got = await call(client, tool, toolArgs(path.join(srvHome, 'bars')));
       assert.ok(want.text.trim().length > 0, `${label}: the CLI printed something`);
       assert.deepStrictEqual({ text: norm(got.text), isError: got.isError }, want, label);
@@ -218,9 +226,9 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
     assert.strictEqual(viaLink.isError, true);
     assert.match(viaLink.text, /bars-link is a symlink/);
     for (const [tool, args, why] of [
-      ['strategies_scan', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[strategies\] --record: the autonomous runner records every bar itself/],
-      ['mtf_read', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[mtf\] --record: the autonomous runner records the read itself/],
-      ['bars_fetch', { symbol: 'MNQ', timeframe: 7, record: true }, /\[bars\] --record: the autonomous runner records the read itself/],
+      ['strategies_scan', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[strategies\] record: the autonomous runner records every bar itself/],
+      ['mtf_read', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[mtf\] record: the autonomous runner records the read itself/],
+      ['bars_fetch', { symbol: 'MNQ', timeframe: 7, record: true }, /\[bars\] record: the autonomous runner records the read itself/],
     ]) {
       const r = await call(client, tool, args);
       assert.strictEqual(r.isError, true, tool);
