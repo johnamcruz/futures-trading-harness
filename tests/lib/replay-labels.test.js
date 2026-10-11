@@ -1088,6 +1088,10 @@ test('labels: a paper strategy (the gate refuses its entries) is no candidate un
   fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), paper: true }));
   const P = labelRun(paper.runDir, { strategies });
   assert.deepStrictEqual([P.labels[0].candidates.map(c => c.name), P.labels[0].clone.reasons, P.labels[0].counterfactual, P.summary.skipped], [['crt_1h', 'orb'], ['paper mode'], null, 0]);
+  // Any truthy value is paper mode, as the runner reads it (autotrader.js childEnv).
+  fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), paper: 1 }));
+  const P1 = labelRun(paper.runDir, { strategies });
+  assert.deepStrictEqual([P1.labels[0].candidates.map(c => c.name), P1.labels[0].clone.reasons], [['crt_1h', 'orb'], ['paper mode']]);
 });
 
 test('labels: flat with a working order, or in a manage-only cycle, standing aside is no skip and never cloned', () => {
@@ -1133,22 +1137,27 @@ test('labels: the account\'s working orders flag a flat symbol only while no oth
   assert.deepStrictEqual(L.map(l => [l.decision, l.clone.reasons, l.counterfactualFor]), [['flat', [], 'skip'], ['flat', ['working order'], null]]);
 });
 
-test('labels: flat when the policy\'s screen failed (no verdict: the gate refuses its strategies), standing aside is no skip', () => {
-  const run = makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: {} }, { k: 5, scan: [{ name: 'orb', direction: 'short' }], cycle: {} }] });
-  const file = fs.readdirSync(path.join(run.home, 'logs', 'cycles', '2026-10-10')).sort()[0];
-  const full = path.join(run.home, 'logs', 'cycles', '2026-10-10', file);
-  const doc = JSON.parse(fs.readFileSync(full, 'utf8'));
-  doc.context.unavailable = ['MNQ policy screen (account check failed: timeout): no verdict, so no entry for orb this bar'];
-  fs.writeFileSync(full, JSON.stringify(doc));
-  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
-  assert.deepStrictEqual(labels.map(l => [l.clone.reasons, l.counterfactualFor]), [[['policy screen failed'], null], [[], 'skip']]);
-  assert.strictEqual(summary.skipped, 1);
-  // With two symbols, only the one whose screen failed.
-  const two = makeRun({ symbols: ['MES', 'MNQ'], steps: [{ k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: {} }] });
-  const dir = path.join(two.home, 'logs', 'cycles', '2026-10-10');
-  const f2 = path.join(dir, fs.readdirSync(dir)[0]);
-  const d2 = JSON.parse(fs.readFileSync(f2, 'utf8'));
-  d2.context.unavailable = ['MES policy screen (account check failed: timeout): no verdict, so no entry for orb this bar'];
-  fs.writeFileSync(f2, JSON.stringify(d2));
-  assert.deepStrictEqual(labelRun(two.runDir, { strategies: STRATEGIES }).labels.map(l => [l.symbol, l.clone.reasons]), [['MES', ['policy screen failed']], ['MNQ', []]]);
+test('labels: when the policy\'s screen failed, the strategies it names lose their candidates; plain ones still trade', () => {
+  const run = makeRun({ symbols: ['MES', 'MNQ'], steps: [
+    { k: 4, scan: [{ name: 'orb', direction: 'short' }, { name: 'crt_1h', direction: 'long' }], cycle: {} },
+    { k: 5, scan: [{ name: 'crt_1h', direction: 'long' }], cycle: {} },
+    { k: 6, scan: [{ name: 'orb', direction: 'short' }], cycle: {} },
+  ] });
+  const dir = path.join(run.home, 'logs', 'cycles', '2026-10-10');
+  const files = fs.readdirSync(dir).sort();
+  const unavailable = [
+    ['MNQ policy screen (account check failed: x: no verdict, so no entry for orb): no verdict, so no entry for crt_1h this bar'],
+    ['MNQ policy screen (boom): no verdict, so no entry for crt_1h, value_area_breakout this bar'],
+    // Not named: the whole label is flagged. Another symbol's line is not this one's.
+    ['MES policy screen (boom): no verdict, so no entry for orb this bar', 'MNQ policy screen (boom): no verdict, so no entry for its strategies this bar'],
+  ];
+  files.forEach((f, i) => {
+    const doc = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    doc.context.unavailable = unavailable[i];
+    fs.writeFileSync(path.join(dir, f), JSON.stringify(doc));
+  });
+  const L = labelRun(run.runDir, { strategies: STRATEGIES }).labels.filter(l => l.symbol === 'MNQ');
+  assert.deepStrictEqual(L.map(l => [l.candidates.map(c => c.name), l.clone.reasons, l.counterfactualFor]), [
+    [['orb'], [], 'skip'], [[], [], null], [['orb'], ['policy screen failed'], null],
+  ]);
 });

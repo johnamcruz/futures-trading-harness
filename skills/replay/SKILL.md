@@ -121,8 +121,8 @@ broker.
    refused gets its candidates' counterfactual too. Candidates are only
    what the teacher could trade (a paper strategy is left out unless the
    run is in paper mode, where no flat decision is a skip); a flat cycle
-   with a resting order, a manage-only cycle, or one whose policy screen
-   failed is no skip. Decisions the student can't express (limit or
+   with a resting order or a manage-only cycle is no skip, and the
+   strategies a failed policy screen names are no candidates. Decisions the student can't express (limit or
    stop entries, a target other than the strategy's own exit as
    `order_plan` places it, adds, partial exits) are counted, not cloned.
    Read the printed counts (taken, unknownOutcome (an entry whose call

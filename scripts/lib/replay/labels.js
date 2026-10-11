@@ -379,6 +379,21 @@ function budgetFor(budgetUsd) {
   return num(budgetUsd) > 0 ? budgetUsd : null;
 }
 
+/**
+ * The runner's line for a symbol whose policy screen failed (runner.js policyFailed): "<SYMBOL> policy screen
+ * (<why>): no verdict, so no entry for <a, b | its strategies> this bar". { names } the strategies that lost
+ * their entry, names null when the line doesn't name them; null when the screen didn't fail.
+ */
+const SCREEN_NAMES = ': no verdict, so no entry for ';
+function screenFailed(ctx, symbol) {
+  const line = symbol && ctx && Array.isArray(ctx.unavailable) ? ctx.unavailable.map(String).find(u => u.startsWith(`${symbol} policy screen (`)) : null;
+  if (!line) return null;
+  const i = line.lastIndexOf(SCREEN_NAMES);
+  const list = i !== -1 && line.endsWith(' this bar') ? line.slice(i + SCREEN_NAMES.length, -' this bar'.length) : '';
+  const names = list && list !== 'its strategies' ? list.split(', ').map(x => x.trim()).filter(Boolean) : [];
+  return { names: names.length ? names : null };
+}
+
 /** Who refused an order: 'gate', 'broker', or null (it went through, or its fate is unknown). */
 const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.broker.decision === 'refused' ? o.broker.by || 'broker' : null);
 // A call another PreToolUse hook blocked (not the order gate's: it logs its own) never reached the broker.
@@ -590,7 +605,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const statusOf = new Map((strategies || []).filter(x => x && x.name).map(x => [x.name, x.status]));
   const tradeable = r => {
     const status = r.status ?? statusOf.get(r.name);
-    return cfg.paper === true || status === undefined || status === null || status === 'active';
+    return Boolean(cfg.paper) || status === undefined || status === null || status === 'active';
   };
   // Malformed lines (null, arrays, numbers) are skipped wherever a record is read.
   const objs = xs => (Array.isArray(xs) ? xs.filter(isObj) : []);
@@ -665,7 +680,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       // (the gate refuses it; the runner starts no cycle for it) unless the run is in paper mode. A bar no
       // cycle ran on where the runner's own scan decided not to run (decision.run false) has none.
       const runnerPassed = !cyc && isObj(scan && scan.decision) && scan.decision.run === false;
-      const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r)) : [];
+      // The policy's screen failed this cycle: the strategies it owns had no verdict (the gate refuses them).
+      const screen = cyc ? screenFailed(cyc.ctx, symbol) : null;
+      const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r) && !(screen && screen.names && screen.names.includes(r.name))) : [];
       const candidates = fired.map(r => ({ name: r.name, direction: r.direction }));
       const refPrice = scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : ctxSym && ctxSym.bar && num(ctxSym.bar.c) !== null ? ctxSym.bar.c : null;
       const isTradeTime = rec.kind === 'trade';
@@ -732,9 +749,10 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
           // A manage-only cycle (the day's cycle cap reached): no new entry was allowed, so standing aside is no skip.
           if (cyc.action === 'manage') draft.act.reasons.push('manage-only');
           // Paper mode: the gate refuses every live entry (the teacher journals plans), so no flat decision is a skip.
-          if (cfg.paper === true) draft.act.reasons.push('paper mode');
+          if (cfg.paper) draft.act.reasons.push('paper mode');
           // The policy's screen failed (runner.js policyFailed): its strategies had no verdict and the gate refused their entries.
-          if (symbol && cyc.ctx && Array.isArray(cyc.ctx.unavailable) && cyc.ctx.unavailable.some(u => String(u).startsWith(`${symbol} policy screen (`))) draft.act.reasons.push('policy screen failed');
+          // Only when the line doesn't name them (their candidates are dropped above); plain strategies still trade.
+          if (screen && !screen.names) draft.act.reasons.push('policy screen failed');
         }
         if (unresolved) draft.act.reasons.push('unattributed order');
         // A failed or timed-out cycle's silence is no decision: never a skip, never cloned.

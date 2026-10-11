@@ -340,8 +340,9 @@ fills). One label per decision time and symbol:
   a manage-only cycle (`manage-only`: the day's cycle cap was reached, no
   new entry allowed), of a paper-mode run (`paper mode`: the gate refuses
   every live entry; the teacher journals plans), or of a cycle whose
-  policy screen failed (`policy screen failed`: no verdict, the gate
-  refuses the policy's strategies).
+  policy screen failed without naming its strategies (`policy screen
+  failed`; when the runner names them, only their candidates are dropped:
+  plain strategies still trade).
 - `candidates`: what the scan fired on the decision's bar, with direction
   (only scans logged by t), that the teacher could trade: a strategy whose
   status isn't active (paper: the gate refuses its entries, the runner
