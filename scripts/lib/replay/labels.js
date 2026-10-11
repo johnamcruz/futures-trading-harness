@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Labels from a replay run (docs/REASONING-TRADER-DESIGN.md, stage 2,
+ * Labels from a replay run (the reasoning-trader design's stage 2,
  * "Actions"): every decision the reasoning model made at a decision time, per
  * symbol, mapped to the student's action space, with the gate's answer and the
  * trade's outcome. Model-neutral: it reads only what every replay writes.
