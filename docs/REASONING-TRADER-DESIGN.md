@@ -351,12 +351,15 @@ fills). One label per decision time and symbol:
   record: without `--budget` the step is null and counted), with the
   order's own contract's tick value (NQ on an MNQ run) as the run's broker
   reported it (`contracts-<broker>.json` in the run home), else the static
-  table (`provenance.specs` says which); the raw orders. The
+  table; a broker spec unlike the table is measured with the table and
+  flagged, as live refuses entries on it (`provenance.specs`: broker, table
+  or mismatch); the raw orders. The
   entry that counts is the last one the broker accepted, else the last one
   the gate let through and the broker didn't refuse, else the last one sent
   (refused tries before it, by the gate or by the broker's guardrails in
   its journal, are one decision with it, counted in `priorRefusals`; only
-  several entries that went through are "several entries"). Orders are the gate's records
+  several entries that went through are "several entries"). An exit or a
+  tighten is chosen the same way. Orders are the gate's records
   in the cycle's window (place, modify, cancel, partial close) joined to
   the transcript's calls for their arguments; an order the gate allowed and
   the gateway's order tracker then refused is one refused order;
@@ -368,8 +371,8 @@ fills). One label per decision time and symbol:
   `FTH_STRATEGIES_DIRS`): run it with the run's settings (the hash is in the
   provenance). A fill that reverses a position through flat is read as its
   close only (round trips don't split it).
-- `gate`: allowed, refused (with checks, and `by`: the gate, or the broker
-  with its reason: the replay broker's journal, matched by rationale,
+- `gate`: allowed, refused (with checks, and `by`: the gate, another hook,
+  or the broker with its reason: the replay broker's journal, matched by rationale,
   contract and replayed time, or a call that came back an error with no
   journal record), not-logged (a call no gate record names: never taken,
   never cloned), none; refused intents are kept and flagged, for the

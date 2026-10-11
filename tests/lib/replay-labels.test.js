@@ -764,7 +764,7 @@ test('labels: a call that came back an error (no broker record) never became an 
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'invalid arguments' }] } }),
   ].join('\n');
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
-  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'broker', 'the call returned an error']);
+  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason], ['refused', 'broker', 'invalid arguments']);
 });
 
 // Review round 3 findings.
@@ -835,12 +835,16 @@ test('labels: a modify that widens the stop is flagged, never cloned; one agains
 // After the rebase onto #38 (broker specs) and #39 (opencode).
 
 test('labels: tick specs are the ones the run recorded from its broker (contracts-<broker>.json), else the static table', () => {
-  // The broker reported MNQ at $1 a tick (the table says $0.50); nothing for MES.
-  const specs = JSON.stringify({ ids: {}, front: {}, specs: { MNQ: { tickSize: 0.25, tickValue: 1 } } });
+  // The broker reported MNQ as the table has it; nothing for MES.
+  const specs = JSON.stringify({ ids: {}, front: {}, specs: { MNQ: { tickSize: 0.25, tickValue: 0.5 } } });
   const mnq = makeRun({ manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [LONG] } }] });
   fs.writeFileSync(path.join(mnq.home, 'contracts-sim.json'), specs);
   const a = labelRun(mnq.runDir, { budgetUsd: 40 }).labels[0];
-  assert.deepStrictEqual([a.teacher.size.riskUsd, a.provenance.specs], [40, 'broker']);
+  assert.deepStrictEqual([a.teacher.size.riskUsd, a.provenance.specs, a.clone.reasons], [20, 'broker', []]);
+  // A broker spec unlike the table ($1 a tick): live refuses entries on it; measured with the table, flagged.
+  fs.writeFileSync(path.join(mnq.home, 'contracts-sim.json'), JSON.stringify({ ids: {}, front: {}, specs: { MNQ: { tickSize: 0.25, tickValue: 1 } } }));
+  const m = labelRun(mnq.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([m.teacher.size.riskUsd, m.provenance.specs, m.clone.reasons], [20, 'mismatch', ['broker spec mismatch']]);
   const mes = makeRun({ symbols: ['MES'], manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [order('setup:orb long, stop 19990', { contractId: 'MES' })] } }] });
   fs.writeFileSync(path.join(mes.home, 'contracts-sim.json'), specs);
   const b = labelRun(mes.runDir, { budgetUsd: 40 }).labels[0];
@@ -869,7 +873,7 @@ test('labels: an exit or a tighten whose call came back an error is refused (it 
   ] });
   const L = labelRun(run.runDir).labels;
   assert.deepStrictEqual(L.map(l => [l.teacher.action, l.gate.decision, l.gate.by, l.gate.brokerReason]), [
-    ['exit', 'refused', 'broker', 'the call returned an error'], ['tighten', 'refused', 'broker', 'the call returned an error'],
+    ['exit', 'refused', 'broker', 'PositionNotFound'], ['tighten', 'refused', 'broker', 'PositionNotFound'],
   ]);
 });
 
@@ -881,4 +885,52 @@ test('labels: flat, an exit or a protective order is no skip', () => {
   const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
   assert.deepStrictEqual(labels.map(l => [l.teacher.action, l.clone.reasons, l.counterfactual]), [['none', ['exit while flat'], null], ['none', ['exit while flat'], null]]);
   assert.strictEqual(summary.skipped, 0);
+});
+
+// Review round 5 findings.
+
+test('labels: Codex announces each call before it completes - counted once, joined to its gate record, its fill joined', () => {
+  const ev = (type, status) => JSON.stringify({ type, item: { id: 'm1', type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: LONG.input, status } });
+  const transcript = [ev('item.started', 'in_progress'), ev('item.completed', 'completed')].join('\n');
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { transcript, orders: [LONG] } },
+    { k: 1, cycle: { positions: LONG_POS }, trades: [fill(1, 0, 20000, null)] },
+    { k: 2, cycle: {}, trades: [fill(5, 1, 20010, 20)] },
+  ] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([L.teacher.orders.length, L.gate.decision, L.clone.reasons, L.outcome.result], [1, 'allowed', [], 'win']);
+});
+
+test('labels: an exit or a tighten that failed, then a retry that went through, is the retry', () => {
+  const claude = (calls, errors) => calls.map((c, j) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${j}`, name: `mcp__broker__${c.tool}`, input: c.input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `c${j}`, is_error: errors[j], content: errors[j] ? 'busy' : 'ok' }] } }),
+  ].join('\n')).join('\n');
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
+  const modify = { tool: 'modify_order', input: { accountId: 7, orderId: 2, stopPrice: 20000 } };
+  const exitOrder = order('[exit] flatten the long');
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { positions: LONG_POS, transcript: claude([close, close], [true, false]), orders: [close, close] } },
+    { k: 1, cycle: { positions: LONG_POS, transcript: claude([modify, modify], [true, false]), orders: [modify, modify] } },
+    // An [exit] order the gate refused, then a close that went through.
+    { k: 2, cycle: { positions: LONG_POS, transcript: claude([exitOrder, close], [true, false]), orders: [{ ...exitOrder, gate: BLOCK('max-position') }, close] } },
+  ] });
+  const { labels, summary } = labelRun(run.runDir);
+  assert.deepStrictEqual(labels.map(l => [l.teacher.action, l.gate.decision, l.teacher.priorRefusals, l.clone.ok]), [['exit', 'ungated', 1, true], ['tighten', 'allowed', 1, true], ['exit', 'ungated', 1, true]]);
+  assert.strictEqual(summary.refused, 0);
+});
+
+test('labels: an order another PreToolUse hook blocked is refused by the hook', () => {
+  const transcript = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'mcp__broker__place_order', input: LONG.input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'PreToolUse:mcp__broker__place_order hook error: blocked by policy' }] } }),
+  ].join('\n');
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by], ['refused', 'hook']);
+});
+
+test('labels: an interrupted last line\'s fills are counted unread', () => {
+  const { summary } = labelRun(makeRun({ steps: [{ k: 0, cycle: {} }, { k: 1, interrupted: true }] }).runDir);
+  assert.strictEqual(summary.fillsUnread, 1);
+  assert.strictEqual(labelRun(makeRun({ steps: [{ k: 0, interrupted: true }, { k: 1, cycle: {} }] }).runDir).summary.fillsUnread, 0, 'the next line reads them');
 });

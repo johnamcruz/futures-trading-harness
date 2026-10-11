@@ -55,7 +55,7 @@ const { readJson, writeJsonAtomic } = require('../harness-run');
 const { gateLogPath } = require('../trading/check-order');
 const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
-const { brokerSpecFor } = require('../trading/broker-specs');
+const { brokerSpecFor, specMismatch } = require('../trading/broker-specs');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { parseStandardName, standardRoot } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
@@ -108,8 +108,11 @@ function contractSpec(contractId, fallback = null, specsFile = null) {
   const rootOf = id => (id ? (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
   for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
     const broker = specsFile ? brokerSpecFor(specsFile, root) : null;
-    if (broker) return { tickSize: broker.tickSize, tickValue: broker.tickValue, feesPerSide: broker.feesPerSide, source: 'broker' };
     const table = specFor(root);
+    // As live (broker-specs.js brokerSpecs): a broker spec unlike the static table can't be trusted (live
+    // refuses entries on it); measured with the table, flagged.
+    if (broker && table && specMismatch(root, broker)) return { ...table, source: 'mismatch' };
+    if (broker) return { tickSize: broker.tickSize, tickValue: broker.tickValue, feesPerSide: broker.feesPerSide, source: 'broker' };
     if (table) return { ...table, source: 'table' };
   }
   return null;
@@ -305,15 +308,15 @@ function cycleOrders(c, doc, gateLog, untilMs) {
   const to = Math.min(Number.isFinite(c.durationMs) ? from + c.durationMs + GATE_SLACK_MS : Infinity, untilMs);
   const gates = collapsePairs(gateLog.filter(e => gateTool(e) && e.ms >= from && e.ms < to));
   for (const e of gateLog) if (e.ms >= from && e.ms < to) e.inCycle = true;
-  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name) && !x.stopped).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), used: false })) : [];
+  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name) && !x.stopped).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), error: x.error || '', used: false })) : [];
   const out = gates.map(g => {
     const tool = gateTool(g);
     const call = calls.find(x => !x.used && x.tool === tool && String(x.input.rationale ?? '') === String(g.rationale ?? '')
       && (!x.input.contractId || !g.contractId || String(x.input.contractId) === String(g.contractId)));
     if (call) call.used = true;
-    return { ...normalizeOrder(tool, call ? call.input : null, g), callFailed: Boolean(call && call.failed) };
+    return { ...normalizeOrder(tool, call ? call.input : null, g), callFailed: Boolean(call && call.failed), callError: call && call.failed ? call.error || '' : null };
   });
-  for (const x of calls.filter(y => !y.used)) out.push({ ...normalizeOrder(x.tool, x.input, null), callFailed: Boolean(x.failed) });
+  for (const x of calls.filter(y => !y.used)) out.push({ ...normalizeOrder(x.tool, x.input, null), callFailed: Boolean(x.failed), callError: x.failed ? x.error || '' : null });
   return out;
 }
 
@@ -346,7 +349,10 @@ function budgetFor(budgetUsd) {
 }
 
 /** Who refused an order: 'gate', 'broker', or null (it went through, or its fate is unknown). */
-const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.broker.decision === 'refused' ? 'broker' : null);
+const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.broker.decision === 'refused' ? o.broker.by || 'broker' : null);
+// A call another PreToolUse hook blocked (not the order gate's: it logs its own) never reached the broker.
+const HOOK_BLOCK = /\bhook\b/i;
+const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error', ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : {}) });
 
 /** The teacher's action for one symbol from its orders, and what keeps it out of cloning. */
 function teacherAction(orders, inTrade) {
@@ -376,9 +382,16 @@ function teacherAction(orders, inTrade) {
   }
   if (entries.length) reasons.push('entry while in a trade');
   const exits = orders.filter(o => o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && /^\s*\[exit\]/i.test(o.rationale || '')));
+  // As for entries: the last one that went through (a refused try, then a retry, is one decision), else the last sent.
+  const pick = list => {
+    const through = list.filter(x => !refusedBy(x));
+    const o = through.length ? through[through.length - 1] : list[list.length - 1];
+    return { o, priorRefusals: list.filter(x => x !== o && refusedBy(x)).length };
+  };
   if (exits.length) {
     if (exits.some(o => o.tool === 'partial_close_position')) reasons.push('partial exit');
-    return { action: 'exit', order: exits[0], reasons };
+    const { o, priorRefusals } = pick(exits);
+    return { action: 'exit', order: o, reasons, priorRefusals };
   }
   const tightens = orders.filter(o => (o.tool === 'modify_order' && (!o.argsKnown || o.stopPrice !== null || o.trailPrice !== null))
     || (o.tool === 'place_order' && /^\s*\[protect\]/i.test(o.rationale || '')));
@@ -390,7 +403,8 @@ function teacherAction(orders, inTrade) {
       if (!inTrade.side || !Number.isFinite(inTrade.stop) || next === null) reasons.push('stop change unknown');
       else if ((inTrade.side === 'long' ? 1 : -1) * (next - inTrade.stop) < 0) reasons.push('stop widened');
     }
-    return { action: 'tighten', order: tightens[0], reasons };
+    const { o, priorRefusals } = pick(tightens);
+    return { action: 'tighten', order: o, reasons, priorRefusals };
   }
   if (orders.some(o => o.tool === 'modify_order')) reasons.push('target change');
   return { action: 'hold', order: null, reasons };
@@ -627,7 +641,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         for (const o of mine.filter(x => x.gate.decision !== 'refused')) {
           if (o.tool !== 'place_order' || o.gate.decision !== 'allowed') {
             // Not an entry the broker journals: a call that came back an error never changed the account.
-            if (o.callFailed) o.broker = { decision: 'refused', orderId: null, reason: 'the call returned an error' };
+            if (o.callFailed) o.broker = callRefusal(o);
             continue;
           }
           const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
@@ -638,7 +652,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
           } else if (o.callFailed) {
             // No journal record, and the call came back an error (a broker refusal sets isError; so does a
             // server that rejected its arguments): it never became an order.
-            o.broker = { decision: 'refused', orderId: null, reason: 'the call returned an error' };
+            o.broker = callRefusal(o);
           }
         }
         // In a trade: its side and the working stop the cycle's context showed (open-trades.js), for a modify.
@@ -711,6 +725,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       // Decision-time fields read only the order and what was there at t (never its fill).
       const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache) : spec;
       usedSpec = ospec;
+      if (ospec && ospec.source === 'mismatch') reasons.push('broker spec mismatch');
       // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
       const atr = isEntry ? atrAt(futureBars(d.symbol), tfMs, d.t) : null;
       const stop = isEntry ? stopOf(o, ospec, d.refPrice, atr) : null;
@@ -731,7 +746,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       if (o) {
         const by = refusedBy(o);
         // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
-        gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' ? { brokerReason: o.broker.reason } : {}) };
+        gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' ? { brokerReason: o.broker.reason } : {}) };
         if (gate.decision === 'not-logged') reasons.push('no gate record');
       }
       reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
@@ -782,7 +797,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     runId: manifest.runId, strategiesHash, unfinished: why, torn: tornLines(dir), unattributedOrders: unattributed.size,
     // Order records the gate made outside every trade cycle (the runner's own, or a cycle with no log line).
     gateRecordsOutsideCycles: gateLog.filter(e => gateTool(e) && !e.inCycle).length,
-    fillsUnread: lines.filter(r => r.trades && !Array.isArray(r.trades)).length,
+    // A failed read, and an interrupted last line (its fills would have gone to a next line that never came).
+    fillsUnread: lines.filter(r => r.trades && !Array.isArray(r.trades)).length + (lines.length && lines[lines.length - 1].interrupted && lines[lines.length - 1].trades === null ? 1 : 0),
     unmatchedOpenings: trips.filter(x => x.openMs !== null && !matchedTrips.has(x)).length,
   });
   return { labels, summary };

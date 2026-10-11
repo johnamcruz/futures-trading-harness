@@ -162,4 +162,13 @@ test('toolCalls: calls that came back an error are failed in every format; a cal
   const codex = [{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: {}, status: 'failed' } },
     { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {}, status: 'completed' } }].map(x => JSON.stringify(x)).join('\n');
   assert.deepStrictEqual(toolCalls(codex).map(c => Boolean(c.failed)), [true, false]);
+  // Codex announces each item before it completes: counted once; an error or an isError result is failed.
+  const ev = (type, item) => JSON.stringify({ type, item: { id: 'm1', type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: { size: 1 }, ...item } });
+  const twice = [ev('item.started', { status: 'in_progress' }), ev('item.updated', { status: 'in_progress' }), ev('item.completed', { status: 'completed', result: { isError: true, content: [] } })].join('\n');
+  assert.deepStrictEqual(toolCalls(twice).map(c => [c.name, Boolean(c.failed)]), [['mcp__broker__place_order', true]]);
+  assert.deepStrictEqual(summarize(twice).orders.length, 1);
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'completed', error: { message: 'refused' } }))[0].error, 'refused');
+  // opencode: a call the user rejected when asked never reached a tool either.
+  const rejected = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: {}, error: 'The user rejected permission to use this specific tool call.' } } });
+  assert.strictEqual(toolCalls(rejected)[0].stopped, true);
 });

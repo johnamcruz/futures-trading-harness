@@ -100,9 +100,10 @@ function opencodeCall(part) {
 
 /**
  * A call opencode itself stopped before any tool ran: a tool it doesn't have ("Model tried to call
- * unavailable tool") or one its permission rules deny. Not a call to the tool (a broker never saw it).
+ * unavailable tool"), one its permission rules deny, or one the user rejected when asked. Not a call to
+ * the tool (a broker never saw it).
  */
-const OPENCODE_STOPPED = /^\s*(Model tried to call unavailable tool|The user has specified a rule which prevents you from using this specific tool call)/;
+const OPENCODE_STOPPED = /^\s*(Model tried to call unavailable tool|The user has specified a rule which prevents you from using this specific tool call|The user rejected permission to use this specific tool call)/;
 const opencodeStopped = part => Boolean(part && part.state && part.state.status === 'error' && OPENCODE_STOPPED.test(resultText(part.state.error)));
 
 module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };
