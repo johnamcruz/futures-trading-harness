@@ -15,13 +15,13 @@ const series = (...moves) => [{ o: 100, h: 101, l: 99, c: 100, ms: S0 }, ...move
 const RR2 = { name: 'orb', signal: 'rules', risk: { min_rr: 2 }, exit: {} };
 const sim = (bars, x = {}) => simulate({ bars, tfMs: TF, signalMs: S0, signalClose: 100, direction: 'long', stopDistance: 9.9, strategy: RR2, spec: MNQ, eodMs: EOD, ...x });
 
-test('counterfactual: a long hits its target - next-open fill with slippage, stop ceiled to ticks (never tighter), target floored', () => {
+test('counterfactual: a long hits its target - next-open fill with slippage, order_plan\'s brackets (stop ceiled to ticks, never tighter)', () => {
   const cf = sim(series({}, { h: 121 }));
-  // Entry 100 + 1 tick; stop 9.9 -> 40 ticks = 10 points; target 2 x 9.9 = 19.8 -> 79 ticks = 19.75 points.
-  assert.deepStrictEqual([cf.entry, cf.stop, cf.target, cf.exitPrice, cf.exitReason], [100.25, 90.25, 120, 120, 'target']);
-  assert.deepStrictEqual([cf.R, cf.result, cf.simulated, cf.source], [1.975, 'win', true, 'simulated']);
-  // P&L per contract: 79 ticks x $0.50, less $0.37 a side.
-  assert.deepStrictEqual([cf.pnl, cf.net], [39.5, 38.76]);
+  // Entry 100 + 1 tick; stop 9.9 -> 40 ticks = 10 points; target 2R of the placed stop: 80 ticks = 20 points.
+  assert.deepStrictEqual([cf.entry, cf.stop, cf.target, cf.exitPrice, cf.exitReason], [100.25, 90.25, 120.25, 120.25, 'target']);
+  assert.deepStrictEqual([cf.R, cf.result, cf.simulated, cf.source], [2, 'win', true, 'simulated']);
+  // P&L per contract: 80 ticks x $0.50, less $0.37 a side.
+  assert.deepStrictEqual([cf.pnl, cf.net], [40, 39.26]);
   assert.strictEqual(cf.mfeR, 2.075, 'the high was 20.75 points over the entry');
   assert.strictEqual(cf.exitTime, new Date(S0 + 3 * TF).toISOString(), 'the close of the bar it exited in');
 });
@@ -68,9 +68,9 @@ test('counterfactual: entries that never happen and exits that can\'t be simulat
   assert.deepStrictEqual(why(sim(series())), [false, 'no bars after the signal', null]);
   assert.deepStrictEqual(why(sim(series({}, {}))), [false, 'the bars end before the exit', null]);
   assert.deepStrictEqual(why(sim(series({}), { strategy: { ...RR2, signal: 'manual' } })), [false, 'manual strategy', null]);
-  // An exit.target level: the signal close plus the scan's distance (floored to ticks).
+  // An exit.target level: the scan's distance floored to ticks (44 = 11 points), from the fill, as order_plan places it.
   const level = sim(series({}, { h: 112 }), { strategy: { ...RR2, risk: { min_rr: 1 }, exit: { target: 'crt_far_side' } }, targetDistance: 11.1 });
-  assert.deepStrictEqual([level.target, level.exitReason], [111, 'target']);
+  assert.deepStrictEqual([level.target, level.exitReason], [111.25, 'target']);
 });
 
 test('counterfactual: a taken trade\'s same fields from its fills (MAE/MFE from the bars when the broker sends none)', () => {

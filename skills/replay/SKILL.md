@@ -108,7 +108,8 @@ broker.
    counterfactual: the strategy's own trade as the backtester would have
    run it (pass the data the run replayed with `--bars MNQ=<file>`; else
    the run home's bars). Decisions the student can't express (limit or
-   stop entries, targets, adds, partial exits) are counted, not cloned.
+   stop entries, a target other than the strategy's own exit as
+   `order_plan` places it, adds, partial exits) are counted, not cloned.
    Read the printed counts (taken, skipped, refused, wins, losses,
    skipped-would-have-won and -lost, uncloneable, unmapped, unsimulated)
    before training on a run. An exit by `close_position` shows only when

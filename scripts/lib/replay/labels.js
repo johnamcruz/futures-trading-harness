@@ -24,7 +24,8 @@
  *               size: { contracts, riskUsd, budgetUsd, step (nearest of SIZE_STEPS), ratio }, orders }
  *   gate      { decision: allowed | refused | none | not-logged, checks } of the order behind the action
  *   outcome   the round trip the action opened (flat) or was in (in a trade), from the broker's fills
- *   clone     { ok, reasons }: what the student can't express (limit or stop entries, targets, several
+ *   clone     { ok, reasons }: what the student can't express (limit or stop entries, a target other
+ *             than the strategy's own exit as order_plan places it (teacher.target.from), several
  *             entries, adds, partial exits, unknown arguments, an unmapped stop) stays out of cloning
  *   counterfactuals / counterfactual   what each candidate's own trade would have done (counterfactual.js:
  *             the backtester's fills and exits walked forward on the bars) on a skipped label or a no-cycle
@@ -58,6 +59,8 @@ const { parseStandardName } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
 const { readRun, readLines } = require('./store');
+const { targetFor } = require('../trading/order-plan');
+const { exitPlan } = require('../trading/evaluator');
 const { simulate, fromFills } = require('./counterfactual');
 const { loadBars: loadDataBars, barMinutes, aggregate } = require('../backtest/data');
 const { endOfDayAt } = require('../autotrader');
@@ -490,12 +493,22 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const atr = isEntry ? atrAt(barsFor(d.symbol), tfMs, d.t) : null;
       const stop = isEntry ? stopOf(o, spec, d.refPrice, atr, firstOpen && firstOpen.stopTicks) : null;
       const size = isEntry ? sizeOf(o, spec, stop, budgetFor(d.ctx, budgetUsd)) : null;
+      // A target bracket is the strategy's own exit when it is what order_plan places for the setup
+      // (the env applies the strategy's exit); any other target is the teacher's, which the student can't express.
+      let target = null;
+      if (isEntry && o.targetTicks) {
+        const strat = byName.get(o.setup);
+        const fired = d.signal.fired.find(r => r.name === o.setup) || {};
+        let planned = null;
+        try { planned = strat && stop && stop.ticks && spec ? targetFor(exitPlan(strat), stop.ticks, num(fired.targetDistance), spec.tickSize).ticks : null; } catch (_err) { planned = null; }
+        target = { ticks: o.targetTicks, from: planned === o.targetTicks ? 'strategy' : 'teacher' };
+      }
       teacher = {
-        action: d.act.action, setup: o ? o.setup : null, stop, size,
+        action: d.act.action, setup: o ? o.setup : null, stop, size, target,
         orders: d.orders.map(({ argsKnown, ...rest }) => ({ ...rest, argsKnown })),
       };
       if (o) gate = { decision: o.gate.decision, checks: o.gate.checks };
-      reasons.push(...d.act.reasons);
+      reasons.push(...d.act.reasons.filter(r => !(r === 'explicit target' && target && target.from === 'strategy')));
       if (isEntry && !stop.points) reasons.push('no stop');
       else if (isEntry && stop.multiple === null) reasons.push('stop not mapped to ATR');
       if (d.decision === 'in-trade') {

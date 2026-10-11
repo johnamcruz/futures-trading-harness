@@ -168,7 +168,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
 
   // The limit entry with a target: uncloneable, counted; never filled.
   assert.deepStrictEqual([L[8].teacher.action, L[8].clone.ok, L[8].outcome.result], ['long', false, 'unfilled']);
-  assert.deepStrictEqual(L[8].clone.reasons, ['limit entry', 'explicit target']);
+  assert.deepStrictEqual(L[8].clone.reasons, ['limit entry'], 'its 2R target is orb\'s own exit');
 
   // No cycle while orb fired: not a teacher decision. Its long would have been flat to end of day (a small loss).
   assert.deepStrictEqual([L[9].decision, L[9].teacher, L[9].candidates.length], ['no-cycle', null, 1]);
@@ -180,7 +180,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
     [11, 8, 3, 1, 1, 1, 1, 1, 0, 2, 1, 1, 1],
   );
   assert.deepStrictEqual([summary.holds, summary.tightens, summary.exits, summary.unfilled], [1, 1, 1, 1]);
-  assert.deepStrictEqual(summary.uncloneableBy, { 'explicit target': 1, 'limit entry': 1 });
+  assert.deepStrictEqual(summary.uncloneableBy, { 'limit entry': 1 });
   assert.deepStrictEqual(
     [summary.takenWon, summary.takenLost, summary.skippedWouldWin, summary.skippedWouldLose, summary.noCycleWouldWin, summary.noCycleWouldLose, summary.unsimulated],
     [1, 1, 1, 0, 0, 1, 0],
@@ -274,6 +274,32 @@ test('labels: --bars data (one-minute bars, aggregated to the run\'s bars) walks
   const five = path.join(path.dirname(run.home), 'MNQ-5m.json');
   fs.writeFileSync(five, JSON.stringify(minutes.filter((_, i) => i % 5 === 0)));
   assert.throws(() => writeLabels(run.runDir, { strategies: STRATEGIES, barsFiles: { MNQ: five } }), /5-minute bars; the run trades 3-minute bars/);
+});
+
+test('labels: an order with order_plan\'s arguments and rationale: joined, its stop mapped, its strategy target cloneable', () => {
+  const { buildPlan } = require('../../scripts/lib/trading/order-plan');
+  const { exitPlan } = require('../../scripts/lib/trading/evaluator');
+  const { specFor } = require('../../scripts/lib/trading/contracts');
+  const { args } = buildPlan({ name: 'orb', side: 'long', contract: 'MNQ', spec: specFor('MNQ'), entryRef: 20000, stop: 40, stopDistance: 10, exit: exitPlan(STRATEGIES[0]), minRR: 2, size: 1, sizeWhy: 'fixed', accountId: 7 });
+  assert.match(args.rationale, /^setup:orb long at market from 20000\.00 \(the signal bar's close\), stop 19990\.00 \(40 ticks\), target 20020\.00 \(80 ticks\)/);
+  const plan = { tool: 'place_order', input: args };
+  const own = { tool: 'place_order', input: { ...args, takeProfitBracket: { ticks: 100, type: 'limit' }, rationale: args.rationale.replace('20020.00 (80', '20025.00 (100') } };
+  const run = makeRun({ steps: [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [plan] } },
+    { k: 1, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [plan], transcript: 'plain text' } },
+    { k: 2, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [own] } },
+  ] });
+  const { labels } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  // With the transcript: the arguments joined to the gate's record; brackets read; the 2R target is orb's own exit.
+  assert.deepStrictEqual([labels[0].teacher.action, labels[0].teacher.setup, labels[0].gate.decision, labels[0].teacher.orders.length, labels[0].teacher.orders[0].argsKnown], ['long', 'orb', 'allowed', 1, true]);
+  assert.deepStrictEqual(labels[0].teacher.stop, { ticks: 40, points: 10, atr: 10, ratio: 1, multiple: 1 });
+  assert.deepStrictEqual(labels[0].teacher.target, { ticks: 80, from: 'strategy' });
+  assert.deepStrictEqual(labels[0].clone, { ok: true, reasons: [] });
+  // From the gate's record alone: the stop is the rationale's price (19990), not the "(40 ticks)" after it.
+  assert.deepStrictEqual([labels[1].teacher.orders[0].rationaleStop, labels[1].teacher.stop.points, labels[1].teacher.stop.multiple], [19990, 10, 1]);
+  // A target other than the strategy's: the teacher's, kept out of cloning.
+  assert.deepStrictEqual(labels[2].teacher.target, { ticks: 100, from: 'teacher' });
+  assert.deepStrictEqual(labels[2].clone.reasons, ['explicit target']);
 });
 
 test('labels: a torn last line is counted; the decision times before it are labelled', () => {

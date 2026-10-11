@@ -12,14 +12,13 @@
  * exitPlan), on the replay's bars:
  *   - entry: a market order at the next bar's open after the signal bar plus
  *     one tick of slippage (fill: next-open), dropped (`expired`) when that
- *     bar opens through the stop or a target level, or falls in another
- *     trading day or at or after end of day;
- *   - stop: the scan's `stopDistance`, rounded as the skills round a bracket
- *     (ceil to ticks: never tighter than the strategy's distance);
- *   - target: `exit.target_r` (or `risk.min_rr`) x the stop distance, floored
- *     to ticks (a target rounds toward the entry), from the fill; an
- *     `exit.target` level is the signal bar's close plus the scan's
- *     `targetDistance` (floored to ticks), refused under `risk.min_rr`;
+ *     bar opens through the stop, or falls in another trading day or at or
+ *     after end of day;
+ *   - the brackets order_plan (trading/order-plan.js) places for the setup,
+ *     from the fill: the stop is the scan's `stopDistance` ceiled to ticks
+ *     (never tighter), the target the strategy's exit in ticks (`target_r`,
+ *     or `risk.min_rr`, x the placed stop; an `exit.target` level's
+ *     `targetDistance`), floored (toward the entry);
  *     trailing exits (`trail_activate_r`, `trail_giveback_r`) and `max_bars`
  *     run as the backtester runs them (trail.js through the simulated broker);
  *   - each bar: the stop is checked before the target, so a bar reaching both
@@ -37,6 +36,7 @@
 
 const { exitPlan } = require('../trading/evaluator');
 const { createSimBroker, onTick } = require('../backtest/sim-broker');
+const { stopTicks, targetFor } = require('../trading/order-plan');
 const { tradingDayKey } = require('../trading/clock');
 
 const SLIPPAGE_TICKS = 1; // the backtester's default per market fill
@@ -74,26 +74,27 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
   const sign = direction === 'long' ? 1 : direction === 'short' ? -1 : 0;
   if (!sign) return unsimulated(base, 'no direction');
   const plan = exitPlan(strategy);
-  const stopTicks = Math.max(1, Math.ceil(stopDistance / tick - 1e-9));
-  const risk = onTick(stopTicks * tick, tick);
-  let target = null;
-  if (plan.targetR) target = { ticks: Math.max(1, Math.floor((plan.targetR * stopDistance) / tick + 1e-9)) };
-  else if (plan.target) {
-    if (!(targetDistance > 0) || !Number.isFinite(signalClose)) return unsimulated(base, 'no target distance');
-    target = { price: onTick(signalClose + sign * Math.floor(targetDistance / tick + 1e-9) * tick, tick) };
+  // The brackets order_plan would place for this setup: the stop ceiled to ticks, the target from the strategy's exit.
+  const stop = stopTicks(stopDistance, tick);
+  const risk = onTick(stop * tick, tick);
+  let planned;
+  try {
+    planned = targetFor(plan, stop, targetDistance, tick);
+  } catch (_err) {
+    return unsimulated(base, 'no target distance');
   }
+  const target = planned.ticks ? { ticks: planned.ticks } : null;
   const i = lowerBound(bars, signalMs + tfMs);
   if (i >= bars.length) return unsimulated(base, 'no bars after the signal');
   const broker = createSimBroker({ tickSize: tick, slippageTicks: SLIPPAGE_TICKS });
   const fee = Number(spec.feesPerSide) || 0;
-  const minRR = plan.target && !plan.targetR ? (strategy.risk && strategy.risk.min_rr) || 0 : 0;
-  const pos = broker.submitMarket({ sign, risk, size: 1, tickValue: spec.tickValue, fee, plan, target, minRR }, { price: signalClose, fill: 'next-open' });
+  if (!Number.isFinite(signalClose)) return unsimulated(base, 'no signal close');
+  broker.submitMarket({ sign, risk, size: 1, tickValue: spec.tickValue, fee, plan, target }, { price: signalClose, fill: 'next-open' });
   const expired = why => ({ ...base, entry: null, stop: null, target: null, exitTime: null, exitPrice: null, exitReason: 'expired', R: null, pnl: null, net: null, maeR: null, mfeR: null, result: 'no-trade', simulated: true, reason: why });
-  if (!pos) return expired('the target level leaves no trade');
   const day = tradingDayKey(new Date(signalMs + tfMs));
   const first = bars[i];
   if (tradingDayKey(new Date(first.ms)) !== day || first.ms + tfMs >= eodMs) return expired('the next bar is past end of day');
-  if (!broker.fillAtOpen(first)) return expired('the next bar opened through the stop or the target');
+  if (!broker.fillAtOpen(first)) return expired('the next bar opened through the stop');
   const p = broker.position;
   let done = null;
   let exitBar = null;

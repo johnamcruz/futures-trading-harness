@@ -348,15 +348,16 @@ fills). One label per decision time and symbol:
 - `counterfactual(s)`: for a skipped candidate or one fired on a no-cycle
   bar, what the strategy's own trade would have done, simulated as the
   backtester trades it (the simulated broker, next-open fill with a tick of
-  slippage, the scan's stop ceiled to ticks, the exit block's target, trail
-  and max bars, the stop checked before the target in a bar, flat at end of
+  slippage, the brackets order_plan would place: the scan's stop ceiled to
+  ticks and the exit block's target; trail and max bars, the stop checked before the target in a bar, flat at end of
   day) on the run's bars or the data the run replayed (`--bars`); for a
   taken entry the same fields from its fills. So a skilful skip (a loser
   avoided) can be told from a cautious one (a winner missed). What can't be
   simulated is marked and counted.
-- `clone`: whether the student can express it (limit or stop entries,
-  targets, several entries, adds, partial exits, unknown arguments, an
-  unmapped stop stay out), and why.
+- `clone`: whether the student can express it (limit or stop entries, a
+  target other than the strategy's own exit as order_plan places it,
+  several entries, adds, partial exits, unknown arguments, an unmapped stop
+  stay out), and why. `teacher.target` says whose target a bracket is.
 - provenance: harness, model, config hash, prompt hash, the cycle file.
 
 Decision-time fields never read anything after t; outcomes and
