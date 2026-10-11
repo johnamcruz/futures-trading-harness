@@ -90,8 +90,11 @@ test('order_plan: only the strategy\'s own, current bars - another timeframe, a 
   const oneMin = path.join(home, 'MNQ-1m.json');
   fs.writeFileSync(oneMin, JSON.stringify(bars.map((b, i) => ({ ...b, t: new Date(end - (bars.length - 1 - i) * 60000).toISOString() }))));
   assert.throws(() => plan({ file: oneMin, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 70000) }), /the bars are 1-minute; the strategy trades 3m bars/);
-  // The last bar still open at the harness clock.
-  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 179000) }), /hasn't closed/);
+  // The last bar's close after the harness clock: within the gate's 1 minute (a broker clock a little ahead,
+  // signal-state.js FUTURE_TOLERANCE_MIN) it is planned, as the gate accepts it; beyond it, refused.
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 30000) }).args.size, 1, '30 s ahead: planned');
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 120000) }), /more than 1 min after the harness clock .*it hasn't closed/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 61000) }), /hasn't closed/, 'just over the minute');
   // Older than the gate's signal age (10 min by default; FTH_SIGNAL_MAX_AGE_MIN).
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 11 * 60000) }), /more than 10 min before the harness clock .*fetch current bars/);
   assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 9 * 60000) }).args.size, 1, 'within the age');
@@ -109,6 +112,20 @@ test('order_plan: a stop over the strategy\'s risk.max_risk_usd is refused, neve
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), /one MNQ at a 18-tick stop risks \$9\.00, over bos's risk\.max_risk_usd \$8: no size fits/);
   fs.writeFileSync(path.join(root, 'strategies', 'bos', 'STRATEGY.md'), doc.replace('max_risk_usd: 8', 'max_risk_usd: 9'));
   assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx).plan.size, 1, 'at the cap: planned');
+});
+
+test('order_plan: a paper rules strategy is planned with the note that the gate refuses its live entry', () => {
+  const { file, home } = setup();
+  const root = path.join(home, 'plugin');
+  fs.mkdirSync(path.join(root, 'strategies', 'bos'), { recursive: true });
+  const doc = fs.readFileSync(path.join(ROOT, 'strategies', 'bos', 'STRATEGY.md'), 'utf8').replace(/^status: active$/m, 'status: paper');
+  assert.match(doc, /^status: paper$/m);
+  fs.writeFileSync(path.join(root, 'strategies', 'bos', 'STRATEGY.md'), doc);
+  const r = plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { root, env: { FTH_HOME: home }, now: () => NOW });
+  assert.match(r.text.split('\n')[0], / \| status paper: plan only, the gate refuses a live entry$/);
+  // The active strategy has no such note.
+  const { file: f2, ctx } = setup();
+  assert.doesNotMatch(plan({ file: f2, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx).text, /status /);
 });
 
 test('order_plan: a policy strategy - its verdict\'s contract, side and stop ticks, at most its size and the budget now', () => {
@@ -140,6 +157,20 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /expired at/);
   verdict({ component: 'orb' });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb is not a candidate on the last closed bar/);
+  // A verdict from another policy than the strategy's (here: a bundle, where it trades on the sizing alone).
+  verdict({ policy: 'other_bundle' });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /^Error: prop_portfolio's latest verdict came from other_bundle, not the sizing alone; no order$/);
+  // The verdict's stop was sized on its own bar: a verdict from the bar before (still unexpired), with bos
+  // firing again on the last bar, is never paired with this bar's entry.
+  verdict({ bar: new Date(Date.parse(FIRED_BAR) - 180000).toISOString() });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio's verdict is for the bar opened 2026-04-28T04:06:00\.000Z, not the last closed bar of these bars \(opened 2026-04-28T04:09:00\.000Z\)/);
+  verdict({ bar: undefined });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /verdict is for the bar opened undefined/, 'no bar: refused');
+  // The attempt's own block (here: a position open on the account), with order_plan's reason, not only the gate's.
+  verdict();
+  prop.snapshot(home, account, 100000, NOW, { open: 1, openIds: [42] });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /^Error: topstep_100k: a position is open on the account \(42\)/);
+  prop.snapshot(home, account, 100000, NOW);
   // The gate's own prop checks on the exact arguments: an entry already journaled since the snapshot (and the
   // verdict it used) makes the plan one the gate would refuse, so order_plan refuses it with the gate's reasons.
   verdict();

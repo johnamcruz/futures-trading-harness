@@ -45,6 +45,14 @@ test('whyNot: one line for why a result is not a candidate; nothing for a candid
   assert.strictEqual(whyNot({ name: 'x', signal: 'rules', direction: 'long', candidate: false, inSession: true, inRegime: null, filtersFailed: [] }), 'not a candidate', 'never blank for a non-candidate');
 });
 
+test('scanSummary: a stop in ticks is rounded away from the entry (ceil), never to the nearest tick', () => {
+  // 4.30 pts on MNQ = 17.2 ticks: 18, never 17 (a nearer tick would be tighter than the strategy's stop).
+  const r = { name: 's', status: 'active', timeframe: '3m', signal: 'rules', direction: 'long', candidate: true, entryRef: 21503.25, stopDistance: 4.3, minRR: 1.5,
+    exit: { targetR: 1, target: null, trailActivateR: null, trailGivebackR: null, maxBars: null } };
+  // The 1R target from those 18 ticks: 18 ticks, toward the entry.
+  assert.match(scanSummary([r], { symbol: 'MNQ' }), /entryRef 21503\.25, stop 4\.3 pts = 18 ticks \(\$9\.00\/MNQ contract\), target 1R = 18 ticks/);
+});
+
 test('scanSummary: the bar and trend, the candidates first with what a plan needs, then one line per strategy', () => {
   const text = scanSummary(RESULTS, { symbol: 'MNQ', bar: '2026-10-07T14:00:00.000Z' });
   const lines = text.trimEnd().split('\n');

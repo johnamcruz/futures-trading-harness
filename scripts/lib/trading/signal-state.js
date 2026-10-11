@@ -18,6 +18,9 @@ const path = require('path');
 const { familyRoot } = require('./contracts');
 
 const DEFAULT_MAX_AGE_MIN = 10;
+// How far after now a bar's close may be dated and still be trusted: the broker's clock may run a
+// little ahead of the harness's (order_plan applies the same tolerance to the bars it plans from).
+const FUTURE_TOLERANCE_MIN = 1;
 
 // One record per index family and timeframe: a 1m scan never overwrites the 3m one.
 const signalFile = (home, root, timeframe) => path.join(home, 'signals', `${familyRoot(root)}-${timeframe}.json`);
@@ -69,7 +72,7 @@ function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe =
   if (!rec) return `No ${timeframe} signal record for ${fam}: setup:${strategy} is a rules strategy, and the gate needs to see its trigger fire. ${how}`;
   if (rec.error || !Array.isArray(rec.candidates) || !rec.closedAt) return `The signal record for ${fam} is unreadable (${rec.error || 'missing fields'}). ${how}`;
   const age = (now.getTime() - Date.parse(rec.closedAt)) / 60000;
-  if (age < -1) return `The signal record for ${fam} is dated ${rec.closedAt}, after now; it can't be trusted. ${how}`;
+  if (age < -FUTURE_TOLERANCE_MIN) return `The signal record for ${fam} is dated ${rec.closedAt}, after now; it can't be trusted. ${how}`;
   if (!(age <= maxAgeMin)) {
     return `The last recorded signal bar for ${fam} closed ${Number.isFinite(age) ? `${Math.round(age)} min` : 'an unknown time'} ago (limit ${maxAgeMin}, FTH_SIGNAL_MAX_AGE_MIN): the setup has expired. ${how}`;
   }
@@ -91,4 +94,4 @@ function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe =
   return `setup:${strategy} ${dir || ''} did not fire on the last closed ${fam} bar (closed ${rec.closedAt}; fired: ${fired}). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.`;
 }
 
-module.exports = { DEFAULT_MAX_AGE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger };
+module.exports = { DEFAULT_MAX_AGE_MIN, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger };
