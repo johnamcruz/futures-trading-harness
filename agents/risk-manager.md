@@ -49,7 +49,7 @@ Stand-down conditions: <any that apply now>
 
 Check, in order, and stop at the first failure:
 
-0. The trigger fired: the scan shows the strategy `candidate: true` in this
+0. The trigger fired: the scan lists the strategy as a candidate in this
    direction on the last closed bar (or, for a manual strategy, the plan
    quotes the trigger on closed bars and you can see it in the bars), or, for
    a policy strategy, a live verdict matches the plan. Otherwise VETO. (The

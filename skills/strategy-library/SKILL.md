@@ -35,13 +35,14 @@ With the harness tools (the `harness-tools` skill):
 ```text
 strategies_list {}                       name, status, signal, instruments
 strategies_show {"name": "orb"}          the full STRATEGY.md
-strategies_scan {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ"}
+strategies_scan {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ"}                  summary: candidates, then a line per strategy
+strategies_scan {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}   one strategy's full result
 strategies_list {"json": true}           machine-readable
 strategies_recent {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ", "count": 5}   what fired on each of the last 5 bars
 ```
 
 `recent` answers the skip rules about recent signals ("fired the other way
-in the last 5 bars"). A scan result's `detail` carries the detectors' state:
+in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
 a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
 fire, and cisd_ote's `hadSweep` and displacement.
 
@@ -55,8 +56,14 @@ read results only for strategies whose timeframe is the file's (a 3m strategy
 on 1-minute bars, or the reverse, is not a signal), and only when that last
 bar is fresh (no older than one bar plus a minute).
 
-The scan runs market-snapshot with each strategy's `params` and reports, per
-strategy: `direction` (mechanical signal on the last closed bar),
+The scan's summary gives the bar, the higher-timeframe trends, the
+candidates first (side, entry reference, stop distance, min R:R, exit,
+confluence), then one line per strategy: status, timeframe, direction,
+candidate, and why not (the rules that did not hold, outside its sessions,
+the regime, or what failed). For one strategy's full result, call it with
+`name`; `detail: true` returns every strategy's (large). The scan runs
+market-snapshot with each strategy's `params`, and a full result reports:
+`direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
 `inRegime` (fits the strategy's `regimes`), `confluence` (on a strategy
 that fired: the other strategies on its timeframe that fired the same side,
@@ -66,14 +73,14 @@ this strategy's style), `candidate`, and `stopDistance`. A trend strategy
 that fires against the prevailing trend is never a candidate (`filtersFailed`
 says `mtf: ...`); only `mtf: reversal` strategies may fade it. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
-one did or didn't fire. Strategies with `signal: manual` are listed with
-`candidate: true` when in session; you evaluate their trigger from the body.
+one did or didn't fire. Strategies with `signal: manual` are listed
+as candidates when in session; you evaluate their trigger from the body.
 
 ### Apply a strategy
 
 1. `strategies_show` it and read the whole body.
 2. A trade needs, in order: the trigger has fired on a closed bar (scan
-   `candidate: true`, or the manual trigger described in the body), every
+   lists it as a candidate, or the manual trigger described in the body), every
    context filter holds, no "Skip when" rule applies, and planned R:R ≥
    `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
    `min_rr` stands in for it).
@@ -107,9 +114,9 @@ against the recorded prevailing trend, or without a fresh record, is refused.
 ## Examples
 
 ```text
-strategies_scan → orb: direction long, inSession true, filtersFailed [], candidate true, stopDistance 5.25
+strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5 (a candidate)
 strategies_show orb → skip rule "relative volume < 1.0x" → volume analyst reports 0.8x → no trade.
 
-strategies_scan → cisd_ote: direction short, candidate true, stopDistance 18.5 → read the
+strategies_scan → cisd_ote short, a candidate, stopDistance 18.5 → read the
 body's skip rules (sweep before the displacement?) → none apply → plan it.
 ```

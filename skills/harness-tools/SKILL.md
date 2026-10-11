@@ -8,9 +8,11 @@ description: The harness's own operations as MCP tools on the `harness` server -
 The harness's operations are tools on the MCP server `harness` (Claude Code
 shows them as `mcp__harness__<tool>`, other harnesses by server and tool
 name). Each runs the same code as a script in `<root>/scripts/` and returns
-what that script prints. Agents call the tools, in autonomous and interactive
-runs alike; a person at a terminal runs the scripts. None places, changes, or
-cancels an order.
+what that script prints, except that the results that can be large come back
+compact by default (the scan as a summary, recent fires as lines, JSON on one
+line), with an argument for the full form. Agents call the tools, in
+autonomous and interactive runs alike; a person at a terminal runs the
+scripts. None places, changes, or cancels an order.
 
 ## When to Use
 
@@ -25,12 +27,12 @@ cancels an order.
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
 | `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`?, `name`? | writes closed bars to `/tmp/fth/<SYMBOL>-<tf>m.json` (`-1d.json` daily; with `name`, `<SYMBOL>-<tf>m-<name>.json`, a file of your own) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
-| `strategies_list` | `json`? | the registered strategies | `strategies.js list [--json]` |
+| `strategies_list` | `json`? | the registered strategies, one line each; `json`: every field (timeframe, sessions, file) as JSON on one line | `strategies.js list [--json]` |
 | `strategies_show` | `name` | one STRATEGY.md | `strategies.js show <name>` |
 | `strategies_validate` | none | each strategy ok or what is invalid | `strategies.js validate` |
-| `strategies_scan` | `bars`, `symbol`, `record`? | the scan of the last closed bar, at the harness clock; `record` also records the fired rules strategies | `strategies.js scan <bars> --symbol MNQ [--record]` |
-| `strategies_recent` | `bars`, `symbol`, `count`? (1-50) | what fired on each of the last bars | `strategies.js recent <bars> --symbol MNQ --bars 5` |
-| `market_snapshot` | `bars`, `params`? | the indicator and level snapshot (JSON) | `market-snapshot.js <bars> [--name=value]` |
+| `strategies_scan` | `bars`, `symbol`, `name`?, `detail`?, `record`? | the scan of the last closed bar, at the harness clock, as a summary: the candidates first (side, entry reference, stop distance, min R:R, exit, confluence), then one line per strategy (status, timeframe, direction, candidate, why not); `name`: that strategy's full result as JSON (each rule with `ok`, `detail`, `mtf`, `exit`); `detail`: every strategy's full result (large: prefer `name`); `record` also records the fired rules strategies | `strategies.js scan <bars> --symbol MNQ [--record]` (the full JSON) |
+| `strategies_recent` | `bars`, `symbol`, `count`? (1-50), `json`? | one line per bar (its open time, oldest first): each strategy and side that fired, or none; `json`: the same as JSON | `strategies.js recent <bars> --symbol MNQ --bars 5` |
+| `market_snapshot` | `bars`, `params`? | the indicator and level snapshot (JSON, on one line) | `market-snapshot.js <bars> [--name=value]` |
 | `mtf_read` | `bars`, `timeframes`?, `daily`?, `json`?, `record`?, `symbol`? | the multi-timeframe read; `record` (with `symbol`) records it | `mtf.js <bars> [--tf=15,60,240] [--daily=<file>] [--json] [--record --symbol MNQ]` |
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
 | `blackouts_add` | `start`, `end` (ISO with a zone), `reason` | adds a window (append-only, at most 12 hours) | `blackouts.js add --start <ISO> --end <ISO> --reason <text>` |
@@ -50,7 +52,9 @@ cancels an order.
 - A refusal or failure comes back as an error result: `[<script>] <why>`,
   as the script prints it. Read it, don't retry the same call blindly.
 - A reply over 256 KB is refused with how to narrow it (fewer bars, a lower
-  `count`, no `json`).
+  `count`, no `json` or `detail`). Read a result from the reply itself: some
+  harnesses move a long reply to a file you may not be allowed to read, so
+  ask for the compact form (or `name` for one strategy), not the full one.
 - `record` is refused in autonomous runs, and whenever the autonomous runner
   is running: it records every bar's read and signals itself.
 
@@ -69,6 +73,14 @@ bars_fetch {"symbol": "MNQ", "timeframe": 15, "count": 160}
 
 market_snapshot {"bars": "/tmp/fth/MNQ-15m.json"}
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ"}
+→ Scan of MNQ on the last closed bar (opened 2026-10-07T13:57:00.000Z): 16 strategies, 1 candidate. Regime trend-up. Trend 4h up, 1h up, 15m up, prevailing 4h up.
+  Candidates:
+    orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5, exit: target 1.5R | with: none; against: none
+  Every strategy (name | status | timeframe | direction | candidate | why not):
+    bos | active | 3m | - | no | no rule set fired (long: close crosses_above swing_high; short: close crosses_below swing_low)
+    ...
+strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}
+→ orb's full result as JSON
 mtf_read {"bars": "/tmp/fth/MNQ-3m.json", "daily": "/tmp/fth/MNQ-1d.json"}
 blackouts_add {"start": "2026-10-07T12:25:00Z", "end": "2026-10-07T12:40:00Z", "reason": "CPI 08:30 ET"}
 combine_status {}

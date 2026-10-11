@@ -5,11 +5,16 @@
  * validate, scan, recent. Each is `(args, ctx) -> { text, stderr?, code? }`
  * (harness-tools/cli.js).
  *
- *   list     { json }
+ *   list     { json, compact }
  *   show     { name }
  *   validate {}                                  code 1 when any strategy is invalid
- *   scan     { file, symbol, now, record }       file: bars file or '-'; now: ISO (default: the harness clock)
- *   recent   { file, symbol, count }             count: 1 to 50 (default 5)
+ *   scan     { file, symbol, now, record, view, name }   file: bars file or '-'; now: ISO (default: the harness clock)
+ *   recent   { file, symbol, count, format }     count: 1 to 50 (default 5)
+ *
+ * The scripts print the full JSON. The harness tools ask for the compact forms
+ * (compact.js) by default: scan view 'summary' (or 'one' with name: that
+ * strategy's full result), recent format 'lines', list json on one line
+ * (compact); registry.js maps the tools' detail / name / json to them.
  *
  * scan with record also records which rules strategies fired on the last
  * closed bar (only those on the bars' timeframe), for the order gate's trigger
@@ -26,17 +31,18 @@ const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
 const { context, say, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
+const { scanSummary, recentLines } = require('./compact');
 
 const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]';
 
 const load = c => loadStrategies(c.root, c.env);
 
-function list({ json = false } = {}, ctx) {
+function list({ json = false, compact = false } = {}, ctx) {
   const rows = load(context(ctx)).strategies.map(s => ({
     name: s.name, status: s.valid ? s.status : 'INVALID', instruments: s.instruments, timeframe: s.timeframe,
     signal: s.signal, sessions: s.sessions || [], description: s.description, file: s.file,
   }));
-  if (json) return { text: `${JSON.stringify(rows, null, 2)}\n` };
+  if (json) return { text: compact ? `${JSON.stringify(rows)}\n` : `${JSON.stringify(rows, null, 2)}\n` };
   return { text: rows.map(r => `${r.name.padEnd(14)} ${String(r.status).padEnd(9)} ${String(r.signal).padEnd(11)} ${(r.instruments || []).join(',')}  ${r.description || ''}\n`).join('') };
 }
 
@@ -58,7 +64,21 @@ function validate(_args, ctx) {
   return { text, code: bad === 0 ? 0 : 1 };
 }
 
-function scan({ file, symbol, now: at, record = false } = {}, ctx) {
+/** The scan as the caller asked: the full JSON (the script's), one strategy's full result, or the summary. */
+function scanText(results, bars, { view = 'json', name, symbol }) {
+  if (view === 'one') {
+    const one = results.find(r => r.name === name);
+    if (!one) throw new Error(`no scan result for "${name}" (scanned: ${results.map(r => r.name).join(', ') || 'none'})`);
+    return `${JSON.stringify(one, null, 2)}\n`;
+  }
+  if (view === 'summary') {
+    const norm = normalizeBars(bars);
+    return scanSummary(results, { symbol: symbol ? String(symbol).toUpperCase() : '', bar: norm.length ? norm[norm.length - 1].t : null });
+  }
+  return `${JSON.stringify(results, null, 2)}\n`;
+}
+
+function scan({ file, symbol, now: at, record = false, view = 'json', name } = {}, ctx) {
   const c = context(ctx);
   const { strategies } = load(c);
   if (!file) throw new Error('scan needs a bars file (get_bars JSON, CSV, Parquet) or -');
@@ -68,7 +88,7 @@ function scan({ file, symbol, now: at, record = false } = {}, ctx) {
   const now = at ? new Date(at) : clock;
   if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`); // cli-only: the tool takes no time
   const results = scanStrategies(strategies, bars, { symbol, now });
-  const text = `${JSON.stringify(results, null, 2)}\n`;
+  const text = scanText(results, bars, { view, name, symbol });
   if (!record) return { text };
   return withText(text, () => {
     const record = say(c, '--record', 'record');
@@ -88,13 +108,14 @@ function scan({ file, symbol, now: at, record = false } = {}, ctx) {
   });
 }
 
-function recent({ file, symbol, count: raw } = {}, ctx) {
+function recent({ file, symbol, count: raw, format = 'json' } = {}, ctx) {
   const c = context(ctx);
   const { strategies } = load(c);
   if (!file) throw new Error('recent needs a bars file');
   const count = raw === undefined ? 5 : Number(raw);
   if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error(say(c, '--bars: 1 to 50', 'count: 1 to 50'));
-  return { text: `${JSON.stringify(recentSignals(strategies, readBarsArg(file), { symbol, count }), null, 2)}\n` };
+  const rows = recentSignals(strategies, readBarsArg(file), { symbol, count });
+  return { text: format === 'lines' ? recentLines(rows, { symbol: symbol ? String(symbol).toUpperCase() : '' }) : `${JSON.stringify(rows, null, 2)}\n` };
 }
 
 /** argv (after the script name) to { op, args }; throws the usage on anything else. */

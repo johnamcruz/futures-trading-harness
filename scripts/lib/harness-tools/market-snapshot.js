@@ -6,7 +6,8 @@
  *   snapshot { file, params }   file: bars file or '-' (get_bars JSON on stdin);
  *                               params: { name: number } overrides of trading/market-snapshot.js PARAMS
  *
- * Output: the snapshot as JSON. Use closed bars only, oldest first.
+ * Output: the snapshot as JSON (compact: on one line, as the harness tool
+ * returns it). Use closed bars only, oldest first.
  */
 
 const { readBarsArg } = require('../backtest/data');
@@ -22,11 +23,12 @@ function paramValue(name, raw) {
   return n;
 }
 
-function snapshot({ file, params = {} } = {}) {
+function snapshot({ file, params = {}, compact = false } = {}) {
   if (file === undefined || file === null) throw new Error(USAGE);
   const overrides = {};
   for (const [name, raw] of Object.entries(params || {})) overrides[name] = paramValue(name, raw);
-  return { text: `${JSON.stringify(buildSnapshot(readBarsArg(file), overrides), null, 2)}\n` };
+  const snap = buildSnapshot(readBarsArg(file), overrides);
+  return { text: compact ? `${JSON.stringify(snap)}\n` : `${JSON.stringify(snap, null, 2)}\n` };
 }
 
 /** argv to { file, params }: --name=value or --name value, and one bars file. */

@@ -93,7 +93,16 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
 
 test('registry: arguments map to the operation\'s own', () => {
   const args = (name, input) => BY_NAME.get(name).args(input);
-  assert.deepStrictEqual(args('strategies_scan', { bars: '/b.json', symbol: 'MNQ' }), { file: '/b.json', symbol: 'MNQ', record: false });
+  // The tools' compact forms by default; the full ones (the scripts') on request.
+  assert.deepStrictEqual(args('strategies_scan', { bars: '/b.json', symbol: 'MNQ' }), { file: '/b.json', symbol: 'MNQ', record: false, view: 'summary' });
+  assert.deepStrictEqual(args('strategies_scan', { bars: '/b.json', symbol: 'MNQ', detail: true }), { file: '/b.json', symbol: 'MNQ', record: false, view: 'json' });
+  assert.deepStrictEqual(args('strategies_scan', { bars: '/b.json', symbol: 'MNQ', detail: false }), { file: '/b.json', symbol: 'MNQ', record: false, view: 'summary' });
+  assert.deepStrictEqual(args('strategies_scan', { bars: '/b.json', symbol: 'MNQ', name: 'orb', detail: true, record: true }), { file: '/b.json', symbol: 'MNQ', name: 'orb', record: true, view: 'one' });
+  for (const name of ['../x', 'a/b', '', 'x'.repeat(65)]) assert.match(validate(BY_NAME.get('strategies_scan').inputSchema, { bars: '/b.json', symbol: 'MNQ', name }).join(), /name: (must match|at least)/, name);
+  assert.deepStrictEqual(args('strategies_recent', { bars: '/b.json', symbol: 'MNQ', count: 3 }), { file: '/b.json', symbol: 'MNQ', count: 3, format: 'lines' });
+  assert.deepStrictEqual(args('strategies_recent', { bars: '/b.json', symbol: 'MNQ', json: true }), { file: '/b.json', symbol: 'MNQ', format: 'json' });
+  assert.deepStrictEqual(args('strategies_list', {}), { compact: true });
+  assert.deepStrictEqual(args('strategies_list', { json: true }), { json: true, compact: true });
   assert.deepStrictEqual(args('mtf_read', { bars: '/b.json', timeframes: [15], daily: '/d.json', symbol: 'MNQ', record: true }), { file: '/b.json', tf: [15], daily: '/d.json', symbol: 'MNQ', json: false, record: true });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily' }), { symbol: 'MNQ', timeframe: 3, daily: true, record: false });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 5, count: 10 }), { symbol: 'MNQ', timeframe: 5, daily: false, count: 10, record: false });
@@ -103,6 +112,6 @@ test('registry: arguments map to the operation\'s own', () => {
   for (const name of ['../x', 'Trend', 'a/b', 'a.json', '', '-x', 'x'.repeat(25)]) {
     assert.match(validate(BY_NAME.get('bars_fetch').inputSchema, { symbol: 'MNQ', timeframe: 3, name }).join(), /name: (must match|at least)/, name);
   }
-  assert.deepStrictEqual(args('market_snapshot', { bars: '/b.json' }), { file: '/b.json', params: {} });
+  assert.deepStrictEqual(args('market_snapshot', { bars: '/b.json' }), { file: '/b.json', params: {}, compact: true });
   assert.deepStrictEqual(args('reconcile', { day: '2026-10-07' }), { day: '2026-10-07', json: false });
 });
