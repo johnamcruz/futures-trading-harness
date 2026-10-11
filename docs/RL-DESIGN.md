@@ -23,6 +23,11 @@ micros or minis (`contracts: auto` trades minis once the size reaches one mini,
 10 micros; rounding is always down). Without a bundle the policy strategy takes
 every setup as sized: the rules-only baseline the policy must beat.
 
+The policy learns from the rules' setups, not from the reasoning model's
+judgment. A design for replaying the reasoning trader over history and
+training a policy on its decisions is in `docs/REASONING-TRADER-DESIGN.md`
+(not built).
+
 The policy aims for a **high pass rate and a high win rate**: reach the
 profit target before the challenge's sessions run out, without touching the
 max-loss floor, with more winning trades than losing ones. Blowing the
