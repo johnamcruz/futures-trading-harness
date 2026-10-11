@@ -82,7 +82,8 @@ directories only the user owns and can write (`paths.js`). Only `bars_fetch`
 loads the user's `.env` (into a copy), as only `bars.js` does. `record` stays refused in autonomous runs (`FTH_AUTONOMOUS=1`, which every
 harness hands its MCP servers: Claude and Qwen pass their environment, Codex
 forwards it), and whenever a live runner holds its lock
-(`<FTH_HOME>/autotrader.lock`), whatever the server's environment. A reply over 256 KB is
+(`<FTH_HOME>/autotrader.lock`, its pid an autotrader's), whatever the
+server's environment; the scripts refuse it the same way. A reply over 256 KB is
 refused with how to narrow it, never truncated. No tool places, modifies or
 cancels an order, and the order-gate hook matches none of them. The installer
 registers it as `harness` for every harness, as it registers `broker` (Claude:

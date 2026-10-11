@@ -25,6 +25,7 @@ const { timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
 const { context, withText, options } = require('./cli');
+const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5]';
 
@@ -71,6 +72,8 @@ function scan({ file, symbol, now: at, record = false } = {}, ctx) {
   if (!record) return { text };
   return withText(text, () => {
     if (c.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records every bar itself');
+    const pid = liveRunner(c.env);
+    if (pid) throw new Error(`--record: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
     if (!symbol) throw new Error('--record needs --symbol <ROOT>');
     // The record's file is named after it: a contract root only (as mtf and bars take it).
     if (!/^[A-Z0-9]+$/.test(String(symbol).toUpperCase())) throw new Error('--record needs --symbol <ROOT>: a contract root, e.g. MNQ');

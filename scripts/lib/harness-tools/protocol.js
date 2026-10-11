@@ -24,10 +24,7 @@
  * boundedLines(onLine, onOversize, max) -> { push(chunk), flush() }
  */
 
-const fs = require('fs');
-const path = require('path');
 const { lineSplitter } = require('../trading/mcp-gateway');
-const { harnessHome } = require('../paths');
 const { harnessNow } = require('../trading/harness-now');
 const { OPERATIONS } = require('./index');
 const { OpError, ROOT } = require('./cli');
@@ -43,28 +40,6 @@ const VERSION = '1';
 const MAX_ERRORS = 10; // an invalid call's reply names the first few problems, never thousands
 
 const result = (text, isError = false) => ({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) });
-
-/**
- * The pid of an autonomous runner holding its lock (<FTH_HOME>/autotrader.lock), or null. `record` is
- * refused while one runs, whatever this server's environment says: the runner records every bar's read
- * and signals itself, and a harness that didn't pass FTH_AUTONOMOUS on can't make record allowed.
- */
-function liveRunner(env) {
-  let lock;
-  try {
-    lock = JSON.parse(fs.readFileSync(path.join(harnessHome(env), 'autotrader.lock'), 'utf8'));
-  } catch (_err) {
-    return null;
-  }
-  const pid = lock && lock.pid;
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  try {
-    process.kill(pid, 0);
-  } catch (err) {
-    if (err.code !== 'EPERM') return null; // gone: a stale lock
-  }
-  return pid;
-}
 
 /** Run one tool; never throws (a failure is an isError result). */
 async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
@@ -88,10 +63,6 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
     const r = barsFile(given[k], { env });
     if (r.error) return result(`[harness] ${k}: ${r.error}\n`, true);
     checked[k] = r.file;
-  }
-  if (given.record === true) {
-    const pid = liveRunner(env);
-    if (pid) return result(`[${tool.script}] --record: an autonomous runner is running (pid ${pid}); it records the read itself\n`, true);
   }
   let text;
   let isError;
@@ -206,4 +177,4 @@ function createServer({ env = process.env, root = ROOT, write, call = callTool }
   };
 }
 
-module.exports = { liveRunner, PROTOCOL_VERSIONS, MAX_LINE_BYTES, MAX_OUTPUT_BYTES, callTool, boundedLines, createServer };
+module.exports = { PROTOCOL_VERSIONS, MAX_LINE_BYTES, MAX_OUTPUT_BYTES, callTool, boundedLines, createServer };

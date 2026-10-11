@@ -19,6 +19,7 @@ const { buildRecord, writeRecord } = require('../trading/mtf-state');
 const { harnessHome } = require('../paths');
 const { readBarsArg } = require('../backtest/data');
 const { context, withText } = require('./cli');
+const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: mtf.js <bars.json | bars.csv | -> [--tf=15,60,240] [--daily=<daily bars>] [--json] [--record --symbol=MNQ]';
 
@@ -32,6 +33,8 @@ function mtf({ file = null, tf = [15, 60, 240], daily = null, json = false, reco
   return withText(text, () => {
     // In autonomous runs the runner records the read from the bars it hands the cycle.
     if (c.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
+    const pid = liveRunner(c.env);
+    if (pid) throw new Error(`--record: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
     if (!symbol || !/^[A-Z0-9]+$/i.test(symbol)) throw new Error('--record needs --symbol=<ROOT> (e.g. MNQ)');
     const out = writeRecord(harnessHome(c.env), buildRecord(bars, { symbol, source: file === '-' ? 'stdin' : file, now: c.now() }));
     return { text, stderr: `[mtf] recorded for the order gate: ${out}\n` };

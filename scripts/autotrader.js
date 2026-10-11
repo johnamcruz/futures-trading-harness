@@ -59,6 +59,7 @@ const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
+const { lockHolderAlive } = require('./lib/runner-lock');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -68,26 +69,6 @@ const LOCK_FILE = path.join(HOME_DIR, 'autotrader.lock');
 function arg(argv, name) {
   const i = argv.indexOf(name);
   return i === -1 ? undefined : argv[i + 1];
-}
-
-function processCommand(pid) {
-  try {
-    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ');
-  } catch (_err) {
-    return null; // no /proc (macOS) or no such process
-  }
-}
-
-/** A lock holder is live only if the pid exists and (where /proc exists) is an autotrader. */
-function lockHolderAlive(lock) {
-  if (!lock || !Number.isInteger(lock.pid) || lock.pid <= 0 || lock.pid === process.pid) return false;
-  try {
-    process.kill(lock.pid, 0);
-  } catch (err) {
-    if (err.code !== 'EPERM') return false;
-  }
-  const cmd = processCommand(lock.pid);
-  return cmd === null || cmd.includes('autotrader');
 }
 
 /** One runner per machine: an exclusive lock file holding our pid and start time. */
