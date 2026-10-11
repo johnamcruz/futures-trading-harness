@@ -78,9 +78,12 @@ broker.
    why). As live, the day under way still runs with no trade cycle, its
    housekeeping and end of day included (flat at the close); the run stops
    before the next day. Review the change, remove the file, and run again
-   to resume there. A queued end-of-day retry is kept across a stop. The settings-format stamp (`"$version"`)
-   Qwen Code writes into the workspace `.qwen/settings.json` on start is not
-   a change.
+   to resume there. A queued end-of-day retry is kept across any stop (the
+   error limit included) and runs first on resume; a time already recorded
+   never runs again. A day whose end of day was never verified flat waits
+   for that resume: the runner flattens it before the next day trades. The
+   settings-format stamp (`"$version"`) Qwen Code writes into the workspace
+   `.qwen/settings.json` on start is not a change.
 9. **The prop policy.** A policy strategy (for example `prop_portfolio`,
    `account: topstep_100k`) names a prop account; with an account in the
    runner config, every pass logs "topstep_100k: no attempt is started" until

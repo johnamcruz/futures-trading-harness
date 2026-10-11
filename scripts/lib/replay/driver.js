@@ -88,12 +88,18 @@ function withEntry(fill, entries) {
  * A decision time whose step started but whose line was never written (the
  * driver was stopped mid-step): recorded as interrupted from what its process
  * left in the logs, and never run again (its cycle may have traded). Its
- * fills go to the next line.
+ * fills go to the next line. One whose line was written (a stop before the
+ * manifest said so) is already recorded.
  */
-function recoverPending(paths, manifest, log) {
+function recoverPending(paths, manifest, log, recorded) {
   const p = manifest.pending;
   if (!p) return;
   delete manifest.pending;
+  // Its line was written just before the stop (the manifest not yet saying so): already recorded.
+  if (recorded.has(p.t)) {
+    writeJsonAtomic(paths.manifest, manifest);
+    return;
+  }
   store.appendRecord(paths, manifest, {
     t: p.t, day: p.day, kind: p.kind, asked: p.kind, ran: [], events: [], step: { code: null, timedOut: false }, interrupted: true,
     cycles: store.cycleLogsSince(paths.runHome, p.startedMs).map(store.cycleSummary), refusals: store.refusalsSince(paths.runHome, p.startedMs),
@@ -122,6 +128,29 @@ function defaultDeps(run, root) {
       return fills.filter(f => Date.parse(f.creationTimestamp) > since.getTime() && Date.parse(f.creationTimestamp) <= until.getTime()).map(f => withEntry(f, entries));
     },
   };
+}
+
+/**
+ * The end-of-day retry after a try at `at` (`tries` so far) when the day isn't verified flat: a minute
+ * later, while tries are left and it is before the close and the run's end; else null.
+ */
+function nextRetry(run, day, at, tries) {
+  const state = readJson(path.join(run.paths.runHome, 'autotrader-state.json'), {}) || {};
+  const t = new Date(at.getTime() + 60000);
+  if ((state.day === day && state.eodDone) || tries >= EOD_RETRIES || tradingDayKey(t) !== day || sessionMinute(t) >= CLOSE_SESSION_MIN || t >= run.end) return null;
+  return { t, kind: 'eod-retry', day, tries: tries + 1 };
+}
+
+/**
+ * The end-of-day retry saved in the manifest, to run first on resume (null: none, or nothing left to try).
+ * One whose time is already recorded (interrupted after it may have acted, or a crash after its line) never
+ * runs that time again: the next try follows the last time recorded.
+ */
+function savedRetry(run, manifest, lastMs) {
+  const r = manifest.eodRetry;
+  if (!r || (manifest.daysDone || []).includes(r.day)) return null;
+  if (Date.parse(r.t) > lastMs) return Date.parse(r.t) < run.end.getTime() ? { t: new Date(r.t), kind: 'eod-retry', day: r.day, tries: r.tries } : null;
+  return nextRetry(run, r.day, new Date(lastMs), r.tries);
 }
 
 /** The kill switch's latest line ('' when empty or unreadable) when the file exists, else null. */
@@ -189,12 +218,15 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     info: { broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
-  recoverPending(paths, manifest, log);
-  const todo = store.remaining(manifest, points, store.recordedTimes(paths.runDir));
-  // An end-of-day retry queued before the last stop (--max-cycles, the kill switch, a crash): it runs first.
-  const retry = manifest.eodRetry;
-  if (retry && !(manifest.daysDone || []).includes(retry.day) && Date.parse(retry.t) < run.end.getTime()) {
-    todo.unshift({ t: new Date(retry.t), kind: 'eod-retry', day: retry.day, tries: retry.tries });
+  const recorded = store.recordedTimes(paths.runDir);
+  recoverPending(paths, manifest, log, recorded);
+  const todo = store.remaining(manifest, points, recorded);
+  // An end-of-day retry queued before the last stop (--max-cycles, the kill switch, the error limit, a crash): it runs first.
+  const retry = savedRetry(run, manifest, store.lastRecorded(manifest, recorded));
+  if (retry) todo.unshift(retry);
+  else if (manifest.eodRetry) {
+    delete manifest.eodRetry;
+    writeJsonAtomic(paths.manifest, manifest);
   }
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
@@ -267,19 +299,17 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const failed = rec.ran.some(r => !r.ok) || (point.kind === 'trade' && !rec.ran.length && unread && rec.errors.length > 0);
     failures = failed ? failures + 1 : rec.ran.length ? 0 : failures;
     log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || (killed !== null ? 'no cycle (kill switch on)' : 'no cycle')}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
-    if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };
     // End of day not verified flat: once more a minute later, as the live runner retries, before the close.
-    if (point.kind === 'eod' || point.kind === 'eod-retry') {
-      const state = readJson(path.join(paths.runHome, 'autotrader-state.json'), {}) || {};
-      const tries = point.tries || 0;
-      const next = new Date(point.t.getTime() + 60000);
-      if (!(state.day === point.day && state.eodDone) && tries < EOD_RETRIES && sessionMinute(next) < CLOSE_SESSION_MIN && next < run.end) {
-        queue.unshift({ t: next, kind: 'eod-retry', day: point.day, tries: tries + 1 });
-        // Kept in the manifest until it runs, so a stop before it never loses it.
-        manifest.eodRetry = { t: next.toISOString(), day: point.day, tries: tries + 1 };
-        writeJsonAtomic(paths.manifest, manifest);
-        continue;
-      }
+    // Kept in the manifest until it runs, so a stop before it (the error limit included) never loses it.
+    const next = point.kind === 'eod' || point.kind === 'eod-retry' ? nextRetry(run, point.day, point.t, point.tries || 0) : null;
+    if (next) {
+      manifest.eodRetry = { t: next.t.toISOString(), day: next.day, tries: next.tries };
+      writeJsonAtomic(paths.manifest, manifest);
+    }
+    if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };
+    if (next) {
+      queue.unshift(next);
+      continue;
     }
     const nextPoint = queue[0];
     if (lastOfDay.get(point.day) && (!nextPoint || nextPoint.day !== point.day) && point.t >= lastOfDay.get(point.day).t) store.markDayDone(paths, manifest, point.day);

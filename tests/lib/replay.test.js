@@ -320,6 +320,72 @@ test('driver: a queued end-of-day retry survives a stop (--max-cycles) and runs 
   assert.deepStrictEqual(m.daysDone, ['2026-10-07']);
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
   assert.strictEqual(ran.length, 4);
+  // A retry saved for a day already done (a stale manifest) never runs, and is cleared.
+  fs.writeFileSync(w.run.paths.manifest, JSON.stringify({ ...m, eodRetry: { t: '2026-10-07T19:55:00.000Z', day: '2026-10-07', tries: 2 } }));
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0);
+  assert.strictEqual(ran.length, 4);
+  assert.strictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).eodRetry, undefined);
+});
+
+test('driver: a retry interrupted after acting, or whose line was written before a crash, never runs that time again', async () => {
+  for (const crashAfterLine of [false, true]) {
+    const w = userWorld({ start: '2026-10-07T19:44:00Z', end: '2026-10-07T19:59:00Z' });
+    seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+    const ran = [];
+    let crash = true;
+    const deps = {
+      serverCheck: async () => null,
+      trades: async () => [],
+      async step(p) {
+        ran.push(`${p.kind}@${p.t.toISOString().slice(11, 16)}`);
+        if (p.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: p.day, eodDone: p.kind === 'eod-retry' && !crash }));
+        if (p.kind === 'eod-retry' && crash && !crashAfterLine) return { code: 1, output: 'killed' }; // acted (wrote state), then died
+        return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: p.kind === 'trade' ? 'trade' : 'eod', ok: true }] })}` };
+      },
+    };
+    if (crashAfterLine) {
+      // The retry's line is written, then the driver dies before its manifest says so.
+      const real = store.appendRecord;
+      store.appendRecord = (paths, manifest, rec) => {
+        if (rec.kind !== 'eod-retry') return real(paths, manifest, rec);
+        fs.appendFileSync(store.dayFile(paths.runDir, rec.day), `${JSON.stringify({ v: store.VERSION, ...rec })}\n`);
+        throw new Error('crash');
+      };
+      await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps }), /crash/);
+      store.appendRecord = real;
+    } else {
+      await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps }), /could not run at 2026-10-07T19:51/);
+    }
+    crash = false;
+    const resumed = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+    assert.strictEqual(resumed.done, true);
+    assert.deepStrictEqual(ran, ['trade@19:45', 'trade@19:48', 'eod@19:50', 'eod-retry@19:51', 'eod-retry@19:52'], `the next try, not 19:51 again (crash after line: ${crashAfterLine})`);
+    const times = Object.values(store.readRun(w.run.paths.runDir).days).flat().map(l => l.t);
+    assert.strictEqual(new Set(times).size, times.length, 'one line per decision time');
+    const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));
+    assert.strictEqual(m.eodRetry, undefined);
+  }
+});
+
+test('driver: the error-limit stop keeps a queued end-of-day retry; it runs first on resume', async () => {
+  const w = userWorld({ start: '2026-10-07T19:44:00Z', end: '2026-10-07T19:59:00Z' });
+  w.run.cfg.maxConsecutiveErrors = 1;
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const ran = [];
+  const deps = {
+    serverCheck: async () => null,
+    trades: async () => [],
+    async step(p) {
+      ran.push(`${p.kind}@${p.t.toISOString().slice(11, 16)}`);
+      if (p.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: p.day, eodDone: p.kind === 'eod-retry' }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: p.kind === 'trade' ? 'trade' : 'eod', ok: p.kind !== 'eod' }] })}` };
+    },
+  };
+  const first = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.match(first.stopped, /failed cycles in a row/);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).eodRetry, { t: '2026-10-07T19:51:00.000Z', day: '2026-10-07', tries: 1 });
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).done, true);
+  assert.deepStrictEqual(ran, ['trade@19:45', 'trade@19:48', 'eod@19:50', 'eod-retry@19:51']);
 });
 
 test('driver: a step that can\'t run stops the run; failed cycles in a row stop it; the broker must attest the replay', async () => {

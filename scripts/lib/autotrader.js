@@ -531,6 +531,10 @@ function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = f
   return fired.length ? { run: true, reason: `strategy candidate: ${fired.join(', ')}` } : { run: false, reason: 'no strategy fired and flat' };
 }
 
+// A harness transcript's event types (Claude stream-json and Qwen JSON; Codex --json): any other JSON line
+// (an echoed order, a stderr warning) is plain text, so it never hides a plain-text run's result line.
+const TRANSCRIPT_EVENT = /^(?:system|assistant|user|result|(?:item|turn|thread)\.[a-z_.]+)$/;
+
 /**
  * The run's final message: { structured, final }. `structured`: the output is a harness transcript
  * (Claude stream-json, Qwen JSON, Codex --json events); `final`: its final message (Claude's and Qwen's
@@ -541,7 +545,7 @@ function finalMessage(output) {
   let structured = false;
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
-      if (!ev || typeof ev !== 'object' || typeof ev.type !== 'string') continue;
+      if (!ev || typeof ev !== 'object' || !TRANSCRIPT_EVENT.test(ev.type)) continue;
       structured = true;
       if (ev.type === 'result' && typeof ev.result === 'string') final = ev.result;
       const item = ev.type === 'item.completed' && ev.item;

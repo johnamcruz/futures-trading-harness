@@ -18,6 +18,7 @@
  * config, harness or model is a new run id.
  *
  *   openRun(paths, { runId, hash, info, now })     the manifest (created, or checked on resume)
+ *   lastRecorded(manifest, recorded)                the last time recorded (ms)
  *   remaining(manifest, points, recorded)           points still to run, in order (recorded: recordedTimes(runDir))
  *   appendRecord(paths, manifest, rec)              write a line, then the manifest's progress
  *   markDayDone(paths, manifest, day)
@@ -65,11 +66,16 @@ function openRun(paths, { runId, hash, info = {}, now = new Date() }) {
   return manifest;
 }
 
-function remaining(manifest, points, recorded = new Set()) {
-  const done = new Set(manifest.daysDone || []);
-  // The last time recorded: the manifest's, or a line written just before a stop kept the manifest from saying so.
+/** The last time recorded (ms, -Infinity for none): the manifest's, or a line written just before a stop kept the manifest from saying so. */
+function lastRecorded(manifest, recorded = new Set()) {
   let last = manifest.lastT ? Date.parse(manifest.lastT) : -Infinity;
   for (const t of recorded) if (Number.isFinite(Date.parse(t))) last = Math.max(last, Date.parse(t)); // a loop: a long run has too many times to spread
+  return last;
+}
+
+function remaining(manifest, points, recorded = new Set()) {
+  const done = new Set(manifest.daysDone || []);
+  const last = lastRecorded(manifest, recorded);
   return points.filter(p => !done.has(p.day) && p.t.getTime() > last);
 }
 
@@ -160,4 +166,4 @@ function parseStep(output) {
   }
 }
 
-module.exports = { VERSION, openRun, remaining, recordedTimes, touchedSince, appendRecord, markDayDone, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };
+module.exports = { VERSION, openRun, lastRecorded, remaining, recordedTimes, touchedSince, appendRecord, markDayDone, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };

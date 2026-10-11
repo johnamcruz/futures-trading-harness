@@ -207,6 +207,17 @@ test('cycleResult: trivial formatting tolerated, nothing looser; only the final 
   assert.strictEqual(cycleResult(fixture), null);
 });
 
+test('cycleResult: a JSON line in a plain-text run (an echoed order, a stderr warning) never hides its result line', () => {
+  for (const out of [
+    'placing order\n{"type":"market","side":"buy","size":1}\nCYCLE RESULT: executed - orb long\n',
+    'CYCLE RESULT: executed - orb long\n{"type":"warning","message":"deprecated"}\n',
+    '{"type":"log","msg":"start"}\n[{"type":"error"}]\nCYCLE RESULT: executed - orb long',
+  ]) assert.strictEqual(cycleResult(out), 'CYCLE RESULT: executed - orb long', out);
+  // A transcript event among them still makes it a transcript: no final message, no result.
+  assert.strictEqual(cycleResult('{"type":"system","subtype":"init"}\nCYCLE RESULT: executed - echoed\n'), null);
+  assert.strictEqual(cycleResult('{"type":"turn.started"}\nCYCLE RESULT: executed - echoed\n'), null);
+});
+
 test('cycleResult: a transcript cut short has no result; formatting inside the body; no empty body; a failed run logs its error', () => {
   const { runResult } = require('../../scripts/lib/autotrader');
   // (a) A stream-json run that timed out before its result event: an echoed skill example is no result.
