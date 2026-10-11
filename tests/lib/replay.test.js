@@ -449,6 +449,31 @@ test('driver: a saved retry runs only when due - kept by a retry that ran nothin
   assert.deepStrictEqual(ranC, ['trade@19:45', 'trade@19:48', 'eod@19:50']);
 });
 
+test('driver: end-of-day retries never run at or past the run\'s end or the close', async () => {
+  const notFlat = (w, ran) => ({
+    serverCheck: async () => null,
+    trades: async () => [],
+    async step(p) {
+      ran.push(`${p.kind}@${p.t.toISOString().slice(11, 16)}`);
+      if (p.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: p.day, eodDone: false }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: p.kind === 'trade' ? 'trade' : 'eod', ok: true }] })}` };
+    },
+  });
+  // The run ends at 19:52: one retry (19:51), none at 19:52.
+  const w = userWorld({ start: '2026-10-07T19:49:00Z', end: '2026-10-07T19:52:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const ran = [];
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: notFlat(w, ran) })).done, true);
+  assert.deepStrictEqual(ran, ['eod@19:50', 'eod-retry@19:51']);
+  // End of day at 15:57 ET (19:57Z): retries at 15:58 and 15:59, none at the 16:00 close.
+  const base = replayConfig('/x').autotrader;
+  const w2 = userWorld({ start: '2026-10-07T19:56:00Z', end: '2026-10-07T21:00:00Z', autotrader: { ...base, eodAt: '15:57@America/New_York' } });
+  seedRunHome(w2.run, { root: ROOT, userEnv: w2.env });
+  const ran2 = [];
+  assert.strictEqual((await runReplay({ run: w2.run, baseEnv: w2.env, root: ROOT, deps: notFlat(w2, ran2) })).done, true);
+  assert.deepStrictEqual(ran2, ['eod@19:57', 'eod-retry@19:58', 'eod-retry@19:59']);
+});
+
 test('driver: the kill switch\'s day under way comes from the last recorded time (a line written just before a crash)', async () => {
   const w = userWorld({ start: '2026-10-07T19:49:00Z', end: '2026-10-07T19:59:00Z' });
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });
