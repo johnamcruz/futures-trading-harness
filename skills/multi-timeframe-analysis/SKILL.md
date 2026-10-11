@@ -27,11 +27,11 @@ than two requests:
 
 | Role | Timeframe | Source |
 |---|---|---|
-| Context | daily | `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": "daily"}` (60 bars to `/tmp/fth/<SYMBOL>-1d.json`) |
+| Context | daily | `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": "daily"}` (60 bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-1d.json`) |
 | Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
 | Bias | 1 hour | built from the trigger bars |
 | Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (the runner's default, 5000 3-minute bars, to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (the runner's default, 5000 3-minute bars, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate) |
 
 Without `daily` the highest timeframe is the 4-hour: the alignment is then
 judged from it, and the plan says "no daily read". Fetch the daily bars once
@@ -41,7 +41,7 @@ them rather than retrying.
 ### 2. Run the read
 
 ```text
-mtf_read {"bars": "<trigger bars>", "daily": "/tmp/fth/<SYMBOL>-1d.json"}
+mtf_read {"bars": "<trigger bars>", "daily": "<the daily file bars_fetch returned>"}
 mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}    every number
 ```
 
@@ -162,7 +162,7 @@ copy (e.g. `strategies/ema_cross_mtf/`) and compare the two with
 ## Examples
 
 ```text
-mtf_read {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "daily": "/tmp/fth/MNQ-1d.json"}
+mtf_read {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "daily": "/home/u/.futures-trading-harness/bars-scratch/MNQ-1d.json"}
 daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/HL), ADX 24.1, ...
 4h: UP (close 21652.25 vs EMA20 21590.75, EMA20 vs EMA50 21470.5, structure HH/HL), ADX 21.3, ...
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
@@ -174,7 +174,7 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal 
    Shorts are counter: a 3m keltner short is refused (scan and gate); only a
    crt_1h raid of the 1h high could short, at half size.
 
-mtf_read {"bars": "/tmp/fth/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied there)
+mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.59, ...

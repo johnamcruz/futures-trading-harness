@@ -80,7 +80,8 @@ transcripts). Load the others as a step names them.
 - **Bars, interactively** (no runner bars file): the harness tool
   `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <3 or 1>, "record": true}`)
   writes the runner's default count of closed bars (5000 3-minute, 15000
-  1-minute) to `/tmp/fth/<SYMBOL>-<tf>m.json` and records the
+  1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness
+  home's own; use the path it returns) and records the
   multi-timeframe read for the gate (the `harness-tools` skill). Never paste
   a long `get_bars` reply into a file.
 

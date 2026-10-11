@@ -76,7 +76,7 @@ test('bars.js: fetches bars up to the replayed time and records the trend read a
   const dir = tmpDir();
   const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
   fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE], replay: true } } }));
-  const out = `/tmp/fth/replay-clock-${process.pid}.json`; // bars files go only under /tmp/fth
+  const out = path.join(dir, 'bars-scratch', 'replay-clock.json'); // bars files go only under the home's bars scratch directory
   const run = extra => node('bars.js', ['--symbol', 'MNQ', '--timeframe', '1', '--count', '10', '--out', out, '--record'], { FTH_HOME: dir, ...extra });
   // The fake serves 1-minute bars from 13:00 to 13:09 and never one after the request's endTime.
   const replayed = run({ FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
@@ -87,8 +87,8 @@ test('bars.js: fetches bars up to the replayed time and records the trend read a
   assert.strictEqual(wall.status, 0, wall.stderr);
   assert.match(wall.stdout, /wrote 10 1-minute bars .*last bar 2026-10-07T13:09:00.000Z/);
   // Refused with a live broker: exits before asking the broker for anything.
-  const live = node('bars.js', ['--symbol', 'MNQ', '--count', '10', '--out', out], { FTH_HOME: tmpDir(), FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
+  const liveHome = tmpDir();
+  const live = node('bars.js', ['--symbol', 'MNQ', '--count', '10', '--out', path.join(liveHome, 'bars-scratch', 'x.json')], { FTH_HOME: liveHome, FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
   assert.strictEqual(live.status, 1);
   assert.match(live.stderr, /not a replay broker/);
-  fs.rmSync(out, { force: true });
 });

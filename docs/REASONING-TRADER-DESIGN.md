@@ -132,9 +132,10 @@ broker with a journal of its own and no live twin (`harness-now.js`), and
 that its server attests `replay: true` at the clock's time; every replay pass
 checks it again before reading anything, and the gateway before any order.
 The isolation checks follow symlinks and fold letter case where the
-filesystem does. The driver refuses to start while the live runner runs (its
-agents and a replay's share `/tmp/fth`), and one driver holds a run at a
-time.
+filesystem does. Fetched bars go to the run home's own scratch directory
+(`<run home>/bars-scratch`), never one the live runner or another run reads.
+The driver refuses to start while the live runner runs, and one driver
+holds a run at a time.
 
 ### The cycle: the live harness
 

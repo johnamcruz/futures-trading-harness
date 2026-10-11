@@ -133,6 +133,13 @@ test('replay env: the run home, the replay broker and clock; no path overrides; 
   assert.deepStrictEqual([env.SIM_DATA, env.SIM_CLOCK, env.SIM_STATE, env.SIM_START, env.SIM_JOURNAL], ['/data', w.run.paths.clockFile, w.run.paths.brokerDir, '2026-10-07T13:31:00.000Z', w.run.paths.journal]);
   assert.strictEqual(env.FTH_PLAN_MAX_AGE_MIN, '60', 'the gate\'s settings stay');
   assert.deepStrictEqual(brokerErrors(env, w.run), []);
+  // Fetched bars: the run home's own scratch directory, never the live home's (nor the shared /tmp/fth), and the tools read
+  // only it and the bar directory.
+  const { scratchDir } = require('../../scripts/lib/bars-fetch');
+  const { barsDirs } = require('../../scripts/lib/harness-tools/paths');
+  assert.strictEqual(scratchDir(env), path.join(h, 'bars-scratch'));
+  assert.notStrictEqual(scratchDir(env), scratchDir(w.env));
+  assert.ok(barsDirs(env).includes(path.join(h, 'bars-scratch')) && !barsDirs(env).some(d => d === scratchDir(w.env) || d.startsWith('/tmp/fth')), barsDirs(env).join());
   // A live broker, a broker without its own journal, or one that shares a live server: refused.
   assert.match(brokerErrors({ ...env, FTH_BROKER: 'live' }, w.run).join(' '), /not "sim"[\s\S]*not a replay broker/);
   fs.writeFileSync(path.join(w.run.paths.runHome, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/live/server.js'], replay: true, journalEnv: 'SIM_JOURNAL' }, live: { command: [process.execPath, '/opt/live/server.js'] } } }));

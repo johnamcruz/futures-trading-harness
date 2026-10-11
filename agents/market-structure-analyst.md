@@ -1,6 +1,6 @@
 ---
 name: market-structure-analyst
-description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under /tmp/fth).
+description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Read, Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_bars, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show
 model: inherit
 ---
@@ -20,7 +20,7 @@ If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file of your own with the harness tool `bars_fetch`
 (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "count": <n>, "name": "structure"}`:
-it writes `/tmp/fth/<SYMBOL>-<minutes>m-structure.json`, which no other fetch
+it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-structure.json` (use the path it returns), which no other fetch
 replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 

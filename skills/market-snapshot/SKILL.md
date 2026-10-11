@@ -18,7 +18,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
    file (the prompt names it). Otherwise the harness tool `bars_fetch`
    (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)
-   writes `/tmp/fth/MNQ-3m.json` and says when its last bar closed (see the
+   writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns) and says when its last bar closed (see the
    `harness-tools` skill).
    Don't paste a `get_bars` reply into a file: thousands of bars are far more
    than a tool reply can carry. The default is enough for EMA(200), prior-day
@@ -32,7 +32,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 3. Call the harness tool `market_snapshot` with the file:
 
    ```text
-   market_snapshot {"bars": "/tmp/fth/MNQ-3m.json"}
+   market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json"}
    ```
 
    Override parameters with `params`, e.g. `{"orbMinutes": 30, "emaSlow": 50}`,

@@ -129,7 +129,8 @@ test('qwen workspace permissions allow harness scripts and deny edits to the har
   assert.deepStrictEqual(p.allow.filter(r => /^(Agent|Task|agent|task)\b/.test(r)), roles.map(r => `Agent(${r})`));
   assert.ok(!p.allow.includes('Agent'), 'no bare Agent allow');
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
-  assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
+  assert.ok(p.allow.includes('Read(//home/u/.futures-trading-harness/bars-scratch/**)'), 'the home\'s bars scratch directory, read-only');
+  assert.ok(!p.allow.some(r => r.includes('/tmp/fth')), 'never the shared /tmp/fth');
   assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
   assert.ok(p.allow.includes('WebFetch(bls.gov)'));
   assert.ok(!p.allow.some(r => ['Bash', 'Edit', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
@@ -203,6 +204,7 @@ test('the Qwen allowlist follows the configured bar and state directories', () =
   const p = qwenWorkspaceSettings('/fth', '/home/u', { dataDir: '/data/bars', stateDir: '/srv/fth' }).permissions;
   assert.ok(p.allow.includes('Read(//data/bars/**)'));
   assert.ok(p.deny.includes('Edit(//srv/fth/**)'));
+  assert.ok(p.allow.includes('Read(//srv/fth/bars-scratch/**)'));
 });
 
 test('the gateway is forwarded FTH_REPLAY_NOW (Codex passes only listed variables), so a replayed time reaches the gate', () => {

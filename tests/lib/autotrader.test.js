@@ -34,7 +34,11 @@ test('commands for each harness put the prompt where the CLI expects it', () => 
   assert.ok(tools.includes('mcp__broker'));
   assert.ok(tools.includes('Bash(node /fth/scripts/strategies.js:*)'));
   assert.ok(!tools.some(t => t === 'Write' || t === 'Bash' || /^Bash\(node:/.test(t)), 'no general write or shell access');
-  assert.deepStrictEqual(claudeTools('/r').filter(t => t.startsWith('Write')), ['Write(//tmp/fth/**)']);
+  assert.deepStrictEqual(claudeTools('/r').filter(t => /^(Write|Edit)|mkdir/.test(t)), [], 'no write rule: bars_fetch writes the scratch files');
+  // The home's own bars scratch directory is readable (where bars_fetch writes); the shared /tmp/fth is not.
+  assert.ok(claudeTools('/r', { home: '/h' }).includes('Read(//h/.futures-trading-harness/bars-scratch/**)'));
+  assert.ok(claudeTools('/r', { home: '/h', stateDir: '/srv/run' }).includes('Read(//srv/run/bars-scratch/**)'));
+  assert.ok(!claudeTools('/r', { home: '/h' }).some(t => t.includes('/tmp/fth')));
   assert.ok(!tools.includes('Read') && !tools.includes('WebFetch'), 'reads and fetches are scoped');
   assert.ok(tools.includes('Read(//fth/**)') && tools.includes('WebFetch(domain:bls.gov)'));
   const denied = claude[claude.indexOf('--disallowedTools') + 1].split(',');

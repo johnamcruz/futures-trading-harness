@@ -1,7 +1,7 @@
 'use strict';
 
 // Which bars files a harness tool may read (scripts/lib/harness-tools/paths.js): regular bars
-// files under the bars directory or /tmp/fth, through no symlink, refused without reading them.
+// files under the bars directory or the home's bars scratch directory, through no symlink, refused without reading them.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -23,9 +23,37 @@ function setup() {
   return { base, dir, secret };
 }
 
-test('paths: barsDirs is FTH_BARS_DIR (default <FTH_HOME>/bars) and /tmp/fth', () => {
-  assert.deepStrictEqual(barsDirs({ FTH_HOME: '/h' }), ['/h/bars', '/tmp/fth']);
-  assert.deepStrictEqual(barsDirs({ FTH_HOME: '/h', FTH_BARS_DIR: '/data/bars' }), ['/data/bars', '/tmp/fth']);
+test('paths: barsDirs is FTH_BARS_DIR (default <FTH_HOME>/bars) and <FTH_HOME>/bars-scratch, never /tmp/fth', () => {
+  assert.deepStrictEqual(barsDirs({ FTH_HOME: '/h' }), ['/h/bars', '/h/bars-scratch']);
+  assert.deepStrictEqual(barsDirs({ FTH_HOME: '/h', FTH_BARS_DIR: '/data/bars' }), ['/data/bars', '/h/bars-scratch']);
+});
+
+test('paths: a bars_fetch file is read from its own home only; /tmp/fth is refused', async () => {
+  const { fetchBarsToFile } = require('../../scripts/lib/bars-fetch');
+  const client = {
+    activeContract: async s => ({ id: s, tickSize: 0.25, tickValue: 0.5 }),
+    closedBars: async () => Array.from({ length: 5 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 13) + k * 180000).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 3 })),
+  };
+  const live = fs.realpathSync(tmpDir());
+  const replay = fs.realpathSync(tmpDir());
+  const { file } = await fetchBarsToFile({ client, symbol: 'MNQ', count: 5, env: { FTH_HOME: live } });
+  assert.deepStrictEqual(barsFile(file, { env: { FTH_HOME: live } }), { file });
+  assert.match(barsFile(file, { env: { FTH_HOME: replay } }).error, /outside them/, 'another home never reads it');
+  assert.match(barsFile(file, { env: { FTH_HOME: replay, FTH_BARS_DIR: path.join(replay, 'bars') } }).error, /outside them/);
+  for (const value of ['/tmp/fth/MNQ-3m.json', '/private/tmp/fth/MNQ-3m.json']) assert.match(barsFile(value, { env: { FTH_HOME: live } }).error, /outside them/, value);
+  // The path checks hold for the scratch directory: climbing out of it, a link in it, the directory itself a link,
+  // or writable by others.
+  const scratch = path.join(live, 'bars-scratch');
+  fs.writeFileSync(path.join(live, 'journal.json'), '{"secret":1}');
+  assert.match(barsFile(path.join(scratch, '..', 'journal.json'), { env: { FTH_HOME: live } }).error, /outside them/);
+  fs.symlinkSync(path.join(live, 'journal.json'), path.join(scratch, 'link.json'));
+  assert.match(barsFile(path.join(scratch, 'link.json'), { env: { FTH_HOME: live } }).error, /is a symlink/);
+  fs.chmodSync(scratch, 0o777);
+  assert.match(barsFile(file, { env: { FTH_HOME: live } }).error, /writable by other users/);
+  fs.chmodSync(scratch, 0o700);
+  fs.renameSync(scratch, path.join(live, 'moved'));
+  fs.symlinkSync(path.join(live, 'moved'), scratch);
+  assert.match(barsFile(file, { env: { FTH_HOME: live } }).error, /bars-scratch is a symlink/);
 });
 
 test('paths: a regular bars file under a bars directory is allowed', () => {
@@ -97,7 +125,7 @@ test('paths: the bars directory itself a symlink, missing, or another user\'s is
   assert.ok(barsFile(path.join(dir, 'sub', 'a.csv'), { dirs: [dir] }).file);
 });
 
-test('paths: a directory given by its real form (/private/tmp/fth for /tmp/fth) is the same place', () => {
+test('paths: a directory given by its real form (/private/tmp/x for /tmp/x) is the same place', () => {
   const { base, dir } = setup();
   // A directory reached through a symlinked parent is checked from the directory down.
   const alias = path.join(fs.realpathSync(tmpDir()), 'alias');

@@ -4,11 +4,12 @@
  * (market-snapshot, mtf, strategies scan), without pasting them through a
  * tool reply. Credentials come from the user's .env (never printed).
  *
- *   node scripts/bars.js --symbol MNQ [--timeframe 3] [--count N] [--out /tmp/fth/MNQ-3m.json] [--record]
+ *   node scripts/bars.js --symbol MNQ [--timeframe 3] [--count N] [--out <FTH_HOME>/bars-scratch/MNQ-3m.json] [--record]
  *   (default count: what the runner keeps, 250 hours of bars, enough for the 4h trend: 5000 3m bars)
  *   node scripts/bars.js --symbol MNQ --daily [--count 60]          daily bars for mtf.js --daily
  *
- * --out takes a .json file under /tmp/fth/ (and nothing else). --record also
+ * --out takes a .json file under the harness home's bars scratch directory,
+ * <FTH_HOME>/bars-scratch/ (and nothing else; the default file is there). --record also
  * records the multi-timeframe read for the order gate (as mtf.js --record);
  * refused in autonomous runs, where the runner records it. Prints one line:
  * the file, the contract, the bar count, and when the last bar closed.

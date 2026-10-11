@@ -1,6 +1,6 @@
 ---
 name: trend-momentum-analyst
-description: "Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy-library scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under /tmp/fth)."
+description: "Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy-library scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder)."
 tools:
   - read_file
   - skill
@@ -29,7 +29,7 @@ If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file of your own with the harness tool `bars_fetch`
 (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "count": <n>, "name": "trend"}`:
-it writes `/tmp/fth/<SYMBOL>-<minutes>m-trend.json`, which no other fetch
+it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-trend.json` (use the path it returns), which no other fetch
 replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 

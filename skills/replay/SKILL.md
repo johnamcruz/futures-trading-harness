@@ -97,6 +97,9 @@ broker.
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
 next run resumes. One driver runs a run at a time (a lock in its folder).
+Bars the agents fetch (`bars_fetch`) go to the run home's own
+`<run home>/bars-scratch`, never a folder a live session or another run
+reads; the driver still refuses to start while the live runner runs.
 
 What a replay can't seal off (say so when reporting results):
 
@@ -104,10 +107,6 @@ What a replay can't seal off (say so when reporting results):
   which answer with today's pages, after the replayed time. For a sealed run,
   use a runner config whose harness has no web tools (a custom command or
   `extraArgs`).
-- **Scratch files.** The scripts write `/tmp/fth`, shared with live sessions
-  and earlier runs: a stale file there can hold later bars. The driver
-  refuses to start while the live runner runs; clear `/tmp/fth` before a
-  replay when no live session needs it.
 - **Codex** can read files outside its workspace, including the replay
   broker's data folder; and its gateway gets only the variables the installer
   listed for the broker chosen at install time, so a Codex replay's entries

@@ -229,7 +229,7 @@ test('agents: every mcp__harness__ tool a role lists exists; analysts, risk-mana
 
 // A valid value per argument, for a placeholder (<SYMBOL>, <minutes>) in a documented call.
 const SAMPLE = {
-  symbol: 'MNQ', bars: '/tmp/fth/a.json', daily: '/tmp/fth/a.json', timeframe: 3, count: 5, timeframes: [15], start: '2026-01-02T10:00:00Z',
+  symbol: 'MNQ', bars: '/h/bars-scratch/a.json', daily: '/h/bars-scratch/a.json', timeframe: 3, count: 5, timeframes: [15], start: '2026-01-02T10:00:00Z',
   end: '2026-01-02T10:30:00Z', reason: 'x', account: 'topstep_50k', day: '2026-01-02', top: 5, json: true, record: true, params: {},
 };
 const sampleFor = (tool, key) => (key === 'name' ? (tool === 'strategies_show' ? 'orb' : 'trend') : SAMPLE[key]);

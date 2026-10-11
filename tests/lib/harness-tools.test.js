@@ -194,18 +194,20 @@ test('bars: fetch through the broker; only its own arguments reach the file writ
   const home = tmpDir();
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE] } } }));
   const env = { PATH: process.env.PATH, FTH_HOME: home };
-  const out = `/tmp/fth/harness-tools-${process.pid}.json`;
+  const scratch = path.join(home, 'bars-scratch');
   const now = clock(new Date('2026-10-07T13:05:30Z'));
-  try {
-    const r = await bars.fetch({ symbol: 'MNQ', timeframe: 1, count: 10, out, record: true }, { env, now });
-    assert.strictEqual(now.calls, 1);
-    assert.match(r.text, /^wrote 6 1-minute bars for MNQ .* to \/tmp\/fth\/harness-tools-\d+\.json; last bar 2026-10-07T13:05:00\.000Z/);
-    assert.match(r.text, /\(recorded for the order gate: .*MNQ\.json\)\n$/);
-  } finally {
-    fs.rmSync(out, { force: true });
-  }
-  // An output directory in the arguments is ignored: the file still has to be under /tmp/fth.
-  await assert.rejects(bars.fetch({ symbol: 'MNQ', count: 10, out: path.join(home, 'x.json'), outDir: home }, { env, now }), /--out: a \.json file under \/tmp\/fth\//);
+  const r = await bars.fetch({ symbol: 'MNQ', timeframe: 1, count: 10, record: true }, { env, now });
+  assert.strictEqual(now.calls, 1);
+  assert.ok(r.text.startsWith('wrote 6 1-minute bars for MNQ ') && r.text.includes(` to ${path.join(scratch, 'MNQ-1m.json')}; last bar 2026-10-07T13:05:00.000Z`), r.text);
+  assert.match(r.text, /\(recorded for the order gate: .*MNQ\.json\)\n$/);
+  // The env's home decides where: another home's fetch goes to its own scratch directory.
+  const other = tmpDir();
+  fs.copyFileSync(path.join(home, 'brokers.json'), path.join(other, 'brokers.json'));
+  const r2 = await bars.fetch({ symbol: 'MNQ', timeframe: 1, count: 10, name: 'trend' }, { env: { ...env, FTH_HOME: other }, now });
+  assert.ok(r2.text.includes(` to ${path.join(other, 'bars-scratch', 'MNQ-1m-trend.json')};`), r2.text);
+  // An output directory in the arguments is ignored: the file still has to be under the home's scratch directory.
+  await assert.rejects(bars.fetch({ symbol: 'MNQ', count: 10, out: path.join(home, 'x.json'), outDir: home }, { env, now }), new RegExp(`--out: a \\.json file under ${scratch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`));
+  await assert.rejects(bars.fetch({ symbol: 'MNQ', count: 10, out: '/tmp/fth/MNQ-1m.json' }, { env, now }), /--out: a \.json file under .*bars-scratch\/ \(outside it/);
   assert.ok(!fs.existsSync(path.join(home, 'x.json')));
   await assert.rejects(bars.fetch({ symbol: 'MNQ', daily: true, record: true }, { env, now }), /--record reads trigger bars/);
   await assert.rejects(bars.fetch({ symbol: 'MNQ', record: true }, { env: { ...env, FTH_AUTONOMOUS: '1' }, now }), /runner records the read itself/);

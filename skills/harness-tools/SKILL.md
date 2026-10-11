@@ -26,7 +26,7 @@ scripts. None places, changes, or cancels an order.
 
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
-| `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`?, `name`? | writes closed bars to `/tmp/fth/<SYMBOL>-<tf>m.json` (`-1d.json` daily; with `name`, `<SYMBOL>-<tf>m-<name>.json`, a file of your own) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
+| `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`?, `name`? | writes closed bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json`, this harness home's own scratch folder (`-1d.json` daily; with `name`, `<SYMBOL>-<tf>m-<name>.json`, a file of your own) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
 | `strategies_list` | `json`? | the registered strategies, one line each; `json`: every field (timeframe, sessions, file) as JSON on one line | `strategies.js list [--json]` |
 | `strategies_show` | `name` | one STRATEGY.md | `strategies.js show <name>` |
 | `strategies_validate` | none | each strategy ok or what is invalid | `strategies.js validate` |
@@ -42,7 +42,9 @@ scripts. None places, changes, or cancels an order.
 
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`
-  file under `/tmp/fth`. Nothing else is read: another path, a symlink, or
+  file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns:
+  each harness home, a replay's run home included, has its own, and
+  `/tmp/fth` is no longer read). Nothing else is read: another path, a symlink, or
   a file that isn't `.json` or `.csv` is refused (Parquet and Excel files
   are the user's, for backtests).
 - `symbol` is a contract root in capitals (`MNQ`, `MES`).
@@ -74,9 +76,9 @@ backtest itself (the `strategy-authoring` skill); no trading role does.
 
 ```text
 bars_fetch {"symbol": "MNQ", "timeframe": 15, "count": 160}
-→ wrote 160 15-minute bars for MNQ (tick 0.25, $0.5/tick) to /tmp/fth/MNQ-15m.json; last bar 2026-10-07T13:45:00.000Z, closed 2026-10-07T14:00:00.000Z
+→ wrote 160 15-minute bars for MNQ (tick 0.25, $0.5/tick) to /home/u/.futures-trading-harness/bars-scratch/MNQ-15m.json; last bar 2026-10-07T13:45:00.000Z, closed 2026-10-07T14:00:00.000Z
 
-market_snapshot {"bars": "/tmp/fth/MNQ-15m.json"}
+market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-15m.json"}
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ"}
 → Scan of MNQ on the last closed bar (opened 2026-10-07T13:57:00.000Z): 16 strategies, 1 candidate. Regime trend-up. Trend 4h up, 1h up, 15m up, prevailing 4h up.
   Candidates:
@@ -86,7 +88,7 @@ strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "s
     ...
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}
 → orb's full result as JSON
-mtf_read {"bars": "/tmp/fth/MNQ-3m.json", "daily": "/tmp/fth/MNQ-1d.json"}
+mtf_read {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "daily": "/home/u/.futures-trading-harness/bars-scratch/MNQ-1d.json"}
 blackouts_add {"start": "2026-10-07T12:25:00Z", "end": "2026-10-07T12:40:00Z", "reason": "CPI 08:30 ET"}
 combine_status {}
 ```
