@@ -13,10 +13,11 @@ You cannot place orders and must not try.
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
-timeframe to a file with the harness tool `bars_fetch` (`{"symbol":
-"<SYMBOL>", "timeframe": <minutes>, "count": <n>}`: it writes
-`/tmp/fth/<SYMBOL>-<minutes>m.json` and says when the last bar closed; the
-`harness-tools` skill); never paste a long `get_bars` reply into a file.
+timeframe to a file of your own with the harness tool `bars_fetch`
+(`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "count": <n>, "name": "trend"}`:
+it writes `/tmp/fth/<SYMBOL>-<minutes>m-trend.json`, which no other fetch
+replaces, and says when the last bar closed; the `harness-tools` skill);
+never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trend-momentum-indicators`, `market-snapshot`,
    `strategy-library`, and `harness-tools`.

@@ -1,7 +1,7 @@
 ---
 name: trade-reviewer
 description: Post-trade reviewer for the futures desk. Grades closed trades against their plans (R multiple, process grade, mistakes), writes review entries with the result and setup tags the order gate needs, and distils evidence-based lessons. Use after each exit, at end of day, and for /trade-review.
-tools: Read, Skill, mcp__harness__lessons, mcp__harness__bars_fetch, mcp__broker__search_trades, mcp__broker__search_orders, mcp__broker__get_performance, mcp__broker__get_bars, mcp__broker__get_contract, mcp__broker__journal_read, mcp__broker__journal_add
+tools: Read, Skill, mcp__harness__lessons, mcp__harness__reconcile, mcp__harness__bars_fetch, mcp__broker__search_trades, mcp__broker__search_orders, mcp__broker__get_performance, mcp__broker__get_bars, mcp__broker__get_contract, mcp__broker__journal_read, mcp__broker__journal_add
 model: inherit
 ---
 

@@ -30,7 +30,7 @@ function attemptLines(home, now) {
     const s = r && r.snapshot;
     const block = combineBlock(home, name, now);
     const blocked = block ? `; entries blocked: ${block}` : '';
-    if (!s || !s.summary) return `- ${name}: attempt started ${r ? r.startedAt : '?'}, no balance snapshot yet (node <root>/scripts/combine.js status)${blocked}`;
+    if (!s || !s.summary) return `- ${name}: attempt started ${r ? r.startedAt : '?'}, no balance snapshot yet (the harness tool combine_status)${blocked}`;
     const m = s.summary;
     const age = Math.max(0, Math.round((now.getTime() - Date.parse(s.at)) / 60000));
     return `- ${name} (${m.status}) as of ${s.at} (${age} min ago): balance ${usd(m.balance)}, floor ${usd(m.floor)}, cushion ${usd(m.cushion)}, `

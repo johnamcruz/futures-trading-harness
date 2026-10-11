@@ -31,7 +31,7 @@ than two requests:
 | Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
 | Bias | 1 hour | built from the trigger bars |
 | Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (2000 bars to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (the runner's default, 5000 3-minute bars, to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
 
 Without `daily` the highest timeframe is the 4-hour: the alignment is then
 judged from it, and the plan says "no daily read". Fetch the daily bars once

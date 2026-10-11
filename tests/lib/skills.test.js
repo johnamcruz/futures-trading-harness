@@ -226,3 +226,63 @@ test('agents: every mcp__harness__ tool a role lists exists; analysts, risk-mana
   // blackouts_add, which only the head trader uses.
   for (const [role, list] of Object.entries(tools)) assert.ok(!list.includes('mcp__harness__blackouts_add'), `${role}: blackouts_add is the head trader's`);
 });
+
+test('skills: every harness tool call a doc writes uses the tool\'s own argument names and types; tool-like names exist', () => {
+  const { validate } = require('../../scripts/lib/harness-tools/validate');
+  const names = [...HARNESS_NAMES];
+  const bad = [];
+  const typeOf = raw => (/^"/.test(raw) ? 'string' : /^(true|false)$/.test(raw) ? 'boolean' : /^-?\d+(\.\d+)?$/.test(raw) ? 'number' : /^\[/.test(raw) ? 'array' : null);
+  for (const d of DOCS) {
+    for (const name of names) {
+      const schema = BY_NAME_SCHEMA(name);
+      for (const m of d.text.matchAll(new RegExp(`\\b${name}\\b`, 'g'))) {
+        const rest = d.text.slice(m.index + name.length, m.index + name.length + 400);
+        const where = `${d.rel}: ${name}`;
+        // `tool {...}`, `tool` `{...}`, `tool` with `{...}`, `tool` (`{...}`)
+        const obj = /^`?\s*(?:with\s+)?\(?`?\s*(\{[^}]*\})/.exec(rest);
+        if (obj) {
+          for (const kv of obj[1].matchAll(/[{,]\s*"?([A-Za-z_]+)"?\s*:\s*("[^"]*"|-?\d+(?:\.\d+)?|true|false|\[[^\]]*\]|<[^>]*>)?/g)) {
+            const [, key, raw] = kv;
+            if (!schema.properties[key]) { bad.push(`${where} {${key}}: no such argument`); continue; }
+            const t = raw === undefined ? null : typeOf(raw);
+            if (t === null) continue; // a placeholder
+            const value = t === 'string' ? raw.slice(1, -1) : t === 'boolean' ? raw === 'true' : t === 'number' ? Number(raw) : JSON.parse(raw);
+            const errs = validate(schema.properties[key], value).filter(e => /must be (a|an) /.test(e));
+            if (errs.length) bad.push(`${where} {${key}: ${raw}}: ${errs.join('; ')}`);
+          }
+          continue;
+        }
+        // `tool` with `arg`, `arg: value` and `arg` (to the end of the clause)
+        if (!/^`?\s*with\s/.test(rest)) continue;
+        const clause = rest.split(/[.;)]\s|\n\s*\n/)[0];
+        for (const a of clause.matchAll(/`([a-z_]+)(?::\s*([^`]+))?`/g)) {
+          if (HARNESS_NAMES.has(a[1])) continue; // another tool named in the clause
+          if (!schema.properties[a[1]]) bad.push(`${where} with \`${a[1]}\`: no such argument`);
+        }
+      }
+    }
+    // Names that look like a harness tool (singular or plural of a tool's family) must be one.
+    for (const m of d.text.matchAll(/`([a-z]+_[a-z_]+)(?:[ {(][^`]*)?`/g)) {
+      const looks = /^(strateg(y|ies)|markets?|mtfs?|blackouts?|bars?|combines?|lessons?|reconciles?|harness)_/.test(m[1]);
+      if (looks && !HARNESS_NAMES.has(m[1]) && m[1] !== 'mtf_bias') bad.push(`${d.rel}: \`${m[1]}\` is not a harness tool`);
+    }
+  }
+  assert.deepStrictEqual(bad, []);
+});
+
+function BY_NAME_SCHEMA(name) {
+  return HARNESS_TOOLS.find(t => t.name === name).inputSchema;
+}
+
+test('skills: messages an agent reads from the gate and the hooks name the harness tools, not the scripts', () => {
+  const files = ['scripts/lib/trading', 'scripts/hooks'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).map(f => path.join(dir, f)));
+  assert.ok(files.length > 20);
+  const bad = [];
+  for (const f of files) {
+    fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n').forEach((line, i) => {
+      if (/^\s*(\*|\/\/|\/\*)/.test(line)) return; // comments are for people
+      if (AGENT_RUN_SCRIPT.test(line) || /node <root>\/scripts\//.test(line)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
+    });
+  }
+  assert.deepStrictEqual(bad, []);
+});

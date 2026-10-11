@@ -24,7 +24,7 @@ cancels an order.
 
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
-| `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`? | writes closed bars to `/tmp/fth/<SYMBOL>-<tf>m.json` (`-1d.json` daily) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
+| `bars_fetch` | `symbol`, `timeframe` (minutes 1-60, or `"daily"`), `count`?, `record`?, `name`? | writes closed bars to `/tmp/fth/<SYMBOL>-<tf>m.json` (`-1d.json` daily; with `name`, `<SYMBOL>-<tf>m-<name>.json`, a file of your own) and returns that path, the contract, and when the last bar closed; `record` also records the multi-timeframe read | `bars.js --symbol MNQ --timeframe 3 [--daily] [--count N] [--record]` |
 | `strategies_list` | `json`? | the registered strategies | `strategies.js list [--json]` |
 | `strategies_show` | `name` | one STRATEGY.md | `strategies.js show <name>` |
 | `strategies_validate` | none | each strategy ok or what is invalid | `strategies.js validate` |
@@ -41,7 +41,8 @@ cancels an order.
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`
   file under `/tmp/fth`. Nothing else is read: another path, a symlink, or
-  a file that isn't `.json`, `.csv`, `.parquet` or `.xlsx` is refused.
+  a file that isn't `.json` or `.csv` is refused (Parquet and Excel files
+  are the user's, for backtests).
 - `symbol` is a contract root in capitals (`MNQ`, `MES`).
 - No tool takes a time: the harness clock decides (a replay broker's time
   in a replay). No tool takes an output path or an environment.
@@ -55,7 +56,10 @@ cancels an order.
 
 Only the user's commands stay scripts: starting, stopping, or recording a day
 of a prop attempt (`combine.js start | stop | record-day`), backtests,
-training, and replays. Ask the user to run those.
+training, and replays. In a trading run (autonomous or interactive) ask the
+user to run those. The one exception is authoring: the `strategy-researcher`
+role, which the user starts interactively for a new strategy, may run a
+backtest itself (the `strategy-authoring` skill); no trading role does.
 
 ## Examples
 

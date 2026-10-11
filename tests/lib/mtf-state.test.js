@@ -64,7 +64,7 @@ test('checkTrend: refuses a trend strategy against the prevailing trend, without
   // No 4h read yet: trend strategies wait.
   assert.match(check(trendHome(tmpDir(), { closedAt: fresh, biases: { 240: null, 60: 1, 15: 1 } })), /no 4h trend read yet/);
   // Fail closed: no record, unreadable, stale.
-  assert.match(check(tmpDir()), /No multi-timeframe read for MNQ.*mtf\.js .* --record --symbol MNQ/);
+  assert.match(check(tmpDir()), /No multi-timeframe read for MNQ.*bars_fetch \{"symbol": "MNQ", "timeframe": <minutes>, "record": true\} \(or mtf_read \{"bars": "<a fresh bars file>", "symbol": "MNQ", "record": true\}/);
   const broken = tmpDir();
   fs.mkdirSync(path.join(broken, 'mtf'));
   fs.writeFileSync(path.join(broken, 'mtf', 'MNQ.json'), 'nope');

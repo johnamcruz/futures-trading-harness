@@ -104,7 +104,8 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    rules can't express (multi-bar zone logic like cisd_ote) needs `manual` or
    a new series in `scripts/lib/trading/rules.js` (with tests), used from the
    rules like `cisd_ote_dir`.
-8. Backtest it before paper trading:
+8. Backtest it before paper trading (the user, or the `strategy-researcher`
+   role in an interactive authoring session; never a trading run):
    `node <root>/scripts/backtest.js --data <bars.parquet|.xlsx|.csv> --symbol MNQ --strategy <name>`
    (docs/BACKTESTING.md). Check that it fires where you expect (`trades.csv`)
    and that its R statistics hold up with harness rules on.

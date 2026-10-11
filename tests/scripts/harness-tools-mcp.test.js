@@ -114,6 +114,7 @@ const CASES = [
   ['reconcile timeframe', 'reconcile.js', () => ['--day', day, '--timeframe', '60'], 'reconcile', () => ({ day, timeframe: 60 })],
   // Bars go to the op's default /tmp/fth file: an odd timeframe no session uses, removed afterwards.
   ['bars fetch record', 'bars.js', () => ['--symbol', 'MNQ', '--timeframe', '7', '--count', '10', '--record'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 7, count: 10, record: true })],
+  ['bars fetch named', 'bars.js', () => ['--symbol', 'MNQ', '--timeframe', '7', '--count', '10', '--out', '/tmp/fth/MNQ-7m-test.json'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 7, count: 10, name: 'test' })],
   ['bars fetch daily record', 'bars.js', () => ['--symbol', 'MNQ', '--daily', '--record'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 'daily', record: true })],
 ];
 
@@ -141,6 +142,7 @@ test('harness-tools server: handshake, tools, and each tool\'s text equal to the
   } finally {
     client.close();
     fs.rmSync(path.join(TMP_FTH, 'MNQ-7m.json'), { force: true });
+    fs.rmSync(path.join(TMP_FTH, 'MNQ-7m-test.json'), { force: true });
   }
 });
 

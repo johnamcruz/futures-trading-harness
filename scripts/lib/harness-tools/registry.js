@@ -17,7 +17,7 @@
  * CLI does), narrow (how to make the output smaller) }.
  */
 
-const { MAX_COUNT } = require('../bars-fetch');
+const { MAX_COUNT, defaultOut } = require('../bars-fetch');
 const { PARAMS } = require('../trading/market-snapshot');
 
 const SERVER_NAME = 'harness';
@@ -114,14 +114,19 @@ const TOOLS = [
   },
   {
     name: 'bars_fetch', op: 'bars_fetch', script: 'bars',
-    description: `Fetch closed bars for a symbol from the broker into /tmp/fth/<SYMBOL>-<tf>m.json (or -1d.json) at the harness clock, for the other tools' bars argument. Returns one line: the file, the contract, the bar count, when the last bar closed. record also records the multi-timeframe read for the order gate (not for daily bars).`,
+    description: `Fetch closed bars for a symbol from the broker into /tmp/fth/<SYMBOL>-<tf>m.json (or -1d.json; with name, <SYMBOL>-<tf>m-<name>.json, a file of the caller's own that no other fetch replaces) at the harness clock, for the other tools' bars argument. Returns one line: the file, the contract, the bar count, when the last bar closed. record also records the multi-timeframe read for the order gate (not for daily bars).`,
     inputSchema: object({
       symbol: SYMBOL,
       timeframe: { anyOf: [{ type: 'integer', minimum: 1, maximum: 60 }, { type: 'string', enum: ['daily'] }], description: 'minutes per bar, 1 to 60, or "daily"' },
       count: { type: 'integer', minimum: 3, maximum: MAX_COUNT, description: 'How many bars (default: what the runner keeps; daily 60).' },
       record: RECORD,
+      name: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,23}$', description: 'A suffix for the file name (e.g. a role: trend), so a smaller fetch doesn\'t replace a file someone else is reading.' },
     }, ['symbol', 'timeframe']),
-    args: i => ({ symbol: i.symbol, timeframe: i.timeframe === 'daily' ? 3 : i.timeframe, daily: i.timeframe === 'daily', ...pick(i, { count: 'count' }), record: i.record === true }),
+    args: i => ({
+      symbol: i.symbol, timeframe: i.timeframe === 'daily' ? 3 : i.timeframe, daily: i.timeframe === 'daily', ...pick(i, { count: 'count' }), record: i.record === true,
+      // A named file: the default one with the suffix (still a .json file under /tmp/fth, checked by bars-fetch.js).
+      ...(i.name ? { out: defaultOut(i.symbol, i.timeframe === 'daily' ? 3 : i.timeframe, i.timeframe === 'daily').replace(/\.json$/, `-${i.name}.json`) } : {}),
+    }),
     envFile: true,
     narrow: 'the reply is too large to return',
   },

@@ -7,6 +7,8 @@ tools:
   - mcp__harness__combine_status
   - mcp__harness__strategies_show
   - mcp__harness__blackouts_list
+  - mcp__harness__bars_fetch
+  - mcp__harness__market_snapshot
   - mcp__broker__get_server_config
   - mcp__broker__list_accounts
   - mcp__broker__get_account_snapshot
@@ -71,7 +73,8 @@ Check, in order, and stop at the first failure:
    quotes the trigger on closed bars and you can see it in the bars), or, for
    a policy strategy, a live verdict matches the plan. Otherwise VETO. (The
    gate checks rules strategies' triggers from the signal record; a manual
-   strategy's trigger only you check.)
+   strategy's trigger only you check: read the plan's bars file, or fetch
+   them with `bars_fetch`, with `market_snapshot`.)
 1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
    on the side the prevailing trend allows (the plan quotes the `Trend rule:`
    line of the multi-timeframe read, or the scan's `mtf`). Against it, VETO: the gate refuses

@@ -5,6 +5,7 @@ tools:
   - read_file
   - skill
   - mcp__harness__lessons
+  - mcp__harness__reconcile
   - mcp__harness__bars_fetch
   - mcp__broker__search_trades
   - mcp__broker__search_orders

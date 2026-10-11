@@ -161,8 +161,7 @@ function planCodex({ root, home, broker }) {
       'codex plugin add futures-trading-harness@futures-trading-harness',
       'Open /hooks in Codex once and trust the harness hooks (the MCP gateway enforces the order gate either way).',
       `Run trading sessions from ${path.join(root, 'workspace')} so Codex reads workspace/AGENTS.md (its sandbox keeps writes inside workspace/ and /tmp).`,
-      'Interactive sessions: let the sandbox write the multi-timeframe record the order gate reads (scripts/mtf.js --record) and news blackouts: '
-        + 'codex --add-dir ~/.futures-trading-harness/mtf --add-dir ~/.futures-trading-harness/blackouts (autonomous runs need nothing: the runner records the read).',
+      'The harness tools (the `harness` MCP server, outside the sandbox) write the records the order gate reads and the news blackouts: the sandbox needs no extra directories.',
     ],
   };
 }

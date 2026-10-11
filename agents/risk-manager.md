@@ -1,7 +1,7 @@
 ---
 name: risk-manager
 description: Independent risk officer for the futures desk. Phase 1 (parallel with analysts) reports account state, limits, loss streak, and today's risk budget. Phase 2 approves or vetoes a specific trade plan with sizing. Read-only; cannot place orders. Use in /premarket, /trade-session, and before any order.
-tools: Read, Skill, mcp__harness__combine_status, mcp__harness__strategies_show, mcp__harness__blackouts_list, mcp__broker__get_server_config, mcp__broker__list_accounts, mcp__broker__get_account_snapshot, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_performance, mcp__broker__journal_read
+tools: Read, Skill, mcp__harness__combine_status, mcp__harness__strategies_show, mcp__harness__blackouts_list, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__broker__get_server_config, mcp__broker__list_accounts, mcp__broker__get_account_snapshot, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_performance, mcp__broker__journal_read
 model: inherit
 ---
 
@@ -54,7 +54,8 @@ Check, in order, and stop at the first failure:
    quotes the trigger on closed bars and you can see it in the bars), or, for
    a policy strategy, a live verdict matches the plan. Otherwise VETO. (The
    gate checks rules strategies' triggers from the signal record; a manual
-   strategy's trigger only you check.)
+   strategy's trigger only you check: read the plan's bars file, or fetch
+   them with `bars_fetch`, with `market_snapshot`.)
 1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
    on the side the prevailing trend allows (the plan quotes the `Trend rule:`
    line of the multi-timeframe read, or the scan's `mtf`). Against it, VETO: the gate refuses
