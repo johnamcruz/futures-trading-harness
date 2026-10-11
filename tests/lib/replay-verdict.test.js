@@ -93,18 +93,64 @@ test('verdict: daily-limit days that reach the trailing floor fail the month on 
 });
 
 test('verdict: the floor trails the end-of-day high; an intraday MAE to it fails the month (a static floor would not)', () => {
+  // No daily limit here, so only the floor can act (with one, the nearer level acts first: next test).
+  const noDaily = { ...ACCOUNT, daily_loss_limit: 0 };
   const trades = [['2026-03-02', 2500], ['2026-03-03', -100, { mae: -3100 }]];
-  const v = evaluate(run(trades), ACCOUNT).months[0];
+  const v = evaluate(run(trades), noDaily).months[0];
   assert.deepStrictEqual([v.verdict, v.fail.day], ['FAIL', '2026-03-03']);
   assert.match(v.fail.how, /equity reached \$99398\.52 \(from the trade's MAE\), floor \$99499\.26/);
-  // Static: the floor stays at $97000; the same MAE only crosses the $2000 daily limit.
-  const flat = evaluate(run(trades), { ...ACCOUNT, max_loss_mode: 'static' }).months[0];
+  assert.strictEqual(v.maxLossUsed, 3000);
+  // Static: the floor stays at $97000; the same MAE doesn't reach it.
+  const flat = evaluate(run(trades), { ...noDaily, max_loss_mode: 'static' }).months[0];
   assert.strictEqual(flat.verdict, 'NOT YET');
-  assert.strictEqual(flat.events.length, 1);
   // The floor stops at the starting balance: after a $3500 day it is $100000, not $100499.26.
-  const locked = evaluate(run([['2026-03-02', 3500], ['2026-03-03', -3600]]), ACCOUNT).months[0];
+  const locked = evaluate(run([['2026-03-02', 3500], ['2026-03-03', -3600]]), noDaily).months[0];
   assert.strictEqual(locked.days[0].floor, 100000);
   assert.strictEqual(locked.verdict, 'FAIL');
+});
+
+test('verdict: of the daily limit and the floor, the nearer one acts first as the open loss grows', () => {
+  // After a +$2500 day the cushion is $2999.63 and the daily room $2000: the daily limit is reached
+  // first, so a $3100 MAE is flattened at -$2000 and the month goes on.
+  const v = evaluate(run([['2026-03-02', 2500], ['2026-03-03', -100, { mae: -3100 }]]), ACCOUNT).months[0];
+  assert.strictEqual(v.verdict, 'NOT YET');
+  assert.deepStrictEqual(v.days.map(d => d.pnl), [net(2500), -2000].map(x => Math.round(x * 100) / 100));
+  assert.strictEqual(v.events.length, 1);
+  // With the cushion smaller than the daily room, the floor comes first: FAIL, not a daily stop.
+  const f = evaluate(run([['2026-03-02', -1500], ['2026-03-03', -1600]]), ACCOUNT).months[0];
+  assert.deepStrictEqual([f.verdict, f.fail.day, f.events.length], ['FAIL', '2026-03-03', 0]);
+});
+
+test('verdict: the daily limit flattens the whole position; max loss used counts only what the cap let through', () => {
+  // Two contracts, closed one at a time, each -$2500: the first close takes the day to the limit, the
+  // rest of the position is flattened with it (static floor $10000 away, so only the daily limit acts).
+  const t = ms => new Date(Date.parse('2026-03-02T15:00:00Z') + ms * 60000).toISOString();
+  const days = { '2026-03-02': [{ t: t(5), day: '2026-03-02', kind: 'trade', trades: [
+    { id: 1, contractId: 'MNQ', creationTimestamp: t(0), profitAndLoss: null, fees: FEE, side: 0, size: 2 },
+    { id: 2, contractId: 'MNQ', creationTimestamp: t(1), profitAndLoss: -2500, fees: FEE, side: 1, size: 1 },
+    { id: 3, contractId: 'MNQ', creationTimestamp: t(2), profitAndLoss: -2500, fees: FEE, side: 1, size: 1 },
+  ] }] };
+  const v = evaluate(days, { ...ACCOUNT, max_loss_mode: 'static', max_loss: 10000 }).months[0];
+  assert.deepStrictEqual(v.days.map(d => d.pnl), [-2000]);
+  assert.deepStrictEqual(v.excluded.map(x => [x.contract, x.why]), [['MNQ', 'flattened at the daily loss limit']]);
+  assert.strictEqual(v.maxLossUsed, 2000);
+  // A trade closing at -$2900 on topstep_100k: the day is capped at -$2000, and so is the max loss used.
+  const one = evaluate(run([['2026-03-02', -2900]]), ACCOUNT).months[0];
+  assert.deepStrictEqual([one.verdict, one.maxLossUsed], ['NOT YET', 2000]);
+});
+
+test('verdict: fills with an unreadable side or size are counted, not tracked; fills filed under another day still count', () => {
+  const days = run([['2026-03-02', 300], ['2026-03-03', 200, { recordDay: '2026-03-04' }], ['2026-03-04', 100]]);
+  days['2026-03-02'][0].trades.push({ id: 50, contractId: 'MES', creationTimestamp: '2026-03-02T15:30:00Z', profitAndLoss: null, fees: FEE, side: 'buy', size: 1 });
+  const m = evaluate(days, ACCOUNT).months[0];
+  assert.strictEqual(m.unreadable, 1);
+  assert.deepStrictEqual(m.days.map(d => [d.day, d.pnl]), [['2026-03-02', net(300)], ['2026-03-03', net(200)], ['2026-03-04', net(100)]].map(([d, x]) => [d, Math.round(x * 100) / 100]));
+});
+
+test('verdict: a month with more days than the account\'s training length says training would have stopped', () => {
+  const v = evaluate(run([['2026-03-02', 100], ['2026-03-03', 100], ['2026-03-04', 100]]), { ...ACCOUNT, sessions: 2 });
+  assert.strictEqual(v.months[0].verdict, 'NOT YET');
+  assert.match(verdictText(v), /more days than the account's training length \(2 sessions\)/);
 });
 
 test('verdict: a month short of the target is NOT YET, with what is left and the days traded', () => {
@@ -172,7 +218,7 @@ test('verdict account: --account, else a runner config naming an account, else t
   const strategies = [{ name: 'p1', signal: 'policy', account: 'topstep_50k' }, { name: 'orb', signal: 'rules' }];
   assert.deepStrictEqual(resolveAccount({ override: 'x', runnerAccount: 'topstep_100k', strategies, accounts }), { name: 'x', why: '--account' });
   assert.strictEqual(resolveAccount({ runnerAccount: 'topstep_100k', strategies, accounts }).name, 'topstep_100k');
-  assert.deepStrictEqual(resolveAccount({ runnerAccount: '1', strategies, accounts }), { name: 'topstep_50k', why: 'the prop strategy\'s account (p1)' });
+  assert.deepStrictEqual(resolveAccount({ runnerAccount: '1', strategies, accounts }), { name: 'topstep_50k', why: 'the policy strategies\' account (p1)' });
   const two = resolveAccount({ strategies: [...strategies, { name: 'p2', signal: 'policy', account: 'topstep_100k' }], accounts });
   assert.strictEqual(two.name, DEFAULT_ACCOUNT);
   assert.match(two.why, /several accounts \(topstep_50k, topstep_100k\); pass --account/);
@@ -183,7 +229,7 @@ test('verdict on the opencode-e2e-2 replay (one day, two trades): NOT YET, far f
   const dir = tmpDir();
   for (const f of fs.readdirSync(path.join(__dirname, '..', 'fixtures', 'replay-e2e-2'))) fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'replay-e2e-2', f), path.join(dir, f));
   const out = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'report', dir], { env: { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir }, encoding: 'utf8' });
-  assert.match(out, /Combine verdict: topstep_100k \(the prop strategy's account/);
+  assert.match(out, /Combine verdict: topstep_100k \(the policy strategies' account/);
   assert.match(out, /2026-06 {2}NOT YET: profit \$0\.02 of \$6000\.00 \(\$5999\.98 to go\), 1 of 1 day\(s\) traded/);
   assert.match(out, /max loss used \$15\.74 of \$3000\.00 \(closest to the floor on 2026-06-02\); intraday from MAE on 2 of 2/);
   assert.match(out, /Year: 0 passed, 0 failed, 1 not yet, of 1 month\(s\)\./);

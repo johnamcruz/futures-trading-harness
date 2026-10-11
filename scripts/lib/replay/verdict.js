@@ -15,10 +15,13 @@
  *     (max_loss_mode trailing_eod: the floor trails the highest end-of-day
  *     balance and stops at the starting balance; static: it never moves);
  *   - the firm's daily loss limit flattens the trade there and stops trading
- *     for the rest of the day; it doesn't end the attempt (combine.js);
+ *     for the rest of the day; it doesn't end the attempt (combine.js). Of the
+ *     two levels, the daily limit's and the floor's, the nearer one is reached
+ *     first as a trade's open P&L falls, and acts;
  *   - `sessions` is the training attempt's length, not a firm rule: as for a
- *     live attempt (prop-state.js), a month never times out. The account has
- *     no minimum-days or other time rule to apply.
+ *     live attempt (prop-state.js), a month never times out (training would
+ *     stop at `sessions` days; the output says when a month has more). The
+ *     account has no minimum-days or other time rule to apply.
  *
  * Money: every fill the replay broker reported, its realized P&L minus its
  * fees, as the account balance moves (prop-state closeBefore): fees are paid
@@ -31,10 +34,12 @@
  *     fees is the trade's worst open P&L, set against the balance when it
  *     closed; without MAE, only the close is seen. Open trades on other
  *     contracts at the same moment are not added together.
- *   - after the daily limit, a position opened later that day is left out (the
- *     firm would have refused it), as is one carried in from before the month
- *     (it belongs to no fresh attempt); a position already open when the limit
- *     was hit counts at its real close.
+ *   - at the daily limit the breaching close counts as the limit and the rest
+ *     of every position open then is left out (the firm flattens the account);
+ *     so is a position opened later that day (the firm would refuse it) and
+ *     one carried in from before the month (it belongs to no fresh attempt).
+ *   - a fill whose side, size, P&L or fees can't be read is skipped and
+ *     counted (the output says the verdict may be wrong).
  *
  *   evaluate(days, account, { daysDone, why })   { why, account, months, summary }
  *   resolveAccount({ override, runnerAccount, strategies, accounts })   { name, why }
@@ -59,7 +64,7 @@ function resolveAccount({ override, runnerAccount, strategies = [], accounts = [
   if (override) return { name: override, why: '--account' };
   if (runnerAccount && names.has(String(runnerAccount))) return { name: String(runnerAccount), why: 'the runner config\'s account' };
   const prop = [...new Set(strategies.filter(s => s && s.signal === 'policy' && s.account).map(s => s.account))];
-  if (prop.length === 1) return { name: prop[0], why: `the prop strategy's account (${strategies.filter(s => s.signal === 'policy' && s.account === prop[0]).map(s => s.name).join(', ')})` };
+  if (prop.length === 1) return { name: prop[0], why: `the policy strategies' account (${strategies.filter(s => s.signal === 'policy' && s.account === prop[0]).map(s => s.name).join(', ')})` };
   const why = prop.length > 1 ? `the default: the prop strategies name several accounts (${prop.join(', ')}); pass --account` : 'the default (no --account, no prop account in the runner config or the strategies)';
   return { name: DEFAULT_ACCOUNT, why };
 }
@@ -80,14 +85,14 @@ function fillsOf(days) {
         const ms = Date.parse(f.creationTimestamp);
         const pnl = num(f.profitAndLoss);
         const fees = num(f.fees) ?? 0;
-        const size = Math.abs(Number(f.size)) || 0;
-        const side = Number(f.side);
+        const size = Math.abs(Number(f.size));
+        const side = f.side === 0 || f.side === 1 || f.side === '0' || f.side === '1' ? Number(f.side) : null;
         const rt = f.roundTrip && typeof f.roundTrip === 'object' ? f.roundTrip : null;
         out.push({
-          ms: Number.isFinite(ms) ? ms : Date.parse(rec.t), order: order += 1,
+          ms: Number.isFinite(ms) ? ms : (Number.isFinite(Date.parse(rec.t)) ? Date.parse(rec.t) : 0), order: order += 1,
           day: Number.isFinite(ms) ? tradingDayKey(new Date(ms)) : (rec.day || day),
           contract: String(f.contractId || '?'),
-          delta: side === 0 ? size : side === 1 ? -size : null,
+          delta: !(size > 0) || side === null ? null : side === 0 ? size : -size,
           closing: pnl !== null,
           net: pnl === null ? -fees : pnl - fees,
           fees,
@@ -110,38 +115,48 @@ function lowWater(m, cushion, day) {
   if (cushion < m.worstCushion) { m.worstCushion = cushion; m.worstDay = day; }
 }
 
-/** One fill against the month's attempt. */
+/**
+ * One fill against the month's attempt. Returns true when it hit the firm's
+ * daily limit (the caller then leaves the rest of every open position out).
+ */
 function applyFill(m, f) {
-  if (!Number.isFinite(f.net)) { m.unreadable += 1; return; }
   let s = m.s;
   m.traded.add(f.day);
   if (!f.closing) {
     s = combine.applyClose(s, f.net);
     lowWater(m, s.balance - s.floor, f.day);
     m.s = s;
-    return;
+    return false;
   }
   m.closes += 1;
   if (f.mae !== null) m.intradayChecked += 1;
   // The trade's worst open P&L: its MAE less the closing fee still to pay, never better than its close.
   const worst = Math.min(f.net, f.mae !== null ? f.mae - f.fees : f.net);
+  // Open P&L falls continuously from 0 to `worst`: whichever level is nearer, the daily limit's or the
+  // floor's, is reached first. The firm acts there (the backtester's guard does the same bar by bar).
+  const dailyFirst = s.dailyLimit > 0 && !s.dayStopped && s.dailyLimit + s.dayPnl < combine.cushion(s);
+  if (dailyFirst && combine.dailyBreached(s, worst)) return dailyStop(m, f, worst);
   lowWater(m, s.balance + worst - s.floor, f.day);
   if (combine.touches(s, worst)) {
     m.s = combine.blow(s);
     const intraday = worst < f.net;
     m.fail = { rule: 'max-loss', day: f.day, how: `equity ${intraday ? 'reached' : 'closed at'} $${round2(s.balance + worst)}${intraday ? ' (from the trade\'s MAE)' : ''}, floor $${s.floor}` };
-    return;
+    return false;
   }
-  if (!s.dayStopped && combine.dailyBreached(s, worst)) {
-    // The firm flattens the trade at the limit (as the backtester's guard does): the day's loss is the limit.
-    const capped = round2(-s.dailyLimit - s.dayPnl);
-    s = { ...combine.applyClose(s, capped), dayStopped: true };
-    m.events.push({ day: f.day, text: `daily loss limit ($${s.dailyLimit}) hit: flattened there (trade ${f.net < capped ? `closed at $${round2(f.net)}` : `went to $${round2(worst)} before closing at $${round2(f.net)}`}, counted as $${capped}); no trading until the next session` });
-    m.s = s;
-    return;
-  }
+  if (!s.dayStopped && combine.dailyBreached(s, worst)) return dailyStop(m, f, worst);
   m.s = combine.applyClose(s, f.net);
   lowWater(m, m.s.balance - m.s.floor, f.day);
+  return false;
+}
+
+/** The firm flattens at the daily limit (as the backtester's guard does): the day's loss is the limit. */
+function dailyStop(m, f, worst) {
+  const s = m.s;
+  const capped = round2(-s.dailyLimit - s.dayPnl);
+  m.s = { ...combine.applyClose(s, capped), dayStopped: true };
+  lowWater(m, m.s.balance - m.s.floor, f.day);
+  m.events.push({ day: f.day, text: `daily loss limit ($${s.dailyLimit}) hit: flattened there (trade ${f.net < capped ? `closed at $${round2(f.net)}` : `went to $${round2(worst)} before closing at $${round2(f.net)}`}, counted as $${capped}); no trading until the next session` });
+  return true;
 }
 
 function endDay(m, day) {
@@ -165,9 +180,12 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
   const done = daysDone ? new Set(daysDone) : null;
   const pos = new Map(); // contract -> signed size, across the whole run
   const left = new Map(); // contract -> why its position is left out, until it is flat
+  const byDay = new Map();
+  for (const f of fills) byDay.set(f.day, [...(byDay.get(f.day) || []), f]);
+  // A day known only from a fill's time, before the last day done, is done too.
+  const lastDone = daysDone && daysDone.length ? [...daysDone].sort().pop() : null;
   const months = [];
   let m = null;
-  let fi = 0;
   for (const day of allDays) {
     const key = day.slice(0, 7);
     if (!m || m.key !== key) {
@@ -176,10 +194,14 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
       // A position carried in from last month belongs to no fresh attempt.
       for (const [c, q] of pos) if (q !== 0) left.set(c, 'carried in from the month before');
     }
-    for (; fi < fills.length && fills[fi].day === day; fi += 1) {
-      const f = fills[fi];
+    for (const f of byDay.get(day) || []) {
+      // A fill whose side, size or money can't be read: position tracking and the balance would both be guesses.
+      if (f.delta === null || !Number.isFinite(f.net)) {
+        if (m.s.status === 'active') m.unreadable += 1;
+        continue;
+      }
       const prev = pos.get(f.contract) || 0;
-      const next = f.delta === null ? prev : prev + f.delta;
+      const next = prev + f.delta;
       pos.set(f.contract, next);
       if (!left.has(f.contract) && prev === 0 && m.s.status === 'active' && m.s.dayStopped) left.set(f.contract, 'opened after the daily loss limit was hit');
       if (left.has(f.contract)) {
@@ -188,11 +210,12 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
         continue;
       }
       if (m.s.status !== 'active') continue;
-      applyFill(m, f);
+      // At the daily limit the firm flattens the whole account: what is still open is left out from here.
+      if (applyFill(m, f)) for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit');
       // A close (or a fee) that took the balance to the floor: combine.applyClose marks it blown.
       if (m.s.status === 'blown' && !m.fail) m.fail = { rule: 'max-loss', day, how: `the balance closed at $${m.s.balance}, floor $${m.s.floor}` };
     }
-    if (!done || done.has(day)) endDay(m, day);
+    if (!done || done.has(day) || (lastDone && day < lastDone)) endDay(m, day);
     else m.openDay = { day, pnl: m.s.dayPnl };
   }
   if (m) months.push(m);
@@ -218,6 +241,7 @@ function finishMonth(m, account) {
     maxLossUsed: round2(Math.min(account.max_loss, Math.max(0, account.max_loss - m.worstCushion))), maxLoss: account.max_loss, worstDay: m.worstDay,
     days: m.days, events: m.events, excluded: m.excluded, unreadable: m.unreadable,
     closes: m.closes, intradayChecked: m.intradayChecked, openDay: m.openDay || null,
+    pastSessions: m.days.length > account.sessions ? account.sessions : null,
   };
 }
 
@@ -242,7 +266,7 @@ const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
   'Approximation: intraday equity is a round trip\'s MAE less its closing fee, against the balance when it closed (trades open together are not added up); a trade without MAE is seen only at its close.',
-  'Left out: positions opened after the daily loss limit was hit that day (the firm would refuse them) and positions carried in from the month before.',
+  'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before.',
 ];
 
 const dayPath = r => r.days.map(d => `${d.day.slice(5)} ${signed(d.pnl)}`).join(', ');
@@ -254,7 +278,8 @@ function monthDetail(r) {
   if (r.openDay) out.push(`${r.openDay.day} is still being replayed (${signed(r.openDay.pnl)} so far): no end of day for it yet`);
   for (const e of r.events) out.push(`${e.day}: ${e.text}`);
   if (r.excluded.length) out.push(`left out: ${r.excluded.map(x => `${x.day} ${x.contract} ${signed(x.net)} (${x.why})`).join('; ')}`);
-  if (r.unreadable) out.push(`${r.unreadable} fill(s) with no readable P&L or fees were skipped: the verdict may be wrong`);
+  if (r.unreadable) out.push(`${r.unreadable} fill(s) with no readable side, size, P&L or fees were skipped: the verdict may be wrong`);
+  if (r.pastSessions) out.push(`more days than the account's training length (${r.pastSessions} sessions): training would stop there (timeout); the replay runs the month on, as a live attempt does`);
   return out;
 }
 
@@ -280,7 +305,8 @@ function verdictMarkdown(v) {
   const extra = v.months.flatMap(r => [...r.events.map(e => `- ${r.key}, ${e.day}: ${e.text}`),
     ...r.excluded.map(x => `- ${r.key}, ${x.day}: left out ${x.contract} ${signed(x.net)} (${x.why})`),
     ...(r.openDay ? [`- ${r.key}: ${r.openDay.day} is still being replayed (${signed(r.openDay.pnl)} so far): no end of day for it yet`] : []),
-    ...(r.unreadable ? [`- ${r.key}: ${r.unreadable} fill(s) with no readable P&L or fees were skipped`] : [])]);
+    ...(r.unreadable ? [`- ${r.key}: ${r.unreadable} fill(s) with no readable side, size, P&L or fees were skipped`] : []),
+    ...(r.pastSessions ? [`- ${r.key}: more days than the account's training length (${r.pastSessions} sessions); training would stop there, the replay runs the month on`] : [])]);
   return ['## Combine verdict', '', headLine(v), '', `| ${head.join(' | ')} |`, `| ${head.map(() => '---').join(' | ')} |`, ...rows, '',
     summaryLine(v), '', ...(extra.length ? [...extra, ''] : []), ...NOTES.map(n => `- ${n}`), ''].join('\n');
 }

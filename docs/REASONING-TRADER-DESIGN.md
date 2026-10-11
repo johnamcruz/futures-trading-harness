@@ -279,15 +279,18 @@ replay judge alike:
   (profit at the target; the best day at most `consistency_pct` of the
   profit); equity at the max-loss floor fails the month (`trailing_eod`: the
   floor trails the highest end-of-day balance and locks at the start;
-  `static`: fixed); the firm's daily limit flattens the trade there and
-  stops the day, not the attempt. `sessions` is the training length, not a
+  `static`: fixed); the firm's daily limit flattens the account there and
+  stops the day, not the attempt (as a trade's open P&L falls, the nearer of
+  the daily limit and the floor is reached first). `sessions` is the training length, not a
   firm rule: a month never times out (as `prop-state.js` for a live
-  attempt). The accounts have no minimum-days rule to apply.
+  attempt; training would stop at `sessions` days, and the output says when
+  a month has more). The accounts have no minimum-days rule to apply.
 - **Approximations**, stated in the output: intraday equity is a round
   trip's MAE (`maeDollars`) less its closing fee against the balance when it
   closed (trades open together are not added up; without MAE only the close
-  is seen); positions opened after the daily limit that day, or carried in
-  from the month before, are left out.
+  is seen); at the daily limit the breaching close counts as the limit and
+  what was still open is left out, as are positions opened after it that
+  day and positions carried in from the month before.
 - **Output** per month: PASS and the day, FAIL with the rule and day, or
   NOT YET with profit vs target, what consistency still needs, and days
   traded; the max loss used vs the limit, the daily P&L path, and a year
