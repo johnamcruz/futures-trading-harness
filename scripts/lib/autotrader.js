@@ -565,6 +565,11 @@ function runnerArgv(argv) {
   }
   const once = out[out.indexOf('--once') + 1];
   if (seen.has('--once') && !['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
+  // Flags that only mean something with another: alone they would be ignored and the live loop would start.
+  if (seen.has('--symbol') && !seen.has('--once')) throw new Error(`--symbol goes with --once (one manual cycle) (${RUNNER_USAGE})`);
+  if (seen.has('--stale-minutes') && !seen.has('--status')) throw new Error(`--stale-minutes goes with --status (${RUNNER_USAGE})`);
+  const others = ['--config', '--once', '--symbol', '--dry-run'].filter(f => seen.has(f));
+  if (seen.has('--status') && others.length) throw new Error(`--status checks the running runner and takes only --stale-minutes, not ${others.join(', ')} (${RUNNER_USAGE})`);
   return out;
 }
 

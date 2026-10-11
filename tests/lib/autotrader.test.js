@@ -157,6 +157,8 @@ test('runnerArgv: only the runner\'s own flags, as --flag value or --flag=value,
     [['config.json'], /unknown argument: config\.json/], [['--once'], /--once needs a value/], [['--once', '--dry-run'], /--once needs a value/],
     [['--once', 'later'], /--once must be premarket, trade, or eod/], [['--once=trade', '--once', 'eod'], /--once given twice/],
     [['--config', 'a', '--config', 'b'], /--config given twice/], [['--status', '--status'], /--status given twice/],
+    [['--config', 'a', '--symbol', 'MNQ'], /--symbol goes with --once/], [['--config', 'a', '--stale-minutes', '5'], /--stale-minutes goes with --status/],
+    [['--status', '--config', 'a'], /--status checks the running runner and takes only --stale-minutes, not --config/],
   ]) assert.throws(() => runnerArgv(argv), why, argv.join(' '));
 });
 
@@ -215,10 +217,10 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   assert.match(bare.stderr, /--once needs a value/);
   // Typos never fall through to the live loop: refused before anything runs, the lock never taken.
   const lockFile = path.join(env.FTH_HOME, 'autotrader.lock');
-  for (const args of [['--dryrun'], ['--dry-run=true'], ['--ONCE', 'trade'], ['--once', 'trade', '--once', 'eod'], ['--symbol']]) {
+  for (const args of [['--dryrun'], ['--dry-run=true'], ['--ONCE', 'trade'], ['--once', 'trade', '--once', 'eod'], ['--symbol'], ['--symbol', 'MNQ'], ['--stale-minutes', '5']]) {
     const r = spawnSync(process.execPath, [cli, '--config', config, ...args], { encoding: 'utf8', env, timeout: 30000 });
     assert.strictEqual(r.status, 1, args.join(' '));
-    assert.match(r.stderr, /unknown argument|given twice|needs a value/, args.join(' '));
+    assert.match(r.stderr, /unknown argument|given twice|needs a value|goes with/, args.join(' '));
     assert.ok(!fs.existsSync(lockFile), `${args.join(' ')}: no lock taken`);
   }
   // --once=trade is --once trade: one manual cycle (refused here by the start check), never the live loop.
