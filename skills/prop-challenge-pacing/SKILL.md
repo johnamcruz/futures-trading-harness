@@ -35,7 +35,9 @@ The harness tracks the attempt and enforces it:
   size, and the stop in ticks. **Place exactly the verdict**: rationale
   `setup:<policy strategy> ...`, that contract and side, at most that size,
   `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the
-  policy strategy's name gives exactly these arguments). A verdict permits one
+  policy strategy's name, the bars file and its `symbol`, the micro whose
+  bars the runner scans, gives exactly these arguments, or refuses with the
+  gate's reason). A verdict permits one
   entry: after a stop-out, wait for the next setup's verdict. Never argue with
   it or route around it. Past the ratchet the runner may close the trade on the policy's
   word.

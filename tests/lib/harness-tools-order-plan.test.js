@@ -97,6 +97,8 @@ test('order_plan: a stop over the strategy\'s risk.max_risk_usd is refused, neve
 
 test('order_plan: a policy strategy - its verdict\'s contract, side and stop ticks, at most its size and the budget now', () => {
   const { file, home, ctx } = setup();
+  // The journal the gate reads (the broker's): this home's own.
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, '/nonexistent'], journal: path.join(home, 'journal.jsonl') } } }));
   // A rules strategy while an attempt runs: refused (only the policy strategy may enter).
   const account = accountNamed(ROOT, 'topstep_100k', {});
   prop.startAttempt(home, account, NOW);
@@ -122,6 +124,13 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /expired at/);
   verdict({ component: 'orb' });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb is not a candidate on the last closed bar/);
+  // The gate's own prop checks on the exact arguments: an entry already journaled since the snapshot (and the
+  // verdict it used) makes the plan one the gate would refuse, so order_plan refuses it with the gate's reasons.
+  verdict();
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx).args.size, 9);
+  fs.writeFileSync(path.join(home, 'journal.jsonl'), `${JSON.stringify({ ts: new Date(NOW.getTime() + 1000).toISOString(), kind: 'order_placed', contractId: 'NQ', text: 'setup:prop_portfolio long', data: { result: { success: true } } })}\n`);
+  const later = { ...ctx, now: () => new Date(NOW.getTime() + 5000) };
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, later), /the order gate would refuse this entry: \[combine\] .*since the snapshot|the order gate would refuse this entry: .*\[policy\] .*already used/);
 });
 
 test('order_plan: the CLI (strategies.js plan) takes the same arguments', () => {

@@ -70,12 +70,19 @@ Check, in order, and stop at the first failure:
 4. Entry, stop, and target are on the correct sides; prices are multiples of
    `tickSize` (from `get_contract`).
 5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
-   budget. Recompute; don't trust the plan's arithmetic: call `order_plan`
-   with the plan's bars file, symbol, strategy, and side, and compare its stop
-   price, ticks, size, and $ risk with the plan's. Numbers that differ are a
-   VETO with order_plan's as the fix; its refusal (not a candidate now, the
-   other side) is a VETO. It does the arithmetic only: every judgement in
-   these checks stays yours.
+   budget. Recompute; don't trust the plan's arithmetic: for a rules
+   strategy's candidate or a policy verdict, call `order_plan` with the plan's
+   bars file, symbol, strategy, and side, and compare its stop and target
+   ticks, the sides they sit on, and the risk per contract with the plan's;
+   different stop ticks or a stop on the wrong side is a VETO with
+   order_plan's stop as the fix. Size is not order_plan's to set: a plan may
+   be smaller (a `mixed` read halves it, a reversal fade is at most half), a
+   policy verdict's entry is at most order_plan's size, and a rules
+   strategy's size follows position-sizing; then risk $ = risk per contract ×
+   the plan's size. Its refusal (not a candidate now, the other side, a
+   verdict the gate would refuse) is a VETO. A manual strategy has no
+   order_plan: check its arithmetic by the formula above. order_plan does the
+   arithmetic only: every judgement in these checks stays yours.
 6. The strategy (`strategies_show` with its name) is `active`, trades this symbol,
    is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
    trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);

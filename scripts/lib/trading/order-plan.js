@@ -81,12 +81,13 @@ function targetFor(exit, stop, targetDistance, tickSize) {
  *   contract    the root to trade (MNQ, NQ); spec its tick specs (contracts.js)
  *   entryRef    the signal bar's close; stop ticks (stopTicks above, or a verdict's)
  *   exit, targetDistance   the strategy's exit plan (evaluator.js exitPlan) and the scan's level distance
- *   stopDistance  the strategy's stop in points (for the text), size, sizeWhy, accountId?, notes[]
+ *   stopDistance  the strategy's stop in points (for the text), minRR (its risk.min_rr, to say when the
+ *   target in whole ticks falls under it), size, sizeWhy, accountId?, notes[]
  * Market entry with brackets: the stop and target brackets in ticks, the
  * rationale's stop and target prices that many ticks from the entry
  * reference, so the gate's bracket-to-price span check holds exactly.
  */
-function buildPlan({ name, side, contract, spec, entryRef, stop, stopDistance = null, exit, targetDistance = null, size, sizeWhy, accountId, notes = [] }) {
+function buildPlan({ name, side, contract, spec, entryRef, stop, stopDistance = null, exit, targetDistance = null, minRR = null, size, sizeWhy, accountId, notes = [] }) {
   const sign = side === 'long' ? 1 : side === 'short' ? -1 : 0;
   if (!sign) throw new Error(`side must be long or short (got ${side})`);
   if (!spec) throw new Error(`no tick specs for ${contract}`);
@@ -116,6 +117,8 @@ function buildPlan({ name, side, contract, spec, entryRef, stop, stopDistance = 
     target.ticks ? `target ${fmt(targetPrice, tick)} (${target.why}): ${target.ticks} ticks, takeProfitBracket.ticks ${target.ticks}` : target.why,
     `risk ${usd(risk)} = ${size} x ${stop} ticks x ${usd(spec.tickValue)}/tick (before fees)`,
     `size ${size}: ${sizeWhy}`,
+    // A fact the plan needs, not advice: the target as placed (whole ticks) against the strategy's min R:R.
+    ...(target.ticks && Number.isFinite(minRR) && target.ticks < minRR * stop - EPS ? [`the target is ${(target.ticks / stop).toFixed(2)}R in whole ticks, under the strategy's min_rr ${minRR}`] : []),
     ...notes,
   ].join(' | ');
   return {

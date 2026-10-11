@@ -32,6 +32,8 @@ const { exitPlan } = require('../trading/evaluator');
 const { specFor } = require('../trading/contracts');
 const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
+const { resolveJournalPath, readJournal, entriesSince } = require('../trading/journal');
+const { tradingDayStart } = require('../trading/clock');
 const { harnessHome } = require('../paths');
 const { context, say } = require('./cli');
 const { whyNot } = require('./compact');
@@ -66,7 +68,7 @@ function rulesPlan(c, s, { results, root, want, home }) {
   }
   return {
     name: s.name, side: r.direction, contract: root, spec, entryRef: r.entryRef, stop, stopDistance: r.stopDistance,
-    exit: r.exit, targetDistance: r.targetDistance ?? null, size: 1,
+    exit: r.exit, targetDistance: r.targetDistance ?? null, minRR: s.risk.min_rr, size: 1,
     sizeWhy: 'the minimum; no account budget sizes a rules strategy (position-sizing: size 1 until the setup has 30+ reviewed trades)',
     notes: s.status === 'active' ? [] : [`status ${s.status}: plan only, the gate refuses a live entry`],
   };
@@ -90,6 +92,7 @@ function policyPlan(c, s, { results, root, want, home, now }) {
   if (b.root !== v.contract || !(b.size >= 1)) throw new Error(`${account.name}: the size budget now allows ${b.root ? `${b.size} ${b.root}` : 'nothing'} at a ${v.stopTicks}-tick stop, not ${v.contract}; no order`);
   const size = Math.min(v.maxSize, b.size);
   return {
+    account,
     name: s.name, side: v.direction, contract: v.contract, spec: specFor(v.contract), entryRef: r.entryRef, stop: v.stopTicks, stopDistance: null,
     exit: exitPlan(s), targetDistance: null, size,
     sizeWhy: `the verdict's ${v.action} size ${v.maxSize}${size < v.maxSize ? `, cut to the size budget now (${b.size})` : ''}, for ${v.component}'s setup; the stop is the verdict's ${v.stopTicks} ticks`,
@@ -115,6 +118,13 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const inputs = { results, root, want, home: harnessHome(c.env), now };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });
+  if (s.signal === 'policy') {
+    // The gate's own prop checks on these exact arguments (an entry since the snapshot, the verdict
+    // already used, the budget): a plan it would refuse is refused here, with its reason.
+    const journal = readJournal(resolveJournalPath(c.env));
+    const found = prop.propViolations(inputs.home, { strategy: s, account: p.account, input: args, now, entries: entriesSince(journal, tradingDayStart(now)), journal });
+    if (found.length) throw new Error(`the order gate would refuse this entry: ${found.map(v => `[${v.check}] ${v.message}`).join(' ')}`);
+  }
   const account = Number.isInteger(accountId) ? '' : ' (add "accountId": the account\'s id)';
   return { text: `${line}\nplace_order arguments${account}: ${JSON.stringify(args)}\n`, plan: out, args };
 }

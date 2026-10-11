@@ -88,6 +88,14 @@ test('buildPlan: a trailing exit has no target order; the entry reference goes o
   assert.match(buildPlan(base({ contract: 'MYM', spec: specFor('MYM'), entryRef: 46210, stop: 12, side: 'short' })).args.rationale, /from 46210 .*stop 46222 \(12 ticks\), target 46186 \(24 ticks\)/);
 });
 
+test('buildPlan: says (does not judge) when the target in whole ticks falls under the strategy\'s min_rr', () => {
+  // A level 12.6 pts away is 50 ticks; a 34-tick stop makes it 1.47R, under min_rr 1.5.
+  const level = { targetR: null, target: 'level' };
+  assert.match(buildPlan(base({ exit: level, targetDistance: 12.6, minRR: 1.5 })).line, /\| the target is 1\.47R in whole ticks, under the strategy's min_rr 1\.5$/);
+  assert.doesNotMatch(buildPlan(base({ exit: level, targetDistance: 17, minRR: 2 })).line, /min_rr/, '68 ticks on 34: exactly 2R');
+  assert.doesNotMatch(buildPlan(base({ exit: TRAIL, minRR: 2 })).line, /min_rr/, 'no target, nothing to compare');
+});
+
 test('buildPlan: refuses what it cannot plan', () => {
   assert.throws(() => buildPlan(base({ side: 'up' })), /side must be long or short/);
   assert.throws(() => buildPlan(base({ spec: null })), /no tick specs for MNQ/);

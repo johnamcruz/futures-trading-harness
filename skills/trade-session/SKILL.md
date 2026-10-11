@@ -258,7 +258,12 @@ own words (why the stop sits there, the R multiple, the exit). Don't
 compute stop prices, ticks, size, or dollar risk by hand. A refusal (the
 strategy isn't a candidate now, or its rules fired the other side) means no
 entry on that strategy and side; never work around it. For a policy verdict,
-call it with the policy strategy's name: it plans exactly the verdict.
+call it with the policy strategy's name: it plans exactly the verdict. Its
+size is the most the harness's own rules give (1 for a rules strategy, the
+verdict's for a policy); a smaller size from your plan (a `mixed` read, a
+reversal fade) changes only `size`, and the risk scales with it. A manual
+strategy has no order_plan (its stop is your read of STRATEGY.md): work its
+numbers by the rules above and position-sizing.
 
 ### 5. Verdict
 
