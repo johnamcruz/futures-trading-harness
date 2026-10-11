@@ -21,7 +21,7 @@ const SERVER = path.join(ROOT, 'scripts', 'harness-tools-mcp.js');
 const PARITY = path.join(ROOT, 'tests', 'fixtures', 'parity');
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
 const REPLAY = '2026-10-07T13:05:30Z';
-const SECRET = 'SECRET-JOURNAL-LINE';
+const MARKER = 'PRIVATE-JOURNAL-LINE';
 const TMP_FTH = '/tmp/fth';
 const tag = `fth-test-${process.pid}`;
 
@@ -146,8 +146,8 @@ test('harness-tools server: handshake, tools, and each tool\'s text equal to the
 
 test('harness-tools server: bars path attacks are refused without echoing a file; unknown arguments refused', { timeout: 120000 }, async () => {
   const home = fixtureHome();
-  fs.writeFileSync(path.join(home, 'journal.jsonl'), `${SECRET}\n`);
-  fs.writeFileSync(path.join(home, 'secret.json'), `{"x":"${SECRET}"}`);
+  fs.writeFileSync(path.join(home, 'journal.jsonl'), `${MARKER}\n`);
+  fs.writeFileSync(path.join(home, 'secret.json'), `{"x":"${MARKER}"}`);
   fs.mkdirSync(TMP_FTH, { recursive: true });
   const link = path.join(TMP_FTH, `${tag}-link.json`);
   const dirLike = path.join(TMP_FTH, `${tag}-dir.json`);
@@ -156,7 +156,7 @@ test('harness-tools server: bars path attacks are refused without echoing a file
   fs.mkdirSync(dirLike);
   fs.writeFileSync(big, '');
   fs.truncateSync(big, 50 * 1024 * 1024 + 1);
-  fs.writeFileSync(path.join(home, 'bars', 'notes.txt'), SECRET);
+  fs.writeFileSync(path.join(home, 'bars', 'notes.txt'), MARKER);
   const client = server(envFor(home));
   try {
     const attacks = [
@@ -176,7 +176,7 @@ test('harness-tools server: bars path attacks are refused without echoing a file
         const r = await call(client, tool, args);
         assert.strictEqual(r.isError, true, `${tool} ${bars}`);
         assert.match(r.text, why, `${tool} ${bars}`);
-        assert.doesNotMatch(r.text, new RegExp(SECRET));
+        assert.doesNotMatch(r.text, new RegExp(MARKER));
       }
     }
     for (const [tool, args, why] of [

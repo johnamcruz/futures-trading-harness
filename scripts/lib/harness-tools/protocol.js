@@ -53,7 +53,7 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
     checked[k] = r.file;
   }
   let text;
-  let isError = false;
+  let isError;
   try {
     if (tool.clockFirst) harnessNow(env); // as the CLI does: a refused replay clock refuses the call
     const r = await OPERATIONS[tool.op](tool.args(checked), { env, root, now: () => harnessNow(env) });
