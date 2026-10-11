@@ -349,7 +349,9 @@ fills). One label per decision time and symbol:
   step (0.25, 0.5, 0.75, 1) of the budget given with `--budget` (a prop
   attempt's budget needs its whole state at t, which the run doesn't
   record: without `--budget` the step is null and counted), with the
-  order's own contract's tick value (NQ on an MNQ run); the raw orders. The
+  order's own contract's tick value (NQ on an MNQ run) as the run's broker
+  reported it (`contracts-<broker>.json` in the run home), else the static
+  table (`provenance.specs` says which); the raw orders. The
   entry that counts is the last one the broker accepted, else the last one
   the gate let through and the broker didn't refuse, else the last one sent
   (refused tries before it, by the gate or by the broker's guardrails in

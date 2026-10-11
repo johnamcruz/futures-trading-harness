@@ -137,7 +137,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
   assert.deepStrictEqual(L[0].clone, { ok: true, reasons: [] });
   assert.strictEqual(L[0].result, 'CYCLE RESULT: long MNQ');
   const { strategiesHash, ...prov } = L[0].provenance;
-  assert.deepStrictEqual(prov, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), bars: 'run home', promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
+  assert.deepStrictEqual(prov, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), bars: 'run home', specs: 'table', promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
   assert.match(strategiesHash, /^[0-9a-f]{64}$/);
   assert.notStrictEqual(labelRun(runDir, { budgetUsd: 40, strategies: [{ ...STRATEGIES[0], risk: { min_rr: 3 } }] }).labels[0].provenance.strategiesHash, strategiesHash, 'another exit, another hash');
   assert.strictEqual(L[0].teacher.orders[0].args, undefined);
@@ -628,7 +628,7 @@ test('labels: the transcript\'s calls join the gate\'s records by rationale, not
 });
 
 test('labels: an opencode transcript gives the orders their arguments', () => {
-  const transcript = JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'completed', input: LONG.input } } });
+  const transcript = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'completed', input: LONG.input } } });
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
   assert.deepStrictEqual([L.teacher.orders[0].argsKnown, L.teacher.size.step, L.clone.reasons], [true, 0.5, []]);
 });
@@ -830,4 +830,26 @@ test('labels: a modify that widens the stop is flagged, never cloned; one agains
   assert.deepStrictEqual(L.map(l => [l.teacher.action, l.clone.reasons]), [
     ['tighten', ['stop widened']], ['tighten', []], ['tighten', ['stop widened']], ['tighten', ['stop change unknown']],
   ]);
+});
+
+// After the rebase onto #38 (broker specs) and #39 (opencode).
+
+test('labels: tick specs are the ones the run recorded from its broker (contracts-<broker>.json), else the static table', () => {
+  // The broker reported MNQ at $1 a tick (the table says $0.50); nothing for MES.
+  const specs = JSON.stringify({ ids: {}, front: {}, specs: { MNQ: { tickSize: 0.25, tickValue: 1 } } });
+  const mnq = makeRun({ manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [LONG] } }] });
+  fs.writeFileSync(path.join(mnq.home, 'contracts-sim.json'), specs);
+  const a = labelRun(mnq.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([a.teacher.size.riskUsd, a.provenance.specs], [40, 'broker']);
+  const mes = makeRun({ symbols: ['MES'], manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [order('setup:orb long, stop 19990', { contractId: 'MES' })] } }] });
+  fs.writeFileSync(path.join(mes.home, 'contracts-sim.json'), specs);
+  const b = labelRun(mes.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([b.teacher.size.riskUsd, b.provenance.specs], [50, 'table'], 'MES from the table: 40 ticks x $1.25');
+});
+
+test('labels: an order opencode stopped itself (a permission rule) is no order', () => {
+  const ev = state => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state } });
+  const transcript = ev({ status: 'error', input: LONG.input, error: 'The user has specified a rule which prevents you from using this specific tool call.' });
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.teacher.action, L.teacher.orders], ['none', []]);
 });

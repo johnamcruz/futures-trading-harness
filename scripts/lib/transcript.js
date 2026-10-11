@@ -14,6 +14,7 @@
  *   bridgeRefused(call, result)  the bridge refused this call (it never reached the tool)
  *   SHELL_TOOLS              shell tool names across harnesses
  *   isOpencodeEvent(ev)      an opencode `run --format json` event
+ *   opencodeStopped(part)    opencode stopped the call itself (an unavailable tool, a permission rule)
  *   opencodeCall(part)       an opencode tool part as { name, input, result }, MCP tools named
  *                            mcp__<server>__<tool> as on the other harnesses
  *
@@ -97,4 +98,11 @@ function opencodeCall(part) {
   return { name: server ? `mcp__${server}__${tool.slice(server.length + 1)}` : tool, input, result };
 }
 
-module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, OPENCODE_SERVERS };
+/**
+ * A call opencode itself stopped before any tool ran: a tool it doesn't have ("Model tried to call
+ * unavailable tool") or one its permission rules deny. Not a call to the tool (a broker never saw it).
+ */
+const OPENCODE_STOPPED = /^\s*(Model tried to call unavailable tool|The user has specified a rule which prevents you from using this specific tool call)/;
+const opencodeStopped = part => Boolean(part && part.state && part.state.status === 'error' && OPENCODE_STOPPED.test(resultText(part.state.error)));
+
+module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };

@@ -55,6 +55,7 @@ const { readJson, writeJsonAtomic } = require('../harness-run');
 const { gateLogPath } = require('../trading/check-order');
 const { STOP_PRICE, isRiskReducing } = require('../trading/order-gate');
 const { specFor, familyRoot } = require('../trading/contracts');
+const { brokerSpecFor } = require('../trading/broker-specs');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { parseStandardName, standardRoot } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
@@ -98,12 +99,20 @@ const sign = side => (side === 'buy' ? 1 : side === 'sell' ? -1 : 0);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 /**
- * A contract's tick specs (tickSize, tickValue) from its standard name (MNQ, NQ:2026-03), else the
- * fallback's (the label's symbol). The one place specs are looked up, so another source can replace it.
+ * A contract's tick specs { tickSize, tickValue, source } from its standard name (MNQ, NQ:2026-03), else
+ * the fallback's (the label's symbol): the broker's, as the run recorded them (`specsFile`, the run home's
+ * contracts-<broker>.json: what the run's gate and sizing traded with), else the static table ('table').
+ * The one place specs are looked up.
  */
-function contractSpec(contractId, fallback = null) {
-  const root = contractId ? (parseStandardName(String(contractId)) || {}).root : null;
-  return (root && specFor(root)) || (fallback ? specFor((parseStandardName(String(fallback)) || {}).root || fallback) : null);
+function contractSpec(contractId, fallback = null, specsFile = null) {
+  const rootOf = id => (id ? (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
+  for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
+    const broker = specsFile ? brokerSpecFor(specsFile, root) : null;
+    if (broker) return { tickSize: broker.tickSize, tickValue: broker.tickValue, feesPerSide: broker.feesPerSide, source: 'broker' };
+    const table = specFor(root);
+    if (table) return { ...table, source: 'table' };
+  }
+  return null;
 }
 
 /** Every line of the run's day files that isn't JSON (a torn write), by count. */
@@ -209,11 +218,11 @@ function roundTrips(fills) {
 }
 
 /** The outcome of a round trip: P&L, R from the initial stop, MAE/MFE in R (the broker's when it sends them). */
-function outcomeOf(rt, stopTicks) {
+function outcomeOf(rt, stopTicks, specsFile = null) {
   if (!rt) return null;
   const first = rt.opens[0] || null;
   const entry = first && first.entry && typeof first.entry === 'object' ? first.entry : {};
-  const spec = contractSpec(rt.contractId) || {};
+  const spec = contractSpec(rt.contractId, null, specsFile) || {};
   const ticks = num(entry.stopTicks) || num(stopTicks);
   const tickValue = num(entry.tickValue) || num(spec.tickValue);
   const risk = ticks && tickValue ? ticks * tickValue * (rt.openSize || 1) : null;
@@ -296,7 +305,7 @@ function cycleOrders(c, doc, gateLog, untilMs) {
   const to = Math.min(Number.isFinite(c.durationMs) ? from + c.durationMs + GATE_SLACK_MS : Infinity, untilMs);
   const gates = collapsePairs(gateLog.filter(e => gateTool(e) && e.ms >= from && e.ms < to));
   for (const e of gateLog) if (e.ms >= from && e.ms < to) e.inCycle = true;
-  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name)).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), used: false })) : [];
+  const calls = doc ? toolCalls(doc.transcript || '').filter(x => toolName(x.name) && !x.stopped).map(x => ({ tool: toolName(x.name), input: x.input, failed: Boolean(x.failed), used: false })) : [];
   const out = gates.map(g => {
     const tool = gateTool(g);
     const call = calls.find(x => !x.used && x.tool === tool && String(x.input.rationale ?? '') === String(g.rationale ?? '')
@@ -682,7 +691,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const labels = [];
   for (const d of drafts) {
     const { rec } = d;
-    const spec = specFor(d.symbol) || (d.fam ? specFor(d.fam) : null);
+    const spec = contractSpec(d.symbol, d.fam, contractCache);
+    let usedSpec = spec;
     let teacher = null;
     let gate = { decision: 'none', checks: [] };
     let outcome = null;
@@ -694,7 +704,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const isEntry = d.decision === 'flat' && o;
       const rt = isEntry ? entryOf.get(d) || null : null;
       // Decision-time fields read only the order and what was there at t (never its fill).
-      const ospec = isEntry ? contractSpec(o.contractId, d.symbol) : spec;
+      const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache) : spec;
+      usedSpec = ospec;
       // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
       const atr = isEntry ? atrAt(futureBars(d.symbol), tfMs, d.t) : null;
       const stop = isEntry ? stopOf(o, ospec, d.refPrice, atr) : null;
@@ -724,9 +735,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       else if (isEntry && stop.multiple === null) reasons.push('stop not mapped to ATR');
       if (d.decision === 'in-trade') {
         const open = trips.find(x => x.family === d.fam && (x.openMs === null || x.openMs <= d.t) && (x.closeMs === null || x.closeMs >= d.t)) || null;
-        outcome = open ? outcomeOf(open, null) : null;
+        outcome = open ? outcomeOf(open, null, contractCache) : null;
       } else if (isEntry) {
-        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks) : { filled: false, result: 'unfilled' })
+        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks, contractCache) : { filled: false, result: 'unfilled' })
           : { filled: false, result: gate.decision === 'refused' ? 'refused' : 'not logged' };
       }
       // A skip: flat, nothing sent, no working order touched (a cancel or a modify is a decision of its own).
@@ -759,7 +770,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       counterfactual: counterfactuals.length ? pickCounterfactual(d, counterfactuals) : null, counterfactuals, counterfactualFor: counterfactuals.length ? counterfactualFor : null,
       clone: { ok: Boolean(teacher) && reasons.length === 0, reasons: [...new Set(reasons)] },
       result: d.cyc ? d.cyc.result : ((rec.ran || [])[0] || {}).result || null,
-      provenance: { harness: manifest.harness || null, model: manifest.model || null, configHash: manifest.hash || null, strategiesHash, bars: barsSource || 'run home', promptHash, cycleFile: cyc ? relCycle(home, cyc.file) : null },
+      provenance: { harness: manifest.harness || null, model: manifest.model || null, configHash: manifest.hash || null, strategiesHash, bars: barsSource || 'run home', specs: usedSpec ? usedSpec.source : null, promptHash, cycleFile: cyc ? relCycle(home, cyc.file) : null },
     });
   }
   const summary = summarize(labels, {

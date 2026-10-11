@@ -27,14 +27,14 @@ const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
-const { documents, unwrap, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall } = require('./transcript');
+const { documents, unwrap, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 
 /**
  * Every tool call in a transcript (Claude stream-json, Codex --json, Qwen's JSON array, opencode's JSON
- * events, its MCP tools named mcp__<server>__<tool>): [{ name, input }].
+ * events, its MCP tools named mcp__<server>__<tool>): [{ name, input, failed?, stopped? }].
  * A call through a bridge wrapper (Qwen's tool_call, transcript.js BRIDGE_TOOLS) counts as the tool it
  * reaches, with that tool's arguments; one the bridge refused never reached the tool and isn't counted.
  */
@@ -48,7 +48,7 @@ function toolCalls(output) {
       if (isOpencodeEvent(ev)) {
         if (ev.type === 'tool_use' && ev.part.type === 'tool') {
           const { name, input, result } = opencodeCall(ev.part);
-          calls.push({ name, input, ...(result && result.isError ? { failed: true } : {}) });
+          calls.push({ name, input, ...(result && result.isError ? { failed: true } : {}), ...(opencodeStopped(ev.part) ? { stopped: true } : {}) });
         }
         continue;
       }
@@ -62,16 +62,19 @@ function toolCalls(output) {
           if (c.id !== undefined && c.id !== null) byId.set(c.id, call);
         } else if (c && c.type === 'tool_result' && byId.has(c.tool_use_id)) {
           if (bridgeRefused(byId.get(c.tool_use_id), c)) byId.get(c.tool_use_id).refused = true;
+          else if (c.is_error === true) byId.get(c.tool_use_id).failed = true;
         }
       }
       // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }
       const item = ev.item;
       if (item && item.type === 'command_execution') calls.push({ name: 'Bash', input: { command: item.command } });
-      if (item && item.type === 'mcp_tool_call') calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {} });
+      if (item && item.type === 'mcp_tool_call') calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {}, ...(item.status === 'failed' ? { failed: true } : {}) });
     }
   }
-  // failed: the harness reported the call errored (opencode): still a call, but a skill it failed to load isn't loaded.
-  return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {}, ...(c.failed ? { failed: true } : {}) }));
+  // failed: the call came back an error (opencode's error status, a Claude/Qwen is_error result, a Codex
+  // failed status): still a call, but a skill it failed to load isn't loaded. stopped: opencode stopped it
+  // itself (an unavailable tool, a permission rule), so no tool (no broker) ever saw it; still counted here.
+  return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {}, ...(c.failed ? { failed: true } : {}), ...(c.stopped ? { stopped: true } : {}) }));
 }
 
 /** The parsed summary of one cycle's transcript. */
