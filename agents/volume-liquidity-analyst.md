@@ -14,7 +14,7 @@ must not try.
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
 timeframe to a file with `node <root>/scripts/bars.js --symbol <SYMBOL>
---timeframe <minutes> --count <n> --out <file>` (it prints the file and when
+--timeframe <minutes> --count <n> --out /tmp/fth/<name>.json` (it prints the file and when
 the last bar closed); never paste a long `get_bars` reply into a file.
 
 1. Load the skills `vwap-volume-profile`, `liquidity-concepts`,

@@ -412,3 +412,48 @@ test('confluence: trades record how many strategies agreed; minConfluence and co
   const { buildReport } = require('../../scripts/lib/backtest/report');
   assert.deepStrictEqual(Object.keys(buildReport([t, mixed], {}).byConfluence), ['1 agreeing, 1 against', '2 agreeing']);
 });
+
+test('bar-file errors never echo the file\'s content (a script run on a credentials file shows none of it)', () => {
+  const { spawnSync } = require('child_process');
+  const dir = tmpDir();
+  // A credentials line (built here, so the repository's secret scan doesn't take it for a real one).
+  const secret = ['API', 'KEY'].join('_') + ['=', 'hunter2', 'abcdef'].join('');
+  const leaks = m => /hunter2|API_KEY|api_key/.test(m);
+  const cases = {
+    '.env': `${secret}\nOTHER=x\n`,
+    'header.csv': `time,open,high,low,${secret}\n2026-01-02T14:30:00Z,1,2,0,1\n`,
+    'cell.csv': `time,open,high,low,close\n${secret},1,2,0,1\n`,
+    // V8's parse error quotes the text around the fault.
+    'bad.json': `[${secret}]`,
+    'obj.json': `{"a": ${secret}}`,
+    // A free-text time V8 parses, off the minute: the error gives the parsed time, not the text.
+    'offminute.json': JSON.stringify([{ t: `Jan 2 2026 14:30:30 (${secret})`, o: 1, h: 2, l: 0, c: 1 }]),
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, text);
+    let message = null;
+    try { loadBars(file); } catch (err) { message = err.message; }
+    assert.ok(message, `${name} is refused`);
+    assert.ok(!leaks(message), `${name}: ${message}`);
+  }
+  // What the error still says: the recognized columns and a count of the others, the row, the parsed time.
+  assert.throws(() => loadBars(path.join(dir, 'header.csv')), /found: time, open, high, low, and 1 other column\(s\)/);
+  assert.throws(() => loadBars(path.join(dir, '.env')), /found: none, and 1 other column\(s\)/);
+  assert.throws(() => loadBars(path.join(dir, 'cell.csv')), /row 2: unreadable time$/);
+  assert.throws(() => loadBars(path.join(dir, 'bad.json')), /bad\.json: not valid JSON$/);
+  assert.throws(() => loadBars(path.join(dir, 'offminute.json')), /a bar at 20\d\d-\d\d-\d\dT\d\d:\d\d:30\.000Z is not on a minute boundary/);
+  // Through the scripts agents run, on a file and on stdin.
+  const script = (name, args, input = '') => spawnSync(process.execPath, [path.join(ROOT, 'scripts', name), ...args], { input, encoding: 'utf8', env: { PATH: process.env.PATH, FTH_HOME: dir } });
+  for (const [name, args] of [['market-snapshot.js', []], ['mtf.js', []], ['strategies.js', ['scan']]]) {
+    for (const file of Object.keys(cases)) {
+      const r = script(name, [...args, path.join(dir, file)]);
+      assert.strictEqual(r.status, 1, `${name} ${file}`);
+      assert.ok(!leaks(r.stderr + r.stdout), `${name} ${file}: ${r.stderr}`);
+    }
+    const piped = script(name, [...args, '-'], `[${secret}]`);
+    assert.strictEqual(piped.status, 1);
+    assert.match(piped.stderr, /stdin: not valid JSON/);
+    assert.ok(!leaks(piped.stderr + piped.stdout), piped.stderr);
+  }
+});
