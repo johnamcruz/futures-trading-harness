@@ -30,6 +30,9 @@ test('process: the hard rule is where every coding agent reads it, and the PR te
   assert.match(rule, /`npm run verify` passes/);
   assert.match(rule, /\*\*Adversarial review\.\*\* A reviewer other than the author/);
   assert.match(rule, /Never open a pull request with a failing regression or an unaddressed\s+confirmed finding/);
+  // Documents only get a soundness review; anything agents act on keeps the full round.
+  assert.match(rule, /A change to documents only[\s\S]*not the full\s+adversarial round/);
+  assert.match(rule, /Skills, agents, commands, rules, strategies, and\s+accounts are instructions agents act on: they get the full round/);
   // Codex and other agents read AGENTS.md, Qwen Code reads QWEN.md: both point at it.
   for (const f of ['AGENTS.md', 'QWEN.md']) {
     assert.match(read(f), /CLAUDE\.md/, `${f} points to CLAUDE.md`);

@@ -13,5 +13,6 @@
 
 - [ ] Reviewed by someone other than the change's author (an independent agent or a person), against the base branch
 - [ ] Every confirmed finding fixed or answered; the regression re-run; the fixes reviewed again until nothing new
+- [ ] Documents only (`docs/`, README, CONTRIBUTING): reviewed instead for soundness and the truth of its claims about the code
 
 <!-- The findings and what was done about each. -->

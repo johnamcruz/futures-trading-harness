@@ -40,7 +40,9 @@ For everyone, people and coding agents alike, on every pull request: the
 regression passes (`npm run verify`; with `FTH_REQUIRE_PYTHON=1` and a Python
 that has `rl/requirements.txt` when `rl/` changed), and an adversarial review
 by someone other than the change's author found nothing left to fix (each
-confirmed finding fixed, the regression re-run, the fixes reviewed again). Say
-both in the pull request (the template asks). See `CLAUDE.md`.
+confirmed finding fixed, the regression re-run, the fixes reviewed again). A
+change to documents only (`docs/`, the README, this file) needs the
+regression and a review that it is sound and its claims about the code are
+true. Say both in the pull request (the template asks). See `CLAUDE.md`.
 
 Use conventional commit messages.

@@ -104,6 +104,13 @@ request, every time, whatever the size of the change:
    reason), then the regression runs again and the fixes get their own review,
    until a round confirms nothing new.
 
+   A change to documents only (Markdown under `docs/`, `README.md`,
+   `CONTRIBUTING.md`; no code, test, config, skill, agent, command, rule, hook,
+   strategy, or account) gets the regression and a review that the plan or
+   content is sound and its claims about the code are true, not the full
+   adversarial round. Skills, agents, commands, rules, strategies, and
+   accounts are instructions agents act on: they get the full round.
+
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
 the review found and fixed (`.github/pull_request_template.md`).

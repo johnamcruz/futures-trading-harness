@@ -254,21 +254,26 @@ it spends; a budget cap stops a run cleanly. Batch requests and a cheaper
 teacher lower it further; the fidelity sample measures how much a cheaper
 teacher agrees with the strongest.
 
-### Multiple symbols
+### Multiple markets
 
 The runner trades several symbols, one cycle per symbol, and the gate's
-exposure and correlation checks read every position. Replay keeps that: one
-account path holds every symbol, the store records the symbol on each
-decision, and one price offset per family per day is used (NQ with MNQ, ES
-with MES), with the cross-family offsets drawn so related indices keep their
-moves. The first runs use one symbol.
+exposure and correlation checks read every position. The prop policy now
+trades NQ, ES, YM, and RTY on one combine, one position at a time across
+them (`docs/RL-DESIGN.md`, Markets). Replay keeps that: one account path
+holds every market on one timeline, a market waits while another's trade is
+open or filling in a prop attempt, and the store records the market on each
+decision. One price offset per index family per day (NQ with MNQ, ES with
+MES); offsets only shift levels, so each market's moves, and how the indices
+move together, are unchanged. The first runs use one market.
 
 ## Stage 2: the student policy
 
 ### Observation
 
-Everything the compact prompt carries, as numbers: the current RL
-observation (account, trade state, timeframes, confluence, VWAP, value area)
+Everything the compact prompt carries, as numbers, scaled to the account and
+to the market's ATR as the current observation is (so one policy reads every
+market): the current RL observation (account, trade state, timeframes,
+confluence, VWAP, value area)
 widened with every strategy's signal as an input (not a gate), structure and
 liquidity levels as distances in ATR, the day context (opening type, IB, day
 type, ADR used), the session and time to the close, news windows, and the
