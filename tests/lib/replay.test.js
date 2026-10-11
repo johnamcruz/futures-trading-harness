@@ -170,6 +170,9 @@ test('store: the manifest, one line per decision time, resume after the last one
   assert.strictEqual(store.readRun(dir).days['2026-10-07'].length, 1, 'a torn last line is skipped');
   assert.deepStrictEqual(store.parseStep('x\nREPLAY STEP {"asked":"trade","ran":[]}\n'), { asked: 'trade', ran: [] });
   assert.strictEqual(store.parseStep('no step'), null);
+  // A long run (more recorded times than a call can take as arguments) still resumes.
+  const many = new Set(Array.from({ length: 200000 }, (_, i) => new Date(Date.parse('2025-01-01T00:00:00Z') + i * 60000).toISOString()));
+  assert.strictEqual(store.remaining({ daysDone: [], lastT: null }, pts, many).length, 4);
 });
 
 test('store: a step\'s cycle logs and gate refusals, from the run home\'s logs', () => {
@@ -269,7 +272,17 @@ test('driver: a step that can\'t run stops the run; failed cycles in a row stop 
   await assert.rejects(runReplay({ run: live.run, baseEnv: live.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /not a replay broker/);
   assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_PLAN_MAX_AGE_MIN: '30' }), 'a gate setting is part of the run');
   assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, SIM_DATA: '/other' }), 'the replay broker\'s settings are part of the run');
-  assert.strictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_ROOT: '/x', FTH_HOOK_PROFILE: 'strict', FTH_AUTONOMOUS: '1' }), 'where it was started from is not');
+  assert.strictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_ROOT: '/x', FTH_AUTONOMOUS: '1', PATH: '/other/bin' }), 'where it was started from is not');
+  assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_HOOK_PROFILE: 'minimal' }), 'the hook profile is part of the run');
+  // The node binary that starts an entry-based broker is not part of the run.
+  const brokers = path.join(w.run.paths.runHome, 'brokers.json');
+  const b = JSON.parse(fs.readFileSync(brokers, 'utf8'));
+  b.brokers.sim.command = [process.execPath, '/opt/sim/server.js'];
+  fs.writeFileSync(brokers, JSON.stringify(b));
+  const withExec = configHash(w.run, w.env);
+  b.brokers.sim.command = ['node', '/opt/sim/server.js'];
+  fs.writeFileSync(brokers, JSON.stringify(b));
+  assert.strictEqual(configHash(w.run, w.env), withExec, 'this node\'s path counts as any node');
 });
 
 test('report: month by month, trades from round trips or closing fills, R, stand-aside, refusals by check', () => {

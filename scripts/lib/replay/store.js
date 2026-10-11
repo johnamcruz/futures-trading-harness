@@ -68,7 +68,8 @@ function openRun(paths, { runId, hash, info = {}, now = new Date() }) {
 function remaining(manifest, points, recorded = new Set()) {
   const done = new Set(manifest.daysDone || []);
   // The last time recorded: the manifest's, or a line written just before a stop kept the manifest from saying so.
-  const last = Math.max(manifest.lastT ? Date.parse(manifest.lastT) : -Infinity, ...[...recorded].map(t => Date.parse(t)));
+  let last = manifest.lastT ? Date.parse(manifest.lastT) : -Infinity;
+  for (const t of recorded) last = Math.max(last, Date.parse(t)); // a loop: a long run has too many times to spread
   return points.filter(p => !done.has(p.day) && p.t.getTime() > last);
 }
 
@@ -143,7 +144,7 @@ function touchedSince(home, sinceMs) {
   if (cycleLogsSince(home, sinceMs).length) return true;
   if (readLines(gateLogPath({ FTH_HOME: home })).some(e => Date.parse(e.ts) >= sinceMs)) return true;
   try {
-    return fs.statSync(path.join(home, 'autotrader-state.json')).mtimeMs >= sinceMs;
+    return fs.statSync(path.join(home, 'autotrader-state.json')).mtimeMs >= sinceMs - 1000; // filesystems with whole-second times
   } catch (_err) {
     return false;
   }

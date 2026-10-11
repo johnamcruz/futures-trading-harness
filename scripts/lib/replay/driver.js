@@ -150,8 +150,10 @@ function lockRun(paths) {
 async function runReplay(opts) {
   const { run, baseEnv = process.env } = opts;
   // A live runner on this machine shares the scripts' scratch files (/tmp/fth) with the replay's agents.
-  const liveLock = readJson(path.join(harnessHome(baseEnv), 'autotrader.lock'), null);
-  if (liveLock && alive(liveLock.pid)) throw new Error(`replay refused: the live runner is running (pid ${liveLock.pid}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
+  for (const home of new Set([harnessHome(baseEnv), harnessHome({})])) {
+    const liveLock = readJson(path.join(home, 'autotrader.lock'), null);
+    if (liveLock && alive(liveLock.pid)) throw new Error(`replay refused: the live runner is running (pid ${liveLock.pid}, ${home}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
+  }
   const release = lockRun(run.paths);
   try {
     return await replayLoop(opts);
