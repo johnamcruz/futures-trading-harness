@@ -53,7 +53,8 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
      `[exit]` rationale and report.
    - **Working, with its stop bracket** (a resting limit or stop, or a market
      order the broker hasn't filled; the bracket's stop works once it fills):
-     report `EXECUTED` with the entry working. The caller journals it and
+     report `EXECUTED` with the entry working, its order id, and that its
+     stop bracket is attached. The caller journals that and
      ends the cycle (interactively, waits for the next check); the next
      cycle verifies the fill and the stop.
    - **Working, without a stop bracket** (step 4): it would fill with no

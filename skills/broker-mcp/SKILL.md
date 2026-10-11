@@ -66,7 +66,10 @@ guide resource once per session if it has one.
   Still working (a limit or stop entry not reached, or a market order the
   broker hasn't filled yet; a replayed broker fills market orders at the next
   bar, and live fills can lag) with its stop bracket attached: journal that
-  it is working and end the cycle (the bracket protects it once it fills).
+  it is working, with its order id and that its stop bracket is attached (an
+  order list may not show the bracket until the entry fills; the next cycle
+  tells by this note), and end the cycle (the bracket protects it once it
+  fills).
   Still working without a stop bracket (brackets rejected): don't leave it,
   since it would fill with no stop. `cancel_order` it (cancelling an entry
   only reduces risk), then read `list_open_orders` and `list_open_positions`

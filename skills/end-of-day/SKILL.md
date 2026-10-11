@@ -22,7 +22,9 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    entry earlier than that.
 3. Confirm with `list_open_positions` and `list_open_orders` that nothing is
    left. A close the broker accepted isn't a flat account: a position still
-   open after its close is closed again. The autonomous runner keeps closing,
+   open after its close is closed again, unless its earlier close still shows
+   as a working order in `list_open_orders` (it hasn't filled yet; a second
+   close could cross it). The autonomous runner keeps closing,
    and its end of day is done only once the account reads flat. Don't wait
    for a close to fill (no repeated bar or quote reads): if it still reads
    open after the second close (a replayed broker fills at the next bar),
