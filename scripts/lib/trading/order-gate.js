@@ -8,6 +8,9 @@
  *   [exit] ...     closes or reduces a position          -> never gated
  *   [protect] ...  protective stop / target for a fill   -> never gated
  *   anything else  a new entry                           -> every check below
+ * An entry's tick specs are the broker's, as the contract translator recorded
+ * them (broker-specs.js, local state); an entry on a contract with none is
+ * refused (contract-specs). Exits and protective orders never need them.
  * The MCP server still enforces its own size and loss limits on all of them.
  */
 
@@ -19,7 +22,7 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
-const { specFor } = require('./contracts');
+const { brokerSpecs, contractsFileFor, whyNoSpec } = require('./broker-specs');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -77,7 +80,7 @@ const fmtPrice = (x, tick) => x.toFixed((String(tick).split('.')[1] || '').lengt
  * target brackets are checked against the stop-to-target span. Returns a
  * message, or null.
  */
-function checkConsistency(input, rationale) {
+function checkConsistency(input, rationale, specOf = () => null) {
   const problems = [];
   const sign = { buy: 1, sell: -1 }[String(input.side || '').toLowerCase()];
   const said = SIDE_WORD.exec(rationale);
@@ -91,7 +94,7 @@ function checkConsistency(input, rationale) {
   for (const [name, t] of [['stopLossBracket', sl], ['takeProfitBracket', tp]]) {
     if (t !== null && !(Number.isInteger(t) && t > 0)) problems.push(`${name}.ticks must be a whole number of ticks above 0 (got ${t})`);
   }
-  const spec = specFor(contractRoot(input.contractId));
+  const spec = specOf(contractRoot(input.contractId));
   const stopM = STOP_PRICE.exec(rationale);
   const targetM = TARGET_PRICE.exec(rationale);
   const price = m => (m ? Number(m[1].replace(/,/g, '')) : null);
@@ -218,6 +221,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   if (isRiskReducing(input.rationale)) return { intent: 'risk-reducing', violations: [] };
 
   const rationale = String(input.rationale || '');
+  // The broker's tick specs: the translator's file of the selected broker under this harness home.
+  const specOf = brokerSpecs(config.contractsFile !== undefined ? config.contractsFile : contractsFileFor(config.home));
   const dayStart = tradingDayStart(now);
   const dayEntries = entriesSince(entries, dayStart);
   const skip = config.skipChecks || new Set();
@@ -262,8 +267,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       if (fired) violations.push({ check: 'trigger-fired', message: fired });
     }
   }
+  // Hard rule: an entry is checked and sized with the broker's tick specs; none recorded (or unlike the table), no entry.
+  const specRoot = contractRoot(input.contractId);
+  if (!specOf(specRoot)) violations.push({ check: 'contract-specs', message: `${whyNoSpec(specOf, specRoot)}.` });
   if (named && named.account) {
-    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries }));
+    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf }));
   } else {
     // While an attempt runs, every entry (tagged or not) must come from a
     // policy strategy that trades it, so none skips the floor, the daily
@@ -279,7 +287,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     : 'Entry has no stop: add stopLossBracket, or state the stop price in the rationale ("stop 21450.25") '
       + 'and place a [protect] stop order right after the fill.');
 
-  add('order-consistency', checkConsistency(input, rationale));
+  add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
   add('skills-loaded', checkSkillsLoaded(transcriptPath));
   add('plan-required', checkPlan(input, dayEntries, now, config));

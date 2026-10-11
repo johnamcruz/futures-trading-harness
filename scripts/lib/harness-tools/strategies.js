@@ -33,6 +33,7 @@ const { harnessHome } = require('../paths');
 const { context, say, ignoredRecord, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 const { scanSummary, recentLines } = require('./compact');
+const { liveSpecs } = require('../trading/broker-specs');
 const { plan } = require('./order-plan');
 
 const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5] | plan <bars file> --symbol <ROOT> --strategy <name> --side long|short [--account-id <id>]';
@@ -67,7 +68,7 @@ function validate(_args, ctx) {
 }
 
 /** The scan as the caller asked: the full JSON (the script's), one strategy's full result, or the summary. */
-function scanText(results, bars, { view = 'json', name, symbol }) {
+function scanText(results, bars, { view = 'json', name, symbol, specOf }) {
   if (view === 'one') {
     const one = results.find(r => r.name === name);
     if (!one) throw new Error(`no scan result for "${name}" (scanned: ${results.map(r => r.name).join(', ') || 'none'})`);
@@ -75,7 +76,7 @@ function scanText(results, bars, { view = 'json', name, symbol }) {
   }
   if (view === 'summary') {
     const norm = normalizeBars(bars);
-    return scanSummary(results, { symbol: symbol ? String(symbol).toUpperCase() : '', bar: norm.length ? norm[norm.length - 1].t : null });
+    return scanSummary(results, { symbol: symbol ? String(symbol).toUpperCase() : '', bar: norm.length ? norm[norm.length - 1].t : null, specOf });
   }
   return `${JSON.stringify(results, null, 2)}\n`;
 }
@@ -90,7 +91,7 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   const now = at ? new Date(at) : clock;
   if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`); // cli-only: the tool takes no time
   const results = scanStrategies(strategies, bars, { symbol, now });
-  const text = scanText(results, bars, { view, name, symbol });
+  const text = scanText(results, bars, { view, name, symbol, specOf: liveSpecs(c.env) }); // the broker's tick specs
   if (!record) return { text };
   const ignored = ignoredRecord(c, 'strategies', 'the autonomous runner records every bar itself');
   if (ignored) return { text, stderr: ignored };

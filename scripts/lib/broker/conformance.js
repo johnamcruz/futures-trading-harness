@@ -4,13 +4,18 @@
  * Conformance of an MCP server to the broker MCP interface (interface.js):
  * the tool list, then read-only calls whose results are checked against the
  * fields the harness reads (a failed get_quote is a warning: only agents use it).
- * Never calls an order tool or writes the journal.
+ * The contract's tickSize and tickValue must be sane (the harness trades with
+ * the broker's tick specs: trading/broker-specs.js); one that differs from the
+ * static table backtests and training use is a warning (training would not
+ * equal live). Never calls an order tool or writes the journal.
  *
  *   checkConformance(mcp, { accountId, symbol }) -> { ok, results: [{ check, ok, problems }] }
  */
 
 const { TOOLS, validateTools, validateResult } = require('./interface');
 const { tradingDayStart } = require('../trading/clock');
+const { validSpec, specMismatch } = require('../trading/broker-specs');
+const { parseTicker } = require('./translator');
 
 async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = new Date() } = {}) {
   const results = [];
@@ -46,7 +51,14 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = n
   const active = Array.isArray(contracts) ? contracts.find(c => c.activeContract) : null;
   if (Array.isArray(contracts)) record(`search_contracts ${symbol}: an active contract`, active ? [] : [`no activeContract for ${symbol}`]);
   if (active) {
-    await probe('get_contract', 'get_contract', { contractId: active.id });
+    const one = await probe('get_contract', 'get_contract', { contractId: active.id });
+    if (one) {
+      const v = validSpec(one);
+      record('get_contract: tickSize above 0 and tickValue (USD) from 0.01 to 10,000 (the harness trades with these)', v ? [] : [`tickSize ${one.tickSize}, tickValue ${one.tickValue}`]);
+      const t = parseTicker(one.name, now);
+      const why = v && t ? specMismatch(t.root, v) : null;
+      if (why) results.push({ check: 'get_contract: tick specs match the static table (warning: training would not equal live)', ok: true, problems: [why] });
+    }
     const bars = await probe('get_bars (5 one-minute bars)', 'get_bars', { contractId: active.id, unit: 'minute', unitNumber: 1, limit: 5, includePartialBar: false });
     const list = bars && Array.isArray(bars.bars) ? bars.bars : [];
     const ordered = list.every((b, i) => i === 0 || Date.parse(list[i - 1].t) < Date.parse(b.t));

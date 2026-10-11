@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder } = require('../helpers');
+const { tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder, recordBrokerSpecs } = require('../helpers');
 
 // The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
 // market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
@@ -93,6 +93,7 @@ test('order gate: a server-written entry under a broker id the translator never 
   assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, 'reviewed under the id journal_read shows: cleared');
   // With the translator's lookup on file, it counts as MNQ (and still needs the review); on another root it wouldn't.
   fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
+  recordBrokerSpecs(env.FTH_HOME);
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
 });
 
@@ -964,6 +965,7 @@ const SATURDAY = '2026-10-10T15:00:00.000Z'; // market closed
 function simBroker(home, journal, { replay = true } = {}) {
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+  recordBrokerSpecs(home, { broker: 'sim' }); // the replay broker's tick specs, as its translator records them
 }
 
 test('order gate hook: with a replay broker it judges the order at FTH_REPLAY_NOW, not the wall clock', () => {
@@ -1161,8 +1163,45 @@ test('MCP gateway with a replay broker: an allowed entry is recorded at the repl
   const byId = await gatewayCfg({
     FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW), FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'),
     FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }),
-  }, [call(1, 'place_order', ORDER)], { dir });
+  }, [call(0, 'search_contracts', { searchText: 'MNQ' }), call(1, 'place_order', ORDER)], { dir }); // the contract first: its tick specs
   assert.match(textOf(byId[1]), /"orderId":\s*5/, textOf(byId[1]));
   const entries = JSON.parse(fs.readFileSync(path.join(home, 'entry-orders.json'), 'utf8'));
   assert.deepStrictEqual(entries.map(e => [e.orderId, e.at]), [[5, TEST_NOW]]);
+});
+
+test('order gate wiring: without the broker\'s tick specs the hook and the gateway refuse an entry, never an exit or a stop; looking the contract up records them', async () => {
+  const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  // The hook: a home whose translator file has no specs.
+  const { env } = setup(plan, { FTH_HOME: trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', specs: false }) });
+  const entry = gate(orderPayload(), env);
+  assert.strictEqual(entry.code, 2);
+  assert.match(entry.stderr, /\[contract-specs\] no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first/);
+  // Even autonomous with every check named skipped.
+  const auto = gate(orderPayload(), { ...env, FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'contract-specs,order-consistency' });
+  assert.strictEqual(auto.code, 2);
+  for (const input of [{ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' }]) {
+    const r = gate(orderPayload(input), env);
+    assert.strictEqual(r.code, 0, `${input.rationale}: ${r.stderr}`);
+  }
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' } }, env).code, 0);
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__close_position', tool_input: { accountId: 1, contractId: 'MNQ', reason: 'flatten' } }, env).code, 0);
+  // The gateway, on the configured broker behind the translator: refused, then the contract is looked up and the entry goes.
+  const dir = tmpDir();
+  const { home } = simHome(dir, { journalEntries: plan });
+  trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW) };
+  const held = await gatewayCfg({ ...base, FAKE_POSITIONS: LONG1 }, [
+    call(1, 'place_order', ORDER),
+    call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
+  ], { dir });
+  assert.match(textOf(held[1]), /\[contract-specs\] no tick specs from the broker for MNQ yet/);
+  assert.strictEqual(textOf(held[2]), 'forwarded:tools/call:place_order', 'the exit goes without specs');
+  fs.rmSync(path.join(home, 'contracts-sim.json'), { force: true }); // (the exit's own translation looked MNQ up; start over)
+  const r = await gatewayCfg({ ...base, FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) }, [
+    call(3, 'search_contracts', { searchText: 'MNQ' }),
+    call(4, 'place_order', ORDER),
+  ], { dir });
+  const recorded = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')).specs.MNQ;
+  assert.deepStrictEqual([recorded.tickSize, recorded.tickValue, recorded.name], [0.25, 0.5, 'MNQZ6']);
+  assert.match(textOf(r[4]), /"orderId":\s*5/, textOf(r[4]));
 });

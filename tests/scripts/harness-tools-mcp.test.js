@@ -12,7 +12,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const { createMcpClient } = require('../../scripts/lib/broker/mcp-client');
 const { TOOLS } = require('../../scripts/lib/harness-tools/registry');
 
@@ -32,6 +32,7 @@ function fixtureHome({ replay = true } = {}) {
   }));
   fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
   for (const f of ['NQ-3m.csv', 'RTY-3m.csv']) fs.copyFileSync(path.join(PARITY, f), path.join(home, 'bars', f));
+  recordBrokerSpecs(home, { broker: 'sim' }); // the broker's tick specs, as the translator records them
   return home;
 }
 

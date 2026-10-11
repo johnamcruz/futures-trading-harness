@@ -11,7 +11,7 @@ const { observationFields } = require('../../scripts/lib/rl/observation');
 const { ACTIONS } = require('../../scripts/lib/rl/challenge-env');
 const { BUNDLE_FORMAT, BUNDLE_VERSION } = require('../../scripts/lib/rl/policy-bundle');
 const { main: combineCli } = require('../../scripts/combine');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CONTRACT = 'MNQ';
@@ -41,8 +41,9 @@ function bars(n = 200) {
   });
 }
 
-function setup({ policy = 'always_2', start = true, models = {}, contracts = 'micro' } = {}) {
+function setup({ policy = 'always_2', start = true, models = {}, contracts = 'micro', specs = true } = {}) {
   const home = tmpDir();
+  if (specs) recordBrokerSpecs(home); // the broker's tick specs, as the translator records them
   const modelsDir = tmpDir();
   for (const [name, b] of Object.entries(models)) fs.writeFileSync(path.join(modelsDir, `${name}.json`), JSON.stringify(b));
   const env = { FTH_MODELS_DIRS: modelsDir };
@@ -167,6 +168,24 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
   auto.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   const va = prop.latestVerdict(auto.home, 'prop_x', 'NQ');
   assert.deepStrictEqual([va.contract, va.maxSize, va.policy, va.action], ['NQ', 2, null, 'full'], 'no bundle: the setup as sized');
+  // The tick specs are the broker's: none recorded for the contract (or the family's other one) is a skip saying so.
+  for (const roots of [[], ['MNQ']]) {
+    const bare = setup({ policy: null, contracts: 'auto', specs: false });
+    if (roots.length) recordBrokerSpecs(bare.home, { roots });
+    await bare.hooks.snapshot(now);
+    bare.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+    const vb = prop.latestVerdict(bare.home, 'prop_x', 'MNQ');
+    assert.deepStrictEqual([vb.action, vb.maxSize], ['skip', 0]);
+    assert.match(vb.reason, new RegExp(`no tick specs from the broker for ${roots.length ? 'NQ' : 'MNQ'} yet: call get_contract or search_contracts`));
+  }
+  // A broker spec unlike the static table (NQ at $0.50, a units mix-up): a skip, never a 10x size.
+  const odd = setup({ policy: null, contracts: 'auto', specs: false });
+  recordBrokerSpecs(odd.home, { roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0.5 } } });
+  await odd.hooks.snapshot(now);
+  odd.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const vo = prop.latestVerdict(odd.home, 'prop_x', 'MNQ');
+  assert.deepStrictEqual([vo.action, vo.maxSize], ['skip', 0]);
+  assert.match(vo.reason, /^NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table/);
   // A bundle trained for another policy strategy, account, sizing, or contract mode never decides.
   for (const [meta, why] of [[{ strategy: 'other_prop' }, /trained for other_prop/], [{ components: ['trendy'] }, /different observation/], [{ account: 'topstep_100k' }, /account topstep_100k/],
     [{ sizing: { cushion_frac: 0.5 } }, /sizing/], [{ symbol: 'MES' }, /trained on MES/], [{ contracts: 'auto' }, /contracts: auto/]]) {

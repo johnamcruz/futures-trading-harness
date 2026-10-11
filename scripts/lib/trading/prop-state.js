@@ -16,6 +16,7 @@ const path = require('path');
 const combine = require('./combine');
 const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf } = require('./contracts');
+const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
@@ -230,17 +231,25 @@ function entrySinceSnapshot(home, accountName, entries = []) {
 
 const feeOf = (account, root) => (account.fees_per_side && account.fees_per_side[root]) ?? (specFor(root) || {}).feesPerSide ?? 0.37;
 
+/*
+ * `specOf` (root -> { tickSize, tickValue } or null) is where tick specs come
+ * from: the static table (contracts.js specFor) offline, the broker's recorded
+ * specs (broker-specs.js) live. The gate and order_plan pass the broker's.
+ */
+
 /** A contract the account can trade: tick value, the account's fee (else the spec's), and its limit. */
-function legOf(account, root) {
-  const spec = specFor(root);
+function legOf(account, root, specOf = specFor) {
+  const spec = specOf(root);
   return spec ? { root, tickValue: spec.tickValue, fee: feeOf(account, root), max: (account.max_contracts && account.max_contracts[root]) || 0 } : null;
 }
 
-/** The micro and mini legs of a root's family (or the root alone), and the mini:micro ratio. */
-function legsFor(account, root) {
+/** The micro and mini legs of a root's family (or the root alone), and the mini:micro ratio (from the specs' tick values). */
+function legsFor(account, root, specOf = specFor) {
   const fam = familyOf(root);
-  if (!fam) return { legs: { micro: legOf(account, root), mini: null }, ratio: 10, mode: 'micro' };
-  return { legs: { micro: legOf(account, fam.micro), mini: legOf(account, fam.mini) }, ratio: fam.ratio };
+  if (!fam) return { legs: { micro: legOf(account, root, specOf), mini: null }, ratio: 10, mode: 'micro' };
+  const legs = { micro: legOf(account, fam.micro, specOf), mini: legOf(account, fam.mini, specOf) };
+  const ratio = legs.micro && legs.mini ? Math.round(legs.mini.tickValue / legs.micro.tickValue) : fam.ratio;
+  return { legs, ratio: ratio >= 1 ? ratio : fam.ratio };
 }
 
 /**
@@ -248,14 +257,21 @@ function legsFor(account, root) {
  * entry with a `stopTicks` stop, from the latest snapshot (combine.contractPlan,
  * as the backtester and training size it), or { error }.
  */
-function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1) {
+function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, specOf = specFor) {
   const r = readAttempt(home, account.name);
   const state = r && r.snapshot && r.snapshot.state;
   if (!state) return { error: `no ${account.name} snapshot to size from` };
-  if (!specFor(root)) return { error: `no tick specs for ${root}` };
+  // Every contract the budget may pick (the micro and the mini of a family) needs its specs.
+  const fam = familyOf(root);
+  const missing = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => !specOf(x));
+  if (missing) return { error: specOf === specFor ? `no tick specs for ${missing}` : whyNoSpec(specOf, missing) };
+  // One stop in ticks sizes both legs: the family's contracts must agree on the tick size.
+  if (fam && Math.abs(specOf(fam.micro).tickSize - specOf(fam.mini).tickSize) > 1e-12) {
+    return { error: `${fam.micro} and ${fam.mini} have different tick sizes (${specOf(fam.micro).tickSize}, ${specOf(fam.mini).tickSize}): no size can be worked out` };
+  }
   if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return { error: 'a combine entry needs stopLossBracket.ticks (the gate sizes the trade from its stop)' };
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
-  const { legs, ratio, mode } = legsFor(account, root);
+  const { legs, ratio, mode } = legsFor(account, root, specOf);
   const plan = combine.contractPlan({
     dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
   });
@@ -279,7 +295,7 @@ function latestVerdict(home, strategy, root) {
  *   policy:  a fresh verdict from the strategy's policy for this contract and
  *            side said half or full, and the size is within it.
  */
-function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries }) {
+function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor }) {
   const out = [];
   const root = contractRoot(input.contractId);
   const size = Number(input.size);
@@ -295,7 +311,7 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
   const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
   else {
-    const b = budgetPlan(home, account, strategy, root, ticks, fraction);
+    const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf);
     if (b.error) out.push({ check: 'combine', message: `${account.name}: ${b.error}.` });
     else if (b.root !== root || !(size >= 1 && size <= b.size)) {
       const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : 'nothing';

@@ -17,11 +17,39 @@ function tmpDir() {
 }
 
 /**
+ * The broker's tick specs for `roots`, as the contract translator records them
+ * (contracts-<broker>.json, `specs`), so the gate has them for entries. By
+ * default every root of the static table, at its values (what the broker reports).
+ */
+function recordBrokerSpecs(home, { roots = null, broker = 'topstepx', specs = {} } = {}) {
+  const { CONTRACT_SPECS } = require('../scripts/lib/trading/contracts');
+  const file = path.join(home, `contracts-${broker}.json`);
+  let data = { ids: {}, front: {} };
+  try {
+    data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (_err) {
+    // a new file
+  }
+  data.specs = data.specs || {};
+  for (const r of roots || Object.keys(CONTRACT_SPECS)) {
+    const t = CONTRACT_SPECS[r] || {};
+    data.specs[r] = { tickSize: t.tickSize, tickValue: t.tickValue, name: `${r}Z6`, description: null, id: `CON.F.US.${r}.Z26`, readAt: '2026-10-07T13:00:00.000Z', ...(specs[r] || {}) };
+  }
+  for (const [r, sp] of Object.entries(specs)) if (!data.specs[r]) data.specs[r] = { name: `${r}Z6`, id: `CON.F.US.${r}.Z26`, readAt: '2026-10-07T13:00:00.000Z', ...sp };
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data));
+  return file;
+}
+
+/**
  * A harness home with a multi-timeframe record (mtf-state.js) and a signal
  * record (signal-state.js) for MNQ, so the gate's trend rule and trigger check
- * have a read. Default: every frame up, orb fired long, closed at closedAt.
+ * have a read, and the broker's tick specs (recordBrokerSpecs; specs: false
+ * leaves them out). Default: every frame up, orb fired long, closed at closedAt.
  */
-function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedAt = '2026-10-07T13:57:00.000Z', symbol = 'MNQ', fired = [{ name: 'orb', direction: 'long' }] } = {}) {
+function trendHome(home = tmpDir(), { biases = { 240: 1, 60: 1, 15: 1 }, closedAt = '2026-10-07T13:57:00.000Z', symbol = 'MNQ', fired = [{ name: 'orb', direction: 'long' }], specs = true } = {}) {
+  // The broker's tick specs, as the translator records them (the gate refuses entries without).
+  if (specs) recordBrokerSpecs(home);
   fs.mkdirSync(path.join(home, 'mtf'), { recursive: true });
   fs.writeFileSync(path.join(home, 'mtf', `${symbol}.json`), JSON.stringify({ symbol, asOf: closedAt, closedAt, biases }));
   // And the signal record (signal-state.js): which rules strategies fired on that bar.
@@ -64,4 +92,4 @@ function entryOrder(extra = {}) {
   return o;
 }
 
-module.exports = { NOW, CONTRACT, minutesAgo, tmpDir, trendHome, writeJournal, plan, placed, review, entryOrder };
+module.exports = { NOW, CONTRACT, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

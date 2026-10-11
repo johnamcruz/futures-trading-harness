@@ -239,6 +239,13 @@ The exit follows the strategy's `exit` (shown in the scan):
 - **Time stop:** with `maxBars`, close at market after that many bars in the
   trade if neither the stop nor the target has filled.
 
+Tick sizes and values are the broker's: the harness records them when
+`search_contracts` or `get_contract` returns the contract, and the gate,
+`order_plan` and the scan use only those. A tool that says there are no tick
+specs from the broker for a contract yet means: look the contract up with
+`search_contracts` (or `get_contract`) first, then ask again; never supply
+tick numbers of your own.
+
 Prices are on the tick (MNQ/MES 0.25). Round a stop away from the entry and a
 target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
 numbers in the rationale and the brackets. The scan's distances are price

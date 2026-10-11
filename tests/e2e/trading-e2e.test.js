@@ -24,7 +24,7 @@ const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/t
 const { scanRecord, appendJsonl } = require('../../scripts/lib/trading/scan-log');
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { tmpDir, writeJournal } = require('../helpers');
+const { tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 const { digest, recentTrades, formSummary } = require('../../scripts/lib/trading/instincts');
 const { readJournal } = require('../../scripts/lib/trading/journal');
 
@@ -35,6 +35,7 @@ const CONTRACT = 'MNQ:2026-06';
 
 test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gate allows the trigger and refuses the rest', async () => {
   const home = tmpDir();
+  recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const dataDir = path.join(home, 'bars');
   const journal = writeJournal(home, []);
   const env = {

@@ -20,7 +20,9 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 
 1. `get_account_snapshot`: confirm the account state matches the plan's
    assumption (e.g. flat). If not, stop and report.
-2. `get_contract`: round entry, stop, and target to `tickSize`. When the plan
+2. `get_contract`: round entry, stop, and target to `tickSize` (the broker's
+   tick specs; the harness records them from this answer, and the gate
+   refuses an entry with `[contract-specs]` until it has them). When the plan
    carries the `place_order` arguments from the harness tool `order_plan`,
    send them as given (with the account's `accountId`): they are already on
    the tick, with the stop on the correct side; don't recompute them.

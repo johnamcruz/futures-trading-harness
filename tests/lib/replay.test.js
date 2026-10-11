@@ -14,6 +14,7 @@ const { decisionPoints, tradingDays, holidayDates } = require('../../scripts/lib
 const { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, DISABLED } = require('../../scripts/lib/replay/config');
 const store = require('../../scripts/lib/replay/store');
 const { seedRunHome, runReplay, withEntry, EOD_RETRIES } = require('../../scripts/lib/replay/driver');
+const { specFor } = require('../../scripts/lib/trading/contracts');
 const { summarize, toMarkdown, toText } = require('../../scripts/lib/replay/report');
 const { openRunnerBroker, wireRunner } = require('../../scripts/lib/runner-wiring');
 
@@ -572,7 +573,7 @@ test('report: month by month, trades from round trips or closing fills, R, stand
     ],
     '2026-04-01': [
       // A broker without round trips: the opening fill's entry gives 1R = 20 ticks x $0.50 = $10.
-      { ran: [{ action: 'manage', ok: false, result: null }], refusals: [{ checks: ['plan-required'] }], trades: [withEntry({ contractId: 'MNQ', orderId: 5, profitAndLoss: null, size: 1, fees: 0.37 }, [{ orderId: 5, setup: 'orb', stopTicks: 20 }])] },
+      { ran: [{ action: 'manage', ok: false, result: null }], refusals: [{ checks: ['plan-required'] }], trades: [withEntry({ contractId: 'MNQ', orderId: 5, profitAndLoss: null, size: 1, fees: 0.37 }, [{ orderId: 5, setup: 'orb', stopTicks: 20 }], specFor)] },
       { ran: [], refusals: [], trades: [{ contractId: 'MNQ', profitAndLoss: 20, fees: 0.37, size: 1 }] },
     ],
   };
