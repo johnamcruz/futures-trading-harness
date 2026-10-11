@@ -95,6 +95,7 @@ test('order_plan: only the strategy\'s own, current bars - another timeframe, a 
   assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 30000) }).args.size, 1, '30 s ahead: planned');
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 120000) }), /more than 1 min after the harness clock .*it hasn't closed/);
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 61000) }), /hasn't closed/, 'just over the minute');
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 - 60000) }).args.size, 1, 'exactly the minute: planned, as the gate accepts it');
   // Older than the gate's signal age (10 min by default; FTH_SIGNAL_MAX_AGE_MIN).
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 11 * 60000) }), /more than 10 min before the harness clock .*fetch current bars/);
   assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, now: () => new Date(end + 180000 + 9 * 60000) }).args.size, 1, 'within the age');

@@ -61,6 +61,7 @@ test('checkTrigger: only the strategy that fired, on its side, on a recent bar; 
   // A record up to FUTURE_TOLERANCE_MIN (1) after now is a broker clock a little ahead: trusted (order_plan shares it).
   assert.strictEqual(FUTURE_TOLERANCE_MIN, 1);
   assert.strictEqual(check({ now: new Date('2026-10-07T13:56:30Z') }), null, '30 s ahead');
+  assert.strictEqual(check({ now: new Date('2026-10-07T13:56:00Z') }), null, 'exactly the minute ahead');
   assert.match(check({ now: new Date('2026-10-07T13:55:59Z') }), /after now/, 'just over a minute ahead');
   assert.match(checkTrigger(tmpDir(), { root: 'MNQ', side: 'buy', strategy: 'orb', now }), /No 3m signal record for MNQ.*bars_fetch \{"symbol": "MNQ", "timeframe": 3\}.*strategies_scan \{"bars": "<that file>", "symbol": "MNQ", "record": true\}/);
   const broken = tmpDir();
