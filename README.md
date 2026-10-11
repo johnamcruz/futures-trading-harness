@@ -513,7 +513,7 @@ rules strategy in sample and reports only its out-of-sample trades. See
 
 ### Operating it
 
-- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: 2000 closed
+- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: the runner's count of closed
   bars to `~/.futures-trading-harness/bars-scratch/MNQ-3m.json` (the harness
   home's own scratch folder, `<FTH_HOME>/bars-scratch`; through the broker adapter; credentials
   from your `.env`, never printed) and the multi-timeframe read recorded for the gate. Interactive

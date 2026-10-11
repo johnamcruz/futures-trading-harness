@@ -100,6 +100,16 @@ test('bars files go only to a .json file under the bars directory, through no sy
   assert.match(outError(path.join(linkedDir, 'MNQ-3m.json'), linkedDir), /is a symlink/);
   await assert.rejects(fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, outDir: linkedDir, out: null }), /--out/);
   assert.deepStrictEqual(fs.readdirSync(elsewhere).sort(), [], 'nothing written through the link');
+  // A directory others can write to (the scratch directory or one below it): refused, as the bars tools refuse reading from it.
+  const open = tmpDir();
+  fs.mkdirSync(path.join(open, 'sub'));
+  fs.chmodSync(open, 0o777);
+  assert.match(outError(path.join(open, 'MNQ-3m.json'), open), /is writable by other users/);
+  fs.chmodSync(open, 0o700);
+  fs.chmodSync(path.join(open, 'sub'), 0o777);
+  assert.match(outError(path.join(open, 'sub', 'MNQ-3m.json'), open), /sub is writable by other users/);
+  fs.chmodSync(path.join(open, 'sub'), 0o755);
+  assert.strictEqual(outError(path.join(open, 'sub', 'MNQ-3m.json'), open), null);
   // A bars directory that belongs to another user (root's /) is refused.
   if (typeof process.getuid === 'function' && process.getuid() !== 0) assert.match(outError('/x.json', '/'), /belongs to another user/);
   // Refused before the broker is asked, and nothing written.

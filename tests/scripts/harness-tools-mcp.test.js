@@ -183,16 +183,8 @@ test('harness-tools server: bars path attacks are refused without echoing a file
   fs.mkdirSync(scratch, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
   const link = path.join(scratch, `${tag}-link.json`);
   const dirLike = path.join(scratch, `${tag}-dir.json`);
-  // A regular bars file in the shared /tmp/fth (where an earlier run, a test, or another home left it): never read.
-  let shared = null;
-  try {
-    fs.mkdirSync('/tmp/fth', { recursive: true, mode: 0o700 });
-    shared = `/tmp/fth/${tag}-stale.json`;
-    fs.copyFileSync(path.join(home, 'bars', 'NQ-3m.csv'), shared.replace(/\.json$/, '.csv'));
-    shared = shared.replace(/\.json$/, '.csv');
-  } catch (_err) {
-    shared = shared || '/tmp/fth/MNQ-3m.json'; // refused by its path alone either way
-  }
+  // A bars file in the shared /tmp/fth (where an earlier run, a test, or another home left one): refused by its path alone.
+  const shared = '/tmp/fth/MNQ-3m.json';
   const big = path.join(home, 'bars', 'big.csv');
   fs.symlinkSync(path.join(home, 'secret.json'), link);
   fs.mkdirSync(dirLike);
@@ -240,7 +232,6 @@ test('harness-tools server: bars path attacks are refused without echoing a file
     await assert.rejects(() => client.request('resources/list', {}), /method not found/);
   } finally {
     client.close();
-    if (shared.includes(tag)) fs.rmSync(shared, { force: true });
   }
 });
 
@@ -275,6 +266,26 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
     assert.strictEqual(capped.isError, true);
     assert.match(capped.text, /strategies_show: the output is 30\d KB, over the 256 KB .* none of it is returned/);
     assert.ok(capped.text.length < 1000, 'never truncated into the reply');
+  } finally {
+    client.close();
+  }
+});
+
+test('harness-tools server: bars_fetch writes where the bars tools read, even when a .env file names another FTH_HOME', { timeout: 120000 }, async () => {
+  // The server's home comes from HOME (no FTH_HOME); the .env bars_fetch loads names another home (whose broker it uses).
+  const user = tmpDir();
+  const other = fixtureHome();
+  const envFile = path.join(user, 'x.env');
+  fs.writeFileSync(envFile, `FTH_HOME=${other}\n`, { mode: 0o600 });
+  const client = server(envFor(other, { HOME: user, FTH_HOME: '', FTH_ENV_FILE: envFile }));
+  try {
+    const fetched = await call(client, 'bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10 });
+    assert.strictEqual(fetched.isError, false, fetched.text);
+    const file = path.join(user, '.futures-trading-harness', 'bars-scratch', 'MNQ-7m.json');
+    assert.ok(fetched.text.includes(` to ${file};`), fetched.text);
+    assert.ok(!fs.existsSync(path.join(other, 'bars-scratch')), 'nothing in the .env file\'s home');
+    const read = await call(client, 'market_snapshot', { bars: file });
+    assert.strictEqual(read.isError, false, read.text);
   } finally {
     client.close();
   }

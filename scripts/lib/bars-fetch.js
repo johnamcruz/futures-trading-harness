@@ -99,8 +99,9 @@ function outError(out, outDir, { tool = false } = {}) {
     if (st.isSymbolicLink()) return refused(`${cur} is a symlink`);
     if (i < parts.length - 1 && !st.isDirectory()) return refused(`${cur} is not a directory`);
     if (i === parts.length - 1 && !st.isFile()) return refused('not a regular file');
-    // A directory someone else made could be switched under us.
+    // A directory someone else made, or others can write to, could be switched under us (and the bars tools would refuse the file: paths.js).
     if (i === -1 && typeof process.getuid === 'function' && st.uid !== process.getuid()) return refused(`${dir} belongs to another user`);
+    if (i < parts.length - 1 && process.platform !== 'win32' && (st.mode & 0o022)) return refused(`${cur} is writable by other users`);
   }
   // And by real path, the file inside the real directory (defense in depth: the walk above already refuses links).
   if (!inside(realish(file), realDir)) return refused('its real path is outside');
