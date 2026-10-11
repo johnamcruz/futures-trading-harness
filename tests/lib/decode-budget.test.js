@@ -281,6 +281,13 @@ test('JSON bars: a byte order mark is skipped; numeric epoch times (pandas to_js
   // Records with a pandas index or yfinance columns (timestamp, Date, Open...) read as CSV would.
   fs.writeFileSync(path.join(dir, 'pandas-index.json'), JSON.stringify(rows.map(r => ({ timestamp: r.time, Open: r.open, High: r.high, Low: r.low, Close: r.close, Volume: r.volume }))));
   assert.strictEqual(loadBars(path.join(dir, 'pandas-index.json')).length, 5);
+  // A first record without the time key doesn't make the rest a table; unreadable records are refused, with the file named.
+  fs.writeFileSync(path.join(dir, 'note-first.json'), JSON.stringify([{ note: 'x' }, { t: '2026-01-02T14:00:00Z', open: 1, high: 2, low: 0.5, close: 1 }]));
+  assert.strictEqual(loadBars(path.join(dir, 'note-first.json')).length, 1);
+  fs.writeFileSync(path.join(dir, 'bad-records.json'), JSON.stringify([{ timestamp: '2026-01-02T14:00:00Z', open: 'x', high: 1, low: 1, close: 1 }]));
+  assert.throws(() => loadBars(path.join(dir, 'bad-records.json')), /bad-records\.json: none of its 1 bars has a readable time, open, high, low and close$/);
+  fs.writeFileSync(path.join(dir, 'no-time.json'), JSON.stringify([{ open: 1, high: 2, low: 0.5, close: 1, secret: 'x' }]));
+  assert.throws(() => loadBars(path.join(dir, 'no-time.json')), /no-time\.json: the data needs time, open, high, low, close columns \(found: open, high, low, close, and 1 other column\(s\)\)$/);
   fs.writeFileSync(path.join(dir, 'empty.json'), '[]');
   assert.deepStrictEqual(loadBars(path.join(dir, 'empty.json')), [], 'an empty file is empty, not an error');
 });

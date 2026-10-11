@@ -103,9 +103,20 @@ const stripBom = text => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
  */
 function jsonBars(parsed, label) {
   const raw = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.bars) ? parsed.bars : null;
-  // Records with other column names (timestamp, Date, Open...: a pandas index, yfinance) read as a table, as CSV does.
-  const first = raw && raw.find(b => b && typeof b === 'object');
-  if (first && !Array.isArray(first) && !('t' in first) && !('time' in first)) return normalizeBars(tableToBars(Object.keys(first), raw.filter(b => b && typeof b === 'object')));
+  // Records with other column names (timestamp, Date, Open...: a pandas index, yfinance) read as a table, as CSV
+  // does, when no record has a t or time key (then the column names come from the first record that has a time column).
+  const objects = raw ? raw.filter(b => b && typeof b === 'object' && !Array.isArray(b)) : [];
+  if (objects.length && !objects.some(b => 't' in b || 'time' in b)) {
+    const named = objects.find(b => Object.keys(b).some(k => TIME_NAMES.includes(String(k).trim().toLowerCase()))) || objects[0];
+    let bars;
+    try {
+      bars = normalizeBars(tableToBars(Object.keys(named), objects));
+    } catch (err) {
+      throw new Error(`${label}: ${err.message}`, { cause: err });
+    }
+    if (!bars.length) throw new Error(`${label}: none of its ${objects.length} bars has a readable time, open, high, low and close`);
+    return bars;
+  }
   const epoch = b => {
     const t = b && typeof b === 'object' ? (b.t ?? b.time) : undefined;
     if (typeof t !== 'number' || !Number.isFinite(t)) return b;
