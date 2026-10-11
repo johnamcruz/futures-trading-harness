@@ -7,7 +7,7 @@
  * while one runs: it records every bar's read and signals itself).
  *
  *   processCommand(pid, { spawn })   the process's command line, '' when it is gone, null when unknown
- *   lockHolderAlive(lock, { self })  the pid exists and (where its command can be read) runs scripts/autotrader.js
+ *   lockHolderAlive(lock, { self })  the pid exists and (where its command can be read) runs the autotrader script
  *   liveRunner(env)                  the live runner's pid from its lock, or null
  */
 
@@ -16,8 +16,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { harnessHome } = require('./paths');
 
-// The runner's own script on its command line (node .../scripts/autotrader.js ...), not any mention of the word.
-const AUTOTRADER = /scripts[\\/]autotrader\.js(\s|$)/;
+// The runner's script as an argument of its command line (node .../scripts/autotrader.js, node autotrader.js
+// from scripts/, node scripts/autotrader), not any mention of the word (autotrader.log, notes-about-autotrader).
+const AUTOTRADER = /(^|[\s\\/])autotrader(\.js)?(\s|$)/;
 
 const lockFile = env => path.join(harnessHome(env), 'autotrader.lock');
 

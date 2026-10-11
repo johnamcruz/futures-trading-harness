@@ -197,6 +197,9 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   assert.strictEqual(bogus.status, 1);
   assert.match(bogus.stderr, /--once must be premarket, trade, or eod/);
   assert.doesNotMatch(bogus.stderr, /harness tools server/);
+  const bare = spawnSync(process.execPath, [cli, '--config', config, '--once'], { encoding: 'utf8', env, timeout: 30000 });
+  assert.strictEqual(bare.status, 1, 'a bare --once never starts the live loop');
+  assert.match(bare.stderr, /--once must be premarket, trade, or eod/);
   const eod = spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod'], { encoding: 'utf8', env });
   assert.strictEqual(eod.status, 0, eod.stderr);
   assert.match(eod.stderr, /\[autotrader\] warning: the harness tools server/);

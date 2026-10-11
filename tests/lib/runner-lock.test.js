@@ -28,7 +28,9 @@ test('lockHolderAlive: an autotrader is live; another program, a dead pid, itsel
   for (const cmd of ['vim notes-about-autotrader.txt', 'node /x/scripts/autotrader.jsx', 'tail -f autotrader.log']) {
     assert.strictEqual(lockHolderAlive(live, { self: null, command: () => cmd }), false, cmd);
   }
-  assert.strictEqual(lockHolderAlive(live, { self: null, command: () => 'C:\\h\\scripts\\autotrader.js' }), true);
+  for (const cmd of ['C:\\h\\scripts\\autotrader.js', 'node autotrader.js --config a.json', 'node scripts/autotrader --config a.json', 'node /x/scripts/autotrader.js']) {
+    assert.strictEqual(lockHolderAlive(live, { self: null, command: () => cmd }), true, cmd);
+  }
   assert.strictEqual(lockHolderAlive(live, { self: null, command: () => null }), true, 'unknown command: assume live (fail closed)');
   assert.strictEqual(lockHolderAlive(live), false, 'its own lock');
   assert.strictEqual(lockHolderAlive({ pid: 2 ** 30 }, { self: null, command: () => 'autotrader' }), false, 'gone');

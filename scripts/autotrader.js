@@ -310,7 +310,8 @@ async function main(argv) {
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
   // The harness tools server the cycles use answers with the registry's tools; else no trading (harness-tools/preflight.js).
-  if (arg(argv, '--once') !== undefined && !['premarket', 'trade', 'eod'].includes(arg(argv, '--once'))) throw new Error('--once must be premarket, trade, or eod');
+  // A bare --once is refused too: asked for one cycle, never the live loop.
+  if (argv.includes('--once') && !['premarket', 'trade', 'eod'].includes(arg(argv, '--once'))) throw new Error('--once must be premarket, trade, or eod');
   const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once, killSwitchFile });
   // A replay step is a pass of the live loop: like it, a failure turns trading off and end of day still runs.
   if (!opts.dryRun && arg(argv, '--once')) await preflight(resolveClock(process.env, { testClock: false }).replay ? null : arg(argv, '--once'));
