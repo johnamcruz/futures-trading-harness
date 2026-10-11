@@ -21,6 +21,7 @@ broker.
   gate checks refuse it).
 - Setting up a replay broker, starting a replay, resuming one, or reading its
   report.
+- Turning a run into labels for training a student policy (step 10).
 - Not inside an autonomous cycle: replays, like backtests and training, are
   the user's to start. An agent may explain and prepare the config.
 
@@ -94,6 +95,44 @@ broker.
    after the first step created the home (`run --max-cycles 1`), then resume:
    `FTH_HOME=<workDir>/<runId> FTH_BROKERS_FILE=<workDir>/<runId>/brokers.json FTH_BROKER=<replay broker> FTH_REPLAY_NOW=<start, UTC> node scripts/combine.js start --account topstep_100k`.
 
+10. **Labels.** `node scripts/replay.js labels <run dir>` turns a run into
+   the labels a student policy learns from (any harness, any model): one
+   per decision time and symbol in `<run dir>/labels.jsonl`, with
+   `labels-summary.json`, never in the repository. Each holds the bar's
+   candidates; the teacher's action (`none`, `long`, `short` flat; `hold`,
+   `tighten`, `exit` in a trade), its setup, its stop as a multiple of
+   ATR(20) on bars closed by then, its size as a step of the budget
+   (`--budget USD`; unknown without it); the gate's answer (refused intents
+   kept and flagged; a refused try then an allowed retry is one decision);
+   the trade's outcome from the fills; and, for a skipped candidate or one
+   on a bar no cycle ran, the counterfactual: the strategy's own trade with
+   the brackets `order_plan` would place, filled by the backtester's
+   simulated broker (next-open fill plus a tick, stop before target in a
+   bar, flat at end of day; pass the data the run replayed with
+   `--bars MNQ=<file>`, else the run home's bars). Label a run only once
+   it is finished: the labels hold what came after each decision, and the
+   command refuses an unfinished run unless `--out` names a folder outside
+   its run home. A run counts as finished once the driver ran every
+   decision time of its window (`finished` in its manifest); a run made
+   before the driver recorded that has no flag and can only be labelled
+   with `--out` (resuming it is refused once skills changed: they are in
+   its config hash). A refused try followed by one that went through is one
+   decision (the refused tries counted); an intent the gate or the broker
+   refused gets its candidates' counterfactual too. Candidates are only
+   what the teacher could trade (a paper strategy is left out unless the
+   run is in paper mode, where no flat decision is a skip); a flat cycle
+   with a resting order or a manage-only cycle is no skip, and the
+   strategies a failed policy screen names are no candidates. Decisions the student can't express (limit or
+   stop entries, a target other than the strategy's own exit as
+   `order_plan` places it, adds, partial exits) are counted, not cloned.
+   Read the printed counts (taken, unknownOutcome (an entry whose call
+   timed out with no broker record or fill: never counted as taken), skipped, refused, wins, losses,
+   skipped-would-have-won and -lost, uncloneable, unmapped, unsimulated)
+   before training on a run. An exit by `close_position` shows only when
+   the harness's transcript names tool calls (Claude Code, Codex, Qwen
+   Code, opencode); a custom harness printing plain text shows it as a
+   hold.
+
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
 next run resumes. One driver runs a run at a time (a lock in its folder).
@@ -122,6 +161,7 @@ node scripts/replay.js points --config replay.json    # decision times per day (
 node scripts/replay.js run --config replay.json --max-cycles 50
 node scripts/replay.js run --config replay.json       # resumes after the last decision time done
 node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03
+node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
 ```
 
 ```text

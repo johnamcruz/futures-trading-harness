@@ -142,3 +142,51 @@ test('summarize: an opencode transcript counts its tools, its orders (refused on
   assert.deepStrictEqual(toolCalls(other).map(c => c.name), ['github_create_issue']);
   assert.deepStrictEqual(toolCalls(JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'broker_place_order', state: { input: {} } } })), []);
 });
+
+test('toolCalls: calls that came back an error are failed in every format; a call opencode stopped itself is stopped', () => {
+  // opencode: one its permission rules denied, one it doesn't have (stopped: no tool saw them), one the tool answered with an error.
+  const oc = (tool, state) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state } });
+  const opencode = [
+    oc('bash', { status: 'error', input: { command: 'rm -rf /' }, error: 'The user has specified a rule which prevents you from using this specific tool call. Try a different approach.' }),
+    oc('strategies_show', { status: 'error', input: {}, error: "Model tried to call unavailable tool 'invalid'." }),
+    oc('broker_place_order', { status: 'error', input: { size: 1 }, error: 'order gate refused' }),
+  ].join('\n');
+  assert.deepStrictEqual(toolCalls(opencode).map(c => [c.name, Boolean(c.failed), Boolean(c.stopped)]), [['bash', true, true], ['strategies_show', true, true], ['mcp__broker__place_order', true, false]]);
+  // Claude: an is_error tool_result.
+  const claude = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'mcp__broker__place_order', input: {} }, { type: 'tool_use', id: 'b', name: 'mcp__broker__get_bars', input: {} }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'invalid arguments' }, { type: 'tool_result', tool_use_id: 'b', content: '[]' }] } }),
+  ].join('\n');
+  assert.deepStrictEqual(toolCalls(claude).map(c => Boolean(c.failed)), [true, false]);
+  // Codex: a failed MCP call.
+  const codex = [{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: {}, status: 'failed' } },
+    { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {}, status: 'completed' } }].map(x => JSON.stringify(x)).join('\n');
+  assert.deepStrictEqual(toolCalls(codex).map(c => Boolean(c.failed)), [true, false]);
+  // Codex announces each item before it completes: counted once; an error or an isError result is failed.
+  const ev = (type, item) => JSON.stringify({ type, item: { id: 'm1', type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: { size: 1 }, ...item } });
+  const twice = [ev('item.started', { status: 'in_progress' }), ev('item.updated', { status: 'in_progress' }), ev('item.completed', { status: 'completed', result: { isError: true, content: [] } })].join('\n');
+  assert.deepStrictEqual(toolCalls(twice).map(c => [c.name, Boolean(c.failed)]), [['mcp__broker__place_order', true]]);
+  assert.deepStrictEqual(summarize(twice).orders.length, 1);
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'completed', error: { message: 'refused' } }))[0].error, 'refused');
+  // A call still in flight when the turn ended (only started) still counts, once.
+  const inFlight = [ev('item.started', { status: 'in_progress' }), ev('item.updated', { status: 'in_progress' })].join('\n');
+  assert.deepStrictEqual(toolCalls(inFlight).map(c => [c.name, Boolean(c.failed)]), [['mcp__broker__place_order', false]]);
+  assert.strictEqual(summarize(inFlight).orders.length, 1);
+  // Without an id, only the completed form counts.
+  const noId = (type, status) => JSON.stringify({ type, item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {}, status } });
+  assert.strictEqual(toolCalls([noId('item.started', 'in_progress'), noId('item.completed', 'completed')].join('\n')).length, 1);
+  // The error text: a refusal returned as the result's content; an error object without a message.
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'failed', result: { content: [{ type: 'text', text: 'Blocked by trading harness' }] } }))[0].error, 'Blocked by trading harness');
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'failed', error: { code: 7 } }))[0].error, '{"code":7}');
+  // opencode: a call the user rejected when asked never reached a tool either.
+  const rejected = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: {}, error: 'The user rejected permission to use this specific tool call.' } } });
+  assert.strictEqual(toolCalls(rejected)[0].stopped, true);
+});
+
+test('toolCalls: Codex items with no event type count; an opencode call that errored keeps its error text', () => {
+  const item = { type: 'mcp_tool_call', server: 'broker', tool: 'place_order', arguments: { size: 1 }, status: 'completed' };
+  assert.deepStrictEqual(toolCalls(JSON.stringify({ item })).map(c => c.name), ['mcp__broker__place_order'], 'no id, no type');
+  assert.deepStrictEqual(toolCalls(JSON.stringify({ item: { ...item, id: 'x' } })).map(c => c.name), ['mcp__broker__place_order'], 'an id, no type');
+  const oc = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_close_position', state: { status: 'error', input: {}, error: 'PositionNotFound: no open position' } } });
+  assert.deepStrictEqual(toolCalls(oc).map(c => [c.name, c.failed, c.error]), [['mcp__broker__close_position', true, 'PositionNotFound: no open position']]);
+});

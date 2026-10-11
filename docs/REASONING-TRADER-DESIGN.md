@@ -3,7 +3,9 @@
 Status: stage 1 (replay) is built: the replay driver (`scripts/replay.js`,
 `scripts/lib/replay/`), the replay clock (`scripts/lib/trading/harness-now.js`)
 and the simulated-broker module the replay broker's fills are ported from.
-Stage 2 is design only, built if stage 1 shows an edge.
+Stage 2's first piece, the labeler (`scripts/lib/replay/labels.js`,
+`node scripts/replay.js labels <run dir>`), is built; the rest of stage 2
+is design only, built if stage 1 shows an edge.
 
 ## The problem
 
@@ -311,6 +313,121 @@ to the budget's step). Decisions the student can't express (limit or stop
 entries, targets) are kept out of cloning and counted; the report gives the
 coverage.
 
+### Labels (built)
+
+`node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file] [--out dir]`
+(`scripts/lib/replay/labels.js`, `counterfactual.js`) writes
+`<run dir>/labels.jsonl` and `labels-summary.json`, in the run's own folder
+(refused inside the repository; a run the driver hasn't marked finished,
+`finished` in its manifest once every decision time of the window ran, is
+labelled only with `--out` outside its run home: the labels hold what came
+after each decision, which a resumed teacher could read there), and prints
+the coverage. Model-neutral: it
+reads only what every replay writes (the day files, the cycle files'
+context and transcript, the gate's log, the scans log, the bars, the
+fills). One label per decision time and symbol:
+
+- `decision`: `flat` or `in-trade` (a trade or manage cycle ran for the
+  symbol: the teacher decided; the position is what the cycle's context
+  showed, else the fills through t), `no-cycle` (a trade time with no cycle
+  for it: counted, not a teacher decision), `housekeeping` (premarket, end
+  of day), `kill-switch` (a trade time while the run's kill switch was on).
+  Interrupted lines are labelled and flagged; torn lines counted. A failed
+  or timed-out cycle, or one with no cycle log line, is never cloned and
+  never a skip; so is a flat label with a resting order (`working order`:
+  the cycle ran for it; the count is the account's, so while another
+  symbol holds a position its brackets explain it and no flag is set), of
+  a manage-only cycle (`manage-only`: the day's cycle cap was reached, no
+  new entry allowed), of a paper-mode run (`paper mode`: the gate refuses
+  every live entry; the teacher journals plans), or of a cycle whose
+  policy screen failed without naming its strategies (`policy screen
+  failed`; when the runner names them, only their candidates are dropped:
+  plain strategies still trade).
+- `candidates`: what the scan fired on the decision's bar, with direction
+  (only scans logged by t), that the teacher could trade: a strategy whose
+  status isn't active (paper: the gate refuses its entries, the runner
+  starts no cycle for it) is left out unless the run is in paper mode
+  (where no flat decision is a skip), and
+  a no-cycle bar the runner's scan decided not to run on has none.
+- `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
+  and no entry is a skip), `hold` / `tighten` / `exit` in a trade (a
+  modify that widens the working stop the context showed is flagged, one
+  against an unknown stop too); the
+  setup tag; the stop in ticks, points, and the nearest of 0.5, 0.75, 1,
+  1.5, 2, 3 x ATR(20) on bars closed by t, the student's own ATR
+  (`rl/observation.js` atr20: Wilder over the whole series; null and
+  counted when there are too few, or when the stop is under 0.375 or over 4.5 ATR: out
+  of range, never snapped to an end bucket), from the order alone (never its fill); the size as a
+  step (0.25, 0.5, 0.75, 1) of the budget given with `--budget` (a prop
+  attempt's budget needs its whole state at t, which the run doesn't
+  record: without `--budget` the step is null and counted), with the
+  order's own contract's tick value (NQ on an MNQ run) as the run's broker
+  reported it (`contracts-<broker>.json` in the run home), else the static
+  table; a broker spec unlike the table is measured with the table and
+  flagged, as live refuses entries on it (`provenance.specs`: broker, table
+  or mismatch); the raw orders. The
+  entry that counts is the last one the broker accepted, else the last one
+  the gate let through and the broker didn't refuse, else the last one sent
+  (refused tries before it, by the gate or by the broker's guardrails in
+  its journal, are one decision with it, counted in `priorRefusals`; only
+  several entries that went through are "several entries"). An exit or a
+  tighten is chosen the same way. Orders are the gate's records
+  in the cycle's window (place, modify, cancel, partial close) joined to
+  the transcript's calls for their arguments; an order the gate allowed and
+  the gateway's order tracker then refused is one refused order;
+  `close_position` isn't gated (`ungated`), so an exit by it is seen only in
+  a parsed transcript. A modify or cancel naming no contract goes to its
+  order id's contract (the broker's journal), else, with several symbols,
+  every label of the cycle is flagged. Gate records outside every cycle are
+  counted. The strategies are the caller's (the repository's and its
+  `FTH_STRATEGIES_DIRS`): run it with the run's settings (the hash is in the
+  provenance). A fill that reverses a position through flat is read as its
+  close only (round trips don't split it).
+- `gate`: allowed, refused (with checks, and `by`: the gate, another hook,
+  the client (a gated call with no gate record never reached the gateway),
+  or the broker with its reason (an exit whose call timed out but whose
+  closing fill, not a bracket's, shows it went through is allowed; a client
+  timeout with nothing to show is unknown and never cloned, and an entry so is
+  `outcome: unknown`, counted as `unknownOutcome`, never taken): the replay broker's journal, matched by rationale,
+  contract and replayed time, or a call that came back an error with no
+  journal record), not-logged (a call no gate record names: never taken,
+  never cloned), none; refused intents are kept and flagged, for the
+  cloning config to decide. Flat, a modify or a cancel of a working order
+  is a decision of its own: never a skip, never cloned.
+- `outcome`: the round trip from the broker's fills (P&L, net of every
+  fill's fees, R from the initial stop, MAE and MFE in R when the broker
+  sends them, win or loss).
+- `counterfactual(s)`: for a skipped candidate, a refused intent's
+  candidates, or one fired on a no-cycle bar (`counterfactualFor` says
+  which), what the strategy's own trade would have done: the brackets
+  order_plan would place (the scan's stop ceiled to ticks, the exit block's
+  target in ticks from the placed stop, floored), filled and managed by the
+  backtester's simulated broker (a market entry at the next bar's open plus
+  a tick of slippage; the stop checked before the target in a bar; trail
+  and max bars at the close; flat at the end-of-day bar's close), on the
+  run's bars or the data the run replayed (`--bars`). It is its own walk,
+  not a backtest run (no gate, no other positions). For a taken entry the
+  same fields come from its fills (MAE/MFE, when the broker sends none,
+  from the bars wholly inside the trade and its exit price). A no-cycle bar
+  while a position is open (by the fills) gets none. The one standing for
+  the label is a taken trade's own, a refused intent's own setup and side,
+  else the first candidate with a stop distance. So a skilful skip (a loser
+  avoided) can be told from a cautious one (a winner missed). What can't be
+  simulated is marked and counted.
+- `clone`: whether the student can express it (limit or stop entries, a
+  target other than the strategy's own exit as order_plan places it,
+  several entries, adds, partial exits, unknown arguments, an unmapped stop
+  stay out), and why. `teacher.target` says whose target a bracket is.
+- provenance: harness, model, config hash, the strategies' hash (the files
+  the counterfactuals read), prompt hash, the cycle file.
+
+Decision-time fields never read anything after t; outcomes and
+counterfactuals are what came after, only in their own fields. The same
+files give the same labels (idempotent). Limitation: the runner's bars file
+keeps the last `bars` bars, so a long run's earliest days may have no ATR
+or counterfactual bars in the run home: pass the replayed data with
+`--bars`, and read the counts.
+
 ### Training
 
 1. **Behaviour cloning** on the train window's labels: the policy learns to
@@ -347,7 +464,11 @@ live record.
   interface.
 - The `replay` skill tells agents how to configure, run, resume and read a
   replay (the user's to start); `policy-training` points to it.
-- Stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
+- Stage 2's labeler: `scripts/lib/replay/labels.js` and `counterfactual.js`
+  (tests in `tests/lib/replay-labels.test.js`,
+  `tests/lib/replay-counterfactual.test.js`, and the replay end-to-end
+  test), through `replay.js labels`.
+- The rest of stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
   `scripts/lib/rl/` (observation, env server), with tests in both.
 
 ## Plan
@@ -356,12 +477,14 @@ live record.
 2. The replay clock. Done.
 3. The replay broker (backtester-mcp, its own repo). Done.
 4. The replay driver, store and report. Done.
-5. Leakage tests, then one month in the train window, the New York session,
+5. Labels from a run (the labeler, with counterfactuals for what the
+   teacher didn't take). Done.
+6. Leakage tests, then one month in the train window, the New York session,
    with the report.
-6. A replay of the select window. **Decision point**, on the select window
+7. A replay of the select window. **Decision point**, on the select window
    only: build stage 2 if the reasoning trader beats the rules baseline and
    the current policy there.
-7. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
+8. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
    then the one out-of-sample look.
 
 Not built yet: a prop attempt started per run (today a run's prop strategies

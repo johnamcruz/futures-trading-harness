@@ -27,20 +27,22 @@ const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
-const { documents, unwrap, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall } = require('./transcript');
+const { documents, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 
 /**
  * Every tool call in a transcript (Claude stream-json, Codex --json, Qwen's JSON array, opencode's JSON
- * events, its MCP tools named mcp__<server>__<tool>): [{ name, input }].
+ * events, its MCP tools named mcp__<server>__<tool>): [{ name, input, failed?, error?, stopped? }] (error: the
+ * failed call's answer, cut to 300 characters).
  * A call through a bridge wrapper (Qwen's tool_call, transcript.js BRIDGE_TOOLS) counts as the tool it
  * reaches, with that tool's arguments; one the bridge refused never reached the tool and isn't counted.
  */
 function toolCalls(output) {
   const calls = [];
   const byId = new Map();
+  const codexById = new Map();
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
       if (!ev || typeof ev !== 'object') continue;
@@ -48,7 +50,7 @@ function toolCalls(output) {
       if (isOpencodeEvent(ev)) {
         if (ev.type === 'tool_use' && ev.part.type === 'tool') {
           const { name, input, result } = opencodeCall(ev.part);
-          calls.push({ name, input, ...(result && result.isError ? { failed: true } : {}) });
+          calls.push({ name, input, ...(result && result.isError ? { failed: true, error: String(result.text || '').slice(0, 300) } : {}), ...(opencodeStopped(ev.part) ? { stopped: true } : {}) });
         }
         continue;
       }
@@ -62,16 +64,39 @@ function toolCalls(output) {
           if (c.id !== undefined && c.id !== null) byId.set(c.id, call);
         } else if (c && c.type === 'tool_result' && byId.has(c.tool_use_id)) {
           if (bridgeRefused(byId.get(c.tool_use_id), c)) byId.get(c.tool_use_id).refused = true;
+          else if (c.is_error === true) Object.assign(byId.get(c.tool_use_id), { failed: true, error: resultText(c.content).slice(0, 300) });
         }
       }
-      // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }
-      const item = ev.item;
-      if (item && item.type === 'command_execution') calls.push({ name: 'Bash', input: { command: item.command } });
-      if (item && item.type === 'mcp_tool_call') calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {} });
+      // Codex --json: { type: 'item.started' | 'item.updated' | 'item.completed', item: { id, type: 'command_execution' |
+      // 'mcp_tool_call', ... } }. One call per item id, its latest form (a call still in flight when the turn
+      // ended, only started, still counts); an item with no id counts once it completed.
+      const item = /^item\.(started|updated|completed)$/.test(String(ev.type)) || ev.type === undefined ? ev.item : null;
+      if (!item || !['command_execution', 'mcp_tool_call'].includes(item.type)) continue;
+      if ((item.id === undefined || item.id === null) && !(ev.type === 'item.completed' || ev.type === undefined)) continue;
+      let call;
+      if (item.type === 'command_execution') call = { name: 'Bash', input: { command: item.command } };
+      else {
+        // An error: a failed status, an error, or a result the tool marked as one (isError).
+        const failed = item.status === 'failed' || Boolean(item.error) || Boolean(item.result && typeof item.result === 'object' && (item.result.isError || item.result.is_error));
+        const error = !failed ? '' : item.error ? String(item.error.message || JSON.stringify(item.error)) : resultText(item.result && typeof item.result === 'object' ? item.result.content : item.result);
+        call = { name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {}, ...(failed ? { failed: true, error: error.slice(0, 300) } : {}) };
+      }
+      const key = item.id !== undefined && item.id !== null ? `codex:${item.id}` : null;
+      if (key && codexById.has(key)) {
+        const prev = codexById.get(key);
+        for (const k of Object.keys(prev)) delete prev[k];
+        Object.assign(prev, call);
+      } else {
+        calls.push(call);
+        if (key) codexById.set(key, call);
+      }
     }
   }
-  // failed: the harness reported the call errored (opencode): still a call, but a skill it failed to load isn't loaded.
-  return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {}, ...(c.failed ? { failed: true } : {}) }));
+  // failed: the call came back an error (opencode's error status, a Claude/Qwen is_error result, a Codex
+  // failed status, error or isError result): still a call; a skill load that failed isn't counted from the
+  // calls (summarize's text fallback may still find its name in the transcript). stopped: opencode stopped it
+  // itself (an unavailable tool, a permission rule), so no tool (no broker) ever saw it; still counted here.
+  return calls.filter(c => !c.refused).map(c => ({ name: c.name, input: c.input && typeof c.input === 'object' ? c.input : {}, ...(c.failed ? { failed: true, error: c.error || '' } : {}), ...(c.stopped ? { stopped: true } : {}) }));
 }
 
 /** The parsed summary of one cycle's transcript. */
