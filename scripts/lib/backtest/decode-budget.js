@@ -16,7 +16,8 @@
  */
 
 const MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024;
-const MAX_DECODED_VALUES = 50 * 1000 * 1000;
+// About 70 bytes a decoded value: 10M values (2M bars of 5 columns) stay well under a gigabyte.
+const MAX_DECODED_VALUES = 10 * 1000 * 1000;
 
 class DecodeBudgetError extends Error {}
 
@@ -24,7 +25,7 @@ function createBudget({ bytes = MAX_DECOMPRESSED_BYTES, values = MAX_DECODED_VAL
   let left = bytes;
   let valuesLeft = values;
   const refuse = (what, limit) => new DecodeBudgetError(`${what}: the file decodes to more than ${limit} (a decompression bomb, or a file too large to read): refused`);
-  const mb = `${Math.round(bytes / 1024 / 1024)} MB`;
+  const mb = bytes >= 1024 * 1024 ? `${Math.round(bytes / 1024 / 1024)} MB` : `${bytes} bytes`;
   return {
     get left() { return left; },
     take(what, n) {

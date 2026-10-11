@@ -189,6 +189,7 @@ function decompress(codec, buf, outLen, budget) {
 
 /** RLE / bit-packed hybrid: `count` values of `width` bits from buf[pos..end). */
 function rleHybrid(buf, pos, end, width, count) {
+  if (!(Number.isInteger(width) && width >= 0 && width <= 32)) throw new Error('parquet: a bit width over 32');
   const out = new Array(count);
   const r = new Reader(buf, pos);
   const byteWidth = Math.ceil(width / 8);
@@ -202,15 +203,18 @@ function rleHybrid(buf, pos, end, width, count) {
       r.pos += byteWidth;
       for (let k = 0; k < run && n < count; k += 1) out[n++] = v;
     } else {
-      const total = (header >> 1) * 8;
-      let bit = 0;
+      const groups = Math.floor(header / 2);
       const start = r.pos;
-      for (let k = 0; k < total; k += 1) {
+      // The groups must be in the data; decode only the values still wanted.
+      if (start + groups * width > end) throw new Error('parquet: truncated level or index data');
+      const take = Math.min(groups * 8, count - n);
+      let bit = 0;
+      for (let k = 0; k < take; k += 1) {
         let v = 0;
         for (let b = 0; b < width; b += 1, bit += 1) if (buf[start + (bit >> 3)] & (1 << (bit & 7))) v |= 1 << b;
-        if (n < count) out[n++] = v;
+        out[n++] = v;
       }
-      r.pos = start + (header >> 1) * width;
+      r.pos = start + groups * width;
     }
   }
   if (n < count) throw new Error('parquet: truncated level or index data');
@@ -223,12 +227,18 @@ function bitWidth(max) {
   return w;
 }
 
-/** DELTA_BINARY_PACKED: returns { values (BigInt), pos }. */
-function deltaBinary(buf, pos) {
+/** DELTA_BINARY_PACKED: returns { values (BigInt), pos }; at most `max` values (the page's count). */
+function deltaBinary(buf, pos, max = Infinity) {
   const r = new Reader(buf, pos);
   const blockSize = Number(r.varint());
   const miniblocks = Number(r.varint());
   const total = Number(r.varint());
+  // The format's own bounds (block size a multiple of 128, miniblocks of a multiple of 32 values), and no
+  // more values than the page says it holds.
+  if (!(blockSize > 0 && blockSize % 128 === 0 && blockSize <= 1 << 20 && miniblocks > 0 && blockSize % miniblocks === 0 && (blockSize / miniblocks) % 32 === 0)) {
+    throw new Error('parquet: a malformed delta encoding header');
+  }
+  if (!(Number.isInteger(total) && total >= 0 && total <= max)) throw new Error('parquet: a delta encoding with more values than its page');
   let last = r.zigzag();
   const values = total > 0 ? [last] : [];
   const perMini = blockSize / miniblocks;
@@ -236,8 +246,11 @@ function deltaBinary(buf, pos) {
     const minDelta = r.zigzag();
     const widths = [];
     for (let k = 0; k < miniblocks; k += 1) widths.push(r.byte());
+    if (r.pos > buf.length) throw new Error('parquet: truncated delta encoding');
     for (let m = 0; m < miniblocks; m += 1) {
       const w = widths[m];
+      if (w > 64) throw new Error('parquet: a delta bit width over 64');
+      if (r.pos + (perMini * w) / 8 > buf.length) throw new Error('parquet: truncated delta encoding');
       const start = r.pos;
       for (let k = 0; k < perMini; k += 1) {
         let v = 0n;
@@ -276,7 +289,7 @@ function plain(buf, pos, type, count, typeLength) {
   return out;
 }
 
-function decodeValues(buf, pos, end, encoding, col, count, dict) {
+function decodeValues(buf, pos, end, encoding, col, count, dict, budget = createBudget()) {
   switch (encoding) {
     case ENC.PLAIN: return plain(buf, pos, col.type, count, col.typeLength);
     case ENC.PLAIN_DICTIONARY:
@@ -289,22 +302,24 @@ function decodeValues(buf, pos, end, encoding, col, count, dict) {
       if (col.type !== TYPE.BOOLEAN) throw new Error('parquet: RLE values are only supported for booleans');
       return rleHybrid(buf, pos + 4, end, 1, count).map(Boolean);
     case ENC.DELTA_BINARY_PACKED: {
-      const v = deltaBinary(buf, pos).values;
+      const v = deltaBinary(buf, pos, count).values;
       return col.type === TYPE.INT32 ? v.map(Number) : v;
     }
     case ENC.DELTA_LENGTH_BYTE_ARRAY: {
-      const { values: lens, pos: p0 } = deltaBinary(buf, pos);
+      const { values: lens, pos: p0 } = deltaBinary(buf, pos, count);
       let p = p0;
       return lens.map(l => { const n = Number(l); const s = buf.subarray(p, p + n); p += n; return s; });
     }
     case ENC.DELTA_BYTE_ARRAY: {
-      const { values: prefix, pos: p1 } = deltaBinary(buf, pos);
-      const { values: suffix, pos: p2 } = deltaBinary(buf, p1);
+      const { values: prefix, pos: p1 } = deltaBinary(buf, pos, count);
+      const { values: suffix, pos: p2 } = deltaBinary(buf, p1, count);
       let p = p2;
       let prev = Buffer.alloc(0);
       return prefix.map((pl, k) => {
         const n = Number(suffix[k]);
-        const v = Buffer.concat([prev.subarray(0, Number(pl)), buf.subarray(p, p + n)]);
+        const keep = Math.max(0, Math.min(Number(pl), prev.length));
+        budget.take('parquet', keep + Math.min(n, Math.max(0, buf.length - p))); // each value is a new buffer
+        const v = Buffer.concat([prev.subarray(0, keep), buf.subarray(p, p + n)]);
         p += n;
         prev = v;
         return v;
@@ -371,6 +386,9 @@ function readColumnChunk(buf, chunk, col, budget) {
     const compressed = header[3];
     const uncompressed = header[2];
     const type = header[1];
+    // Sizes from the file: never negative, and every page moves forward inside the file.
+    if (!(Number.isInteger(compressed) && compressed >= 0 && Number.isInteger(uncompressed) && uncompressed >= 0)) throw new Error('parquet: a page with a negative size');
+    if (dataStart + compressed > buf.length || dataStart + compressed <= pos) throw new Error('parquet: a page outside the file');
     pos = dataStart + compressed;
     if (type === PAGE.DICTIONARY) {
       budget.count('parquet', Number(header[7][1]));
@@ -389,7 +407,7 @@ function readColumnChunk(buf, chunk, col, budget) {
         p = 4 + len;
       }
       const present = defs ? defs.filter(d => d === 1).length : n;
-      const vals = decodeValues(page, p, page.length, h[2], col, present, dict);
+      const vals = decodeValues(page, p, page.length, h[2], col, present, dict, budget);
       let k = 0;
       for (let j = 0; j < n; j += 1) values.push(defs && defs[j] === 0 ? null : vals[k++]);
       seen += n;
@@ -404,7 +422,7 @@ function readColumnChunk(buf, chunk, col, budget) {
       const defs = col.optional && defLen ? rleHybrid(buf, levels, levels + defLen, bitWidth(1), n) : null;
       const body = buf.subarray(dataStart + repLen + defLen, dataStart + compressed);
       const page = h[7] === false ? body : decompress(codec, body, uncompressed - repLen - defLen, budget);
-      const vals = decodeValues(page, 0, page.length, h[4], col, n - nulls, dict);
+      const vals = decodeValues(page, 0, page.length, h[4], col, n - nulls, dict, budget);
       let k = 0;
       for (let j = 0; j < n; j += 1) values.push(defs && defs[j] === 0 ? null : vals[k++]);
       seen += n;

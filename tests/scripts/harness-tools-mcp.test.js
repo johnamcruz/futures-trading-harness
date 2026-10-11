@@ -302,6 +302,7 @@ test('harness-tools server: when its client goes away (stdout closed), it exits 
   const child = spawn(process.execPath, [SERVER], { env: envFor(fixtureHome()), stdio: ['pipe', 'pipe', 'pipe'] });
   try {
     const exited = new Promise(resolve => child.on('exit', (code, signal) => resolve({ code, signal })));
+    child.stdin.on('error', () => {}); // the server may be gone before our writes drain
     child.stdout.destroy(); // the reading end: the server's next write fails with EPIPE
     for (let i = 1; i <= 5; i += 1) child.stdin.write(`{"jsonrpc":"2.0","id":${i},"method":"tools/list"}\n`);
     assert.deepStrictEqual(await within(20000, 'the server to exit', exited), { code: 0, signal: null });

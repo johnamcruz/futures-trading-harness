@@ -58,10 +58,13 @@ function textOf(xml) {
   return unescapeXml(out);
 }
 
+const MAX_COLUMN = 16383; // XFD, Excel's last column
+
 function columnIndex(ref) {
   const letters = /^[A-Z]+/.exec(ref)[0];
   let n = 0;
-  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+  for (const ch of letters.slice(0, 4)) n = n * 26 + (ch.charCodeAt(0) - 64);
+  if (letters.length > 3 || n - 1 > MAX_COLUMN) throw new Error('xlsx: a cell past column XFD (not an Excel worksheet)');
   return n - 1;
 }
 
@@ -117,6 +120,8 @@ function readXlsx(file, { sheet = null, budget = createBudget() } = {}) {
       else value = v === undefined || v === '' ? null : Number(v);
       row[col] = value;
     }
+    // Every cell the row materializes (the gaps before its last cell too) counts against the budget.
+    budget.count('xlsx', row.length);
     rows.push(Array.from(row, x => (x === undefined ? null : x)));
   }
   return { rows, date1904 };
