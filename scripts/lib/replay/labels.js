@@ -82,7 +82,7 @@ const GATE_SLACK_MS = 2000;
 const UNGATED = new Set(['close_position']);
 // A flat label with one of these reasons is no skip (nor a stand-aside, nor a hold in a trade): the teacher
 // touched an order, or what it did is unknown.
-const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out']);
+const NOT_A_SKIP = new Set(['order cancel', 'working-order change', 'exit while flat', 'unattributed order', 'no cycle log', 'cycle failed', 'cycle timed out']);
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const round = (x, d = 4) => (x === null ? null : Number(x.toFixed(d)));
@@ -357,6 +357,8 @@ function teacherAction(orders, inTrade) {
   if (!inTrade) {
     // Flat, a modify moves a working order (a resting entry): a decision the student can't express, never a skip.
     if (orders.some(o => o.tool === 'modify_order')) reasons.push('working-order change');
+    // Flat, an exit or a protective order (the teacher saw a position the account read didn't): no skip.
+    if (orders.some(o => o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && o.riskReducing))) reasons.push('exit while flat');
     if (!entries.length) return { action: 'none', order: null, reasons, priorRefusals: 0 };
     // The entry that counts: the last one the broker accepted, else the last one the gate let through and
     // the broker didn't refuse, else the last one sent. Refused tries before it (by the gate or the broker)
@@ -468,12 +470,6 @@ function eodOf(cfg, t) {
   return at ? start.getTime() + sessionMinuteOf(at, start) * 60000 : start.getTime() + (MARKET_CLOSE_MIN - MARKET_OPEN_MIN + 24 * 60) * 60000;
 }
 
-/**
- * @param opts.budgetUsd the dollars a trade may risk (size steps); else an active prop attempt's
- * @param opts.strategies loaded STRATEGY.md objects (their exits, for the counterfactuals)
- * @param opts.outcomeBars { SYMBOL: bars } to walk counterfactuals on (the data the run replayed);
- *   else the run home's bars. Never read for anything at decision time.
- */
 /** Why a run isn't finished (a step pending, a day not done), or null. */
 function unfinishedWhy(manifest, days) {
   const open = Object.keys(days).filter(d => !(manifest.daysDone || []).includes(d));
@@ -504,10 +500,6 @@ function brokerOrders(file, familyOfBrokerId = () => null) {
   }).filter(e => Number.isFinite(e.ms));
 }
 
-/**
- * @param opts.barsSource { SYMBOL: sha256 } of the --bars files, for provenance (else 'run home')
- * @param opts.unfinished label a run that isn't finished (writeLabels allows it only into a folder outside the run home)
- */
 /** A run dir as stored (symlinks resolved), so its run home is the real one two levels up. */
 function realDir(runDir) {
   try {
@@ -517,6 +509,14 @@ function realDir(runDir) {
   }
 }
 
+/**
+ * @param opts.budgetUsd the dollars a trade may risk (size steps); null: the step is unknown
+ * @param opts.strategies loaded STRATEGY.md objects (their exits, for the counterfactuals)
+ * @param opts.outcomeBars { SYMBOL: bars } the data the run replayed: the counterfactuals walk it, the stop's
+ *   ATR reads its bars closed by t; else the run home's bars
+ * @param opts.barsSource { SYMBOL: sha256 } of the --bars files, for provenance (else 'run home')
+ * @param opts.unfinished label a run that isn't finished (writeLabels allows it only into a folder outside the run home)
+ */
 function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false, barsSource = null } = {}) {
   const dir = realDir(runDir);
   const { manifest, days } = readRun(dir);
@@ -624,7 +624,12 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         draft.orders = mine;
         // What the broker did with each entry the gate let through: its journal at the replayed time
         // (from t to the next decision time), matched by rationale, in order.
-        for (const o of mine.filter(x => x.tool === 'place_order' && x.gate.decision === 'allowed')) {
+        for (const o of mine.filter(x => x.gate.decision !== 'refused')) {
+          if (o.tool !== 'place_order' || o.gate.decision !== 'allowed') {
+            // Not an entry the broker journals: a call that came back an error never changed the account.
+            if (o.callFailed) o.broker = { decision: 'refused', orderId: null, reason: 'the call returned an error' };
+            continue;
+          }
           const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
             && (e.family === null || e.family === familyOfId(o.contractId)));
           if (j) {
@@ -856,7 +861,6 @@ function outcomeBarsFrom(file, tf) {
   return aggregate(bars, { unit: 2, unitNumber: tf, nowMs: Infinity }).map(b => ({ ...b, ms: Date.parse(b.t) }));
 }
 
-/** @param opts.barsFiles { SYMBOL: file } the data the run replayed, for the counterfactuals */
 /**
  * @param opts.barsFiles { SYMBOL: file } the data the run replayed, for the counterfactuals
  * @param opts.outDir where to write (default the run dir); required for an unfinished run, and then

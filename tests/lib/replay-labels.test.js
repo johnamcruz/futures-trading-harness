@@ -853,3 +853,32 @@ test('labels: an order opencode stopped itself (a permission rule) is no order',
   const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...LONG, gate: 'none' }] } }] }).runDir).labels[0];
   assert.deepStrictEqual([L.teacher.action, L.teacher.orders], ['none', []]);
 });
+
+// Review round 4 findings.
+
+test('labels: an exit or a tighten whose call came back an error is refused (it never changed the account)', () => {
+  const failedCall = (tool, input) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: `mcp__broker__${tool}`, input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: 'PositionNotFound' }] } }),
+  ].join('\n');
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
+  const modify = { tool: 'modify_order', input: { accountId: 7, orderId: 2, stopPrice: 20000 } };
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { positions: LONG_POS, transcript: failedCall('close_position', close.input), orders: [close] } },
+    { k: 1, cycle: { positions: LONG_POS, transcript: failedCall('modify_order', modify.input), orders: [modify] } },
+  ] });
+  const L = labelRun(run.runDir).labels;
+  assert.deepStrictEqual(L.map(l => [l.teacher.action, l.gate.decision, l.gate.by, l.gate.brokerReason]), [
+    ['exit', 'refused', 'broker', 'the call returned an error'], ['tighten', 'refused', 'broker', 'the call returned an error'],
+  ]);
+});
+
+test('labels: flat, an exit or a protective order is no skip', () => {
+  const run = makeRun({ steps: [
+    { k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { orders: [{ tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] flat' } }] } },
+    { k: 5, scan: [{ name: 'orb', direction: 'short' }], cycle: { orders: [order('[exit] flatten what is left')] } },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual(labels.map(l => [l.teacher.action, l.clone.reasons, l.counterfactual]), [['none', ['exit while flat'], null], ['none', ['exit while flat'], null]]);
+  assert.strictEqual(summary.skipped, 0);
+});
