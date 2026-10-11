@@ -91,6 +91,8 @@ Where it is enforced:
   records it every bar and puts its line in the cycle prompt. Interactively,
   record it yourself before any entry:
   `mtf_read` with `{"bars": "<bars>", "record": true, "symbol": "MNQ"}`.
+  While the autonomous runner is running, `record` is refused (the runner
+  records the symbols it trades): don't trade interactively next to it.
 
 The last line of the read states it: `Trend rule: prevailing trend 4h up;
 trend strategies may not go short, reversal strategies (mtf: reversal) may.`

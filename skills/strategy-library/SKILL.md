@@ -93,7 +93,8 @@ Live entries are blocked unless `setup:<name>` names a valid strategy with
 enters only on its own trigger (`trigger-fired`): the signal record must show
 it fired on that side on a bar that closed less than 10 minutes ago (the
 runner records every bar; interactively `strategies_scan` with `record: true`,
-whose `symbol` is a contract root such as `MNQ`). The gate does
+whose `symbol` is a contract root such as `MNQ`; refused while the
+autonomous runner is running, which records the symbols it trades). The gate does
 **not** judge a manual strategy's trigger, the skip rules, or that the order
 is the plan's: those are yours and risk-manager's. It does refuse an order that contradicts its
 own rationale (`order-consistency`): write the side right after the tag
