@@ -352,6 +352,15 @@ function allFills(lines) {
   return out.sort((a, b) => a.ms - b.ms || String(a.id ?? '').localeCompare(String(b.id ?? ''), 'en', { numeric: true }));
 }
 
+/** The target ticks order_plan places for a strategy's setup with this stop, or null (none, or no level distance). */
+function plannedTarget(strategy, stopTicks, targetDistance, tickSize) {
+  try {
+    return targetFor(exitPlan(strategy), stopTicks, targetDistance, tickSize).ticks;
+  } catch (_err) {
+    return null;
+  }
+}
+
 /** The end of day (ms) of t's trading day, as the runner and the replay schedule place it. */
 function eodOf(cfg, t) {
   const c = { eodAt: '15:50@America/New_York', earlyCloseEodAt: null, ...cfg, earlyCloseDates: Array.isArray(cfg.earlyCloseDates) ? cfg.earlyCloseDates : [] };
@@ -499,8 +508,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       if (isEntry && o.targetTicks) {
         const strat = byName.get(o.setup);
         const fired = d.signal.fired.find(r => r.name === o.setup) || {};
-        let planned = null;
-        try { planned = strat && stop && stop.ticks && spec ? targetFor(exitPlan(strat), stop.ticks, num(fired.targetDistance), spec.tickSize).ticks : null; } catch (_err) { planned = null; }
+        const planned = strat && stop && stop.ticks && spec ? plannedTarget(strat, stop.ticks, num(fired.targetDistance), spec.tickSize) : null;
         target = { ticks: o.targetTicks, from: planned === o.targetTicks ? 'strategy' : 'teacher' };
       }
       teacher = {
