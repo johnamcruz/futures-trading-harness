@@ -11,6 +11,10 @@
  * Times are ISO 8601 (UTC unless an offset is given), epoch s/ms/us/ns, a
  * Parquet timestamp, or an Excel date. Bars are keyed by their open time,
  * oldest first, deduplicated, and must sit on minute boundaries.
+ *
+ * Errors never echo the file's content (a header name, a cell, the text a JSON
+ * parse error quotes): agents run the scripts on paths they name, and an
+ * echoed line would show part of any file, a credentials file included.
  */
 
 const fs = require('fs');
@@ -52,6 +56,23 @@ function parseTime(raw, { excel = false, date1904 = false } = {}) {
   return Date.parse(iso);
 }
 
+/** The recognized column names among `names`, and how many others (never their text). */
+function columnsSeen(names) {
+  const known = new Set([...TIME_NAMES, ...Object.values(FIELD_NAMES).flat()]);
+  const found = names.filter(n => known.has(n));
+  const others = names.length - found.length;
+  return `found: ${found.length ? found.join(', ') : 'none'}${others ? `, and ${others} other column(s)` : ''}`;
+}
+
+/** JSON.parse without the cause: V8's message quotes the text. */
+function parseJson(text, label) {
+  try {
+    return JSON.parse(text);
+  } catch (_err) {
+    throw new Error(`${label}: not valid JSON`); // eslint-disable-line preserve-caught-error
+  }
+}
+
 /** Rows (arrays) with a header row, or objects keyed by column name, to raw bars. */
 function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
   const names = header.map(h => String(h === null || h === undefined ? '' : h).trim().toLowerCase());
@@ -59,12 +80,12 @@ function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
   const idx = { t: find(TIME_NAMES) };
   for (const [k, list] of Object.entries(FIELD_NAMES)) idx[k] = find(list);
   for (const k of ['t', 'o', 'h', 'l', 'c']) {
-    if (idx[k] === -1) throw new Error(`the data needs time, open, high, low, close columns (got: ${names.join(', ')})`);
+    if (idx[k] === -1) throw new Error(`the data needs time, open, high, low, close columns (${columnsSeen(names)})`);
   }
   return rows.map((r, i) => {
     const get = k => (Array.isArray(r) ? r[idx[k]] : r[header[idx[k]]]);
     const t = parseTime(get('t'), { excel, date1904 });
-    if (!Number.isFinite(t)) throw new Error(`row ${i + 2}: unreadable time "${get('t')}"`);
+    if (!Number.isFinite(t)) throw new Error(`row ${i + 2}: unreadable time`);
     // An empty cell is missing, not zero: the row is dropped (a missing volume reads as 0).
     const num = x => (x === null || x === undefined || (typeof x === 'string' && x.trim() === '') ? NaN : Number(x));
     const v = idx.v === -1 ? 0 : num(get('v'));
@@ -100,7 +121,7 @@ function readTable(file, { sheet = null } = {}) {
   if (ext === '.xls') throw new Error(`${file}: legacy .xls is not supported; save it as .xlsx`);
   const text = fs.readFileSync(file, 'utf8');
   const trimmed = text.trimStart();
-  return trimmed.startsWith('[') || trimmed.startsWith('{') ? normalizeBars(JSON.parse(text)) : parseCsv(text);
+  return trimmed.startsWith('[') || trimmed.startsWith('{') ? normalizeBars(parseJson(text, file)) : parseCsv(text);
 }
 
 /** Load and clean bars from a Parquet, Excel, CSV, or JSON file. */
@@ -108,7 +129,7 @@ function loadBars(file, opts = {}) {
   const bars = normalizeBars(readTable(file, opts)).map(b => ({ ...b, ms: Date.parse(b.t) }));
   const out = [];
   for (const b of bars) {
-    if (b.ms % MINUTE !== 0) throw new Error(`${file}: bar ${b.t} is not on a minute boundary`);
+    if (b.ms % MINUTE !== 0) throw new Error(`${file}: a bar at ${new Date(b.ms).toISOString()} is not on a minute boundary`);
     if (out.length && out[out.length - 1].ms === b.ms) out[out.length - 1] = b; // keep the last duplicate
     else out.push(b);
   }
@@ -120,7 +141,7 @@ function loadBars(file, opts = {}) {
  * array); anything else is a file loadBars reads (JSON, CSV, Parquet, Excel).
  */
 function readBarsArg(file) {
-  if (file === '-') return normalizeBars(JSON.parse(fs.readFileSync(0, 'utf8')));
+  if (file === '-') return normalizeBars(parseJson(fs.readFileSync(0, 'utf8'), 'stdin'));
   return loadBars(path.resolve(file));
 }
 

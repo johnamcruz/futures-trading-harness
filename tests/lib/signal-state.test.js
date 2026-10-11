@@ -26,6 +26,30 @@ test('buildSignals keeps the rules candidates with a side; writes one file per i
   assert.strictEqual(readSignals(home, 'MNQ', '1m'), null, 'another timeframe has its own record');
 });
 
+test('writeSignals: the file is named from a contract root and minutes only, never a path', () => {
+  const base = tmpDir();
+  const home = path.join(base, 'a', 'home');
+  const bar = { t: '2026-10-07T13:54:00.000Z' };
+  for (const symbol of ['../../x', 'MNQ/../..', 'a b', '']) {
+    assert.throws(() => writeSignals(home, buildSignals([], { symbol, bar, stepMs: 180000, now })), /the symbol must be a contract root/, symbol);
+  }
+  assert.throws(() => writeSignals(home, { ...buildSignals([], { symbol: 'MNQ', bar, stepMs: 180000, now }), timeframe: '../3m' }), /the timeframe must be minutes/);
+  assert.throws(() => writeSignals(home, { ...buildSignals([], { symbol: 'MNQ', bar, stepMs: 180000, now }), timeframe: 'Infinitym' }), /the timeframe must be minutes/);
+  assert.deepStrictEqual(fs.readdirSync(base, { recursive: true }), [], 'nothing written');
+});
+
+test('scripts/strategies.js scan --record refuses a symbol that is not a contract root', () => {
+  const { spawnSync } = require('child_process');
+  const base = tmpDir();
+  const home = path.join(base, 'a', 'home');
+  const csv = path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv');
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'strategies.js'), 'scan', csv, '--symbol', '../../x', '--now', '2026-04-28T14:15:30Z', '--record'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH, FTH_HOME: home } });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /\[strategies\] --record needs --symbol <ROOT>: a contract root/);
+  assert.deepStrictEqual(fs.readdirSync(base, { recursive: true }), [], 'nothing written');
+});
+
 test('checkTrigger: only the strategy that fired, on its side, on a recent bar; fails closed', () => {
   const home = trendHome(tmpDir(), { fired: [{ name: 'orb', direction: 'long' }] });
   const check = extra => checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'orb', now, ...extra });

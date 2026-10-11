@@ -334,9 +334,10 @@ function columnsOf(meta) {
   const schema = meta[2] || [];
   const cols = [];
   // schema[0] is the root; flat files have only leaf children.
-  for (const el of schema.slice(1)) {
-    if (el[5]) throw new Error(`parquet: nested column "${el[4]}" is not supported`);
-    if (el[3] === 2) throw new Error(`parquet: repeated column "${el[4]}" is not supported`);
+  // Errors name a column by its position, never its name: the bar loader's errors don't echo file content.
+  for (const [i, el] of schema.slice(1).entries()) {
+    if (el[5]) throw new Error(`parquet: column ${i + 1} is nested, which is not supported`);
+    if (el[3] === 2) throw new Error(`parquet: column ${i + 1} is repeated, which is not supported`);
     const logical = el[10] || {};
     cols.push({
       name: el[4].toString('utf8'), type: el[1], typeLength: el[2], optional: el[3] === 1,

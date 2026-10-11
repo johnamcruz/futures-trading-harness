@@ -18,7 +18,9 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
    file (the prompt names it). Otherwise:
    `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --count 2000`
-   writes `/tmp/fth/MNQ-3m.json` and prints when its last bar closed.
+   writes `/tmp/fth/MNQ-3m.json` and prints when its last bar closed
+   (`--out` takes another `.json` file under `/tmp/fth/`; any other path,
+   or a symlink there, is refused).
    Don't paste a `get_bars` reply into a file: 2000 bars are far more than a
    tool reply can carry. 2000 bars are enough for EMA(200), prior-day levels, and the
    1-hour trend in the multi-timeframe read. The windowed pieces (cisd_ote,

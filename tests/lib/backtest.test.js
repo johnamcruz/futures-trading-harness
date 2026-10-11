@@ -412,3 +412,103 @@ test('confluence: trades record how many strategies agreed; minConfluence and co
   const { buildReport } = require('../../scripts/lib/backtest/report');
   assert.deepStrictEqual(Object.keys(buildReport([t, mixed], {}).byConfluence), ['1 agreeing, 1 against', '2 agreeing']);
 });
+
+test('bar-file errors never echo the file\'s content (a script run on a credentials file shows none of it)', () => {
+  const { spawnSync } = require('child_process');
+  const dir = tmpDir();
+  // A credentials line (built here, so the repository's secret scan doesn't take it for a real one).
+  const secret = ['API', 'KEY'].join('_') + ['=', 'hunter2', 'abcdef'].join('');
+  const leaks = m => /hunter2|API_KEY|api_key/.test(m);
+  const cases = {
+    '.env': `${secret}\nOTHER=x\n`,
+    'header.csv': `time,open,high,low,${secret}\n2026-01-02T14:30:00Z,1,2,0,1\n`,
+    'cell.csv': `time,open,high,low,close\n${secret},1,2,0,1\n`,
+    // V8's parse error quotes the text around the fault.
+    'bad.json': `[${secret}]`,
+    'obj.json': `{"a": ${secret}}`,
+    // A free-text time V8 parses, off the minute: the error gives the parsed time, not the text.
+    'offminute.json': JSON.stringify([{ t: `Jan 2 2026 14:30:30 (${secret})`, o: 1, h: 2, l: 0, c: 1 }]),
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, text);
+    let message = null;
+    try { loadBars(file); } catch (err) { message = err.message; }
+    assert.ok(message, `${name} is refused`);
+    assert.ok(!leaks(message), `${name}: ${message}`);
+  }
+  // What the error still says: the recognized columns and a count of the others, the row, the parsed time.
+  assert.throws(() => loadBars(path.join(dir, 'header.csv')), /found: time, open, high, low, and 1 other column\(s\)/);
+  assert.throws(() => loadBars(path.join(dir, '.env')), /found: none, and 1 other column\(s\)/);
+  assert.throws(() => loadBars(path.join(dir, 'cell.csv')), /row 2: unreadable time$/);
+  assert.throws(() => loadBars(path.join(dir, 'bad.json')), /bad\.json: not valid JSON$/);
+  assert.throws(() => loadBars(path.join(dir, 'offminute.json')), /a bar at 20\d\d-\d\d-\d\dT\d\d:\d\d:30\.000Z is not on a minute boundary/);
+  // Parquet and Excel: a column name, a sheet name, or a worksheet target from the file stays out of the error.
+  const name = Buffer.from(secret);
+  const thriftName = Buffer.concat([Buffer.from([name.length]), name]);
+  // FileMetaData { 1: version 1, 2: schema [root (2 children), child] } in Thrift compact; child = nested or repeated.
+  const parquet = child => {
+    const meta = Buffer.concat([Buffer.from([0x15, 0x02, 0x19, 0x2c, 0x48, 6]), Buffer.from('schema'), Buffer.from([0x15, 0x02, 0x00]), child, Buffer.from([0x00, 0x00])]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(meta.length);
+    return Buffer.concat([Buffer.from('PAR1'), meta, len, Buffer.from('PAR1')]);
+  };
+  fs.writeFileSync(path.join(dir, 'nested.parquet'), parquet(Buffer.concat([Buffer.from([0x48]), thriftName, Buffer.from([0x15, 0x02])])));
+  fs.writeFileSync(path.join(dir, 'repeated.parquet'), parquet(Buffer.concat([Buffer.from([0x35, 0x04, 0x18]), thriftName])));
+  assert.throws(() => loadBars(path.join(dir, 'nested.parquet')), /^Error: parquet: column 1 is nested, which is not supported$/);
+  assert.throws(() => loadBars(path.join(dir, 'repeated.parquet')), /^Error: parquet: column 1 is repeated, which is not supported$/);
+  // A stored (uncompressed) zip: the workbook names a sheet and a worksheet target that isn't there.
+  const zip = entries => {
+    const locals = [];
+    const central = [];
+    let offset = 0;
+    for (const [n, body] of Object.entries(entries)) {
+      const nb = Buffer.from(n);
+      const data = Buffer.from(body);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(data.length, 22);
+      local.writeUInt16LE(nb.length, 26);
+      const cd = Buffer.alloc(46);
+      cd.writeUInt32LE(0x02014b50, 0);
+      cd.writeUInt32LE(data.length, 20);
+      cd.writeUInt32LE(data.length, 24);
+      cd.writeUInt16LE(nb.length, 28);
+      cd.writeUInt32LE(offset, 42);
+      locals.push(local, nb, data);
+      central.push(cd, nb);
+      offset += 30 + nb.length + data.length;
+    }
+    const cdBuf = Buffer.concat(central);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(Object.keys(entries).length, 8);
+    eocd.writeUInt16LE(Object.keys(entries).length, 10);
+    eocd.writeUInt32LE(cdBuf.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, cdBuf, eocd]);
+  };
+  fs.writeFileSync(path.join(dir, 'book.xlsx'), zip({
+    'xl/workbook.xml': `<workbook><sheets><sheet name="${secret}" r:id="rId1"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<Relationships><Relationship Id="rId1" Target="${secret}.xml"/></Relationships>`,
+  }));
+  assert.throws(() => loadBars(path.join(dir, 'book.xlsx')), /^Error: xlsx: the worksheet the workbook points to is missing$/);
+  const { readXlsx } = require('../../scripts/lib/backtest/xlsx');
+  assert.throws(() => readXlsx(path.join(dir, 'book.xlsx'), { sheet: 'Bars' }), /^Error: xlsx: no sheet named "Bars" \(the workbook has 1 sheet\(s\)\)$/);
+  cases['nested.parquet'] = null;
+  cases['book.xlsx'] = null;
+  // Through the scripts agents run, on a file and on stdin.
+  const script = (name, args, input = '') => spawnSync(process.execPath, [path.join(ROOT, 'scripts', name), ...args], { input, encoding: 'utf8', env: { PATH: process.env.PATH, FTH_HOME: dir } });
+  for (const [name, args] of [['market-snapshot.js', []], ['mtf.js', []], ['strategies.js', ['scan']]]) {
+    for (const file of Object.keys(cases)) {
+      const r = script(name, [...args, path.join(dir, file)]);
+      assert.strictEqual(r.status, 1, `${name} ${file}`);
+      assert.ok(!leaks(r.stderr + r.stdout), `${name} ${file}: ${r.stderr}`);
+    }
+    const piped = script(name, [...args, '-'], `[${secret}]`);
+    assert.strictEqual(piped.status, 1);
+    assert.match(piped.stderr, /stdin: not valid JSON/);
+    assert.ok(!leaks(piped.stderr + piped.stdout), piped.stderr);
+  }
+});
