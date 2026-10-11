@@ -1,13 +1,13 @@
 ---
 name: multi-timeframe-analysis
-description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (scripts/mtf.js) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (one marked mtf reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
+description: Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (the harness tool mtf_read) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (one marked mtf reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
 ---
 
 # Multi-Timeframe Analysis
 
 A trigger on 3-minute bars is worth more when the timeframes above it point
 the same way, and it is a pullback (or a trap) when they don't. This skill
-makes that read the same every time: one script reads the trend on each
+makes that read the same every time: one tool reads the trend on each
 higher timeframe from the bars you already have, and labels each side.
 
 ## When to Use
@@ -27,27 +27,27 @@ than two requests:
 
 | Role | Timeframe | Source |
 |---|---|---|
-| Context | daily | `node <root>/scripts/bars.js --symbol <SYMBOL> --daily` (60 bars to `/tmp/fth/<SYMBOL>-1d.json`) |
+| Context | daily | `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": "daily"}` (60 bars to `/tmp/fth/<SYMBOL>-1d.json`) |
 | Context | 4 hours | built from the trigger bars (its EMA50 vote needs 50 candles, about 4000 3m bars; with fewer it votes on two, and the line says so) |
 | Bias | 1 hour | built from the trigger bars |
 | Setup | 15 minutes | built from the trigger bars |
-| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `node <root>/scripts/bars.js --symbol <SYMBOL> --timeframe 3 --record` (2000 bars to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
+| Trigger | 3 minutes (1 minute for the flow strategies) | the runner's bars file (at least 2000 bars), or `bars_fetch` with `{"symbol": "<SYMBOL>", "timeframe": 3, "record": true}` (2000 bars to `/tmp/fth/<SYMBOL>-3m.json`, and the read recorded for the gate) |
 
-Without `--daily` the highest timeframe is the 4-hour: the alignment is then
+Without `daily` the highest timeframe is the 4-hour: the alignment is then
 judged from it, and the plan says "no daily read". Fetch the daily bars once
 a session (premarket) and reuse the file; if the fetch fails, go on without
 them rather than retrying.
 
 ### 2. Run the read
 
-```bash
-node <root>/scripts/mtf.js <trigger bars> --daily=/tmp/fth/<SYMBOL>-1d.json
-node <root>/scripts/mtf.js <trigger bars> --tf=15,60,240 --json    # every number
+```text
+mtf_read {"bars": "<trigger bars>", "daily": "/tmp/fth/<SYMBOL>-1d.json"}
+mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}    every number
 ```
 
-`<trigger bars>` is the runner's bars file (e.g.
-`~/.futures-trading-harness/bars/MNQ-3m.json`), a `bars.js` file, or a
-CSV / Parquet file. Candles align to the 18:00 ET open: 1-hour candles open
+`<trigger bars>` is the runner's bars file by absolute path (e.g.
+`/home/u/.futures-trading-harness/bars/MNQ-3m.json`; no `~`) or a
+`bars_fetch` file (the `harness-tools` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
 on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
 Only completed candles decide a trend; the one forming is reported apart.
 
@@ -79,7 +79,7 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
 
 Where it is enforced:
 
-- `strategies.js scan`: a trend strategy that fires against it is not a
+- `strategies_scan`: a trend strategy that fires against it is not a
   `candidate`; `filtersFailed` says `mtf: against the prevailing 4h down
   trend ...`. Every result has `mtf` (frames, `prevailing`, `longAllowed`,
   `shortAllowed`).
@@ -90,11 +90,11 @@ Where it is enforced:
   (`FTH_MTF_MAX_AGE_MIN`) past its last bar's close. The autonomous runner
   records it every bar and puts its line in the cycle prompt. Interactively,
   record it yourself before any entry:
-  `node <root>/scripts/mtf.js <bars> --record --symbol MNQ`.
+  `mtf_read` with `{"bars": "<bars>", "record": true, "symbol": "MNQ"}`.
 
-The last line of `mtf.js` states it: `Trend rule: prevailing trend 4h up;
+The last line of the read states it: `Trend rule: prevailing trend 4h up;
 trend strategies may not go short, reversal strategies (mtf: reversal) may.`
-The daily (`--daily`) is context for your judgment; the rule reads the
+The daily (`daily`) is context for your judgment; the rule reads the
 intraday frames.
 
 ### 4. Read the alignment
@@ -159,7 +159,7 @@ copy (e.g. `strategies/ema_cross_mtf/`) and compare the two with
 ## Examples
 
 ```text
-$ node <root>/scripts/mtf.js ~/.futures-trading-harness/bars/MNQ-3m.json --daily=/tmp/fth/MNQ-1d.json
+mtf_read {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "daily": "/tmp/fth/MNQ-1d.json"}
 daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/HL), ADX 24.1, ...
 4h: UP (close 21652.25 vs EMA20 21590.75, EMA20 vs EMA50 21470.5, structure HH/HL), ADX 21.3, ...
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
@@ -171,7 +171,7 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal 
    Shorts are counter: a 3m keltner short is refused (scan and gate); only a
    crt_1h raid of the 1h high could short, at half size.
 
-$ node <root>/scripts/mtf.js <root>/tests/fixtures/parity/NQ-3m.csv
+mtf_read {"bars": "/tmp/fth/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied there)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.59, ...

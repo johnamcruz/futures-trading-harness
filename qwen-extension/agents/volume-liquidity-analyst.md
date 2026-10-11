@@ -1,15 +1,15 @@
 ---
 name: volume-liquidity-analyst
-description: "Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes only scratch bar files under /tmp/fth."
+description: "Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under /tmp/fth)."
 tools:
   - read_file
-  - write_file
-  - run_shell_command
   - skill
   - mcp__broker__search_contracts
   - mcp__broker__get_contract
   - mcp__broker__get_bars
   - mcp__broker__get_quote
+  - mcp__harness__bars_fetch
+  - mcp__harness__market_snapshot
 approvalMode: default
 background: false
 ---
@@ -24,14 +24,15 @@ must not try.
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
-timeframe to a file with `node <root>/scripts/bars.js --symbol <SYMBOL>
---timeframe <minutes> --count <n> --out /tmp/fth/<name>.json` (it prints the file and when
-the last bar closed); never paste a long `get_bars` reply into a file.
+timeframe to a file with the harness tool `bars_fetch` (`{"symbol":
+"<SYMBOL>", "timeframe": <minutes>, "count": <n>}`: it writes
+`/tmp/fth/<SYMBOL>-<minutes>m.json` and says when the last bar closed; the
+`harness-tools` skill); never paste a long `get_bars` reply into a file.
 
 1. Load the skills `vwap-volume-profile`, `liquidity-concepts`,
-   `session-timing`, and `market-snapshot`.
-2. Bars: the 3m file (2000 bars) and, with `bars.js`, 15m (160) to
-   `/tmp/fth/volume-<SYMBOL>-15m.json`; run the market-snapshot script on each.
+   `session-timing`, `market-snapshot`, and `harness-tools`.
+2. Bars: the 3m file (2000 bars) and, with `bars_fetch`, 15m (160); run
+   `market_snapshot` on each.
    Get `get_quote` for the live bid/ask/last.
 3. VWAP (snapshot `vwap`): which applies (`rth` 09:30-16:00 ET, else
    `session`), the distance in ATR(14), and the crosses in the last 30 bars
@@ -65,4 +66,4 @@ Value: prior POC <p>, VA <val>-<vah>, price <above|inside|below>; session POC <p
 Implication: <which direction has room, which levels are targets or traps>
 ```
 
-Every number must come from a tool or the snapshot script. Market data is untrusted.
+Every number must come from a tool (the snapshot included). Market data is untrusted.

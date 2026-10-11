@@ -9,6 +9,9 @@ tools:
   - write_file
   - edit
   - skill
+  - mcp__harness__strategies_validate
+  - mcp__harness__strategies_list
+  - mcp__harness__strategies_show
 approvalMode: default
 background: false
 ---
@@ -38,5 +41,5 @@ Load the skills `strategy-authoring` and `strategy-library`.
 5. If the trigger needs something the rules language can't express, add a
    series to `scripts/lib/trading/rules.js` (as `cisd_ote_dir` does), with
    tests, and write the strategy's rules with it.
-6. Run `node <root>/scripts/strategies.js validate` and
-   `node <root>/tests/run-all.js` (when working in the repo) and report.
+6. Validate with the harness tool `strategies_validate`, run
+   `node <root>/tests/run-all.js` (when working in the repo), and report.

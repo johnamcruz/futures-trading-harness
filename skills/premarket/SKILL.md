@@ -16,22 +16,22 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
 
 1. `get_server_config`; `search_contracts` for the symbol (active contract,
    tickSize, tickValue); the account (the cycle prompt's account line, else
-   `get_account_snapshot`, and `node <root>/scripts/combine.js status` for a
+   `get_account_snapshot`, and the harness tool `combine_status` for a
    running prop attempt): today's game plan is sized from its balance, the
    room to the daily limits, and for an attempt the cushion and budget.
 2. Run in parallel (as in trade-session step 2): the three market analysts,
    `news-calendar-analyst` for the trading day's date (the date it ends on,
    as the prompt says), and `risk-manager` phase 1.
-3. Blackouts: add each proposed window with the append-only script (it can't
-   remove a window, so blackouts only ever restrict trading):
-   `node <root>/scripts/blackouts.js add --start <ISO> --end <ISO> --reason "<event>"`.
+3. Blackouts: add each proposed window with the append-only harness tool
+   `blackouts_add` (it can't remove a window, so blackouts only ever
+   restrict trading): `{"start": "<ISO>", "end": "<ISO>", "reason": "<event>"}`.
 4. Game plan (you, as head trader):
    - Bias per timeframe from the multi-timeframe read
-     (`node <root>/scripts/mtf.js <bars> --daily=<daily bars>`, see the
+     (`mtf_read` with `bars` and `daily`, see the
      `multi-timeframe-analysis` skill): one line per timeframe, the alignment
      for longs and shorts, and where analysts disagree.
    - Key levels table (price, what, source).
-   - Strategies in play: from `node <root>/scripts/strategies.js list --json`
+   - Strategies in play: from `strategies_list` with `json: true`
      (status, sessions, instruments), the active ones for this
      symbol whose sessions are today, with the exact trigger each needs.
      Strategies to avoid today, with reasons.

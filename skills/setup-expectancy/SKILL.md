@@ -46,11 +46,11 @@ description: Measure whether each futures setup has an edge - win rate, average 
    far worse than backtest usually means execution drift or regime change.
 7. **Does the judgment add anything?** Over the same days, compare the live
    results of the signals taken with what the passed ones would have done
-   (`node <root>/scripts/reconcile.js --day <day>` per day lists both; the
+   (the harness tool `reconcile` with `day`, per day, lists both; the
    backtest of the same days trades every signal). If passing signals doesn't
    improve E, the filter costs trades without adding edge: say so.
 8. Record the decision as a `lesson` tagged with the setup and regime.
-   `node <root>/scripts/lessons.js` shows the same evidence as ranked
+   The `lessons` tool shows the same evidence as ranked
    instincts (confidence 0.3 to 0.9 from the number of trades), which every
    cycle prompt and session briefing carries.
 

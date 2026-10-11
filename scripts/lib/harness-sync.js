@@ -51,9 +51,11 @@ function tomlString(text) {
 function codexAgentToml(agent) {
   const writes = agent.tools.some(t => ['Write', 'Edit', 'Bash'].includes(t));
   const mcp = agent.tools.filter(t => t.startsWith('mcp__broker__')).map(t => t.replace('mcp__broker__', ''));
+  const tools = agent.tools.filter(t => t.startsWith(`mcp__${HARNESS_SERVER}__`)).map(t => t.replace(`mcp__${HARNESS_SERVER}__`, ''));
   const instructions = [
     `You are the ${agent.name} role of the futures trading harness. ${agent.description}`,
     mcp.length ? `broker MCP tools you may use: ${mcp.join(', ')}. Do not call any other broker tool.` : 'Do not call any broker MCP tool.',
+    tools.length ? `${HARNESS_SERVER} MCP tools you may use: ${tools.join(', ')}. Do not call any other ${HARNESS_SERVER} tool.` : `Do not call any ${HARNESS_SERVER} MCP tool.`,
     '',
     agent.body,
   ].join('\n');
@@ -135,13 +137,16 @@ function workspaceAgentsMd(root) {
     '## Start here',
     '',
     '- The harness root (`<root>`, also in `FTH_ROOT` and the session briefing) is the',
-    '  absolute path of the parent of this `workspace/` folder. Scripts are in',
-    '  `<root>/scripts/`, strategies in `<root>/strategies/`. Always write the absolute',
-    '  path in commands; autonomous runs only allow the harness scripts that way.',
+    '  absolute path of the parent of this `workspace/` folder. Strategies are in',
+    '  `<root>/strategies/`. Always write absolute paths.',
+    '- The harness\'s operations (bars, strategy scans, the market snapshot, the',
+    '  multi-timeframe read, blackouts, the prop status, lessons, reconcile) are',
+    '  tools on the `harness` MCP server (the `harness-tools` skill). Use the tools;',
+    '  the scripts in `<root>/scripts/` are for people at a terminal.',
     '- Before trading, read the skill you need from `<root>/skills/<name>/SKILL.md`',
     '  if your harness has not loaded it. Start with `trade-session`, `premarket`,',
     '  `end-of-day`, or `autonomous-trading`.',
-    '- Strategies are Markdown files: `node <root>/scripts/strategies.js list`.',
+    '- Strategies are Markdown files: the `strategies_list` tool lists them.',
     '- Delegate to the agent roles below with your harness\'s subagents; without',
     '  subagents, read the role file and play the role yourself.',
     '',

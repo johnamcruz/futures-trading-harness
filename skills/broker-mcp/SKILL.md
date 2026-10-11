@@ -25,7 +25,7 @@ guide resource once per session if it has one.
 3. `journal_read {kind:"lesson"}` plus recent `review` entries.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
 5. `search_contracts {searchText:"MNQ"}`: contracts come back by standard name: `MNQ` is the front month, `MNQ:2027-03` a later one. Note `tickSize`, `tickValue`. Use the name as `contractId` everywhere; the harness translates it to the broker's own id.
-6. Bars to a file: the runner's bars file, or `node <root>/scripts/bars.js --symbol MNQ --timeframe 3 --record` (+ `get_quote`), then market-snapshot, `mtf.js`, and `strategies.js scan --record`.
+6. Bars to a file: the runner's bars file, or the harness tool `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read`, and `strategies_scan` with `record` (the `harness-tools` skill).
 7. `journal_add {kind:"plan", contractId, tags:["setup:<name>", "<SYMBOL>"]}`.
 8. `place_order` only when the plan's trigger has happened.
 9. Manage with `get_account_snapshot` / `get_quote` / `list_open_orders`.
@@ -97,7 +97,7 @@ one `{ ts, kind, contractId, tags, text }` per line (order entries also carry `d
 itself. Write through the tools only; never edit the file. The gate reads
 plans (a plan for this contract within `FTH_PLAN_MAX_AGE_MIN`, 120) and
 reviews (every entry reviewed before the next) from it. Which strategy fired
-it reads from the signal record (`strategies.js scan --record`), not the
+it reads from the signal record (`strategies_scan` with `record`), not the
 plan. Optional parameters the gate and reviews use: `journal_read {kind, tag}`
 filters, `journal_add {orderId}` links a review to its order, and
 `modify_order {reason}` labels a stop change (`[protect] ...`).
