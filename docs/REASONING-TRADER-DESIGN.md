@@ -315,10 +315,13 @@ coverage.
 
 ### Labels (built)
 
-`node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file]`
+`node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file] [--out dir]`
 (`scripts/lib/replay/labels.js`, `counterfactual.js`) writes
 `<run dir>/labels.jsonl` and `labels-summary.json`, in the run's own folder
-(refused inside the repository), and prints the coverage. Model-neutral: it
+(refused inside the repository; a run not yet finished is labelled only
+with `--out` outside its run home: the labels hold what came after each
+decision, which a resumed teacher could read there), and prints the
+coverage. Model-neutral: it
 reads only what every replay writes (the day files, the cycle files'
 context and transcript, the gate's log, the scans log, the bars, the
 fills). One label per decision time and symbol:
@@ -327,38 +330,59 @@ fills). One label per decision time and symbol:
   symbol: the teacher decided; the position is what the cycle's context
   showed, else the fills through t), `no-cycle` (a trade time with no cycle
   for it: counted, not a teacher decision), `housekeeping` (premarket, end
-  of day). Interrupted lines are labelled and flagged; torn lines counted.
+  of day). Interrupted lines are labelled and flagged; torn lines counted. A
+  failed or timed-out cycle is flagged (`cycleFailed`), never cloned and
+  never a skip.
 - `candidates`: what the scan fired on the decision's bar, with direction
   (only scans logged by t).
 - `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
   and no entry is a skip), `hold` / `tighten` / `exit` in a trade; the
   setup tag; the stop in ticks, points, and the nearest of 0.5, 0.75, 1,
   1.5, 2, 3 x ATR(20) on bars closed by t (null and counted when the run
-  home has too few); the size as a step (0.25, 0.5, 0.75, 1) of the budget
-  (`--budget`, else an active prop attempt's default share of its cushion;
-  null and counted otherwise); the raw orders. Orders are the gate's records
+  home has too few, or when the stop is under 0.375 or over 4.5 ATR: out
+  of range, never snapped to an end bucket), from the order alone (never its fill); the size as a
+  step (0.25, 0.5, 0.75, 1) of the budget given with `--budget` (a prop
+  attempt's budget needs its whole state at t, which the run doesn't
+  record: without `--budget` the step is null and counted), with the
+  order's own contract's tick value (NQ on an MNQ run); the raw orders. The
+  entry that counts is the last one the broker accepted, else the last one
+  the gate let through and the broker didn't refuse, else the last one sent
+  (refused tries before it, by the gate or by the broker's guardrails in
+  its journal, are one decision with it, counted in `priorRefusals`; only
+  several entries that went through are "several entries"). Orders are the gate's records
   in the cycle's window (place, modify, cancel, partial close) joined to
-  the transcript's calls for their arguments; `close_position` isn't gated,
-  so an exit by it is seen only in a parsed transcript.
-- `gate`: allowed, refused (with checks), none; refused intents are kept and
-  flagged, for the cloning config to decide.
+  the transcript's calls for their arguments; an order the gate allowed and
+  the gateway's order tracker then refused is one refused order;
+  `close_position` isn't gated, so an exit by it is seen only in a parsed
+  transcript. Gate records outside every cycle are counted.
+- `gate`: allowed, refused (with checks, and `by`: the gate, or the broker
+  with its reason from the replay broker's journal), none; refused intents
+  are kept and flagged, for the cloning config to decide.
 - `outcome`: the round trip from the broker's fills (P&L, net of every
   fill's fees, R from the initial stop, MAE and MFE in R when the broker
   sends them, win or loss).
-- `counterfactual(s)`: for a skipped candidate or one fired on a no-cycle
-  bar, what the strategy's own trade would have done, simulated as the
-  backtester trades it (the simulated broker, next-open fill with a tick of
-  slippage, the brackets order_plan would place: the scan's stop ceiled to
-  ticks and the exit block's target; trail and max bars, the stop checked before the target in a bar, flat at end of
-  day) on the run's bars or the data the run replayed (`--bars`); for a
-  taken entry the same fields from its fills. So a skilful skip (a loser
+- `counterfactual(s)`: for a skipped candidate, a refused intent's
+  candidates, or one fired on a no-cycle bar (`counterfactualFor` says
+  which), what the strategy's own trade would have done: the brackets
+  order_plan would place (the scan's stop ceiled to ticks, the exit block's
+  target in ticks from the placed stop, floored), filled and managed by the
+  backtester's simulated broker (a market entry at the next bar's open plus
+  a tick of slippage; the stop checked before the target in a bar; trail
+  and max bars at the close; flat at the end-of-day bar's close), on the
+  run's bars or the data the run replayed (`--bars`). It is its own walk,
+  not a backtest run (no gate, no other positions). For a taken entry the
+  same fields come from its fills (MAE/MFE from bars opening at or after
+  the fill when the broker sends none). The one standing for the label is a
+  taken trade's own, a refused intent's own setup and side, else the first
+  candidate with a stop distance. So a skilful skip (a loser
   avoided) can be told from a cautious one (a winner missed). What can't be
   simulated is marked and counted.
 - `clone`: whether the student can express it (limit or stop entries, a
   target other than the strategy's own exit as order_plan places it,
   several entries, adds, partial exits, unknown arguments, an unmapped stop
   stay out), and why. `teacher.target` says whose target a bracket is.
-- provenance: harness, model, config hash, prompt hash, the cycle file.
+- provenance: harness, model, config hash, the strategies' hash (the files
+  the counterfactuals read), prompt hash, the cycle file.
 
 Decision-time fields never read anything after t; outcomes and
 counterfactuals are what came after, only in their own fields. The same

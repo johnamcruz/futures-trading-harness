@@ -7,7 +7,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('../helpers');
-const { labelRun, writeLabels, roundTrips, outcomeOf, atrAt, teacherAction, summaryText } = require('../../scripts/lib/replay/labels');
+const { labelRun, writeLabels, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, summaryText } = require('../../scripts/lib/replay/labels');
 
 const DAY = '2026-03-03';
 const RUN = 'r1';
@@ -31,14 +31,15 @@ const STRATEGIES = [{ name: 'orb', valid: true, signal: 'rules', risk: { min_rr:
 /**
  * A run home with its run dir. steps: [{ k, kind, cycle: { orders: [{ tool, input, gate }], positions, transcript }, scan, trades, interrupted, noCycle }]
  */
-function makeRun({ steps, barList = bars(), budget } = {}) {
+function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['MNQ'] } = {}) {
   const home = path.join(tmpDir(), 'replays', RUN);
   const runDir = path.join(home, 'replay', RUN);
   fs.mkdirSync(runDir, { recursive: true });
   fs.mkdirSync(path.join(home, 'logs', 'cycles', '2026-10-10'), { recursive: true });
   fs.mkdirSync(path.join(home, 'bars'), { recursive: true });
-  fs.writeFileSync(path.join(runDir, 'manifest.json'), JSON.stringify({ v: 1, runId: RUN, hash: 'c'.repeat(64), harness: 'custom', model: 'teacher-1', daysDone: [DAY] }));
-  fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ symbols: ['MNQ'], timeframe: 3, account: '7' }));
+  fs.writeFileSync(path.join(runDir, 'manifest.json'), JSON.stringify({ v: 1, runId: RUN, hash: 'c'.repeat(64), harness: 'custom', model: 'teacher-1', daysDone: [DAY], ...manifest }));
+  fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ symbols, timeframe: 3, account: '7' }));
+  const journal = [];
   fs.writeFileSync(path.join(home, 'bars', 'MNQ-3m.json'), JSON.stringify({ contractId: 'MNQ', bars: barList }));
   const lines = [];
   const gate = [];
@@ -47,22 +48,24 @@ function makeRun({ steps, barList = bars(), budget } = {}) {
     const t = s.t || at(s.k);
     const barT = iso(t - 2000 - 180000);
     const wall = WALL0 + i * 60000;
-    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: [{ symbol: 'MNQ', lastBarT: barT }], trades: s.trades || [], since: iso(t - 180000) };
+    const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: symbols.map(symbol => ({ symbol, lastBarT: barT })), trades: s.trades || [], since: iso(t - 180000) };
+    for (const j of s.journal || []) journal.push({ ts: iso(t), accountId: 7, contractId: 'BT.MNQ', ...j });
     if (s.interrupted) Object.assign(rec, { interrupted: true, trades: null, bars: undefined });
-    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, stopDistance: 10 })) });
+    if (s.scan) scans.push({ at: iso(t), symbol: 'MNQ', contractId: 'MNQ', bar: { t: barT, c: 20000 }, candidates: s.scan.map(x => x.name), results: s.scan.map(x => ({ name: x.name, candidate: true, direction: x.direction, stopDistance: x.stopDistance === undefined ? 10 : x.stopDistance })) });
     if (s.cycle) {
       const c = s.cycle;
       const file = path.join(home, 'logs', 'cycles', '2026-10-10', `${String(i).padStart(6, '0')}-trade.json`);
       const transcript = c.transcript !== undefined ? c.transcript : (c.orders || []).map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${i}-${j}`, name: `mcp__broker__${o.tool}`, input: o.input }] } })).join('\n');
       const result = c.result || 'CYCLE RESULT: done';
-      fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: [{ symbol: 'MNQ', bar: { t: barT, c: 20000 } }], account: { id: 7, balance: 50000, positions: c.positions || [], attempts: c.attempts || [] } }, transcript }));
-      rec.ran.push({ action: 'trade', ok: true, result, symbols: ['MNQ'] });
-      rec.cycles.push({ action: 'trade', at: iso(wall), ok: true, durationMs: 30000, result, promptHash: `hash${i}`, file });
+      const account = c.noAccount ? null : { id: 7, balance: 50000, positions: c.positions || [], attempts: c.attempts || [] };
+      if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account }, transcript }));
+      rec.ran.push({ action: 'trade', ok: c.ok !== false, timedOut: Boolean(c.timedOut), result, symbols });
+      if (!c.noLog) rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
       for (const [j, o] of (c.orders || []).entries()) {
         if (o.gate === 'none') continue;
-        const g = o.gate || { source: 'gateway', decision: 'allowed', violations: [] };
-        gate.push({ ts: iso(wall + 1000 + j * 100), tool: g.source === 'hook' ? undefined : o.tool, ...g, contractId: o.input.contractId, rationale: o.input.rationale });
-        if (g.decision === 'blocked') rec.refusals.push({ ts: iso(wall + 1000), source: g.source, tool: null, contractId: o.input.contractId, checks: g.violations.map(v => v.check) });
+        for (const g of [].concat(o.gate || { source: 'gateway', decision: 'allowed', violations: [] })) {
+          gate.push({ ts: iso(wall + (o.atMs ?? 1000 + j * 100)), tool: g.source === 'hook' ? undefined : o.tool, ...g, contractId: o.input.contractId, rationale: o.input.rationale });
+        }
       }
     }
     lines.push(rec);
@@ -70,6 +73,8 @@ function makeRun({ steps, barList = bars(), budget } = {}) {
   fs.writeFileSync(path.join(runDir, `${DAY}.jsonl`), lines.map(l => `${JSON.stringify(l)}\n`).join(''));
   fs.writeFileSync(path.join(home, 'logs', 'gate-log.jsonl'), gate.map(g => `${JSON.stringify(g)}\n`).join(''));
   fs.writeFileSync(path.join(home, 'logs', `scans-${DAY}.jsonl`), scans.map(g => `${JSON.stringify(g)}\n`).join(''));
+  fs.mkdirSync(path.join(runDir, 'broker'), { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'broker', 'journal.jsonl'), journal.map(g => `${JSON.stringify(g)}\n`).join(''));
   return { home, runDir, budget };
 }
 
@@ -121,14 +126,17 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
   assert.deepStrictEqual(L[0].candidates, [{ name: 'orb', direction: 'long' }]);
   assert.strictEqual(L[0].teacher.action, 'long');
   assert.strictEqual(L[0].teacher.setup, 'orb');
-  assert.deepStrictEqual(L[0].teacher.stop, { ticks: 40, points: 10, atr: 10, ratio: 1, multiple: 1 });
+  assert.deepStrictEqual(L[0].teacher.stop, { ticks: 40, points: 10, atr: 10, ratio: 1, multiple: 1, outOfRange: false });
   assert.deepStrictEqual([L[0].teacher.size.riskUsd, L[0].teacher.size.step], [20, 0.5]);
-  assert.deepStrictEqual(L[0].gate, { decision: 'allowed', checks: [] });
+  assert.deepStrictEqual(L[0].gate, { decision: 'allowed', by: null, checks: [] });
   assert.deepStrictEqual([L[0].outcome.filled, L[0].outcome.result, L[0].outcome.r, L[0].outcome.net, L[0].outcome.maeR, L[0].outcome.mfeR], [true, 'win', 2, 39.26, -0.25, 2.5]);
   assert.strictEqual(L[0].outcome.entryTime, iso(T0 + 60000));
   assert.deepStrictEqual(L[0].clone, { ok: true, reasons: [] });
   assert.strictEqual(L[0].result, 'CYCLE RESULT: long MNQ');
-  assert.deepStrictEqual(L[0].provenance, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
+  const { strategiesHash, ...prov } = L[0].provenance;
+  assert.deepStrictEqual(prov, { harness: 'custom', model: 'teacher-1', configHash: 'c'.repeat(64), promptHash: 'hash0', cycleFile: 'logs/cycles/2026-10-10/000000-trade.json' });
+  assert.match(strategiesHash, /^[0-9a-f]{64}$/);
+  assert.notStrictEqual(labelRun(runDir, { budgetUsd: 40, strategies: [{ ...STRATEGIES[0], risk: { min_rr: 3 } }] }).labels[0].provenance.strategiesHash, strategiesHash, 'another exit, another hash');
   assert.strictEqual(L[0].teacher.orders[0].args, undefined);
   assert.strictEqual(L[0].teacher.orders[0].stopTicks, 40);
 
@@ -154,7 +162,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
 
   // The short loser: R negative (-$20 on a $40 risk: 80 ticks x $0.50), its stop 2 ATR, the full budget.
   assert.strictEqual(L[5].teacher.action, 'short');
-  assert.deepStrictEqual(L[5].teacher.stop, { ticks: 80, points: 20, atr: 10, ratio: 2, multiple: 2 });
+  assert.deepStrictEqual(L[5].teacher.stop, { ticks: 80, points: 20, atr: 10, ratio: 2, multiple: 2, outOfRange: false });
   assert.strictEqual(L[5].teacher.size.step, 1);
   assert.deepStrictEqual([L[5].outcome.result, L[5].outcome.r, L[5].outcome.pnl, L[5].outcome.net, L[5].outcome.side], ['loss', -0.5, -20, -20.74, 'sell']);
 
@@ -191,7 +199,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
 test('labels: no ATR (too few bars closed by t) leaves the stop unmapped and counts it', () => {
   const { runDir } = makeRun({ barList: bars(10), steps: [{ k: 0, cycle: { orders: [LONG] } }] });
   const { labels, summary } = labelRun(runDir);
-  assert.deepStrictEqual(labels[0].teacher.stop, { ticks: 40, points: 10, atr: null, ratio: null, multiple: null });
+  assert.deepStrictEqual(labels[0].teacher.stop, { ticks: 40, points: 10, atr: null, ratio: null, multiple: null, outOfRange: false });
   assert.deepStrictEqual(labels[0].clone, { ok: false, reasons: ['stop not mapped to ATR'] });
   assert.strictEqual(summary.unmapped, 1);
   // No budget given and no prop attempt: the size step is unknown, counted.
@@ -199,10 +207,15 @@ test('labels: no ATR (too few bars closed by t) leaves the stop unmapped and cou
   assert.strictEqual(summary.unsized, 1);
 });
 
-test('labels: an active prop attempt sets the budget (the default share of its cushion)', () => {
+test('labels: a prop attempt alone sets no budget (its sizing needs state the run doesn\'t record): the step is unknown', () => {
   const { runDir } = makeRun({ steps: [{ k: 0, cycle: { orders: [LONG], attempts: [{ account: 'topstep_50k', status: 'active', cushion: 200, entryBlock: null }] } }] });
-  const { labels } = labelRun(runDir);
-  assert.deepStrictEqual([labels[0].teacher.size.budgetUsd, labels[0].teacher.size.ratio, labels[0].teacher.size.step], [40, 0.5, 0.5]);
+  const { labels, summary } = labelRun(runDir);
+  assert.deepStrictEqual([labels[0].teacher.size.budgetUsd, labels[0].teacher.size.step, summary.unsized], [null, null, 1]);
+  // Over the budget: the step is the whole budget, flagged.
+  const over = labelRun(runDir, { budgetUsd: 10 }).labels[0].teacher.size;
+  assert.deepStrictEqual([over.ratio, over.step, over.overBudget], [2, 1, true]);
+  const under = labelRun(runDir, { budgetUsd: 80 }).labels[0].teacher.size;
+  assert.deepStrictEqual([under.ratio, under.step, under.overBudget], [0.25, 0.25, false]);
 });
 
 test('labels: no lookahead - bars and scans after t never change an earlier label', () => {
@@ -292,7 +305,7 @@ test('labels: an order with order_plan\'s arguments and rationale: joined, its s
   const { labels } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
   // With the transcript: the arguments joined to the gate's record; brackets read; the 2R target is orb's own exit.
   assert.deepStrictEqual([labels[0].teacher.action, labels[0].teacher.setup, labels[0].gate.decision, labels[0].teacher.orders.length, labels[0].teacher.orders[0].argsKnown], ['long', 'orb', 'allowed', 1, true]);
-  assert.deepStrictEqual(labels[0].teacher.stop, { ticks: 40, points: 10, atr: 10, ratio: 1, multiple: 1 });
+  assert.deepStrictEqual(labels[0].teacher.stop, { ticks: 40, points: 10, atr: 10, ratio: 1, multiple: 1, outOfRange: false });
   assert.deepStrictEqual(labels[0].teacher.target, { ticks: 80, from: 'strategy' });
   assert.deepStrictEqual(labels[0].clone, { ok: true, reasons: [] });
   // From the gate's record alone: the stop is the rationale's price (19990), not the "(40 ticks)" after it.
@@ -349,11 +362,265 @@ test('labels: ATR from bars closed at or before t only', () => {
 });
 
 test('labels: teacher actions', () => {
-  const o = x => ({ tool: 'place_order', riskReducing: false, argsKnown: true, type: 'market', side: 'buy', targetTicks: null, limitPrice: null, rationale: '', ...x });
+  const o = x => ({ tool: 'place_order', riskReducing: false, argsKnown: true, type: 'market', side: 'buy', targetTicks: null, limitPrice: null, rationale: '', gate: { decision: 'allowed' }, broker: { decision: 'unknown' }, ...x });
   assert.strictEqual(teacherAction([], false).action, 'none');
   assert.strictEqual(teacherAction([o({ side: 'sell' })], false).action, 'short');
   assert.deepStrictEqual(teacherAction([o({ type: 'stop' })], false).reasons, ['stop entry']);
   assert.deepStrictEqual(teacherAction([o(), o()], false).reasons, ['several entries']);
   assert.strictEqual(teacherAction([o({ riskReducing: true, rationale: '[protect] stop' })], true).action, 'tighten');
-  assert.deepStrictEqual(teacherAction([{ tool: 'modify_order', argsKnown: true, stopPrice: null, trailPrice: null, limitPrice: 21000 }], true), { action: 'hold', order: null, reasons: ['target change'] });
+  assert.deepStrictEqual(teacherAction([{ tool: 'modify_order', argsKnown: true, stopPrice: null, trailPrice: null, limitPrice: 21000, gate: { decision: 'allowed' } }], true), { action: 'hold', order: null, reasons: ['target change'] });
+  // Refused tries, then one that went through: one decision, not several entries.
+  const refused = o({ gate: { decision: 'refused' }, side: 'sell' });
+  const brokerRefused = o({ broker: { decision: 'refused' }, size: 27 });
+  const placed = o({ broker: { decision: 'accepted' }, size: 1 });
+  const a = teacherAction([refused, refused, brokerRefused, placed], false);
+  assert.deepStrictEqual([a.order, a.reasons, a.priorRefusals, a.action], [placed, [], 3, 'long']);
+  // Refused only: the last intent, refused.
+  assert.strictEqual(teacherAction([refused, brokerRefused], false).order, brokerRefused);
+});
+
+// Review findings: each test fails without the code it names.
+
+const BLOCK = check => ({ source: 'gateway', decision: 'blocked', violations: [{ check, message: check }] });
+const order = (rationale, x = {}) => ({ tool: 'place_order', input: { ...LONG.input, rationale, ...x } });
+
+test('labels: refused tries, then a retry that fills - the retry is the action, not "several entries"', () => {
+  const run = makeRun({ steps: [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [
+      { ...order('setup:orb long try one, stop 19990.3'), gate: BLOCK('order-consistency') },
+      { ...order('setup:orb long try two, stop 19990.3'), gate: BLOCK('order-consistency') },
+      order('setup:orb long, stop 19990'),
+    ] } },
+    { k: 1, cycle: { positions: LONG_POS }, trades: [fill(1, 0, 20000, null)] },
+    { k: 2, cycle: {}, trades: [fill(5, 1, 19990, -20)] },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  assert.deepStrictEqual([labels[0].teacher.action, labels[0].gate.decision, labels[0].teacher.priorRefusals, labels[0].clone.reasons], ['long', 'allowed', 2, []]);
+  assert.deepStrictEqual([labels[0].outcome.result, labels[0].outcome.r], ['loss', -1]);
+  assert.deepStrictEqual([summary.taken, summary.losses, summary.refused, summary.priorRefusals], [1, 1, 0, 2]);
+});
+
+test('labels: an entry the gate allowed but the broker refused (its journal), then one that filled - the filled one is the action', () => {
+  const big = order('setup:orb long size 27, stop 19990', { size: 27 });
+  const one = order('setup:orb long size 1, stop 19990');
+  const run = makeRun({ steps: [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [big, one] }, journal: [
+      { kind: 'order_blocked', text: `Order size 27 exceeds BACKTESTER_MAX_ORDER_SIZE (1). | rationale: ${big.input.rationale}` },
+      { kind: 'order_placed', text: one.input.rationale, orderId: 5, data: { request: {}, result: { orderId: 5, success: true, errorCode: 0 } } },
+    ] },
+    { k: 1, cycle: { positions: LONG_POS }, trades: [fill(1, 0, 20000, null, { orderId: 5 })] },
+    { k: 2, cycle: {}, trades: [fill(5, 1, 20020, 40)] },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  const L = labels[0];
+  assert.deepStrictEqual([L.teacher.action, L.gate.decision, L.teacher.priorRefusals, L.clone.reasons, L.teacher.size.contracts], ['long', 'allowed', 1, [], 1]);
+  assert.deepStrictEqual(L.teacher.orders.map(o => o.broker.decision), ['refused', 'accepted']);
+  assert.deepStrictEqual([L.outcome.result, L.outcome.r, summary.wins, summary.brokerRefused], ['win', 2, 1, 0]);
+});
+
+test('labels: an intent the broker refused is a refused label with the candidates\' counterfactual', () => {
+  const big = order('setup:orb long size 27, stop 19990', { size: 27 });
+  const run = makeRun({ steps: [
+    { k: 4, scan: [{ name: 'orb', direction: 'long', stopDistance: null }, { name: 'orb', direction: 'short' }], cycle: { orders: [big] }, journal: [
+      { kind: 'order_blocked', text: `Order size 27 exceeds BACKTESTER_MAX_ORDER_SIZE (1). | rationale: ${big.input.rationale}` },
+    ] },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40, strategies: STRATEGIES });
+  const L = labels[0];
+  assert.deepStrictEqual([L.gate.decision, L.gate.by, L.gate.brokerReason, L.outcome.result], ['refused', 'broker', 'Order size 27 exceeds BACKTESTER_MAX_ORDER_SIZE (1).', 'refused']);
+  assert.strictEqual(L.counterfactualFor, 'refused intent');
+  assert.strictEqual(L.counterfactuals.length, 2);
+  // Its own setup and side (orb long) stands for it, though it has no stop distance (unsimulated).
+  assert.deepStrictEqual([L.counterfactual.direction, L.counterfactual.simulated], ['long', false]);
+  assert.deepStrictEqual([summary.refused, summary.brokerRefused, summary.taken], [1, 1, 0]);
+});
+
+test('labels: a skip\'s counterfactual is the backtester\'s pick - the first candidate with a stop distance', () => {
+  const run = makeRun({ steps: [{ k: 4, scan: [{ name: 'orb', direction: 'long', stopDistance: null }, { name: 'orb', direction: 'short' }], cycle: {} }] });
+  const L = labelRun(run.runDir, { strategies: STRATEGIES }).labels[0];
+  assert.deepStrictEqual([L.counterfactualFor, L.counterfactual.direction, L.counterfactual.result], ['skip', 'short', 'win']);
+});
+
+test('labels: an order the gate allowed and the gateway then refused (its order tracker) is one refused order', () => {
+  const o = order('setup:orb long, stop 19990');
+  const run = makeRun({ steps: [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [{ ...o, gate: [{ source: 'gateway', decision: 'allowed', violations: [] }, BLOCK('order-pending')] }] } }] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.strictEqual(labels[0].teacher.orders.length, 1);
+  assert.deepStrictEqual([labels[0].gate.decision, labels[0].gate.checks, labels[0].outcome.result, summary.taken], ['refused', ['order-pending'], 'refused', 0]);
+});
+
+test('labels: a failed or timed-out cycle is no skip and never cloned', () => {
+  const run = makeRun({ steps: [
+    { k: 4, scan: [{ name: 'orb', direction: 'short' }], cycle: { ok: false } },
+    { k: 5, scan: [{ name: 'orb', direction: 'short' }], cycle: { timedOut: true } },
+  ] });
+  const { labels, summary } = labelRun(run.runDir, { strategies: STRATEGIES });
+  assert.deepStrictEqual(labels.map(l => [l.cycleFailed, l.clone.ok, l.clone.reasons, l.counterfactual]), [['cycle failed', false, ['cycle failed'], null], ['cycle timed out', false, ['cycle timed out'], null]]);
+  assert.deepStrictEqual([summary.skipped, summary.skippedWouldWin, summary.standAside, summary.cycleFailed], [0, 0, 0, 2]);
+});
+
+test('labels: an NQ order on an MNQ run is sized with NQ\'s tick value', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [order('setup:orb long, stop 19990', { contractId: 'NQ' })] } }] });
+  const L = labelRun(run.runDir, { budgetUsd: 400 }).labels[0];
+  // 40 ticks x $5 = $200: half the budget (MNQ's $0.50 would have made it $20).
+  assert.deepStrictEqual([L.teacher.size.riskUsd, L.teacher.size.step], [200, 0.5]);
+});
+
+test('labels: malformed lines (null, arrays) in the gate log, the scans log and a day file are skipped', () => {
+  const run = makeRun({ steps: [{ k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [LONG] } }] });
+  for (const f of [path.join(run.home, 'logs', 'gate-log.jsonl'), path.join(run.home, 'logs', `scans-${DAY}.jsonl`), path.join(run.runDir, `${DAY}.jsonl`)]) fs.appendFileSync(f, 'null\n[1]\n7\n');
+  const dayFile = path.join(run.runDir, `${DAY}.jsonl`);
+  const rec = JSON.parse(fs.readFileSync(dayFile, 'utf8').split('\n')[0]);
+  fs.appendFileSync(dayFile, `${JSON.stringify({ ...rec, t: iso(at(1)), cycles: [null], ran: [null], bars: [null], trades: [null] })}\n`);
+  const { labels } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual(labels.map(l => l.decision), ['flat', 'no-cycle']);
+});
+
+test('labels: a run that isn\'t finished is refused in place; --out elsewhere (never in the run home) labels it', () => {
+  const run = makeRun({ manifest: { daysDone: [] }, steps: [{ k: 0, cycle: {} }] });
+  assert.throws(() => labelRun(run.runDir), /not finished \(day 2026-03-03 is not done\)/);
+  assert.throws(() => writeLabels(run.runDir), /not finished/);
+  assert.throws(() => writeLabels(run.runDir, { outDir: path.join(run.home, 'labels') }), /inside the run home/);
+  const out = path.join(path.dirname(path.dirname(run.home)), 'labels-out');
+  const { file, summary } = writeLabels(run.runDir, { outDir: out });
+  assert.ok(file.startsWith(out) && fs.existsSync(file));
+  assert.strictEqual(summary.unfinished, 'day 2026-03-03 is not done');
+  assert.ok(!fs.existsSync(path.join(run.runDir, 'labels.jsonl')));
+  const pending = makeRun({ manifest: { pending: { t: iso(at(1)) } }, steps: [{ k: 0, cycle: {} }] });
+  assert.throws(() => labelRun(pending.runDir), /a step at .* was interrupted/);
+});
+
+test('labels: the cycle file is read from the run home, not wherever the log line points', () => {
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [LONG] } }] });
+  // The log line points at another folder's copy with an open position in it: never read.
+  const dayFile = path.join(run.runDir, `${DAY}.jsonl`);
+  const rec = JSON.parse(fs.readFileSync(dayFile, 'utf8').trim());
+  const real = rec.cycles[0].file;
+  const decoy = path.join(tmpDir(), 'logs', 'cycles', '2026-10-10', path.basename(real));
+  fs.mkdirSync(path.dirname(decoy), { recursive: true });
+  const doc = JSON.parse(fs.readFileSync(real, 'utf8'));
+  fs.writeFileSync(decoy, JSON.stringify({ ...doc, context: { ...doc.context, account: { positions: LONG_POS } } }));
+  rec.cycles[0].file = decoy;
+  fs.writeFileSync(dayFile, `${JSON.stringify(rec)}\n`);
+  assert.strictEqual(labelRun(run.runDir).labels[0].decision, 'flat');
+});
+
+test('labels: the position from fills (no account in the context) reads only fills through t', () => {
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { noAccount: true }, trades: [fill(-1, 0, 20000, null)] },
+    { k: 1, cycle: { noAccount: true }, trades: [fill(2, 1, 20000, 0)] },
+    // A fill after this decision time reported in its line (a broker reporting early): not seen at t.
+    { k: 2, cycle: { noAccount: true }, trades: [fill(7, 0, 20000, null)] },
+  ] });
+  const { labels } = labelRun(run.runDir);
+  assert.deepStrictEqual(labels.map(l => [l.decision, l.position.source]), [['in-trade', 'fills'], ['flat', 'fills'], ['flat', 'fills']]);
+});
+
+test('labels: entries join to fills - the latest entry before an opening takes it, the same trading day only', () => {
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [order('setup:orb long first, stop 19990')] } },
+    { k: 1, cycle: { orders: [order('setup:orb long second, stop 19990')] } },
+    { k: 2, cycle: { positions: LONG_POS }, trades: [fill(4, 0, 20000, null)] },
+    { k: 3, cycle: {}, trades: [fill(8, 1, 20010, 20)] },
+    // An entry late in the day whose only opening comes the next trading day: unfilled.
+    { t: Date.parse(`${DAY}T20:47:02Z`), cycle: { orders: [order('setup:orb long late, stop 19990')] } },
+    { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
+    { t: Date.parse('2026-03-03T23:33:02Z'), cycle: { positions: LONG_POS }, trades: [fill(9 * 60, 0, 20000, null, { id: 'next-day' })] },
+  ] });
+  const { labels } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual(labels.slice(0, 2).map(l => l.outcome.result), ['unfilled', 'win']);
+  assert.strictEqual(labels[4].outcome.result, 'unfilled');
+});
+
+test('labels: an in-trade decision gets the round trip open at its time, not an earlier closed one', () => {
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [LONG] } },
+    { k: 3, cycle: {}, trades: [fill(1, 0, 20000, null), fill(5, 1, 20010, 20)] },
+    { k: 4, cycle: { orders: [order('setup:orb long again, stop 19990')] } },
+    { k: 5, cycle: { positions: LONG_POS }, trades: [fill(13, 0, 20000, null, { id: 'b' })] },
+    { k: 6, cycle: {}, trades: [fill(17, 1, 19990, -20, { id: 'c' })] },
+  ] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels;
+  assert.deepStrictEqual([L[3].decision, L[3].outcome.pnl, L[3].outcome.result], ['in-trade', -20, 'loss']);
+});
+
+test('labels: a fill reported twice counts once; a voided fill not at all', () => {
+  const open = fill(1, 0, 20000, null);
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [LONG] } },
+    { k: 1, cycle: { positions: LONG_POS }, trades: [open, fill(2, 1, 20100, 200, { id: 'void', voided: true })] },
+    { k: 2, cycle: {}, trades: [open, fill(4, 1, 20010, 20)] },
+  ] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([L.outcome.pnl, L.outcome.size, L.outcome.fees, L.outcome.result], [20, 1, 0.74, 'win']);
+});
+
+test('labels: gate records are bound to their cycle\'s duration; the rest are counted', () => {
+  // The record 40 s after a 30 s cycle (past its slack, before the next cycle): no order of the cycle.
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [{ ...LONG, atMs: 40000 }] } }, { k: 1, cycle: {} }] });
+  const { labels, summary } = labelRun(run.runDir);
+  assert.deepStrictEqual([labels[0].teacher.orders.map(o => o.gate.decision), labels[0].teacher.action], [['not-logged'], 'long']);
+  assert.strictEqual(summary.gateRecordsOutsideCycles, 1);
+});
+
+test('labels: an order naming no contract (modify, cancel) goes to the only symbol, never a guess among several', () => {
+  const modify = { tool: 'modify_order', input: { accountId: 7, orderId: 2, stopPrice: 20000 } };
+  const one = labelRun(makeRun({ steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [modify] } }] }).runDir);
+  assert.strictEqual(one.labels[0].teacher.action, 'tighten');
+  const two = labelRun(makeRun({ symbols: ['MES', 'MNQ'], steps: [{ k: 0, cycle: { positions: LONG_POS, orders: [modify] } }] }).runDir);
+  assert.deepStrictEqual(two.labels.map(l => [l.symbol, l.teacher.action]), [['MES', 'none'], ['MNQ', 'hold']]);
+  assert.strictEqual(two.summary.unattributedOrders, 1);
+});
+
+test('labels: a trade cycle with no cycle log line is a decision whose orders are unknown', () => {
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { noLog: true } }] }).runDir).labels[0];
+  assert.deepStrictEqual([L.decision, L.clone.reasons], ['flat', ['no cycle log']]);
+});
+
+test('labels: ATR over a fixed window of closed bars (a bar 100+ bars back no longer counts)', () => {
+  const list = bars(160).map((b, i) => (i === 5 ? { ...b, h: 120000, l: 1 } : b)).map(b => ({ ...b, ms: Date.parse(b.t) }));
+  assert.strictEqual(atrAt(list, 180000, Date.parse(list[150].t)), 10);
+  assert.ok(atrAt(list, 180000, Date.parse(list[60].t)) > 10, 'inside the window it does');
+});
+
+test('labels: a stop for a limit or stop entry is measured from its own price; on the wrong side it is no stop', () => {
+  const { specFor } = require('../../scripts/lib/trading/contracts');
+  const base = { tool: 'place_order', side: 'buy', stopTicks: null, rationaleStop: 19980, limitPrice: null, stopPrice: null };
+  assert.strictEqual(stopOf({ ...base, type: 'limit', limitPrice: 19990 }, specFor('MNQ'), 20000, 10).points, 10);
+  assert.strictEqual(stopOf({ ...base, type: 'stop', stopPrice: 20010 }, specFor('MNQ'), 20000, 10).points, 30);
+  assert.strictEqual(stopOf({ ...base, type: 'market' }, specFor('MNQ'), 20000, 10).points, 20);
+  // A long's stop above its entry: no stop (never its distance turned around).
+  const wrong = stopOf({ ...base, type: 'market', rationaleStop: 20010 }, specFor('MNQ'), 20000, 10);
+  assert.deepStrictEqual([wrong.points, wrong.multiple], [null, null]);
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { orders: [order('setup:orb long, stop 20010', { stopLossBracket: undefined })] } }] }).runDir).labels[0];
+  assert.deepStrictEqual(L.clone.reasons, ['no stop']);
+});
+
+test('labels: a stop far outside the ATR multiples is out of range (unmapped), not snapped to the end bucket', () => {
+  const { specFor } = require('../../scripts/lib/trading/contracts');
+  const o = { tool: 'place_order', side: 'buy', type: 'market', stopTicks: 5, rationaleStop: null };
+  const tight = stopOf(o, specFor('MNQ'), 20000, 10);
+  assert.deepStrictEqual([tight.multiple, tight.outOfRange], [null, true], '1.25 points = 0.125 ATR');
+  assert.strictEqual(stopOf({ ...o, stopTicks: 200 }, specFor('MNQ'), 20000, 10).outOfRange, true, '5 ATR');
+  assert.strictEqual(stopOf({ ...o, stopTicks: 16 }, specFor('MNQ'), 20000, 10).multiple, 0.5, '0.4 ATR is still 0.5');
+  const run = makeRun({ steps: [{ k: 0, cycle: { orders: [order('setup:orb long tight, stop 19998.75', { stopLossBracket: { ticks: 5, type: 'stop' } })] } }] });
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual([labels[0].clone.reasons, summary.unmapped, summary.stopOutOfRange], [['stop out of ATR range'], 1, 1]);
+});
+
+test('labels: the transcript\'s calls join the gate\'s records by rationale, not by order', () => {
+  const a = order('setup:orb long A, stop 19990', { stopLossBracket: { ticks: 40, type: 'stop' } });
+  const b = order('setup:orb long B, stop 19990', { stopLossBracket: { ticks: 60, type: 'stop' } });
+  // The gate saw B refused first, then A allowed; the transcript lists A before B.
+  const transcript = [a, b].map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `x${j}`, name: 'mcp__broker__place_order', input: o.input }] } })).join('\n');
+  const run = makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [{ ...b, gate: BLOCK('plan-required') }, a] } }] });
+  const L = labelRun(run.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual(L.teacher.orders.map(o => [o.rationale.slice(0, 16), o.stopTicks, o.gate.decision]), [['setup:orb long B', 60, 'refused'], ['setup:orb long A', 40, 'allowed']]);
+  assert.strictEqual(L.teacher.stop.ticks, 40);
+});
+
+test('labels: an opencode transcript gives the orders their arguments', () => {
+  const transcript = JSON.stringify({ type: 'tool_use', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'completed', input: LONG.input } } });
+  const L = labelRun(makeRun({ steps: [{ k: 0, cycle: { transcript, orders: [LONG] } }] }).runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([L.teacher.orders[0].argsKnown, L.teacher.size.step, L.clone.reasons], [true, 0.5, []]);
 });

@@ -7,9 +7,11 @@
  * real fills of a trade it did take, so RL can tell a skilful skip (a loser
  * avoided) from an overly cautious one (a winner missed).
  *
- * The simulation is the backtester's (backtest/engine.js), through the same
- * simulated broker (backtest/sim-broker.js) and exit plan (evaluator.js
- * exitPlan), on the replay's bars:
+ * The simulation is this module's own walk, not a backtest run: it places
+ * the brackets order_plan would place for the setup and lets the
+ * backtester's simulated broker (backtest/sim-broker.js) fill and manage
+ * them with the strategy's exit plan (evaluator.js exitPlan), on the
+ * replay's bars. Its conventions:
  *   - entry: a market order at the next bar's open after the signal bar plus
  *     one tick of slippage (fill: next-open), dropped (`expired`) when that
  *     bar opens through the stop, or falls in another trading day or at or
@@ -117,7 +119,7 @@ function simulate({ bars, tfMs, signalMs, signalClose, direction, stopDistance, 
 }
 
 /** A taken trade's counterfactual fields from its real fills (MAE/MFE from the bars when the broker sends none). */
-function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null, bars = [], tfMs = 0, strategy = null, direction = null } = {}) {
+function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null, bars = [], strategy = null, direction = null } = {}) {
   const base = { strategy, direction, source: 'fills' };
   if (!outcome || !outcome.filled || outcome.entryPrice === null) return unsimulated(base, outcome && outcome.result === 'refused' ? 'refused' : 'not filled');
   const sign = outcome.side === 'buy' ? 1 : -1;
@@ -129,7 +131,9 @@ function fromFills(outcome, { stopPoints = null, targetTicks = null, spec = null
   if ((maeR === null || mfeR === null) && stopPoints && outcome.exitTime && bars.length) {
     const from = Date.parse(outcome.entryTime);
     const to = Date.parse(outcome.exitTime);
-    const span = bars.filter(b => b.ms + tfMs > from && b.ms < to);
+    // Bars opening at or after the fill and before the exit: a mid-bar fill's bar is left out (its high
+    // and low may come before the fill), as a next-open fill's bar starts at the fill.
+    const span = bars.filter(b => b.ms >= from && b.ms < to);
     if (span.length) {
       const fav = Math.max(...span.map(b => sign * ((sign > 0 ? b.h : b.l) - outcome.entryPrice)));
       const adv = Math.min(...span.map(b => sign * ((sign > 0 ? b.l : b.h) - outcome.entryPrice)));

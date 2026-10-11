@@ -102,19 +102,27 @@ broker.
    candidates; the teacher's action (`none`, `long`, `short` flat; `hold`,
    `tighten`, `exit` in a trade), its setup, its stop as a multiple of
    ATR(20) on bars closed by then, its size as a step of the budget
-   (`--budget USD`, else an active prop attempt's); the gate's answer
-   (refused intents kept and flagged); the trade's outcome from the fills;
-   and, for a skipped candidate or one on a bar no cycle ran, the
-   counterfactual: the strategy's own trade as the backtester would have
-   run it (pass the data the run replayed with `--bars MNQ=<file>`; else
-   the run home's bars). Decisions the student can't express (limit or
+   (`--budget USD`; unknown without it); the gate's answer (refused intents
+   kept and flagged; a refused try then an allowed retry is one decision);
+   the trade's outcome from the fills; and, for a skipped candidate or one
+   on a bar no cycle ran, the counterfactual: the strategy's own trade with
+   the brackets `order_plan` would place, filled by the backtester's
+   simulated broker (next-open fill plus a tick, stop before target in a
+   bar, flat at end of day; pass the data the run replayed with
+   `--bars MNQ=<file>`, else the run home's bars). Label a run only once
+   it is finished: the labels hold what came after each decision, and the
+   command refuses an unfinished run unless `--out` names a folder outside
+   its run home. A refused try followed by one that went through is one
+   decision (the refused tries counted); an intent the gate or the broker
+   refused gets its candidates' counterfactual too. Decisions the student can't express (limit or
    stop entries, a target other than the strategy's own exit as
    `order_plan` places it, adds, partial exits) are counted, not cloned.
    Read the printed counts (taken, skipped, refused, wins, losses,
    skipped-would-have-won and -lost, uncloneable, unmapped, unsimulated)
    before training on a run. An exit by `close_position` shows only when
    the harness's transcript names tool calls (Claude Code, Codex, Qwen
-   Code); a custom harness printing plain text shows it as a hold.
+   Code, opencode); a custom harness printing plain text shows it as a
+   hold.
 
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the

@@ -10,7 +10,8 @@
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
  *   node scripts/replay.js report <run dir | --config replay.json>     month by month; writes report.md
  *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
- *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups
+ *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups;
+ *       --out: write elsewhere (required for an unfinished run, outside its run home)
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
  * Each run lives in its own harness home, <workDir>/<runId>, never the live
@@ -36,7 +37,7 @@ const { writeLabels, summaryText } = require('./lib/replay/labels');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> | labels <run dir> [--budget USD] [--bars SYM=file ...]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -89,9 +90,9 @@ function labels(argv) {
   });
   // The strategies' exits for the counterfactuals: the ones the run's gate read (the repository's and FTH_STRATEGIES_DIRS).
   const { strategies } = loadStrategies(ROOT, process.env);
-  const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, barsFiles });
+  const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, barsFiles, outDir: arg(argv, '--out') || null });
   process.stdout.write(summaryText(summary));
-  say(`wrote ${file} and labels-summary.json`);
+  say(`wrote ${file} and labels-summary.json${summary.unfinished ? ` (the run is not finished: ${summary.unfinished})` : ''}`);
   return 0;
 }
 

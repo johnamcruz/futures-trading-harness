@@ -81,4 +81,25 @@ test('counterfactual: a taken trade\'s same fields from its fills (MAE/MFE from 
   // Over the bars the trade spanned (the bar after the exit isn't): worst 102 (-0.4R), best 94 (+1.2R).
   assert.deepStrictEqual([cf.maeR, cf.mfeR], [-0.4, 1.2]);
   assert.deepStrictEqual([fromFills({ filled: false, result: 'unfilled' }).simulated, fromFills({ filled: false, result: 'unfilled' }).reason], [false, 'not filled']);
+  // A fill in the middle of a bar: that bar's extremes may come before it, so it is left out.
+  const mid = fromFills({ ...out, entryTime: new Date(S0 + TF + 60000).toISOString() }, { stopPoints: 5, spec: MNQ, bars, tfMs: TF });
+  assert.deepStrictEqual([mid.maeR, mid.mfeR], [-0.2, 1.2]);
+});
+
+test('counterfactual: the stop is ceiled to ticks where rounding would tighten it', () => {
+  // 4.30 points = 17.2 ticks: 18 ticks (4.5 points), not 17.
+  const cf = sim(series({}, { l: 90 }), { stopDistance: 4.3, strategy: { ...RR2, exit: {}, risk: { min_rr: 1 } } });
+  assert.strictEqual(cf.stop, 100.25 - 4.5);
+});
+
+test('counterfactual: end of day - a next bar closing at end of day is no entry; a bar closing exactly at end of day exits there', () => {
+  // The grid puts a bar's close exactly at 15:50 ET (20:50Z): the 20:47 bar.
+  const at = (hhmm, x = {}) => ({ o: 100, h: 101, l: 99, c: 100, ms: Date.parse(`2026-03-03T${hhmm}:00Z`), ...x });
+  const signal = Date.parse('2026-03-03T20:44:00Z');
+  const run = (list, s) => simulate({ bars: list, tfMs: TF, signalMs: s, signalClose: 100, direction: 'long', stopDistance: 9.9, strategy: RR2, spec: MNQ, eodMs: EOD });
+  const expired = run([at('20:44'), at('20:47'), at('20:50')], signal);
+  assert.deepStrictEqual([expired.exitReason, expired.reason], ['expired', 'the next bar is past end of day']);
+  const s2 = Date.parse('2026-03-03T20:41:00Z');
+  const cf = run([at('20:41'), at('20:44'), at('20:47', { c: 101 }), at('20:50', { c: 105 })], s2);
+  assert.deepStrictEqual([cf.exitReason, cf.exitPrice, cf.exitTime], ['eod', 101, '2026-03-03T20:50:00.000Z']);
 });
