@@ -77,6 +77,12 @@ test('paths: the bars directory itself a symlink, missing, or another user\'s is
   assert.match(barsFile(path.join(linked, 'MNQ-3m.json'), { dirs: [linked] }).error, /fth is a symlink/);
   assert.match(barsFile(path.join(base, 'none', 'a.json'), { dirs: [path.join(base, 'none')] }).error, /does not exist/);
   assert.match(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir], uid: 123456 }).error, /belongs to another user/);
+  fs.chmodSync(dir, 0o777);
+  assert.match(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir] }).error, /is writable by other users/);
+  fs.chmodSync(dir, 0o775);
+  assert.match(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir] }).error, /is writable by other users/);
+  fs.chmodSync(dir, 0o755);
+  assert.ok(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir] }).file);
 });
 
 test('paths: a directory given by its real form (/private/tmp/fth for /tmp/fth) is the same place', () => {

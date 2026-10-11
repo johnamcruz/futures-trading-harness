@@ -57,6 +57,12 @@ test('validate: each rule refuses what breaks it', () => {
 test('validate: a long value is clipped in the message, and an unsupported keyword throws', () => {
   const msg = validate(schema, { name: 'x'.repeat(5000) }).join();
   assert.ok(msg.length < 300, msg);
+  let deep = 1;
+  for (let i = 0; i < 200000; i += 1) deep = [deep];
+  assert.match(validate(schema, { name: 'abc', either: deep, tf: deep }).join(), /either: minutes or "daily" \(got \(too large to show\)\)/);
+  const nested = { type: 'array' };
+  nested.items = nested;
+  assert.match(validate(nested, deep).join(), /nested too deeply/, 'a value deeper than any schema is refused, not walked');
   assert.throws(() => validate({ type: 'string', format: 'date-time' }, 'x'), /unsupported schema keyword format/);
   assert.throws(() => validate({ type: 'null' }, null), /unsupported type null/);
 });

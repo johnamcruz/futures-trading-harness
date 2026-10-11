@@ -7,8 +7,8 @@
  *
  *   node scripts/harness-tools-mcp.js
  *
- * Every call runs with this process's environment (credentials loaded from the
- * user's .env as scripts/bars.js loads them, never printed) and the harness
+ * Every call runs with this process's environment (bars_fetch also with the
+ * user's .env, as scripts/bars.js loads it; never printed) and the harness
  * clock. Nothing it offers places, modifies or cancels an order. stdout carries
  * only protocol messages; anything else goes to stderr.
  * The logic lives in scripts/lib/harness-tools/ (protocol.js, registry.js).
@@ -32,9 +32,6 @@ function main({ env = process.env, stdin = process.stdin, stdout = process.stdou
     stderr.write(`[harness] tools without an operation: ${missing.join(', ')}\n`);
     return 1;
   }
-  // Credentials for bars_fetch's broker, as the bars CLI loads them (a variable already set wins).
-  require('./lib/env-file').loadEnvForCli('harness', { env, out: stderr });
-
   // Only protocol messages on stdout: anything an operation prints goes to stderr.
   const out = stdout.write.bind(stdout);
   stdout.write = (chunk, ...rest) => stderr.write(chunk, ...rest);

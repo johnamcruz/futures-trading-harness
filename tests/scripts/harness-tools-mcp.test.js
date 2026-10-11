@@ -261,3 +261,43 @@ test('harness-tools server: the replay clock is honored for a replay broker and 
     client.close();
   }
 });
+
+test('harness-tools server: a line over 1 MB is refused and the next request still answered', { timeout: 60000 }, async () => {
+  const { spawn } = require('child_process');
+  const child = spawn(process.execPath, [SERVER], { env: envFor(fixtureHome()), stdio: ['pipe', 'pipe', 'pipe'] });
+  const replies = [];
+  let buf = '';
+  const done = new Promise(resolve => {
+    child.stdout.on('data', c => {
+      buf += c;
+      const parts = buf.split('\n');
+      buf = parts.pop();
+      replies.push(...parts.filter(Boolean).map(l => JSON.parse(l)));
+      if (replies.length >= 2) resolve();
+    });
+  });
+  // Multibyte: 600 K characters, 1.2 MB.
+  child.stdin.write(`{"jsonrpc":"2.0","id":1,"method":"ping","params":{"pad":"${'é'.repeat(600 * 1024)}"}}\n`);
+  child.stdin.write('{"jsonrpc":"2.0","id":2,"method":"ping"}\n');
+  await done;
+  child.stdin.end();
+  child.kill();
+  assert.deepStrictEqual(replies[0], { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request: a line over 1 MB is refused' } });
+  assert.deepStrictEqual(replies[1], { jsonrpc: '2.0', id: 2, result: {} });
+});
+
+test('harness-tools server main: only protocol messages reach stdout; anything else printed goes to stderr', async () => {
+  const { EventEmitter } = require('events');
+  const { main } = require('../../scripts/harness-tools-mcp');
+  const stdin = Object.assign(new EventEmitter(), { setEncoding() {} });
+  const got = { out: '', err: '' };
+  const stdout = { write: s => { got.out += s; return true; } };
+  const stderr = { write: s => { got.err += s; return true; } };
+  assert.strictEqual(main({ env: { FTH_HOME: tmpDir() }, stdin, stdout, stderr }), 0);
+  stdout.write('stray print from an operation\n');
+  stdin.emit('data', '{"jsonrpc":"2.0","id":1,"method":"ping"}\n');
+  await new Promise(r => setImmediate(r));
+  assert.strictEqual(got.out, '{"jsonrpc":"2.0","id":1,"result":{}}\n');
+  assert.match(got.err, /stray print from an operation/);
+  assert.match(got.err, /13 tools ready/);
+});

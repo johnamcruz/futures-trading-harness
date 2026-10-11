@@ -81,6 +81,35 @@ test('callTool: success is the CLI text plus stderr notes; a failure is [script]
   assert.match(clock.content[0].text, /^\[blackouts\] FTH_REPLAY_NOW "soon" is not an ISO 8601 UTC time/);
 });
 
+test('callTool: the clock is read first where the CLI reads it first; deep arguments are invalid, not a crash', async () => {
+  const home = tmpDir();
+  const file = path.join(home, 'blackouts.json');
+  fs.writeFileSync(file, '{"not":"a list"}');
+  const env = { FTH_HOME: home, FTH_BLACKOUTS_FILE: file, FTH_REPLAY_NOW: 'soon' };
+  const r = await callTool('blackouts_add', { start: '2026-10-07T14:25:00Z', end: '2026-10-07T14:40:00Z', reason: 'CPI' }, { env });
+  assert.match(r.content[0].text, /^\[blackouts\] FTH_REPLAY_NOW "soon"/, 'the clock refusal, before the malformed file');
+  const { FTH_REPLAY_NOW: _drop, ...wall } = env;
+  const m = await callTool('blackouts_add', { start: '2999-10-07T14:25:00Z', end: '2999-10-07T14:40:00Z', reason: 'CPI' }, { env: wall });
+  assert.match(m.content[0].text, /^\[blackouts\] .*must contain a JSON array/);
+  let deep = 3;
+  for (let i = 0; i < 200000; i += 1) deep = [deep];
+  const d = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: deep }, { env: wall });
+  assert.match(d.content[0].text, /^\[harness\] invalid arguments for bars_fetch: timeframe/);
+});
+
+test('callTool: only bars_fetch loads the user\'s .env (as only bars.js does), into a copy', async () => {
+  const home = tmpDir();
+  const envFile = path.join(home, 'x.env');
+  fs.writeFileSync(envFile, `FTH_REPLAY_NOW=bogus\nFTH_BLACKOUTS_FILE=${path.join(home, 'other.json')}\n`);
+  fs.writeFileSync(path.join(home, 'other.json'), '[{"start":"2999-01-01T00:00:00.000Z","end":"2999-01-01T01:00:00.000Z","reason":"other"}]');
+  const env = { FTH_HOME: home, FTH_ENV_FILE: envFile, FTH_BLACKOUTS_FILE: path.join(home, 'mine.json') };
+  const list = await callTool('blackouts_list', {}, { env });
+  assert.strictEqual(list.content[0].text, '[]\n', 'the launch environment, as blackouts.js reads it');
+  const fetch = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 3 }, { env });
+  assert.match(fetch.content[0].text, /^\[bars\] FTH_REPLAY_NOW "bogus"/, 'bars_fetch saw the .env');
+  assert.strictEqual(env.FTH_REPLAY_NOW, undefined, 'the launch environment is unchanged');
+});
+
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {
   const root = tmpDir();
   fs.mkdirSync(path.join(root, 'strategies', 'big'), { recursive: true });
@@ -102,8 +131,9 @@ test('boundedLines: complete lines pass; a line over the limit is dropped whole 
   b.push('z\n{"c":3}\n');
   b.push('0123456789\n');
   b.push('01234567890\n');
+  b.push('012345678\r\n');
   b.push('tail');
   b.flush();
-  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', 'tail']);
+  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', '012345678', 'tail']);
   assert.strictEqual(over, 2);
 });

@@ -14,14 +14,22 @@
  *
  * validate(schema, value) -> [message]: empty when the value fits. Any other
  * schema keyword throws (a schema the checker can't enforce must not pass
- * silently). The checker never echoes a long value back: strings are clipped.
+ * silently). The checker never echoes a long value back: strings are clipped,
+ * and a value nested deeper than the schema could be is refused, not walked.
  */
 
 const KNOWN = new Set(['type', 'description', 'enum', 'properties', 'required', 'additionalProperties', 'minLength', 'maxLength',
   'pattern', 'minimum', 'maximum', 'items', 'minItems', 'maxItems', 'anyOf', 'default']);
 
+const MAX_DEPTH = 16;
+
 const show = v => {
-  const s = JSON.stringify(v);
+  let s;
+  try {
+    s = JSON.stringify(v);
+  } catch (_err) {
+    s = '(too large to show)';
+  }
   return s === undefined ? String(v) : s.length > 40 ? `${s.slice(0, 37)}...` : s;
 };
 
@@ -36,11 +44,15 @@ function fitsType(type, v) {
   throw new Error(`validate: unsupported type ${type}`);
 }
 
-function check(schema, v, at, errors) {
+function check(schema, v, at, errors, depth = 0) {
   for (const k of Object.keys(schema)) if (!KNOWN.has(k)) throw new Error(`validate: unsupported schema keyword ${k}`);
   const where = at || 'arguments';
+  if (depth > MAX_DEPTH) {
+    errors.push(`${where}: nested too deeply`);
+    return errors;
+  }
   if (schema.anyOf) {
-    if (!schema.anyOf.some(s => check(s, v, at, []).length === 0)) errors.push(`${where}: ${schema.description || 'does not fit any allowed form'} (got ${show(v)})`);
+    if (!schema.anyOf.some(s => check(s, v, at, [], depth + 1).length === 0)) errors.push(`${where}: ${schema.description || 'does not fit any allowed form'} (got ${show(v)})`);
     return errors;
   }
   if (schema.type && !fitsType(schema.type, v)) {
@@ -60,16 +72,16 @@ function check(schema, v, at, errors) {
   if (Array.isArray(v)) {
     if (schema.minItems !== undefined && v.length < schema.minItems) errors.push(`${where}: at least ${schema.minItems} items`);
     if (schema.maxItems !== undefined && v.length > schema.maxItems) errors.push(`${where}: at most ${schema.maxItems} items`);
-    if (schema.items) v.forEach((x, i) => check(schema.items, x, `${where}[${i}]`, errors));
+    if (schema.items) v.forEach((x, i) => check(schema.items, x, `${where}[${i}]`, errors, depth + 1));
   }
   if (typeOf(v) === 'object' && (schema.properties || schema.required || schema.additionalProperties !== undefined)) {
     const props = schema.properties || {};
     for (const k of schema.required || []) if (!Object.prototype.hasOwnProperty.call(v, k)) errors.push(`${at ? `${at}.` : ''}${k}: required`);
     for (const [k, x] of Object.entries(v)) {
       const name = `${at ? `${at}.` : ''}${k}`;
-      if (Object.prototype.hasOwnProperty.call(props, k)) check(props[k], x, name, errors);
+      if (Object.prototype.hasOwnProperty.call(props, k)) check(props[k], x, name, errors, depth + 1);
       else if (schema.additionalProperties === false) errors.push(`${show(name)}: unknown argument${Object.keys(props).length ? ` (known: ${Object.keys(props).join(', ')})` : ' (this tool takes none)'}`);
-      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') check(schema.additionalProperties, x, name, errors);
+      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') check(schema.additionalProperties, x, name, errors, depth + 1);
     }
   }
   return errors;

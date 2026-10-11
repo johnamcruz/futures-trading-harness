@@ -9,7 +9,8 @@
  * tools/call sent as a notification is not run (nobody would see its result).
  *
  * A tool call runs its operation (index.js OPERATIONS) with the server's
- * launch environment and the harness clock (harnessNow, read per call), after
+ * launch environment (bars_fetch also loads the user's .env into a copy, as
+ * scripts/bars.js does) and the harness clock (harnessNow, read per call), after
  * its arguments pass the tool's schema (registry.js, validate.js) and its bars
  * files pass paths.js. The result is the CLI's output: the text it prints on
  * stdout with the operation's stderr notes appended; a failure is isError
@@ -30,6 +31,7 @@ const { OpError, ROOT } = require('./cli');
 const { SERVER_NAME, BY_NAME, listTools } = require('./registry');
 const { validate } = require('./validate');
 const { barsFile } = require('./paths');
+const { loadEnvFiles } = require('../env-file');
 
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const MAX_LINE_BYTES = 1024 * 1024;
@@ -45,6 +47,11 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   const given = input === undefined ? {} : input;
   const errors = validate(tool.inputSchema, given);
   if (errors.length) return result(`[harness] invalid arguments for ${tool.name}: ${errors.join('; ')}\n`, true);
+  // The .env credentials only where the CLI loads them (bars.js: the broker's settings), on a copy.
+  if (tool.envFile) {
+    env = { ...env };
+    loadEnvFiles({ env });
+  }
   const checked = { ...given };
   for (const k of tool.bars || []) {
     if (given[k] === undefined) continue;
@@ -85,7 +92,7 @@ function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
         rest = i === -1 ? '' : rest.slice(i + 1);
         if (!dropping) {
           size += Buffer.byteLength(seg);
-          if (size - (i === -1 ? 0 : 1) > max) { dropping = true; parts = []; } else parts.push(seg);
+          if (size - (i === -1 ? 0 : seg.endsWith('\r\n') ? 2 : 1) > max) { dropping = true; parts = []; } else parts.push(seg);
         }
         if (i === -1) continue;
         if (dropping) onOversize();

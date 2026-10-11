@@ -13,7 +13,8 @@
  *
  * Each TOOLS entry: { name, op, script, description, inputSchema, args(input),
  * bars: [argument names that are bars files], clockFirst (read the harness
- * clock before running, as the CLI does), narrow (how to make the output smaller) }.
+ * clock before running, as the CLI does), envFile (load the user's .env, as the
+ * CLI does), narrow (how to make the output smaller) }.
  */
 
 const { MAX_COUNT } = require('../bars-fetch');
@@ -121,6 +122,7 @@ const TOOLS = [
       record: RECORD,
     }, ['symbol', 'timeframe']),
     args: i => ({ symbol: i.symbol, timeframe: i.timeframe === 'daily' ? 3 : i.timeframe, daily: i.timeframe === 'daily', ...pick(i, { count: 'count' }), record: i.record === true }),
+    envFile: true,
     narrow: 'the reply is too large to return',
   },
   {
