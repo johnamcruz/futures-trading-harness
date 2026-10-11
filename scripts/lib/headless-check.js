@@ -26,7 +26,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, childEnv, resolveDataDir } = require('./autotrader');
+const { validateConfig, buildCommand, childEnv, resolveDataDir, DEFAULTS } = require('./autotrader');
 const { qwenWorkspaceSettings } = require('./install');
 const { harnessHome } = require('./paths');
 
@@ -54,7 +54,8 @@ function probeConfig(harness, config = {}) {
   if (!HARNESSES.includes(harness)) throw new Error(`unknown harness "${harness}" (${HARNESSES.join(', ')})`);
   // Another harness's model and extra arguments don't apply to this one.
   const { model: _m, extraArgs: _a, command: _c, ...shared } = config || {};
-  const own = config && config.harness === harness ? config : shared;
+  // A config without a harness runs the runner's default one.
+  const own = config && (config.harness || DEFAULTS.harness) === harness ? config : shared;
   // Paper: the broker server itself refuses every order, whatever the probe's run does.
   return validateConfig({ ...own, harness, paper: true });
 }
@@ -185,4 +186,7 @@ function formatReport(res) {
   return lines;
 }
 
-module.exports = { MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };
+/** The harness a runner config trades with (its own, else the runner's default). */
+const configHarness = config => (config && config.harness) || DEFAULTS.harness;
+
+module.exports = { configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };

@@ -128,6 +128,12 @@ test('runProbe: Qwen without the runner\'s workspace allowlist stops and says so
   const c = hc.probeConfig('codex', { harness: 'claude', model: 'claude-model', extraArgs: ['--x'], dataDir: '/data/bars' });
   assert.deepStrictEqual([c.model, c.extraArgs, c.dataDir, c.paper], [hc.probeConfig('codex').model, [], '/data/bars', true]);
   assert.strictEqual(hc.probeConfig('claude', { harness: 'claude', model: 'm' }).model, 'm');
+  // A config with no harness key trades with the runner's default harness: its model and arguments are that one's.
+  const { DEFAULTS } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(hc.configHarness({ model: 'm1' }), DEFAULTS.harness);
+  assert.strictEqual(hc.configHarness({ harness: 'codex' }), 'codex');
+  const d = hc.probeConfig(DEFAULTS.harness, { model: 'm1', extraArgs: ['--x'] });
+  assert.deepStrictEqual([d.model, d.extraArgs], ['m1', ['--x']]);
 });
 
 test('runProbe: Qwen first gets the runner\'s workspace allowlist when asked, then the probe runs (stand-in CLI)', { timeout: 60000 }, () => {

@@ -22,7 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { HARNESSES, runProbe, passed, formatReport } = require('./lib/headless-check');
+const { HARNESSES, configHarness, runProbe, passed, formatReport } = require('./lib/headless-check');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -41,7 +41,7 @@ function main(argv, { out = s => process.stdout.write(s), env = process.env } = 
   let harnesses = HARNESSES;
   // With a runner config: its harness, model, extra args, workspace and bar directory (in paper mode).
   const config = arg(argv, '--config') ? JSON.parse(fs.readFileSync(arg(argv, '--config'), 'utf8')) : {};
-  if (arg(argv, '--config')) harnesses = [config.harness || 'claude'];
+  if (arg(argv, '--config')) harnesses = [configHarness(config)];
   if (arg(argv, '--harness')) harnesses = arg(argv, '--harness').split(',').map(s => s.trim()).filter(Boolean);
   const bad = harnesses.filter(h => !HARNESSES.includes(h));
   if (bad.length) throw new Error(`--harness: ${bad.join(', ')} (known: ${HARNESSES.join(', ')})`);

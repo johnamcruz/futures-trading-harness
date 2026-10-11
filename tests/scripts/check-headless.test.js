@@ -37,6 +37,11 @@ test('check-headless: a run that delegates to no role fails; bad arguments are r
   const r = run(['--harness', 'claude', '--bin', FAKE], { FAKE_PROBE: 'no-role' });
   assert.strictEqual(r.status, 1);
   assert.match(r.stdout, /claude: NOT ok[\s\S]*subagent: none delegated/);
+  // A runner config without a harness key trades with the runner's default harness: that one is probed.
+  const cfg = path.join(tmpDir(), 'auto.json');
+  require('fs').writeFileSync(cfg, JSON.stringify({ model: 'm1' }));
+  const { DEFAULTS } = require('../../scripts/lib/autotrader');
+  assert.match(run(['--config', cfg, '--bin', FAKE]).stdout, new RegExp(`^\\[check-headless\\] probing ${DEFAULTS.harness} `, 'm'));
   assert.strictEqual(run(['--harness', 'cursor']).status, 2);
   assert.match(run(['--bogus', 'x']).stderr, /usage: check-headless\.js/);
   assert.match(run(['--timeout', '0']).stderr, /--timeout/);
