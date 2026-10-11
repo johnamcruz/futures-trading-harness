@@ -346,7 +346,7 @@ test('combine: every missed close is flagged, not only the first, so the floor i
   prop.snapshot(home, MINI, 52500, new Date('2026-10-06T19:00:00Z')); // Tue, close never recorded
   prop.snapshot(home, MINI, 52500, new Date(NOW.getTime() - 60000)); // Wed
   const ev = () => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [MINI] });
-  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: record each\)/);
+  assert.match(ev().violations[0].message, /close of 2026-10-05 was never recorded.*\(also 2026-10-06: the user records each\)/);
   prop.recordEndOfDay(home, MINI, 50500, '2026-10-05');
   assert.match(ev().violations[0].message, /close of 2026-10-06 was never recorded/, 'recording the first one alone does not clear the block');
   prop.recordEndOfDay(home, MINI, 52500, '2026-10-06');

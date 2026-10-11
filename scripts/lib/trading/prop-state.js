@@ -187,7 +187,7 @@ function combineBlock(home, accountName, now = new Date()) {
   if (r.missedClose) {
     const missed = missedOf(r);
     const day = missed[0] || r.missedClose;
-    const more = missed.length > 1 ? ` (also ${missed.slice(1).join(', ')}: record each)` : '';
+    const more = missed.length > 1 ? ` (also ${missed.slice(1).join(', ')}: the user records each)` : '';
     const record = `the user records it: node scripts/combine.js record-day --account ${accountName} --day ${day} --balance <dollars>`;
     return `the close of ${day} was never recorded, so the trailing floor is unknown; the account's closing balance that day is needed (${record})${more}`;
   }
