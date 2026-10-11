@@ -6,7 +6,8 @@
  * childEnv: the same argv, allowlist, workspace and lock-down), with a probe
  * prompt that calls two harness tools, delegates once to a harness role by
  * name, and tries a shell command. The run's transcript (Claude stream-json,
- * Codex --json events, Qwen JSON) says what each step reached:
+ * Codex --json events, Qwen JSON) says what each step reached, whether a tool
+ * was called directly or through a harness's bridge wrapper (BRIDGE_TOOLS):
  *
  *   harness tools  blackouts_list and strategies_list: answered, errored, or not called
  *   subagent       the role delegated to, and whether it answered
@@ -19,7 +20,7 @@
  *   probePrompt()                                   the prompt
  *   probeCommand(harness, root, env, { bin })       { argv, cwd, env } as the runner runs it
  *   analyze(text)                                   { tools, subagent, shell }
- *   runProbe({ harness, root, env, bin, timeoutMs, spawn })  { harness, status, error, analysis }
+ *   runProbe({ harness, root, env, bin, timeoutMs, spawn })  { harness, status, error, analysis, transcript }
  *   formatReport(result)                            text lines
  */
 
@@ -120,10 +121,32 @@ const roleOf = input => {
 };
 const textOf = v => (typeof v === 'string' ? v : JSON.stringify(v === undefined ? '' : v));
 
+/**
+ * Bridge wrappers: a harness that defers its MCP tools reaches them through one generic tool whose
+ * input names the real tool. Each entry: the wrapper's tool name, the real tool's name and arguments
+ * from its input, and how the wrapper says it refused (a refusal is never an answer, is_error or not).
+ *   Qwen Code (0.25+): tool_call {"name": "mcp__harness__blackouts_list", "arguments": {...}};
+ *   refused until tool_search reviewed the schema: "[tool_call bridge refused] Deferred tool ...".
+ */
+const BRIDGE_TOOLS = [
+  { name: 'tool_call', target: i => i.name, args: i => i.arguments, refused: /\[tool_call bridge refused\]/ },
+];
+
+/** A tool_use as the tool it reaches: the real tool behind a bridge wrapper, else itself. */
+function unwrap(name, input) {
+  const bridge = BRIDGE_TOOLS.find(b => b.name === name);
+  const i = bridge ? parsed(input) : null;
+  const target = i && typeof i === 'object' ? bridge.target(i) : null;
+  if (typeof target !== 'string' || !target) return { name, input: input || {} };
+  const args = bridge.args(i);
+  return { name: target, input: parsed(args) || {}, bridge };
+}
+
 /** What the probe reached, from a transcript. */
 function analyze(text) {
   const calls = [];
-  const results = new Map();
+  // A result answers the latest call with its id (an id a provider reuses can't pass one call's answer to another).
+  const latest = new Map();
   // Codex reports an item when it starts (in progress) and again when it completes: the last report counts.
   const items = new Map();
   const item = (v, call) => {
@@ -137,8 +160,11 @@ function analyze(text) {
   const walk = (v, depth) => {
     if (depth > 40 || v === null || typeof v !== 'object') return;
     if (Array.isArray(v)) { v.forEach(x => walk(x, depth + 1)); return; }
-    if (v.type === 'tool_use' && typeof v.name === 'string') calls.push({ id: v.id, name: v.name, input: v.input || {} });
-    else if (v.type === 'tool_result' && v.tool_use_id !== undefined) results.set(v.tool_use_id, { isError: v.is_error === true, text: textOf(v.content) });
+    if (v.type === 'tool_use' && typeof v.name === 'string') {
+      const call = { id: v.id, ...unwrap(v.name, v.input) };
+      calls.push(call);
+      if (v.id !== undefined && v.id !== null) latest.set(v.id, call);
+    } else if (v.type === 'tool_result' && latest.has(v.tool_use_id)) latest.get(v.tool_use_id).result = { isError: v.is_error === true, text: textOf(v.content) };
     else if (v.type === 'mcp_tool_call') {
       item(v, { name: `mcp__${v.server}__${v.tool}`, input: v.arguments || {}, done: pending(v.status) ? null : { isError: v.status !== 'completed' || Boolean(v.error), text: textOf(v.error || v.result) } });
     } else if (v.type === 'command_execution') {
@@ -149,11 +175,16 @@ function analyze(text) {
     for (const x of Object.values(v)) walk(x, depth + 1);
   };
   documents(text).forEach(d => walk(d, 0));
-  const outcome = c => c.done || results.get(c.id) || null;
+  const outcome = c => {
+    const r = c.done || c.result || null;
+    // Through a bridge, its refusal is the bridge's, not the tool's answer.
+    return r && c.bridge && c.bridge.refused.test(r.text) ? { ...r, isError: true } : r;
+  };
 
   const tools = {};
   for (const t of PROBE_TOOLS) {
-    const hits = calls.filter(c => new RegExp(`(^|__)harness__${t}$`).test(c.name));
+    // A name the model wrote into a bridge must be the tool's exact name.
+    const hits = calls.filter(c => new RegExp(c.bridge ? `^(mcp__)?harness__${t}$` : `(^|__)harness__${t}$`).test(c.name));
     const res = hits.map(outcome);
     tools[t] = !hits.length ? 'not called' : res.some(r => r && !r.isError) ? 'answered' : res.some(r => r) ? 'errored' : 'called (no result seen)';
   }
@@ -182,7 +213,7 @@ function qwenAllowlist(cfg, root, env = process.env) {
   return { file, content };
 }
 
-function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = 10 * 60000, spawn = spawnSync, writeAllowlist = false, writeFile = null }) {
+function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = 10 * 60000, spawn = spawnSync, writeAllowlist = false, writeFile = null, saveFile = null, now = () => new Date() }) {
   const { argv, cwd, env: runEnv } = probeCommand(harness, root, env, { bin, config });
   if (harness === 'qwen') {
     // The workspace allowlist is one of the runner's watched files: changing it switches a running
@@ -197,8 +228,29 @@ function runProbe({ harness, root, env = process.env, bin = null, config = {}, t
     }
   }
   const r = spawn(argv[0], argv.slice(1), { cwd, env: runEnv, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
-  if (r.error) return { harness, status: null, error: r.error.code === 'ENOENT' ? `${argv[0]} is not installed (not on PATH)` : r.error.message, analysis: null };
-  return { harness, status: r.status, error: r.status === 0 ? null : `exit ${r.status}${r.stderr ? `: ${String(r.stderr).trim().split('\n').filter(l => /error|refus|denied|not /i.test(l)).slice(-2).join(' | ').slice(0, 300) || String(r.stderr).trim().split('\n').pop().slice(0, 200)}` : ''}`, analysis: analyze(r.stdout) };
+  if (r.error && r.error.code === 'ENOENT') return { harness, status: null, error: `${argv[0]} is not installed (not on PATH)`, analysis: null };
+  const transcript = keepTranscript(harness, r, env, saveFile, now);
+  if (r.error) return { harness, status: null, error: r.error.message, analysis: null, transcript };
+  return { harness, status: r.status, error: r.status === 0 ? null : `exit ${r.status}${r.stderr ? `: ${String(r.stderr).trim().split('\n').filter(l => /error|refus|denied|not /i.test(l)).slice(-2).join(' | ').slice(0, 300) || String(r.stderr).trim().split('\n').pop().slice(0, 200)}` : ''}`, analysis: analyze(r.stdout), transcript };
+}
+
+/**
+ * The probe's raw transcript, kept at FTH_HOME/logs/headless-<harness>-<time>.json (its stderr beside
+ * it as .stderr.log when there is any), so a failure can be diagnosed without another run.
+ * Returns the path, or { error } when it couldn't be written (the check itself goes on).
+ */
+function keepTranscript(harness, r, env, saveFile, now) {
+  const file = path.join(harnessHome(env), 'logs', `headless-${harness}-${now().toISOString().replace(/[:.]/g, '-')}.json`);
+  const save = saveFile || ((f, c) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, c); });
+  try {
+    save(file, String(r.stdout || ''));
+  } catch (err) {
+    return { error: `${file}: ${err.message}` };
+  }
+  try {
+    if (r.stderr && String(r.stderr).trim()) save(file.replace(/\.json$/, '.stderr.log'), String(r.stderr));
+  } catch (_err) { /* the transcript is kept; its stderr is a bonus */ }
+  return file;
 }
 
 /** True when the probe reached every harness tool and its role. */
@@ -207,6 +259,7 @@ const passed = res => Boolean(res.analysis) && !res.error && PROBE_TOOLS.every(t
 
 function formatReport(res) {
   const lines = [`${res.harness}: ${passed(res) ? 'ok' : 'NOT ok'}${res.error ? ` (${res.error})` : ''}`];
+  if (res.transcript) lines.push(`  transcript: ${typeof res.transcript === 'string' ? res.transcript : `not kept (${res.transcript.error})`}`);
   if (!res.analysis) return lines;
   const a = res.analysis;
   for (const t of PROBE_TOOLS) lines.push(`  harness tool ${t}: ${a.tools[t]}`);
@@ -218,4 +271,4 @@ function formatReport(res) {
 /** The harness a runner config trades with (its own, else the runner's default). */
 const configHarness = config => (config && config.harness) || DEFAULTS.harness;
 
-module.exports = { PROBE_BROKER_TOOLS, PROBE_DENIED, readOnlyBroker, configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };
+module.exports = { BRIDGE_TOOLS, PROBE_BROKER_TOOLS, PROBE_DENIED, readOnlyBroker, configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };

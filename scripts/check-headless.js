@@ -15,7 +15,9 @@
  * Qwen probe stops and says so; --write-qwen-allowlist writes it (with no
  * runner trading: a running runner sees the change and turns trading off). Exit 0 when every probed
  * harness reached both tools and the role. --bin <file> runs a stand-in for
- * the harness CLI (tests). The logic lives in scripts/lib/headless-check.js.
+ * the harness CLI (tests). Each probe's raw transcript is kept at
+ * FTH_HOME/logs/headless-<harness>-<time>.json, its path printed. The logic
+ * lives in scripts/lib/headless-check.js.
  */
 
 'use strict';
