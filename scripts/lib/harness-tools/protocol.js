@@ -48,9 +48,10 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   const errors = validate(tool.inputSchema, given);
   if (errors.length) return result(`[harness] invalid arguments for ${tool.name}: ${errors.join('; ')}\n`, true);
   // The .env credentials only where the CLI loads them (bars.js: the broker's settings), on a copy.
+  let notes = '';
   if (tool.envFile) {
     env = { ...env };
-    loadEnvFiles({ env });
+    notes = loadEnvFiles({ env }).warnings.map(w => `[${tool.script}] warning: ${w}\n`).join('');
   }
   const checked = { ...given };
   for (const k of tool.bars || []) {
@@ -64,10 +65,10 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   try {
     if (tool.clockFirst) harnessNow(env); // as the CLI does: a refused replay clock refuses the call
     const r = await OPERATIONS[tool.op](tool.args(checked), { env, root, now: () => harnessNow(env) });
-    text = `${r.text || ''}${r.stderr || ''}`;
+    text = `${r.text || ''}${r.stderr || ''}${notes}`;
     isError = Boolean(r.code);
   } catch (err) {
-    text = `${(err instanceof OpError && err.text) || ''}[${tool.script}] ${err && err.message}\n`;
+    text = `${(err instanceof OpError && err.text) || ''}${notes}[${tool.script}] ${(err && err.message) || String(err)}\n`;
     isError = true;
   }
   const bytes = Buffer.byteLength(text);
@@ -77,12 +78,20 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   return result(text, isError);
 }
 
-/** Complete lines to onLine; a line over `max` bytes is dropped whole and reported with onOversize(). */
+/** Complete lines to onLine; a line over `max` bytes (its line ending not counted) is dropped whole and reported with onOversize(). */
 function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
   const lines = lineSplitter(onLine);
   let parts = [];
   let size = 0;
   let dropping = false;
+  const end = () => {
+    const line = parts.join('');
+    if (dropping || Buffer.byteLength(line.replace(/\r?\n$/, '')) > max) onOversize();
+    else lines.push(line.endsWith('\n') ? line : `${line}\n`);
+    parts = [];
+    size = 0;
+    dropping = false;
+  };
   return {
     push(chunk) {
       let rest = String(chunk);
@@ -92,22 +101,14 @@ function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
         rest = i === -1 ? '' : rest.slice(i + 1);
         if (!dropping) {
           size += Buffer.byteLength(seg);
-          if (size - (i === -1 ? 0 : seg.endsWith('\r\n') ? 2 : 1) > max) { dropping = true; parts = []; } else parts.push(seg);
+          // Memory stays bounded: past the limit plus a line ending, stop keeping it.
+          if (size > max + 2) { dropping = true; parts = []; } else parts.push(seg);
         }
-        if (i === -1) continue;
-        if (dropping) onOversize();
-        else lines.push(parts.join(''));
-        parts = [];
-        size = 0;
-        dropping = false;
+        if (i !== -1) end();
       }
     },
     flush() {
-      if (dropping) onOversize();
-      else if (parts.length) { lines.push(parts.join('')); lines.flush(); }
-      parts = [];
-      size = 0;
-      dropping = false;
+      if (dropping || parts.length) end();
     },
   };
 }

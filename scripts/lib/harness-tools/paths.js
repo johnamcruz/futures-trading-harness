@@ -11,8 +11,9 @@
  * writes; on macOS also given as /private/tmp/fth). Refused: anything outside,
  * a symlink anywhere from the directory down (the directory itself included),
  * a file with more than one hard link (a link to a file elsewhere), a directory
- * another user owns or others can write to (so only the user's own processes
- * could swap a file between this check and the read), and a real path outside the directory. Nothing is read
+ * on the way (the bars directory included) that another user owns or others can
+ * write to (so only the user's own processes could swap a file between this
+ * check and the read), and a real path outside the directory. Nothing is read
  * here but metadata, so a refusal never echoes the file's content.
  *
  * barsFile(value, { env, dirs, uid }) -> { file } (the path to read) or { error }
@@ -43,9 +44,12 @@ function walkError(dir, file, uid) {
     if (!st) return i === -1 ? `${dir} does not exist` : 'no such file';
     if (st.isSymbolicLink()) return `${cur} is a symlink`;
     if (i < parts.length - 1 && !st.isDirectory()) return `${cur} is not a directory`;
-    if (i === -1 && uid !== null && st.uid !== uid) return `${dir} belongs to another user`;
-    // Only its owner may change what is in it (between this check and the read, too).
-    if (i === -1 && process.platform !== 'win32' && (st.mode & 0o022)) return `${dir} is writable by other users`;
+    if (i < parts.length - 1) {
+      // Every directory on the way: the user's, and only the user may change what is in it (so nobody
+      // else can swap the file between this check and the read).
+      if (uid !== null && st.uid !== uid) return `${cur} belongs to another user`;
+      if (process.platform !== 'win32' && (st.mode & 0o022)) return `${cur} is writable by other users`;
+    }
     if (i === parts.length - 1) {
       if (!st.isFile()) return 'not a regular file';
       if (st.nlink > 1) return 'a file with more than one hard link';

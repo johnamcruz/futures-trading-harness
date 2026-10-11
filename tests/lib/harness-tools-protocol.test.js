@@ -106,7 +106,11 @@ test('callTool: only bars_fetch loads the user\'s .env (as only bars.js does), i
   const list = await callTool('blackouts_list', {}, { env });
   assert.strictEqual(list.content[0].text, '[]\n', 'the launch environment, as blackouts.js reads it');
   const fetch = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 3 }, { env });
-  assert.match(fetch.content[0].text, /^\[bars\] FTH_REPLAY_NOW "bogus"/, 'bars_fetch saw the .env');
+  assert.match(fetch.content[0].text, /^\[bars\] FTH_REPLAY_NOW "bogus"/m, 'bars_fetch saw the .env');
+  assert.match(fetch.content[0].text, /^\[bars\] warning: .*x\.env can be read by other users; chmod 600 it\n\[bars\] FTH_REPLAY_NOW/, 'with the loader\'s warning, as bars.js prints it');
+  fs.chmodSync(envFile, 0o600);
+  const quiet = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 3 }, { env });
+  assert.match(quiet.content[0].text, /^\[bars\] FTH_REPLAY_NOW "bogus"/);
   assert.strictEqual(env.FTH_REPLAY_NOW, undefined, 'the launch environment is unchanged');
 });
 
@@ -132,8 +136,10 @@ test('boundedLines: complete lines pass; a line over the limit is dropped whole 
   b.push('0123456789\n');
   b.push('01234567890\n');
   b.push('012345678\r\n');
+  b.push('0123456789\r');
+  b.push('\n');
   b.push('tail');
   b.flush();
-  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', '012345678', 'tail']);
+  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', '012345678', '0123456789', 'tail']);
   assert.strictEqual(over, 2);
 });

@@ -14,6 +14,8 @@ function setup() {
   const base = fs.realpathSync(tmpDir());
   const dir = path.join(base, 'bars');
   fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
+  fs.chmodSync(dir, 0o755); // whatever the umask
+  fs.chmodSync(path.join(dir, 'sub'), 0o755);
   fs.writeFileSync(path.join(dir, 'MNQ-3m.json'), '{"bars":[]}');
   fs.writeFileSync(path.join(dir, 'sub', 'a.csv'), 'time,open\n');
   const secret = path.join(base, 'journal.jsonl');
@@ -83,6 +85,10 @@ test('paths: the bars directory itself a symlink, missing, or another user\'s is
   assert.match(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir] }).error, /is writable by other users/);
   fs.chmodSync(dir, 0o755);
   assert.ok(barsFile(path.join(dir, 'MNQ-3m.json'), { dirs: [dir] }).file);
+  fs.chmodSync(path.join(dir, 'sub'), 0o777);
+  assert.match(barsFile(path.join(dir, 'sub', 'a.csv'), { dirs: [dir] }).error, /sub is writable by other users/, 'every directory on the way');
+  fs.chmodSync(path.join(dir, 'sub'), 0o755);
+  assert.ok(barsFile(path.join(dir, 'sub', 'a.csv'), { dirs: [dir] }).file);
 });
 
 test('paths: a directory given by its real form (/private/tmp/fth for /tmp/fth) is the same place', () => {

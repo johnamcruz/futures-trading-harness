@@ -31,7 +31,7 @@ function fixtureHome({ replay = true } = {}) {
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({
     broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE], replay, journal: path.join(home, 'journal.jsonl') } },
   }));
-  fs.mkdirSync(path.join(home, 'bars'));
+  fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
   for (const f of ['NQ-3m.csv', 'RTY-3m.csv']) fs.copyFileSync(path.join(PARITY, f), path.join(home, 'bars', f));
   return home;
 }
@@ -148,7 +148,7 @@ test('harness-tools server: bars path attacks are refused without echoing a file
   const home = fixtureHome();
   fs.writeFileSync(path.join(home, 'journal.jsonl'), `${MARKER}\n`);
   fs.writeFileSync(path.join(home, 'secret.json'), `{"x":"${MARKER}"}`);
-  fs.mkdirSync(TMP_FTH, { recursive: true });
+  fs.mkdirSync(TMP_FTH, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
   const link = path.join(TMP_FTH, `${tag}-link.json`);
   const dirLike = path.join(TMP_FTH, `${tag}-dir.json`);
   const big = path.join(home, 'bars', 'big.csv');
@@ -164,7 +164,8 @@ test('harness-tools server: bars path attacks are refused without echoing a file
       [`${home}/bars/../journal.jsonl`, /not a bars file type/],
       [path.join(home, 'secret.json'), /outside them/],
       [link, /is a symlink/],
-      [`/private${link}`, /is a symlink/],
+      // macOS: /tmp is /private/tmp, and the real form is the same place; elsewhere /private/tmp/fth is outside.
+      [`/private${link}`, process.platform === 'darwin' ? /is a symlink/ : /outside them/],
       [dirLike, /not a regular file/],
       [big, /larger than 50 MB/],
       [path.join(home, 'bars', 'notes.txt'), /not a bars file type/],
@@ -204,7 +205,7 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
   const linkedDir = path.join(home, 'bars-link');
   fs.symlinkSync(path.join(home, 'bars'), linkedDir);
   const tmpBars = path.join(TMP_FTH, `${tag}-NQ.csv`);
-  fs.mkdirSync(TMP_FTH, { recursive: true });
+  fs.mkdirSync(TMP_FTH, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
   fs.copyFileSync(path.join(PARITY, 'NQ-3m.csv'), tmpBars);
   const big = path.join(home, 'more-strategies', 'big');
   fs.mkdirSync(big, { recursive: true });
