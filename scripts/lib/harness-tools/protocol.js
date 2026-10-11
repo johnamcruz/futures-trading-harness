@@ -11,7 +11,8 @@
  * A tool call runs its operation (index.js OPERATIONS) with the server's
  * launch environment (bars_fetch also loads the user's .env into a copy, as
  * scripts/bars.js does) and the harness clock (harnessNow, read per call), after
- * its arguments pass the tool's schema (registry.js, validate.js) and its bars
+ * its arguments, with numbers and booleans sent as strings repaired (repair.js),
+ * pass the tool's schema (registry.js, validate.js) and its bars
  * files pass paths.js. The result is the CLI's output: the text it prints on
  * stdout with the operation's stderr notes appended; a failure is isError
  * with the stdout printed before it and `[<script>] <message>`, as the CLI
@@ -30,6 +31,7 @@ const { OPERATIONS } = require('./index');
 const { OpError, ROOT } = require('./cli');
 const { SERVER_NAME, BY_NAME, listTools } = require('./registry');
 const { validate } = require('./validate');
+const { repair } = require('./repair');
 const { barsFile } = require('./paths');
 const { loadEnvFiles } = require('../env-file');
 
@@ -45,7 +47,8 @@ const result = (text, isError = false) => ({ content: [{ type: 'text', text }], 
 async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   const tool = BY_NAME.get(name);
   if (!tool) return result(`[harness] unknown tool: ${String(name).slice(0, 64)}`, true);
-  const given = input === undefined ? {} : input;
+  // A number or boolean sent as a string ("3", "true") becomes what the schema declares, then is validated as usual (repair.js).
+  const given = repair(tool.inputSchema, input === undefined ? {} : input);
   const errors = validate(tool.inputSchema, given);
   if (errors.length) {
     const more = errors.length > MAX_ERRORS ? `; and ${errors.length - MAX_ERRORS} more` : '';

@@ -49,6 +49,11 @@ scripts. None places, changes, or cancels an order.
 - No tool takes a time: the harness clock decides (a replay broker's time
   in a replay). No tool takes an output path or an environment.
 - An unknown argument is refused, with the arguments the tool takes.
+- Give numbers as JSON numbers (`"timeframe": 3`) and flags as `true` or
+  `false`. A number or flag sent as a string (`"3"`, `"true"`) is read as
+  the number or flag the tool takes (surrounding spaces ignored), then
+  checked the same way (a timeframe of `"90"` is still refused); `"1.5"`
+  where a whole number is taken, or any other string, is not.
 - A refusal or failure comes back as an error result: `[<script>] <why>`,
   as the script prints it. Read it, don't retry the same call blindly.
 - A reply over 256 KB is refused with how to narrow it (fewer bars, a lower
