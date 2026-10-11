@@ -23,7 +23,7 @@ source: docs/RL-DESIGN.md; needs 1-minute bars with recorded buy/sell volume (sc
 
 # Strategy: Prop Flow 1m (`setup:prop_flow_1m`)
 
-The order-flow counterpart of `prop_portfolio_3m`: the same account, sizing,
+The order-flow counterpart of `prop_portfolio`: the same account, sizing,
 and policy, over the 1-minute `ofi` and `ofi_absorption` setups. A policy
 trades one timeframe, so the flow strategies get their own policy strategy.
 
@@ -37,7 +37,7 @@ trades one timeframe, so the flow strategies get their own policy strategy.
 
 ## How It Works
 
-As `prop_portfolio_3m`: the first flow strategy with a setup on the closed
+As `prop_portfolio`: the first flow strategy with a setup on the closed
 1-minute bar is the setup, sized from the cushion in micros or minis, and the
 trained policy (once shipped) takes it, halves it, or skips it, and may bank a
 trade past +2R. Place exactly the verdict with `setup:prop_flow_1m`.

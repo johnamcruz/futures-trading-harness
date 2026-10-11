@@ -486,13 +486,53 @@ test('policy: a verdict permits one entry; a re-entry waits for the next setup\'
 test('policy: only this strategy\'s entries on this index use its verdict', () => {
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
-  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
+  // A snapshot after those entries (it holds them): only the verdict's own use is judged here.
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 30000));
   prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 3, policy: null, at: new Date(NOW.getTime() - 120000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
   const run = entries => evaluateOrder({ input: entryOrder(), entries: [plan(), ...entries], now: NOW, config: { ...config, home, skipChecks: new Set(['review-before-next-entry']) }, strategies: [propStrategy()], accounts: [MINI] }).violations;
   assert.deepStrictEqual(run([placed(1, 'setup:orb-x long')]), [], 'another strategy\'s tag');
   assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'MES' }]), [], 'another index');
   assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'NQ' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
   assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.ENQ.Z25' }]).map(v => v.message).join(), /already used/, 'a broker id it can\'t name: fails closed');
+});
+
+test('combine: an entry since the account snapshot holds every other entry until the next snapshot (one position across markets)', () => {
+  // Two indexes fire on one bar: the snapshot (taken before the cycle) shows the account flat, and each
+  // verdict was sized from the whole cushion. Once one entry goes in, the other waits for a snapshot that holds it.
+  const home = trendHome();
+  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 90000));
+  prop.appendVerdict(home, { strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 3, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+  const run = entries => evaluateOrder({ input: entryOrder(), entries: [plan(), ...entries], now: NOW, config: { ...config, home, skipChecks: new Set(['review-before-next-entry']) }, strategies: [propStrategy()], accounts: [MINI] }).violations;
+  const es = { ...placed(1, 'setup:orb long, stop 16 ticks'), contractId: 'ES' };
+  assert.match(run([es]).map(v => `[${v.check}] ${v.message}`).join(), /\[combine\] mini: an entry \(ES\) went in at or after the account snapshot .* one position at a time/);
+  assert.match(run([{ ...es, text: 'going long ES' }]).map(v => v.message).join(), /went in at or after the account snapshot/, 'untagged, another strategy\'s: any entry counts');
+  assert.deepStrictEqual(run([{ ...es, ts: minutesAgo(2) }]), [], 'an entry before the snapshot is in it (its open count)');
+  assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long', false), contractId: 'ES' }]), [], 'a rejected order isn\'t an entry');
+  assert.deepStrictEqual(run([{ ...placed(1, '[exit] flatten ES'), contractId: 'ES' }]), [], 'an exit adds no risk');
+  assert.match(run([{ ...es, ts: 'not a time' }]).map(v => v.message).join(), /went in at or after the account snapshot/, 'through the gate too, an entry with no readable time counts as since the snapshot');
+  // The next snapshot holds it: the gate judges from that one (open position, or flat again after it closed).
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 20000));
+  assert.deepStrictEqual(run([es]), []);
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 10000), { open: 1, openIds: ['ES'] });
+  assert.match(run([es]).map(v => v.message).join(), /a position is open on the account \(ES\)/);
+});
+
+test('combine: the snapshot check reads only local state and needs a snapshot to compare with', () => {
+  const home = trendHome();
+  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+  assert.strictEqual(prop.entrySinceSnapshot(home, 'mini', [{ ...placed(1), contractId: 'ES' }]), null, 'no snapshot: combineBlock refuses it instead');
+  assert.match(prop.combineBlock(home, 'mini', NOW), /snapshot is missing/);
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 90000));
+  assert.strictEqual(prop.entrySinceSnapshot(home, 'mini', []), null);
+  assert.strictEqual(prop.entrySinceSnapshot(home, 'mini', null), null);
+  assert.match(prop.entrySinceSnapshot(home, 'mini', [{ ...placed(1), contractId: 'ES' }]), /ES/);
+  assert.match(prop.entrySinceSnapshot(home, 'mini', [{ ...placed(1), ts: 'not a time' }]), /went in/, 'an entry with no readable time fails closed');
+  // A snapshot from the future (the clock stepped back) can't be trusted to hold the latest entries.
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() + 5 * 60000));
+  assert.match(prop.combineBlock(home, 'mini', NOW), /dated in the future/);
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() + 30000));
+  assert.strictEqual(prop.combineBlock(home, 'mini', NOW), null, 'under a minute ahead is clock skew, not a stale view');
 });
 
 test('order-consistency: the side named in the rationale must be the order side', () => {

@@ -246,11 +246,11 @@ test('the default cycle cap covers the whole 22-hour session; the runner passes 
 test('a policy strategy\'s verdicts go into the cycle prompt as the only allowed entry', () => {
   const p = prompts(validateConfig({ account: '123' }), et(10, 0));
   const verdicts = [
-    { strategy: 'prop_portfolio_3m', component: 'supertrend', direction: 'long', action: 'full', contract: 'NQ', maxSize: 3, stopTicks: 40 },
+    { strategy: 'prop_portfolio', component: 'supertrend', direction: 'long', action: 'full', contract: 'NQ', maxSize: 3, stopTicks: 40 },
     { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the policy' },
   ];
   const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'MNQ' }, verdicts }]);
-  assert.match(text, /prop_portfolio_3m: long setup from supertrend, verdict full: enter only as setup:prop_portfolio_3m, NQ buy, at most 3, stopLossBracket.ticks 40/);
+  assert.match(text, /prop_portfolio: long setup from supertrend, verdict full: enter only as setup:prop_portfolio, NQ buy, at most 3, stopLossBracket.ticks 40/);
   assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the policy\); no entry/);
 });
 
@@ -263,12 +263,12 @@ test('every cycle prompt carries the account: balance, positions, orders, and ea
   const p = prompts(validateConfig({ account: '123' }), et(10, 0));
   const attempts = [{
     account: 'topstep_100k', status: 'active', asOf: '2026-10-07T14:00:01.000Z', balance: 101250, floor: 98000, cushion: 3250, profit: 1250, target: 6000, dayPnl: -250, sessionsLeft: 26,
-    budgets: [{ strategy: 'prop_portfolio_3m', budgetUsd: 975 }], entryBlock: null,
+    budgets: [{ strategy: 'prop_portfolio', budgetUsd: 975 }], entryBlock: null,
   }];
   const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 101250, positions: [{ contractId: 'NQ', type: 1, size: 2, averagePrice: 21500.25 }], workingOrders: 1, attempts };
   const text = p.trade([{ symbol: 'MNQ' }], { state });
   assert.match(text, /Account 123 at 10:00 ET: balance \$101,250; open: NQ long 2 @ 21500.25; 1 working order\./);
-  assert.match(text, /topstep_100k attempt \(active\): floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio_3m size budget \$975\./);
+  assert.match(text, /topstep_100k attempt \(active\): floor \$98,000, cushion \$3,250, profit \+\$1,250 of \$6,000, day -\$250, 26 sessions left; prop_portfolio size budget \$975\./);
   const flat = { ...state, positions: [], workingOrders: 0, attempts: [{ ...attempts[0], entryBlock: 'a position is open on the account' }] };
   assert.match(p.trade([{ symbol: 'MNQ' }], { state: flat }), /balance \$101,250; flat; 0 working orders\..*new entries blocked: a position is open on the account\./);
   assert.match(p.premarket('MNQ', { state }), /Account 123 .*balance \$101,250.*Run the premarket skill/);
@@ -356,10 +356,10 @@ test('the fired line: a paper strategy is marked, manage-only lists nothing, a p
   // Manage-only is said once, in the instruction's mode; nothing that fired is listed.
   assert.doesNotMatch(manage, /value_area|orb long|fired on this bar/);
   assert.strictEqual(manage.match(/manage-only/g).length, 1, manage);
-  const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'MNQ', maxSize: 3, stopTicks: 40 }];
+  const verdicts = [{ strategy: 'prop_portfolio', component: 'orb', direction: 'long', action: 'full', contract: 'MNQ', contractId: 'MNQ', maxSize: 3, stopTicks: 40 }];
   const prop = p.trade([{ symbol: 'MNQ', bar, scan, verdicts }]);
-  assert.match(prop, /These are prop_portfolio_3m's components: enter only as its verdict below says \(setup:prop_portfolio_3m\), never as setup:<component>\./);
-  assert.match(prop, /prop_portfolio_3m: long setup from orb, verdict full: enter only as setup:prop_portfolio_3m/);
+  assert.match(prop, /These are prop_portfolio's components: enter only as its verdict below says \(setup:prop_portfolio\), never as setup:<component>\./);
+  assert.match(prop, /prop_portfolio: long setup from orb, verdict full: enter only as setup:prop_portfolio/);
 });
 
 test('a section that could not be built is named; positions without trade details are still listed', () => {
@@ -411,8 +411,8 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   assert.strictEqual(failedScreen.match(/no verdict, so no entry/g).length, 1, 'the reason, once');
   assert.doesNotMatch(failedScreen, /The policy screen failed this bar/);
   // Verdicts name their symbol (two symbols can each have one).
-  const verdicts = [{ strategy: 'prop_portfolio_3m', component: 'orb', direction: 'long', action: 'skip', reason: 'cushion' }];
-  assert.match(p.trade([{ symbol: 'MES', bar, scan, verdicts }]), / MES prop_portfolio_3m: the long setup from orb is skipped \(cushion\); no entry\./);
+  const verdicts = [{ strategy: 'prop_portfolio', component: 'orb', direction: 'long', action: 'skip', reason: 'cushion' }];
+  assert.match(p.trade([{ symbol: 'MES', bar, scan, verdicts }]), / MES prop_portfolio: the long setup from orb is skipped \(cushion\); no entry\./);
   // Formatting: one sentence for the trend line; a plan without a full stop gets one; the bar's close is not repeated.
   const f = p.trade([{ symbol: 'MNQ', bar: { ...bar, trend: 'Trend rule: up; trend strategies may not go short.', plan: 'MNQ premarket plan (09:05 ET): bias long' }, scan: [] }]);
   assert.match(f, /MNQ Trend rule: up; trend strategies may not go short \(recorded for the order gate, which enforces it\)\. MNQ premarket plan \(09:05 ET\): bias long\. /);

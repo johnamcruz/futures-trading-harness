@@ -181,7 +181,7 @@ before trusting the flow branch.
 
 ### Traded through a policy strategy
 
-Listed in `prop_portfolio_3m`, a value_area setup exits by the policy
+Listed in `prop_portfolio`, a value_area setup exits by the policy
 strategy's own trail (2R / 0.5R), not by the value-area target and time stop
 above, as in training.
 

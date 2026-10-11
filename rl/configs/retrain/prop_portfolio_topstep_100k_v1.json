@@ -1,5 +1,5 @@
 {
-  "sweep": "../sweep/prop_portfolio_3m_topstep_100k_v1.json",
+  "sweep": "../sweep/prop_portfolio_topstep_100k_v1.json",
   "trial": "best",
   "seeds": [
     1,
@@ -10,5 +10,5 @@
     6
   ],
   "total_timesteps": 400000,
-  "n_envs": 4
+  "n_envs": 2
 }

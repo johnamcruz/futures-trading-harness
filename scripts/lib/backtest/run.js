@@ -122,7 +122,7 @@ function validateBacktestConfig(raw, baseDir) {
   if (cfg.feesPerSide !== null && !(cfg.feesPerSide >= 0)) errors.push('feesPerSide: dollars per contract per side');
   if (!(Number.isInteger(cfg.window) && cfg.window >= 160)) errors.push('window: bars of history per evaluation, at least 160');
   if (cfg.outDir !== null && typeof cfg.outDir !== 'string') errors.push('outDir: a directory');
-  if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio_3m"');
+  if (cfg.prop !== null && !(typeof cfg.prop === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(cfg.prop))) errors.push('prop: a policy strategy (signal: policy), e.g. "prop_portfolio"');
   if (cfg.bundle !== null && !(typeof cfg.bundle === 'string' && cfg.prop !== null)) errors.push('bundle: a policy bundle (models/<name>.json) to try in place of the policy strategy\'s own; needs prop');
   if (!(Number.isInteger(cfg.every) && cfg.every >= 1)) errors.push('every: attempts start every N trading days (1 or more)');
   if (typeof cfg.record !== 'boolean') errors.push('record: true or false (record each strategy\'s track record for the cycle prompt)');
@@ -349,8 +349,11 @@ function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, en
   if (bundleName) {
     const bundle = loadBundle(root, bundleName, env, { requireValidated: false });
     if (!bundle.meta.validated) log(`warning: ${bundleName} is not validated (research only; live trading refuses it)`);
-    const why = bundleMismatch(bundle.meta, prop, cfg.symbols[0]);
-    if (why) throw new Error(`bundle ${bundleName} ${why}`);
+    // Every market of the run: a bundle trained on NQ only decides nothing on ES.
+    for (const sym of cfg.symbols) {
+      const why = bundleMismatch(bundle.meta, prop, sym);
+      if (why) throw new Error(`bundle ${bundleName} ${why}`);
+    }
     policy = evaluate(e, starts, to, { decide: bundle.decide });
   }
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');

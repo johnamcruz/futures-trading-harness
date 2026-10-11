@@ -81,6 +81,16 @@ function gateFailures(oos, minPassRate = PROMOTION_GATE.minPassRate, minWinRate 
   return out;
 }
 
+/**
+ * The markets a bundle was trained on: meta.symbols, or meta.symbol (bundles
+ * from before several markets), or null when it records neither. A malformed
+ * list records nothing usable: [] (every root refused).
+ */
+function trainedSymbols(meta) {
+  if (meta.symbols !== undefined) return Array.isArray(meta.symbols) ? meta.symbols.filter(x => typeof x === 'string' && x) : [];
+  return typeof meta.symbol === 'string' && meta.symbol ? [meta.symbol] : null;
+}
+
 const sizingOf = z => JSON.stringify(Object.fromEntries(Object.entries({ ...DEFAULT_SIZING, ...(z || {}) }).sort()));
 
 /**
@@ -93,8 +103,11 @@ function bundleMismatch(meta, strategy, symbolRoot = null) {
   if (meta.strategy !== strategy.name) return `was trained for ${meta.strategy}, not ${strategy.name}`;
   if (JSON.stringify(meta.components) !== JSON.stringify(strategy.strategies)) return `was trained on ${(meta.components || []).join(', ')}, not ${(strategy.strategies || []).join(', ')}`;
   if (meta.account !== strategy.account) return `was trained for account ${meta.account}, not ${strategy.account}`;
+  // The markets it was trained on (a list, or one symbol in older bundles): a live root of another index is refused.
   const fam = r => (familyOf(r) ? familyOf(r).micro : r);
-  if (symbolRoot && meta.symbol && fam(meta.symbol) !== fam(symbolRoot)) return `was trained on ${meta.symbol}, not ${symbolRoot}`;
+  const trained = trainedSymbols(meta);
+  if (symbolRoot && !trained) return `records no market it was trained on, so it can't be checked against ${symbolRoot}`;
+  if (symbolRoot && !trained.some(t => fam(t) === fam(symbolRoot))) return `was trained on ${trained.join(', ')}, not ${symbolRoot}`;
   if (strategy.timeframe && meta.timeframe && timeframeMs(strategy.timeframe) !== meta.timeframe * 60000) return `was trained on ${meta.timeframe}m bars, not ${strategy.timeframe}`;
   if (sizingOf(meta.sizing) !== sizingOf(strategy.sizing)) return `was trained with sizing ${sizingOf(meta.sizing)}, not the strategy's ${sizingOf(strategy.sizing)}`;
   if ((meta.contracts || 'auto') !== (strategy.contracts || 'auto')) return `was trained with contracts: ${meta.contracts || 'auto'}, not ${strategy.contracts || 'auto'}`;
@@ -173,4 +186,4 @@ function loadBundle(pluginRoot, name, env = process.env, { requireValidated = tr
   };
 }
 
-module.exports = { BUNDLE_FORMAT, BUNDLE_VERSION, PROMOTION_GATE, modelDirs, bundlePath, gateFailures, bundleMismatch, checkBundle, loadBundle };
+module.exports = { BUNDLE_FORMAT, BUNDLE_VERSION, PROMOTION_GATE, modelDirs, bundlePath, gateFailures, bundleMismatch, trainedSymbols, checkBundle, loadBundle };

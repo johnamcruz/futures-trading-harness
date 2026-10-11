@@ -281,6 +281,13 @@ test('micros and minis are one root: an MNQ entry waits while an NQ position is 
   const ledger = [{ contractId: 'MES', sign: 1, size: 1, netBefore: 0, at: NOW.getTime() - 5000 }];
   assert.ok(checks(evaluateAccount({ input: order(), now: NOW, config, ledger, propAttempt: 'topstep_100k' })).includes('prop-one-position'));
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), now: NOW, config, propAttempt: 'topstep_100k' })), []);
+  // A resting entry on another market, the account flat: it could fill next to this one.
+  const restingES = [{ id: 9, contractId: 'ES', type: 1, side: 0, size: 1, limitPrice: 5000 }];
+  const w = evaluateAccount({ input: order(), orders: restingES, now: NOW, config: { ...config, skipChecks: new Set(['prop-one-position']) }, propAttempt: 'topstep_100k' });
+  assert.match(w.find(x => x.check === 'prop-one-position').message, /an order is working on ES and could fill into a second position/);
+  assert.ok(!checks(evaluateAccount({ input: order(), orders: restingES, now: NOW, config })).includes('prop-one-position'), 'no attempt: the per-root checks only');
+  const unnamed = evaluateAccount({ input: order(), orders: [{ id: 10, type: 1, side: 0, size: 1 }], now: NOW, config, propAttempt: 'topstep_100k' });
+  assert.match(unnamed.find(x => x.check === 'prop-one-position').message, /working on an unnamed contract/, 'an order it can\'t name still counts');
 });
 
 test('correlated exposure: a second same-direction equity-index position is refused; the other side, or a non-index, is not', () => {

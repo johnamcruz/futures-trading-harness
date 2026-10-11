@@ -90,5 +90,18 @@ class EnvTest(unittest.TestCase):
             self.assertEqual(r["attempts"], 1)
 
 
+class HeapTest(unittest.TestCase):
+    def test_the_env_server_gets_a_heap_big_enough_for_several_markets(self):
+        from fth_rl import bridge
+
+        with environ({"FTH_NODE_HEAP_MB": ""}):
+            self.assertEqual(bridge.heap_mb(), 8192)
+        with environ({"FTH_NODE_HEAP_MB": "12000"}):
+            self.assertEqual(bridge.heap_mb(), 12000)
+        for bad in ("lots", "100"):
+            with environ({"FTH_NODE_HEAP_MB": bad}), self.assertRaises(EnvServerError):
+                bridge.heap_mb()
+
+
 if __name__ == "__main__":
     unittest.main()
