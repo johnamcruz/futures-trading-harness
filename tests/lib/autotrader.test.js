@@ -316,6 +316,38 @@ test('a run that changes the workspace instructions or settings is detected', ()
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)).sort(), ['.claude/settings.local.json', 'AGENTS.md']);
 });
 
+test('the Qwen settings fingerprint: the $version stamp Qwen Code writes on start is no change; anything else is', () => {
+  const { workspaceFingerprint, changedFiles, fileDigest } = require('../../scripts/lib/harness-run');
+  const dir = tmpDir();
+  fs.mkdirSync(path.join(dir, '.qwen'));
+  const file = path.join(dir, '.qwen', 'settings.json');
+  const allow = { permissions: { allow: ['mcp__broker', 'mcp__harness'], deny: ['Read(//home/u/.qwen/**)'] } };
+  fs.writeFileSync(file, `${JSON.stringify(allow, null, 2)}\n`);
+  const before = workspaceFingerprint(dir);
+  const changed = v => {
+    fs.writeFileSync(file, typeof v === 'string' ? v : `${JSON.stringify(v, null, 2)}\n`);
+    return changedFiles(before, workspaceFingerprint(dir));
+  };
+  // Qwen's stamp (its settings version, written back with the file's formatting, at the end or the start).
+  assert.deepStrictEqual(changed({ ...allow, $version: 4 }), []);
+  assert.deepStrictEqual(changed({ $version: 5, ...allow }), []);
+  assert.deepStrictEqual(changed(JSON.stringify({ ...allow, $version: 4 })), [], 'whitespace only');
+  // Anything else is a change: a permission, a stamp that is no settings version, a new key, the order of the rules, not JSON.
+  for (const v of [
+    { ...allow, $version: 4, permissions: { ...allow.permissions, allow: [...allow.permissions.allow, 'run_shell_command'] } },
+    { ...allow, $version: '4' }, { ...allow, $version: 4.5 }, { ...allow, $version: null }, { ...allow, $version: { a: 1 } },
+    { ...allow, tools: { allowed: ['run_shell_command'] } },
+    { permissions: { deny: allow.permissions.deny, allow: allow.permissions.allow } },
+    { permissions: { ...allow.permissions, deny: [] }, $version: 4 },
+    '// comment\n{}', '[]', '',
+  ]) assert.deepStrictEqual(changed(v), ['.qwen/settings.json'], JSON.stringify(v));
+  fs.unlinkSync(file);
+  assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), ['.qwen/settings.json'], 'removed');
+  // Only the Qwen settings file: another file's $version is a change like any other.
+  assert.notStrictEqual(fileDigest('.claude/settings.json', '{"a":1}'), fileDigest('.claude/settings.json', '{"a":1,"$version":4}'));
+  assert.strictEqual(fileDigest('.qwen/settings.json', '{"a":1}'), fileDigest('.qwen/settings.json', Buffer.from('{ "a": 1, "$version": 4 }')));
+});
+
 test('signal mode: a paper strategy only starts a cycle in paper mode', () => {
   const { signalDecision } = require('../../scripts/lib/autotrader');
   const scan = [{ name: 'vwap_reclaim', status: 'paper', signal: 'rules', candidate: true, direction: 'long' }];

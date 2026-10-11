@@ -54,7 +54,7 @@ const { appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
 const { harnessNow, resolveClock } = require('./lib/trading/harness-now');
 const runnerNow = () => harnessNow(process.env, { testClock: false }); // never FTH_TEST_NOW: the runner trades live
-const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFiles } = require('./lib/harness-run');
+const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFiles, fileDigest } = require('./lib/harness-run');
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
@@ -208,7 +208,8 @@ function writeQwenSettings(cfg, dataDir, opts) {
   if (cfg.harness !== 'qwen' || opts.dryRun) return;
   const file = path.resolve(ROOT, cfg.workdir, '.qwen', 'settings.json');
   const content = `${JSON.stringify(qwenWorkspaceSettings(ROOT, os.homedir(), { dataDir, stateDir: harnessHome() }), null, 2)}\n`;
-  if (readJson(file, null) !== null && fs.readFileSync(file, 'utf8') === content) return;
+  // The same allowlist but for the $version stamp Qwen Code writes on start (fileDigest): left as it is.
+  if (readJson(file, null) !== null && fileDigest('.qwen/settings.json', fs.readFileSync(file)) === fileDigest('.qwen/settings.json', content)) return;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
   process.stdout.write(`[autotrader] wrote the Qwen autonomous allowlist to ${file}\n`);

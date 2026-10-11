@@ -19,6 +19,8 @@
  * End of day is retried a minute later (up to 5 times, before 16:00 ET) while
  * the runner hasn't verified the account flat; a day is done after its last
  * time. The run stops after cfg.maxConsecutiveErrors failed cycles in a row,
+ * before a time while the run's kill switch (<run home>/STOP) is on (a pass would
+ * run no cycle; the reason is the file's first line),
  * or at once when a step can't run (the broker won't start, the clock is
  * refused).
  *
@@ -120,6 +122,16 @@ function defaultDeps(run, root) {
   };
 }
 
+/** The kill switch's first line ('' when empty or unreadable) when the file exists, else null. */
+function killSwitchReason(file) {
+  if (!file || !fs.existsSync(file)) return null;
+  try {
+    return fs.readFileSync(file, 'utf8').trim().split('\n')[0].slice(0, 300);
+  } catch (_err) {
+    return '';
+  }
+}
+
 /** A pid that is running (signal 0 reaches it, or it belongs to another user). */
 function alive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -194,9 +206,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const queue = [...todo];
   while (queue.length) {
     if (cycles >= maxCycles) return { cycles, stopped: `stopped after ${cycles} decision times (--max-cycles)`, done: false };
+    const env = replayEnv(baseEnv, run, { at: queue[0].t });
+    // The run's kill switch (a cycle's workspace change, the runner's error limit): every later pass would
+    // run no cycle, so the run stops here, saying why; it resumes from this time once the file is removed.
+    const killed = killSwitchReason(env.FTH_KILL_SWITCH_FILE);
+    if (killed !== null) return { cycles, stopped: `the run's kill switch is on (${env.FTH_KILL_SWITCH_FILE}${killed ? `: ${killed}` : ''}); review it, then remove the file`, done: false };
     const point = queue.shift();
     writeClock(point.t);
-    const env = replayEnv(baseEnv, run, { at: point.t });
     const started = Date.now();
     // Marked before it runs: a driver stopped before its line is written never runs this time twice.
     manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
