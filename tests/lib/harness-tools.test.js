@@ -236,7 +236,7 @@ test('bars: fetch through the broker; only its own arguments reach the file writ
   assert.ok(!fs.existsSync(path.join(autoHome, 'mtf')), 'no mtf record');
   assert.ok(fs.existsSync(path.join(home, 'mtf', 'MNQ.json')), 'the same call outside autonomous mode recorded');
   // A broker failure is still a failure, not hidden behind the note.
-  await assert.rejects(bars.fetch({ symbol: 'MNQ', record: true }, { env: { PATH: process.env.PATH, FTH_HOME: tmpDir(), FTH_AUTONOMOUS: '1', FTH_BROKER: 'nope' }, now }), e => !/note: /.test(e.message));
+  await assert.rejects(bars.fetch({ symbol: 'MNQ', record: true }, { env: { PATH: process.env.PATH, FTH_HOME: tmpDir(), FTH_AUTONOMOUS: '1', FTH_BROKER: 'nope' }, now }), e => /^unknown broker "nope"/.test(e.message) && !/note: /.test(e.message));
   assert.deepStrictEqual(bars.parseArgv(['--symbol=mnq', '--timeframe', '5', '--daily', '--out', 'f.json']), { symbol: 'MNQ', timeframe: 5, daily: true, count: null, out: 'f.json', record: false });
 });
 

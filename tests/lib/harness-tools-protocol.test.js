@@ -225,10 +225,11 @@ test('callTool: in an autonomous run record is ignored, not an error: the result
     assert.doesNotMatch(r.content[0].text, /note: record ignored/, tool);
     assert.ok(fs.existsSync(file), `${tool}: ${file}`);
   }
-  // A real failure in an autonomous run stays an error (a bars file outside the bars directories).
-  const outside = await callTool('mtf_read', { bars: path.join(tmpDir(), 'x.csv'), symbol: 'MNQ', record: true }, { env: auto });
-  assert.strictEqual(outside.isError, true);
-  assert.doesNotMatch(outside.content[0].text, /note: record ignored/);
+  // A real failure in an autonomous run with record stays an error: the broker's, not a note (an unknown broker).
+  const failed = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, { env: { ...auto, FTH_BROKER: 'nope' } });
+  assert.strictEqual(failed.isError, true);
+  assert.match(failed.content[0].text, /^\[bars\] unknown broker "nope"/m);
+  assert.doesNotMatch(failed.content[0].text, /note: record ignored/);
 });
 
 test('callTool: record is refused while an autonomous runner holds its lock, whatever the server\'s environment', async () => {
