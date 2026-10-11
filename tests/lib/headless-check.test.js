@@ -22,7 +22,7 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   const claude = hc.probeCommand('claude', ROOT, env);
   assert.deepStrictEqual(claude.argv.slice(0, 2), ['claude', '-p']);
   const allowed = claude.argv[claude.argv.indexOf('--allowedTools') + 1].split(',');
-  assert.ok(allowed.includes('mcp__harness') && allowed.includes('mcp__broker'));
+  assert.ok(allowed.includes('mcp__harness'));
   assert.strictEqual(claude.cwd, path.join(ROOT, 'workspace'));
   assert.deepStrictEqual([claude.env.FTH_AUTONOMOUS, claude.env.FTH_ROOT, claude.env.FTH_BARS_DIR], ['1', ROOT, '/srv/fth/bars']);
   assert.deepStrictEqual(hc.probeCommand('codex', ROOT, env).argv.slice(0, 2), ['codex', 'exec']);
@@ -34,6 +34,22 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   assert.deepStrictEqual(fake.argv.slice(0, 3), [process.execPath, '/x/fake.js', '-p']);
   assert.deepStrictEqual(hc.probeCommand('claude', ROOT, env, { bin: '/x/claude2' }).argv.slice(0, 2), ['/x/claude2', '-p']);
   assert.throws(() => hc.probeCommand('cursor', ROOT, env), /unknown harness "cursor"/);
+  // The broker narrowed to reading on every harness: no order tool, no journal write.
+  const orderTools = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position', 'journal_add'];
+  assert.deepStrictEqual([...hc.PROBE_DENIED].sort(), [...orderTools].sort());
+  assert.ok(!allowed.includes('mcp__broker'), 'Claude: not the whole broker server');
+  assert.ok(allowed.includes('mcp__broker__get_account_snapshot') && allowed.includes('mcp__broker__get_bars'));
+  assert.ok(!allowed.some(t => orderTools.some(o => t === `mcp__broker__${o}`)));
+  const denied = claude.argv[claude.argv.indexOf('--disallowedTools') + 1].split(',');
+  for (const o of orderTools) assert.ok(denied.includes(`mcp__broker__${o}`), `Claude denies ${o}`);
+  const codex = hc.probeCommand('codex', ROOT, env).argv;
+  assert.strictEqual(codex[codex.indexOf('exec') + 2], `mcp_servers.broker.disabled_tools=${JSON.stringify(hc.PROBE_DENIED)}`);
+  assert.strictEqual(codex[codex.length - 1], hc.probePrompt(), 'Codex: the prompt stays last');
+  const qwenArgv = hc.probeCommand('qwen', ROOT, env).argv;
+  assert.deepStrictEqual(qwenArgv.slice(qwenArgv.indexOf('--exclude-tools') + 1), hc.PROBE_DENIED.map(o => `mcp__broker__${o}`));
+  // The runner's own runs are untouched (the probe narrows only its argv).
+  const { buildCommand, validateConfig } = require('../../scripts/lib/autotrader');
+  assert.ok(buildCommand(validateConfig({ harness: 'claude' }), 'P', ROOT, env)[buildCommand(validateConfig({ harness: 'claude' }), 'P', ROOT, env).indexOf('--allowedTools') + 1].split(',').includes('mcp__broker'));
 });
 
 const use = (id, name, input = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });

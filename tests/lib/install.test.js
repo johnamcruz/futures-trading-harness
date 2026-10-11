@@ -36,6 +36,9 @@ test('codex block wires the gateway and every agent role', () => {
   assert.match(block, /\[agents\.trade_executor\]/);
   assert.match(block, /^default_tools_approval_mode = "approve"$/m);
   assert.match(block, /"FTH_KILL_SWITCH_FILE"/);
+  // The runner's exchange calendar reaches the gateway (Codex forwards only listed variables).
+  const gatewayVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);
+  for (const v of ['FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_REPLAY_NOW', 'FTH_HOME']) assert.ok(gatewayVars.includes(v), `gateway: ${v}`);
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 
@@ -62,6 +65,21 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   }
   fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness_other]\ncommand = "x"\n[mcp_servers.brokerage]\n[mcp_servers]\nharnessx = { command = "x" }\n[profiles]\nharness = "x"\n');
   assert.ok(planCodex({ root: ROOT, home, broker: BROKER }), 'other servers whose names start alike are fine');
+});
+
+test('every harness hands an autonomous run\'s FTH_AUTONOMOUS=1 to the harness tools server (so record stays refused)', () => {
+  const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
+  const { qwenExtensionJson } = require('../../scripts/lib/harness-sync');
+  for (const harness of ['claude', 'codex', 'qwen']) assert.strictEqual(childEnv(validateConfig({ harness }), ROOT, {}).FTH_AUTONOMOUS, '1', harness);
+  // Claude and Qwen start a stdio server with their own environment: no registration may override it.
+  const claude = planClaude({ root: ROOT, home: tmpDir(), broker: BROKER }).next.find(l => l.startsWith('claude mcp add harness'));
+  assert.ok(claude && !/\s(-e|--env)\b/.test(claude), 'Claude: no env override in the registration');
+  assert.strictEqual(mergeQwenSettings({}, ROOT).mcpServers.harness.env, undefined, 'Qwen settings: no env override');
+  assert.strictEqual(JSON.parse(qwenExtensionJson(ROOT)).mcpServers.harness.env, undefined, 'Qwen extension: no env override');
+  // Codex passes only the listed variables.
+  const block = codexConfigBlock(ROOT, BROKER);
+  const section = block.slice(block.indexOf('[mcp_servers.harness]'));
+  assert.ok(JSON.parse(/^env_vars = (\[.*\])$/m.exec(section)[1]).includes('FTH_AUTONOMOUS'), 'Codex: forwarded');
 });
 
 test('claude plan prints the harness tools server registration', () => {

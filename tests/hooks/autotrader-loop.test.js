@@ -123,3 +123,59 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
   const state = JSON.parse(fs.readFileSync(path.join(home, '.futures-trading-harness', 'autotrader-state.json'), 'utf8'));
   assert.strictEqual(state.cycles, 1);
 });
+
+// A copy of the harness whose harness tools server is a foreign MCP server (the fake broker).
+function foreignToolsRoot() {
+  const root = tmpDir();
+  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'models', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
+  fs.writeFileSync(path.join(root, 'scripts', 'harness-tools-mcp.js'), `require(${JSON.stringify(FAKE_BROKER)});\n`);
+  return root;
+}
+
+const waitFor = (what, ms, cond) => new Promise((resolve, reject) => {
+  let check = null;
+  const timer = setTimeout(() => { clearInterval(check); reject(new Error(`${what}: not within ${ms} ms`)); }, ms);
+  check = setInterval(() => { if (cond()) { clearTimeout(timer); clearInterval(check); resolve(); } }, 100);
+});
+
+test('live loop: a harness tools server that fails the start check turns trading off after the lock is taken, and the loop runs on', { timeout: 60000 }, async () => {
+  const root = foreignToolsRoot();
+  const home = tmpDir();
+  const config = path.join(home, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({
+    harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], timeframe: 1,
+    sessions: ['18:00-15:50@America/New_York'], premarketAt: '', eodAt: '15:50@America/New_York', weekdaysOnly: false,
+  }));
+  const killSwitch = path.join(home, 'STOP');
+  const state = path.join(home, '.futures-trading-harness');
+  const start = () => {
+    const runner = spawn(process.execPath, [path.join(root, 'scripts', 'autotrader.js'), '--config', config], {
+      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, PROJECTX_MCP_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1' },
+    });
+    const io = { out: '' };
+    runner.stdout.on('data', c => { io.out += c; });
+    runner.stderr.on('data', c => { io.out += c; });
+    return { runner, io, done: new Promise(r => runner.on('close', r)) };
+  };
+  const first = start();
+  try {
+    await waitFor('the kill switch', 30000, () => fs.existsSync(killSwitch) || first.runner.exitCode !== null);
+    assert.strictEqual(first.runner.exitCode, null, `the runner keeps running:\n${first.io.out}`);
+    const reason = fs.readFileSync(killSwitch, 'utf8');
+    assert.match(reason, /^the harness tools server \(.*harness-tools-mcp\.js\) does not offer the harness's tools .*Fix it, then remove this file to resume trading\.\n$/);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(state, 'autotrader.lock'), 'utf8')).pid, first.runner.pid, 'the lock is the running loop\'s');
+    // It keeps running: its heartbeat (end of day and housekeeping run from the same loop).
+    await waitFor('a heartbeat', 20000, () => fs.existsSync(path.join(state, 'autotrader-heartbeat.json')));
+    assert.match(first.io.out, /trading is off \(kill switch .*\); end of day and housekeeping still run/);
+    // A second start while the lock is held stops at the lock: the kill switch is left alone.
+    const second = start();
+    assert.strictEqual(await second.done, 1);
+    assert.match(second.io.out, /another autotrader is running/);
+    assert.strictEqual(fs.readFileSync(killSwitch, 'utf8'), reason, 'no second reason appended');
+    assert.strictEqual(first.runner.exitCode, null);
+  } finally {
+    if (first.runner.exitCode === null) first.runner.kill('SIGTERM');
+    await first.done;
+  }
+});

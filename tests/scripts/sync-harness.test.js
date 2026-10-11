@@ -24,6 +24,7 @@ test('generated files parse in their harness formats', () => {
         assert.ok(Array.isArray(data.tools) && data.tools.length > 0, `${rel}: tools`);
         for (const t of data.tools) assert.ok(!Object.keys(QWEN_TOOLS).includes(t), `${rel}: untranslated tool ${t}`);
         assert.strictEqual(data.approvalMode, 'default', `${rel}: headless roles ask, so the workspace allowlist decides`);
+        assert.strictEqual(data.background, false, `${rel}: runs in the foreground (Qwen's default for a named subagent is the background)`);
       }
     }
     if (rel.endsWith('.toml')) assert.match(content, /^sandbox_mode = "(read-only|workspace-write)"$/m);

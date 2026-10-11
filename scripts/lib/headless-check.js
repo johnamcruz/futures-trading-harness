@@ -12,8 +12,9 @@
  *   subagent       the role delegated to, and whether it answered
  *   shell          `node -e 1`: ran, refused, or not attempted
  *
- * It places no orders and changes nothing (the probe says so, and the order
- * gate and the allowlists hold as in any autonomous run).
+ * It places no orders and changes nothing: it runs in paper mode with the
+ * broker narrowed to its read tools (no order or journal-write tool on any
+ * harness), and the order gate holds as in any autonomous run.
  *
  *   probePrompt()                                   the prompt
  *   probeCommand(harness, root, env, { bin })       { argv, cwd, env } as the runner runs it
@@ -29,6 +30,8 @@ const { spawnSync } = require('child_process');
 const { validateConfig, buildCommand, childEnv, resolveDataDir, DEFAULTS } = require('./autotrader');
 const { qwenWorkspaceSettings } = require('./install');
 const { harnessHome } = require('./paths');
+const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
+const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
 const PROBE_TOOLS = ['blackouts_list', 'strategies_list'];
@@ -61,9 +64,32 @@ function probeConfig(harness, config = {}) {
 }
 
 /** argv, working directory and environment of the probe, exactly as the runner would start a cycle. */
+/**
+ * The probe's argv with the broker narrowed to reading: no order tool (place, modify, cancel, close,
+ * partial close) and no journal write, on any harness. Paper mode refuses entries, but a broker's paper
+ * switch may not stop a close or a cancel; the probe needs none of them.
+ */
+const PROBE_BROKER_TOOLS = Object.entries(BROKER_TOOLS).filter(([name, t]) => t.role === 'read' || name === 'journal_read').map(([name]) => name);
+const PROBE_DENIED = Object.keys(BROKER_TOOLS).filter(name => !PROBE_BROKER_TOOLS.includes(name));
+function readOnlyBroker(harness, argv) {
+  const out = [...argv];
+  if (harness === 'claude') {
+    const a = out.indexOf('--allowedTools') + 1;
+    out[a] = out[a].split(',').flatMap(t => (t === `mcp__${BROKER_SERVER}` ? PROBE_BROKER_TOOLS.map(n => `mcp__${BROKER_SERVER}__${n}`) : [t])).join(',');
+    const d = out.indexOf('--disallowedTools') + 1;
+    out[d] = [out[d], ...PROBE_DENIED.map(n => `mcp__${BROKER_SERVER}__${n}`)].filter(Boolean).join(',');
+  } else if (harness === 'codex') {
+    out.splice(out.indexOf('exec') + 1, 0, '-c', `mcp_servers.${BROKER_SERVER}.disabled_tools=${JSON.stringify(PROBE_DENIED)}`);
+  } else if (harness === 'qwen') {
+    out.push('--exclude-tools', ...PROBE_DENIED.map(n => `mcp__${BROKER_SERVER}__${n}`));
+  }
+  return out;
+}
+
 function probeCommand(harness, root, env = process.env, { bin = null, config = {} } = {}) {
   const cfg = probeConfig(harness, config);
-  const argv = buildCommand(cfg, probePrompt(), root, env);
+  // The prompt stays last for Codex (buildCommand puts it there); Qwen's flags may follow -p.
+  const argv = readOnlyBroker(harness, buildCommand(cfg, probePrompt(), root, env));
   // A stand-in for the harness CLI (tests): its path replaces the program, node runs a .js one.
   if (bin) argv.splice(0, 1, ...(/\.[cm]?js$/.test(bin) ? [process.execPath, bin] : [bin]));
   return { argv, cwd: path.resolve(root, cfg.workdir), env: childEnv(cfg, root, env) };
@@ -189,4 +215,4 @@ function formatReport(res) {
 /** The harness a runner config trades with (its own, else the runner's default). */
 const configHarness = config => (config && config.harness) || DEFAULTS.harness;
 
-module.exports = { configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };
+module.exports = { PROBE_BROKER_TOOLS, PROBE_DENIED, readOnlyBroker, configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };

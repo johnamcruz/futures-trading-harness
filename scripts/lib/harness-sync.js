@@ -89,6 +89,8 @@ function qwenAgentMd(agent) {
     ...tools.map(t => `  - ${t}`),
     // Headless runs: the role asks (and so is refused) for anything the workspace allowlist doesn't allow.
     'approvalMode: default',
+    // Qwen runs a named subagent in the background unless told otherwise; the head trader waits for each role.
+    'background: false',
     '---',
     '',
     GENERATED,

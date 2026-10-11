@@ -196,6 +196,18 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   assert.strictEqual(eod.status, 0, eod.stderr);
   assert.match(eod.stderr, /\[autotrader\] warning: the harness tools server/);
   assert.match(eod.stdout, /CYCLE RESULT: no-trade - fake harness/, 'flattening needs only the broker: the end of day runs');
+  // A replay step is a pass of the live loop: trading turns off (kill switch), the step itself runs.
+  const home = path.join(dir, 'replay-home');
+  fs.mkdirSync(home);
+  // The replay broker: the mock exchange as a replay server (its clock starts at 2026-10-07T14:00:00Z).
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL' } } }));
+  const replayStop = path.join(home, 'STOP');
+  const replayEnv = { ...env, FTH_HOME: home, FTH_KILL_SWITCH_FILE: replayStop, FTH_REPLAY_NOW: '2026-10-07T14:00:00Z', MOCK_REPLAY: '1', MOCK_STATE_DIR: home, MOCK_JOURNAL: path.join(home, 'journal.jsonl') };
+  const step = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade'], { encoding: 'utf8', env: replayEnv, timeout: 60000 });
+  assert.doesNotMatch(step.stderr, /^\[autotrader\] the harness tools server .*does not offer the harness's tools .*update the checkout and re-run the installer\n/m, 'not refused outright');
+  assert.match(step.stderr, /trading is off \(kill switch .*\); end of day and housekeeping still run/);
+  assert.match(fs.readFileSync(replayStop, 'utf8'), /does not offer the harness's tools/);
+  assert.match(step.stdout, /REPLAY STEP /, `the step ran:\n${step.stdout}\n${step.stderr}`);
 });
 
 test('codex runs may write the news-blackouts directory and nothing else of the harness state', () => {
