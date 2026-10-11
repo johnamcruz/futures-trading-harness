@@ -1,9 +1,17 @@
 {
-  "name": "prop_portfolio_3m_topstep_100k_v1",
-  "strategy": "prop_portfolio_3m",
-  "symbol": "MNQ",
+  "name": "prop_portfolio_topstep_100k_v1",
+  "strategy": "prop_portfolio",
+  "symbols": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
   "data": {
-    "MNQ": "../../../data/MNQ_1min.csv"
+    "MNQ": "../../../data/NQ_1min.csv",
+    "MES": "../../../data/ES_1min.csv",
+    "MYM": "../../../data/YM_1min.csv",
+    "M2K": "../../../data/RTY_1min.csv"
   },
   "windows": {
     "train": [
@@ -24,7 +32,7 @@
     1
   ],
   "total_timesteps": 150000,
-  "n_envs": 4,
+  "n_envs": 2,
   "hidden": [
     64,
     64
@@ -85,13 +93,6 @@
         "low": 0.15,
         "high": 0.35
       },
-      "contracts": {
-        "type": "categorical",
-        "choices": [
-          "micro",
-          "auto"
-        ]
-      },
       "hidden": {
         "type": "categorical",
         "choices": [
@@ -119,7 +120,8 @@
       "reward.pass": 10,
       "sizing.cap_usd": 1000,
       "sizing.drawdown_halve_usd": 1500,
-      "sizing.min_size_guard": 1.5
+      "sizing.min_size_guard": 1.5,
+      "contracts": "mini"
     }
   }
 }

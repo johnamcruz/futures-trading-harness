@@ -144,7 +144,7 @@ function validateStrategy(data, body, folderName) {
     req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
   } else {
     for (const k of POLICY_STRATEGY_KEYS) {
-      if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio_3m)`);
+      if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio)`);
     }
     if (data.risk && data.risk.stop === 'strategy') errors.push('risk.stop: strategy is only for a policy strategy');
   }
@@ -323,7 +323,8 @@ function loadStrategies(pluginRoot, env = process.env) {
       if (!c) errs.push(`strategies: ${n} is not a strategy`);
       else if (!c.valid) errs.push(`strategies: ${n} is invalid (${c.errors[0]})`);
       else if (c.signal !== 'rules') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies only`);
-      else if (c.timeframe !== s.timeframe) errs.push(`strategies: ${n} trades ${c.timeframe} bars, not ${s.timeframe}`);
+      // Not re-run on other bars: its periods and stop are in its own bars (a 3m strategy on 1m bars is another strategy).
+      else if (c.timeframe !== s.timeframe) errs.push(`strategies: ${n} trades ${c.timeframe} bars, not ${s.timeframe} (a policy strategy lists strategies on its own timeframe; they are not re-run on other bars)`);
       else if (c.status === 'disabled') errs.push(`strategies: ${n} is disabled; remove it from the list (the policy was trained on the list as it is)`);
     }
     // Every index the policy strategy trades must be scanned by at least one of its strategies (on the micro's bars).

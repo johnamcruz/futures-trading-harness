@@ -55,7 +55,32 @@ def fills_of(engine):
     return {k: (engine or {}).get(k) for k in FILL_KEYS}
 
 
-FINGERPRINT_KEYS = ("strategy", "symbol", "data", "windows", "eval_every", "sessions", "eodAt", "slippageTicks", "closedDates", "earlyCloseDates")
+FINGERPRINT_KEYS = ("strategy", "symbol", "symbols", "data", "windows", "eval_every", "sessions", "eodAt", "slippageTicks", "closedDates", "earlyCloseDates")
+# What the env trains on that the strategy document sets (scripts/lib/rl/env-config.js meta): its
+# strategies, account, markets, bar size, exit (when the policy is asked in a trade), and volume
+# profile settings. Sizing and contracts are per trial (searchable) and recorded in each config. A study, its retrained seeds, and the shipped bundle are
+# bound to it, so an edited STRATEGY.md (say, timeframe: 1m) never mixes trials or ships a network
+# trained on other bars under the new label.
+ENV_KEYS = ("strategy", "components", "account", "symbols", "symbol", "timeframe", "obsFields", "exit", "profile")
+
+
+def env_identity(info):
+    return {k: info.get(k) for k in ENV_KEYS}
+
+
+def check_env(recorded, info, what):
+    """Refuse when the env now differs from the one `what` was trained in."""
+    now = env_identity(info)
+    if recorded is not None and recorded != now:
+        diff = sorted(k for k in ENV_KEYS if (recorded or {}).get(k) != now.get(k))
+        raise ValueError(f"{what} was trained on another env ({', '.join(diff)}: {json.dumps({k: recorded.get(k) for k in diff})}, "
+                         f"now {json.dumps({k: now.get(k) for k in diff})}); the strategy document or config changed: start a new family")
+    return now
+
+
+# Keys added to the fingerprint later: hashed only when a config sets them, so studies made before
+# they existed keep their fingerprint and resume.
+FINGERPRINT_OPTIONAL = ("symbols",)
 SPEC_TYPES = ("float", "int", "categorical")
 STUDY_DEFAULTS = {
     "n_trials": 24,
@@ -210,7 +235,7 @@ def data_files(raw):
 def fingerprint(raw, base_path):
     """What a study is bound to: the non-tunable config and the data's contents."""
     absd = absolute_data(raw, Path(base_path).parent)
-    key = {k: absd.get(k) for k in FINGERPRINT_KEYS}
+    key = {k: absd.get(k) for k in FINGERPRINT_KEYS if k not in FINGERPRINT_OPTIONAL or k in absd}
     key["data_sha256"] = sorted(file_sha(f) for f in data_files(absd) if Path(f).exists())
     key["fills"] = FILLS_VERSION
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
@@ -353,6 +378,9 @@ def objective(sw):
         w = cfg["_windows"]
         log(f"trial {trial.number}: {json.dumps(params)}")
         with EnvServer(cfg_path) as server:
+            env_now = check_env(trial.study.user_attrs.get("env"), server.info(), f"study {trial.study.study_name}")
+            if "env" not in trial.study.user_attrs:
+                trial.study.set_user_attr("env", env_now)
             starts = server.starts(w["select"], cfg["eval_every"])
             if not starts:
                 raise ValueError("the selection window needs room for at least one attempt")
@@ -507,11 +535,19 @@ def _run_retrain(rt, dry_run):
     w = cfg["_windows"]
     with EnvServer(cfg_path) as server:
         # The simulator the seeds are trained in (its fills: FILL_KEYS); retrain and ship refuse seeds from another.
-        engine = server.info()["engine"]
+        info = server.info()
+        engine = info["engine"]
+        check_env(study.user_attrs.get("env"), info, f"study {study.study_name}")
+        if candidates["seeds"] and "env" not in candidates:
+            raise ValueError(f"{cand_file} holds seeds from before retrain recorded their env (strategies, markets, timeframe); "
+                             "move it aside and retrain")
+        candidates["env"] = check_env(candidates.get("env") if candidates["seeds"] else None, info, str(cand_file))
         if candidates["seeds"] and fills_of(candidates.get("engine")) != fills_of(engine):
             raise ValueError(f"{cand_file} holds seeds retrained in another simulator ({candidates.get('engine')}, now {engine}); "
                              "move it aside and retrain")
         candidates["engine"] = engine
+        if candidates["seeds"]:
+            write_config(cand_file, candidates)  # the env and simulator recorded even when every seed is done
         starts = server.starts(w["select"], cfg["eval_every"])
         for seed in rt["seeds"]:
             if str(seed) in candidates["seeds"]:
@@ -599,6 +635,9 @@ def _run_ship(sh, dry_run, models_dir):
         if not candidates.get("engine") or fills_of(candidates["engine"]) != fills_of(info["engine"]):
             raise ValueError(f"the retrained seeds were trained in another simulator ({candidates.get('engine')}) than this harness runs "
                              f"({info['engine']}): retrain them (move {cand_file} aside)")
+        if "env" not in candidates:
+            raise ValueError(f"{cand_file} records no env (strategies, markets, timeframe); retrain it (move it aside)")
+        check_env(candidates["env"], info, f"the retrained seeds ({cand_file})")
         oos, baseline, fails = evaluate_oos(server, cfg, best["network"])
         looks = log_oos_look(sh["out"], sh["retrain"]["sweep"]["raw"]["name"], best["seed"], oos, info, cfg)
         bundle = build_bundle(sh["bundle"], cfg, info, best, [{"seed": c["seed"], "selection": {k: v for k, v in c["selection"].items() if k != "months"}} for c in seeds],

@@ -257,12 +257,12 @@ test('htfCandles: a feed gap that skips a whole candle leaves no previous candle
 });
 
 test('a policy strategy refuses exit.target (its trades exit by its trail)', () => {
-  const p = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'prop_portfolio_3m');
+  const p = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'prop_portfolio');
   const body = '## When to Use\n## How It Works\n## Examples';
   const { name, description, version, status, instruments, timeframe, signal, strategies, account, sizing, contracts, exit, risk, policy, source } = p;
   const data = { name, description, version, status, instruments, timeframe, signal, strategies, account, sizing, contracts, exit, risk, policy, source };
-  assert.deepStrictEqual(validateStrategy(data, body, 'prop_portfolio_3m'), []);
-  assert.match(validateStrategy({ ...data, exit: { ...exit, target: 'crt_target(60)' } }, body, 'prop_portfolio_3m').join(' '), /exit.target: not for a policy strategy/);
+  assert.deepStrictEqual(validateStrategy(data, body, 'prop_portfolio'), []);
+  assert.match(validateStrategy({ ...data, exit: { ...exit, target: 'crt_target(60)' } }, body, 'prop_portfolio').join(' '), /exit.target: not for a policy strategy/);
 });
 
 test('backtest: a fill already at or past the target level is not taken', () => {

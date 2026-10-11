@@ -21,11 +21,30 @@ def node_binary():
     return node
 
 
+DEFAULT_HEAP_MB = 8192
+
+
+def heap_mb():
+    """The env server's V8 heap limit (MB): FTH_NODE_HEAP_MB, else 8192. Node's default (about 4 GB)
+    is too small for several markets of years of bars: the server aborts mid-training (exit code -6).
+    Each env server (n_envs of them, plus one for evaluation) may grow to this."""
+    raw = os.environ.get("FTH_NODE_HEAP_MB")
+    if raw is None or raw == "":
+        return DEFAULT_HEAP_MB
+    try:
+        v = int(raw)
+    except ValueError as err:
+        raise EnvServerError(f"FTH_NODE_HEAP_MB: megabytes, a whole number (got {raw!r})") from err
+    if v < 512:
+        raise EnvServerError(f"FTH_NODE_HEAP_MB: at least 512 (got {v})")
+    return v
+
+
 class EnvServer:
     """A running `node scripts/rl-env-server.js --config <file>`."""
 
     def __init__(self, config_path, hash_data=False, quiet=False):
-        args = [node_binary(), str(SERVER), "--config", str(config_path)]
+        args = [node_binary(), f"--max-old-space-size={heap_mb()}", str(SERVER), "--config", str(config_path)]
         if not hash_data:
             args.append("--no-hash")
         self.proc = subprocess.Popen(

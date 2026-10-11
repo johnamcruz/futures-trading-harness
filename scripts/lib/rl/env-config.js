@@ -46,27 +46,53 @@ function policyStrategy(root, name, env = process.env) {
 }
 
 /**
+ * The markets a config trains on: `symbols` (several indexes at once, one
+ * shared account) or `symbol` (one). Each is a contract root the policy
+ * strategy trades (by its micro/mini family), at most one per family (MNQ
+ * and NQ share their bars: both would trade the same market twice).
+ */
+function symbolsOf(cfg, strategy) {
+  if (cfg.symbol !== undefined && cfg.symbols !== undefined) throw new Error('symbol, symbols: use one (symbols: ["MNQ", "MES", ...] trains on several markets with one account)');
+  const list = cfg.symbols !== undefined ? cfg.symbols : [cfg.symbol];
+  const root = /^[A-Z0-9]+$/;
+  if (!Array.isArray(list) || !list.length || !list.every(x => root.test(String(x || '')))) {
+    throw new Error('symbols: the data\'s contract roots, e.g. ["MNQ", "MES", "MYM", "M2K"] (micros and minis share their bars)');
+  }
+  const seen = new Map();
+  for (const s of list) {
+    const fam = familyOf(s);
+    const key = fam ? fam.micro : s;
+    if (seen.has(key)) throw new Error(`symbols: ${seen.get(key)} and ${s} are the same market (one root per index)`);
+    seen.set(key, s);
+    if (!strategy.instruments.includes(s) && !(fam && (strategy.instruments.includes(fam.micro) || strategy.instruments.includes(fam.mini)))) {
+      throw new Error(`symbols: ${strategy.name} trades ${strategy.instruments.join(', ')}, not ${s}`);
+    }
+  }
+  return list.slice();
+}
+
+/**
  * @param cfg the parsed training config
  * @param baseDir where relative data paths resolve from (the config's folder)
  * @returns { env, meta } meta: what the bundle records about the env
  */
 function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, hashData = true }) {
   if (!NAME.test(String(cfg.name || ''))) throw new Error('name: lowercase letters, digits, _ . -');
-  if (!/^[A-Z0-9]+$/.test(String(cfg.symbol || ''))) throw new Error('symbol: the data\'s contract root, e.g. "MNQ" (micros and minis share its bars)');
-  if (typeof cfg.strategy !== 'string') throw new Error('strategy: the policy strategy to train (signal: policy), e.g. "prop_portfolio_3m"');
+  if (typeof cfg.strategy !== 'string') throw new Error('strategy: the policy strategy to train (signal: policy), e.g. "prop_portfolio"');
   for (const k of ['account', 'strategies', 'gate']) {
     if (cfg[k] !== undefined) throw new Error(`${k}: comes from the policy strategy's STRATEGY.md (training always runs the harness rules)`);
   }
   const { strategy, components } = policyStrategy(root, cfg.strategy, env);
-  const fam = familyOf(cfg.symbol);
-  if (!strategy.instruments.includes(cfg.symbol) && !(fam && (strategy.instruments.includes(fam.micro) || strategy.instruments.includes(fam.mini)))) {
-    throw new Error(`symbol: ${strategy.name} trades ${strategy.instruments.join(', ')}, not ${cfg.symbol}`);
+  const symbols = symbolsOf(cfg, strategy);
+  // The engine scans a market with the strategies that list its root: the data is keyed by what they list (the micro).
+  for (const sym of symbols) {
+    if (!components.some(c => c.instruments.includes(sym))) throw new Error(`symbols: none of ${strategy.name}'s strategies scans ${sym}; key the data by the root they list (the micro, e.g. MNQ for NQ)`);
   }
   const contracts = cfg.contracts ?? strategy.contracts ?? 'auto';
   if (!CONTRACT_MODES.includes(contracts)) throw new Error(`contracts: ${CONTRACT_MODES.join(' | ')}`);
   const sizing = cfg.sizing ?? strategy.sizing ?? null;
   const raw = {
-    symbols: [cfg.symbol], timeframe: Number.parseInt(strategy.timeframe, 10), data: cfg.data, strategies: components.map(c => c.name), gate: true,
+    symbols, timeframe: Number.parseInt(strategy.timeframe, 10), data: cfg.data, strategies: components.map(c => c.name), gate: true,
   };
   for (const k of ENGINE_KEYS) if (cfg[k] !== undefined) raw[k] = cfg[k];
   if (cfg.slippageTicks !== undefined && !(typeof cfg.slippageTicks === 'number' && Number.isFinite(cfg.slippageTicks) && cfg.slippageTicks >= ENGINE_DEFAULTS.slippageTicks)) {
@@ -87,7 +113,7 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
     engine: { ...bt, gateConfig: loadConfig(env) },
   });
   const meta = {
-    strategy: strategy.name, components: names, strategies: names, account: account.name, symbol: cfg.symbol, timeframe: bt.timeframe,
+    strategy: strategy.name, components: names, strategies: names, account: account.name, symbols, timeframe: bt.timeframe,
     sizing, contracts, exit: strategy.exit, obsFields: observationFields(names),
     // The volume profile its observation reads (value_area, poc_dist), from the policy strategy's params.
     profile: optionsFromParams(strategy.params || {}),
@@ -98,4 +124,4 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
   return { env: e, meta };
 }
 
-module.exports = { envFromConfig, policyStrategy, fileHash };
+module.exports = { envFromConfig, policyStrategy, symbolsOf, fileHash };

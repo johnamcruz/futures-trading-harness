@@ -7,7 +7,7 @@ description: Train, sweep, validate, and ship the policy of a policy strategy (a
 
 ## When to Use
 
-- The user wants a policy strategy (`strategies/prop_portfolio_3m`, or a new
+- The user wants a policy strategy (`strategies/prop_portfolio`, or a new
   one over other strategies) to pass a prop account with a trained policy,
   or a sweep for better settings.
 - A policy needs retraining: the observation changed (the bundle is refused
@@ -32,18 +32,51 @@ without touching the trailing max-loss floor, rewarded for each winning trade
 and penalized for each losing one, and swept on pass rate plus win rate.
 
 The policy strategy's STRATEGY.md is the source of truth: the training config
-names it (`"strategy": "prop_portfolio_3m"`) and takes its strategies,
-account, sizing, contract mode, and exit from it. A sweep may try other
-`sizing.*` or `contracts`; the shipped bundle then trades only once the
-document says the same (ship prints the lines).
+names it (`"strategy": "prop_portfolio"`) and takes its strategies,
+account, timeframe, sizing, contract mode, and exit from it. A config may
+train other `sizing.*` or `contracts` (the shipped `prop_portfolio` family
+anchors `"contracts": "mini"` while the document stays `contracts: auto`, so
+it can still trade micros); the shipped bundle then trades only once the
+document says the same (ship prints the lines; the harness refuses a bundle
+whose contract mode, sizing, or timeframe differs from the document's).
+
+**Several markets, one account.** A config's `symbols` (e.g.
+`["MNQ", "MES", "MYM", "M2K"]`, each keyed in `data`; `symbol` still names
+one) trains one policy on all of them at once against one prop account, as a
+real combine runs: one timeline of every market's bars, one balance, one
+trailing floor, one daily limit. Each root must be one the policy strategy
+trades (by its micro/mini family), once per index, and listed by its
+strategies (key the data by the micro: minis share its prices). The account
+trades one position at a time across all markets, in training, backtests,
+and live (the gate refuses an entry while any position is open or an entry
+went in since the last account snapshot), so every trade is sized from the
+whole cushion and a stopped trade never reaches the floor or the daily
+limit. When two markets fire on one bar, training takes the first in
+`symbols` order (if the policy skips it, the next is asked); live, the first
+entry placed wins and the gate refuses the other. The bundle records its
+`symbols`; live trading refuses it on an index it wasn't trained on (a
+bundle trained on MNQ alone still refuses ES). The observation has no
+market field: its inputs are scaled to the account and to each market's ATR.
+Four markets of 1-minute data need about 7 GB of heap per env server
+(`FTH_NODE_HEAP_MB`, 8192 by default) and run about 5 s per attempt; keep
+`n_envs` small (the shipped family uses 2).
+
+**Timeframe.** The policy strategy's `timeframe` is the one bar-size
+setting: training uses it, the bundle is bound to it (live refuses a bundle
+trained on other bars), and every strategy it lists must trade it (they are
+not re-run on other bars: a 3-minute strategy's periods and stops on
+1-minute bars would be another strategy). A family is bound to the env it
+trained in (strategies, account, markets, timeframe): a study, its retrained
+seeds, and ship refuse to continue after the document changes ("trained on
+another env"): start a new family.
 
 1. **Install** (once, Python 3.10+): `pip install -r rl/requirements.txt`.
    Node runs the env (the harness's backtester); Python trains (`rl/fth_rl`).
 2. **Config family**: copy the three files of
-   `rl/configs/{sweep,retrain,ship}/prop_portfolio_3m_topstep_100k_v1.json` to a new
+   `rl/configs/{sweep,retrain,ship}/prop_portfolio_topstep_100k_v1.json` to a new
    family name. The sweep file names the policy strategy (`strategy`), the
-   data's symbol (the micro, e.g. MNQ: micros and minis share its bars) and
-   file, the windows (train, then select, then out of sample, never
+   data's markets (`symbols`, the micros, e.g. MNQ: micros and minis share
+   their bars) and a file for each (`data`), the windows (train, then select, then out of sample, never
    overlapping), the training settings, `study`, and `search_space`
    (`searched`, `anchored`). See `rl/README.md`.
 3. **Dry run first**: `python rl/sweep.py --config <sweep> --dry-run` checks
@@ -88,10 +121,10 @@ were. Report it, and treat a policy shipped after several looks with suspicion.
 ## Examples
 
 ```text
-$ python rl/ship.py --config rl/configs/ship/prop_portfolio_3m_topstep_100k_v1.json
-[train-policy] ship prop_portfolio_3m_topstep_100k: seed 4 of 6 (selection pass 46.2%, blow 0)
+$ python rl/ship.py --config rl/configs/ship/prop_portfolio_topstep_100k_v1.json
+[train-policy] ship prop_portfolio_topstep_100k: seed 4 of 6 (selection pass 46.2%, blow 0)
 [train-policy] out of sample: policy pass 43.0% blow 0.0%; rules only pass 21.0% blow 9.0%; VALIDATED
-[train-policy] promoted to models/prop_portfolio_3m_topstep_100k.json
+[train-policy] promoted to models/prop_portfolio_topstep_100k.json
 ```
 
 Report to the user: the out-of-sample pass and blow rates by month next to the

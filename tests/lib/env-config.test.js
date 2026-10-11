@@ -8,7 +8,7 @@ const { DEFAULTS } = require('../../scripts/lib/backtest/engine');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DATA = path.join(ROOT, 'tests', 'fixtures', 'data');
-const base = { name: 'fills', strategy: 'prop_portfolio_3m', symbol: 'MNQ', data: { MNQ: 'bars.csv' } };
+const base = { name: 'fills', strategy: 'prop_portfolio', symbol: 'MNQ', data: { MNQ: 'bars.csv' } };
 const build = cfg => envFromConfig(cfg, { root: ROOT, baseDir: DATA, env: {}, hashData: false });
 
 test('env-config: training fills as live (next bar\'s open, the backtester\'s slippage), and the bundle records it', () => {

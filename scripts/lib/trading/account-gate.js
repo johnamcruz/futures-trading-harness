@@ -197,10 +197,16 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   if (propAttempt) {
     const anyOpen = positions.filter(p => positionSize(p) > 0);
     const inFlight = (ledger || []).filter(e => now.getTime() - e.at < 30000);
-    if (anyOpen.length || inFlight.length) {
+    // A working order anywhere on the account (a resting entry on another market) can fill into a
+    // second position next to this one: each was sized from the whole cushion.
+    const working = (orders || []).map(o => (o && o.contractId) || 'an unnamed contract');
+    if (anyOpen.length || inFlight.length || working.length) {
+      const why = anyOpen.length ? `${anyOpen.map(p => p.contractId).join(', ')} is open`
+        : inFlight.length ? 'an order sent moments ago has not shown up yet'
+          : `an order is working on ${[...new Set(working)].join(', ')} and could fill into a second position (cancel it first)`;
       violations.push({
         check: 'prop-one-position',
-        message: `A ${propAttempt} attempt trades one position at a time: ${anyOpen.length ? `${anyOpen.map(p => p.contractId).join(', ')} is open` : 'an order sent moments ago has not shown up yet'}. New entries wait until the account is flat.`,
+        message: `A ${propAttempt} attempt trades one position at a time: ${why}. New entries wait until the account is flat.`,
       });
     }
   }
