@@ -119,6 +119,7 @@ test('verdict: of the daily limit and the floor, the nearer one acts first as th
   // With the cushion smaller than the daily room, the floor comes first: FAIL, not a daily stop.
   const f = evaluate(run([['2026-03-02', -1500], ['2026-03-03', -1600]]), ACCOUNT).months[0];
   assert.deepStrictEqual([f.verdict, f.fail.day, f.events.length], ['FAIL', '2026-03-03', 0]);
+  assert.strictEqual(f.fail.how, 'equity closed at $96898.52, floor $97000');
 });
 
 test('verdict: the daily limit flattens the whole position; max loss used counts only what the cap let through', () => {
@@ -246,6 +247,36 @@ test('verdict: a day known only from a fill, before the last day done, gets its 
   const m = evaluate(days, ACCOUNT, { daysDone: ['2026-03-04'] }).months[0];
   assert.deepStrictEqual(m.days.map(d => d.day), ['2026-03-03', '2026-03-04']);
   assert.strictEqual(m.openDay, null);
+});
+
+test('verdict: a round trip\'s MAE counts from the balance when the position opened, not after profitable partial exits', () => {
+  // Long 2 MNQ (no fees): 1 closed at +$2000, then the other at -$50; the round trip's MAE was -$3100.
+  const t = ms => new Date(Date.parse('2026-03-02T15:00:00Z') + ms * 60000).toISOString();
+  const partial = (first, mae) => ({ '2026-03-02': [{ t: t(5), day: '2026-03-02', kind: 'trade', trades: [
+    { id: 1, contractId: 'MNQ', creationTimestamp: t(0), profitAndLoss: null, fees: 0, side: 0, size: 2 },
+    { id: 2, contractId: 'MNQ', creationTimestamp: t(1), profitAndLoss: first, fees: 0, side: 1, size: 1 },
+    { id: 3, contractId: 'MNQ', creationTimestamp: t(2), profitAndLoss: -50, fees: 0, side: 1, size: 1, roundTrip: { maeDollars: mae } },
+  ] }] });
+  // Without a daily limit the floor acts: equity at the MAE was $96900, under the $97000 floor.
+  const noDaily = evaluate(partial(2000, -3100), { ...ACCOUNT, daily_loss_limit: 0 }).months[0];
+  assert.strictEqual(noDaily.verdict, 'FAIL');
+  assert.strictEqual(noDaily.fail.how, 'equity reached $96900 (from the trade\'s MAE), floor $97000');
+  // With topstep_100k's $2000 daily limit, nearer than the floor from the open, the day is flattened at -$2000.
+  const daily = evaluate(partial(2000, -3100), ACCOUNT).months[0];
+  assert.deepStrictEqual([daily.verdict, daily.days.map(d => d.pnl)], ['NOT YET', [-2000]]);
+  const smaller = evaluate(partial(1500, -2100), ACCOUNT).months[0];
+  assert.deepStrictEqual([smaller.verdict, smaller.days.map(d => d.pnl), smaller.events.length], ['NOT YET', [-2000], 1]);
+});
+
+test('verdict: a left-out contract whose position an unreadable fill made unknown counts again next month', () => {
+  // A position opened after the daily limit (left out), then an unreadable close: April's trades on it count.
+  const days = run([['2026-03-02', -2500, { at: '2026-03-02T15:00:00Z' }], ['2026-03-02', 0, { at: '2026-03-02T16:00:00Z', openOnly: true }]]);
+  days['2026-03-02'][1].trades.push({ id: 'x', contractId: 'MNQ', creationTimestamp: '2026-03-02T16:30:00Z', profitAndLoss: 10, fees: FEE, side: 7, size: 1 });
+  Object.assign(days, run([['2026-04-01', 300]]));
+  for (const f of days['2026-04-01'][0].trades) f.id = `apr-${f.id}`;
+  const [mar, apr] = evaluate(days, ACCOUNT).months;
+  assert.deepStrictEqual(mar.excluded.map(x => x.why), ['opened after the daily loss limit was hit']);
+  assert.deepStrictEqual([apr.excluded.length, apr.profit], [0, net(300)]);
 });
 
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {

@@ -31,8 +31,10 @@
  *
  * What the replay doesn't record, approximated (said in the output):
  *   - intraday equity: a round trip's MAE (maeDollars) less the closing fill's
- *     fees is the trade's worst open P&L, set against the balance when it
- *     closed; without MAE, only the close is seen. Open trades on other
+ *     fees is the trade's worst open P&L, set against the lower of the balance
+ *     (and the day's P&L) when the position opened and when it closed, so
+ *     partial exits that banked profit don't hide it; without MAE, only the
+ *     close is seen. Open trades on other
  *     contracts at the same moment are not added together.
  *   - at the daily limit the breaching close counts as the limit and the rest
  *     of every position open then is left out (the firm flattens the account);
@@ -119,8 +121,10 @@ function lowWater(m, cushion, day) {
 /**
  * One fill against the month's attempt. Returns true when it hit the firm's
  * daily limit (the caller then leaves the rest of every open position out).
+ * `base`: the balance and day's P&L when the closing fill's position opened
+ * (its MAE is measured from there: partial exits since then don't hide it).
  */
-function applyFill(m, f) {
+function applyFill(m, f, base = null) {
   let s = m.s;
   m.traded.add(f.day);
   if (!f.closing) {
@@ -134,12 +138,19 @@ function applyFill(m, f) {
   }
   m.closes += 1;
   if (f.mae !== null) m.intradayChecked += 1;
-  // The trade's worst open P&L: its MAE less the closing fee still to pay, never better than its close.
-  const worst = Math.min(f.net, f.mae !== null ? f.mae - f.fees : f.net);
-  // Open P&L falls continuously from 0 to `worst`: whichever level is nearer, the daily limit's or the
+  // The trade's worst moment: its MAE less the closing fee still to pay, from the lower of the balance
+  // (and day's P&L) when the position opened and now, since partial exits in between may have banked
+  // profit after the MAE; never better than the close itself.
+  const mae = f.mae !== null ? f.mae - f.fees : null;
+  const b = base || { balance: s.balance, dayPnl: s.dayPnl, day: f.day };
+  const baseBalance = Math.min(b.balance, s.balance);
+  const baseDay = b.day === f.day ? Math.min(b.dayPnl, s.dayPnl) : s.dayPnl;
+  const worst = Math.min(f.net, mae !== null ? baseBalance + mae - s.balance : f.net); // vs the balance now
+  const worstDay = Math.min(f.net, mae !== null ? baseDay + mae - s.dayPnl : f.net); // vs the day's P&L now
+  // Open P&L falls continuously to its worst: whichever level is nearer, the daily limit's or the
   // floor's, is reached first. The firm acts there (the backtester's guard does the same bar by bar).
-  const dailyFirst = s.dailyLimit > 0 && !s.dayStopped && s.dailyLimit + s.dayPnl < combine.cushion(s);
-  if (dailyFirst && combine.dailyBreached(s, worst)) return dailyStop(m, f, worst);
+  const dailyFirst = s.dailyLimit > 0 && !s.dayStopped && s.dailyLimit + baseDay < baseBalance - s.floor;
+  if (dailyFirst && combine.dailyBreached(s, worstDay)) return dailyStop(m, f, worstDay);
   lowWater(m, s.balance + worst - s.floor, f.day);
   if (combine.touches(s, worst)) {
     m.s = combine.blow(s);
@@ -185,6 +196,7 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
   const pos = new Map(); // contract -> signed size, across the whole run
   const left = new Map(); // contract -> why its position is left out, until it is flat
   const unknown = new Map(); // contract -> the day an unreadable fill left its position unknown
+  const opened = new Map(); // contract -> { balance, dayPnl, day } when its counted position opened
   const byDay = new Map();
   for (const f of fills) byDay.set(f.day, [...(byDay.get(f.day) || []), f]);
   // A day known only from a fill's time, before the last day done, is done too.
@@ -203,6 +215,7 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
         m.notes.push(`${c}: position unknown after an unreadable fill on ${d}; assumed flat from the start of the month`);
       }
       unknown.clear();
+      opened.clear();
       // A position carried in from last month belongs to no fresh attempt.
       for (const [c, q] of pos) if (q !== 0) left.set(c, 'carried in from the month before');
     }
@@ -223,8 +236,13 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
         continue;
       }
       if (m.s.status !== 'active') continue;
+      const base = opened.get(f.contract) || null;
+      const hit = applyFill(m, f, base);
+      // A new position (from flat, or reversed): its MAE is measured from here.
+      if (next === 0) opened.delete(f.contract);
+      else if (prev === 0 || Math.sign(prev) !== Math.sign(next)) opened.set(f.contract, { balance: m.s.balance, dayPnl: m.s.dayPnl, day });
       // At the daily limit the firm flattens the whole account: what is still open is left out from here.
-      if (applyFill(m, f)) for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit');
+      if (hit) for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit');
       // A close (or a fee) that took the balance to the floor: combine.applyClose marks it blown.
       if (m.s.status === 'blown' && !m.fail) m.fail = { rule: 'max-loss', day, how: `the balance closed at $${m.s.balance}, floor $${m.s.floor}` };
     }
@@ -278,7 +296,7 @@ function headLine(v) {
 const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
-  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, against the balance when it closed (trades open together are not added up); a trade without MAE is seen only at its close; after partial exits the MAE may also count loss already realized (on the safe side).',
+  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, against the lower of the balance when the position opened and when it closed, so profit banked by partial exits doesn\'t hide it (trades open together are not added up); a trade without MAE is seen only at its close.',
   'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',
 ];
 
