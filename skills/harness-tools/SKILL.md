@@ -50,8 +50,8 @@ cancels an order.
   as the script prints it. Read it, don't retry the same call blindly.
 - A reply over 256 KB is refused with how to narrow it (fewer bars, a lower
   `count`, no `json`).
-- `record` is refused in autonomous runs: the runner records every bar's
-  read and signals itself.
+- `record` is refused in autonomous runs, and whenever the autonomous runner
+  is running: it records every bar's read and signals itself.
 
 Only the user's commands stay scripts: starting, stopping, or recording a day
 of a prop attempt (`combine.js start | stop | record-day`), backtests,
