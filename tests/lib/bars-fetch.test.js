@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { fetchBarsToFile, requestErrors, defaultOut, outError, OUT_DIR } = require('../../scripts/lib/bars-fetch');
+const { fetchBarsToFile, requestErrors, defaultOut, outError, scratchDir } = require('../../scripts/lib/bars-fetch');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -41,14 +41,42 @@ test('fetchBarsToFile writes get_bars JSON oldest first, and says when the last 
 test('request checks and default paths', () => {
   assert.deepStrictEqual(requestErrors({ symbol: 'MNQ', timeframe: 3, count: 2000 }), []);
   assert.match(requestErrors({ symbol: 'mnq!', timeframe: 0, count: 1 }).join(), /--symbol.*--timeframe.*--count/);
-  assert.strictEqual(defaultOut('MNQ', 3, false), '/tmp/fth/MNQ-3m.json');
-  assert.strictEqual(defaultOut('MNQ', 3, true), '/tmp/fth/MNQ-1d.json');
+  assert.strictEqual(defaultOut('MNQ', 3, false, '/h/bars-scratch'), '/h/bars-scratch/MNQ-3m.json');
+  assert.strictEqual(defaultOut('MNQ', 3, true, '/h/bars-scratch'), '/h/bars-scratch/MNQ-1d.json');
+  assert.strictEqual(defaultOut('MNQ', 15, false, '/h/bars-scratch', 'trend'), '/h/bars-scratch/MNQ-15m-trend.json');
+  for (const name of ['../x', 'a/b', 'Trend', '', 'x'.repeat(25)]) assert.match(requestErrors({ symbol: 'MNQ', timeframe: 3, count: 50, name }).join(), /name:/, name);
+});
+
+test('the bars scratch directory is the harness home\'s own: <FTH_HOME>/bars-scratch, never /tmp/fth', () => {
+  assert.strictEqual(scratchDir({ FTH_HOME: '/h' }), '/h/bars-scratch');
+  assert.strictEqual(scratchDir({ FTH_HOME: '~/x' }), path.join(require('os').homedir(), 'x', 'bars-scratch'));
+  assert.strictEqual(scratchDir({}), path.join(require('os').homedir(), '.futures-trading-harness', 'bars-scratch'));
+  assert.notStrictEqual(scratchDir({ FTH_HOME: '/a' }), scratchDir({ FTH_HOME: '/b' }), 'two homes never share one');
+});
+
+test('by default the bars go under the caller\'s home, so two homes (the live runner, a replay) never share a file', async () => {
+  const live = tmpDir();
+  const replay = tmpDir();
+  const a = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, env: { FTH_HOME: live } });
+  assert.strictEqual(a.file, path.join(live, 'bars-scratch', 'MNQ-3m.json'));
+  assert.strictEqual(fs.statSync(path.join(live, 'bars-scratch')).mode & 0o777, 0o700, 'created private');
+  const b = await fetchBarsToFile({ client: fakeClient(10), symbol: 'MNQ', count: 10, env: { FTH_HOME: replay } });
+  assert.strictEqual(b.file, path.join(replay, 'bars-scratch', 'MNQ-3m.json'));
+  assert.strictEqual(JSON.parse(fs.readFileSync(a.file, 'utf8')).count, 50, 'the other home\'s fetch left it alone');
+  const named = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', timeframe: 15, count: 50, name: 'trend', env: { FTH_HOME: live } });
+  assert.strictEqual(named.file, path.join(live, 'bars-scratch', 'MNQ-15m-trend.json'));
+  // Out of the home's scratch directory: /tmp/fth, the other home's, the home itself; refused before the broker is asked.
+  for (const out of ['/tmp/fth/MNQ-3m.json', path.join(replay, 'bars-scratch', 'MNQ-3m.json'), path.join(live, 'MNQ-3m.json'), path.join(live, 'bars', 'MNQ-3m.json')]) {
+    const client = fakeClient();
+    await assert.rejects(fetchBarsToFile({ client, symbol: 'MNQ', count: 50, out, env: { FTH_HOME: live } }), /a \.json file under .*bars-scratch\//, out);
+    assert.deepStrictEqual(client.calls, [], out);
+  }
+  await assert.rejects(fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, name: '../x', env: { FTH_HOME: live } }), /name:/);
 });
 
 test('bars files go only to a .json file under the bars directory, through no symlink', async () => {
   const outDir = tmpDir();
   const elsewhere = tmpDir();
-  assert.strictEqual(OUT_DIR, '/tmp/fth');
   assert.strictEqual(outError(path.join(outDir, 'MNQ-3m.json'), outDir), null);
   assert.strictEqual(outError(path.join(outDir, 'a', 'b', 'c.json'), outDir), null, 'subdirectories that do not exist yet');
   fs.writeFileSync(path.join(outDir, 'old.json'), '{}');
@@ -72,6 +100,16 @@ test('bars files go only to a .json file under the bars directory, through no sy
   assert.match(outError(path.join(linkedDir, 'MNQ-3m.json'), linkedDir), /is a symlink/);
   await assert.rejects(fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, outDir: linkedDir, out: null }), /--out/);
   assert.deepStrictEqual(fs.readdirSync(elsewhere).sort(), [], 'nothing written through the link');
+  // A directory others can write to (the scratch directory or one below it): refused, as the bars tools refuse reading from it.
+  const open = tmpDir();
+  fs.mkdirSync(path.join(open, 'sub'));
+  fs.chmodSync(open, 0o777);
+  assert.match(outError(path.join(open, 'MNQ-3m.json'), open), /is writable by other users/);
+  fs.chmodSync(open, 0o700);
+  fs.chmodSync(path.join(open, 'sub'), 0o777);
+  assert.match(outError(path.join(open, 'sub', 'MNQ-3m.json'), open), /sub is writable by other users/);
+  fs.chmodSync(path.join(open, 'sub'), 0o755);
+  assert.strictEqual(outError(path.join(open, 'sub', 'MNQ-3m.json'), open), null);
   // A bars directory that belongs to another user (root's /) is refused.
   if (typeof process.getuid === 'function' && process.getuid() !== 0) assert.match(outError('/x.json', '/'), /belongs to another user/);
   // Refused before the broker is asked, and nothing written.
@@ -188,11 +226,14 @@ test('a path given under the bars directory\'s real form (/private/tmp/fth on ma
   for (const bad of [path.join(realDir, 'x.txt'), path.join(realDir, 'link', 'x.json'), realDir, path.join(realDir, '..', 'x.json')]) {
     assert.match(outError(bad, outDir), /--out/, bad);
   }
-  const own = (() => { try { return fs.lstatSync('/tmp/fth').uid === process.getuid(); } catch (_err) { return true; } })();
-  if (fs.realpathSync('/tmp') !== '/tmp' && own) assert.strictEqual(outError(path.join(fs.realpathSync('/tmp'), 'fth', 'MNQ-3m.json')), null);
+  // A home under the system temp directory (/var/folders -> /private/var/folders on macOS): its scratch directory by either form.
+  const home = tmpDir();
+  const realHome = fs.realpathSync(home);
+  assert.strictEqual(outError(path.join(realHome, 'bars-scratch', 'MNQ-3m.json'), scratchDir({ FTH_HOME: home })), null);
+  assert.match(outError(path.join(realHome, 'MNQ-3m.json'), scratchDir({ FTH_HOME: home })), /outside it/);
 });
 
-test('scripts/bars.js refuses an --out outside /tmp/fth before asking the broker', () => {
+test('scripts/bars.js refuses an --out outside the home\'s bars scratch directory (/tmp/fth included) before asking the broker', () => {
   const home = tmpDir();
   const calls = path.join(home, 'calls.txt');
   const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
@@ -200,18 +241,21 @@ test('scripts/bars.js refuses an --out outside /tmp/fth before asking the broker
   const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FAKE_CALLS: calls, FTH_ENV_FILE: path.join(home, 'none.env') };
   const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'bars.js'), '--symbol', 'MNQ', '--timeframe', '1', '--count', '10', ...args], { encoding: 'utf8', env });
   const target = path.join(home, 'journal.jsonl');
-  for (const out of [target, path.join(home, 'settings.json'), '/tmp/fth/x.txt', '/tmp/fth/../x.json']) {
+  const scratch = path.join(home, 'bars-scratch');
+  for (const out of [target, path.join(home, 'settings.json'), '/tmp/fth/x.json', '/tmp/fth/x.txt', '/tmp/fth/../x.json', path.join(scratch, '..', 'x.json'), path.join(scratch, 'x.txt')]) {
     const r = run(['--out', out]);
     assert.strictEqual(r.status, 1, out);
-    assert.match(r.stderr, /\[bars\] --out: a \.json file under \/tmp\/fth\//, out);
+    assert.ok(r.stderr.includes(`[bars] --out: a .json file under ${scratch}/`), `${out}: ${r.stderr}`);
     assert.strictEqual(r.stdout, '');
   }
   assert.ok(!fs.existsSync(target));
   const asked = fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '';
   assert.ok(!/get_bars/.test(asked), `the broker was asked for bars: ${asked}`);
-  const ok = run(['--out', `/tmp/fth/bars-fetch-${process.pid}.json`]);
+  const ok = run([]);
   assert.strictEqual(ok.status, 0, ok.stderr);
-  fs.rmSync(`/tmp/fth/bars-fetch-${process.pid}.json`, { force: true });
+  assert.ok(ok.stdout.includes(`to ${path.join(scratch, 'MNQ-1m.json')};`), ok.stdout);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(scratch, 'MNQ-1m.json'), 'utf8')).count, 10);
+  assert.strictEqual(run(['--out', path.join(scratch, 'sub', 'mine.json')]).status, 0, 'any .json file under it');
 });
 
 test('scripts/bars.js refuses unknown flags and --record in autonomous runs', () => {

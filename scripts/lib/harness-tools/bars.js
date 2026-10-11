@@ -5,10 +5,12 @@
  * bars-fetch.js), for market-snapshot, mtf and strategies scan, without
  * pasting them through a tool reply:
  *
- *   fetch { symbol, timeframe, daily, count, out, record }
+ *   fetch { symbol, timeframe, daily, count, out, name, record }
  *     timeframe  minutes per bar, 1 to 60 (default 3), or daily
  *     count      default: what the runner keeps (daily: 60)
- *     out        a .json file under /tmp/fth/ (default /tmp/fth/<SYMBOL>-<tf>m.json)
+ *     out        a .json file under the harness home's bars scratch directory, <FTH_HOME>/bars-scratch/
+ *                (default <FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json)
+ *     name       a suffix for the default file (<SYMBOL>-<tf>m-<name>.json): a file of the caller's own
  *     record     also record the multi-timeframe read for the order gate
  *                (refused for daily bars, and in autonomous runs, where the runner records it)
  *
@@ -30,7 +32,7 @@ async function fetch(args = {}, ctx) {
   const c = context(ctx);
   // Only these: nothing else (an output directory, a client) reaches fetchBarsToFile from the arguments.
   const pick = (k, d) => (args[k] === undefined ? d : args[k]);
-  const o = { symbol: pick('symbol', null), timeframe: pick('timeframe', 3), daily: pick('daily', false), count: pick('count', null), out: pick('out', null), record: pick('record', false) };
+  const o = { symbol: pick('symbol', null), timeframe: pick('timeframe', 3), daily: pick('daily', false), count: pick('count', null), out: pick('out', null), name: pick('name', null), record: pick('record', false) };
   // Bars up to the harness clock: a replay broker's replayed time, else the wall clock.
   const now = c.now();
   const record = say(c, '--record', 'record');
@@ -38,7 +40,7 @@ async function fetch(args = {}, ctx) {
   if (o.record && c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records the read itself`);
   const pid = o.record ? liveRunner(c.env) : null;
   if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
-  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, tool: c.tool }));
+  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, env: c.barsEnv, tool: c.tool }));
   let text = `wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`;
   if (!o.record) return { text };
   return withTextAsync(text, async () => {

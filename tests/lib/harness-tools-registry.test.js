@@ -64,25 +64,25 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
   ok('strategies_show', { name: 'orb' });
   bad('strategies_show', { name: '../orb' }, /must match/);
   bad('strategies_show', { name: '/etc/passwd' }, /must match/);
-  ok('strategies_scan', { bars: '/tmp/fth/MNQ-3m.json', symbol: 'MNQ', record: true });
-  bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol: 'MNQ', now: '2026-01-01T00:00:00Z' }, /"now": unknown argument/);
-  bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol: 'mnq' }, /symbol: must match/);
-  for (const symbol of ['MNQ\n../x', 'X\nMNQ', 'MNQ\n']) bad('strategies_scan', { bars: '/tmp/fth/a.json', symbol }, /symbol: must match/);
+  ok('strategies_scan', { bars: '/h/bars-scratch/MNQ-3m.json', symbol: 'MNQ', record: true });
+  bad('strategies_scan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', now: '2026-01-01T00:00:00Z' }, /"now": unknown argument/);
+  bad('strategies_scan', { bars: '/h/bars-scratch/a.json', symbol: 'mnq' }, /symbol: must match/);
+  for (const symbol of ['MNQ\n../x', 'X\nMNQ', 'MNQ\n']) bad('strategies_scan', { bars: '/h/bars-scratch/a.json', symbol }, /symbol: must match/);
   bad('reconcile', { day: '2026-10-07\nx' }, /day: must match/);
   bad('combine_status', { account: 'topstep_50k\n../../x' }, /account: must match/);
-  bad('strategies_recent', { bars: '/tmp/fth/a.json', symbol: 'MNQ', count: 51 }, /at most 50/);
-  ok('market_snapshot', { bars: '/tmp/fth/a.json', params: { emaSlow: 30 } });
-  bad('market_snapshot', { bars: '/tmp/fth/a.json', params: { bogus: 1 } }, /"params.bogus": unknown argument/);
-  bad('market_snapshot', { bars: '/tmp/fth/a.json', params: { emaSlow: '30' } }, /must be a number/);
-  bad('mtf_read', { bars: '/tmp/fth/a.json', timeframes: [15, 60, 240, 480, 720, 1440, 30] }, /at most 6 items/);
-  bad('mtf_read', { bars: '/tmp/fth/a.json', timeframes: [1441] }, /at most 1440/);
+  bad('strategies_recent', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', count: 51 }, /at most 50/);
+  ok('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { emaSlow: 30 } });
+  bad('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { bogus: 1 } }, /"params.bogus": unknown argument/);
+  bad('market_snapshot', { bars: '/h/bars-scratch/a.json', params: { emaSlow: '30' } }, /must be a number/);
+  bad('mtf_read', { bars: '/h/bars-scratch/a.json', timeframes: [15, 60, 240, 480, 720, 1440, 30] }, /at most 6 items/);
+  bad('mtf_read', { bars: '/h/bars-scratch/a.json', timeframes: [1441] }, /at most 1440/);
   ok('blackouts_add', { start: '2026-10-07T12:25:00Z', end: '2026-10-07T12:40:00-04:00', reason: 'CPI' });
   bad('blackouts_add', { start: 'tomorrow', end: '2026-10-07T12:40:00Z', reason: 'CPI' }, /start: must match/);
   bad('blackouts_add', { start: '2026-10-07T12:25:00Z', end: '2026-10-07T12:40:00Z', reason: 'x'.repeat(121) }, /at most 120/);
   ok('bars_fetch', { symbol: 'MNQ', timeframe: 'daily', count: 60 });
   ok('bars_fetch', { symbol: 'MNQ', timeframe: 3 });
   bad('bars_fetch', { symbol: 'MNQ', timeframe: 61 }, /timeframe/);
-  bad('bars_fetch', { symbol: 'MNQ', timeframe: 3, out: '/tmp/fth/x.json' }, /"out": unknown argument/);
+  bad('bars_fetch', { symbol: 'MNQ', timeframe: 3, out: '/h/bars-scratch/x.json' }, /"out": unknown argument/);
   bad('bars_fetch', { symbol: 'MNQ', timeframe: 3, count: 20001 }, /at most 20000/);
   ok('combine_status', { account: 'topstep_50k', json: true });
   bad('combine_status', { account: '../x' }, /must match/);
@@ -106,9 +106,9 @@ test('registry: arguments map to the operation\'s own', () => {
   assert.deepStrictEqual(args('mtf_read', { bars: '/b.json', timeframes: [15], daily: '/d.json', symbol: 'MNQ', record: true }), { file: '/b.json', tf: [15], daily: '/d.json', symbol: 'MNQ', json: false, record: true });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily' }), { symbol: 'MNQ', timeframe: 3, daily: true, record: false });
   assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 5, count: 10 }), { symbol: 'MNQ', timeframe: 5, daily: false, count: 10, record: false });
-  // A role's own file: the default name with its suffix, under /tmp/fth.
-  assert.strictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 15, name: 'trend' }).out, '/tmp/fth/MNQ-15m-trend.json');
-  assert.strictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily', name: 'structure' }).out, '/tmp/fth/MNQ-1d-structure.json');
+  // A role's own file: the name goes to the operation, which puts the file in the caller's home (bars-fetch.js); never an out path.
+  assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 15, name: 'trend' }), { symbol: 'MNQ', timeframe: 15, daily: false, record: false, name: 'trend' });
+  assert.deepStrictEqual(args('bars_fetch', { symbol: 'MNQ', timeframe: 'daily', name: 'structure' }), { symbol: 'MNQ', timeframe: 3, daily: true, record: false, name: 'structure' });
   for (const name of ['../x', 'Trend', 'a/b', 'a.json', '', '-x', 'x'.repeat(25)]) {
     assert.match(validate(BY_NAME.get('bars_fetch').inputSchema, { symbol: 'MNQ', timeframe: 3, name }).join(), /name: (must match|at least)/, name);
   }

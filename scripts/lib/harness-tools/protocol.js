@@ -56,6 +56,7 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   }
   // The .env credentials only where the CLI loads them (bars.js: the broker's settings), on a copy.
   let notes = '';
+  const barsEnv = env; // the bars directories: the server's own environment, never one a .env file filled in
   if (tool.envFile) {
     env = { ...env };
     notes = loadEnvFiles({ env }).warnings.map(w => `[${tool.script}] warning: ${w}\n`).join('');
@@ -63,7 +64,7 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   const checked = { ...given };
   for (const k of tool.bars || []) {
     if (given[k] === undefined) continue;
-    const r = barsFile(given[k], { env });
+    const r = barsFile(given[k], { env: barsEnv });
     if (r.error) return result(`[harness] ${k}: ${r.error}\n`, true);
     checked[k] = r.file;
   }
@@ -71,7 +72,7 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   let isError;
   try {
     if (tool.clockFirst) harnessNow(env); // as the CLI does: a refused replay clock refuses the call
-    const r = await OPERATIONS[tool.op](tool.args(checked), { env, root, tool: true, now: () => harnessNow(env) });
+    const r = await OPERATIONS[tool.op](tool.args(checked), { env, barsEnv, root, tool: true, now: () => harnessNow(env) });
     text = `${r.text || ''}${r.stderr || ''}${notes}`;
     isError = Boolean(r.code);
   } catch (err) {

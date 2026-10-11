@@ -105,7 +105,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 | Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
 | Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
-| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads, `/tmp/fth`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
+| Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads incl. the home's `bars-scratch`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
 Always register the `broker` server **through the gateway** (the installer
@@ -412,7 +412,7 @@ which checkpoint, or failed with its traceback), and a run manifest
 Each sweep trial also writes `trial_NNN/train.log` and `summary.json`. Each run
 follows the `autonomous-trading` skill: one bounded cycle, positions first, no
 questions, stand aside when unsure. Runs are locked down per harness: Claude
-Code gets an explicit tool allowlist (broker tools, reading, `/tmp/fth`, and the
+Code gets an explicit tool allowlist (broker tools, reading, and the
 harness scripts by absolute path), Qwen Code runs in default approval mode
 with the allowlist in `workspace/.qwen/settings.json`, and Codex runs in its
 `workspace-write` sandbox. Start with `"paper": true` and tight server limits
@@ -513,8 +513,9 @@ rules strategy in sample and reports only its out-of-sample trades. See
 
 ### Operating it
 
-- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: 2000 closed
-  bars to `/tmp/fth/MNQ-3m.json` (through the broker adapter; credentials
+- `node scripts/bars.js --symbol MNQ --timeframe 3 --record`: the runner's count of closed
+  bars to `~/.futures-trading-harness/bars-scratch/MNQ-3m.json` (the harness
+  home's own scratch folder, `<FTH_HOME>/bars-scratch`; through the broker adapter; credentials
   from your `.env`, never printed) and the multi-timeframe read recorded for the gate. Interactive
   sessions use it in place of pasting `get_bars` replies.
 - `node scripts/autotrader.js --status`: a watchdog for cron or launchd;

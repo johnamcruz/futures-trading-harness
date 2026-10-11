@@ -35,10 +35,10 @@ With the harness tools (the `harness-tools` skill):
 ```text
 strategies_list {}                       name, status, signal, instruments
 strategies_show {"name": "orb"}          the full STRATEGY.md
-strategies_scan {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ"}                  summary: candidates, then a line per strategy
-strategies_scan {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}   one strategy's full result
+strategies_scan {"bars": "<bars file>", "symbol": "MNQ"}                 summary: candidates, then a line per strategy
+strategies_scan {"bars": "<bars file>", "symbol": "MNQ", "name": "orb"}   one strategy's full result
 strategies_list {"json": true}           machine-readable
-strategies_recent {"bars": "/tmp/fth/MNQ-3m.json", "symbol": "MNQ", "count": 5}   what fired on each of the last 5 bars
+strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fired on each of the last 5 bars
 ```
 
 `recent` answers the skip rules about recent signals ("fired the other way

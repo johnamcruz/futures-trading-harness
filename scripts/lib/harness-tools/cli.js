@@ -31,9 +31,11 @@ class OpError extends Error {
  * The context an operation runs in, with defaults: process.env, the harness clock, the plugin root.
  * `tool`: the call came through the harness MCP server, so messages name the tool's arguments
  * (`record`, `symbol`) rather than the script's flags (`--record`, `--symbol`): say(c, cli, tool).
+ * `barsEnv`: the environment the bars tools resolve their directories from (the server's own, before
+ * any .env load), so bars_fetch writes where market_snapshot and the rest read; default `env`.
  */
-function context({ env = process.env, now, root = ROOT, tool = false } = {}) {
-  return { env, root, tool: tool === true, now: typeof now === 'function' ? now : () => harnessNow(env) };
+function context({ env = process.env, barsEnv = env, now, root = ROOT, tool = false } = {}) {
+  return { env, barsEnv, root, tool: tool === true, now: typeof now === 'function' ? now : () => harnessNow(env) };
 }
 
 /** The script's wording or the tool's, for the caller in front of it. */

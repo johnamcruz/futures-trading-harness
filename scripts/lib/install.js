@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadAgents, codexAgentsTable } = require('./harness-sync');
 const { NEWS_DOMAINS } = require('./autotrader');
+const { scratchDir } = require('./bars-fetch');
 const { SERVER_NAME } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 
@@ -209,7 +210,7 @@ function mergeQwenSettings(settings, root) {
  * Project settings for workspace/ (where autonomous Qwen runs start): allow the
  * broker tools, the harness tools, the harness's own agent roles by name
  * (Agent(<role>), so Qwen's built-in and forked agents stay unapproved),
- * reading, scratch files, and the harness's own scripts; deny
+ * reading (the bars scratch directory included), and the harness's own scripts; deny
  * edits to the harness, its state, and harness configs, so a run can't loosen
  * its own limits.
  */
@@ -222,8 +223,7 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
       allow: [
         `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', ...roles.map(r => `Agent(${r})`), 'web_search',
         ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
-        `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs('/tmp/fth')}/**)`,
-        'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
+        `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs(scratchDir({ FTH_HOME: stateDir }))}/**)`,
         ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
         // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
         `Bash(node ${root}/scripts/combine.js status *)`,

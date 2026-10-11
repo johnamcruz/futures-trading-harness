@@ -202,10 +202,11 @@ function lockRun(paths) {
 
 async function runReplay(opts) {
   const { run, baseEnv = process.env } = opts;
-  // A live runner on this machine shares the scripts' scratch files (/tmp/fth) with the replay's agents.
+  // Never alongside live trading on this machine (each home has its own bars scratch directory, so the
+  // bars no longer cross; the refusal stays as defense in depth).
   for (const home of new Set([harnessHome(baseEnv), harnessHome({})])) {
     const pid = liveRunner({ FTH_HOME: home });
-    if (pid) throw new Error(`replay refused: the live runner is running (pid ${pid}, ${home}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
+    if (pid) throw new Error(`replay refused: the live runner is running (pid ${pid}, ${home}); replay when it is stopped.`);
   }
   const release = lockRun(run.paths);
   try {

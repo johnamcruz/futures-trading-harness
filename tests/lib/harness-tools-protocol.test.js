@@ -166,7 +166,7 @@ test('callTool: an invalid call names the first ten problems, never thousands', 
   assert.strictEqual(r.isError, true);
   assert.match(r.content[0].text, /"k9": unknown argument .*; and 59990 more\n$/);
   assert.ok(r.content[0].text.length < 2000);
-  const items = await callTool('mtf_read', { bars: '/tmp/fth/a.json', timeframes: Array(150000).fill('x') }, { env: { FTH_HOME: tmpDir() } });
+  const items = await callTool('mtf_read', { bars: '/h/bars-scratch/a.json', timeframes: Array(150000).fill('x') }, { env: { FTH_HOME: tmpDir() } });
   assert.ok(items.content[0].text.length < 2000);
 });
 
@@ -249,16 +249,11 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
   // Through the tool itself (the operation passes `tool` on): its own file a directory, with the fake broker configured.
   const fakeHome = tmpDir();
   fs.writeFileSync(path.join(fakeHome, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
-  fs.mkdirSync('/tmp/fth', { recursive: true, mode: 0o700 });
-  const mine = `/tmp/fth/MNQ-7m-t${process.pid}.json`;
-  fs.mkdirSync(mine, { recursive: true });
-  try {
-    const viaTool = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10, name: `t${process.pid}` }, { env: { ...process.env, FTH_HOME: fakeHome, FTH_ENV_FILE: path.join(fakeHome, 'none.env'), FTH_REPLAY_NOW: '' } });
-    assert.strictEqual(viaTool.isError, true);
-    assert.match(viaTool.content[0].text, /^\[bars\] the bars file: a \.json file under \/tmp\/fth\/ \(not a regular file: /m);
-  } finally {
-    fs.rmSync(mine, { recursive: true, force: true });
-  }
+  const mine = path.join(fakeHome, 'bars-scratch', 'MNQ-7m-mine.json');
+  fs.mkdirSync(mine, { recursive: true, mode: 0o700 });
+  const viaTool = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10, name: 'mine' }, { env: { ...process.env, FTH_HOME: fakeHome, FTH_ENV_FILE: path.join(fakeHome, 'none.env'), FTH_REPLAY_NOW: '' } });
+  assert.strictEqual(viaTool.isError, true);
+  assert.ok(viaTool.content[0].text.includes(`[bars] the bars file: a .json file under ${path.join(fakeHome, 'bars-scratch')}/ (not a regular file: `), viaTool.content[0].text);
   // combine_status with no attempt: starting one is the user's (the script's own line stays as it was).
   const none = await callTool('combine_status', {}, { env: { FTH_HOME: home } });
   assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n');

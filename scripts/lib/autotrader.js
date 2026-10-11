@@ -11,6 +11,7 @@
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
+const { scratchDir } = require('./bars-fetch');
 const { SERVER_NAME, activeBroker } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
@@ -73,7 +74,8 @@ const abs = p => `/${p}`;
 
 /**
  * Claude Code permissions for an autonomous run. Allowed: the broker MCP
- * server, reading the harness, the bar data, and /tmp/fth, writing /tmp/fth,
+ * server, reading the harness, the bar data, and the home's bars scratch
+ * directory (<state>/bars-scratch, where bars_fetch writes; nothing to write by hand),
  * the harness's own read/append scripts by absolute path, skills, subagents,
  * web search, and fetching calendar sites. Denied explicitly (deny beats any
  * broader allow in the user's settings): reading credentials and other
@@ -84,8 +86,7 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
     `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent', 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
-    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, 'Read(//tmp/fth/**)',
-    'Write(//tmp/fth/**)', 'Bash(mkdir -p /tmp/fth)',
+    `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs(scratchDir({ FTH_HOME: stateDir }))}/**)`,
     ...SCRIPTS.map(s => `Bash(node ${root}/scripts/${s}:*)`),
     // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
     `Bash(node ${root}/scripts/combine.js status:*)`,

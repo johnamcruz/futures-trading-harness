@@ -8,8 +8,11 @@
  * Allowed: an existing regular .json or .csv file of at most
  * 50 MB, by absolute path, inside the bars directory (FTH_BARS_DIR, default
  * <FTH_HOME>/bars: the runner's default bars directory; a runner with another
- * dataDir sets FTH_BARS_DIR to it) or /tmp/fth (where bars_fetch
- * writes; on macOS also given as /private/tmp/fth). Refused: anything outside,
+ * dataDir sets FTH_BARS_DIR to it) or the home's bars scratch directory,
+ * <FTH_HOME>/bars-scratch (where bars_fetch writes; never a directory every
+ * run on the machine shares, so a replay never reads the live runner's
+ * fetches or the other way round). A directory may also be given by its real
+ * form (/private/tmp/... for /tmp/... on macOS). Refused: anything outside,
  * a symlink anywhere from the directory down (the directory itself included),
  * a file with more than one hard link (a link to a file elsewhere), a directory
  * on the way (the bars directory included) that another user owns or others can
@@ -22,18 +25,18 @@
 
 const fs = require('fs');
 const path = require('path');
-const { OUT_DIR, lstat, realish, inside } = require('../bars-fetch');
+const { scratchDir, lstat, realish, inside } = require('../bars-fetch');
 const { harnessHome, expandHome } = require('../paths');
 
 // JSON and CSV only: the Parquet and Excel readers trust their file (the user's own data, through the CLIs).
 const EXTENSIONS = ['.json', '.csv'];
 const MAX_BYTES = 50 * 1024 * 1024;
 
-/** The directories bars files may come from: the bars directory and /tmp/fth. */
+/** The directories bars files may come from: the bars directory and the home's bars scratch directory. */
 function barsDirs(env = process.env) {
   const configured = String(env.FTH_BARS_DIR || '').trim();
   const dir = configured ? path.resolve(expandHome(configured)) : path.join(harnessHome(env), 'bars');
-  return [dir, OUT_DIR];
+  return [dir, scratchDir(env)];
 }
 
 /** Why `file` (inside `dir` by its path) is refused, or null. */
@@ -70,7 +73,7 @@ function barsFile(value, { env = process.env, dirs = barsDirs(env), uid = typeof
   const given = path.resolve(value);
   for (const d of dirs) {
     const dir = path.resolve(d);
-    // The directory resolved through its parent only (/tmp/fth is /private/tmp/fth on macOS): a path given
+    // The directory resolved through its parent only (/tmp/x is /private/tmp/x on macOS): a path given
     // under that real form is the same place, and is checked as the path under the directory.
     const realDir = path.join(realish(path.dirname(dir)), path.basename(dir));
     const file = realDir !== dir && inside(given, realDir) ? path.join(dir, path.relative(realDir, given)) : given;

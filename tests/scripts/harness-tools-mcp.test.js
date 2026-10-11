@@ -22,7 +22,6 @@ const PARITY = path.join(ROOT, 'tests', 'fixtures', 'parity');
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
 const REPLAY = '2026-10-07T13:05:30Z';
 const MARKER = 'PRIVATE-JOURNAL-LINE';
-const TMP_FTH = '/tmp/fth';
 const tag = `fth-test-${process.pid}`;
 
 /** A harness home whose broker is the fake replay broker, with its journal and bars inside. */
@@ -138,9 +137,9 @@ const CASES = [
   }],
   ['reconcile json', 'reconcile.js', () => ['--day', day, '--json'], 'reconcile', () => ({ day, json: true })],
   ['reconcile timeframe', 'reconcile.js', () => ['--day', day, '--timeframe', '60'], 'reconcile', () => ({ day, timeframe: 60 })],
-  // Bars go to the op's default /tmp/fth file: an odd timeframe no session uses, removed afterwards.
+  // Bars go to the op's default file in each home's own bars scratch directory (<home>/bars-scratch).
   ['bars fetch record', 'bars.js', () => ['--symbol', 'MNQ', '--timeframe', '7', '--count', '10', '--record'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 7, count: 10, record: true })],
-  ['bars fetch named', 'bars.js', () => ['--symbol', 'MNQ', '--timeframe', '7', '--count', '10', '--out', '/tmp/fth/MNQ-7m-test.json'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 7, count: 10, name: 'test' })],
+  ['bars fetch named', 'bars.js', bars => ['--symbol', 'MNQ', '--timeframe', '7', '--count', '10', '--out', path.join(path.dirname(bars), 'bars-scratch', 'MNQ-7m-test.json')], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 7, count: 10, name: 'test' })],
   ['bars fetch daily record', 'bars.js', () => ['--symbol', 'MNQ', '--daily', '--record'], 'bars_fetch', () => ({ symbol: 'MNQ', timeframe: 'daily', record: true })],
 ];
 
@@ -167,10 +166,12 @@ test('harness-tools server: handshake, tools, and each tool\'s text equal to the
     }
     assert.ok(fs.existsSync(path.join(srvHome, 'signals')) && fs.existsSync(path.join(srvHome, 'mtf', 'MNQ.json')), 'record wrote the gate\'s records');
     assert.strictEqual(JSON.parse(fs.readFileSync(path.join(srvHome, 'blackouts.json'), 'utf8')).length, 2);
+    // Each home's fetches stayed in its own scratch directory.
+    for (const h of [cliHome, srvHome]) {
+      assert.deepStrictEqual(fs.readdirSync(path.join(h, 'bars-scratch')).sort(), ['MNQ-7m-test.json', 'MNQ-7m.json'], h);
+    }
   } finally {
     client.close();
-    fs.rmSync(path.join(TMP_FTH, 'MNQ-7m.json'), { force: true });
-    fs.rmSync(path.join(TMP_FTH, 'MNQ-7m-test.json'), { force: true });
   }
 });
 
@@ -178,9 +179,12 @@ test('harness-tools server: bars path attacks are refused without echoing a file
   const home = fixtureHome();
   fs.writeFileSync(path.join(home, 'journal.jsonl'), `${MARKER}\n`);
   fs.writeFileSync(path.join(home, 'secret.json'), `{"x":"${MARKER}"}`);
-  fs.mkdirSync(TMP_FTH, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
-  const link = path.join(TMP_FTH, `${tag}-link.json`);
-  const dirLike = path.join(TMP_FTH, `${tag}-dir.json`);
+  const scratch = path.join(home, 'bars-scratch');
+  fs.mkdirSync(scratch, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
+  const link = path.join(scratch, `${tag}-link.json`);
+  const dirLike = path.join(scratch, `${tag}-dir.json`);
+  // A bars file in the shared /tmp/fth (where an earlier run, a test, or another home left one): refused by its path alone.
+  const shared = '/tmp/fth/MNQ-3m.json';
   const big = path.join(home, 'bars', 'big.csv');
   fs.symlinkSync(path.join(home, 'secret.json'), link);
   fs.mkdirSync(dirLike);
@@ -194,8 +198,11 @@ test('harness-tools server: bars path attacks are refused without echoing a file
       [`${home}/bars/../journal.jsonl`, /not a bars file type/],
       [path.join(home, 'secret.json'), /outside them/],
       [link, /is a symlink/],
-      // macOS: /tmp is /private/tmp, and the real form is the same place; elsewhere /private/tmp/fth is outside.
-      [`/private${link}`, process.platform === 'darwin' ? /is a symlink/ : /outside them/],
+      // A path under the home's real form is the same place (macOS: /var is /private/var); a form that isn't is outside.
+      [path.join(fs.realpathSync(home), 'bars-scratch', path.basename(link)), /is a symlink/],
+      [`/private${link}`, fs.realpathSync(path.dirname(home)) === `/private${path.dirname(home)}` ? /is a symlink/ : /outside them/],
+      [shared, /outside them/],
+      [`${scratch}/../secret.json`, /outside them/],
       [dirLike, /not a regular file/],
       [big, /larger than 50 MB/],
       [path.join(home, 'bars', 'notes.txt'), /not a bars file type/],
@@ -225,8 +232,6 @@ test('harness-tools server: bars path attacks are refused without echoing a file
     await assert.rejects(() => client.request('resources/list', {}), /method not found/);
   } finally {
     client.close();
-    fs.rmSync(link, { force: true });
-    fs.rmSync(dirLike, { recursive: true, force: true });
   }
 });
 
@@ -234,8 +239,8 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
   const home = fixtureHome();
   const linkedDir = path.join(home, 'bars-link');
   fs.symlinkSync(path.join(home, 'bars'), linkedDir);
-  const tmpBars = path.join(TMP_FTH, `${tag}-NQ.csv`);
-  fs.mkdirSync(TMP_FTH, { recursive: true, mode: 0o700 }); // as bars_fetch makes it
+  const tmpBars = path.join(home, 'bars-scratch', `${tag}-NQ.csv`);
+  fs.mkdirSync(path.dirname(tmpBars), { recursive: true, mode: 0o700 }); // as bars_fetch makes it
   fs.copyFileSync(path.join(PARITY, 'NQ-3m.csv'), tmpBars);
   const big = path.join(home, 'more-strategies', 'big');
   fs.mkdirSync(big, { recursive: true });
@@ -256,14 +261,33 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
     }
     assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
     const ok = await call(client, 'strategies_scan', { bars: tmpBars, symbol: 'MNQ' });
-    assert.strictEqual(ok.isError, false, 'without record it runs (bars under /tmp/fth)');
+    assert.strictEqual(ok.isError, false, 'without record it runs (bars under the home\'s bars scratch directory)');
     const capped = await call(client, 'strategies_show', { name: 'big' });
     assert.strictEqual(capped.isError, true);
     assert.match(capped.text, /strategies_show: the output is 30\d KB, over the 256 KB .* none of it is returned/);
     assert.ok(capped.text.length < 1000, 'never truncated into the reply');
   } finally {
     client.close();
-    fs.rmSync(tmpBars, { force: true });
+  }
+});
+
+test('harness-tools server: bars_fetch writes where the bars tools read, even when a .env file names another FTH_HOME', { timeout: 120000 }, async () => {
+  // The server's home comes from HOME (no FTH_HOME); the .env bars_fetch loads names another home (whose broker it uses).
+  const user = tmpDir();
+  const other = fixtureHome();
+  const envFile = path.join(user, 'x.env');
+  fs.writeFileSync(envFile, `FTH_HOME=${other}\n`, { mode: 0o600 });
+  const client = server(envFor(other, { HOME: user, FTH_HOME: '', FTH_ENV_FILE: envFile }));
+  try {
+    const fetched = await call(client, 'bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10 });
+    assert.strictEqual(fetched.isError, false, fetched.text);
+    const file = path.join(user, '.futures-trading-harness', 'bars-scratch', 'MNQ-7m.json');
+    assert.ok(fetched.text.includes(` to ${file};`), fetched.text);
+    assert.ok(!fs.existsSync(path.join(other, 'bars-scratch')), 'nothing in the .env file\'s home');
+    const read = await call(client, 'market_snapshot', { bars: file });
+    assert.strictEqual(read.isError, false, read.text);
+  } finally {
+    client.close();
   }
 });
 

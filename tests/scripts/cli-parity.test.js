@@ -25,7 +25,7 @@ const CSV = path.join(PARITY, 'NQ-3m.csv');
 const DAILY = path.join(PARITY, 'RTY-3m.csv');
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
 const REPLAY = '2026-10-07T13:05:30Z';
-const OUT = `/tmp/fth/cli-parity-${process.pid}.json`;
+const OUT = '<out>'; // in the arguments: the fixture home's own bars scratch file (bars files go nowhere else)
 
 /** A harness home whose broker is the fake replay broker, with its journal inside. */
 function fixtureHome() {
@@ -156,20 +156,21 @@ function runAll() {
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'),
   };
   const bars = stdinBars();
-  const norm = s => s.split(realHome).join('<home>').split(home).join('<home>').split(ROOT).join('<root>').split(OUT).join('<out>')
+  const out = path.join(home, 'bars-scratch', 'cli-parity.json');
+  const norm = s => s.split(out).join('<out>').split(realHome).join('<home>').split(home).join('<home>').split(ROOT).join('<root>')
     // Where credentials came from depends on the machine (bars.js names the .env files it loaded).
     .split('\n').filter(l => !/^\[bars\] (loaded|warning)/.test(l)).join('\n');
   const results = {};
   try {
     for (const [label, script, args, opts = {}] of CASES) {
       if (opts.before) opts.before(home);
-      const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args], {
+      const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', script), ...args.map(a => a.split(OUT).join(out))], {
         cwd: ROOT, encoding: 'utf8', env, input: opts.stdin === 'bars' ? bars : '', timeout: 60000,
       });
       results[label] = { status: r.status, stdout: norm(r.stdout), stderr: norm(r.stderr) };
     }
   } finally {
-    fs.rmSync(OUT, { force: true });
+    fs.rmSync(out, { force: true });
   }
   return results;
 }
