@@ -255,35 +255,71 @@ test('driver: a time whose step started but whose line was never written is reco
   assert.strictEqual(lines[1].since, '2026-10-07T13:31:00.000Z', 'the interrupted time\'s fills go to the next line');
 });
 
-test('driver: the run\'s kill switch stops it before the next time, saying why; removing it resumes there', async () => {
-  const w = userWorld();
+test('driver: with the run\'s kill switch on, the day under way runs to its end of day (as live: no trade cycle, flat at the close); a new day stops, saying why', async () => {
+  const w = userWorld({ start: '2026-10-07T19:44:00Z', end: '2026-10-08T13:40:00Z' });
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });
   const stop = path.join(w.run.paths.runHome, 'STOP');
+  const state = path.join(w.run.paths.runHome, 'autotrader-state.json');
   const ran = [];
+  let eods = 0;
   const deps = {
     serverCheck: async () => null,
     trades: async () => [],
     async step(p, env) {
       assert.strictEqual(env.FTH_KILL_SWITCH_FILE, stop, 'the run\'s own kill switch');
-      ran.push(p.t.toISOString().slice(11, 19));
-      // The first pass's cycle tripped the runner's workspace guard (as a harness rewriting its settings did).
-      if (ran.length === 1) fs.writeFileSync(stop, 'workspace files changed during a trade run: .qwen/settings.json. Review the change\nsecond line\n');
-      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: ran.length > 1, result: 'CYCLE RESULT: no-trade - x' }] })}` };
+      ran.push(`${p.kind}@${p.t.toISOString().slice(5, 16)}`);
+      // The first pass's cycle tripped the runner's workspace guard; a later alarm was appended.
+      if (ran.length === 1) fs.writeFileSync(stop, 'workspace files changed during a trade run: AGENTS.md. Review the change\n3 failed runs in a row\n');
+      // The runner, with the kill switch on: no trade cycle; end of day flattens (verified flat on its second try).
+      if (p.kind !== 'trade') { eods += 1; fs.writeFileSync(state, JSON.stringify({ day: p.day, eodDone: eods >= 2 })); }
+      const cycle = p.kind === 'trade' && !fs.existsSync(stop) ? [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }] : [];
+      const ranNow = ran.length === 1 ? [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }] : p.kind === 'trade' ? cycle : [{ action: 'eod', ok: true }];
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: ranNow })}` };
     },
   };
   const first = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
-  assert.deepStrictEqual(ran, ['13:33:02'], 'no pass while the kill switch is on');
+  assert.deepStrictEqual(ran, ['trade@10-07T19:45', 'trade@10-07T19:48', 'eod@10-07T19:50', 'eod-retry@10-07T19:51'], 'the day under way, its end of day and retry included');
   assert.strictEqual(first.done, false);
-  assert.strictEqual(first.stopped, `the run's kill switch is on (${stop}: workspace files changed during a trade run: .qwen/settings.json. Review the change); review it, then remove the file`);
-  // Still on: stopped again before any step.
-  assert.match((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).stopped, /kill switch is on/);
+  assert.strictEqual(first.stopped, `the run's kill switch is on (${stop}: 3 failed runs in a row (and 1 earlier line)); review it, then remove the file`, 'the latest line');
+  const lines = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(lines.map(l => l.killSwitch || null), [null, '3 failed runs in a row (and 1 earlier line)', '3 failed runs in a row (and 1 earlier line)', '3 failed runs in a row (and 1 earlier line)']);
+  assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.daysDone, ['2026-10-07']);
+  // Still on: stopped again before the new day; an empty file is on too.
   fs.writeFileSync(stop, '');
-  assert.match((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).stopped, new RegExp(`kill switch is on \\(${stop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\); review`), 'an empty file is on too');
-  assert.deepStrictEqual(ran, ['13:33:02']);
+  assert.match((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).stopped, /kill switch is on \([^:]*STOP\); review/);
+  assert.strictEqual(ran.length, 4);
   fs.unlinkSync(stop);
   const resumed = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
-  assert.deepStrictEqual([resumed.done, ran], [true, ['13:33:02', '13:36:02', '13:39:02']]);
-  assert.deepStrictEqual(store.readRun(w.run.paths.runDir).days['2026-10-07'].map(l => l.t.slice(11, 19)), ['13:33:02', '13:36:02', '13:39:02'], 'one line each, none repeated');
+  assert.strictEqual(resumed.done, true);
+  assert.ok(ran.slice(4).length > 0 && ran.slice(4).every(r => r.startsWith('trade@10-08')), ran.join(' '));
+});
+
+test('driver: a queued end-of-day retry survives a stop (--max-cycles) and runs first on resume', async () => {
+  const w = userWorld({ start: '2026-10-07T19:44:00Z', end: '2026-10-07T19:59:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const ran = [];
+  const deps = {
+    serverCheck: async () => null,
+    trades: async () => [],
+    async step(p) {
+      ran.push(`${p.kind}@${p.t.toISOString().slice(11, 16)}`);
+      // Not verified flat on the first end of day; flat on the retry.
+      if (p.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: p.day, eodDone: p.kind === 'eod-retry' }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: p.kind === 'trade' ? 'trade' : 'eod', ok: true }] })}` };
+    },
+  };
+  const first = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, maxCycles: 3 });
+  assert.match(first.stopped, /--max-cycles/);
+  assert.deepStrictEqual(ran, ['trade@19:45', 'trade@19:48', 'eod@19:50']);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).eodRetry, { t: '2026-10-07T19:51:00.000Z', day: '2026-10-07', tries: 1 });
+  const second = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.strictEqual(second.done, true);
+  assert.deepStrictEqual(ran, ['trade@19:45', 'trade@19:48', 'eod@19:50', 'eod-retry@19:51'], 'the retry, not lost');
+  const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));
+  assert.strictEqual(m.eodRetry, undefined);
+  assert.deepStrictEqual(m.daysDone, ['2026-10-07']);
+  assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
+  assert.strictEqual(ran.length, 4);
 });
 
 test('driver: a step that can\'t run stops the run; failed cycles in a row stop it; the broker must attest the replay', async () => {

@@ -72,11 +72,13 @@ broker.
    folder.
 
 8. **Stops.** The run stops, saying why, after `maxConsecutiveErrors` failed
-   cycles in a row, when a step can't run, and before the next decision time
-   while the run's kill switch (`<run home>/STOP`) is on: the runner sets it
-   when a cycle changed the workspace's operator files or settings (the
-   file's first line names them). Review the change, remove the file, and run
-   again to resume from that time. The settings-format stamp (`"$version"`)
+   cycles in a row, when a step can't run, and while the run's kill switch
+   (`<run home>/STOP`) is on: the runner sets it when a cycle changed the
+   workspace's operator files or settings (the file's latest line says
+   why). As live, the day under way still runs with no trade cycle, its
+   housekeeping and end of day included (flat at the close); the run stops
+   before the next day. Review the change, remove the file, and run again
+   to resume there. A queued end-of-day retry is kept across a stop. The settings-format stamp (`"$version"`)
    Qwen Code writes into the workspace `.qwen/settings.json` on start is not
    a change.
 9. **The prop policy.** A policy strategy (for example `prop_portfolio`,

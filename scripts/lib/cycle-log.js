@@ -25,7 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
-const { documents, unwrap, SHELL_TOOLS } = require('./transcript');
+const { documents, unwrap, bridgeRefused, SHELL_TOOLS } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -38,7 +38,6 @@ const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 function toolCalls(output) {
   const calls = [];
   const byId = new Map();
-  const textOf = v => (typeof v === 'string' ? v : JSON.stringify(v === undefined ? '' : v));
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
       if (!ev || typeof ev !== 'object') continue;
@@ -51,8 +50,7 @@ function toolCalls(output) {
           calls.push(call);
           if (c.id !== undefined && c.id !== null) byId.set(c.id, call);
         } else if (c && c.type === 'tool_result' && byId.has(c.tool_use_id)) {
-          const call = byId.get(c.tool_use_id);
-          if (call.bridge && call.bridge.refused.test(textOf(c.content))) call.refused = true;
+          if (bridgeRefused(byId.get(c.tool_use_id), c)) byId.get(c.tool_use_id).refused = true;
         }
       }
       // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }

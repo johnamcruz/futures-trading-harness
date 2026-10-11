@@ -16,14 +16,15 @@ const RESULTS = [
   { name: 'orb', status: 'active', timeframe: '3m', inSession: true, regime: 'trend-up', regimes: null, inRegime: true, signal: 'rules', direction: 'long', filtersFailed: [], candidate: true, entryRef: 21503.25, stopDistance: 5.25, minRR: 1.5,
     exit: { targetR: 1.5, target: null, trailActivateR: null, trailGivebackR: null, maxBars: null }, mtf, rules: rules([['close crosses_above or_high', true]], [['close crosses_below or_low', false]]), confluence: { with: ['ema_cross'], against: [] } },
   { name: 'ema_cross', status: 'paper', timeframe: '3m', inSession: true, regime: 'trend-up', inRegime: true, signal: 'rules', direction: 'long', filtersFailed: [], candidate: true, entryRef: 21503.25, stopDistance: 6, minRR: 2,
-    exit: { targetR: null, target: null, trailActivateR: 2, trailGivebackR: 0.5, maxBars: 40 }, mtf, confluence: { with: ['orb'], against: [] } },
+    exit: { targetR: null, target: null, trailActivateR: 2, trailGivebackR: 0.5, maxBars: 40 }, mtf, confluence: { with: ['orb'], against: ['keltner', 'bos'] } },
   { name: 'keltner', status: 'active', timeframe: '3m', inSession: true, regime: 'trend-up', inRegime: true, signal: 'rules', direction: 'short', filtersFailed: ['mtf: against the prevailing 4h up trend'], candidate: false, entryRef: 21503.25, stopDistance: 4, minRR: 2, exit: {}, mtf },
   { name: 'bos', status: 'active', timeframe: '3m', inSession: true, regime: 'trend-up', inRegime: true, signal: 'rules', direction: null, filtersFailed: [], candidate: false, entryRef: 21503.25, stopDistance: null, minRR: 1.5, exit: {}, mtf,
     rules: rules([['close crosses_above swing_high', false], ['atr(20) > 0', true]], [['close crosses_below swing_low', false], [`x${'y'.repeat(200)}`, false]]) },
   { name: 'crt_1h', status: 'paper', timeframe: '3m', inSession: false, regime: 'trend-up', regimes: ['range'], inRegime: false, signal: 'rules', direction: null, filtersFailed: [], candidate: false, exit: {}, mtf,
     rules: rules([], [['crt_dir(60) < 0', false]]), detail: { 'crt(60)': { reason: 'not_reclaimed', why: 'the close is not back inside the previous candle\'s range' } } },
   { name: 'vwap_reclaim', status: 'active', timeframe: '3m', inSession: false, regime: 'range', regimes: ['trend'], inRegime: false, signal: 'rules', direction: 'long', filtersFailed: ['VWAP distance 3.67 ATR > 1.5'], candidate: false, exit: {}, mtf },
-  { name: 'value_area', status: 'active', timeframe: '3m', inSession: true, signal: 'manual', candidate: true, mtf, note: 'evaluate the trigger from STRATEGY.md' },
+  { name: 'value_area', status: 'active', timeframe: '3m', inSession: true, signal: 'manual', candidate: true, note: 'evaluate the trigger from STRATEGY.md',
+    mtf: { ...mtf, ready: false, longAllowed: false, shortAllowed: false, reason: '4h: not enough candles for a trend' } },
   { name: 'session_fade', status: 'active', timeframe: '3m', inSession: false, inRegime: true, signal: 'manual', candidate: false, mtf },
   { name: 'prop_portfolio', status: 'paper', signal: 'policy', candidate: false, note: 'a policy strategy: the runner screens the setups of orb, bos' },
   { name: 'broken', status: 'active', error: 'unknown series foo', candidate: false },
@@ -50,8 +51,11 @@ test('scanSummary: the bar and trend, the candidates first with what a plan need
   assert.strictEqual(lines[0], 'Scan of MNQ on the last closed bar (opened 2026-10-07T14:00:00.000Z): 10 strategies, 3 candidates. Regime trend-up. Trend 4h up, 1h up, 15m down, prevailing 4h up.');
   assert.strictEqual(lines[1], 'Candidates:');
   assert.strictEqual(lines[2], '  orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5, exit: target 1.5R | with: ema_cross; against: none');
-  assert.strictEqual(lines[3], '  ema_cross long | paper (plan only: the gate refuses a live entry), 3m, rules, mtf trend | entryRef 21503.25, stopDistance 6, minRR 2, exit: trail from 2R giving back 0.5R, at most 40 bars | with: orb; against: none');
-  assert.strictEqual(lines[4], '  value_area (manual: evaluate its trigger from STRATEGY.md) | active, 3m, manual, mtf trend');
+  assert.strictEqual(lines[3], '  ema_cross long | paper (plan only: the gate refuses a live entry), 3m, rules, mtf trend | entryRef 21503.25, stopDistance 6, minRR 2, exit: trail from 2R giving back 0.5R, at most 40 bars | with: orb; against: keltner, bos');
+  assert.strictEqual(lines[4], '  value_area (manual: evaluate its trigger from STRATEGY.md) | active, 3m, manual, mtf trend | trend rule: long no, short no (4h: not enough candles for a trend)');
+  // A manual candidate says which sides the trend rule leaves open, so no plan takes a side the gate refuses.
+  assert.match(scanSummary([{ name: 'm', status: 'active', timeframe: '3m', signal: 'manual', candidate: true, mtf }]), /\n {2}m \(manual: [^)]*\) \| active, 3m, manual, mtf trend \| trend rule: long ok, short no\n/);
+  assert.match(scanSummary([{ name: 'm', status: 'active', signal: 'manual', candidate: true }]), /\| trend rule: unknown\n/);
   assert.strictEqual(lines[5], 'Every strategy (name | status | timeframe | direction | candidate | why not):');
   assert.strictEqual(lines.length, 6 + RESULTS.length + 1, 'one line per strategy, then how to get more');
   assert.strictEqual(lines[6], '  orb | active | 3m | long | yes | -');

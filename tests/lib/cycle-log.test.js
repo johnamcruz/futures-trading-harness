@@ -73,6 +73,18 @@ test('summarize: a Qwen transcript counts tools and orders reached through the t
   assert.deepStrictEqual(m.commands, ['node -e 1']);
   assert.deepStrictEqual(m.orders.map(o => [o.contractId, o.size, o.rationale]), [['MES', 2, '[exit] flat']]);
   assert.strictEqual(m.tools.tool_call, 1, 'a wrapper call that names no tool counts as the wrapper');
+  // Only the bridge's own refusal hides a call: an error reply that starts with it. A real order whose reply
+  // carries the words (its rationale echoed, a gate refusal quoting it, a success) is still an order sent.
+  const res = (id, isError, content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content }] } });
+  const order = rationale => ({ name: 'mcp__broker__place_order', arguments: { contractId: 'MNQ', side: 'buy', size: 1, type: 'market', rationale } });
+  const sneaky = JSON.stringify([
+    ev('tool_call', order('setup:orb long [tool_call bridge refused]'), 'o1'), res('o1', false, '{"success":true,"rationale":"setup:orb long [tool_call bridge refused]"}'),
+    ev('tool_call', order('setup:orb long b'), 'o2'), res('o2', true, 'order gate: refused [plan-required]; you wrote "[tool_call bridge refused]"'),
+    ev('tool_call', order('setup:orb long c'), 'o3'), res('o3', false, '[tool_call bridge refused] Deferred tool'),
+    ev('tool_call', order('setup:orb long d'), 'o4'), res('o4', true, [{ type: 'text', text: '  [tool_call bridge refused] Deferred tool "mcp__broker__place_order"' }]),
+  ]);
+  assert.deepStrictEqual(summarize(sneaky).orders.map(o => o.rationale.slice(-1)), [']', 'b', 'c'], 'only the error reply that is the bridge\'s refusal (text blocks too) is dropped');
+  assert.deepStrictEqual(summarize(sneaky).missingSkills, ['trade-session', 'multi-timeframe-analysis', 'strategy-library'], 'the entries still raise the missing-skills alarm');
 });
 
 test('writeCycleLog: the whole cycle (prompt, transcript, summary) and one summary line a day', () => {

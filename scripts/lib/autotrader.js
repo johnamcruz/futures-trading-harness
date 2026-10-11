@@ -532,36 +532,51 @@ function signalDecision(scanResults, netPosition, workingOrders = 0, { paper = f
 }
 
 /**
- * The run's final message, when its transcript has one: Claude stream-json's and Qwen JSON's
- * { type: 'result', result }, Codex --json's last agent message. Null for a plain-text run.
+ * The run's final message: { structured, final }. `structured`: the output is a harness transcript
+ * (Claude stream-json, Qwen JSON, Codex --json events); `final`: its final message (Claude's and Qwen's
+ * { type: 'result', result }, Codex's last agent message), or null when it has none (a run cut short).
  */
 function finalMessage(output) {
   let final = null;
+  let structured = false;
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
-      if (ev && ev.type === 'result' && typeof ev.result === 'string') final = ev.result;
-      const item = ev && ev.type === 'item.completed' && ev.item;
+      if (!ev || typeof ev !== 'object' || typeof ev.type !== 'string') continue;
+      structured = true;
+      if (ev.type === 'result' && typeof ev.result === 'string') final = ev.result;
+      const item = ev.type === 'item.completed' && ev.item;
       if (item && (item.type === 'agent_message' || item.type === 'assistant_message') && typeof item.text === 'string') final = item.text;
     }
   }
-  return final;
+  return { structured, final };
 }
+
+/** A result line's body without markdown emphasis or code marks; '' when nothing is left. */
+const resultBody = raw => String(raw).replace(/\*\*|__|`/g, '').replace(/^[*_\s]+|[*_\s]+$/g, '').trim();
 
 /**
  * The last "CYCLE RESULT: <outcome> - <reason>" line the model reported, if any: in its final message
- * when the transcript has one (so a prompt, skill text, or tool output echoed earlier never counts), else
- * anywhere in a plain-text run's output. Trivial formatting is tolerated (leading spaces, markdown bold,
- * italics or code around the line or the label); the label is exact, and the template
+ * when the output is a transcript (so a prompt, skill text, or tool output echoed earlier never counts;
+ * a transcript without a final message, a run cut short, reported none), else anywhere in a plain-text
+ * run's output. Trivial formatting is tolerated (leading spaces, markdown bold, italics or code around
+ * the line, the label, or the body); the label is exact, and a line with no body or the template
  * ("CYCLE RESULT: <no-trade | ...> - <reason>") is not a result.
  */
 function cycleResult(output) {
-  const final = finalMessage(output);
-  // In raw JSON text a line ends at an escaped newline or a closing quote; in a final message, at a newline.
+  const { structured, final } = finalMessage(output);
+  if (structured && final === null) return null;
+  // In raw text a line ends at a newline, or (JSON text) at an escaped newline or a closing quote.
   const found = final === null
-    ? [...String(output || '').matchAll(/CYCLE RESULT:(?:[*_`]{1,3})?([^\n"\\]*)/g)]
-    : [...final.matchAll(/CYCLE RESULT:(?:[*_`]{1,3})?([^\n]*)/g)];
-  const results = found.map(m => m[1].replace(/[*_`\s]+$/, '').trim()).filter(body => !body.startsWith('<'));
-  return results.length ? `CYCLE RESULT: ${results[results.length - 1]}`.trim() : null;
+    ? [...String(output || '').matchAll(/CYCLE RESULT:[*_` \t]*([^\n"\\]*)/g)]
+    : [...final.matchAll(/CYCLE RESULT:[*_` \t]*([^\n]*)/g)];
+  const results = found.map(m => resultBody(m[1])).filter(body => body && !body.startsWith('<'));
+  return results.length ? `CYCLE RESULT: ${results[results.length - 1]}` : null;
+}
+
+/** The result a run is logged with: a failed run's error (whatever it wrote), else its line, else "(none reported)". */
+function runResult(res) {
+  if (!res.ok) return `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`;
+  return cycleResult(res.output) || 'CYCLE RESULT: (none reported)';
 }
 
 const RUNNER_VALUE_FLAGS = ['--config', '--once', '--symbol', '--stale-minutes'];
@@ -627,5 +642,6 @@ module.exports = {
   decide,
   recordRun,
   cycleResult,
+  runResult,
   signalDecision,
 };

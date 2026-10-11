@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { documents, parsed, BRIDGE_TOOLS, unwrap, SHELL_TOOLS } = require('../../scripts/lib/transcript');
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS } = require('../../scripts/lib/transcript');
 const hc = require('../../scripts/lib/headless-check');
 
 test('documents: one JSON document, one per line, or what parses after warning lines', () => {
@@ -31,6 +31,14 @@ test('unwrap: a bridge call is the tool it reaches, with its arguments; anything
   assert.deepStrictEqual(unwrap('Bash', undefined), { name: 'Bash', input: {} });
   assert.ok(BRIDGE_TOOLS[0].refused.test('[tool_call bridge refused] Deferred tool "x" has no verified schema'));
   assert.ok(!BRIDGE_TOOLS[0].refused.test('order gate: refused [plan-required]'));
+  assert.ok(!BRIDGE_TOOLS[0].refused.test('you wrote "[tool_call bridge refused]"'), 'anchored at the start');
+  const call = unwrap('tool_call', { name: 'x' });
+  assert.strictEqual(bridgeRefused(call, { is_error: true, content: '[tool_call bridge refused] Deferred' }), true);
+  assert.strictEqual(bridgeRefused(call, { is_error: true, content: [{ type: 'text', text: '[tool_call bridge refused] Deferred' }] }), true);
+  assert.strictEqual(bridgeRefused(call, { is_error: false, content: '[tool_call bridge refused] Deferred' }), false, 'an answer, not an error');
+  assert.strictEqual(bridgeRefused(call, { is_error: true, content: 'refused: "[tool_call bridge refused]"' }), false);
+  assert.strictEqual(bridgeRefused(unwrap('Bash', {}), { is_error: true, content: '[tool_call bridge refused]' }), false, 'not a bridged call');
+  assert.deepStrictEqual([resultText('a'), resultText([{ type: 'text', text: 'a' }, { type: 'image' }, { type: 'text', text: 'b' }]), resultText({ x: 1 })], ['a', 'a\n\nb', '{"x":1}']);
   // One list, shared by the headless check and the cycle log.
   assert.strictEqual(hc.BRIDGE_TOOLS, BRIDGE_TOOLS);
   assert.ok(SHELL_TOOLS.has('Bash') && SHELL_TOOLS.has('run_shell_command') && !SHELL_TOOLS.has('tool_call'));

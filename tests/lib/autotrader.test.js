@@ -207,6 +207,51 @@ test('cycleResult: trivial formatting tolerated, nothing looser; only the final 
   assert.strictEqual(cycleResult(fixture), null);
 });
 
+test('cycleResult: a transcript cut short has no result; formatting inside the body; no empty body; a failed run logs its error', () => {
+  const { runResult } = require('../../scripts/lib/autotrader');
+  // (a) A stream-json run that timed out before its result event: an echoed skill example is no result.
+  const cut = [
+    JSON.stringify({ type: 'system', subtype: 'init' }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'autonomous-trading' } }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 's1', content: 'CYCLE RESULT: executed - orb long 1 MNQ\nCYCLE RESULT: blocked - [loss-streak] cooldown 18 min' }] } }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working on it. CYCLE RESULT: managed - half way' }] } }),
+  ].join('\n');
+  assert.strictEqual(cycleResult(cut), null);
+  // Codex killed before its agent message; Qwen's array without its result.
+  assert.strictEqual(cycleResult(JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', result: 'CYCLE RESULT: executed - x' } })), null);
+  assert.strictEqual(cycleResult(`Warning\n${JSON.stringify([{ type: 'system' }, { type: 'user', message: { content: [{ type: 'tool_result', content: 'CYCLE RESULT: executed - x' }] } }])}`), null);
+  assert.deepStrictEqual([runResult({ ok: false, timedOut: true, output: cut }), runResult({ ok: false, timedOut: false, code: 2, output: 'CYCLE RESULT: executed - x' })],
+    ['CYCLE RESULT: error - timed out', 'CYCLE RESULT: error - exit 2'], 'a failed run is its error, whatever it printed');
+  assert.deepStrictEqual([runResult({ ok: true, output: 'CYCLE RESULT: no-trade - q' }), runResult({ ok: true, output: 'nothing' })], ['CYCLE RESULT: no-trade - q', 'CYCLE RESULT: (none reported)']);
+  // (b) Formatting inside the body, on both sides; a backticked template is still the template.
+  const result = final => cycleResult(JSON.stringify({ type: 'result', result: final }));
+  for (const line of ['CYCLE RESULT: **no-trade - quiet**', 'CYCLE RESULT: **no-trade** - quiet', 'CYCLE RESULT: `no-trade - quiet`', '**CYCLE RESULT:** _no-trade - quiet_', 'CYCLE RESULT:no-trade - quiet']) {
+    assert.strictEqual(result(`Done.\n${line}`), 'CYCLE RESULT: no-trade - quiet', line);
+    assert.strictEqual(cycleResult(`x\n${line}\n`), 'CYCLE RESULT: no-trade - quiet', `plain ${line}`);
+    // The replay report counts it as standing aside.
+    assert.match(result(line), /^CYCLE RESULT:\s*no-trade\b/i);
+  }
+  assert.strictEqual(result('CYCLE RESULT: no-trade - ema_cross and value_area_reentry quiet'), 'CYCLE RESULT: no-trade - ema_cross and value_area_reentry quiet', 'a name\'s underscores stay');
+  for (const t of ['CYCLE RESULT: `<no-trade | planned | executed> - <reason>`', 'CYCLE RESULT: **<no-trade | planned> - <reason>**']) {
+    assert.strictEqual(result(t), null, t);
+    assert.strictEqual(cycleResult(t), null, `plain ${t}`);
+  }
+  // (c) No body: no result (the "(none reported)" path), in a final message and in plain text.
+  for (const t of ['**CYCLE RESULT:**\nno-trade - x', 'Summary.\nCYCLE RESULT:', 'CYCLE RESULT: **  **']) {
+    assert.strictEqual(result(t), null, t);
+    assert.strictEqual(cycleResult(t), null, `plain ${t}`);
+  }
+  assert.strictEqual(result('CYCLE RESULT: no-trade - a\nCYCLE RESULT:'), 'CYCLE RESULT: no-trade - a', 'an empty last line doesn\'t hide the one before');
+  // Codex: the last agent message counts, not a later tool item's echo nor an earlier message.
+  const codex = [
+    { type: 'item.completed', item: { type: 'agent_message', text: 'CYCLE RESULT: executed - early' } },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'Done.\nCYCLE RESULT: no-trade - final' } },
+    { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'harness', tool: 'x', result: 'CYCLE RESULT: blocked - echo' } },
+    { type: 'turn.completed' },
+  ].map(e => JSON.stringify(e)).join('\n');
+  assert.strictEqual(cycleResult(codex), 'CYCLE RESULT: no-trade - final');
+});
+
 test('every cycle prompt ends with the exact result line the runner reads', () => {
   const cfg = validateConfig({ harness: 'claude', account: '1' });
   const p = prompts(cfg, new Date('2026-10-07T14:03:02Z'), ROOT);
@@ -343,6 +388,16 @@ test('the Qwen settings fingerprint: the $version stamp Qwen Code writes on star
   ]) assert.deepStrictEqual(changed(v), ['.qwen/settings.json'], JSON.stringify(v));
   fs.unlinkSync(file);
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), ['.qwen/settings.json'], 'removed');
+  // Why ignoring the stamp is safe: the settings the harness writes hold only permissions (allow/deny lists of
+  // strings), which no Qwen settings-version migration rewrites (they move legacy top-level scalars, tools.core/
+  // allowed/exclude, modelProviders, general.disable*). A key like those here would reopen the question.
+  const { qwenWorkspaceSettings } = require('../../scripts/lib/install');
+  for (const opts of [{}, { dataDir: '/r/bars', stateDir: '/r/home' }]) {
+    const generated = qwenWorkspaceSettings(ROOT, '/home/u', opts);
+    assert.deepStrictEqual(Object.keys(generated), ['permissions']);
+    assert.deepStrictEqual(Object.keys(generated.permissions).sort(), ['allow', 'deny']);
+    for (const list of Object.values(generated.permissions)) assert.ok(Array.isArray(list) && list.every(x => typeof x === 'string'));
+  }
   // Only the Qwen settings file: another file's $version is a change like any other.
   assert.notStrictEqual(fileDigest('.claude/settings.json', '{"a":1}'), fileDigest('.claude/settings.json', '{"a":1,"$version":4}'));
   assert.strictEqual(fileDigest('.qwen/settings.json', '{"a":1}'), fileDigest('.qwen/settings.json', Buffer.from('{ "a": 1, "$version": 4 }')));

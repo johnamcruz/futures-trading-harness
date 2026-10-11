@@ -104,9 +104,9 @@ Either confirms. Both is the A setup.
 
 - RTH, 10:00-15:00 ET, on MNQ, MES, MYM, M2K, when price is inside the prior
   day's value area and comes to its POC.
-- `scan` reports `value_area` with `candidate: true` and a direction; its
-  `rules` result shows which branch held (rejection or breakout, flow or
-  expansion).
+- The scan lists `value_area` as a candidate with a direction; its full
+  result (`strategies_scan` with `name: "value_area"`) has `rules`, which
+  show which branch held (rejection or breakout, flow or expansion).
 - It is a trend setup: the order gate refuses it against the prevailing
   4h/1h/15m trend (the `multi-timeframe-analysis` skill). A POC rejection long
   in an uptrend is the pullback; a POC breakout down in a downtrend is the

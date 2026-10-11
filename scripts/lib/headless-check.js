@@ -34,7 +34,7 @@ const { harnessHome } = require('./paths');
 const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 // Transcript parsing and the bridge wrappers (Qwen's tool_call), shared with the cycle log.
-const { documents, parsed, BRIDGE_TOOLS, unwrap, SHELL_TOOLS } = require('./transcript');
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS } = require('./transcript');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
 const PROBE_TOOLS = ['blackouts_list', 'strategies_list'];
@@ -130,7 +130,7 @@ function analyze(text) {
       const call = { id: v.id, ...unwrap(v.name, v.input) };
       calls.push(call);
       if (v.id !== undefined && v.id !== null) latest.set(v.id, call);
-    } else if (v.type === 'tool_result' && latest.has(v.tool_use_id)) latest.get(v.tool_use_id).result = { isError: v.is_error === true, text: textOf(v.content) };
+    } else if (v.type === 'tool_result' && latest.has(v.tool_use_id)) latest.get(v.tool_use_id).result = { isError: v.is_error === true, text: resultText(v.content) };
     else if (v.type === 'mcp_tool_call') {
       item(v, { name: `mcp__${v.server}__${v.tool}`, input: v.arguments || {}, done: pending(v.status) ? null : { isError: v.status !== 'completed' || Boolean(v.error), text: textOf(v.error || v.result) } });
     } else if (v.type === 'command_execution') {

@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, runResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
@@ -157,7 +157,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
   const res = await runOnce(cfg, argv, timeoutMs);
-  const result = cycleResult(res.output) || (res.ok ? 'CYCLE RESULT: (none reported)' : `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`);
+  const result = runResult(res);
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });
   process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);

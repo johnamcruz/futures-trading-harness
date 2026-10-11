@@ -103,6 +103,8 @@ function fileDigest(name, content) {
     let v = null;
     try { v = JSON.parse(String(content)); } catch (_err) { /* not JSON: as bytes */ }
     if (v && typeof v === 'object' && !Array.isArray(v)) {
+      // Safe because the harness writes only permissions lists there, which no Qwen version migration
+      // rewrites (tests pin it); a key such a migration moves (legacy scalars, tools.core, modelProviders) would reopen it.
       const { $version: version, ...rest } = v;
       if (version === undefined || Number.isInteger(version)) return hash(`json:${JSON.stringify(rest)}`);
     }

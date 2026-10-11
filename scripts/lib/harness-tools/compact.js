@@ -59,7 +59,8 @@ function candidateLine(r) {
   const parts = [
     `${r.name} ${r.direction || '(manual: evaluate its trigger from STRATEGY.md)'}`,
     `${r.status}${r.status === 'paper' ? ' (plan only: the gate refuses a live entry)' : ''}, ${r.timeframe || '-'}, ${r.signal}${r.mtf ? `, mtf ${r.mtf.style}` : ''}`,
-    r.signal === 'manual' ? '' : `entryRef ${num(r.entryRef)}, stopDistance ${num(r.stopDistance)}${r.targetDistance !== undefined ? `, targetDistance ${num(r.targetDistance)}` : ''}, minRR ${r.minRR ?? '-'}${exit ? `, exit: ${exit}` : ''}`,
+    // A manual strategy's side is the agent's call: which sides the trend rule leaves open (the gate enforces it).
+    r.signal === 'manual' ? (r.mtf ? `trend rule: long ${r.mtf.longAllowed ? 'ok' : 'no'}, short ${r.mtf.shortAllowed ? 'ok' : 'no'}${r.mtf.reason ? ` (${r.mtf.reason})` : ''}` : 'trend rule: unknown') : `entryRef ${num(r.entryRef)}, stopDistance ${num(r.stopDistance)}${r.targetDistance !== undefined ? `, targetDistance ${num(r.targetDistance)}` : ''}, minRR ${r.minRR ?? '-'}${exit ? `, exit: ${exit}` : ''}`,
     r.direction ? `with: ${c.with.join(', ') || 'none'}; against: ${c.against.join(', ') || 'none'}` : '',
     detectorWhy(r),
   ];

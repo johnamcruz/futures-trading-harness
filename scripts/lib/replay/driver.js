@@ -17,10 +17,12 @@
  *      prompt hash, the gate's refusals, and the broker's fills since the
  *      previous time (search_trades through the broker adapter).
  * End of day is retried a minute later (up to 5 times, before 16:00 ET) while
- * the runner hasn't verified the account flat; a day is done after its last
+ * the runner hasn't verified the account flat (a queued retry is kept in the
+ * manifest, so a stop never loses it); a day is done after its last
  * time. The run stops after cfg.maxConsecutiveErrors failed cycles in a row,
- * before a time while the run's kill switch (<run home>/STOP) is on (a pass would
- * run no cycle; the reason is the file's first line),
+ * before a new trading day while the run's kill switch (<run home>/STOP) is on
+ * (the day under way still runs: as live, no trade cycle, but housekeeping and
+ * end of day; the reason is the file's latest line),
  * or at once when a step can't run (the broker won't start, the clock is
  * refused).
  *
@@ -36,7 +38,7 @@ const { loadBrokers } = require('../broker/config');
 const { withAdapter } = require('../broker/adapter');
 const { contractRoot } = require('../trading/journal');
 const { specFor } = require('../trading/contracts');
-const { sessionMinute, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
+const { sessionMinute, tradingDayKey, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { replayUnattested } = require('../runner-wiring');
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
@@ -122,11 +124,12 @@ function defaultDeps(run, root) {
   };
 }
 
-/** The kill switch's first line ('' when empty or unreadable) when the file exists, else null. */
+/** The kill switch's latest line ('' when empty or unreadable) when the file exists, else null. */
 function killSwitchReason(file) {
   if (!file || !fs.existsSync(file)) return null;
   try {
-    return fs.readFileSync(file, 'utf8').trim().split('\n')[0].slice(0, 300);
+    const lines = fs.readFileSync(file, 'utf8').split('\n').map(l => l.trim()).filter(Boolean);
+    return lines.length ? `${lines[lines.length - 1].slice(0, 300)}${lines.length > 1 ? ` (and ${lines.length - 1} earlier line${lines.length > 2 ? 's' : ''})` : ''}` : '';
   } catch (_err) {
     return '';
   }
@@ -188,6 +191,11 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   recoverPending(paths, manifest, log);
   const todo = store.remaining(manifest, points, store.recordedTimes(paths.runDir));
+  // An end-of-day retry queued before the last stop (--max-cycles, the kill switch, a crash): it runs first.
+  const retry = manifest.eodRetry;
+  if (retry && !(manifest.daysDone || []).includes(retry.day) && Date.parse(retry.t) < run.end.getTime()) {
+    todo.unshift({ t: new Date(retry.t), kind: 'eod-retry', day: retry.day, tries: retry.tries });
+  }
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
@@ -207,10 +215,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   while (queue.length) {
     if (cycles >= maxCycles) return { cycles, stopped: `stopped after ${cycles} decision times (--max-cycles)`, done: false };
     const env = replayEnv(baseEnv, run, { at: queue[0].t });
-    // The run's kill switch (a cycle's workspace change, the runner's error limit): every later pass would
-    // run no cycle, so the run stops here, saying why; it resumes from this time once the file is removed.
+    // The run's kill switch (a cycle's workspace change, the runner's error limit): as live, the runner
+    // then starts no trade cycle but keeps housekeeping and runs end of day (flat at the close). So the
+    // day already under way runs to its end; the run stops before a new day, saying why, and resumes
+    // there once the file is removed.
     const killed = killSwitchReason(env.FTH_KILL_SWITCH_FILE);
-    if (killed !== null) return { cycles, stopped: `the run's kill switch is on (${env.FTH_KILL_SWITCH_FILE}${killed ? `: ${killed}` : ''}); review it, then remove the file`, done: false };
+    const dayUnderWay = manifest.lastT && tradingDayKey(new Date(manifest.lastT)) === queue[0].day;
+    if (killed !== null && !dayUnderWay) return { cycles, stopped: `the run's kill switch is on (${env.FTH_KILL_SWITCH_FILE}${killed ? `: ${killed}` : ''}); review it, then remove the file`, done: false };
     const point = queue.shift();
     writeClock(point.t);
     const started = Date.now();
@@ -241,11 +252,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       cycles: store.cycleLogsSince(paths.runHome, started).map(store.cycleSummary),
       refusals: store.refusalsSince(paths.runHome, started),
       errors: step.errors || [], bars: step.bars || [], trades, since: since.toISOString(),
+      ...(killed !== null ? { killSwitch: killed || 'on' } : {}),
     };
     // A failed read is retried from the same time on the next one (also after a resume).
     if (!(trades && trades.error)) since = point.t;
     manifest.tradesSince = since.toISOString();
     delete manifest.pending;
+    if (point.kind === 'eod-retry') delete manifest.eodRetry;
     store.appendRecord(paths, manifest, rec);
     cycles += 1;
     // A failed cycle, or a bar's pass that ran none and read no bar for a symbol while logging errors (the
@@ -253,7 +266,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     const unread = (step.bars || []).some(b => !b.lastBarT);
     const failed = rec.ran.some(r => !r.ok) || (point.kind === 'trade' && !rec.ran.length && unread && rec.errors.length > 0);
     failures = failed ? failures + 1 : rec.ran.length ? 0 : failures;
-    log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || 'no cycle'}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
+    log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || (killed !== null ? 'no cycle (kill switch on)' : 'no cycle')}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
     if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };
     // End of day not verified flat: once more a minute later, as the live runner retries, before the close.
     if (point.kind === 'eod' || point.kind === 'eod-retry') {
@@ -262,6 +275,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       const next = new Date(point.t.getTime() + 60000);
       if (!(state.day === point.day && state.eodDone) && tries < EOD_RETRIES && sessionMinute(next) < CLOSE_SESSION_MIN && next < run.end) {
         queue.unshift({ t: next, kind: 'eod-retry', day: point.day, tries: tries + 1 });
+        // Kept in the manifest until it runs, so a stop before it never loses it.
+        manifest.eodRetry = { t: next.toISOString(), day: point.day, tries: tries + 1 };
+        writeJsonAtomic(paths.manifest, manifest);
         continue;
       }
     }
