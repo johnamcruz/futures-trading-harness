@@ -12,7 +12,16 @@
  *
  * strategies_list json and market_snapshot come back as JSON on one line (the
  * same content: strategies.js and market-snapshot.js, `compact`).
+ *
+ * A candidate's stop and target are given in points (the scan's distances are
+ * prices) and in whole ticks for the symbol, rounded as an order rounds them
+ * (trading/order-plan.js: a stop away from the entry, a target toward it),
+ * with one contract's dollars at those ticks, so no reader takes points for
+ * ticks.
  */
+
+const { specFor } = require('../trading/contracts');
+const { stopTicks, targetTicks, ticksText, distanceText, targetFor } = require('../trading/order-plan');
 
 const num = x => (Number.isFinite(x) ? String(Math.round(x * 1e4) / 1e4) : '-');
 
@@ -46,8 +55,24 @@ function whyNot(r) {
   return reasons.join('; ') || 'not a candidate';
 }
 
+/** The candidate's stop and target, in points and ticks for the symbol (points only without its tick specs). */
+function stopAndTarget(r, symbol) {
+  const spec = specFor(symbol);
+  const tick = spec ? spec.tickSize : null;
+  const sTicks = spec ? stopTicks(r.stopDistance, tick) : null;
+  const parts = [`stop ${Number.isFinite(r.stopDistance) && r.stopDistance > 0 ? distanceText(r.stopDistance, sTicks, symbol, spec) : 'none on this bar'}`];
+  if (r.targetDistance !== undefined) {
+    parts.push(`target ${Number.isFinite(r.targetDistance) && r.targetDistance > 0 ? distanceText(r.targetDistance, spec ? targetTicks(r.targetDistance, tick) : null, symbol, spec) : 'none on this bar'}`);
+  } else if (sTicks && r.exit && r.exit.targetR !== null && r.exit.targetR !== undefined) {
+    const t = targetFor(r.exit, sTicks, null, tick).ticks;
+    if (t) parts.push(`target ${r.exit.targetR}R = ${ticksText(t, symbol, spec)}`);
+  }
+  if (!spec) parts.push(`no tick specs for ${symbol || 'the symbol'}`);
+  return parts.join(', ');
+}
+
 /** One candidate, with what a plan needs from it. */
-function candidateLine(r) {
+function candidateLine(r, symbol = '') {
   const x = r.exit || {};
   const exit = [
     x.targetR !== null && x.targetR !== undefined ? `target ${x.targetR}R` : '',
@@ -60,7 +85,7 @@ function candidateLine(r) {
     `${r.name} ${r.direction || '(manual: evaluate its trigger from STRATEGY.md)'}`,
     `${r.status}${r.status === 'paper' ? ' (plan only: the gate refuses a live entry)' : ''}, ${r.timeframe || '-'}, ${r.signal}${r.mtf ? `, mtf ${r.mtf.style}` : ''}`,
     // A manual strategy's side is the agent's call: which sides the trend rule leaves open (the gate enforces it).
-    r.signal === 'manual' ? (r.mtf ? `trend rule: long ${r.mtf.longAllowed ? 'ok' : 'no'}, short ${r.mtf.shortAllowed ? 'ok' : 'no'}${r.mtf.reason ? ` (${r.mtf.reason})` : ''}` : 'trend rule: unknown') : `entryRef ${num(r.entryRef)}, stopDistance ${num(r.stopDistance)}${r.targetDistance !== undefined ? `, targetDistance ${num(r.targetDistance)}` : ''}, minRR ${r.minRR ?? '-'}${exit ? `, exit: ${exit}` : ''}`,
+    r.signal === 'manual' ? (r.mtf ? `trend rule: long ${r.mtf.longAllowed ? 'ok' : 'no'}, short ${r.mtf.shortAllowed ? 'ok' : 'no'}${r.mtf.reason ? ` (${r.mtf.reason})` : ''}` : 'trend rule: unknown') : `entryRef ${num(r.entryRef)}, ${stopAndTarget(r, symbol)}, minRR ${r.minRR ?? '-'}${exit ? `, exit: ${exit}` : ''}`,
     r.direction ? `with: ${c.with.join(', ') || 'none'}; against: ${c.against.join(', ') || 'none'}` : '',
     detectorWhy(r),
   ];
@@ -82,7 +107,8 @@ function scanSummary(results, { symbol = '', bar = null } = {}) {
     `Scan${symbol ? ` of ${symbol}` : ''}${bar ? ` on the last closed bar (opened ${bar})` : ''}: ${list.length} strategies, ${fired.length} candidate${fired.length === 1 ? '' : 's'}.`
       + `${withRegime ? ` Regime ${withRegime.regime}.` : ''}${frames ? ` Trend ${frames}${withMtf.mtf.prevailing ? `, prevailing ${withMtf.mtf.prevailing}` : ''}.` : ''}`,
     fired.length ? 'Candidates:' : 'Candidates: none.',
-    ...fired.map(candidateLine),
+    ...fired.map(r => candidateLine(r, symbol)),
+    ...(fired.some(r => r.signal === 'rules') ? ['Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.'] : []),
     'Every strategy (name | status | timeframe | direction | candidate | why not):',
     ...list.map(r => `  ${[r.name, r.status || '-', r.timeframe || '-', r.direction || '-', r.candidate ? 'yes' : 'no', whyNot(r) || '-'].join(' | ')}`),
     'One strategy\'s full result: name; every strategy\'s (large): detail true.',

@@ -20,7 +20,10 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
 
 1. `get_account_snapshot`: confirm the account state matches the plan's
    assumption (e.g. flat). If not, stop and report.
-2. `get_contract`: round entry, stop, and target to `tickSize`.
+2. `get_contract`: round entry, stop, and target to `tickSize`. When the plan
+   carries the `place_order` arguments from the harness tool `order_plan`,
+   send them as given (with the account's `accountId`): they are already on
+   the tick, with the stop on the correct side; don't recompute them.
 3. Follow the strategy's exit plan (the scan's `exit`, from its `exit:` block):
    - **Trailing** (`trailActivateR` set, `targetR` null): stop only, no
      take-profit order. The autonomous runner trails the stop after every

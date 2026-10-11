@@ -25,6 +25,7 @@ const OPERATIONS = {
   strategies_validate: strategies.validate,
   strategies_scan: strategies.scan,
   strategies_recent: strategies.recent,
+  order_plan: strategies.plan,
   market_snapshot: marketSnapshot.snapshot,
   mtf: mtf.mtf,
   blackouts_list: blackouts.list,

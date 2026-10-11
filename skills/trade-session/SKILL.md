@@ -241,7 +241,29 @@ The exit follows the strategy's `exit` (shown in the scan):
 
 Prices are on the tick (MNQ/MES 0.25). Round a stop away from the entry and a
 target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
-numbers in the rationale and the brackets.
+numbers in the rationale and the brackets. The scan's distances are price
+points, not ticks: its summary shows both (`stop 5.25 pts = 21 ticks`).
+
+**The exact numbers come from `order_plan`**, not from your own arithmetic:
+once you have chosen the strategy and the side (the steps above: the trigger,
+the trend rule, the skip rules, the account), call it with them, e.g.
+`order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "orb", "side": "long"}`.
+It is a calculator, not a second opinion: it doesn't choose the setup, the
+side, or whether to trade. It shows its working (the entry reference, the
+stop and target in points and in whole ticks, the stop below a long's entry
+and above a short's, how the size was derived, the dollar risk) and gives
+the `place_order` arguments with the `setup:<name> <side>` rationale. Put its
+stop price, ticks, size, and $ risk in the plan, and explain the plan in your
+own words (why the stop sits there, the R multiple, the exit). Don't
+compute stop prices, ticks, size, or dollar risk by hand. A refusal (the
+strategy isn't a candidate now, or its rules fired the other side) means no
+entry on that strategy and side; never work around it. For a policy verdict,
+call it with the policy strategy's name: it plans exactly the verdict. Its
+size is the most the harness's own rules give (1 for a rules strategy, the
+verdict's for a policy); a smaller size from your plan (a `mixed` read, a
+reversal fade) changes only `size`, and the risk scales with it. A manual
+strategy has no order_plan (its stop is your read of STRATEGY.md): work its
+numbers by the rules above and position-sizing.
 
 ### 5. Verdict
 
@@ -271,7 +293,8 @@ to watch next. After the position closes, run trade-review.
 ```text
 Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium, scan: orb
 candidate long), volume long (rel-vol 1.6x), no events until 14:00, risk budget
-$40/trade. orb skip rules clear. Plan: long 21503.25, stop 21498.00 (1R =
-21 ticks = $10.50), 1 MNQ; exit: trail from +2R (21513.75), giving back 0.5R.
+$40/trade. orb skip rules clear. Plan (numbers from order_plan): long 21503.25,
+stop 21498.00 (1R = 5.25 pts = 21 ticks = $10.50), 1 MNQ; exit: trail from +2R
+(21513.75), giving back 0.5R.
 Verdict APPROVE. Executed with a stop bracket only, stop working.
 ```

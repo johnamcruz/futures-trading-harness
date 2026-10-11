@@ -54,7 +54,7 @@ const TOOLS = [
   },
   {
     name: 'strategies_scan', op: 'strategies_scan', script: 'strategies',
-    description: 'Scan the strategies on a bars file at the harness clock: which setups are candidates on the last closed bar. Returns a summary: the candidates first (side, entry reference, stop distance, min R:R, exit, confluence), then one line per strategy (name, status, timeframe, direction, candidate, why not). name: that strategy\'s full result as JSON; detail: every strategy\'s full result as JSON (large). record also records the fired rules strategies for the order gate\'s trigger check.',
+    description: 'Scan the strategies on a bars file at the harness clock: which setups are candidates on the last closed bar. Returns a summary: the candidates first (side, entry reference, the stop and target in points and in ticks with a contract\'s dollars, min R:R, exit, confluence; order_plan gives the order itself), then one line per strategy (name, status, timeframe, direction, candidate, why not). name: that strategy\'s full result as JSON; detail: every strategy\'s full result as JSON (large). record also records the fired rules strategies for the order gate\'s trigger check.',
     inputSchema: object({
       bars: BARS, symbol: SYMBOL, record: RECORD,
       name: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'One strategy: its full scan result as JSON (rules with ok, detail, mtf, exit).' },
@@ -71,6 +71,19 @@ const TOOLS = [
     args: i => ({ ...pick(i, { bars: 'file', symbol: 'symbol', count: 'count' }), format: i.json === true ? 'json' : 'lines' }),
     bars: ['bars'],
     narrow: 'lower count, or call it without json',
+  },
+  {
+    name: 'order_plan', op: 'order_plan', script: 'strategies',
+    description: 'A calculator for the order arithmetic of a trade you chose (strategy and side are yours, from the skills and STRATEGY.md; it never picks, ranks, or advises): for a strategy that is a candidate on the last closed bar of a bars file (at the harness clock), or a policy strategy\'s live verdict, it shows its working (entry reference, the stop and target in points and whole ticks, prices on the tick with the stop below a long\'s entry and above a short\'s, how the size was derived, $ risk) and gives the exact place_order arguments as JSON, with the rationale tag the order gate reads. It never places an order. Refused, with the reason, when the strategy is not a candidate now, its rules did not fire on that side, or the bars are not on its timeframe or are older than the gate\'s signal age.',
+    inputSchema: object({
+      bars: BARS, symbol: SYMBOL,
+      strategy: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'The strategy you chose, by its registered name (a scan candidate, or a policy strategy for its verdict).' },
+      side: { type: 'string', enum: ['long', 'short'], description: 'The side you chose (refused when the strategy\'s rules did not fire on it).' },
+      accountId: { type: 'integer', minimum: 1, description: 'The broker account\'s id, put into the place_order arguments.' },
+    }, ['bars', 'symbol', 'strategy', 'side']),
+    args: i => pick(i, { bars: 'file', symbol: 'symbol', strategy: 'strategy', side: 'side', accountId: 'accountId' }),
+    bars: ['bars'],
+    narrow: 'the reply is too large to return',
   },
   {
     name: 'market_snapshot', op: 'market_snapshot', script: 'market-snapshot',
