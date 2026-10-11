@@ -127,6 +127,22 @@ test('callTool: the clock is read first where the CLI reads it first; deep argum
   assert.match(d.content[0].text, /^\[harness\] invalid arguments for bars_fetch: timeframe/);
 });
 
+test('callTool: numbers and booleans sent as strings are repaired before validation and reach the operation; out of range still refused', async () => {
+  const home = tmpDir();
+  const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
+  // record "true" reaches bars.js as true (args() reads record === true), and timeframe "3" as minutes.
+  const r = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '3', record: 'true' }, { env: auto });
+  assert.doesNotMatch(r.content[0].text, /invalid arguments/);
+  assert.match(r.content[0].text, /^\[bars\] record: the autonomous runner records the read itself$/m);
+  const out = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '90' }, { env: auto });
+  assert.match(out.content[0].text, /^\[harness\] invalid arguments for bars_fetch: timeframe: minutes per bar, 1 to 60, or "daily" \(got 90\)/);
+  const frac = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '1.5' }, { env: auto });
+  assert.match(frac.content[0].text, /^\[harness\] invalid arguments for bars_fetch: timeframe: .*\(got "1\.5"\)/);
+  const top = await callTool('lessons', { top: '5', json: 'false' }, { env: { FTH_HOME: home, FTH_JOURNAL: path.join(home, 'none.jsonl') } });
+  assert.strictEqual(top.isError, undefined);
+  assert.match(top.content[0].text, /^No instincts yet/);
+});
+
 test('callTool: only bars_fetch loads the user\'s .env (as only bars.js does), into a copy', async () => {
   const home = tmpDir();
   const envFile = path.join(home, 'x.env');

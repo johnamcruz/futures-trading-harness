@@ -72,7 +72,9 @@ any MCP client: `strategies_list`, `strategies_show`, `strategies_validate`,
 (`scripts/lib/harness-tools/index.js`) and returns the CLI's output: its stdout
 with the operation's stderr notes appended, or on failure `isError` with
 `[<script>] <message>`. Arguments are checked against strict schemas
-(`registry.js`; unknown arguments refused); no tool takes an environment, a
+(`registry.js`; unknown arguments refused), after a number or `true`/`false`
+sent as a string is read as the number or boolean the schema takes
+(`repair.js`); no tool takes an environment, a
 working directory, an output path, or a time (the harness clock, read per call
 from the server's environment, decides; a refused replay clock refuses as the
 CLI does). The only paths are bars files: regular `.json` or `.csv` files (never
