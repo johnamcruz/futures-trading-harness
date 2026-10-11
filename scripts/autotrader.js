@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
+const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
@@ -288,7 +288,8 @@ async function replayStep(cfg, dataDir, opts, asked) {
   }
 }
 
-async function main(argv) {
+async function main(rawArgv) {
+  const argv = runnerArgv(rawArgv); // only the runner's own flags: a typo never starts the live loop
   if (argv.includes('--status')) {
     // The watchdog: for cron / launchd / a monitor. Exit 1 pages someone.
     const stale = arg(argv, '--stale-minutes') !== undefined ? Number(arg(argv, '--stale-minutes')) : 10;
@@ -310,8 +311,6 @@ async function main(argv) {
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
   // The harness tools server the cycles use answers with the registry's tools; else no trading (harness-tools/preflight.js).
-  // A bare --once is refused too: asked for one cycle, never the live loop.
-  if (argv.includes('--once') && !['premarket', 'trade', 'eod'].includes(arg(argv, '--once'))) throw new Error('--once must be premarket, trade, or eod');
   const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once, killSwitchFile });
   // A replay step is a pass of the live loop: like it, a failure turns trading off and end of day still runs.
   if (!opts.dryRun && arg(argv, '--once')) await preflight(resolveClock(process.env, { testClock: false }).replay ? null : arg(argv, '--once'));

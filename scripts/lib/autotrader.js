@@ -533,7 +533,43 @@ function cycleResult(output) {
   return matches ? matches[matches.length - 1].trim() : null;
 }
 
+const RUNNER_VALUE_FLAGS = ['--config', '--once', '--symbol', '--stale-minutes'];
+const RUNNER_BOOL_FLAGS = ['--dry-run', '--status'];
+const RUNNER_USAGE = 'usage: autotrader.js --config <file.json> [--once premarket|trade|eod] [--symbol X] [--dry-run] | --status [--stale-minutes N]';
+
+/**
+ * The runner's argv, checked: only its own flags (--flag value or --flag=value), each once, nothing else.
+ * A typo (--dryrun, --ONCE, --dry-run=true) must never fall through to the live autonomous loop.
+ * Returns the argv in the --flag value form.
+ */
+function runnerArgv(argv) {
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < argv.length; i += 1) {
+    const [flag, inline] = String(argv[i]).split(/=(.*)/s);
+    const twice = () => new Error(`${flag} given twice (${RUNNER_USAGE})`);
+    if (RUNNER_VALUE_FLAGS.includes(flag)) {
+      const value = inline !== undefined ? inline : argv[i + 1];
+      if (inline === undefined) i += 1;
+      if (value === undefined || value === '' || String(value).startsWith('--')) throw new Error(`${flag} needs a value (${RUNNER_USAGE})`);
+      if (seen.has(flag)) throw twice();
+      seen.add(flag);
+      out.push(flag, String(value));
+    } else if (RUNNER_BOOL_FLAGS.includes(flag) && inline === undefined) {
+      if (seen.has(flag)) throw twice();
+      seen.add(flag);
+      out.push(flag);
+    } else {
+      throw new Error(`unknown argument: ${String(argv[i]).slice(0, 60)} (${RUNNER_USAGE})`);
+    }
+  }
+  const once = out[out.indexOf('--once') + 1];
+  if (seen.has('--once') && !['premarket', 'trade', 'eod'].includes(once)) throw new Error('--once must be premarket, trade, or eod');
+  return out;
+}
+
 module.exports = {
+  runnerArgv,
   accountText,
   historyText,
   endOfDayAt,

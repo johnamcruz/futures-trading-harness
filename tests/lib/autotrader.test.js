@@ -147,6 +147,19 @@ test('Claude settings that ask or deny order tools are reported', () => {
   assert.deepStrictEqual(claudeOrderToolConflicts([{}, null]), []);
 });
 
+test('runnerArgv: only the runner\'s own flags, as --flag value or --flag=value, each once', () => {
+  const { runnerArgv } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual(runnerArgv(['--config=a.json', '--once=trade', '--symbol', 'MES', '--dry-run']), ['--config', 'a.json', '--once', 'trade', '--symbol', 'MES', '--dry-run']);
+  assert.deepStrictEqual(runnerArgv(['--status', '--stale-minutes', '5']), ['--status', '--stale-minutes', '5']);
+  assert.deepStrictEqual(runnerArgv([]), []);
+  for (const [argv, why] of [
+    [['--dryrun'], /unknown argument: --dryrun/], [['--dry-run=true'], /unknown argument: --dry-run=true/], [['--ONCE', 'trade'], /unknown argument: --ONCE/],
+    [['config.json'], /unknown argument: config\.json/], [['--once'], /--once needs a value/], [['--once', '--dry-run'], /--once needs a value/],
+    [['--once', 'later'], /--once must be premarket, trade, or eod/], [['--once=trade', '--once', 'eod'], /--once given twice/],
+    [['--config', 'a', '--config', 'b'], /--config given twice/], [['--status', '--status'], /--status given twice/],
+  ]) assert.throws(() => runnerArgv(argv), why, argv.join(' '));
+});
+
 test('cycleResult finds the last reported result', () => {
   assert.strictEqual(cycleResult('x\nCYCLE RESULT: planned - a\nCYCLE RESULT: executed - b\n'), 'CYCLE RESULT: executed - b');
   assert.strictEqual(cycleResult('{"result":"done. CYCLE RESULT: no-trade - quiet"}'), 'CYCLE RESULT: no-trade - quiet');
@@ -199,7 +212,20 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   assert.doesNotMatch(bogus.stderr, /harness tools server/);
   const bare = spawnSync(process.execPath, [cli, '--config', config, '--once'], { encoding: 'utf8', env, timeout: 30000 });
   assert.strictEqual(bare.status, 1, 'a bare --once never starts the live loop');
-  assert.match(bare.stderr, /--once must be premarket, trade, or eod/);
+  assert.match(bare.stderr, /--once needs a value/);
+  // Typos never fall through to the live loop: refused before anything runs, the lock never taken.
+  const lockFile = path.join(env.FTH_HOME, 'autotrader.lock');
+  for (const args of [['--dryrun'], ['--dry-run=true'], ['--ONCE', 'trade'], ['--once', 'trade', '--once', 'eod'], ['--symbol']]) {
+    const r = spawnSync(process.execPath, [cli, '--config', config, ...args], { encoding: 'utf8', env, timeout: 30000 });
+    assert.strictEqual(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /unknown argument|given twice|needs a value/, args.join(' '));
+    assert.ok(!fs.existsSync(lockFile), `${args.join(' ')}: no lock taken`);
+  }
+  // --once=trade is --once trade: one manual cycle (refused here by the start check), never the live loop.
+  const inline = spawnSync(process.execPath, [cli, `--config=${config}`, '--once=trade'], { encoding: 'utf8', env, timeout: 30000 });
+  assert.strictEqual(inline.status, 1);
+  assert.match(inline.stderr, /the harness tools server .* does not offer the harness's tools/);
+  assert.ok(!fs.existsSync(lockFile));
   const eod = spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod'], { encoding: 'utf8', env });
   assert.strictEqual(eod.status, 0, eod.stderr);
   assert.match(eod.stderr, /\[autotrader\] warning: the harness tools server/);
