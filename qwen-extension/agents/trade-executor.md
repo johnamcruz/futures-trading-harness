@@ -78,7 +78,10 @@ If an order is blocked (`Blocked by risk guardrail` or `Blocked by trading
 harness`), do not retry, resize, reroute, or relabel it. Report the block
 verbatim to the caller. `[order-pending]` means an earlier order got no clear
 answer and may be live: don't resend it; check `list_open_orders` and
-`get_account_snapshot` (broker-mcp skill, Failures and limits).
+`get_account_snapshot` (broker-mcp skill, Failures and limits). `[replay-clock]`
+means a replayed time is set without a real replay broker: no entry, don't
+retry; exits, protective stops, cancels and `close_position` still work. Tell
+the user to unset `FTH_REPLAY_NOW` or select a real replay broker.
 
 ## Output
 

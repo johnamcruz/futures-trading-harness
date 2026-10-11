@@ -13,10 +13,10 @@ const path = require('path');
 const { harnessHome } = require('../paths');
 const { loadConfig } = require('./config');
 const { resolveJournalPath, readJournalWindow } = require('./journal');
-const { evaluateOrder, evaluateModify, formatBlock } = require('./order-gate');
+const { evaluateOrder, evaluateModify, formatBlock, isRiskReducing } = require('./order-gate');
 const { loadStrategies } = require('./strategies');
 const { loadAccounts } = require('./accounts');
-const { harnessNow, recordNow, ReplayClockError } = require('./harness-now');
+const { resolveClock, createGatewayClock } = require('./harness-now');
 
 function readBlackouts(file) {
   let text;
@@ -37,20 +37,19 @@ function readBlackouts(file) {
 /**
  * Returns { allowed, intent, violations, message, now }. `tool` is the broker tool
  * being called: place_order (default), modify_order, cancel_order, or
- * partial_close_position. `now` defaults to the harness clock (harness-now.js);
- * `now` in the result is the time the checks ran at (null when refused for the clock).
+ * partial_close_position. `clock` is the harness clock (harness-now.js; the
+ * gateway passes the one it pinned, else it is resolved here from env); `now`
+ * overrides its time. `now` in the result is the time the checks ran at.
  */
-function checkOrder(input, { env = process.env, pluginRoot, now = null, tool = 'place_order', transcriptPath = null } = {}) {
-  // FTH_REPLAY_NOW without a replay broker, or unparseable: every gated call is refused, whatever `now` was passed.
-  let clockNow;
-  try {
-    clockNow = harnessNow(env);
-  } catch (err) {
-    if (!(err instanceof ReplayClockError)) throw err;
-    const violations = [{ check: 'replay-clock', message: `${err.message} Meanwhile close_position still flattens a position.` }];
-    return { allowed: false, intent: 'unknown', violations, message: formatBlock(violations), now: null };
+function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = null, tool = 'place_order', transcriptPath = null } = {}) {
+  const c = clock || resolveClock(env);
+  // A refused FTH_REPLAY_NOW (no replay broker, unparseable): no new entry. Risk-reducing actions are judged as
+  // usual, at the wall clock (a refused override means a live broker), so a position can always be protected or closed.
+  if (c.refused && tool === 'place_order' && !isRiskReducing((input || {}).rationale)) {
+    const violations = [{ check: 'replay-clock', message: `${c.refused} Exits, protective stops, stop moves, cancels and close_position still go.` }];
+    return { allowed: false, intent: 'entry', violations, message: formatBlock(violations), now: c.now() };
   }
-  if (!now) now = clockNow;
+  if (!now) now = c.now();
   const config = loadConfig(env);
   // cancel_order and partial_close_position need live account data; only the gateway checks them (account-gate.js).
   if (tool === 'cancel_order' || tool === 'partial_close_position') return { allowed: true, intent: tool === 'cancel_order' ? 'cancel' : 'risk-reducing', violations: [], message: '', now };
@@ -101,4 +100,4 @@ function logDecision(entry, env = process.env) {
 }
 
 // The gate's clock too (harness-now.js), so the gateway takes its time where it takes its checks.
-module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, harnessNow, recordNow };
+module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, createGatewayClock };

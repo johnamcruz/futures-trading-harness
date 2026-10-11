@@ -43,8 +43,11 @@ in the last 5 bars"). A scan result's `detail` carries the detectors' state:
 a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
 fire, and cisd_ote's `hadSweep` and displacement.
 
-`scan` judges sessions at the current time; pass `--now <ISO>` to judge them
-at another time (e.g. the bar's close when replaying a file). It reads the
+`scan` judges sessions at the current time (the harness clock: a replay
+broker's replayed time when `FTH_REPLAY_NOW` is set); pass `--now <ISO>` to
+judge them at another time (e.g. the bar's close when replaying a file). With
+`FTH_REPLAY_NOW` set but no real replay broker, or not an ISO 8601 UTC time,
+`scan` refuses even with `--now` (tell the user). It reads the
 signal on the file's last closed bar and doesn't know the file's timeframe:
 read results only for strategies whose timeframe is the file's (a 3m strategy
 on 1-minute bars, or the reverse, is not a signal), and only when that last

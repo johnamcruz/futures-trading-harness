@@ -46,7 +46,7 @@ harness (agents, skills, order gate, runner, CLIs)
   | `journal` / `journalEnv` | The journal file it writes (the variable wins) |
   | `env` | The variables it reads (credentials, guardrails), forwarded by harnesses |
   | `paperEnv` | What a paper run sets so the server refuses every order |
-  | `replay` | `true` only for a simulated broker that replays history: the harness then takes its clock from `FTH_REPLAY_NOW` (see [HARNESS-DESIGN.md](HARNESS-DESIGN.md), Replay clock). A broker the defaults ship without it stays live whatever an override says |
+  | `replay` | `true` only for a simulated broker that replays history: the harness may then take its clock from `FTH_REPLAY_NOW`, if the broker shares no server or variables with a live one and its server's `get_server_config` confirms `replay: true` (see [HARNESS-DESIGN.md](HARNESS-DESIGN.md), Replay clock). A broker the defaults ship without it stays live whatever an override says |
 
   Switching brokers is a config change. Its settings go in
   `~/.futures-trading-harness/.env`, which the gateway loads.
@@ -110,8 +110,11 @@ Input: none.
 
 Result: `{ apiUrl, username, tradingEnabled, allowedAccountIds (integer[] | "any"),
 allowedSymbols (string[] | "any"), maxOrderSize, maxPositionSize,
-maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime }`.
-Never returns credentials.
+maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime, replay? }`.
+Never returns credentials. `replay` (optional boolean) is `true` only for a
+replay server, which simulates history; its `serverTime` is then the replayed
+time. Live servers omit it. The gateway honors `FTH_REPLAY_NOW` only when the
+server reports `replay: true` and a `serverTime` within 5 minutes of it.
 
 #### `list_accounts` (read)
 

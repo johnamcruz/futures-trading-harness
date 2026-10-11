@@ -709,37 +709,69 @@ test('replay clock: with a replay broker every check runs at FTH_REPLAY_NOW, not
   assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...env, FTH_TEST_NOW: wednesday }, pluginRoot: root }).violations, []);
 });
 
-test('replay clock: FTH_REPLAY_NOW without a replay broker, or unparseable, refuses every gated call (unskippable, also autonomous)', () => {
+test('replay clock: a refused FTH_REPLAY_NOW (no replay broker, unparseable) refuses entries only (unskippable, also autonomous); risk-reducing actions are judged at the wall clock', () => {
   const { checkOrder } = require('../../scripts/lib/trading/check-order');
   const live = replaySetup({ replay: false });
   const sim = replaySetup();
-  const calls = [
-    ['place_order', ANYTIME],
+  const wall = '2026-10-07T14:30:00.000Z';
+  const riskReducing = [
     ['place_order', { ...entryOrder({ rationale: '[exit] flatten' }), side: 'sell' }],
+    ['place_order', { ...entryOrder({ rationale: '[protect] stop for the long at 21480' }), side: 'sell', type: 'stop', stopPrice: 21480 }],
     ['modify_order', { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }],
     ['cancel_order', { accountId: 1, orderId: 9 }],
     ['partial_close_position', { accountId: 1, contractId: CONTRACT, size: 1 }],
   ];
   const envs = [
-    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z' }, /"sim" is not a replay broker/],
-    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z', FTH_AUTONOMOUS: '1' }, /not a replay broker/],
-    [live, { FTH_REPLAY_NOW: '2026-10-07T14:30:00Z', FTH_ORDER_GATE_SKIP: 'replay-clock,market-hours,plan-required' }, /not a replay broker/],
+    [live, { FTH_REPLAY_NOW: '2026-10-08T14:30:00Z' }, /"sim" is not a replay broker/],
+    [live, { FTH_REPLAY_NOW: '2026-10-08T14:30:00Z', FTH_AUTONOMOUS: '1' }, /not a replay broker/],
+    [live, { FTH_REPLAY_NOW: '2026-10-08T14:30:00Z', FTH_ORDER_GATE_SKIP: 'replay-clock,market-hours,plan-required' }, /not a replay broker/],
     [sim, { FTH_REPLAY_NOW: 'yesterday' }, /not an ISO 8601 UTC time/],
   ];
   for (const [s, extra, why] of envs) {
-    for (const [tool, input] of calls) {
-      // Even with a time passed in (as a replay worker may): the clock's refusal comes first.
-      for (const now of [undefined, NOW]) {
-        const r = checkOrder(input, { env: { ...s.env, FTH_TEST_NOW: '2026-10-07T14:30:00Z', ...extra }, pluginRoot: s.root, tool, now });
-        assert.strictEqual(r.allowed, false, `${tool} ${JSON.stringify(extra)}`);
-        assert.deepStrictEqual(r.violations.map(v => v.check), ['replay-clock']);
-        assert.match(r.message, why);
-        assert.match(r.message, /close_position still flattens/);
-        assert.strictEqual(r.now, null);
-      }
+    const env = { ...s.env, FTH_TEST_NOW: wall, ...extra };
+    // Even with a time passed in (as a replay worker may): the entry is refused first.
+    for (const now of [undefined, NOW]) {
+      const r = checkOrder(ANYTIME, { env, pluginRoot: s.root, now });
+      assert.strictEqual(r.allowed, false, JSON.stringify(extra));
+      assert.deepStrictEqual(r.violations.map(v => v.check), ['replay-clock']);
+      assert.match(r.message, why);
+      assert.match(r.message, /close_position still go/);
+    }
+    for (const [tool, input] of riskReducing) {
+      const r = checkOrder(input, { env, pluginRoot: s.root, tool });
+      assert.deepStrictEqual(r.violations, [], `${tool} ${input.rationale || input.reason || ''} ${JSON.stringify(extra)}`);
+      if (extra.FTH_AUTONOMOUS !== '1') assert.ok(Math.abs(r.now.getTime() - Date.parse(wall)) < 60000, 'judged at the wall clock (the suite\'s), not the refused replay time');
     }
   }
-  // Control: the same calls without the override are judged normally.
-  assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00Z' }, pluginRoot: live.root }).violations, []);
-  assert.strictEqual(checkOrder(calls[3][1], { env: live.env, pluginRoot: live.root, tool: 'cancel_order' }).allowed, true);
+  // Control: the same entry without the override is judged normally.
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...live.env, FTH_TEST_NOW: wall }, pluginRoot: live.root }).violations, []);
+});
+
+test('replay clock: a broker labelled replay that looks live is refused (same server, entry variable, or a live broker\'s variables)', () => {
+  const path = require('path');
+  const fs = require('fs');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { root, env } = replaySetup();
+  const file = path.join(env.FTH_HOME, 'brokers.json');
+  const base = JSON.parse(fs.readFileSync(file, 'utf8')).brokers.sim;
+  const withSim = (sim, others = {}) => fs.writeFileSync(file, JSON.stringify({ broker: 'sim', brokers: { ...others, sim: { ...base, ...sim } } }));
+  const at = { ...env, FTH_TEST_NOW: '2026-10-10T15:00:00Z', FTH_REPLAY_NOW: '2026-10-07T14:30:00Z' };
+  const refused = (why, extraEnv = {}) => {
+    const r = checkOrder(ANYTIME, { env: { ...at, ...extraEnv }, pluginRoot: root });
+    assert.deepStrictEqual(r.violations.map(v => v.check), ['replay-clock'], r.message);
+    assert.match(r.message, why);
+  };
+  withSim({ command: ['node', '/srv/projectx-mcp/dist/index.js'] }, { mylive: { command: ['node', '/srv/projectx-mcp/dist/index.js'] } });
+  refused(/looks live: it starts the same server as the live broker "mylive"/);
+  withSim({ command: ['/usr/bin/node', '/srv/projectx-mcp/dist/index.js'] });
+  refused(/looks live: it starts the same server \(.*index\.js\) as the live broker "topstepx"/, { PROJECTX_MCP_ENTRY: '/srv/projectx-mcp/dist/index.js' });
+  withSim({ command: null, entryEnv: 'PROJECTX_MCP_ENTRY' });
+  refused(/takes its server from PROJECTX_MCP_ENTRY, as the live broker "topstepx" does/); // (set, it resolves to the same server: above)
+  withSim({ env: ['SIM_SPEED', 'PROJECTX_API_KEY'] });
+  refused(/reads the live broker "topstepx"'s variables \(PROJECTX_API_KEY\)/);
+  withSim({ journalEnv: 'PROJECTX_JOURNAL_PATH' });
+  refused(/variables \(PROJECTX_JOURNAL_PATH\)/);
+  // Control: a replay broker of its own is honored.
+  withSim({ env: ['SIM_SPEED'] });
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: at, pluginRoot: root }).violations, []);
 });

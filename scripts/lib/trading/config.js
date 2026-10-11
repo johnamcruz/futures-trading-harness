@@ -34,6 +34,7 @@ const GATE_CHECKS = [
   'daily-loss-count',
   'review-before-next-entry',
   'max-entries',
+  'replay-clock', // hard: listed for completeness, never skippable
 ];
 
 function intEnv(env, name, fallback, { min = 0 } = {}) {

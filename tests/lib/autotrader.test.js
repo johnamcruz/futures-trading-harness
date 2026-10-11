@@ -444,3 +444,25 @@ test('CLI: the runner decides on the harness clock: a replay broker\'s FTH_REPLA
   assert.strictEqual(garbage.status, 1);
   assert.match(garbage.stderr, /not an ISO 8601 UTC time/);
 });
+
+test('CLI: the runner never takes the test suite\'s FTH_TEST_NOW, keeps its state on the replayed day, and refuses its loop with FTH_REPLAY_NOW', () => {
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: ['true', '{prompt}'] }));
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], replay: true } } }));
+  const cli = path.join(ROOT, 'scripts', 'autotrader.js');
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  const run = (extra, args = ['--dry-run']) => spawnSync(process.execPath, [cli, '--config', config, ...args], { encoding: 'utf8', env: { ...env, ...extra }, timeout: 20000 });
+  // Wednesday 08:00 ET is premarket on the replayed clock; the test clock at that time is ignored (a live runner).
+  assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: premarket/);
+  assert.doesNotMatch(run({ NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T12:00:00Z' }).stdout, /premarket/);
+  // An unreadable state file: manage-only for the rest of the replayed day (not a new day's premarket).
+  fs.writeFileSync(path.join(dir, 'autotrader-state.json'), '{ broken');
+  assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: manage/);
+  fs.unlinkSync(path.join(dir, 'autotrader-state.json'));
+  // The long-running loop: refused before the lock, the broker, or a cycle.
+  const loop = run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, []);
+  assert.strictEqual(loop.status, 1);
+  assert.match(loop.stderr, /FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock.*--once or --dry-run/);
+  assert.ok(!fs.existsSync(path.join(dir, 'autotrader.lock')) && !fs.existsSync(path.join(dir, 'logs')), 'nothing started');
+});

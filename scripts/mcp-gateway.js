@@ -25,7 +25,7 @@ require('./lib/env-file').loadEnvForCli('mcp-gateway');
 
 const path = require('path');
 const { spawn } = require('child_process');
-const { checkOrder, logDecision, harnessNow, recordNow } = require('./lib/trading/check-order');
+const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
 const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
@@ -84,11 +84,11 @@ function main(argv) {
   let command = sep === -1 ? argv : argv.slice(sep + 1);
   // Behind the contract translator (the configured broker): one standard name per contract for the gate (canonicalArgs).
   const canon = command.length === 0 ? canonicalArgs : a => a;
-  // No command: the broker MCP server named in the broker config (broker/config.js).
+  let broker = null; // the configured broker whose server runs here (null: a server from the command line)
   if (command.length === 0) {
     try {
-      // Behind the contract translator: the gateway and its clients see standard contract names only.
-      command = translatedCommand(activeBroker(process.env));
+      // The broker in the broker config (broker/config.js), behind the contract translator: standard contract names only.
+      command = translatedCommand(broker = activeBroker(process.env));
     } catch (err) {
       process.stderr.write(`[mcp-gateway] ${err.message}\n`);
       process.exit(2);
@@ -101,6 +101,7 @@ function main(argv) {
   const write = line => process.stdout.write(`${line}\n`);
   const toChild = line => { if (child.stdin.writable) child.stdin.write(`${line}\n`); };
   const caller = childCaller(toChild);
+  const clock = createGatewayClock(process.env, { broker, fromArgv: !broker, call: (n, a) => caller.call(n, a) }); // pinned once (harness-now.js)
   // Market orders let through recently, until the account reflects them (see pendingNet).
   let ledger = [];
   const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
@@ -126,9 +127,8 @@ function main(argv) {
 
   const check = async (sentArgs, tool, id) => {
     const args = canon(sentArgs); // one name per contract for the gate and its ledger
-    const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, tool });
-    const now = base.now; // the harness clock (harness-now.js); null: refused for the replay clock, every tool
-    if (!now) return base;
+    const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, tool, clock: await clock.ready() });
+    const now = base.now;
     ledger = ledger.filter(e => now.getTime() - e.at < LEDGER_TTL_MS);
     if (tool !== 'place_order') {
       // cancel, modify, partial close: against the account, counting recent orders and orders of unknown outcome.
@@ -152,9 +152,9 @@ function main(argv) {
     if (entry && unknown.length) violations.push(tracker.pendingViolation(unknown, now, lookupFailed));
     // The account reads take time: an entry checked just before the close
     // must still be inside the session when it is sent.
-    const late = isRiskReducing(args.rationale) ? null : marketClosed(harnessNow(), loadConfig(process.env));
+    const late = isRiskReducing(args.rationale) ? null : marketClosed(clock.now(), loadConfig(process.env));
     if (late && !violations.some(v => v.check === 'market-hours')) violations.push({ check: 'market-hours', message: late });
-    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: recordNow(process.env).getTime() });
+    if (violations.length === 0 && id !== undefined) sentNet.set(id, { args, observedNet: extra.observedNet, observedRootNet: extra.observedRootNet, sentAt: clock.now().getTime() });
     return { allowed: violations.length === 0, violations, message: violations.length ? formatBlock(violations) : '' };
   };
 
@@ -194,19 +194,19 @@ function main(argv) {
     if (closeEntry) {
       // Counted since it was sent: only a refusal (success: false) drops it; an error reply is an unknown outcome and stays.
       if (closeRefused(response)) ledger = ledger.filter(e => e !== closeEntry);
-      else if ((resultJson(response) || {}).success === true) Object.assign(closeEntry, { at: recordNow(process.env).getTime(), unconfirmed: false });
+      else if ((resultJson(response) || {}).success === true) Object.assign(closeEntry, { at: clock.now().getTime(), unconfirmed: false });
       return;
     }
     const placed = resultJson(response);
     if (!isRiskReducing(args.rationale) && placed && placed.orderId !== undefined && placed.orderId !== null) {
-      recordEntryOrder(process.env, placed.orderId, args, sent.sentAt || recordNow(process.env).getTime(), logErr);
+      recordEntryOrder(process.env, placed.orderId, args, sent.sentAt || clock.now().getTime(), logErr);
     }
     if (observedNet === null) return;
     // Every order type: a marketable limit or stop fills at once too. While
     // it rests it shows in list_open_orders and the ledger skips it.
     const sign = String(args.side).toLowerCase() === 'buy' ? 1 : -1;
     const orderId = placed && placed.orderId !== undefined && placed.orderId !== null ? String(placed.orderId) : null;
-    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: recordNow(process.env).getTime(), sentAt: sent.sentAt, orderId });
+    ledger.push({ contractId: args.contractId, root: contractRoot(args.contractId), sign, size: Number(args.size), netBefore: observedNet, rootNetBefore: observedRootNet, at: clock.now().getTime(), sentAt: sent.sentAt, orderId });
   };
   const log = e => logDecision(e, process.env);
 
@@ -250,7 +250,7 @@ function main(argv) {
       for (const m of [].concat(parsed || [])) if (m && m.method !== undefined && m.id !== undefined) inFlight.add(m.id);
       // Every place_order goes out with a customTag and a record on disk first, so an unknown
       // outcome (no reply, or this gateway gone) is found again in the broker's orders.
-      const tagged = tracker.tagRequest(parsed, { observed: parsed && parsed.id !== undefined ? sentNet.get(parsed.id) : null, now: recordNow(process.env) });
+      const tagged = tracker.tagRequest(parsed, { observed: parsed && parsed.id !== undefined ? sentNet.get(parsed.id) : null, now: clock.now() });
       if (tagged.refuse) {
         const args = parsed.params.arguments || {};
         if (parsed.id !== undefined) write(JSON.stringify(blockedResponse(parsed.id, formatBlock([tagged.refuse]))));
@@ -270,7 +270,7 @@ function main(argv) {
         if (!close || !args.contractId) continue;
         try {
           const positions = parseToolJson(await caller.call('list_open_positions', { accountId: args.accountId }), 'list_open_positions');
-          const closeEntry = closeLedgerEntry(close[1], args, positions, recordNow(process.env));
+          const closeEntry = closeLedgerEntry(close[1], args, positions, (await clock.ready()).now());
           if (closeEntry) { ledger.push(closeEntry); sentNet.set(m.id, { closeEntry }); }
         } catch (err) {
           process.stderr.write(`[mcp-gateway] could not read the position before ${close[1]}: ${err.message}\n`);

@@ -71,3 +71,23 @@ test('blackouts.js, combine.js and mtf.js --record take the replayed time', () =
   assert.strictEqual(mtf.status, 0, mtf.stderr);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(sim, 'mtf', 'MNQ.json'), 'utf8')).recordedAt, '2026-04-28T04:15:30.000Z');
 });
+
+test('bars.js: fetches bars up to the replayed time and records the trend read at it', () => {
+  const dir = tmpDir();
+  const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE], replay: true } } }));
+  const out = path.join(dir, 'MNQ-1m.json');
+  const run = extra => node('bars.js', ['--symbol', 'MNQ', '--timeframe', '1', '--count', '10', '--out', out, '--record'], { FTH_HOME: dir, ...extra });
+  // The fake serves 1-minute bars from 13:00 to 13:09 and never one after the request's endTime.
+  const replayed = run({ FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
+  assert.strictEqual(replayed.status, 0, replayed.stderr);
+  assert.match(replayed.stdout, /wrote 6 1-minute bars .*last bar 2026-10-07T13:05:00.000Z/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'mtf', 'MNQ.json'), 'utf8')).recordedAt, '2026-10-07T13:05:30.000Z');
+  const wall = run({});
+  assert.strictEqual(wall.status, 0, wall.stderr);
+  assert.match(wall.stdout, /wrote 10 1-minute bars .*last bar 2026-10-07T13:09:00.000Z/);
+  // Refused with a live broker: exits before asking the broker for anything.
+  const live = node('bars.js', ['--symbol', 'MNQ', '--count', '10', '--out', out], { FTH_HOME: tmpDir(), FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
+  assert.strictEqual(live.status, 1);
+  assert.match(live.stderr, /not a replay broker/);
+});

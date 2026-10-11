@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { harnessNow, recordNow, ReplayClockError } = require('../../scripts/lib/trading/harness-now');
+const { harnessNow, recordNow, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError } = require('../../scripts/lib/trading/harness-now');
 const { tmpDir } = require('../helpers');
 
 const REPLAY = '2026-03-02T15:30:00Z';
@@ -80,4 +80,66 @@ test('recordNow: the replay time when honored, else the wall clock; never throws
   assert.ok(near(recordNow({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY })));
   assert.ok(near(recordNow({ FTH_HOME: home, FTH_REPLAY_NOW: 'garbage' })));
   assert.ok(near(recordNow({ FTH_HOME: home })));
+});
+
+test('harnessNow: testClock false never takes FTH_TEST_NOW (the runner trades live)', () => {
+  const far = '2020-01-01T00:00:00Z';
+  assert.ok(near(harnessNow({ FTH_TEST_NOW: far, NODE_ENV: 'test' }, { testClock: false })));
+  assert.ok(!near(harnessNow({ FTH_TEST_NOW: far, NODE_ENV: 'test' })));
+  // A replay broker's time is still honored.
+  assert.strictEqual(harnessNow({ FTH_HOME: homeWith(SIM, 'sim'), FTH_REPLAY_NOW: REPLAY }, { testClock: false }).toISOString(), '2026-03-02T15:30:00.000Z');
+});
+
+test('resolveClock: a refused override is the wall clock with the reason; a broker passed in is judged instead of the config', () => {
+  const live = resolveClock({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY });
+  assert.strictEqual(live.replay, false);
+  assert.match(live.refused, /not a replay broker.*Unset FTH_REPLAY_NOW/);
+  assert.ok(near(live.now()));
+  const given = resolveClock({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY }, { broker: { name: 'sim', command: ['node', 'sim.js'], replay: true, env: [] } });
+  assert.strictEqual(given.now().toISOString(), '2026-03-02T15:30:00.000Z');
+  assert.deepStrictEqual([resolveClock({}).replay, resolveClock({}).refused], [false, null]);
+});
+
+const SIM_BROKER = { name: 'sim', command: ['node', 'sim.js'], replay: true, env: [] };
+const reply = obj => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] });
+
+test('pinGatewayClock: honors FTH_REPLAY_NOW only when the started broker and its server both say replay, at that time', async () => {
+  const env = { FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY };
+  const calls = [];
+  const call = server => async (name, args) => { calls.push([name, args]); return server; };
+  const ok = await pinGatewayClock(env, { broker: SIM_BROKER, call: call(reply({ replay: true, serverTime: '2026-03-02T15:33:00Z' })) });
+  assert.strictEqual(ok.now().toISOString(), '2026-03-02T15:30:00.000Z');
+  assert.deepStrictEqual(calls, [['get_server_config', {}]]);
+  const refused = async (opts, why) => {
+    const c = await pinGatewayClock(env, { broker: SIM_BROKER, ...opts });
+    assert.strictEqual(c.replay, false);
+    assert.match(c.refused, why);
+    assert.ok(near(c.now()), 'the wall clock');
+  };
+  await refused({ fromArgv: true, broker: null, call: call(reply({ replay: true, serverTime: REPLAY })) }, /server given on its command line/);
+  await refused({ call: call(reply({ serverTime: REPLAY })) }, /does not report itself a replay server/);
+  await refused({ call: call(reply({ replay: 'true', serverTime: REPLAY })) }, /does not report itself a replay server/);
+  await refused({ call: call(reply({ replay: true, serverTime: '2026-03-02T15:36:00Z' })) }, /not within 5 min/);
+  await refused({ call: call(reply({ replay: true })) }, /not within 5 min/);
+  await refused({ call: call({ content: [{ type: 'text', text: 'boom' }], isError: true }) }, /could not be read \(boom\)/);
+  await refused({ call: async () => { throw new Error('get_server_config timed out'); } }, /could not be read \(get_server_config timed out\)/);
+  await refused({ call: call({ content: [{ type: 'text', text: 'not json' }] }) }, /could not be read/);
+  // Not a replay broker: the server isn't even asked.
+  calls.length = 0;
+  await refused({ broker: { ...SIM_BROKER, replay: false }, call: call(reply({ replay: true, serverTime: REPLAY })) }, /not a replay broker/);
+  assert.deepStrictEqual(calls, []);
+  // Unset: the wall clock, no question asked.
+  const wall = await pinGatewayClock({}, { broker: SIM_BROKER, call: call(reply({})) });
+  assert.deepStrictEqual([wall.replay, wall.refused, calls.length], [false, null, 0]);
+});
+
+test('createGatewayClock: pinned once for its lifetime; before that, now() is the wall clock', async () => {
+  let asked = 0;
+  const clock = createGatewayClock({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY }, { broker: SIM_BROKER, call: async () => { asked += 1; return reply({ replay: true, serverTime: REPLAY }); } });
+  assert.ok(near(clock.now()));
+  const [a, b] = await Promise.all([clock.ready(), clock.ready()]);
+  assert.strictEqual(a, b);
+  await clock.ready();
+  assert.strictEqual(asked, 1);
+  assert.strictEqual(clock.now().toISOString(), '2026-03-02T15:30:00.000Z');
 });

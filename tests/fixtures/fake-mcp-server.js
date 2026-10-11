@@ -5,9 +5,11 @@
 // is answered with the method and tool name it received, so tests can see what
 // the gateway forwarded. FAKE_DELAY_MS delays those other replies; FAKE_DROP=<tool>
 // never answers that tool (a lost reply); FAKE_PLACE_ERROR=<text> answers place_order with an
-// isError result of that text; FAKE_ARGS=<file> logs each tools/call as a JSON line.
+// isError result of that text; FAKE_ARGS=<file> logs each tools/call as a JSON line. When set, FAKE_SERVER_CONFIG,
+// FAKE_CONTRACTS and FAKE_PLACE_RESULT answer get_server_config, search_contracts and place_order.
 const fs = require('fs');
 const ACCOUNT = { list_open_positions: 'FAKE_POSITIONS', list_open_orders: 'FAKE_ORDERS', search_trades: 'FAKE_TRADES', search_orders: 'FAKE_SEARCH_ORDERS' };
+const OPTIONAL = { get_server_config: 'FAKE_SERVER_CONFIG', search_contracts: 'FAKE_CONTRACTS', place_order: 'FAKE_PLACE_RESULT' };
 let buffer = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => {
@@ -21,11 +23,12 @@ process.stdin.on('data', chunk => {
       const name = msg.params && msg.params.name;
       if (process.env.FAKE_ARGS && name) fs.appendFileSync(process.env.FAKE_ARGS, `${JSON.stringify({ name, args: msg.params.arguments })}\n`);
       if (name && name === process.env.FAKE_DROP) continue;
-      const text = ACCOUNT[name] ? (process.env[ACCOUNT[name]] || '[]') : `forwarded:${msg.method}${name ? `:${name}` : ''}`;
+      const text = ACCOUNT[name] ? (process.env[ACCOUNT[name]] || '[]')
+        : OPTIONAL[name] && process.env[OPTIONAL[name]] ? process.env[OPTIONAL[name]] : `forwarded:${msg.method}${name ? `:${name}` : ''}`;
       const isError = name === 'place_order' && process.env.FAKE_PLACE_ERROR ? true : undefined;
       const body = isError ? process.env.FAKE_PLACE_ERROR : text;
       const reply = () => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { content: [{ type: 'text', text: body }], isError } })}\n`);
-      const delay = ACCOUNT[name] ? 0 : Number(process.env.FAKE_DELAY_MS || 0);
+      const delay = ACCOUNT[name] || name === 'get_server_config' ? 0 : Number(process.env.FAKE_DELAY_MS || 0);
       if (delay) setTimeout(reply, delay);
       else reply();
     }
