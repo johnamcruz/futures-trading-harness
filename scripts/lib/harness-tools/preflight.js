@@ -2,15 +2,25 @@
 
 /**
  * The runner's start check of the harness-tools server (scripts/autotrader.js,
- * live and --once): start the server the harness runs will start, with their
- * environment, and compare its tools/list with the registry (registry.js). A
- * server that doesn't start, or offers other tools or schemas (a stale or
- * foreign `harness` server), refuses the run before any cycle: the skills
- * name these tools, and a cycle without them can't read its bars or strategies.
+ * live and --once): start this checkout's server (scripts/harness-tools-mcp.js)
+ * with the cycles' environment and compare its tools/list with the registry
+ * (registry.js). It catches a server that doesn't start or answer (a broken
+ * checkout, a module that fails to load, a Node too old) and one that offers
+ * other tools. It does not read which server each harness's own settings
+ * register as `harness` (the installer writes those; check-headless.js probes
+ * them for real).
+ *
+ * On a failure (startPreflight): a manual trade or premarket run is refused; a
+ * manual end of day only warns (flattening needs only the broker); the live
+ * loop turns trading off with the kill switch and keeps running, so end of day,
+ * the catch-up of a missed one, and housekeeping still flatten and cancel.
  *
  *   compareTools(got, want)                     -> [problem]
  *   checkToolsServer({ root, env, timeoutMs })  resolves, or rejects with what is wrong
+ *   startPreflight({ root, env, once, killSwitchFile, warn, check })
  */
+
+const fs = require('fs');
 
 const path = require('path');
 const { createMcpClient } = require('../broker/mcp-client');
@@ -49,4 +59,23 @@ async function checkToolsServer({ root, env = process.env, timeoutMs = 15000, co
   return tools.length;
 }
 
-module.exports = { compareTools, checkToolsServer };
+async function startPreflight({ root, env, once = null, killSwitchFile, warn = s => process.stderr.write(s), check = checkToolsServer }) {
+  try {
+    await check({ root, env });
+    return 'ok';
+  } catch (err) {
+    if (once && once !== 'eod') throw err;
+    if (once === 'eod') {
+      warn(`[autotrader] warning: ${err.message}\n`);
+      return 'warned';
+    }
+    // Appended, as the workspace guard does: a kill switch already on keeps its other reasons.
+    // If even that fails, the start fails (trading can't be turned off, so it doesn't start).
+    fs.mkdirSync(path.dirname(killSwitchFile), { recursive: true });
+    fs.appendFileSync(killSwitchFile, `${err.message}. Fix it, then remove this file to resume trading.\n`);
+    warn(`[autotrader] ${err.message}: trading is off (kill switch ${killSwitchFile}); end of day and housekeeping still run\n`);
+    return 'kill-switch';
+  }
+}
+
+module.exports = { compareTools, checkToolsServer, startPreflight };

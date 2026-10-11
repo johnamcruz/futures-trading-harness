@@ -126,7 +126,7 @@ that timeframe again. Other timeframes they fetch with `bars.js`.
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
 (risk-manager, trade-executor, …), never to a generic, forked, or other-CLI
-agent: autonomous runs allow only the harness roles. Launch each so you wait
+agent: autonomous runs may allow only the harness roles. Launch each so you wait
 for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents, play each role yourself in turn. Pass symbol, contractId, and the

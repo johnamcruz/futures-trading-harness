@@ -126,7 +126,9 @@ function planCodex({ root, home, broker }) {
   const file = path.join(home, '.codex', 'config.toml');
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   for (const name of [SERVER_NAME, HARNESS_SERVER]) {
-    if (new RegExp(`^\\s*\\[mcp_servers\\.${name}\\]`, 'm').test(outsideBlock(current))) {
+    // [mcp_servers.x], [mcp_servers."x"], [mcp_servers.x.env], or a dotted key (mcp_servers.x.command = ...).
+    const q = `\\s*\\.\\s*(?:${name}|"${name}"|'${name}')\\s*`;
+    if (new RegExp(`^\\s*(?:\\[\\s*mcp_servers${q}[\\].]|mcp_servers${q}\\.)`, 'm').test(outsideBlock(current))) {
       throw new Error(`${file} already defines [mcp_servers.${name}] outside the harness block; remove it first`);
     }
   }
@@ -175,8 +177,10 @@ function mergeQwenSettings(settings, root) {
   if (existingTools && !isTools(existingTools)) {
     throw new Error(`settings.json already has an mcpServers.${HARNESS_SERVER} that is not the harness tools server; remove it first`);
   }
-  const tools = { command: 'node', args: harnessToolsArgs(root), timeout: 60000 };
-  next.mcpServers = { ...servers, [SERVER_NAME]: { ...(existing || {}), ...ours }, [HARNESS_SERVER]: { ...(existingTools || {}), ...tools } };
+  // Ours alone: nothing of an older entry (an env that unsets the lock-down, an httpUrl Qwen would prefer,
+  // a tool filter) carries over, except whether the user trusts it.
+  const tools = { command: 'node', args: harnessToolsArgs(root), timeout: 60000, ...(existingTools && typeof existingTools.trust === 'boolean' ? { trust: existingTools.trust } : {}) };
+  next.mcpServers = { ...servers, [SERVER_NAME]: { ...(existing || {}), ...ours }, [HARNESS_SERVER]: tools };
   return next;
 }
 

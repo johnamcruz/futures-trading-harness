@@ -6,7 +6,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { compareTools, checkToolsServer } = require('../../scripts/lib/harness-tools/preflight');
+const fs = require('fs');
+const { compareTools, checkToolsServer, startPreflight } = require('../../scripts/lib/harness-tools/preflight');
 const { listTools } = require('../../scripts/lib/harness-tools/registry');
 const { tmpDir } = require('../helpers');
 
@@ -31,4 +32,23 @@ test('checkToolsServer: the real server passes; a foreign server or one that nev
   await assert.rejects(() => checkToolsServer({ root: ROOT, env, args: [FAKE_BROKER] }), /does not offer the harness's tools \(missing strategies_list; .*; and \d+ more\); update the checkout/);
   await assert.rejects(() => checkToolsServer({ root: ROOT, env, args: ['-e', 'process.exit(5)'] }), /did not answer tools\/list: MCP server exited \(code 5\)/);
   await assert.rejects(() => checkToolsServer({ root: ROOT, env, args: ['-e', 'setInterval(() => {}, 1000)'], timeoutMs: 500 }), /did not answer tools\/list: .*no answer/);
+});
+
+test('startPreflight: a manual trade run is refused, a manual end of day warns, the live loop turns trading off and runs on', async () => {
+  const fail = async () => { throw new Error('the harness tools server (x) did not answer tools/list: boom'); };
+  const ok = async () => 13;
+  const dir = tmpDir();
+  const killSwitchFile = path.join(dir, 'STOP');
+  const warned = [];
+  const warn = s => warned.push(s);
+  assert.strictEqual(await startPreflight({ root: ROOT, env: {}, once: 'trade', killSwitchFile, warn, check: ok }), 'ok');
+  await assert.rejects(() => startPreflight({ root: ROOT, env: {}, once: 'trade', killSwitchFile, warn, check: fail }), /boom/);
+  await assert.rejects(() => startPreflight({ root: ROOT, env: {}, once: 'premarket', killSwitchFile, warn, check: fail }), /boom/);
+  assert.ok(!fs.existsSync(killSwitchFile));
+  assert.strictEqual(await startPreflight({ root: ROOT, env: {}, once: 'eod', killSwitchFile, warn, check: fail }), 'warned');
+  assert.ok(!fs.existsSync(killSwitchFile), 'a manual end of day leaves trading as it was');
+  fs.writeFileSync(killSwitchFile, 'operator: paused\n');
+  assert.strictEqual(await startPreflight({ root: ROOT, env: {}, once: null, killSwitchFile, warn, check: fail }), 'kill-switch');
+  assert.match(fs.readFileSync(killSwitchFile, 'utf8'), /^operator: paused\nthe harness tools server .*boom\. Fix it, then remove this file to resume trading\.\n$/, 'appended: the other reason is kept');
+  assert.match(warned.join(''), /trading is off \(kill switch .*\); end of day and housekeeping still run/);
 });

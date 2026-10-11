@@ -22,11 +22,12 @@ const run = (args, extra = {}) => {
 };
 
 test('check-headless: every harness reaches the harness tools and the role; the shell result is reported', { timeout: 180000 }, () => {
-  const r = run(['--bin', FAKE]);
+  // Qwen writes the workspace allowlist first: covered in tests/lib/headless-check.test.js, not here (the repo's workspace).
+  const r = run(['--harness', 'claude,codex', '--bin', FAKE]);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
-  for (const h of ['claude', 'codex', 'qwen']) assert.match(r.stdout, new RegExp(`^${h}: ok$`, 'm'));
-  assert.strictEqual((r.stdout.match(/harness tool blackouts_list: answered/g) || []).length, 3);
-  assert.strictEqual((r.stdout.match(/harness tool strategies_list: answered/g) || []).length, 3);
+  for (const h of ['claude', 'codex']) assert.match(r.stdout, new RegExp(`^${h}: ok$`, 'm'));
+  assert.strictEqual((r.stdout.match(/harness tool blackouts_list: answered/g) || []).length, 2);
+  assert.strictEqual((r.stdout.match(/harness tool strategies_list: answered/g) || []).length, 2);
   assert.match(r.stdout, /subagent: risk-manager \(the harness role\), answered PROBE-ROLE-OK/);
   assert.match(r.stdout, /shell `node -e 1`: refused/);
   assert.match(r.stdout, /shell `node -e 1`: ran/);

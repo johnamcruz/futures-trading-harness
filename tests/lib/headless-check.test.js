@@ -6,7 +6,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
+const fs = require('fs');
 const hc = require('../../scripts/lib/headless-check');
+const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -25,6 +27,9 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   assert.deepStrictEqual([claude.env.FTH_AUTONOMOUS, claude.env.FTH_ROOT, claude.env.FTH_BARS_DIR], ['1', ROOT, '/srv/fth/bars']);
   assert.deepStrictEqual(hc.probeCommand('codex', ROOT, env).argv.slice(0, 2), ['codex', 'exec']);
   assert.ok(hc.probeCommand('qwen', ROOT, env).argv.includes('--approval-mode'));
+  // Paper mode, and the runner config's own settings (bar directory, model).
+  const cfgRun = hc.probeCommand('claude', ROOT, env, { config: { dataDir: '/data/bars', model: 'm1', paper: false } });
+  assert.deepStrictEqual([cfgRun.env.FTH_PAPER, cfgRun.env.FTH_BARS_DIR, cfgRun.argv.includes('m1')], ['1', '/data/bars', true]);
   const fake = hc.probeCommand('qwen', ROOT, env, { bin: '/x/fake.js' });
   assert.deepStrictEqual(fake.argv.slice(0, 3), [process.execPath, '/x/fake.js', '-p']);
   assert.deepStrictEqual(hc.probeCommand('claude', ROOT, env, { bin: '/x/claude2' }).argv.slice(0, 2), ['/x/claude2', '-p']);
@@ -82,4 +87,38 @@ test('runProbe: a harness that is not installed, or that fails, is reported', ()
   assert.strictEqual(failed.error, 'exit 2: Error: not logged in');
   assert.strictEqual(seen.cmd, 'claude');
   assert.strictEqual(seen.opts.env.FTH_AUTONOMOUS, '1');
+});
+
+test('analyze: Codex started-then-completed items, a first delegation elsewhere, and exact role names only', () => {
+  const ev = (type, x) => JSON.stringify({ type, item: x });
+  const text = [
+    ev('item.started', { id: 'c1', type: 'command_execution', command: "bash -lc 'node -e 1'", exit_code: null, status: 'in_progress' }),
+    ev('item.completed', { id: 'c1', type: 'command_execution', command: "bash -lc 'node -e 1'", exit_code: 0, status: 'completed' }),
+    ev('item.started', { id: 'm1', type: 'mcp_tool_call', server: 'harness', tool: 'strategies_list', status: 'in_progress' }),
+    ev('item.completed', { id: 'm1', type: 'mcp_tool_call', server: 'harness', tool: 'strategies_list', status: 'completed', result: {} }),
+    ev('item.completed', { id: 'g1', type: 'collab_tool_call', tool: 'spawn_agent', arguments: JSON.stringify({ agent_type: 'general-purpose' }), status: 'completed' }),
+    ev('item.completed', { id: 'g2', type: 'collab_tool_call', tool: 'spawn_agent', arguments: JSON.stringify({ agent_type: 'risk_manager' }), status: 'completed' }),
+  ].join('\n');
+  const a = hc.analyze(text);
+  assert.strictEqual(a.shell, 'ran', 'the completed report counts, not the in-progress one');
+  assert.strictEqual(a.tools.strategies_list, 'answered');
+  assert.deepStrictEqual([a.subagent.role, a.subagent.harnessRole, a.subagent.ok], ['risk_manager', true, true]);
+  for (const role of ['RISK_MANAGER', 'Risk-Manager', 'risk-manager2']) {
+    assert.strictEqual(hc.analyze([use('1', 'Agent', { subagent_type: role }), res('1', 'ok')].join('\n')).subagent.harnessRole, false, role);
+  }
+  assert.strictEqual(hc.analyze([use('1', 'Agent', { subagent_type: 'futures-trading-harness:risk-manager' }), res('1', 'ok')].join('\n')).subagent.harnessRole, true);
+  // A shell that ran on a second try is reported as ran.
+  const twice = [use('1', 'Bash', { command: 'node -e 1' }), res('1', 'denied', true), use('2', 'Bash', { command: 'node -e 1' }), res('2', '')].join('\n');
+  assert.strictEqual(hc.analyze(twice).shell, 'ran');
+});
+
+test('runProbe: Qwen first gets the runner\'s workspace allowlist, then the probe runs (stand-in CLI)', { timeout: 60000 }, () => {
+  const home = tmpDir();
+  const writes = [];
+  const r = hc.runProbe({ harness: 'qwen', root: ROOT, env: { ...process.env, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: '' }, bin: path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), writeFile: (f, c) => writes.push([f, JSON.parse(c)]) });
+  assert.strictEqual(writes.length, 1);
+  assert.strictEqual(writes[0][0], path.join(ROOT, 'workspace', '.qwen', 'settings.json'));
+  assert.ok(writes[0][1].permissions.allow.includes('mcp__harness') && writes[0][1].permissions.allow.includes('Agent(risk-manager)'));
+  assert.ok(!fs.existsSync(path.join(home, 'unused')));
+  assert.strictEqual(hc.passed(r), true, JSON.stringify(r));
 });

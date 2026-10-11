@@ -8,8 +8,10 @@
  *
  *   node scripts/check-headless.js [--harness claude,codex,qwen] [--config autotrader.json] [--timeout 10]
  *
- * Default harnesses: the config's harness with --config, else all three (a
- * harness that isn't installed is reported so). Exit 0 when every probed
+ * Default harnesses: the config's harness with --config (and its model, extra
+ * args, workspace and bar directory), else all three (a harness that isn't
+ * installed is reported so). The probe runs in paper mode. For Qwen it first
+ * writes the workspace allowlist the runner writes at start. Exit 0 when every probed
  * harness reached both tools and the role. --bin <file> runs a stand-in for
  * the harness CLI (tests). The logic lives in scripts/lib/headless-check.js.
  */
@@ -33,7 +35,9 @@ function main(argv, { out = s => process.stdout.write(s), env = process.env } = 
     if (!known.includes(argv[i]) || argv[i + 1] === undefined) throw new Error(`usage: check-headless.js [--harness ${HARNESSES.join(',')}] [--config autotrader.json] [--timeout minutes] (bad argument: ${argv[i]})`);
   }
   let harnesses = HARNESSES;
-  if (arg(argv, '--config')) harnesses = [JSON.parse(fs.readFileSync(arg(argv, '--config'), 'utf8')).harness || 'claude'];
+  // With a runner config: its harness, model, extra args, workspace and bar directory (in paper mode).
+  const config = arg(argv, '--config') ? JSON.parse(fs.readFileSync(arg(argv, '--config'), 'utf8')) : {};
+  if (arg(argv, '--config')) harnesses = [config.harness || 'claude'];
   if (arg(argv, '--harness')) harnesses = arg(argv, '--harness').split(',').map(s => s.trim()).filter(Boolean);
   const bad = harnesses.filter(h => !HARNESSES.includes(h));
   if (bad.length) throw new Error(`--harness: ${bad.join(', ')} (known: ${HARNESSES.join(', ')})`);
@@ -42,7 +46,7 @@ function main(argv, { out = s => process.stdout.write(s), env = process.env } = 
   let ok = true;
   for (const harness of harnesses) {
     out(`[check-headless] probing ${harness} (a real headless run; up to ${minutes} min)...\n`);
-    const res = runProbe({ harness, root: ROOT, env, bin: arg(argv, '--bin') ? path.resolve(arg(argv, '--bin')) : null, timeoutMs: minutes * 60000 });
+    const res = runProbe({ harness, root: ROOT, env, config, bin: arg(argv, '--bin') ? path.resolve(arg(argv, '--bin')) : null, timeoutMs: minutes * 60000 });
     out(`${formatReport(res).join('\n')}\n`);
     ok = passed(res) && ok;
   }

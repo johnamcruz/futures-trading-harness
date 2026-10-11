@@ -53,8 +53,13 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   for (const v of brokerVars) assert.ok(vars.includes(v), `${v}: everything the broker block forwards`);
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.codex'));
-  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness]\ncommand = "node"\n');
-  assert.throws(() => planCodex({ root: ROOT, home, broker: BROKER }), /already defines \[mcp_servers\.harness\]/);
+  for (const toml of ['[mcp_servers.harness]\ncommand = "node"\n', '[mcp_servers."harness"]\ncommand = "node"\n', '[ mcp_servers . harness . env ]\nX = "1"\n',
+    'mcp_servers.harness.command = "node"\n', '[mcp_servers."broker"]\n', "mcp_servers.'broker'.args = []\n"]) {
+    fs.writeFileSync(path.join(home, '.codex', 'config.toml'), toml);
+    assert.throws(() => planCodex({ root: ROOT, home, broker: BROKER }), /already defines \[mcp_servers\.(harness|broker)\]/, toml);
+  }
+  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness_other]\ncommand = "x"\n[mcp_servers.brokerage]\n');
+  assert.ok(planCodex({ root: ROOT, home, broker: BROKER }), 'other servers whose names start alike are fine');
 });
 
 test('claude plan prints the harness tools server registration', () => {
@@ -86,7 +91,8 @@ test('qwen settings merge is idempotent, keeps user entries, and removes old har
   assert.throws(() => mergeQwenSettings({ mcpServers: { broker: { command: 'node', args: ['/x/index.js'] } } }, ROOT), /does not use the harness gateway/);
   assert.deepStrictEqual(once.mcpServers.harness, { command: 'node', args: [path.join(ROOT, 'scripts', 'harness-tools-mcp.js')], timeout: 60000 });
   assert.throws(() => mergeQwenSettings({ mcpServers: { harness: { command: 'node', args: ['/x/other.js'] } } }, ROOT), /mcpServers\.harness that is not the harness tools server/);
-  assert.ok(mergeQwenSettings({ mcpServers: { harness: { command: 'node', args: ['/old/scripts/harness-tools-mcp.js'], trust: true } } }, ROOT).mcpServers.harness.trust, 'our own entry is updated in place');
+  const older = mergeQwenSettings({ mcpServers: { harness: { command: 'node', args: ['/old/scripts/harness-tools-mcp.js'], trust: true, env: { FTH_AUTONOMOUS: '0' }, httpUrl: 'http://x', includeTools: ['lessons'] } } }, ROOT).mcpServers.harness;
+  assert.deepStrictEqual(older, { command: 'node', args: [path.join(ROOT, 'scripts', 'harness-tools-mcp.js')], timeout: 60000, trust: true }, 'ours alone, keeping only trust');
   // A server of the user's own (not the harness gateway) is kept.
   assert.ok(mergeQwenSettings({ mcpServers: { oldname: { command: 'node', args: ['/x/index.js'] } } }, ROOT).mcpServers.oldname);
 });

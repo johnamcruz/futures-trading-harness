@@ -86,9 +86,12 @@ registers it as `harness` for every harness, as it registers `broker` (Claude:
 `claude mcp add harness`; Codex: `[mcp_servers.harness]`, pre-approved, with
 the clock, state, bars directory and calendar variables forwarded; Qwen: user
 settings and the extension manifest). Autonomous runs allow `mcp__harness`; the
-runner sets `FTH_BARS_DIR` to its bar directory and, at start, refuses to run
-when the server it would start doesn't answer `tools/list` with the registry's
-tools (a manual end of day only warns). `node scripts/check-headless.js` runs
+runner sets `FTH_BARS_DIR` to its bar directory and, at start, checks that this
+checkout's server answers `tools/list` with the registry's tools (it can't see
+which server a harness's own settings register as `harness`; the headless
+check probes that). On a failure a manual trade or premarket run is refused, a
+manual end of day only warns, and the live loop turns trading off with the kill
+switch while end of day and housekeeping keep running. `node scripts/check-headless.js` runs
 one real headless probe per harness (harness tools, a subagent by role, a shell
 attempt) and reports what each reached.
 
