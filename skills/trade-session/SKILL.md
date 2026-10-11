@@ -293,14 +293,21 @@ Filled: check the filled size (a partial fill is a smaller position: its stop
 covers what filled; cancel the rest of the entry if the plan doesn't still
 want it), the fill price, and that the protective stop is working at the
 planned level. A position without a working stop is fixed before anything
-else (the trade-executor places it, or closes the position). Not filled yet
-(a resting limit or stop, or a market order the broker hasn't filled): with
-its stop bracket attached, journal a note that the entry is working, report
-it, and end the cycle; the next cycle verifies the fill and the stop first.
-Without a stop bracket, the trade-executor cancels the entry (it would fill
-with no stop), places a `[protect]` stop or closes it if it filled before the
-cancel, and you journal why and end the cycle; plan again next cycle.
-Never wait or poll for the fill (broker-mcp skill, Order mechanics).
+else (the trade-executor places it, or closes the position), and so is an
+entry working without a stop bracket (it is cancelled). Not filled yet (a
+resting limit or stop, or a market order the broker hasn't filled): with its
+stop bracket attached, journal a note that the entry is working, report it,
+and stop there (in an autonomous cycle, end the cycle; interactively, until
+the next check); the next cycle or check verifies the fill and the stop
+first. Without a stop bracket, the trade-executor cancels the entry (it would
+fill with no stop) and confirms the cancel (broker-mcp skill, Order
+mechanics). Cancelled: journal a review tagged `result:nofill` and the
+`setup:<name>` (the gate counts a placed entry until it is reviewed), and
+plan again next cycle (cycle result `no-trade`, entry cancelled: no stop
+bracket). Filled before the cancel and now protected: report it as executed.
+Still working after a second cancel: report `error`, the entry still working
+with no stop. Never wait or poll for the fill (broker-mcp skill, Order
+mechanics).
 
 ### 7. Report
 

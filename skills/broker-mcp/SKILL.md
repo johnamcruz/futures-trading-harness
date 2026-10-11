@@ -50,7 +50,8 @@ guide resource once per session if it has one.
 - `buy` opens/adds long or closes short; `sell` the reverse.
 - Brackets are in ticks and need Auto OCO Brackets on the account. Error
   "Brackets cannot be used with Position Brackets" → enter without brackets,
-  then place a `[protect]` stop once `list_open_positions` shows the fill.
+  then place a `[protect]` stop when the order's one status check shows the
+  fill (still unfilled: cancel it, as "Check a new order once" below says).
 - `close_position` leaves resting stop/target orders: cancel them.
 - `search_trades`: `profitAndLoss: null` marks an opening fill; fees separate.
 
@@ -68,11 +69,17 @@ guide resource once per session if it has one.
   it is working and end the cycle (the bracket protects it once it fills).
   Still working without a stop bracket (brackets rejected): don't leave it,
   since it would fill with no stop. `cancel_order` it (cancelling an entry
-  only reduces risk), read `list_open_positions` once (a fill can beat the
-  cancel: then place its `[protect]` stop, or close it), journal why, and end
-  the cycle; plan again next cycle. The next cycle checks a working entry's
-  fill and manages the position: the autonomous runner starts a cycle while
-  an order is working or a position is open; interactively, the next check. Never wait or poll for a fill: no repeated `get_bars`,
+  only reduces risk), then read `list_open_orders` and `list_open_positions`
+  once to confirm. Gone and flat: journal a review tagged `result:nofill` and
+  `setup:<name>` (the gate counts a placed entry until it is reviewed) and
+  plan again next cycle. Filled before the cancel (in whole or part): place
+  its `[protect]` stop, or close it; it is a live, executed trade. Still
+  working (the cancel was refused, errored, or lost): cancel once more; if it
+  is still working, end the cycle as `error` with the entry still working and
+  no stop, and the next cycle cancels it first. The next cycle checks a
+  working entry's fill and manages the position: the autonomous runner starts
+  a cycle while an order is working or a position is open; interactively, the
+  next check. Never wait or poll for a fill: no repeated `get_bars`,
   `get_quote`, `list_open_orders`, or snapshot reads to see it fill. A
   position you must leave (no working stop, end of day) is still closed with
   `close_position` and re-read as the steps for it say: closing is acting,

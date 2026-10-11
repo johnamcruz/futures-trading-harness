@@ -136,19 +136,34 @@ test('every harness manifest agrees on name and version, and its paths exist', (
 test('order docs check a new order once and never wait or poll for a fill; the cycle result is plain text', () => {
   const docs = {
     'skills/broker-mcp/SKILL.md': [/check a new order once; never wait for a fill/i, /read its status once/, /Still working[^]*?journal that\s+it is working[^]*?end the cycle/, /Never wait or poll for a fill/, /closing is acting,\s+not waiting/,
-      /Still working without a stop bracket[^]*?`cancel_order` it[^]*?`list_open_positions` once[^]*?`\[protect\]` stop/],
-    'skills/trade-session/SKILL.md': [/`list_open_orders` once/, /Not filled yet[^]*?journal\s+a note that the entry is working[^]*?end the cycle/, /Never wait or poll for the fill/,
-      /Without a stop bracket, the trade-executor cancels the entry/],
-    'agents/trade-executor.md': [/Check the entry's status once/, /don't\s+wait\. With its stop bracket attached[^]*?report `EXECUTED` with the entry working/, /Never poll for a fill/,
-      /Without a stop bracket \(step 4\): `cancel_order` the entry[^]*?`list_open_positions` once[^]*?`\[protect\]` stop/],
+      // An unbracketed entry still working is cancelled, and the cancel confirmed (orders and positions read once).
+      /Still working without a stop bracket[^]*?`cancel_order` it[^]*?read `list_open_orders` and `list_open_positions`\s+once to confirm/,
+      /Gone and flat: journal a review tagged `result:nofill`/, /Filled before the cancel[^]*?`\[protect\]` stop[^]*?executed trade/,
+      /cancel was refused, errored, or lost\): cancel once more[^]*?end the cycle as\s+`error`[^]*?next cycle cancels it first/,
+      /`\[protect\]` stop when the order's one status\s+check shows the\s+fill/],
+    'skills/trade-session/SKILL.md': [/`list_open_orders` once/, /Not filled yet[^]*?journal a note that the entry is working/, /in an autonomous cycle, end the cycle; interactively, until\s+the next check/, /Never wait or poll for the fill/,
+      /Without a stop bracket, the trade-executor cancels the entry[^]*?confirms the cancel/, /journal a review tagged `result:nofill`/,
+      /cycle result `no-trade`, entry cancelled: no stop\s+bracket/, /Filled before the cancel and now protected: report it as executed/, /Still working after a second cancel: report `error`/],
+    'agents/trade-executor.md': [/Check the entry's status once/, /Working, with its stop bracket[^]*?report `EXECUTED` with the entry working/, /Never wait or poll for a fill/,
+      /if the one status\s+check \(step 5\) shows the fill, place the stop/,
+      /Working, without a stop bracket[^]*?`cancel_order` it, then read `list_open_orders` and\s+`list_open_positions` once/,
+      /Gone and flat: report `ABORTED`[^]*?`result:nofill`\s+review/, /Filled \(in whole or part\) before the cancel: place its\s+`\[protect\]` stop \(or `close_position`\) and report `EXECUTED`, protected/,
+      /Still working: `cancel_order` once more[^]*?cycle result is `error`\), so the next cycle cancels it first/],
     'skills/autonomous-trading/SKILL.md': [/Never wait\s+within a cycle/, /journalled as working and the cycle\s+ends/, /as plain text in your final message: never as a tool call/,
-      /unfilled entry without a\s+stop bracket is cancelled, not left working/],
+      /unfilled entry without a\s+stop bracket is cancelled, not left working[^]*?cancel confirmed: cancelled, journal a `result:nofill` review and\s+end as `no-trade`[^]*?`executed`[^]*?`error`/],
     'skills/end-of-day/SKILL.md': [/close again until\s+the position is gone/, /Don't wait for a close to\s+fill/, /runner keeps closing until it reads flat/],
+    'rules/trading/risk-management.md': [/still unfilled at its one\s+status check is cancelled, not waited on/],
   };
   for (const [rel, wants] of Object.entries(docs)) {
     const text = read(rel);
     for (const want of wants) assert.match(text, want, `${rel}: ${want}`);
   }
+  // No doc still has the executor wait for the fill to show before protecting it.
+  assert.doesNotMatch(read('agents/trade-executor.md'), /as soon as\s+`list_open_positions` shows the fill/);
+  assert.doesNotMatch(read('skills/broker-mcp/SKILL.md'), /stop once `list_open_positions` shows the fill/);
+  // The gate counts a placed entry until a review (result:nofill counts) names it: what the docs tell the model to journal.
+  assert.match(read('scripts/lib/trading/order-gate.js'), /hasTag\(e, 'result:nofill'\)/);
   // The generated copies carry it too (node scripts/sync-harness.js).
-  assert.match(read('qwen-extension/agents/trade-executor.md'), /Never poll for a fill/);
+  assert.match(read('qwen-extension/agents/trade-executor.md'), /Never wait or poll for a fill/);
+  assert.match(read('workspace/AGENTS.md'), /still unfilled at its one\s+status check is cancelled, not waited on/);
 });

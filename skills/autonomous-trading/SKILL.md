@@ -72,8 +72,11 @@ description: Rules for running the trading harness unattended (headless, schedul
    that hasn't filled at its one check is journalled as working and the cycle
    ends (`executed` or `managed`, saying it is working); the next cycle checks
    the fill (broker-mcp skill, Order mechanics). An unfilled entry without a
-   stop bracket is cancelled, not left working (it would fill with no stop);
-   journal why and plan again next cycle.
+   stop bracket is cancelled, not left working (it would fill with no stop),
+   and the cancel confirmed: cancelled, journal a `result:nofill` review and
+   end as `no-trade` (entry cancelled: no stop bracket); filled before the
+   cancel and protected, `executed`; still working after a second cancel,
+   `error`, and the next cycle cancels it first.
 8. **Harness tools, not scripts.** Bars, scans, the snapshot, the
    multi-timeframe read, blackouts, the prop status, lessons, and reconcile
    are tools on the `harness` MCP server (the `harness-tools` skill): call
