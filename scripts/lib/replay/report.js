@@ -77,6 +77,8 @@ function summarize(days) {
       const trades = tradesOf(rec.trades, open);
       for (const row of rows) {
         row.points += 1;
+        // A bar's pass that read no bar and ran no cycle while logging errors (driver.js counts it too).
+        if (rec.kind === 'trade' && !(rec.ran || []).length && (rec.errors || []).length && (rec.bars || []).some(b => !b.lastBarT)) row.failed += 1;
         for (const c of rec.ran || []) {
           row.cycles += 1;
           if (!c.ok) row.failed += 1;

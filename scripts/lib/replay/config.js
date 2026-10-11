@@ -24,7 +24,7 @@
  * the default home, the caller's FTH_HOME, or inside the repository; it holds
  * the runner's state, records, logs, journal, the broker's state and clock,
  * a copy of brokers.json and of the workspace's operator files. Child
- * processes get no path override pointing elsewhere and every live broker's
+ * processes get every path override pinned inside the run home and every live broker's
  * variables (credentials, server entry, journal) replaced, so nothing they
  * start can reach a live broker or account.
  *
@@ -49,15 +49,43 @@ const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
 // Backtester-mcp's variables (its README); another replay broker names its own.
 const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END' };
-// Path overrides that would send a child's records, gate log, kill switch or settings outside the run home.
-const STRIPPED = ['FTH_GATE_LOG', 'FTH_BLACKOUTS_FILE', 'FTH_KILL_SWITCH_FILE', 'FTH_BROKERS_FILE', 'FTH_ENV_FILE', 'FTH_TEST_NOW', 'FTH_DRY_RUN', 'FTH_ORDER_GATE_SKIP', 'FTH_PAPER'];
+// Overrides that could send a child's records, gate log, kill switch or settings outside the run home,
+// or change how it runs. Each is set explicitly (never just removed: a child's .env load fills a missing
+// or empty variable from <FTH_HOME>/.env and the repo's .env).
+const PINNED = {
+  FTH_GATE_LOG: p => path.join(p.runHome, 'logs', 'gate-log.jsonl'),
+  FTH_BLACKOUTS_FILE: p => path.join(p.runHome, 'blackouts', 'blackouts.json'),
+  FTH_KILL_SWITCH_FILE: p => path.join(p.runHome, 'STOP'),
+  FTH_BROKERS_FILE: p => path.join(p.runHome, 'brokers.json'),
+  FTH_ENV_FILE: p => path.join(p.runHome, '.env'),
+  FTH_TEST_NOW: () => 'none', FTH_DRY_RUN: () => '0', FTH_ORDER_GATE_SKIP: () => 'none', FTH_PAPER: () => '0',
+};
+const STRIPPED = Object.keys(PINNED);
+// The gate's settings (trading/config.js and the calendar, strategies, accounts and models it reads): part of a run.
+const GATE_ENV = ['FTH_LOSS_COOLDOWN_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_MAX_CORRELATED_POSITIONS', 'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY',
+  'FTH_MIN_CONFLUENCE', 'FTH_MTF_MAX_AGE_MIN', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_SIGNAL_MAX_AGE_MIN', 'FTH_ENTRY_HOURS', 'FTH_NO_ENTRY_WINDOWS',
+  'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_STRATEGIES_DIRS', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS', 'FTH_DISABLED_HOOKS', 'FTH_HOOKS_ENABLED'];
 // A live broker's variable in a replay process: set (so no .env file fills it) and useless.
 const DISABLED = 'disabled-by-fth-replay';
 // Runner fields the driver owns: where the run's files go, and alerts (a replay pages no one).
 const OWNED = ['dataDir', 'workdir', 'alertWebhook', 'alertCommand'];
 
+/** The path as the filesystem resolves it: symlinks of its nearest existing ancestor followed, case folded where names fold. */
+function realish(p) {
+  let head = path.resolve(p);
+  const tail = [];
+  while (!fs.existsSync(head) && path.dirname(head) !== head) {
+    tail.unshift(path.basename(head));
+    head = path.dirname(head);
+  }
+  let real = head;
+  try { real = fs.realpathSync.native(head); } catch (_err) { /* unreadable: as given */ }
+  const out = path.join(real, ...tail);
+  return process.platform === 'darwin' || process.platform === 'win32' ? out.toLowerCase() : out;
+}
+
 const inside = (child, parent) => {
-  const rel = path.relative(parent, child);
+  const rel = path.relative(realish(parent), realish(child));
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 };
 
@@ -96,7 +124,9 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
   const brokerEnv = { ...BROKER_ENV, ...(r.brokerEnv || {}) };
-  for (const [k, v] of Object.entries(brokerEnv)) if (v !== null && !/^[A-Z_][A-Z0-9_]*$/.test(String(v))) errors.push(`brokerEnv.${k}: a variable name or null`);
+  for (const [k, v] of Object.entries(brokerEnv)) {
+    if (v !== null && (!/^[A-Z_][A-Z0-9_]*$/.test(String(v)) || /^(FTH_|NODE_|PATH$|HOME$)/.test(String(v)))) errors.push(`brokerEnv.${k}: the replay server's own variable name (not FTH_*, NODE_*, PATH or HOME), or null`);
+  }
   if (errors.length) throw new Error(`invalid replay config:\n- ${errors.join('\n- ')}`);
 
   const runHome = path.join(path.resolve(expandHome(r.workDir, home)), r.runId);
@@ -138,19 +168,24 @@ function liveBrokerVars(env) {
 
 function replayEnv(base, run, { at }) {
   const env = { ...base };
-  for (const k of STRIPPED) delete env[k];
+  for (const [k, value] of Object.entries(PINNED)) env[k] = value(run.paths);
   env.FTH_HOME = run.paths.runHome;
-  for (const v of liveBrokerVars(env)) env[v] = DISABLED;
+  const live = liveBrokerVars(env);
+  for (const v of live) env[v] = DISABLED;
   env.FTH_BROKER = run.broker;
   env.FTH_REPLAY_NOW = at.toISOString();
-  const set = (key, value) => { if (key) env[key] = value; };
+  const broker = activeBroker(env);
+  const set = (key, value) => {
+    if (!key) return;
+    if (live.has(key)) throw new Error(`replay refused: ${key} is a live broker's variable; a replay never sets it`);
+    env[key] = value;
+  };
   set(run.brokerEnv.clockFile, run.paths.clockFile);
   set(run.brokerEnv.stateDir, run.paths.brokerDir);
   set(run.brokerEnv.runId, run.runId);
   set(run.brokerEnv.start, run.start.toISOString());
   set(run.brokerEnv.end, run.end.toISOString());
-  const broker = activeBroker(env);
-  set(broker.journalEnv, run.paths.journal);
+  if (broker.replay === true) set(broker.journalEnv, run.paths.journal); // a live broker is refused by brokerErrors
   return env;
 }
 
@@ -173,13 +208,39 @@ function brokerErrors(env, run) {
   return errors;
 }
 
-/** What makes a run a run: the derived runner config, the window, the decision points, the broker, and the harness command. */
+/** sha256 over every file under the given folders of the harness (what the agents and the gate read). */
+function treeDigest(root, dirs) {
+  const h = crypto.createHash('sha256');
+  const walk = d => {
+    let entries;
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_err) { return; }
+    for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) h.update(`${path.relative(root, p)}\0`).update(fs.readFileSync(p));
+    }
+  };
+  for (const d of dirs) walk(path.join(root, d));
+  return h.digest('hex');
+}
+
+/**
+ * What makes a run a run: the derived runner config, the window and decision
+ * points, the harness command (harness and model), the gate's settings, the
+ * replay broker's entry and settings, and the strategies, accounts, models,
+ * skills, agents and rules the cycles read. Nothing about where it was started from.
+ */
 function configHash(run, base = process.env) {
-  // The gate's settings come from FTH_* variables: a changed one is a changed run.
-  const gate = Object.fromEntries(Object.entries(base).filter(([k]) => k.startsWith('FTH_') && !STRIPPED.includes(k) && !['FTH_HOME', 'FTH_REPLAY_NOW', 'FTH_BROKER'].includes(k)).sort());
+  const env = replayEnv(base, run, { at: run.start });
+  const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
+  const b = activeBroker(env);
+  const own = new Set(Object.values(run.brokerEnv).concat(b.journalEnv));
+  const brokerSettings = Object.fromEntries((b.env || []).filter(k => !own.has(k)).sort().map(k => [k, env[k] ?? null]));
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, command: harnessCommand(run, base), gate,
+    brokerEntry: { ...b, journalPath: undefined }, brokerSettings,
+    harness: run.root ? treeDigest(run.root, ['strategies', 'accounts', 'models', 'skills', 'agents', 'rules']) : null,
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
@@ -189,4 +250,4 @@ function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED };
+module.exports = { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };

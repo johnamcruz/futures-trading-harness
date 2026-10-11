@@ -46,7 +46,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { validateConfig, prompts, buildCommand, childEnv, decide, cycleResult, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor } = require('./lib/autotrader');
-const { openRunnerBroker, wireRunner } = require('./lib/runner-wiring');
+const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/rl/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { appendJsonl } = require('./lib/trading/scan-log');
@@ -280,21 +280,26 @@ function buildRunner(cfg, dataDir, opts, client, log, event) {
  */
 async function replayStep(cfg, dataDir, opts, asked) {
   holdLock();
-  const log = runnerLog(() => {});
+  const errors = [];
+  const log = runnerLog(msg => errors.push(String(msg).slice(0, 300)));
   let client;
   try {
     client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
+    const why = replayUnattested(await client.serverConfig(), runnerNow());
+    if (why) throw new Error(why);
   } catch (err) {
+    if (client) client.close();
     log(`broker: can't start (${err.message})`, 'error');
     return 1;
   }
   const events = [];
   try {
-    const runner = buildRunner(cfg, dataDir, opts, client, log, ev => { events.push(ev); writeEvent(ev); });
+    const runner = buildRunner(cfg, dataDir, opts, closedBarsOnly(client, runnerNow), log, ev => { events.push(ev); writeEvent(ev); });
     await runner.step();
     const ran = events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null }));
     const kinds = [...new Set(events.map(e => e.kind))];
-    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events: kinds, state: runner.state })}\n`);
+    const bars = runner.symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null }));
+    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events: kinds, errors, bars, state: runner.state })}\n`);
     return 0;
   } finally {
     client.close();

@@ -8,6 +8,8 @@
  * replayed cycle is built exactly as a live one.
  *
  *   openRunnerBroker({ cfg, root, env })   the adapter, verified; throws when a live run can't manage positions
+ *   closedBarsOnly(client, now)           the adapter, bars closing after now() dropped (replay)
+ *   replayUnattested(serverConfig, at)     why a replay server doesn't attest the replayed time, or null
  *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
  *                loadState, saveState, killSwitchFile, log, event })   createRunner(...) with every dependency
  */
@@ -15,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createRunner } = require('./runner');
+const { SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
 const { openAdapter, tradingBlocked } = require('./broker/adapter');
 const { dayKey } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
@@ -43,6 +46,32 @@ async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapt
     client.close();
     throw err;
   }
+}
+
+/**
+ * Why a replay server's get_server_config doesn't attest the replayed time
+ * `at` (replay: true, serverTime within the gateway's tolerance), or null.
+ * A replay pass checks it before anything (as the gateway does before an order).
+ */
+function replayUnattested(config, at) {
+  if (!config || config.replay !== true) return 'the broker server does not report itself a replay server (get_server_config.replay)';
+  const t = Date.parse(String(config.serverTime || ''));
+  if (!Number.isFinite(t) || Math.abs(t - at.getTime()) > SERVER_TIME_TOLERANCE_MS) return `the replay server's time (${config.serverTime}) is not the replayed time (${at.toISOString()})`;
+  return null;
+}
+
+/**
+ * The adapter with bars that closed after `now()` dropped (a replay pass: no
+ * forming or future bar, whatever the replay server returns).
+ */
+function closedBarsOnly(client, now) {
+  return {
+    ...client,
+    closedBars: async (contractId, opts) => {
+      const step = (opts.daily ? 1440 : opts.minutes) * 60000;
+      return (await client.closedBars(contractId, opts)).filter(b => Date.parse(b.t) + step <= now().getTime());
+    },
+  };
 }
 
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
@@ -102,4 +131,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner };
+module.exports = { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly };

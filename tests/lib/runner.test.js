@@ -338,7 +338,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0 }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -389,7 +389,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
-    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => null, saveState: () => {},
+    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
     entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
@@ -523,6 +523,11 @@ test('the event log records cycles, account reads, managed positions, stops move
   assert.ok(quiet.events.some(e => e.kind === 'eod' && e.ok === true && e.day));
   assert.deepStrictEqual(quiet.cycles.filter(c => c === 'eod'), []);
   assert.throws(() => validateConfig({ eodReview: 'no' }), /eodReview: true or false/);
+  // The review run is in the saved state: a runner started again that day (or a replay's next process) doesn't repeat it.
+  assert.strictEqual(eod.saved.eodReviewedDay, '2026-10-07');
+  const again = await trailSim({ tape: {}, startAt: et(15, 50) + 2000, until: et(15, 52), stateIn: { day: '2026-10-07', premarketDone: true, eodDone: false, cycles: 3, lastCycleAt: null, eodReviewedDay: '2026-10-07' } });
+  assert.deepStrictEqual(again.cycles.filter(c => c === 'eod'), []);
+  assert.ok(again.events.some(e => e.kind === 'eod' && e.ok === true), 'end of day still flattens and finishes');
 });
 
 test('trailing: prices from before a mid-bar fill do not count toward the peak', async () => {

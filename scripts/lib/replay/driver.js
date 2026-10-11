@@ -35,7 +35,8 @@ const { withAdapter } = require('../broker/adapter');
 const { contractRoot } = require('../trading/journal');
 const { specFor } = require('../trading/contracts');
 const { sessionMinute, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
-const { SERVER_TIME_TOLERANCE_MS } = require('../trading/harness-now');
+const { replayUnattested } = require('../runner-wiring');
+const { harnessHome } = require('../paths');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
@@ -54,8 +55,11 @@ function seedRunHome(run, { root, userEnv = process.env }) {
   for (const d of [paths.runHome, paths.runDir, paths.brokerDir, paths.bars, paths.workspace]) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   if (!fresh) return false;
   // The brokers as the user configured them (the replay broker is one), read by every process of the run.
-  const brokersFile = loadBrokers(userEnv).file;
-  if (fs.existsSync(brokersFile)) fs.copyFileSync(brokersFile, path.join(paths.runHome, 'brokers.json'));
+  // Resolved (absolute entry and journal paths), so nothing is re-based on the run home.
+  const { broker, brokers } = loadBrokers(userEnv);
+  writeJsonAtomic(path.join(paths.runHome, 'brokers.json'), { broker, brokers });
+  // The run's own .env (FTH_ENV_FILE points here): empty, so a child reads no other first.
+  fs.writeFileSync(path.join(paths.runHome, '.env'), '', { flag: 'a', mode: 0o600 });
   // The workspace's operator files, so the harness CLI runs as live but never writes the live workspace.
   for (const f of TRUSTED_WORKSPACE_FILES.filter(x => !x.startsWith('.qwen/'))) {
     const src = path.join(root, 'workspace', f);
@@ -75,6 +79,24 @@ function withEntry(fill, entries) {
   return { ...fill, entry: { setup: e.setup || null, stopTicks: e.stopTicks || null, tickValue: spec ? spec.tickValue : null } };
 }
 
+/**
+ * A decision time whose step started but whose line was never written (the
+ * driver was stopped mid-step): recorded as interrupted from what its process
+ * left in the logs, and never run again (its cycle may have traded). Its
+ * fills go to the next line.
+ */
+function recoverPending(paths, manifest, log) {
+  const p = manifest.pending;
+  if (!p) return;
+  delete manifest.pending;
+  store.appendRecord(paths, manifest, {
+    t: p.t, day: p.day, kind: p.kind, asked: p.kind, ran: [], events: [], step: { code: null, timedOut: false }, interrupted: true,
+    cycles: store.cycleLogsSince(paths.runHome, p.startedMs).map(store.cycleSummary), refusals: store.refusalsSince(paths.runHome, p.startedMs),
+    trades: null, since: manifest.tradesSince || null,
+  });
+  log(`${p.t} ${p.kind}: interrupted in a previous run; recorded from its logs, not run again`);
+}
+
 function defaultDeps(run, root) {
   const autotrader = path.join(root, 'scripts', 'autotrader.js');
   return {
@@ -86,11 +108,8 @@ function defaultDeps(run, root) {
     },
     // The server must attest the replay at the time it was given (as the gateway checks before any order).
     async serverCheck(env, at) {
-      const cfg = await withAdapter({ root, env }, a => a.serverConfig());
-      const t = Date.parse(String((cfg && cfg.serverTime) || ''));
-      if (!cfg || cfg.replay !== true) return `the server of broker "${run.broker}" does not report itself a replay server (get_server_config.replay)`;
-      if (!Number.isFinite(t) || Math.abs(t - at.getTime()) > SERVER_TIME_TOLERANCE_MS) return `the replay server's time (${cfg.serverTime}) is not the replay clock's (${at.toISOString()}): is ${run.brokerEnv.clockFile || 'its clock'} read by the server?`;
-      return null;
+      const why = replayUnattested(await withAdapter({ root, env }, a => a.serverConfig()), at);
+      return why && `${why}: is ${run.brokerEnv.clockFile || 'its clock'} read by the server of broker "${run.broker}"?`;
     },
     async trades(env, account, since, until) {
       const fills = await withAdapter({ root, env }, a => a.fillsSince(account, since));
@@ -100,7 +119,48 @@ function defaultDeps(run, root) {
   };
 }
 
-async function runReplay({ run, baseEnv = process.env, root, deps = defaultDeps(run, root), maxCycles = Infinity, log = () => {} }) {
+/** A pid that is running (signal 0 reaches it, or it belongs to another user). */
+function alive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+/** One driver per run: an exclusive lock in the run's folder (a dead holder's is taken over). */
+function lockRun(paths) {
+  const file = path.join(paths.runDir, 'driver.lock');
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      fs.writeFileSync(file, JSON.stringify({ pid: process.pid }), { flag: 'wx' });
+      return () => { try { fs.unlinkSync(file); } catch (_err) { /* gone */ } };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      const holder = readJson(file, {});
+      if (alive(holder.pid) && holder.pid !== process.pid) throw new Error(`another replay driver (pid ${holder.pid}) is running this run (${file})`, { cause: err });
+      fs.unlinkSync(file);
+    }
+  }
+  throw new Error(`could not lock ${file}`);
+}
+
+async function runReplay(opts) {
+  const { run, baseEnv = process.env } = opts;
+  // A live runner on this machine shares the scripts' scratch files (/tmp/fth) with the replay's agents.
+  const liveLock = readJson(path.join(harnessHome(baseEnv), 'autotrader.lock'), null);
+  if (liveLock && alive(liveLock.pid)) throw new Error(`replay refused: the live runner is running (pid ${liveLock.pid}); its agents and a replay's share /tmp/fth. Replay when it is stopped.`);
+  const release = lockRun(run.paths);
+  try {
+    return await replayLoop(opts);
+  } finally {
+    release();
+  }
+}
+
+async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps(run, root), maxCycles = Infinity, log = () => {} }) {
   const { paths, cfg } = run;
   writeJsonAtomic(paths.autotrader, run.derived);
   const startEnv = replayEnv(baseEnv, run, { at: run.start });
@@ -111,7 +171,8 @@ async function runReplay({ run, baseEnv = process.env, root, deps = defaultDeps(
     info: { broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
-  const todo = store.remaining(manifest, points);
+  recoverPending(paths, manifest, log);
+  const todo = store.remaining(manifest, points, store.recordedTimes(paths.runDir));
   const lastOfDay = new Map(points.map(p => [p.day, p]));
   if (!todo.length) {
     for (const day of new Set(points.map(p => p.day))) store.markDayDone(paths, manifest, day);
@@ -134,9 +195,17 @@ async function runReplay({ run, baseEnv = process.env, root, deps = defaultDeps(
     writeClock(point.t);
     const env = replayEnv(baseEnv, run, { at: point.t });
     const started = Date.now();
+    // Marked before it runs: a driver stopped before its line is written never runs this time twice.
+    manifest.pending = { t: point.t.toISOString(), day: point.day, kind: point.kind, startedMs: started };
+    writeJsonAtomic(paths.manifest, manifest);
     const res = await deps.step(point, env, timeoutMs);
     const step = store.parseStep(res.output);
     if (res.code !== 0 || !step) {
+      // Nothing ran (no cycle, no order): the time can run again once the cause is fixed.
+      if (!store.touchedSince(paths.runHome, started)) {
+        delete manifest.pending;
+        writeJsonAtomic(paths.manifest, manifest);
+      }
       throw new Error(`the runner could not run at ${point.t.toISOString()} (exit ${res.code}${res.timedOut ? ', timed out' : ''}); see ${paths.stepsLog}: ${String(res.output || '').trim().split('\n').slice(-3).join(' | ')}`);
     }
     let trades = null;
@@ -152,14 +221,18 @@ async function runReplay({ run, baseEnv = process.env, root, deps = defaultDeps(
       step: { code: res.code, timedOut: Boolean(res.timedOut) },
       cycles: store.cycleLogsSince(paths.runHome, started).map(store.cycleSummary),
       refusals: store.refusalsSince(paths.runHome, started),
-      trades, since: since.toISOString(),
+      errors: step.errors || [], bars: step.bars || [], trades, since: since.toISOString(),
     };
     // A failed read is retried from the same time on the next one (also after a resume).
     if (!(trades && trades.error)) since = point.t;
     manifest.tradesSince = since.toISOString();
+    delete manifest.pending;
     store.appendRecord(paths, manifest, rec);
     cycles += 1;
-    const failed = rec.ran.some(r => !r.ok);
+    // A failed cycle, or a bar's pass that ran none and read no bar for a symbol while logging errors (the
+    // broker's bars or contract failing): a failure, so a broken broker never reads as a quiet trader.
+    const unread = (step.bars || []).some(b => !b.lastBarT);
+    const failed = rec.ran.some(r => !r.ok) || (point.kind === 'trade' && !rec.ran.length && unread && rec.errors.length > 0);
     failures = failed ? failures + 1 : rec.ran.length ? 0 : failures;
     log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || 'no cycle'}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
     if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t}; see ${paths.stepsLog}`, done: false };

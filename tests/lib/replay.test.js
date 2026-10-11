@@ -118,7 +118,16 @@ test('replay env: the run home, the replay broker and clock; no path overrides; 
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });
   const env = replayEnv(w.env, w.run, { at: iso('2026-10-07T13:33:02Z') });
   assert.deepStrictEqual([env.FTH_HOME, env.FTH_BROKER, env.FTH_REPLAY_NOW], [w.run.paths.runHome, 'sim', '2026-10-07T13:33:02.000Z']);
-  for (const k of ['FTH_GATE_LOG', 'FTH_KILL_SWITCH_FILE', 'FTH_BLACKOUTS_FILE', 'FTH_BROKERS_FILE']) assert.strictEqual(env[k], undefined, k);
+  const h = w.run.paths.runHome;
+  assert.deepStrictEqual([env.FTH_GATE_LOG, env.FTH_KILL_SWITCH_FILE, env.FTH_BLACKOUTS_FILE, env.FTH_BROKERS_FILE, env.FTH_ENV_FILE],
+    [path.join(h, 'logs', 'gate-log.jsonl'), path.join(h, 'STOP'), path.join(h, 'blackouts', 'blackouts.json'), path.join(h, 'brokers.json'), path.join(h, '.env')]);
+  // A child loads .env files (its own FTH_HOME's and the repo's) without overriding what is set: a repo .env
+  // pointing at the live home, or carrying live credentials, changes nothing.
+  const repoEnv = path.join(w.dir, 'repo.env');
+  fs.writeFileSync(repoEnv, `FTH_KILL_SWITCH_FILE=${w.live}/STOP\nFTH_GATE_LOG=${w.live}/gate.jsonl\nFTH_BLACKOUTS_FILE=${w.live}/b.json\nFTH_BROKERS_FILE=${w.live}/brokers.json\nFTH_ENV_FILE=${w.live}/.env\nFTH_ORDER_GATE_SKIP=mtf-trend\nFTH_PAPER=1\nLIVE_API_KEY=k\nPROJECTX_MCP_ENTRY=/live/server.js\n`);
+  const child = { ...env };
+  require('../../scripts/lib/env-file').loadEnvFiles({ env: child, files: [repoEnv] });
+  assert.deepStrictEqual(child, env, 'nothing filled in');
   // Live brokers' variables (the user's and the shipped topstepx's) are set to a dead value, so no .env fills them.
   for (const k of ['LIVE_API_KEY', 'LIVE_ENTRY', 'LIVE_JOURNAL', 'PROJECTX_API_KEY', 'PROJECTX_MCP_ENTRY']) assert.strictEqual(env[k], DISABLED, k);
   assert.deepStrictEqual([env.SIM_DATA, env.SIM_CLOCK, env.SIM_STATE, env.SIM_START, env.SIM_JOURNAL], ['/data', w.run.paths.clockFile, w.run.paths.brokerDir, '2026-10-07T13:31:00.000Z', w.run.paths.journal]);
@@ -168,20 +177,26 @@ test('store: a step\'s cycle logs and gate refusals, from the run home\'s logs',
   fs.mkdirSync(path.join(home, 'logs', 'cycles', 'd'), { recursive: true });
   const file = path.join(home, 'logs', 'cycles', 'd', '1-trade.json');
   fs.writeFileSync(file, JSON.stringify({ prompt: 'hello' }));
+  const ago = m => new Date(Date.now() - m * 60000).toISOString();
   fs.writeFileSync(path.join(home, 'logs', 'cycles-2026-10-11.jsonl'), [
-    { at: '2026-10-11T06:00:00.000Z', action: 'trade', result: 'old', file },
-    { at: '2026-10-11T07:00:00.000Z', action: 'trade', result: 'CYCLE RESULT: no-trade - x', file, skills: ['trade-session'], tools: { Bash: 1 }, orders: [], promptChars: 5 },
+    { at: ago(60), action: 'trade', result: 'old', file },
+    { at: ago(1), action: 'trade', result: 'CYCLE RESULT: no-trade - x', file, skills: ['trade-session'], tools: { Bash: 1 }, orders: [], promptChars: 5 },
   ].map(l => JSON.stringify(l)).join('\n'));
   fs.writeFileSync(path.join(home, 'logs', 'gate-log.jsonl'), [
-    { ts: '2026-10-11T07:00:01.000Z', source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'plan-required' }, { check: 'mtf-trend' }] },
-    { ts: '2026-10-11T07:00:02.000Z', source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [] },
-    { ts: '2026-10-11T05:00:00.000Z', source: 'hook', decision: 'blocked', violations: [{ check: 'old' }] },
+    { ts: ago(0.9), source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'plan-required' }, { check: 'mtf-trend' }] },
+    { ts: ago(0.8), source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [] },
+    { ts: ago(120), source: 'hook', decision: 'blocked', violations: [{ check: 'old' }] },
   ].map(l => JSON.stringify(l)).join('\n'));
-  const since = Date.parse('2026-10-11T06:30:00Z');
+  const since = Date.now() - 30 * 60000;
   const cycles = store.cycleLogsSince(home, since).map(store.cycleSummary);
   assert.strictEqual(cycles.length, 1);
   assert.strictEqual(cycles[0].promptHash, require('crypto').createHash('sha256').update('hello').digest('hex'));
   assert.deepStrictEqual(store.refusalsSince(home, since).map(r => r.checks), [['plan-required', 'mtf-trend']]);
+  // Whether a step may have acted: any gate decision (an allowed one too), a cycle, or the runner's state saved.
+  assert.strictEqual(store.touchedSince(home, since), true);
+  assert.strictEqual(store.touchedSince(home, Date.now() + 1000), false);
+  fs.writeFileSync(path.join(home, 'autotrader-state.json'), '{}');
+  assert.strictEqual(store.touchedSince(home, Date.now() - 1000), true);
 });
 
 test('driver: one step per decision time at its time, a line each, end of day retried until flat, resume', async () => {
@@ -217,6 +232,26 @@ test('driver: one step per decision time at its time, a line each, end of day re
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
 });
 
+test('driver: a time whose step started but whose line was never written is recorded as interrupted, never run twice', async () => {
+  const w = userWorld();
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const ran = [];
+  const ok = { serverCheck: async () => null, trades: async () => [] };
+  const step = async p => { ran.push(p.t.toISOString()); return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true }] })}` }; };
+  // A step that couldn't start (nothing ran): the time is left to run again.
+  await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => ({ code: 1, output: 'no broker' }) } }));
+  assert.strictEqual(JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8')).pending, undefined);
+  // The driver stopped mid-step (the step had started a cycle): the next run records it from the logs and goes on.
+  const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));
+  m.pending = { t: '2026-10-07T13:33:02.000Z', day: '2026-10-07', kind: 'trade', startedMs: Date.now() - 1000 };
+  fs.writeFileSync(w.run.paths.manifest, JSON.stringify(m));
+  await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step } });
+  assert.deepStrictEqual(ran, ['2026-10-07T13:36:02.000Z', '2026-10-07T13:39:02.000Z']);
+  const lines = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(lines.map(l => [l.t.slice(11, 19), Boolean(l.interrupted)]), [['13:33:02', true], ['13:36:02', false], ['13:39:02', false]]);
+  assert.strictEqual(lines[1].since, '2026-10-07T13:31:00.000Z', 'the interrupted time\'s fills go to the next line');
+});
+
 test('driver: a step that can\'t run stops the run; failed cycles in a row stop it; the broker must attest the replay', async () => {
   const w = userWorld();
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });
@@ -233,6 +268,8 @@ test('driver: a step that can\'t run stops the run; failed cycles in a row stop 
   seedRunHome(live.run, { root: ROOT, userEnv: live.env });
   await assert.rejects(runReplay({ run: live.run, baseEnv: live.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /not a replay broker/);
   assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_PLAN_MAX_AGE_MIN: '30' }), 'a gate setting is part of the run');
+  assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, SIM_DATA: '/other' }), 'the replay broker\'s settings are part of the run');
+  assert.strictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_ROOT: '/x', FTH_HOOK_PROFILE: 'strict', FTH_AUTONOMOUS: '1' }), 'where it was started from is not');
 });
 
 test('report: month by month, trades from round trips or closing fills, R, stand-aside, refusals by check', () => {
@@ -269,4 +306,77 @@ test('runner wiring: the broker must trade for a live account; the runner is bui
   const runner = wireRunner({ cfg: cfgOf({}), root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date('2026-10-10T15:00:00Z'), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {} });
   assert.strictEqual(typeof runner.step, 'function');
   assert.strictEqual(typeof (await runner.step()), 'number', 'a Saturday: nothing to do');
+});
+
+test('replay config: brokerEnv names the replay server\'s own variables only; a live broker\'s is refused', () => {
+  const dir = tmpDir();
+  for (const v of ['FTH_MAX_ENTRIES_PER_DAY', 'FTH_HOME', 'PATH', 'NODE_OPTIONS']) {
+    assert.throws(() => resolveReplay(replayConfig(dir, { brokerEnv: { runId: v } }), { env: {}, home: dir, root: ROOT }), /brokerEnv.runId/, v);
+  }
+  const w = userWorld({ brokerEnv: { runId: 'LIVE_API_KEY' } });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  assert.throws(() => replayEnv(w.env, w.run, { at: iso('2026-10-07T13:33:02Z') }), /LIVE_API_KEY is a live broker's variable/);
+});
+
+test('isolation: a symlink or another letter case to the live home or the repo is the same place', { skip: process.platform === 'win32' }, () => {
+  const dir = tmpDir();
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live);
+  fs.symlinkSync(live, path.join(dir, 'alias'));
+  assert.match(isolationErrors(path.join(dir, 'alias', 'r1'), { env: { FTH_HOME: live }, home: '/nonexistent-home', root: '/nonexistent-root' }).join(' '), /overlaps the live harness home/);
+  fs.symlinkSync(ROOT, path.join(dir, 'repo-alias'));
+  assert.match(isolationErrors(path.join(dir, 'repo-alias', 'runs', 'r1'), { env: {}, home: '/nonexistent-home', root: ROOT }).join(' '), /overlaps the repository/);
+  if (process.platform === 'darwin') assert.match(isolationErrors(path.join(ROOT.toUpperCase(), 'runs'), { env: {}, home: '/nonexistent-home', root: ROOT }).join(' '), /overlaps the repository/);
+});
+
+test('seed: brokers.json is written resolved (relative entries keep pointing where they did)', () => {
+  const w = userWorld();
+  const file = path.join(w.live, 'brokers.json');
+  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  cfg.brokers.sim = { ...cfg.brokers.sim, command: undefined, entry: 'servers/sim.js' };
+  fs.writeFileSync(file, JSON.stringify(cfg));
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const copy = JSON.parse(fs.readFileSync(path.join(w.run.paths.runHome, 'brokers.json'), 'utf8'));
+  assert.strictEqual(copy.brokers.sim.entry, path.join(w.live, 'servers', 'sim.js'));
+  assert.strictEqual(fs.readFileSync(path.join(w.run.paths.runHome, '.env'), 'utf8'), '');
+});
+
+test('driver: refuses while the live runner runs or another driver holds the run; a pass with no bar read and errors is a failure', async () => {
+  const w = userWorld();
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const ok = { serverCheck: async () => null, trades: async () => [] };
+  fs.writeFileSync(path.join(w.live, 'autotrader.lock'), JSON.stringify({ pid: process.pid }));
+  await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /the live runner is running/);
+  fs.unlinkSync(path.join(w.live, 'autotrader.lock'));
+  const lock = path.join(w.run.paths.runDir, 'driver.lock');
+  const sleeper = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)']);
+  try {
+    fs.writeFileSync(lock, JSON.stringify({ pid: sleeper.pid }));
+    await assert.rejects(runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: { ...ok, step: async () => assert.fail('no step') } }), /another replay driver/);
+  } finally {
+    sleeper.kill();
+  }
+  fs.writeFileSync(lock, JSON.stringify({ pid: 999999 })); // a dead holder: taken over
+  const broken = { ...ok, step: async p => ({ code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [], errors: ['MNQ: HTTP 503'], bars: [{ symbol: 'MNQ', lastBarT: null }] })}` }) };
+  const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps: broken });
+  assert.match(r.stopped, /3 failed cycles in a row/);
+  assert.ok(!fs.existsSync(lock), 'released');
+  const s = summarize(store.readRun(w.run.paths.runDir).days);
+  assert.strictEqual(s.total.failed, 3, 'the report counts them failed, not as a quiet trader');
+  // A line written whose manifest update was lost: its time is not run again.
+  const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));
+  assert.strictEqual(store.remaining({ ...m, lastT: null }, [{ t: iso('2026-10-07T13:36:02Z'), day: '2026-10-07' }, { t: iso('2026-10-07T13:39:02Z'), day: '2026-10-07' }], store.recordedTimes(w.run.paths.runDir)).length, 0);
+});
+
+test('runner wiring under replay: the server must attest the replayed time; bars closing after it are dropped', async () => {
+  const { replayUnattested, closedBarsOnly } = require('../../scripts/lib/runner-wiring');
+  const at = iso('2026-10-07T13:33:02Z');
+  assert.strictEqual(replayUnattested({ replay: true, serverTime: '2026-10-07T13:33:02.000Z' }, at), null);
+  assert.match(replayUnattested({ serverTime: '2026-10-07T13:33:02.000Z' }, at), /not report itself a replay server/);
+  assert.match(replayUnattested({ replay: true, serverTime: '2026-10-07T14:33:02.000Z' }, at), /not the replayed time/);
+  assert.match(replayUnattested(null, at), /replay server/);
+  const client = { closedBars: async () => ['13:27', '13:30', '13:33'].map(m => ({ t: `2026-10-07T${m}:00.000Z` })), other: 1 };
+  const wrapped = closedBarsOnly(client, () => at);
+  assert.deepStrictEqual((await wrapped.closedBars('MNQ', { minutes: 3 })).map(b => b.t), ['2026-10-07T13:27:00.000Z', '2026-10-07T13:30:00.000Z']);
+  assert.strictEqual(wrapped.other, 1);
 });

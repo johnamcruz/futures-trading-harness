@@ -18,7 +18,7 @@
  * config, harness or model is a new run id.
  *
  *   openRun(paths, { runId, hash, info, now })     the manifest (created, or checked on resume)
- *   remaining(manifest, points)                     points still to run, in order
+ *   remaining(manifest, points, recorded)           points still to run, in order (recorded: recordedTimes(runDir))
  *   appendRecord(paths, manifest, rec)              write a line, then the manifest's progress
  *   markDayDone(paths, manifest, day)
  *   readRun(runDir)                                 { manifest, days: { day: [records] } }
@@ -65,10 +65,20 @@ function openRun(paths, { runId, hash, info = {}, now = new Date() }) {
   return manifest;
 }
 
-function remaining(manifest, points) {
+function remaining(manifest, points, recorded = new Set()) {
   const done = new Set(manifest.daysDone || []);
-  const last = manifest.lastT ? Date.parse(manifest.lastT) : -Infinity;
+  // The last time recorded: the manifest's, or a line written just before a stop kept the manifest from saying so.
+  const last = Math.max(manifest.lastT ? Date.parse(manifest.lastT) : -Infinity, ...[...recorded].map(t => Date.parse(t)));
   return points.filter(p => !done.has(p.day) && p.t.getTime() > last);
+}
+
+/** Every decision time already in the run's day files. */
+function recordedTimes(runDir) {
+  const out = new Set();
+  let files;
+  try { files = fs.readdirSync(runDir).filter(n => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)); } catch (_err) { return out; }
+  for (const f of files) for (const l of readLines(path.join(runDir, f))) if (l.t) out.add(l.t);
+  return out;
 }
 
 const dayFile = (runDir, day) => path.join(runDir, `${day}.jsonl`);
@@ -112,6 +122,8 @@ function cycleLogsSince(home, sinceMs) {
   const dir = path.join(home, 'logs');
   let files;
   try { files = fs.readdirSync(dir).filter(n => /^cycles-\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)).sort(); } catch (_err) { return []; }
+  // Only files written since then (each step reads one or two, not the whole run's).
+  files = files.filter(f => { try { return fs.statSync(path.join(dir, f)).mtimeMs >= sinceMs - 1000; } catch (_err) { return false; } });
   return files.flatMap(f => readLines(path.join(dir, f))).filter(l => Date.parse(l.at) >= sinceMs);
 }
 
@@ -120,6 +132,21 @@ function refusalsSince(home, sinceMs) {
   return readLines(gateLogPath({ FTH_HOME: home }))
     .filter(e => e.decision === 'blocked' && Date.parse(e.ts) >= sinceMs)
     .map(e => ({ ts: e.ts, source: e.source || null, tool: e.tool || null, contractId: e.contractId || null, checks: (e.violations || []).map(v => v.check) }));
+}
+
+/**
+ * Whether a step may have acted since sinceMs: a cycle log, any gate decision
+ * (an allowed order, a runner close or cancel through the gateway), or the
+ * runner's state saved.
+ */
+function touchedSince(home, sinceMs) {
+  if (cycleLogsSince(home, sinceMs).length) return true;
+  if (readLines(gateLogPath({ FTH_HOME: home })).some(e => Date.parse(e.ts) >= sinceMs)) return true;
+  try {
+    return fs.statSync(path.join(home, 'autotrader-state.json')).mtimeMs >= sinceMs;
+  } catch (_err) {
+    return false;
+  }
 }
 
 function parseStep(output) {
@@ -132,4 +159,4 @@ function parseStep(output) {
   }
 }
 
-module.exports = { VERSION, openRun, remaining, appendRecord, markDayDone, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };
+module.exports = { VERSION, openRun, remaining, recordedTimes, touchedSince, appendRecord, markDayDone, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };

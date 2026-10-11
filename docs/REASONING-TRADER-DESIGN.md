@@ -118,16 +118,23 @@ file and journal. Every process the run starts gets:
 
 - `FTH_HOME`, `FTH_BROKER` (the replay broker), `FTH_REPLAY_NOW`, and the
   broker's run variables (clock file, state folder, run id, window, journal);
-- no path override pointing elsewhere (`FTH_GATE_LOG`, `FTH_BLACKOUTS_FILE`,
-  `FTH_KILL_SWITCH_FILE`, `FTH_BROKERS_FILE`, `FTH_ENV_FILE` removed);
+- every path override pinned inside the run home (`FTH_GATE_LOG`,
+  `FTH_BLACKOUTS_FILE`, `FTH_KILL_SWITCH_FILE`, `FTH_BROKERS_FILE`,
+  `FTH_ENV_FILE`) and the run flags set neutral (`FTH_PAPER`, `FTH_DRY_RUN`,
+  `FTH_ORDER_GATE_SKIP`, `FTH_TEST_NOW`): set, never just removed, because
+  a child's `.env` load fills a missing variable from the repository's `.env`;
 - every live broker's variables (credentials, server entry, journal: from
   `brokers.json` and the shipped brokers) replaced by a dead value, so no
   `.env` file can fill them in.
 
 Before the first step the driver checks that the selected broker is a replay
 broker with a journal of its own and no live twin (`harness-now.js`), and
-that its server attests `replay: true` at the clock's time; the gateway checks
-the server again before any order.
+that its server attests `replay: true` at the clock's time; every replay pass
+checks it again before reading anything, and the gateway before any order.
+The isolation checks follow symlinks and fold letter case where the
+filesystem does. The driver refuses to start while the live runner runs (its
+agents and a replay's share `/tmp/fth`), and one driver holds a run at a
+time.
 
 ### The cycle: the live harness
 
@@ -229,8 +236,17 @@ transcript (what the model saw and did), for stage 2's features.
 
 **Resume** by day: a re-run skips the days done, and an unfinished day
 continues after its last recorded time (the broker's clock only moves
-forward). A changed config, harness or model is a new run id; the driver
-refuses to mix them.
+forward). A time whose step started but whose line was never written (the
+driver stopped mid-step) is recorded as interrupted from what its process
+logged and never run twice. A changed config, harness, model, broker setting,
+gate setting, or strategy, account, model, skill, agent or rule file is a new
+run id; the driver refuses to mix them.
+
+**Per-process runner state.** The runner's day state is saved between
+processes, including the day whose end-of-day review ran (so a retry only
+flattens); its consecutive-error count isn't, so the driver counts failed
+cycles itself (a failed cycle, or a bar's pass that read no bar and logged
+errors) and stops the run after `maxConsecutiveErrors`.
 
 ### Report
 
