@@ -1,6 +1,7 @@
 ---
 name: trade-executor
 description: "The only agent allowed to place, modify, or cancel orders. Executes a risk-manager-approved trade plan exactly - entry, protective stop, target - verifies fills and working orders, and journals the result. Never changes the plan. Use from /trade-session after an APPROVE verdict, or to flatten in /eod."
+approvalMode: default
 tools:
   - skill
   - mcp__broker__get_account_snapshot

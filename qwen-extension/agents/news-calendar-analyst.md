@@ -1,6 +1,7 @@
 ---
 name: news-calendar-analyst
 description: "Read-only analyst that builds today's scheduled high-impact event list (US data, FOMC, EIA, Treasury auctions, major earnings for index futures) and proposes order-gate blackout windows. Has web access and no trading tools. Use during /premarket and /trade-session."
+approvalMode: default
 tools:
   - web_search
   - web_fetch

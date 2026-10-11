@@ -139,7 +139,18 @@ Further safeguards:
   directory.
 - **Qwen allowlist.** For Qwen the runner rewrites the
   `workspace/.qwen/settings.json` allowlist at start, so it matches the
-  configured bar and state directories.
+  configured bar and state directories. It allows subagents only by role
+  name (`Agent(risk-manager)` and the other harness roles). The rule approves
+  whichever agent Qwen resolves for that name, and Qwen prefers a session,
+  project (`workspace/.qwen/agents/`), or user agent (`~/.qwen/agents/`)
+  over the extension's, matching names in any letter case: keep no agent of
+  a harness role's name in either. Qwen's built-in
+  agents, including `claude-code` and `codex`, which run another CLI under
+  its own permissions, still need approval and so never run headless.
+  Headless Qwen 0.25 keeps its shell off under this allowlist: it turns the
+  shell on only for `Shell(...)` rules, and those prefix rules also pass
+  redirects and a leading `NODE_OPTIONS=...`, so the harness doesn't use them.
+  Qwen runs therefore can't run the harness scripts yet (known gap).
 - **Codex blackouts.** Codex runs may also write the news-blackouts
   directory (`<FTH_HOME>/blackouts`), and nothing else of the harness state.
 - **Leftover orders.** Before each bar's cycle, the runner cancels working

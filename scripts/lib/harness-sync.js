@@ -12,7 +12,8 @@
  *     qwen-extension.json, QWEN.md            `qwen extensions link`): generated
  *     agents/<role>.md, commands/<name>.md    Qwen-format agents and commands, plus
  *     skills, scripts, strategies, hooks,     symlinks to the shared sources so
- *     rules -> ../<dir>                       there is a single harness root
+ *     accounts, models -> ../<dir>            there is a single harness root
+ *                                             (rules/trading/ are embedded in QWEN.md)
  */
 
 const fs = require('fs');
@@ -77,12 +78,19 @@ function codexAgentsTable(agents, configDir) {
   ]).join('\n');
 }
 
+// Qwen runs a subagent with no approvalMode in auto-edit (trusted folders), which
+// would auto-approve its file writes outside the workspace allowlist (another
+// harness's or the broker server's config). Pinned to default: the allowlist
+// and deny rules decide, and anything else needs approval (refused headless).
+const QWEN_AGENT_APPROVAL_MODE = 'default';
+
 function qwenAgentMd(agent) {
   const tools = agent.tools.map(t => QWEN_TOOLS[t] || t);
   return [
     '---',
     `name: ${agent.name}`,
     `description: ${JSON.stringify(agent.description)}`,
+    `approvalMode: ${QWEN_AGENT_APPROVAL_MODE}`,
     'tools:',
     ...tools.map(t => `  - ${t}`),
     '---',
@@ -169,7 +177,11 @@ function qwenExtensionJson(root) {
 }
 
 /** Shared directories the Qwen extension links to instead of copying. */
-const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'rules', 'accounts', 'models'];
+const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'accounts', 'models'];
+// Links the extension must not have. rules/: Qwen skips extension rules without
+// `paths:` (always-on rules must live in the context file), and the extension's
+// QWEN.md already embeds rules/trading/, so linking them only adds skip warnings.
+const QWEN_DROPPED_LINKS = ['rules'];
 
 /** Map of relative path -> expected file content. */
 function expectedFiles(root) {
@@ -209,6 +221,18 @@ function syncLinks(root, check, stale) {
     if (current !== null) fs.rmSync(link, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(link), { recursive: true });
     fs.symlinkSync(target, link, 'dir');
+  }
+  for (const name of QWEN_DROPPED_LINKS) {
+    const link = path.join(root, 'qwen-extension', name);
+    let isLink;
+    try {
+      isLink = fs.lstatSync(link).isSymbolicLink();
+    } catch (_err) {
+      continue;
+    }
+    stale.push(`qwen-extension/${name} (obsolete)`);
+    // Only a link is removed; anything else there is left for a person to look at (check stays failing).
+    if (!check && isLink) fs.unlinkSync(link);
   }
 }
 
@@ -250,6 +274,7 @@ module.exports = {
   workspaceAgentsMd,
   expectedFiles,
   QWEN_LINKS,
+  QWEN_DROPPED_LINKS,
   qwenExtensionJson,
   syncHarness,
 };
