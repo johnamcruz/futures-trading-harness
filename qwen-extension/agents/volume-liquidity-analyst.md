@@ -1,7 +1,6 @@
 ---
 name: volume-liquidity-analyst
 description: "Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes only scratch bar files under /tmp/fth."
-approvalMode: default
 tools:
   - read_file
   - write_file

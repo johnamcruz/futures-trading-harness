@@ -1,7 +1,6 @@
 ---
 name: risk-manager
 description: "Independent risk officer for the futures desk. Phase 1 (parallel with analysts) reports account state, limits, loss streak, and today's risk budget. Phase 2 approves or vetoes a specific trade plan with sizing. Read-only; cannot place orders. Use in /premarket, /trade-session, and before any order."
-approvalMode: default
 tools:
   - read_file
   - run_shell_command

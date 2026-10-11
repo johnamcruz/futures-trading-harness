@@ -26,8 +26,6 @@ const FTH_ENV = [
   'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY', 'FTH_ORDER_GATE_SKIP', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS',
   'FTH_HOME',
 ];
-// This checkout: the generated Qwen extension ships the agent roles in its agents/.
-const HARNESS_ROOT = path.join(__dirname, '..', '..');
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
 
@@ -151,10 +149,7 @@ function mergeQwenSettings(settings, root) {
  * Project settings for workspace/ (where autonomous Qwen runs start): allow the
  * broker tools, reading, scratch files, and the harness's own scripts; deny
  * edits to the harness, its state, and harness configs, so a run can't loosen
- * its own limits. Subagents are allowed by name, only the harness's own roles
- * (`Agent(<role>)` matches Qwen's `subagent_type` exactly): Qwen's built-in
- * agents stay behind approval, among them `claude-code` and `codex`, which run
- * another CLI under its own permissions, outside these rules and the hooks.
+ * its own limits.
  */
 function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures-trading-harness', 'bars'), stateDir = path.join(home, '.futures-trading-harness'), journal = path.join(home, '.futures-trading-harness', 'journal.jsonl') } = {}) {
   const abs = p => `/${p}`; // Qwen rules use //absolute/path
@@ -163,13 +158,9 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
   return {
     permissions: {
       allow: [
-        `mcp__${SERVER_NAME}`, 'Skill', ...qwenAgentRules(), 'web_search',
+        `mcp__${SERVER_NAME}`, 'Skill', 'Agent', 'web_search',
         ...NEWS_DOMAINS.map(d => `WebFetch(${d})`),
         `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs('/tmp/fth')}/**)`,
-        // Bash(...) on purpose: headless Qwen 0.25 keeps its shell denied unless a rule names
-        // it Shell/run_shell_command, and its command rules are prefix matches that also pass
-        // redirects (`> any file`) and leading env (`NODE_OPTIONS=--require ...`), which would
-        // let a run write anywhere or run its own code. Don't rename these to Shell(...).
         'Bash(mkdir -p /tmp/fth)', `Edit(${abs('/tmp/fth/**')})`,
         ...HARNESS_SCRIPTS.map(s => `Bash(node ${root}/scripts/${s} *)`),
         // The prop attempt's state and verdicts, read-only (start/stop/record-day stay the user's).
@@ -190,11 +181,6 @@ function qwenWorkspaceSettings(root, home, { dataDir = path.join(home, '.futures
       ],
     },
   };
-}
-
-/** Qwen allow rules for the harness's agent roles, one per role (never the bare tool). */
-function qwenAgentRules() {
-  return loadAgents(HARNESS_ROOT).map(a => `Agent(${a.name})`);
 }
 
 /** Remove line and block comments outside strings (Qwen settings files allow them). */
@@ -295,7 +281,6 @@ module.exports = {
   planBrokerEntry,
   mergeQwenSettings,
   qwenWorkspaceSettings,
-  qwenAgentRules,
   stripJsonComments,
   planClaude,
   planCodex,

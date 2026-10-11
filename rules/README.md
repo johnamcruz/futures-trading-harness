@@ -5,9 +5,7 @@ Always-on policy for the trading agent, one source for every harness:
 - Claude Code: `node scripts/install.js --target claude` copies them to
   `~/.claude/rules/trading/` (plugins can't ship always-on rules).
 - Codex, Qwen Code, and any AGENTS.md reader: `scripts/sync-harness.js` embeds
-  them in `workspace/AGENTS.md`, `workspace/QWEN.md`, and the Qwen extension's
-  `QWEN.md`. The Qwen extension does not ship this folder: Qwen skips
-  extension rules that have no `paths:`.
+  them in `workspace/AGENTS.md` and `workspace/QWEN.md`.
 
 | File | Covers |
 |---|---|

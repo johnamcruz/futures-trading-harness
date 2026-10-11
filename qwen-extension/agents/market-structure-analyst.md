@@ -1,7 +1,6 @@
 ---
 name: market-structure-analyst
 description: "Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes only scratch bar files under /tmp/fth."
-approvalMode: default
 tools:
   - read_file
   - write_file
