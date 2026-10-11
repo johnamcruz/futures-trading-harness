@@ -36,6 +36,8 @@ function main({ env = process.env, stdin = process.stdin, stdout = process.stdou
   const out = stdout.write.bind(stdout);
   stdout.write = (chunk, ...rest) => stderr.write(chunk, ...rest);
   const write = msg => out(`${JSON.stringify(msg)}\n`);
+  // The client went away (EPIPE): nothing more can be answered.
+  if (typeof stdout.on === 'function') stdout.on('error', () => process.exit(0));
 
   const server = createServer({ env, root: ROOT, write });
   const lines = boundedLines(line => { server.handleLine(line); }, () => server.oversize());

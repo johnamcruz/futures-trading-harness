@@ -37,6 +37,7 @@ const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const MAX_LINE_BYTES = 1024 * 1024;
 const MAX_OUTPUT_BYTES = 256 * 1024;
 const VERSION = '1';
+const MAX_ERRORS = 10; // an invalid call's reply names the first few problems, never thousands
 
 const result = (text, isError = false) => ({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) });
 
@@ -46,7 +47,10 @@ async function callTool(name, input, { env = process.env, root = ROOT } = {}) {
   if (!tool) return result(`[harness] unknown tool: ${String(name).slice(0, 64)}`, true);
   const given = input === undefined ? {} : input;
   const errors = validate(tool.inputSchema, given);
-  if (errors.length) return result(`[harness] invalid arguments for ${tool.name}: ${errors.join('; ')}\n`, true);
+  if (errors.length) {
+    const more = errors.length > MAX_ERRORS ? `; and ${errors.length - MAX_ERRORS} more` : '';
+    return result(`[harness] invalid arguments for ${tool.name}: ${errors.slice(0, MAX_ERRORS).join('; ')}${more}\n`, true);
+  }
   // The .env credentials only where the CLI loads them (bars.js: the broker's settings), on a copy.
   let notes = '';
   if (tool.envFile) {
@@ -86,7 +90,7 @@ function boundedLines(onLine, onOversize, max = MAX_LINE_BYTES) {
   let dropping = false;
   const end = () => {
     const line = parts.join('');
-    if (dropping || Buffer.byteLength(line.replace(/\r?\n$/, '')) > max) onOversize();
+    if (dropping || Buffer.byteLength(line.replace(/\r?\n$|\r$/, '')) > max) onOversize();
     else lines.push(line.endsWith('\n') ? line : `${line}\n`);
     parts = [];
     size = 0;

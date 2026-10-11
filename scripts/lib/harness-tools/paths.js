@@ -7,7 +7,8 @@
  *
  * Allowed: an existing regular .json, .csv, .parquet or .xlsx file of at most
  * 50 MB, by absolute path, inside the bars directory (FTH_BARS_DIR, default
- * <FTH_HOME>/bars: where the runner writes bars) or /tmp/fth (where bars_fetch
+ * <FTH_HOME>/bars: the runner's default bars directory; a runner with another
+ * dataDir sets FTH_BARS_DIR to it) or /tmp/fth (where bars_fetch
  * writes; on macOS also given as /private/tmp/fth). Refused: anything outside,
  * a symlink anywhere from the directory down (the directory itself included),
  * a file with more than one hard link (a link to a file elsewhere), a directory
@@ -73,7 +74,12 @@ function barsFile(value, { env = process.env, dirs = barsDirs(env), uid = typeof
     const realDir = path.join(realish(path.dirname(dir)), path.basename(dir));
     const file = realDir !== dir && inside(given, realDir) ? path.join(dir, path.relative(realDir, given)) : given;
     if (!inside(file, dir)) continue;
-    const why = walkError(dir, file, uid);
+    let why;
+    try {
+      why = walkError(dir, file, uid);
+    } catch (err) {
+      why = err.code || 'unreadable'; // ENAMETOOLONG, EACCES: refused like the rest
+    }
     if (why) return refused(why);
     let real;
     try {

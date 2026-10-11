@@ -114,6 +114,16 @@ test('callTool: only bars_fetch loads the user\'s .env (as only bars.js does), i
   assert.strictEqual(env.FTH_REPLAY_NOW, undefined, 'the launch environment is unchanged');
 });
 
+test('callTool: an invalid call names the first ten problems, never thousands', async () => {
+  const many = Object.fromEntries(Array.from({ length: 60000 }, (_, i) => [`k${i}`, 1]));
+  const r = await callTool('lessons', many, { env: { FTH_HOME: tmpDir() } });
+  assert.strictEqual(r.isError, true);
+  assert.match(r.content[0].text, /"k9": unknown argument .*; and 59990 more\n$/);
+  assert.ok(r.content[0].text.length < 2000);
+  const items = await callTool('mtf_read', { bars: '/tmp/fth/a.json', timeframes: Array(150000).fill('x') }, { env: { FTH_HOME: tmpDir() } });
+  assert.ok(items.content[0].text.length < 2000);
+});
+
 test('callTool: output over 256 KB is refused whole, with how to narrow it', async () => {
   const root = tmpDir();
   fs.mkdirSync(path.join(root, 'strategies', 'big'), { recursive: true });
@@ -140,6 +150,8 @@ test('boundedLines: complete lines pass; a line over the limit is dropped whole 
   b.push('\n');
   b.push('tail');
   b.flush();
-  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', '012345678', '0123456789', 'tail']);
+  b.push('0123456789\r');
+  b.flush();
+  assert.deepStrictEqual(lines, ['{"a":1}', '{"b":2}', '{"c":3}', '0123456789', '012345678', '0123456789', 'tail', '0123456789']);
   assert.strictEqual(over, 2);
 });

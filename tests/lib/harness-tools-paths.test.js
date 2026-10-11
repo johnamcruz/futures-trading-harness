@@ -63,6 +63,7 @@ test('paths: everything else is refused, and no refusal carries the file content
     ['', /not a path/],
     [`${dir}/MNQ-3m.json\0`, /not a path/],
     [42, /not a path/],
+    [path.join(dir, `${'n'.repeat(300)}.json`), /ENAMETOOLONG/],
   ];
   for (const [value, why] of cases) {
     const r = barsFile(value, { dirs });
