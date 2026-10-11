@@ -9,6 +9,8 @@
  *   node scripts/replay.js run --config replay.json [--max-cycles N]   run (or resume) a replay
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
  *   node scripts/replay.js report <run dir | --config replay.json>     month by month; writes report.md
+ *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
+ *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
  * Each run lives in its own harness home, <workDir>/<runId>, never the live
@@ -30,9 +32,11 @@ const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
 const { summarize, toMarkdown, toText } = require('./lib/replay/report');
+const { writeLabels, summaryText } = require('./lib/replay/labels');
+const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json>';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> | labels <run dir> [--budget USD] [--bars SYM=file ...]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -71,6 +75,26 @@ function report(argv) {
   return 0;
 }
 
+// Labels (stage 2): one per decision time and symbol, written in the run's folder, never the repository.
+function labels(argv) {
+  if (!argv[1] || argv[1].startsWith('--')) throw new Error(USAGE);
+  const budget = arg(argv, '--budget') !== undefined ? Number(arg(argv, '--budget')) : null;
+  if (budget !== null && !(budget > 0)) throw new Error('--budget: the dollars a trade may risk, above 0');
+  const barsFiles = {};
+  argv.forEach((a, i) => {
+    if (a !== '--bars') return;
+    const m = /^([A-Z0-9]+)=(.+)$/.exec(String(argv[i + 1] || ''));
+    if (!m) throw new Error('--bars: SYMBOL=file (e.g. MNQ=~/data/MNQ-1m.parquet)');
+    barsFiles[m[1]] = m[2];
+  });
+  // The strategies' exits for the counterfactuals: the ones the run's gate read (the repository's and FTH_STRATEGIES_DIRS).
+  const { strategies } = loadStrategies(ROOT, process.env);
+  const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, barsFiles });
+  process.stdout.write(summaryText(summary));
+  say(`wrote ${file} and labels-summary.json`);
+  return 0;
+}
+
 async function run(argv) {
   const r = load(argv);
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
@@ -88,6 +112,7 @@ async function main(argv) {
   if (cmd === 'run') return run(argv);
   if (cmd === 'points') return points(load(argv));
   if (cmd === 'report') return report(argv);
+  if (cmd === 'labels') return labels(argv);
   throw new Error(USAGE);
 }
 

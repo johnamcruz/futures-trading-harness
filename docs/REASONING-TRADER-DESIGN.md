@@ -3,7 +3,9 @@
 Status: stage 1 (replay) is built: the replay driver (`scripts/replay.js`,
 `scripts/lib/replay/`), the replay clock (`scripts/lib/trading/harness-now.js`)
 and the simulated-broker module the replay broker's fills are ported from.
-Stage 2 is design only, built if stage 1 shows an edge.
+Stage 2's first piece, the labeler (`scripts/lib/replay/labels.js`,
+`node scripts/replay.js labels <run dir>`), is built; the rest of stage 2
+is design only, built if stage 1 shows an edge.
 
 ## The problem
 
@@ -311,6 +313,59 @@ to the budget's step). Decisions the student can't express (limit or stop
 entries, targets) are kept out of cloning and counted; the report gives the
 coverage.
 
+### Labels (built)
+
+`node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file]`
+(`scripts/lib/replay/labels.js`, `counterfactual.js`) writes
+`<run dir>/labels.jsonl` and `labels-summary.json`, in the run's own folder
+(refused inside the repository), and prints the coverage. Model-neutral: it
+reads only what every replay writes (the day files, the cycle files'
+context and transcript, the gate's log, the scans log, the bars, the
+fills). One label per decision time and symbol:
+
+- `decision`: `flat` or `in-trade` (a trade or manage cycle ran for the
+  symbol: the teacher decided; the position is what the cycle's context
+  showed, else the fills through t), `no-cycle` (a trade time with no cycle
+  for it: counted, not a teacher decision), `housekeeping` (premarket, end
+  of day). Interrupted lines are labelled and flagged; torn lines counted.
+- `candidates`: what the scan fired on the decision's bar, with direction
+  (only scans logged by t).
+- `teacher`: `none` / `long` / `short` flat (a flat cycle with a candidate
+  and no entry is a skip), `hold` / `tighten` / `exit` in a trade; the
+  setup tag; the stop in ticks, points, and the nearest of 0.5, 0.75, 1,
+  1.5, 2, 3 x ATR(20) on bars closed by t (null and counted when the run
+  home has too few); the size as a step (0.25, 0.5, 0.75, 1) of the budget
+  (`--budget`, else an active prop attempt's default share of its cushion;
+  null and counted otherwise); the raw orders. Orders are the gate's records
+  in the cycle's window (place, modify, cancel, partial close) joined to
+  the transcript's calls for their arguments; `close_position` isn't gated,
+  so an exit by it is seen only in a parsed transcript.
+- `gate`: allowed, refused (with checks), none; refused intents are kept and
+  flagged, for the cloning config to decide.
+- `outcome`: the round trip from the broker's fills (P&L, net of every
+  fill's fees, R from the initial stop, MAE and MFE in R when the broker
+  sends them, win or loss).
+- `counterfactual(s)`: for a skipped candidate or one fired on a no-cycle
+  bar, what the strategy's own trade would have done, simulated as the
+  backtester trades it (the simulated broker, next-open fill with a tick of
+  slippage, the scan's stop ceiled to ticks, the exit block's target, trail
+  and max bars, the stop checked before the target in a bar, flat at end of
+  day) on the run's bars or the data the run replayed (`--bars`); for a
+  taken entry the same fields from its fills. So a skilful skip (a loser
+  avoided) can be told from a cautious one (a winner missed). What can't be
+  simulated is marked and counted.
+- `clone`: whether the student can express it (limit or stop entries,
+  targets, several entries, adds, partial exits, unknown arguments, an
+  unmapped stop stay out), and why.
+- provenance: harness, model, config hash, prompt hash, the cycle file.
+
+Decision-time fields never read anything after t; outcomes and
+counterfactuals are what came after, only in their own fields. The same
+files give the same labels (idempotent). Limitation: the runner's bars file
+keeps the last `bars` bars, so a long run's earliest days may have no ATR
+or counterfactual bars in the run home: pass the replayed data with
+`--bars`, and read the counts.
+
 ### Training
 
 1. **Behaviour cloning** on the train window's labels: the policy learns to
@@ -347,7 +402,11 @@ live record.
   interface.
 - The `replay` skill tells agents how to configure, run, resume and read a
   replay (the user's to start); `policy-training` points to it.
-- Stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
+- Stage 2's labeler: `scripts/lib/replay/labels.js` and `counterfactual.js`
+  (tests in `tests/lib/replay-labels.test.js`,
+  `tests/lib/replay-counterfactual.test.js`, and the replay end-to-end
+  test), through `replay.js labels`.
+- The rest of stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
   `scripts/lib/rl/` (observation, env server), with tests in both.
 
 ## Plan
@@ -356,12 +415,14 @@ live record.
 2. The replay clock. Done.
 3. The replay broker (backtester-mcp, its own repo). Done.
 4. The replay driver, store and report. Done.
-5. Leakage tests, then one month in the train window, the New York session,
+5. Labels from a run (the labeler, with counterfactuals for what the
+   teacher didn't take). Done.
+6. Leakage tests, then one month in the train window, the New York session,
    with the report.
-6. A replay of the select window. **Decision point**, on the select window
+7. A replay of the select window. **Decision point**, on the select window
    only: build stage 2 if the reasoning trader beats the rules baseline and
    the current policy there.
-7. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
+8. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
    then the one out-of-sample look.
 
 Not built yet: a prop attempt started per run (today a run's prop strategies

@@ -102,6 +102,26 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   assert.strictEqual(rep.status, 0, rep.stderr);
   assert.match(rep.stdout, /2026-10 +3 +3 +0 +100\.0% +1 +100\.0%/);
   assert.ok(fs.existsSync(path.join(w.runDir, 'report.md')));
+  // Labels (stage 2) from the same run: one per decision time, joined to the gate's log and the fills.
+  const lab = replay(w, ['labels', w.runDir]);
+  assert.strictEqual(lab.status, 0, lab.stderr);
+  assert.match(lab.stdout, /labels 3, decisions 3, taken 0, skipped 0, refused 2, wins 0, losses 0, uncloneable 3/);
+  const labels = lines(path.join(w.runDir, 'labels.jsonl'));
+  assert.deepStrictEqual(labels.map(l => l.t), recs.map(r => r.t));
+  // First: the replay account's long is open (the cycle's context): an entry on top of it, refused, keeps it out of cloning.
+  // The close (close_position, not gated) is in no gate record and the fake harness's text transcript names no tool calls.
+  assert.deepStrictEqual([labels[0].decision, labels[0].position.side, labels[0].teacher.action, labels[0].clone.reasons], ['in-trade', 'long', 'hold', ['entry while in a trade']]);
+  assert.deepStrictEqual([labels[0].outcome.result, labels[0].outcome.pnl, labels[0].outcome.openKnown], ['win', 20, false]);
+  // Then flat: the teacher's long (setup:orb, stop 21495 from its rationale), refused with the gate's checks; its intent kept.
+  for (const l of labels.slice(1)) {
+    assert.deepStrictEqual([l.decision, l.teacher.action, l.teacher.setup, l.gate.decision, l.outcome.result], ['flat', 'long', 'orb', 'refused', 'refused']);
+    assert.ok(l.gate.checks.includes('plan-required'), JSON.stringify(l.gate));
+    assert.strictEqual(l.teacher.orders.length, 1, 'each cycle\'s own gate record, none of its neighbour\'s');
+    assert.strictEqual(l.teacher.stop.points, 5);
+    assert.match(l.provenance.promptHash, /^[0-9a-f]{64}$/);
+  }
+  const labelSummary = JSON.parse(fs.readFileSync(path.join(w.runDir, 'labels-summary.json'), 'utf8'));
+  assert.strictEqual(labelSummary.decisions, 3);
 
   // The user's own home holds what it held: the replay wrote nothing there.
   assert.deepStrictEqual(fs.readdirSync(w.live), ['brokers.json']);
