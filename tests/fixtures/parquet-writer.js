@@ -45,7 +45,7 @@ const finish = (parts, footer) => {
  * A file of `columns` ([{ name, type, values, typeLength, encoding, convert }]; type: 1 INT32, 2 INT64,
  * 5 DOUBLE, 7 FIXED_LEN_BYTE_ARRAY), plain pages of `pageRows`, gzip (codec 2) or none (codec 0).
  */
-function writeParquet({ columns, pageRows = 65536, codec = 2 }) {
+function writeParquet({ columns, pageRows = 65536, codec = 2, pageHeader = null }) {
   const n = columns[0].values.length;
   const parts = [Buffer.from('PAR1')];
   let off = 4;
@@ -66,7 +66,9 @@ function writeParquet({ columns, pageRows = 65536, codec = 2 }) {
         else Buffer.from(v).copy(raw, j * width);
       }
       const body = codec === 2 ? zlib.gzipSync(raw, { level: 1 }) : raw;
-      const h = Buffer.from(struct([[1, 'i32', 0], [2, 'i32', raw.length], [3, 'i32', body.length], [5, 'struct', [[1, 'i32', rows], [2, 'i32', col.encoding || 0], [3, 'i32', 0], [4, 'i32', 0]]]]));
+      // pageHeader(rows, rawLength, bodyLength): other header fields, to craft a page (a v2 or dictionary page).
+      const fields = pageHeader ? pageHeader(rows, raw.length, body.length) : [[1, 'i32', 0], [2, 'i32', raw.length], [3, 'i32', body.length], [5, 'struct', [[1, 'i32', rows], [2, 'i32', col.encoding || 0], [3, 'i32', 0], [4, 'i32', 0]]]];
+      const h = Buffer.from(struct(fields));
       parts.push(h, body);
       off += h.length + body.length;
       total += raw.length;

@@ -220,13 +220,15 @@ test('JSON and CSV (what the agents\' tools read): shapes no bars file has are r
     'columns.csv': [`${','.repeat(MB45)}\n1\n`, /csv: more than 1000 columns/],
     'wide-rows.csv': [`time,open,high,low,close\n${`${','.repeat(1000)}\n`.repeat(40000)}`, /row 2: unreadable time/],
   };
+  // Rows are split only to the header's width: wide rows stay small (650 MB if every cell were split out).
+  const limits = { 'wide-rows.csv': 400 };
   for (const [name, [text, why]] of Object.entries(files)) {
     fs.writeFileSync(path.join(dir, name), text);
     const r = loadIsolated(path.join(dir, name), 60000);
     assert.strictEqual(r.status, 0, `${name}: ${r.signal || r.stderr}`);
     assert.match(r.msg, why, name);
     assert.ok(r.ms < 15000, `${name}: ${r.ms} ms`);
-    assert.ok(r.maxRssMb < 800, `${name}: ${r.maxRssMb} MB`);
+    assert.ok(r.maxRssMb < (limits[name] || 800), `${name}: ${r.maxRssMb} MB`);
   }
   // Real shapes still read: get_bars JSON, arrays of objects, and CSV.
   const bars = Array.from({ length: 50 }, (_, i) => ({ t: new Date(Date.UTC(2026, 0, 2, 14, i)).toISOString(), o: 1.5, h: 1.75, l: 1.25, c: 1.5, v: 0 }));
@@ -235,4 +237,44 @@ test('JSON and CSV (what the agents\' tools read): shapes no bars file has are r
   const { loadBars } = require('../../scripts/lib/backtest/data');
   assert.strictEqual(loadBars(path.join(dir, 'ok.json')).length, 50);
   assert.strictEqual(loadBars(path.join(dir, 'ok.csv')).length, 50);
+});
+
+test('parquet: a metadata map of booleans reads each boolean as a byte; negative page counts are refused as out of range', () => {
+  const { Reader } = require('../../scripts/lib/backtest/parquet');
+  // map<bool, i32> { true: 5, false: -3 } (compact protocol: size, key/value types, then the entries), then a byte after it.
+  const r = new Reader(Buffer.from([2, 0x15, 1, ...parquetWriter.zz(5), 2, ...parquetWriter.zz(-3), 0x7f]));
+  assert.deepStrictEqual(r.map(), [[true, 5], [false, -3]]);
+  assert.strictEqual(r.byte(), 0x7f, 'the entries consumed exactly their bytes');
+  const page = pageHeader => {
+    const file = path.join(tmpDir(), 'p.parquet');
+    fs.writeFileSync(file, parquetWriter.writeParquet({ codec: 0, columns: [{ name: 'v', type: 1, values: [1, 2, 3] }], pageHeader }));
+    return file;
+  };
+  const v2 = (n, nulls) => (rows, raw, body) => [[1, 'i32', 3], [2, 'i32', raw], [3, 'i32', body], [8, 'struct', [[1, 'i32', n], [2, 'i32', nulls], [3, 'i32', rows], [4, 'i32', 0], [5, 'i32', 0], [6, 'i32', 0]]]];
+  const dict = n => (rows, raw, body) => [[1, 'i32', 2], [2, 'i32', raw], [3, 'i32', body], [7, 'struct', [[1, 'i32', n], [2, 'i32', 0]]]];
+  assert.throws(() => readParquet(page(v2(-5, 0))), /^Error: parquet: a page whose value count is out of range$/);
+  assert.throws(() => readParquet(page(v2(3, 4))), /^Error: parquet: a page whose null count is out of range$/);
+  assert.throws(() => readParquet(page(dict(-5))), /^Error: parquet: a page whose value count is out of range$/);
+  assert.deepStrictEqual(readParquet(page(v2(3, 0))).rows.map(x => x.v), [1, 2, 3], 'a well-formed version-2 page reads');
+});
+
+test('JSON bars: a byte order mark is skipped; numeric epoch times (pandas to_json records) read; a file of unreadable bars is refused, never loaded as none', () => {
+  const { loadBars } = require('../../scripts/lib/backtest/data');
+  const dir = tmpDir();
+  const t0 = Date.UTC(2026, 0, 2, 14, 0);
+  const rows = Array.from({ length: 5 }, (_, i) => ({ time: t0 + i * 60000, open: 1.5, high: 1.75, low: 1.25, close: 1.5, volume: 3 }));
+  fs.writeFileSync(path.join(dir, 'records-ms.json'), JSON.stringify(rows));
+  fs.writeFileSync(path.join(dir, 'records-s.json'), JSON.stringify(rows.map(r => ({ ...r, time: r.time / 1000 }))));
+  fs.writeFileSync(path.join(dir, 'bom.json'), `\ufeff${JSON.stringify({ bars: rows.map(r => ({ t: new Date(r.time).toISOString(), o: 1, h: 2, l: 0.5, c: 1 })) })}`);
+  fs.writeFileSync(path.join(dir, 'bom.csv'), `\ufefftime,open,high,low,close\n2026-01-02T14:00:00Z,1,2,0.5,1\n`);
+  for (const f of ['records-ms.json', 'records-s.json', 'bom.json']) {
+    const bars = loadBars(path.join(dir, f));
+    assert.strictEqual(bars.length, 5, f);
+    assert.strictEqual(bars[0].t, '2026-01-02T14:00:00.000Z', f);
+  }
+  assert.strictEqual(loadBars(path.join(dir, 'bom.csv')).length, 1);
+  fs.writeFileSync(path.join(dir, 'unreadable.json'), JSON.stringify([{ time: 'soon', open: 1, high: 2, low: 0, close: 1 }, { foo: 1 }]));
+  assert.throws(() => loadBars(path.join(dir, 'unreadable.json')), /unreadable\.json: none of its 2 bars has a readable time, open, high, low and close$/);
+  fs.writeFileSync(path.join(dir, 'empty.json'), '[]');
+  assert.deepStrictEqual(loadBars(path.join(dir, 'empty.json')), [], 'an empty file is empty, not an error');
 });

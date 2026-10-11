@@ -406,7 +406,9 @@ function readColumnChunk(buf, chunk, col, budget) {
     if (dataStart + compressed > buf.length || dataStart + compressed <= pos) throw new Error('parquet: a page outside the file');
     pos = dataStart + compressed;
     if (type === PAGE.DICTIONARY) {
-      budget.count('parquet', Number(header[7][1]));
+      const entries = header[7] && header[7][1];
+      if (!(Number.isInteger(entries) && entries >= 0)) throw new Error('parquet: a page whose value count is out of range');
+      budget.count('parquet', entries);
       const page = decompress(codec, buf.subarray(dataStart, dataStart + compressed), uncompressed, budget);
       dict = plain(page, 0, col.type, header[7][1], col.typeLength);
     } else if (type === PAGE.DATA) {
@@ -430,9 +432,10 @@ function readColumnChunk(buf, chunk, col, budget) {
     } else if (type === PAGE.DATA_V2) {
       const h = header[8];
       const n = h[1];
-      budget.count('parquet', Number(n));
+      if (!(Number.isInteger(n) && n >= 0)) throw new Error('parquet: a page whose value count is out of range');
       const nulls = h[2] || 0;
-      if (!(Number.isInteger(n) && n >= 0 && Number.isInteger(nulls) && nulls >= 0 && nulls <= n)) throw new Error('parquet: a page whose null count is out of range');
+      if (!(Number.isInteger(nulls) && nulls >= 0 && nulls <= n)) throw new Error('parquet: a page whose null count is out of range');
+      budget.count('parquet', n);
       const defLen = h[5] || 0;
       const repLen = h[6] || 0;
       const levels = dataStart + repLen;
@@ -496,4 +499,4 @@ function readParquet(file, { budget = createBudget() } = {}) {
   return { columns: cols.map(c => c.name), rows };
 }
 
-module.exports = { readParquet, snappy, rleHybrid, deltaBinary, decompress };
+module.exports = { readParquet, snappy, rleHybrid, deltaBinary, decompress, Reader };

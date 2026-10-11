@@ -93,6 +93,26 @@ function checkJsonShape(text, label) {
   if (values > text.length / 3 + 16) throw new Error(`${label}: more JSON values than a bars file of its size holds (not a bars file)`);
 }
 
+/** A UTF-8 byte order mark (Excel and some exporters write one) is not part of the data. */
+const stripBom = text => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+
+/**
+ * Bars from parsed JSON (get_bars output, or an array of bars as pandas to_json(orient='records') writes):
+ * numeric times are epochs (s, ms, us or ns by magnitude, as in CSV). A file whose bars all fail to
+ * read is refused, never loaded as no bars.
+ */
+function jsonBars(parsed, label) {
+  const raw = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.bars) ? parsed.bars : null;
+  const epoch = b => {
+    const t = b && typeof b === 'object' ? (b.t ?? b.time) : undefined;
+    return typeof t === 'number' && Number.isFinite(t) ? { ...b, t: new Date(epochMs(t)).toISOString(), time: undefined } : b;
+  };
+  const rows = raw ? raw.map(epoch) : null;
+  const bars = normalizeBars(rows ? (Array.isArray(parsed) ? rows : { ...parsed, bars: rows }) : parsed);
+  if (rows && rows.length && !bars.length) throw new Error(`${label}: none of its ${rows.length} bars has a readable time, open, high, low and close`);
+  return bars;
+}
+
 function parseJson(text, label) {
   checkJsonShape(text, label);
   try {
@@ -154,9 +174,9 @@ function readTable(file, { sheet = null } = {}) {
     return tableToBars(rows[start], rows.slice(start + 1).filter(r => r.some(x => x !== null)), { excel: true, date1904 });
   }
   if (ext === '.xls') throw new Error(`${file}: legacy .xls is not supported; save it as .xlsx`);
-  const text = fs.readFileSync(file, 'utf8');
+  const text = stripBom(fs.readFileSync(file, 'utf8'));
   const trimmed = text.trimStart();
-  return trimmed.startsWith('[') || trimmed.startsWith('{') ? normalizeBars(parseJson(text, file)) : parseCsv(text);
+  return trimmed.startsWith('[') || trimmed.startsWith('{') ? jsonBars(parseJson(text, file), file) : parseCsv(text);
 }
 
 /** Load and clean bars from a Parquet, Excel, CSV, or JSON file. */
@@ -176,7 +196,7 @@ function loadBars(file, opts = {}) {
  * array); anything else is a file loadBars reads (JSON, CSV, Parquet, Excel).
  */
 function readBarsArg(file) {
-  if (file === '-') return normalizeBars(parseJson(fs.readFileSync(0, 'utf8'), 'stdin'));
+  if (file === '-') return jsonBars(parseJson(stripBom(fs.readFileSync(0, 'utf8')), 'stdin'), 'stdin');
   return loadBars(path.resolve(file));
 }
 
