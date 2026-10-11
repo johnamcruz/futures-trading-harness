@@ -258,10 +258,15 @@ own words (why the stop sits there, the R multiple, the exit). Don't
 compute stop prices, ticks, size, or dollar risk by hand. A refusal (the
 strategy isn't a candidate now, or its rules fired the other side) means no
 entry on that strategy and side; never work around it. For a policy verdict,
-call it with the policy strategy's name: it plans exactly the verdict. Its
-size is the most the harness's own rules give (1 for a rules strategy, the
-verdict's for a policy); a smaller size from your plan (a `mixed` read, a
-reversal fade) changes only `size`, and the risk scales with it. A manual
+call it with the policy strategy's name: it plans exactly the verdict, on
+bars whose last closed bar is the verdict's. Its size is the starting size:
+1 for a rules strategy (position-sizing's size-1 rule) and, for a policy,
+the verdict's cut to the attempt's size budget now, which is the most a
+policy entry may have. A different size from
+your plan changes only `size`, and the risk scales with it: smaller for a
+`mixed` read or a reversal fade, and, for a rules strategy, larger only as
+position-sizing allows (a setup with 30+ reviewed trades and positive
+expectancy, within the budget and caps). A manual
 strategy has no order_plan (its stop is your read of STRATEGY.md): work its
 numbers by the rules above and position-sizing.
 

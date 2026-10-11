@@ -22,7 +22,8 @@
  * A policy strategy: its live verdict (contract, side, stop ticks, at most its
  * size), capped by the attempt's size budget now (prop-state.js budgetPlan,
  * as the gate checks it), on the verdict's setup, which must still be its
- * component's candidate on the bar.
+ * component's candidate on the bar, and on the verdict's own bar (the last
+ * closed bar of the bars given).
  */
 
 const { readBarsArg } = require('../backtest/data');
@@ -36,6 +37,7 @@ const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
 const { resolveJournalPath, readJournal, entriesSince } = require('../trading/journal');
 const { tradingDayStart } = require('../trading/clock');
+const { FUTURE_TOLERANCE_MIN } = require('../trading/signal-state');
 const { harnessHome } = require('../paths');
 const { context, say } = require('./cli');
 const { whyNot } = require('./compact');
@@ -76,7 +78,7 @@ function rulesPlan(c, s, { results, root, want, home }) {
   };
 }
 
-function policyPlan(c, s, { results, root, want, home, now }) {
+function policyPlan(c, s, { results, root, want, home, now, lastBar }) {
   const v = prop.latestVerdict(home, s.name, root);
   const bundle = s.policy ? s.policy.bundle : null;
   if (!v) throw new Error(`${s.name} has no verdict for ${root}: the runner records one at each setup of ${(s.strategies || []).join(', ')}; no order`);
@@ -84,6 +86,10 @@ function policyPlan(c, s, { results, root, want, home, now }) {
   if (!(Date.parse(v.expiresAt) > now.getTime())) throw new Error(`${s.name}'s latest verdict (${v.bar}) expired at ${v.expiresAt}; no order`);
   if (v.action === 'skip' || !(v.maxSize >= 1)) throw new Error(`${s.name} skipped the setup${v.reason ? ` (${v.reason})` : ''}; no order`);
   if (want !== v.direction) throw new Error(`${s.name}'s verdict is for a ${v.direction} entry, not ${want}; no order`);
+  // The verdict's stop ticks were sized on its own bar: never paired with another bar's entry.
+  if (!(Date.parse(v.bar) === Date.parse(lastBar))) {
+    throw new Error(`${s.name}'s verdict is for the bar opened ${v.bar}, not the last closed bar of these bars (opened ${lastBar}): plan it on bars ending at the verdict's bar; no order`);
+  }
   const r = candidateOf(results, v.component, root, v.direction);
   const account = loadAccounts(c.root, c.env).accounts.find(a => a.name === s.account);
   if (!account || !account.valid) throw new Error(`${s.name} trades account "${s.account}", which is ${account ? 'invalid' : 'not found'}`);
@@ -105,7 +111,8 @@ function policyPlan(c, s, { results, root, want, home, now }) {
 /**
  * The bars must be the strategy's own and current, as the gate's trigger record is: bars on its
  * timeframe (the step between the last bars, as scan's record measures it), the last one closed at
- * the harness clock and no older than the gate's signal age (FTH_SIGNAL_MAX_AGE_MIN). Else a refusal.
+ * the harness clock (within the gate's FUTURE_TOLERANCE_MIN for a broker clock ahead of it) and no
+ * older than the gate's signal age (FTH_SIGNAL_MAX_AGE_MIN). Returns the last bar's open time; else a refusal.
  */
 function checkBars(bars, timeframe, now, env) {
   const norm = normalizeBars(bars);
@@ -115,8 +122,12 @@ function checkBars(bars, timeframe, now, env) {
   if (!(step === want)) throw new Error(`the bars are ${Number.isFinite(step) ? `${step / 60000}-minute` : 'of an unknown timeframe'}; the strategy trades ${timeframe} bars: plan it on its own timeframe's bars`);
   const closedAt = Date.parse(norm[norm.length - 1].t) + step;
   const maxAgeMin = loadConfig(env).signalMaxAgeMin;
-  if (closedAt > now.getTime()) throw new Error(`the last bar closes at ${new Date(closedAt).toISOString()}, after the harness clock (${now.toISOString()}): it hasn't closed`);
+  // A close up to the gate's tolerance after the harness clock is the broker's clock running ahead (signal-state.js).
+  if (closedAt - now.getTime() > FUTURE_TOLERANCE_MIN * 60000) {
+    throw new Error(`the last bar closes at ${new Date(closedAt).toISOString()}, more than ${FUTURE_TOLERANCE_MIN} min after the harness clock (${now.toISOString()}): it hasn't closed`);
+  }
   if (now.getTime() - closedAt > maxAgeMin * 60000) throw new Error(`the last bar closed at ${new Date(closedAt).toISOString()}, more than ${maxAgeMin} min before the harness clock (${now.toISOString()}): fetch current bars`);
+  return norm[norm.length - 1].t;
 }
 
 function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
@@ -134,9 +145,9 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   if (!s.instruments.includes(root)) throw new Error(`${name} does not trade ${root} (instruments: ${s.instruments.join(', ')})`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
   const bars = readBarsArg(file);
-  checkBars(bars, s.timeframe, now, c.env);
+  const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now });
-  const inputs = { results, root, want, home: harnessHome(c.env), now };
+  const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });
   if (s.signal === 'policy') {
