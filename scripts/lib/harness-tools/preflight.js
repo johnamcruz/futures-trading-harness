@@ -38,7 +38,7 @@ async function checkToolsServer({ root, env = process.env, timeoutMs = 15000, co
   try {
     tools = await client.listTools();
   } catch (err) {
-    throw new Error(`the harness tools server (${script}) did not answer tools/list: ${err.message}`);
+    throw new Error(`the harness tools server (${script}) did not answer tools/list: ${err.message}`, { cause: err });
   } finally {
     client.close();
   }

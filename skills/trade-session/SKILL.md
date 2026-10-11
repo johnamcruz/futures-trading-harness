@@ -123,13 +123,14 @@ just closed, e.g. `~/.futures-trading-harness/bars/MNQ-3m.json`), pass its path 
 they run market-snapshot and `strategies.js scan` on it instead of fetching
 that timeframe again. Other timeframes they fetch with `bars.js`.
 
-Run these roles at the same time with your harness's subagents (Claude Code:
-the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles),
-and wait for every result before step 3. On Qwen Code, named subagents run in
-the background by default: launch them with `run_in_background: false`, and
-always run `risk-manager` phase 2 and `trade-executor` in the foreground.
-Without subagents, play each role yourself in turn. Pass symbol, contractId,
-and the current time.
+Run these roles at the same time with your harness's subagents, and wait for
+every result before step 3. Always delegate to a harness role by its agent name
+(risk-manager, trade-executor, …), never to a generic, forked, or other-CLI
+agent: autonomous runs allow only the harness roles. Launch each so you wait
+for its result (not left running in the background), and always run
+`risk-manager` phase 2 and `trade-executor` in the foreground. Without
+subagents, play each role yourself in turn. Pass symbol, contractId, and the
+current time.
 
 | Role (agent file) | Returns |
 |---|---|

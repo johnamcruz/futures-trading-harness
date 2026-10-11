@@ -223,7 +223,7 @@ function syncLinks(root, check, stale) {
 function removeStaleLinks(root, check, stale) {
   for (const name of QWEN_STALE_LINKS) {
     const link = path.join(root, 'qwen-extension', name);
-    let isLink = false;
+    let isLink;
     try {
       isLink = fs.lstatSync(link).isSymbolicLink();
     } catch (_err) {
