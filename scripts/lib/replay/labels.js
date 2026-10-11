@@ -352,6 +352,9 @@ function budgetFor(budgetUsd) {
 const refusedBy = o => (o.gate.decision === 'refused' ? 'gate' : o.broker && o.broker.decision === 'refused' ? o.broker.by || 'broker' : null);
 // A call another PreToolUse hook blocked (not the order gate's: it logs its own) never reached the broker.
 const HOOK_BLOCK = /\bhook\b/i;
+// The client gave up waiting (the broker may still have acted): the outcome is unknown, not a refusal.
+const CLIENT_TIMEOUT = /\btimed out\b|\btimeout\b/i;
+const failedCall = o => (CLIENT_TIMEOUT.test(o.callError || '') ? { decision: 'unknown', orderId: null, reason: o.callError, timeout: true } : callRefusal(o));
 const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error', ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : {}) });
 
 /** The teacher's action for one symbol from its orders, and what keeps it out of cloning. */
@@ -640,8 +643,13 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         // (from t to the next decision time), matched by rationale, in order.
         for (const o of mine.filter(x => x.gate.decision !== 'refused')) {
           if (o.tool !== 'place_order' || o.gate.decision !== 'allowed') {
-            // Not an entry the broker journals: a call that came back an error never changed the account.
-            if (o.callFailed) o.broker = callRefusal(o);
+            // Not an entry the broker journals. A call that came back an error: an exit the fills show
+            // (a closing fill on its contract by the next decision) went through; a client timeout with
+            // nothing to show is unknown; anything else never changed the account.
+            if (!o.callFailed) continue;
+            const exit = o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && o.riskReducing);
+            const closed = exit && fills.some(f => familyOfId(f.contractId) === fam && f.ms > t && f.ms <= nextT && f.profitAndLoss !== null && f.profitAndLoss !== undefined);
+            o.broker = closed ? { decision: 'accepted', orderId: null, reason: null, seen: 'fills' } : failedCall(o);
             continue;
           }
           const j = journal.find(e => !journalUsed.has(e) && e.ms >= t && e.ms < nextT && e.rationale !== null && e.rationale === o.rationale
@@ -651,8 +659,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
             o.broker = { decision: j.accepted ? 'accepted' : 'refused', orderId: j.orderId, reason: j.reason };
           } else if (o.callFailed) {
             // No journal record, and the call came back an error (a broker refusal sets isError; so does a
-            // server that rejected its arguments): it never became an order.
-            o.broker = callRefusal(o);
+            // server that rejected its arguments): it never became an order, unless the client timed out.
+            o.broker = failedCall(o);
           }
         }
         // In a trade: its side and the working stop the cycle's context showed (open-trades.js), for a modify.
@@ -744,6 +752,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
         orders: d.orders.map(({ argsKnown, ...rest }) => ({ ...rest, argsKnown })),
       };
       if (o) {
+        if (o.broker && o.broker.timeout) reasons.push('outcome unknown: client timeout');
         const by = refusedBy(o);
         // An order the gate never logged (a call the transcript shows but no gate record): neither allowed nor refused.
         gate = { decision: by ? 'refused' : o.gate.decision === 'allowed' ? 'allowed' : o.gate.decision, by, checks: o.gate.checks, ...(by === 'broker' || by === 'hook' ? { brokerReason: o.broker.reason } : {}) };

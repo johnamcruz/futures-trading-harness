@@ -372,7 +372,9 @@ fills). One label per decision time and symbol:
   provenance). A fill that reverses a position through flat is read as its
   close only (round trips don't split it).
 - `gate`: allowed, refused (with checks, and `by`: the gate, another hook,
-  or the broker with its reason: the replay broker's journal, matched by rationale,
+  or the broker with its reason (an exit whose call came back an error but
+  whose fill shows it went through is allowed; a client timeout with
+  nothing to show is unknown and never cloned): the replay broker's journal, matched by rationale,
   contract and replayed time, or a call that came back an error with no
   journal record), not-logged (a call no gate record names: never taken,
   never cloned), none; refused intents are kept and flagged, for the

@@ -934,3 +934,22 @@ test('labels: an interrupted last line\'s fills are counted unread', () => {
   assert.strictEqual(summary.fillsUnread, 1);
   assert.strictEqual(labelRun(makeRun({ steps: [{ k: 0, interrupted: true }, { k: 1, cycle: {} }] }).runDir).summary.fillsUnread, 0, 'the next line reads them');
 });
+
+// Review round 6 findings.
+
+test('labels: a close whose call came back an error but whose fill shows it went through; a timed-out one with nothing to show is unknown', () => {
+  const failed = (input, error) => [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'mcp__broker__close_position', input }] } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', is_error: true, content: error }] } }),
+  ].join('\n');
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'MNQ', reason: '[exit] done' } };
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { positions: LONG_POS, transcript: failed(close.input, 'timed out awaiting tools/call'), orders: [close] } },
+    { k: 1, cycle: {}, trades: [fill(1, 1, 20010, 20, { id: 'close' })] },
+    { k: 2, cycle: { positions: LONG_POS, transcript: failed(close.input, 'timed out awaiting tools/call'), orders: [close] } },
+    { k: 3, cycle: { positions: LONG_POS } },
+  ] });
+  const L = labelRun(run.runDir).labels;
+  assert.deepStrictEqual([L[0].teacher.action, L[0].gate.decision, L[0].clone.reasons], ['exit', 'ungated', []], 'the fill shows the close');
+  assert.deepStrictEqual([L[2].teacher.action, L[2].gate.decision, L[2].clone.reasons], ['exit', 'ungated', ['outcome unknown: client timeout']]);
+});

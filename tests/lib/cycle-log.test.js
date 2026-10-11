@@ -168,6 +168,16 @@ test('toolCalls: calls that came back an error are failed in every format; a cal
   assert.deepStrictEqual(toolCalls(twice).map(c => [c.name, Boolean(c.failed)]), [['mcp__broker__place_order', true]]);
   assert.deepStrictEqual(summarize(twice).orders.length, 1);
   assert.strictEqual(toolCalls(ev('item.completed', { status: 'completed', error: { message: 'refused' } }))[0].error, 'refused');
+  // A call still in flight when the turn ended (only started) still counts, once.
+  const inFlight = [ev('item.started', { status: 'in_progress' }), ev('item.updated', { status: 'in_progress' })].join('\n');
+  assert.deepStrictEqual(toolCalls(inFlight).map(c => [c.name, Boolean(c.failed)]), [['mcp__broker__place_order', false]]);
+  assert.strictEqual(summarize(inFlight).orders.length, 1);
+  // Without an id, only the completed form counts.
+  const noId = (type, status) => JSON.stringify({ type, item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {}, status } });
+  assert.strictEqual(toolCalls([noId('item.started', 'in_progress'), noId('item.completed', 'completed')].join('\n')).length, 1);
+  // The error text: a refusal returned as the result's content; an error object without a message.
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'failed', result: { content: [{ type: 'text', text: 'Blocked by trading harness' }] } }))[0].error, 'Blocked by trading harness');
+  assert.strictEqual(toolCalls(ev('item.completed', { status: 'failed', error: { code: 7 } }))[0].error, '{"code":7}');
   // opencode: a call the user rejected when asked never reached a tool either.
   const rejected = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: {}, error: 'The user rejected permission to use this specific tool call.' } } });
   assert.strictEqual(toolCalls(rejected)[0].stopped, true);

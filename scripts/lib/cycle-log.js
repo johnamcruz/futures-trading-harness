@@ -42,6 +42,7 @@ const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 function toolCalls(output) {
   const calls = [];
   const byId = new Map();
+  const codexById = new Map();
   for (const doc of documents(output)) {
     for (const ev of Array.isArray(doc) ? doc : [doc]) {
       if (!ev || typeof ev !== 'object') continue;
@@ -66,15 +67,28 @@ function toolCalls(output) {
           else if (c.is_error === true) Object.assign(byId.get(c.tool_use_id), { failed: true, error: resultText(c.content).slice(0, 300) });
         }
       }
-      // Codex --json: { type: 'item.completed', item: { type: 'command_execution' | 'mcp_tool_call', ... } }. Each
-      // item is also announced (item.started, item.updated) before it completes: counted once, when it completed.
-      const item = ev.type === 'item.completed' || ev.type === undefined ? ev.item : null;
-      if (item && item.type === 'command_execution') calls.push({ name: 'Bash', input: { command: item.command } });
-      if (item && item.type === 'mcp_tool_call') {
+      // Codex --json: { type: 'item.started' | 'item.updated' | 'item.completed', item: { id, type: 'command_execution' |
+      // 'mcp_tool_call', ... } }. One call per item id, its latest form (a call still in flight when the turn
+      // ended, only started, still counts); an item with no id counts once it completed.
+      const item = /^item\.(started|updated|completed)$/.test(String(ev.type)) || ev.type === undefined ? ev.item : null;
+      if (!item || !['command_execution', 'mcp_tool_call'].includes(item.type)) continue;
+      if ((item.id === undefined || item.id === null) && !(ev.type === 'item.completed' || ev.type === undefined)) continue;
+      let call;
+      if (item.type === 'command_execution') call = { name: 'Bash', input: { command: item.command } };
+      else {
         // An error: a failed status, an error, or a result the tool marked as one (isError).
         const failed = item.status === 'failed' || Boolean(item.error) || Boolean(item.result && typeof item.result === 'object' && (item.result.isError || item.result.is_error));
-        const error = failed ? String((item.error && (item.error.message || item.error)) || '').slice(0, 300) : '';
-        calls.push({ name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {}, ...(failed ? { failed: true, error } : {}) });
+        const error = !failed ? '' : item.error ? String(item.error.message || JSON.stringify(item.error)) : resultText(item.result && typeof item.result === 'object' ? item.result.content : item.result);
+        call = { name: `mcp__${item.server}__${item.tool}`, input: item.arguments || {}, ...(failed ? { failed: true, error: error.slice(0, 300) } : {}) };
+      }
+      const key = item.id !== undefined && item.id !== null ? `codex:${item.id}` : null;
+      if (key && codexById.has(key)) {
+        const prev = codexById.get(key);
+        for (const k of Object.keys(prev)) delete prev[k];
+        Object.assign(prev, call);
+      } else {
+        calls.push(call);
+        if (key) codexById.set(key, call);
       }
     }
   }
