@@ -392,3 +392,31 @@ test('confluence: trades record how many strategies agreed; minConfluence and co
   const { buildReport } = require('../../scripts/lib/backtest/report');
   assert.deepStrictEqual(Object.keys(buildReport([t, mixed], {}).byConfluence), ['1 agreeing, 1 against', '2 agreeing']);
 });
+
+test('bar-file errors never echo file content (a script run on a credentials file shows none of it)', () => {
+  const dir = tmpDir();
+  const secret = 'fth_secret=hunter2abcdef';
+  const cases = {
+    env: `${secret}\nOTHER=x\n`,
+    'header.csv': `time,open,high,low,${secret}\n2026-01-02T14:30:00Z,1,2,0,1\n`,
+    'cell.csv': `time,open,high,low,close\n${secret},1,2,0,1\n`,
+    // V8's parse error would quote this text.
+    'bad.json': `[${secret}]`,
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, text);
+    let message = null;
+    try { loadBars(file); } catch (err) { message = err.message; }
+    assert.ok(message, `${name} is refused`);
+    assert.ok(!message.includes('hunter2') && !message.includes('fth_secret'), `${name}: ${message}`);
+  }
+  // A column it knows is still named.
+  assert.throws(() => loadBars(path.join(dir, 'header.csv')), /found: time, open, high, low, and 1 other column\(s\)/);
+  // Stdin ('-'), as market-snapshot.js and mtf.js read it.
+  const r = require('child_process').spawnSync(process.execPath, ['-e', "require(process.argv[1]).readBarsArg('-')", path.join(ROOT, 'scripts', 'lib', 'backtest', 'data.js')],
+    { input: `[${secret}]`, encoding: 'utf8' });
+  assert.notStrictEqual(r.status, 0);
+  assert.match(r.stderr, /stdin: not valid JSON/);
+  assert.ok(!r.stderr.includes('hunter2') && !r.stderr.includes('fth_secret'), r.stderr);
+});

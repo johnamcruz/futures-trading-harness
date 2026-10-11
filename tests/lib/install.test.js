@@ -7,6 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, applyPlan, planBrokerEntry } = require('../../scripts/lib/install');
 const { activeBroker } = require('../../scripts/lib/broker/config');
+const { loadAgents } = require('../../scripts/lib/harness-sync');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -73,9 +74,17 @@ test('qwen workspace permissions allow harness scripts and deny edits to the har
   assert.ok(p.allow.includes('mcp__broker'));
   assert.ok(p.allow.includes('Bash(node /fth/scripts/strategies.js *)'));
   assert.ok(p.allow.includes('Edit(//tmp/fth/**)'));
+  // Never the names that lift headless Qwen's shell deny: its prefix rules would pass
+  // redirects and NODE_OPTIONS=... (verified on 0.25), i.e. any write and any code.
+  assert.ok(!p.allow.some(r => /^(Shell|run_shell_command|ShellTool)\b/.test(r)), 'no Shell(...) rules');
   assert.ok(p.allow.includes('Read(//fth/**)') && p.allow.includes('Read(//home/u/.futures-trading-harness/bars/**)'));
   assert.ok(p.allow.includes('WebFetch(bls.gov)'));
-  assert.ok(!p.allow.some(r => ['Bash', 'Edit', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
+  assert.ok(!p.allow.some(r => ['Bash', 'Shell', 'run_shell_command', 'Edit', 'WriteFile', 'write_file', 'Read', 'WebFetch'].includes(r)), 'no unscoped tools');
+  // Subagents: each harness role by name, never the bare tool (Qwen's claude-code/codex agents run other CLIs).
+  const roles = loadAgents(ROOT).map(a => a.name);
+  assert.ok(roles.includes('risk-manager') && roles.includes('trade-executor'));
+  assert.deepStrictEqual(p.allow.filter(r => /^(Agent|Task|agent|task)\b/.test(r)), roles.map(n => `Agent(${n})`));
+  for (const builtin of ['claude-code', 'codex', 'general-purpose', 'fork', 'Explore']) assert.ok(!p.allow.includes(`Agent(${builtin})`), builtin);
   for (const rule of ['Edit(//fth/**)', 'Edit(//home/u/.futures-trading-harness/**)', 'Edit(//home/u/.broker-mcp/journal.jsonl)', 'Edit(//home/u/.qwen/**)',
     'Read(//proc/**)', 'Read(//home/u/.claude.json)', 'Read(//fth/**/.env)']) assert.ok(p.deny.includes(rule), rule);
 });

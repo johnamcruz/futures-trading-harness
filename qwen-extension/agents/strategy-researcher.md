@@ -1,6 +1,7 @@
 ---
 name: strategy-researcher
 description: "Turns strategy code, backtests, or a written trading idea into a STRATEGY.md document (code-checked frontmatter plus an agent-readable body), validates it, and keeps strategies in sync with their source code. Use for /new-strategy or when a strategy's code or parameters change."
+approvalMode: default
 tools:
   - read_file
   - grep_search
