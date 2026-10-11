@@ -15,6 +15,7 @@ const { lossState, liveReviews } = require('../lib/trading/order-gate');
 const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
 const { sessionsText } = require('../lib/trading/combine');
 const { digest } = require('../lib/trading/instincts');
+const { harnessNow } = require('../lib/trading/harness-now');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
 const signed = x => (Math.round(x) === 0 ? '$0' : `${x < 0 ? '-' : '+'}${usd(Math.abs(x))}`);
@@ -109,7 +110,7 @@ function run(_rawInput, ctx = {}, deps = {}) {
   try {
     const entries = readJournal(resolveJournalPath(env));
     const config = loadConfig(env);
-    return buildBriefing(entries, deps.now || new Date(), config, root, config.home);
+    return buildBriefing(entries, deps.now || harnessNow(env), config, root, config.home);
   } catch (err) {
     return { stderr: `[TradingSessionStart] journal unavailable: ${err.message}`, exitCode: 0 };
   }

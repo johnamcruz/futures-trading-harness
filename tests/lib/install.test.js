@@ -147,3 +147,9 @@ test('the Qwen allowlist follows the configured bar and state directories', () =
   assert.ok(p.allow.includes('Read(//data/bars/**)'));
   assert.ok(p.deny.includes('Edit(//srv/fth/**)'));
 });
+
+test('the gateway is forwarded FTH_REPLAY_NOW (Codex passes only listed variables), so a replayed time reaches the gate', () => {
+  const { forwardedEnv } = require('../../scripts/lib/install');
+  assert.ok(forwardedEnv({ env: [] }).includes('FTH_REPLAY_NOW'));
+  assert.match(codexConfigBlock(path.resolve(__dirname, '..', '..'), activeBroker({ FTH_HOME: tmpDir() })), /"FTH_REPLAY_NOW"/);
+});

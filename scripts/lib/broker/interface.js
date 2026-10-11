@@ -25,7 +25,7 @@ const TOOLS = {
   // Session and accounts.
   get_server_config: {
     role: 'read', input: {},
-    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true) },
+    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true), replay: field('boolean', false, 'true only for a replay server (serverTime is then the replayed time); live servers omit it') },
   },
   list_accounts: {
     role: 'read', input: { onlyActiveAccounts: field('boolean', false, 'default true') },

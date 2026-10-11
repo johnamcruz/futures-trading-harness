@@ -20,6 +20,7 @@
 const { mtfRead } = require('./lib/trading/mtf');
 const { buildRecord, writeRecord } = require('./lib/trading/mtf-state');
 const { harnessHome } = require('./lib/paths');
+const { harnessNow } = require('./lib/trading/harness-now');
 const { readBarsArg: readBars } = require('./lib/backtest/data');
 
 function main(argv) {
@@ -44,7 +45,7 @@ function main(argv) {
     // In autonomous runs the runner records the read from the bars it hands the cycle.
     if (process.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
     if (!opts.symbol || !/^[A-Z0-9]+$/i.test(opts.symbol)) throw new Error('--record needs --symbol=<ROOT> (e.g. MNQ)');
-    const file = writeRecord(harnessHome(), buildRecord(bars, { symbol: opts.symbol, source: opts.file === '-' ? 'stdin' : opts.file }));
+    const file = writeRecord(harnessHome(), buildRecord(bars, { symbol: opts.symbol, source: opts.file === '-' ? 'stdin' : opts.file, now: harnessNow() }));
     process.stderr.write(`[mtf] recorded for the order gate: ${file}\n`);
   }
   return 0;

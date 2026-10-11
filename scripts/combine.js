@@ -22,6 +22,7 @@ const prop = require('./lib/trading/prop-state');
 const combine = require('./lib/trading/combine');
 const { harnessHome } = require('./lib/paths');
 const { loadStrategies } = require('./lib/trading/strategies');
+const { harnessNow } = require('./lib/trading/harness-now');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -62,6 +63,7 @@ const budgetText = r => r.budgets.map(b => (b.strategy ? `${b.strategy} size bud
 function main(argv, out = s => process.stdout.write(s)) {
   const cmd = argv[0];
   const home = harnessHome();
+  const now = harnessNow(); // the harness clock: a replay broker's replayed time, else the wall clock
   if (cmd === 'accounts') {
     const { accounts } = loadAccounts(ROOT, process.env);
     for (const a of accounts) {
@@ -79,8 +81,8 @@ function main(argv, out = s => process.stdout.write(s)) {
     if (had && !argv.includes('--force')) {
       throw new Error(`a ${account.name} attempt is already running (started ${had.startedAt}, ${had.days.length} closes recorded); --force restarts it from $${account.starting_balance}`);
     }
-    if (had) prop.endAttempt(home, account.name);
-    prop.startAttempt(home, account);
+    if (had) prop.endAttempt(home, account.name, now);
+    prop.startAttempt(home, account, now);
     out(`${had ? 'restarted' : 'started'} a ${account.name} attempt: $${account.profit_target} target, $${account.max_loss} max loss, ${account.sessions} sessions. The runner snapshots the balance each bar.\n`);
     return 0;
   }
@@ -88,8 +90,8 @@ function main(argv, out = s => process.stdout.write(s)) {
     const name = arg(argv, '--account');
     const accounts = name ? [accountNamed(ROOT, name, process.env)] : loadAccounts(ROOT, process.env).accounts.filter(a => a.valid);
     const { strategies } = loadStrategies(ROOT, process.env);
-    const rows = accounts.map(a => statusOf(home, a, new Date(), strategies)).filter(r => name || r.started);
-    const verdicts = liveVerdicts(home, new Date());
+    const rows = accounts.map(a => statusOf(home, a, now, strategies)).filter(r => name || r.started);
+    const verdicts = liveVerdicts(home, now);
     if (argv.includes('--json')) out(`${JSON.stringify({ attempts: rows, verdicts }, null, 2)}\n`);
     else if (!rows.length) out('no attempt is started (node scripts/combine.js start --account <name>)\n');
     else {
@@ -120,7 +122,7 @@ function main(argv, out = s => process.stdout.write(s)) {
   if (cmd === 'stop') {
     const name = arg(argv, '--account');
     if (!/^[a-z0-9][a-z0-9_-]*$/.test(String(name || ''))) throw new Error('usage: combine.js stop --account <name> (an account profile name)');
-    const dest = prop.endAttempt(home, name);
+    const dest = prop.endAttempt(home, name, now);
     out(dest ? `${name}: attempt ended (kept as ${dest})\n` : `${name}: no attempt is running\n`);
     return 0;
   }

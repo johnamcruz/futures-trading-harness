@@ -34,6 +34,7 @@ const GATE_CHECKS = [
   'daily-loss-count',
   'review-before-next-entry',
   'max-entries',
+  'replay-clock', // hard: listed for completeness, never skippable
 ];
 
 function intEnv(env, name, fallback, { min = 0 } = {}) {
@@ -50,19 +51,6 @@ function listEnv(env, name) {
       .map(s => s.trim().toLowerCase())
       .filter(Boolean)
   );
-}
-
-const STARTED_AT = Date.now();
-
-/**
- * The gate's clock. The test suite (NODE_ENV=test) may shift it with
- * FTH_TEST_NOW (an ISO time the process starts at); never otherwise, and
- * never in autonomous runs, where the gate is locked.
- */
-function gateNow(env = process.env) {
-  const t = Date.parse(String(env.FTH_TEST_NOW || ''));
-  if (env.NODE_ENV !== 'test' || env.FTH_AUTONOMOUS === '1' || !Number.isFinite(t)) return new Date();
-  return new Date(Date.now() + (t - STARTED_AT));
 }
 
 function loadConfig(env = process.env) {
@@ -111,7 +99,6 @@ function loadConfig(env = process.env) {
 }
 
 module.exports = {
-  gateNow,
   DEFAULT_NO_ENTRY_WINDOWS,
   DEFAULT_ENTRY_HOURS,
   GATE_CHECKS,

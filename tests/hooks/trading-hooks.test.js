@@ -257,7 +257,8 @@ test('session-start briefing states each running prop attempt from its last snap
   const home = tmpDir();
   const account = accountNamed(REPO, 'topstep_100k', {});
   prop.startAttempt(home, account, new Date('2026-10-05T14:00:00Z'));
-  prop.snapshot(home, account, 101250, new Date());
+  // At the gate's clock (TEST_NOW), which the briefing reads too.
+  prop.snapshot(home, account, 101250, new Date(TEST_NOW));
   const { env } = setup([], { FTH_HOME: home });
   const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
   assert.strictEqual(r.code, 0);
@@ -277,7 +278,7 @@ test('session-start briefing shows the block the gate applies now: a missing or 
   assert.match(a.stdout, /- topstep_100k: attempt started .*, no balance snapshot yet .*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
   const old = tmpDir();
   prop.startAttempt(old, account, new Date('2026-10-05T14:00:00Z'));
-  prop.snapshot(old, account, 99000, new Date(Date.now() - 3 * 3600000));
+  prop.snapshot(old, account, 99000, new Date(Date.parse(TEST_NOW) - 3 * 3600000));
   const b = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, setup([], { FTH_HOME: old }).env);
   assert.match(b.stdout, /- topstep_100k \(active\) as of .* \(180 min ago\): balance \$99,000, .*profit -\$1,000 of \$6,000.*; entries blocked: the topstep_100k account snapshot is missing or older than 10 minutes/);
 });
@@ -932,4 +933,214 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
   const r = JSON.parse(out.trim().split('\n')[0]);
   assert.strictEqual(r.result.isError, true);
   assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: an order is working on MES/);
+});
+
+// --- The replay clock (trading/harness-now.js): FTH_REPLAY_NOW, honored only with a replay broker. ---
+const SATURDAY = '2026-10-10T15:00:00.000Z'; // market closed
+
+/** brokers.json in `home` selecting "sim" (journal: the test's), a replay broker or not. */
+function simBroker(home, journal, { replay = true } = {}) {
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+}
+
+test('order gate hook: with a replay broker it judges the order at FTH_REPLAY_NOW, not the wall clock', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  // The wall clock (the suite's) on Saturday: closed, the plan and the trend read stale.
+  const live = gate(orderPayload(), { ...env, FTH_TEST_NOW: SATURDAY });
+  assert.strictEqual(live.code, 2);
+  assert.match(live.stderr, /\[market-hours\]/);
+  // The replayed Wednesday 10:30 ET: allowed.
+  const replayed = gate(orderPayload(), { ...env, FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW });
+  assert.strictEqual(replayed.code, 0, replayed.stderr);
+  // A replayed Saturday is closed, whatever the wall clock says.
+  const closed = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: SATURDAY });
+  assert.strictEqual(closed.code, 2);
+  assert.match(closed.stderr, /\[market-hours\]/);
+});
+
+test('order gate hook: FTH_REPLAY_NOW without a real replay broker, or unparseable, blocks entries (even autonomous with checks skipped); exits, stops and stop moves still go', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  assert.strictEqual(gate(orderPayload(), env).code, 0, 'control: allowed without the override');
+  const modify = { tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' } };
+  const exit = orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' });
+  const protect = orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' });
+  for (const extra of [
+    { FTH_REPLAY_NOW: TEST_NOW },
+    { FTH_REPLAY_NOW: TEST_NOW, FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'replay-clock,market-hours', FTH_DISABLED_HOOKS: 'pre:trading:order-gate' },
+  ]) {
+    const r = gate(orderPayload(), { ...env, ...extra });
+    assert.strictEqual(r.code, 2, JSON.stringify(extra));
+    assert.match(r.stderr, /\[replay-clock\] FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+    assert.match(r.stderr, /close_position still go/);
+    for (const payload of [exit, protect, modify]) {
+      const ok = gate(payload, { ...env, ...extra });
+      assert.strictEqual(ok.code, 0, `${payload.tool_name} ${JSON.stringify(extra)}: ${ok.stderr}`);
+    }
+  }
+  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  const garbage = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: 'now' });
+  assert.strictEqual(garbage.code, 2);
+  assert.match(garbage.stderr, /\[replay-clock\] FTH_REPLAY_NOW "now" is not an ISO 8601 UTC time/);
+  // A replay broker that reads a shipped live broker's credentials is refused too (the hook can't ask the server).
+  fs.writeFileSync(path.join(env.FTH_HOME, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal: env.PROJECTX_JOURNAL_PATH, replay: true, env: ['PROJECTX_USERNAME', 'PROJECTX_API_KEY'] } } }));
+  const twin = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: TEST_NOW });
+  assert.strictEqual(twin.code, 2);
+  assert.match(twin.stderr, /\[replay-clock\] .*"sim" looks live: it reads the live broker "topstepx"'s variables \(PROJECTX_USERNAME, PROJECTX_API_KEY\)/);
+  const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(log.some(e => e.decision === 'blocked' && e.violations.some(v => v.check === 'replay-clock')), 'logged');
+});
+
+test('session-start and stop hooks read the trading day at the replayed time with a replay broker; a refused clock is said', () => {
+  const replay = '2026-03-04T15:00:00.000Z'; // Wednesday 10:00 ET
+  const { env } = setup([{ ts: '2026-03-04T14:50:00.000Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } }]);
+  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  const brief = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, { ...env, FTH_REPLAY_NOW: replay });
+  assert.match(brief.stdout, /Trading day started 2026-03-03T23:00:00.000Z/);
+  assert.match(brief.stdout, /Today: 1 orders placed/);
+  const stop = (extra) => runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict', {}, { ...env, ...extra });
+  assert.strictEqual(stop({ FTH_REPLAY_NOW: replay }).code, 2, 'the replayed day\'s entry has no review');
+  assert.strictEqual(stop({}).code, 0, 'on the wall clock (TEST_NOW) that entry is months old');
+  const refused = stop({ FTH_REPLAY_NOW: 'later' });
+  assert.strictEqual(refused.code, 2);
+  assert.match(refused.stderr, /\[replay-clock\] FTH_REPLAY_NOW "later" is not an ISO 8601 UTC time.*review reminder could not check/);
+});
+
+// --- The gateway with a configured broker (behind the contract translator), as installed. ---
+const FAKE_MCP = path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js');
+const CONTRACTS = JSON.stringify([{ id: 'MNQ', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]);
+const serverSays = (serverTime, replay = true) => JSON.stringify({ tradingEnabled: true, serverTime, ...(replay ? { replay: true } : {}) });
+
+/** A harness home under `dir` whose broker "sim" runs the fake server; returns its brokers.json path. */
+function simHome(dir, { replay = true, journalEntries = [] } = {}) {
+  const home = path.join(dir, '.futures-trading-harness');
+  fs.mkdirSync(path.join(dir, 'sim'), { recursive: true });
+  const journal = writeJournal(path.join(dir, 'sim'), journalEntries);
+  fs.mkdirSync(home, { recursive: true });
+  const file = path.join(home, 'brokers.json');
+  fs.writeFileSync(file, JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE_MCP], journal, ...(replay ? { replay: true } : {}) } } }));
+  return { home, file, journal };
+}
+
+/** The gateway as registered (no server command: the configured broker). Items: messages, or functions run between them. */
+async function gatewayCfg(extraEnv, items, { dir }) {
+  const { spawn } = require('child_process');
+  const env = {
+    PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
+    FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FAKE_CONTRACTS: CONTRACTS, ...extraEnv,
+  };
+  const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  for (const item of items) {
+    if (typeof item === 'function') { await item(); continue; }
+    gw.stdin.write(`${JSON.stringify(item)}\n`);
+    // One at a time: wait for this reply before the next item.
+    for (let t = 0; t < 400 && !replies().some(r => r.id === item.id); t += 1) await new Promise(r => setTimeout(r, 25));
+  }
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  return Object.fromEntries(replies().map(r => [r.id, r]));
+}
+const textOf = r => (r.error ? r.error.message : r.result.content[0].text);
+
+test('MCP gateway: FTH_REPLAY_NOW without a real replay broker refuses entries; exits, cancels, partial and full closes still go', async () => {
+  const msgs = [
+    call(1, 'place_order', ORDER),
+    call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
+    call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
+    call(4, 'partial_close_position', { accountId: 1, contractId: 'MNQ', size: 1 }),
+    call(5, 'close_position', { accountId: 1, contractId: 'MNQ' }),
+  ];
+  // The server from the gateway's command line: never a replay broker. Each risk-reducing call in a run of its own
+  // (one after another they'd count each other's pending fills).
+  const env = { FAKE_POSITIONS: LONG1, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW) };
+  for (const m of msgs.slice(1)) {
+    const { byId } = await gatewayRun(env, [msgs[0], m]);
+    assert.match(textOf(byId[1]), /\[replay-clock\] .*a server given on its command line/);
+    assert.strictEqual(textOf(byId[m.id]), `forwarded:tools/call:${m.params.name}`);
+  }
+  // A configured broker that isn't a replay broker.
+  const dir = tmpDir();
+  simHome(dir, { replay: false });
+  const cfg = await gatewayCfg({ FAKE_POSITIONS: LONG1, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW) }, msgs, { dir });
+  assert.match(textOf(cfg[1]), /\[replay-clock\] FTH_REPLAY_NOW is set but the selected broker "sim" is not a replay broker/);
+  assert.strictEqual(textOf(cfg[2]), 'forwarded:tools/call:place_order');
+  assert.strictEqual(textOf(cfg[5]), 'forwarded:tools/call:close_position');
+});
+
+test('MCP gateway: a broker labelled replay is honored only if its server confirms replay at FTH_REPLAY_NOW', async () => {
+  const run = async server => {
+    const dir = tmpDir();
+    simHome(dir);
+    return gatewayCfg({ FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW, ...(server ? { FAKE_SERVER_CONFIG: server } : {}) }, [call(1, 'place_order', ORDER)], { dir });
+  };
+  // A live server behind a replay label (it doesn't say replay): refused.
+  assert.match(textOf((await run(serverSays(TEST_NOW, false)))[1]), /\[replay-clock\] .*does not report itself a replay server/);
+  // A replay server at another time: refused.
+  assert.match(textOf((await run(serverSays('2026-10-07T14:40:00.000Z')))[1]), /\[replay-clock\] .*not within 5 min of the replay server's time/);
+  // No answer it can read: refused.
+  assert.match(textOf((await run(null))[1]), /\[replay-clock\] .*get_server_config could not be read/);
+  // Confirmed: judged at the replayed Wednesday, not the Saturday wall clock.
+  const ok = textOf((await run(serverSays('2026-10-07T14:32:00.000Z')))[1]);
+  assert.doesNotMatch(ok, /market-hours|replay-clock/);
+});
+
+test('MCP gateway: the replay decision is pinned for its lifetime; editing brokers.json mid-session changes nothing', async () => {
+  const dir = tmpDir();
+  const { file } = simHome(dir);
+  const relabel = replay => () => fs.writeFileSync(file, JSON.stringify({ broker: 'sim', brokers: { sim: { ...JSON.parse(fs.readFileSync(file, 'utf8')).brokers.sim, replay } } }));
+  const env = { FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW) };
+  const honored = await gatewayCfg(env, [call(1, 'place_order', ORDER), relabel(false), call(2, 'place_order', ORDER)], { dir });
+  assert.doesNotMatch(textOf(honored[1]), /replay-clock|market-hours/);
+  assert.doesNotMatch(textOf(honored[2]), /replay-clock|market-hours/, 'still the pinned replay clock');
+  const refused = await gatewayCfg(env, [call(1, 'place_order', ORDER), relabel(true), call(2, 'place_order', ORDER)], { dir });
+  assert.match(textOf(refused[1]), /\[replay-clock\] .*not a replay broker/);
+  assert.match(textOf(refused[2]), /\[replay-clock\] .*not a replay broker/, 'still refused');
+});
+
+test('MCP gateway with a replay broker: its ledger and orders of unknown outcome run on the replayed clock', async () => {
+  // A replayed time past the wall clock: a ledger stamped on the wall clock would look minutes old and expire at once.
+  const future = '2027-03-03T15:00:00.000Z';
+  const env = { FAKE_POSITIONS: LONG1, FTH_REPLAY_NOW: future, FAKE_SERVER_CONFIG: serverSays(future) };
+  const exit = id => call(id, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' });
+  let dir = tmpDir();
+  simHome(dir);
+  const twice = await gatewayCfg(env, [exit(1), exit(2)], { dir });
+  assert.strictEqual(textOf(twice[1]), 'forwarded:tools/call:place_order');
+  assert.match(textOf(twice[2]), /\[exposure\] .*once recent orders fill/, 'the first exit still counts');
+  dir = tmpDir();
+  simHome(dir);
+  const afterClose = await gatewayCfg(env, [call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }), exit(2)], { dir });
+  assert.match(textOf(afterClose[2]), /\[exposure\] .*once recent orders fill/, 'the close still counts');
+  dir = tmpDir();
+  simHome(dir);
+  const confirmed = await gatewayCfg({ ...env, FAKE_CLOSE_RESULT: JSON.stringify({ success: true, errorCode: 0 }) }, [call(1, 'close_position', { accountId: 1, contractId: 'MNQ' }), exit(2)], { dir });
+  assert.match(textOf(confirmed[2]), /\[exposure\] .*once recent orders fill/, 'a confirmed close still counts until the account shows it');
+  // Orders of unknown outcome age on the replayed clock (the wall clock stays on Saturday throughout).
+  dir = tmpDir();
+  simHome(dir);
+  const at = s => new Date(Date.parse(TEST_NOW) + s * 1000).toISOString();
+  const replayAt = s => ({ FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: at(s), FAKE_SERVER_CONFIG: serverSays(at(s)) });
+  await gatewayCfg({ FAKE_POSITIONS: LONG1, FAKE_DROP: 'place_order', FTH_LANE_TIMEOUT_MS: '300', ...replayAt(0) },
+    [call(1, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten', customTag: 'r-1' })], { dir });
+  const early = await gatewayCfg({ FAKE_SEARCH_ORDERS: '[]', ...replayAt(30) }, [call(2, 'place_order', ORDER)], { dir });
+  assert.match(textOf(early[2]), /\[order-pending\]/, '30 replayed seconds later: still inside the grace period');
+  const later = await gatewayCfg({ FAKE_SEARCH_ORDERS: '[]', ...replayAt(180) }, [call(2, 'place_order', ORDER)], { dir });
+  assert.doesNotMatch(textOf(later[2]), /order-pending/, '3 replayed minutes later: settled as not placed');
+});
+
+test('MCP gateway with a replay broker: an allowed entry is recorded at the replayed time', async () => {
+  const dir = tmpDir();
+  const { home } = simHome(dir, { journalEntries: [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }] });
+  trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z' });
+  const byId = await gatewayCfg({
+    FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW), FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'),
+    FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }),
+  }, [call(1, 'place_order', ORDER)], { dir });
+  assert.match(textOf(byId[1]), /"orderId":\s*5/, textOf(byId[1]));
+  const entries = JSON.parse(fs.readFileSync(path.join(home, 'entry-orders.json'), 'utf8'));
+  assert.deepStrictEqual(entries.map(e => [e.orderId, e.at]), [[5, TEST_NOW]]);
 });

@@ -99,12 +99,65 @@ is the authoritative layer. A blocked call never reaches the server.
 | `order-pending` | No new entry while an earlier order's outcome is unknown (no reply within 30 s, an error reply that isn't a sure refusal, or its gateway exited): every `place_order` goes out with a `customTag` and a record in `<FTH_HOME>/pending-orders/` (per account and tag), settled from the broker's `search_orders` (placed, or refused by its status) or after 2 min without it (not placed); survives restarts. Exits, stop moves and cancels are still checked as usual: for 2 min an unknown market order counts as filled and an unknown limit or stop as resting (an unknown entry's bracket stop can't be cancelled); `close_position` always goes | no | yes |
 | `batch` | Order calls go one at a time: a JSON-RPC batch containing one is refused whole | no | yes |
 | `regime` | With `regime_gate: true`: the live regime of the strategy's timeframe fits its `regimes` | no | yes |
+| `replay-clock` | `FTH_REPLAY_NOW` set without a real replay broker, or not an ISO 8601 UTC time: no new entry; risk-reducing actions are judged as usual at the wall clock (Replay clock, below). Hard: not skippable | yes | yes |
 
 Malformed or oversized input, unreadable state, invalid config, a failed
 account query, a position whose size isn't a whole number of contracts, or a
 crash blocks the order. In autonomous runs
 (`FTH_AUTONOMOUS=1`) the gate can't be skipped, dry-run, or disabled.
 Decisions go to `~/.futures-trading-harness/logs/gate-log.jsonl`.
+
+### Replay clock
+
+Replay runs the live harness (harness CLI, agents, skills, scripts, gate,
+broker interface) on replayed history; only data, clock, and fills are
+simulated, by a replay broker: an MCP server configured in `brokers.json` like
+any other, with `"replay": true`, whose `get_server_config` reports
+`replay: true` and the replayed `serverTime`. Its clock reaches the harness
+through one variable, `FTH_REPLAY_NOW` (an ISO 8601 UTC time such as
+`2026-03-02T15:30:00Z`), resolved in `scripts/lib/trading/harness-now.js`.
+Everything that takes "now" for a trading decision takes it from there: the
+gate in the hook and the gateway (market hours, windows, blackouts, plan and
+record ages, the trading day's journal, prop snapshot ages, the gateway's
+ledger and orders of unknown outcome), the session-start and stop hooks, the
+scripts agents run (`strategies.js scan` without `--now`, `bars.js`, `mtf.js
+--record`, `combine.js`, `blackouts.js`), and `autotrader.js --once` /
+`--dry-run`. The contract translator dates its front-month lookups with the
+same clock through `recordNow`, which never refuses. Unset, it is the wall
+clock.
+
+The label alone is not trusted. The hook and the scripts, which can't ask the
+server, also refuse a replay broker that starts the same server as a live
+broker or reads a shipped live broker's variables (credentials, entry,
+journal). The gateway, which runs the server, honors the override only if the
+broker it started (never a server given on its command line) is a replay
+broker and the server's `get_server_config` reports `replay: true` and a
+`serverTime` within 5 minutes of `FTH_REPLAY_NOW`. The broker is the one
+resolved when the gateway starts; the decision is taken at the first order call
+(gated, or a `close_position`) and kept for the gateway's lifetime, so editing
+`brokers.json` after that changes nothing.
+
+It fails closed and is replay-only: when the override is refused (no real
+replay broker, an unparseable value, an unreadable broker config) the gate
+refuses every new entry (`replay-clock`, also with `FTH_AUTONOMOUS=1`) and
+judges exits, `[protect]` stops, stop moves, cancels and partial closes as
+usual at the wall clock (a refused override means a live broker);
+`close_position` always goes. The scripts and the runner exit with the error
+(`autotrader.js --once eod` still runs, at the wall clock), and the stop hook
+says why it couldn't remind. The override never relaxes a
+check; it only moves the time checks run at.
+
+A process's environment is fixed when it starts, so replay drives one cycle per
+process: a fresh harness run (or `autotrader.js --once`) per cycle, with the
+time set by the replay driver. Within one process the replayed time stands
+still (the gateway's 30 s ledger and its 2-minute grace for orders of unknown
+outcome don't elapse), so don't hold a long interactive session on one
+`FTH_REPLAY_NOW`. Replay runs in a harness home of its own (`FTH_HOME`), never
+the live one: the scripts write records, blackouts and attempts there at the
+replayed time. The runner's long-running loop refuses to start
+with `FTH_REPLAY_NOW` set, and never takes the test suite's `FTH_TEST_NOW`.
+Pure log timestamps (cycle logs, the gate log, heartbeats) stay on the wall
+clock.
 
 ## Autonomous runner
 

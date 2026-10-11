@@ -18,6 +18,7 @@ const { spawn } = require('child_process');
 const { childCaller, lineSplitter } = require('./lib/trading/mcp-gateway');
 const { createTranslator } = require('./lib/broker/translator');
 const { contractsCacheFile } = require('./lib/broker/config');
+const { recordNow } = require('./lib/trading/harness-now');
 
 const TOOL = name => String(name || '').replace(/^.*__/, '');
 const errorResult = (id, text) => ({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text }], isError: true } });
@@ -36,7 +37,7 @@ function main(argv) {
   const toChild = line => { if (child.stdin.writable) child.stdin.write(`${line}\n`); };
   const write = msg => process.stdout.write(`${typeof msg === 'string' ? msg : JSON.stringify(msg)}\n`);
   const caller = childCaller(toChild, { prefix: 'fth-tr-' });
-  const translator = createTranslator({ call: (name, args) => caller.call(name, args), cacheFile: contractsCacheFile(broker, process.env) });
+  const translator = createTranslator({ call: (name, args) => caller.call(name, args), cacheFile: contractsCacheFile(broker, process.env), now: () => recordNow(process.env) });
   const toolOf = new Map(); // request id -> tool name, for the answer
 
   // Server -> client: our own lookups are consumed at once (a translation may be waiting on one); the rest in order.

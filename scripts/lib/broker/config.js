@@ -11,7 +11,10 @@
  *   FTH_BROKER                      the broker to use (else the file's "broker")
  *
  * A broker: { description, repo, entry | entryEnv | command, journal, journalEnv,
- * env, paperEnv }. `env` lists the variables its server reads (credentials,
+ * env, paperEnv, replay }. `replay: true` marks a simulated broker that replays
+ * history: only then may FTH_REPLAY_NOW set the harness's clock
+ * (trading/harness-now.js). A broker the defaults define without it stays live
+ * whatever an override says. `env` lists the variables its server reads (credentials,
  * guardrails), which harnesses must forward to it; `paperEnv` is what a paper
  * run sets so the server refuses every order.
  * `command` is the server's argv; else `entry` (a .js file run with node), or
@@ -65,7 +68,11 @@ function loadBrokers(env = process.env) {
   if (!user && explicit) throw new BrokerConfigError(`FTH_BROKERS_FILE: ${userFile} does not exist`);
   const brokers = {};
   for (const [name, b] of Object.entries(defaults.brokers || {})) brokers[name] = resolvePaths(b, path.dirname(DEFAULTS_FILE));
-  for (const [name, b] of Object.entries((user && user.brokers) || {})) brokers[name] = { ...(brokers[name] || {}), ...resolvePaths(b, path.dirname(userFile)) };
+  for (const [name, b] of Object.entries((user && user.brokers) || {})) {
+    brokers[name] = { ...(brokers[name] || {}), ...resolvePaths(b, path.dirname(userFile)) };
+    // A broker the defaults ship as live can't be made a replay broker by an override (harness-now.js).
+    if (b && typeof b === 'object' && 'replay' in b && defaults.brokers && defaults.brokers[name] && defaults.brokers[name].replay !== true) brokers[name].replay = false;
+  }
   return { broker: (user && user.broker) || defaults.broker, brokers, file: userFile };
 }
 

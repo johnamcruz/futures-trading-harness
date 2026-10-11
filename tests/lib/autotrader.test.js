@@ -418,3 +418,62 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   assert.match(f, /MNQ Trend rule: up; trend strategies may not go short \(recorded for the order gate, which enforces it\)\. MNQ premarket plan \(09:05 ET\): bias long\. /);
   assert.match(f, /a 3-minute bar just closed \(opened 15:30 ET\);/);
 });
+
+test('CLI: the runner decides on the harness clock: a replay broker\'s FTH_REPLAY_NOW, refused with a live broker', () => {
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'] }));
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], replay: true } } }));
+  const cli = path.join(ROOT, 'scripts', 'autotrader.js');
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  const at = (now, extra = {}) => spawnSync(process.execPath, [cli, '--config', config, '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: now, ...extra } });
+  const premarket = at('2026-10-07T12:00:00Z'); // Wednesday 08:00 ET
+  assert.strictEqual(premarket.status, 0, premarket.stderr);
+  const weekend = at('2026-10-10T15:00:00Z'); // Saturday
+  assert.strictEqual(weekend.status, 0, weekend.stderr);
+  assert.notStrictEqual(premarket.stdout, weekend.stdout, 'the action depends on the replayed time');
+  assert.match(weekend.stdout, /next action now: none/);
+  const live = at('2026-10-07T12:00:00Z', { FTH_BROKER: 'topstepx' });
+  assert.strictEqual(live.status, 1);
+  assert.match(live.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  // The live loop too: refused before the lock, the broker, or the first cycle.
+  const loop = spawnSync(process.execPath, [cli, '--config', config], { encoding: 'utf8', env: { ...env, FTH_BROKER: 'topstepx', FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, timeout: 20000 });
+  assert.strictEqual(loop.status, 1);
+  assert.match(loop.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  // --once: the prompt is dated by the replayed clock; end of day still runs, at the wall clock, when the override is refused.
+  const once = (now, extra = {}) => spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: now, ...extra } });
+  const replayedEod = once('2026-03-04T20:30:00Z');
+  assert.strictEqual(replayedEod.status, 0, replayedEod.stderr);
+  assert.match(replayedEod.stdout, /trading day ending 2026-03-04/);
+  const refusedEod = once('2026-03-04T20:30:00Z', { FTH_BROKER: 'topstepx' });
+  assert.strictEqual(refusedEod.status, 0, refusedEod.stderr);
+  assert.doesNotMatch(refusedEod.stdout, /2026-03-04/, 'the wall clock\'s day');
+  const premarketOnce = spawnSync(process.execPath, [cli, '--config', config, '--once', 'premarket', '--symbol', 'MNQ', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T12:00:00Z' } });
+  assert.match(premarketOnce.stdout, /premarket skill for MNQ.*trading day ending 2026-03-04/);
+  assert.strictEqual(spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T20:30:00Z', FTH_BROKER: 'topstepx' } }).status, 1, 'any other run is refused');
+  const garbage = at('soon');
+  assert.strictEqual(garbage.status, 1);
+  assert.match(garbage.stderr, /not an ISO 8601 UTC time/);
+});
+
+test('CLI: the runner never takes the test suite\'s FTH_TEST_NOW, keeps its state on the replayed day, and refuses its loop with FTH_REPLAY_NOW', () => {
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'custom', command: ['true', '{prompt}'] }));
+  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], replay: true } } }));
+  const cli = path.join(ROOT, 'scripts', 'autotrader.js');
+  const env = { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  const run = (extra, args = ['--dry-run']) => spawnSync(process.execPath, [cli, '--config', config, ...args], { encoding: 'utf8', env: { ...env, ...extra }, timeout: 20000 });
+  // Wednesday 08:00 ET is premarket on the replayed clock; the test clock at that time is ignored (a live runner).
+  assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: premarket/);
+  assert.doesNotMatch(run({ NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T12:00:00Z' }).stdout, /premarket/);
+  // An unreadable state file: manage-only for the rest of the replayed day (not a new day's premarket).
+  fs.writeFileSync(path.join(dir, 'autotrader-state.json'), '{ broken');
+  assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: manage/);
+  fs.unlinkSync(path.join(dir, 'autotrader-state.json'));
+  // The long-running loop: refused before the lock, the broker, or a cycle.
+  const loop = run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, []);
+  assert.strictEqual(loop.status, 1);
+  assert.match(loop.stderr, /FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock.*--once or --dry-run/);
+  assert.ok(!fs.existsSync(path.join(dir, 'autotrader.lock')) && !fs.existsSync(path.join(dir, 'logs')), 'nothing started');
+});

@@ -9,7 +9,7 @@
 const { tradingDayStart } = require('../lib/trading/clock');
 const { resolveJournalPath, readJournal, entriesSince } = require('../lib/trading/journal');
 const { liveReviews, successfulEntries } = require('../lib/trading/order-gate');
-const { gateNow } = require('../lib/trading/config');
+const { harnessNow, ReplayClockError } = require('../lib/trading/harness-now');
 
 function unreviewedCount(entries, now) {
   const today = entriesSince(entries, tradingDayStart(now));
@@ -28,9 +28,11 @@ function run(rawInput, _ctx = {}, deps = {}) {
   const env = deps.env || process.env;
   let pending;
   try {
-    // The gate's clock: the wall clock, shifted only in the test suite (FTH_TEST_NOW).
-    pending = unreviewedCount(readJournal(resolveJournalPath(env)), deps.now || gateNow(env));
-  } catch (_err) {
+    // The gate's clock (harness-now.js): the wall clock, or a replay broker's replayed time.
+    pending = unreviewedCount(readJournal(resolveJournalPath(env)), deps.now || harnessNow(env));
+  } catch (err) {
+    // A refused replay clock is said, not swallowed: the reminder can't run, and entries are refused meanwhile.
+    if (err instanceof ReplayClockError) return { stderr: `[replay-clock] ${err.message} The review reminder could not check this trading day; tell the user.`, exitCode: 2 };
     return '';
   }
   if (pending === 0) return '';
