@@ -129,4 +129,4 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   return { file, contractId: contract.id, tickSize: contract.tickSize, tickValue: contract.tickValue, count: bars.length, first: bars[0].t, last: last.t, closedAt: new Date(Date.parse(last.t) + step).toISOString(), bars };
 }
 
-module.exports = { MAX_COUNT, OUT_DIR, requestErrors, defaultOut, outError, fetchBarsToFile };
+module.exports = { MAX_COUNT, OUT_DIR, requestErrors, defaultOut, outError, fetchBarsToFile, lstat, realish, inside };
