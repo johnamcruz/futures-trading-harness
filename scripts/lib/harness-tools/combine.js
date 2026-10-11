@@ -17,7 +17,7 @@ const prop = require('../trading/prop-state');
 const combine = require('../trading/combine');
 const { harnessHome } = require('../paths');
 const { loadStrategies } = require('../trading/strategies');
-const { context } = require('./cli');
+const { context, say } = require('./cli');
 
 /** The policy strategies' latest verdicts that haven't expired: what an entry may be. */
 function liveVerdicts(home, now) {
@@ -57,7 +57,7 @@ function status({ account: name, json = false } = {}, ctx) {
   const rows = accounts.map(a => statusOf(home, a, now, strategies)).filter(r => name || r.started);
   const verdicts = liveVerdicts(home, now);
   if (json) return { text: `${JSON.stringify({ attempts: rows, verdicts }, null, 2)}\n` };
-  if (!rows.length) return { text: 'no attempt is started (node scripts/combine.js start --account <name>)\n' };
+  if (!rows.length) return { text: say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') };
   let text = '';
   for (const r of rows) {
     text += !r.started ? `${r.account}: no attempt started\n`

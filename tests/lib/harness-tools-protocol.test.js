@@ -222,6 +222,17 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
     assert.match(text, why, tool);
     assert.doesNotMatch(text.split('\n').filter(l => l.startsWith('[')).join('\n'), /--[a-z]/, `${tool}: no script flag in the refusal`);
   }
+  // bars_fetch has no output argument: a refused bars file is named as the file, not as --out (refused before the broker is asked).
+  const { fetchBarsToFile, outError } = require('../../scripts/lib/bars-fetch');
+  const outDir = path.join(home, 'fth');
+  fs.mkdirSync(path.join(outDir, 'MNQ-7m-x.json'), { recursive: true, mode: 0o700 });
+  fs.chmodSync(outDir, 0o700);
+  const broker = { activeContract: async () => assert.fail('the broker is not asked') };
+  await assert.rejects(() => fetchBarsToFile({ client: broker, symbol: 'MNQ', timeframe: 7, count: 10, out: path.join(outDir, 'MNQ-7m-x.json'), outDir, tool: true }), /^Error: the bars file: a \.json file under .* \(not a regular file: /);
+  assert.match(outError(path.join(outDir, 'MNQ-7m-x.json'), outDir), /^--out: /, 'the script names its flag');
+  // combine_status with no attempt: starting one is the user's (the script's own line stays as it was).
+  const none = await callTool('combine_status', {}, { env: { FTH_HOME: home } });
+  assert.strictEqual(none.content[0].text, 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n');
   // The scripts keep their own wording.
   const mtf = require('../../scripts/lib/harness-tools/mtf');
   assert.throws(() => mtf.mtf({ file: bars, record: true }, { env: { FTH_HOME: home } }), /^Error: --record needs --symbol=<ROOT> \(e\.g\. MNQ\)$/);

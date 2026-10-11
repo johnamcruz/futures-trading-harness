@@ -285,7 +285,15 @@ test('skills: every harness tool call a doc writes is valid for the tool (names,
         const where = `${d.rel}: ${name}`;
         // `tool {...}`, `tool` `{...}`, `tool`: `{...}`, `tool` with (arguments) `{...}`, `tool` (`{...}`), and a fenced block after it.
         const lead = /^`?\s*:?\s*(?:with\s+(?:arguments\s+)?)?\(?(?:`(?!``))?\s*(?:```(?:json)?\s*\n)?/.exec(rest);
-        const raw = leadingObject(rest.slice(lead[0].length));
+        let raw = leadingObject(rest.slice(lead[0].length));
+        if (!raw) {
+          // Further along the clause (a table cell, "passing `{...}`", "(arguments: `{...}`)"), before any other tool is named.
+          const clause = rest.slice(0, 300).split(/\.\s|\n\s*\n|;\s/)[0];
+          const next = clause.search(new RegExp(`(?<![A-Za-z0-9])(${[...HARNESS_NAMES].join('|')})(?![A-Za-z0-9_])`));
+          const scope = next === -1 ? clause : clause.slice(0, next);
+          const at = scope.search(/[`(:]\s*\{/);
+          if (at !== -1) raw = leadingObject(rest.slice(at + 1));
+        }
         if (raw) {
           const { obj, error } = callObject(name, raw);
           if (error) {
@@ -319,7 +327,8 @@ function BY_NAME_SCHEMA(name) {
 }
 
 test('skills: messages an agent reads from the gate and the hooks name the harness tools, not the scripts', () => {
-  const files = ['scripts/lib/trading', 'scripts/hooks', 'scripts/lib/harness-tools'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).map(f => path.join(dir, f)));
+  const files = ['scripts/lib/trading', 'scripts/hooks', 'scripts/lib/harness-tools'].flatMap(dir => fs.readdirSync(path.join(ROOT, dir)).filter(f => f.endsWith('.js')).map(f => path.join(dir, f)))
+    .concat(['scripts/lib/bars-fetch.js']); // what bars_fetch's operation calls
   assert.ok(files.length > 30);
   const bad = [];
   for (const f of files) {
@@ -327,8 +336,12 @@ test('skills: messages an agent reads from the gate and the hooks name the harne
       if (/^\s*(\*|\/\/|\/\*)/.test(line)) return; // comments are for people
       if (/USAGE|usage:/.test(line)) return; // a script's own usage line (its argv parsing; no tool reaches it)
       if (AGENT_RUN_SCRIPT.test(line) || /node <root>\/scripts\//.test(line)) bad.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`);
-      // An operation's refusal names the caller's words: say(c, '--flag ...', 'argument ...'), never a bare script flag.
-      if (f.startsWith('scripts/lib/harness-tools') && /throw new Error\((['`])--/.test(line) && !/\/\/ cli-only: /.test(line)) bad.push(`${f}:${i + 1}: a flag-only message: ${line.trim().slice(0, 100)}`);
+      // A message a tool can return names the caller's words: say(c, '--flag ...', 'argument ...') or a tool flag,
+      // never a bare script flag. Exempt: argv parsing, lines marked `// cli-only:` (the tool's schema refuses first).
+      const toolPath = f.startsWith('scripts/lib/harness-tools') || f === 'scripts/lib/bars-fetch.js';
+      const flagString = /(['"`])[^'"`]*--[a-z][^'"`]*\1|`[^`]*--[a-z]/.test(line);
+      const parsing = /flag ===|\ba === '--|options\(|o\['--|argv/.test(line);
+      if (toolPath && flagString && !parsing && !/say\(c,|\btool \?|\/\/ cli-only: /.test(line)) bad.push(`${f}:${i + 1}: a script flag in a message: ${line.trim().slice(0, 100)}`);
     });
   }
   assert.deepStrictEqual(bad, []);

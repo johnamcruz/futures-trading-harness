@@ -27,9 +27,9 @@ const MAX_COUNT = 20000; // the most get_bars returns at once (broker MCP interf
 /** Problems with the request: [message]. */
 function requestErrors({ symbol, timeframe, daily, count }) {
   const errors = [];
-  if (!/^[A-Z0-9]+$/.test(String(symbol || ''))) errors.push('--symbol: a contract root, e.g. MNQ');
-  if (!daily && !(Number.isInteger(timeframe) && timeframe >= 1 && timeframe <= 60)) errors.push('--timeframe: minutes per bar, 1 to 60 (or --daily)');
-  if (!(Number.isInteger(count) && count >= 3 && count <= MAX_COUNT)) errors.push(`--count: 3 to ${MAX_COUNT} bars`);
+  if (!/^[A-Z0-9]+$/.test(String(symbol || ''))) errors.push('--symbol: a contract root, e.g. MNQ'); // cli-only: the tool's schema refuses this first
+  if (!daily && !(Number.isInteger(timeframe) && timeframe >= 1 && timeframe <= 60)) errors.push('--timeframe: minutes per bar, 1 to 60 (or --daily)'); // cli-only: the tool's schema refuses this first
+  if (!(Number.isInteger(count) && count >= 3 && count <= MAX_COUNT)) errors.push(`--count: 3 to ${MAX_COUNT} bars`); // cli-only: the tool's schema refuses this first
   return errors;
 }
 
@@ -69,14 +69,15 @@ const inside = (file, dir) => {
 };
 
 /** Why a bars file path is refused, or null: a .json file inside outDir, through no symlink. */
-function outError(out, outDir = OUT_DIR) {
+function outError(out, outDir = OUT_DIR, { tool = false } = {}) {
   const dir = path.resolve(outDir);
   // The directory resolved through its parent only (/tmp/fth on macOS is /private/tmp/fth): a path given
   // under that real form is the same place, and is checked as the /tmp/fth path below.
   const realDir = path.join(realish(path.dirname(dir)), path.basename(dir));
   const given = path.resolve(String(out));
   const file = realDir !== dir && inside(given, realDir) ? path.join(dir, path.relative(realDir, given)) : given;
-  const refused = why => `--out: a .json file under ${outDir}/ (${why}: ${given})`;
+  // The script names its flag; a harness tool, which has no output argument, names the file.
+  const refused = why => `${tool ? 'the bars file' : '--out'}: a .json file under ${outDir}/ (${why}: ${given})`;
   if (!file.endsWith('.json')) return refused('not a .json file');
   if (!inside(file, dir)) return refused('outside it');
   // The directory and everything below it, as they are now: no symlink anywhere, the file a regular one if it exists.
@@ -101,14 +102,14 @@ function outError(out, outDir = OUT_DIR) {
  * { file, contractId, count, first, last, closedAt } after writing the bars.
  * `client`: the broker adapter (activeContract, closedBars).
  */
-async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, now = new Date(), outDir = OUT_DIR }) {
+async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, now = new Date(), outDir = OUT_DIR, tool = false }) {
   // By default as many bars as the runner keeps (the multi-timeframe read's whole window).
   if (count === null) count = daily ? 60 : require('./autotrader').historyBars(timeframe);
   const errors = requestErrors({ symbol, timeframe, daily, count });
   if (errors.length) throw new Error(errors.join('; '));
   // Refused before the broker is asked.
   const file = path.resolve(out || defaultOut(symbol, timeframe, daily));
-  const refused = outError(file, outDir);
+  const refused = outError(file, outDir, { tool });
   if (refused) throw new Error(refused);
   const contract = await client.activeContract(symbol);
   const raw = await client.closedBars(contract.id, { minutes: timeframe, limit: count, now, daily });
@@ -116,10 +117,10 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}; the market may be closed or the contract new`);
   // Checked again after the broker call (seconds), before mkdir can follow a link planted meanwhile,
   // and once more just before the write; the temp file is new, never followed.
-  const again = outError(file, outDir);
+  const again = outError(file, outDir, { tool });
   if (again) throw new Error(again);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 }); // the directories it creates are private (an existing /tmp/fth must be the user's: outError)
-  const late = outError(file, outDir);
+  const late = outError(file, outDir, { tool });
   if (late) throw new Error(late);
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ contractId: contract.id, barSize: daily ? '1 day' : `${timeframe} minute`, count: bars.length, bars }), { flag: 'wx' });
