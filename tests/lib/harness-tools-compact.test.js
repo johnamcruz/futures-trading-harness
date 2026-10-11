@@ -53,7 +53,7 @@ test('scanSummary: a stop in ticks is rounded away from the entry (ceil), never 
   const r = { name: 's', status: 'active', timeframe: '3m', signal: 'rules', direction: 'long', candidate: true, entryRef: 21503.25, stopDistance: 4.3, minRR: 1.5,
     exit: { targetR: 1, target: null, trailActivateR: null, trailGivebackR: null, maxBars: null } };
   // The 1R target from those 18 ticks: 18 ticks, toward the entry.
-  assert.match(scanSummary([r], { symbol: 'MNQ' }), /entryRef 21503\.25, stop 4\.3 pts = 18 ticks \(\$9\.00\/MNQ contract\), target 1R = 18 ticks/);
+  assert.match(scanSummary([r], { symbol: 'MNQ', specOf }), /entryRef 21503\.25, stop 4\.3 pts = 18 ticks \(\$9\.00\/MNQ contract\), target 1R = 18 ticks/);
 });
 
 test('scanSummary: the bar and trend, the candidates first with what a plan needs, then one line per strategy', () => {
