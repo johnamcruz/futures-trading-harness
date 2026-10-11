@@ -281,8 +281,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // risk.max_risk_usd where it sets one (for a policy strategy, its own; order-limits.js).
   const sizeMsg = checkOrderSize(input, brokerOrderLimit(contractsFile));
   if (sizeMsg) violations.push({ check: 'max-order-size', message: sizeMsg });
-  const stopM = STOP_PRICE.exec(rationale);
-  const riskMsg = checkRiskLimit({ input, stopPrice: stopM ? Number(stopM[1].replace(/,/g, '')) : null, strategy: named, specOf });
+  const stopPrices = [...rationale.matchAll(new RegExp(STOP_PRICE.source, 'gi'))].map(m => Number(m[1].replace(/,/g, '')));
+  const riskMsg = checkRiskLimit({ input, stopPrices, strategy: named, specOf });
   if (riskMsg) violations.push({ check: 'max-risk', message: riskMsg });
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf }));

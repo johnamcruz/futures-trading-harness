@@ -1214,14 +1214,14 @@ test('order gate wiring: without the broker\'s tick specs the hook and the gatew
   assert.match(textOf(r[4]), /"orderId":\s*5/, textOf(r[4]));
 });
 
-test('order gate wiring: the hook refuses an entry over the broker\'s max order size or its strategy\'s max_risk_usd (even autonomous with the checks named skipped); exits, stops and stop moves of any size go', () => {
+test('order gate wiring: the hook refuses an entry over the broker\'s max order size or its strategy\'s max_risk_usd (even with the checks named skipped); exits, stops and stop moves of any size go', () => {
   const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
   const { env } = setup(plan);
   recordBrokerSpecs(env.FTH_HOME, { server: { maxOrderSize: 5 } });
   const over = gate(orderPayload({ ...ORDER, size: 27 }), env);
   assert.strictEqual(over.code, 2);
   assert.match(over.stderr, /\[max-order-size\] size 27 over the broker's max order size 5 \(get_server_config maxOrderSize\): reduce the size to 5 or less/);
-  const auto = gate(orderPayload({ ...ORDER, size: 6 }), { ...env, FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'max-order-size,max-risk' });
+  const auto = gate(orderPayload({ ...ORDER, size: 6 }), { ...env, FTH_ORDER_GATE_SKIP: 'max-order-size,max-risk' });
   assert.strictEqual(auto.code, 2);
   assert.match(auto.stderr, /\[max-order-size\]/);
   assert.strictEqual(gate(orderPayload({ ...ORDER, size: 5 }), env).code, 0);

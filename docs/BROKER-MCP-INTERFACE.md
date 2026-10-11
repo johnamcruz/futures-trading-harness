@@ -132,7 +132,7 @@ replay server, which simulates history; its `serverTime` is then the replayed
 time. Live servers omit it. The gateway honors `FTH_REPLAY_NOW` only when the
 server reports `replay: true` and a `serverTime` within 5 minutes of it.
 `maxOrderSize` is a whole number of contracts, 1 or more: the contract
-translator records it from each answer (`server` in the same local file as
+translator records it from each successful answer (`server` in the same local file as
 the tick specs), and the order gate refuses an entry larger than it, and
 every entry until an answer with a valid one has been recorded. Exits and
 protective orders are never held to it by the harness (the server applies

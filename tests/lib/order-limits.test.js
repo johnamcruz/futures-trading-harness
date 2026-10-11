@@ -45,6 +45,11 @@ test('entryStopTicks: the bracket, or the rationale\'s stop from a limit or stop
   // Both: the larger, whichever it is.
   assert.deepStrictEqual(entryStopTicks({ ...limit, stopLossBracket: { ticks: 78 } }, 21480.25, s), { ticks: 79 });
   assert.deepStrictEqual(entryStopTicks({ ...limit, stopLossBracket: { ticks: 90 } }, 21480.25, s), { ticks: 90 });
+  // Several "stop <price>" in the rationale ("buy stop 21510 ..., stop 21480"): the farthest on the losing side.
+  const stopEntry = order({ type: 'stop', stopPrice: 21520, stopLossBracket: undefined });
+  assert.deepStrictEqual(entryStopTicks(stopEntry, [21510, 21480], s), { ticks: 160 });
+  assert.deepStrictEqual(entryStopTicks(stopEntry, [21520, 21480], s), { ticks: 160 }, 'the entry price named as "buy stop" is no stop');
+  assert.deepStrictEqual(entryStopTicks(stopEntry, [21530, 21480], s), { ticks: 160 }, 'one on the wrong side is ignored when another is on the losing side');
   // A market entry with a bracket: the bracket (the rationale's stop has no entry price to measure from).
   assert.deepStrictEqual(entryStopTicks(order(), 21000, s), { ticks: 40 });
   // A bracket with a wrong-side rationale stop: the bracket the broker places.
@@ -55,9 +60,9 @@ test('entryStopTicks: no computable stop says why and how to fix it', () => {
   const s = SPECS.MNQ;
   assert.match(entryStopTicks(order({ stopLossBracket: undefined }), 21480, s).why, /market entry with its stop only in the rationale has no entry price .*add stopLossBracket\.ticks/);
   assert.match(entryStopTicks(order({ stopLossBracket: undefined }), null, s).why, /no stop to measure its risk from: add stopLossBracket\.ticks/);
-  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined }), 21510, s).why, /not on the losing side of the buy entry 21500/);
-  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined }), 21500, s).why, /not on the losing side/);
-  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, side: undefined, stopLossBracket: undefined }), 21480, s).why, /not on the losing side/);
+  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined }), 21510, s).why, /no stop in the rationale \(21510\) is on the losing side of the buy entry 21500/);
+  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined }), 21500, s).why, /no stop in the rationale \(21500\) is on the losing side/);
+  assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 21500, side: undefined, stopLossBracket: undefined }), 21480, s).why, /is on the losing side of the unsided entry/);
   assert.match(entryStopTicks(order({ type: 'limit', limitPrice: 'abc', stopLossBracket: undefined }), 21480, s).why, /is not a price/);
   for (const ticks of [0, -4, 2.5, 'x']) assert.match(entryStopTicks(order({ stopLossBracket: { ticks } }), null, s).why, /not a whole number of ticks above 0/, String(ticks));
   assert.match(entryStopTicks(order(), null, null).why, /no usable tick specs from the broker for MNQ/);
@@ -87,13 +92,15 @@ test('checkRiskLimit: MNQ vs NQ - the same ticks, ten times the dollars; a stop 
 test('checkRiskLimit: the stop only in the rationale - a limit entry\'s distance counts; a market entry\'s can\'t be measured (refused)', () => {
   const limit = order({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined });
   // 79 ticks x $0.50 = $39.50.
-  assert.strictEqual(checkRiskLimit({ input: limit, stopPrice: 21480.25, strategy: strat(40), specOf }), null);
-  assert.match(checkRiskLimit({ input: { ...limit, size: 2 }, stopPrice: 21480.25, strategy: strat(40), specOf }), /^risk \$79\.00 \(size 2 x 79-tick stop/);
+  assert.strictEqual(checkRiskLimit({ input: limit, stopPrices: 21480.25, strategy: strat(40), specOf }), null);
+  assert.match(checkRiskLimit({ input: { ...limit, size: 2 }, stopPrices: 21480.25, strategy: strat(40), specOf }), /^risk \$79\.00 \(size 2 x 79-tick stop/);
   // Off the tick: 80 ticks, $40.00 - at the cap, not under-counted to 79.
-  assert.strictEqual(checkRiskLimit({ input: limit, stopPrice: 21480.1, strategy: strat(40), specOf }), null);
-  assert.match(checkRiskLimit({ input: limit, stopPrice: 21480.1, strategy: strat(39.9), specOf }), /^risk \$40\.00 \(size 1 x 80-tick stop/);
+  assert.strictEqual(checkRiskLimit({ input: limit, stopPrices: 21480.1, strategy: strat(40), specOf }), null);
+  assert.match(checkRiskLimit({ input: limit, stopPrices: 21480.1, strategy: strat(39.9), specOf }), /^risk \$40\.00 \(size 1 x 80-tick stop/);
+  // "buy stop 21510 trigger ..., stop 21480" on a buy stop at 21520: 160 ticks ($80), not 40 ($20).
+  assert.match(checkRiskLimit({ input: order({ type: 'stop', stopPrice: 21520, stopLossBracket: undefined }), stopPrices: [21510, 21480], strategy: strat(30), specOf }), /^risk \$80\.00 \(size 1 x 160-tick stop/);
   // The replayed 27-lot: a market entry, no bracket, the stop only in the rationale.
-  assert.match(checkRiskLimit({ input: order({ size: 27, stopLossBracket: undefined }), stopPrice: 21480, strategy: strat(50), specOf }),
+  assert.match(checkRiskLimit({ input: order({ size: 27, stopLossBracket: undefined }), stopPrices: 21480, strategy: strat(50), specOf }),
     /^setup:orb caps risk at \$50\.00 \(risk\.max_risk_usd\) but this entry's risk can't be computed: a market entry with its stop only in the rationale has no entry price .*add stopLossBracket\.ticks/);
 });
 

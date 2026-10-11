@@ -942,6 +942,9 @@ test('max-risk: the stop only in the rationale - measured from a limit entry\'s 
   const limit = entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined, rationale: 'setup:orb long at 21500, stop 21480, target 21540' });
   assert.deepStrictEqual(run(limit, 40), []);
   assert.match(run({ ...limit, size: 2 }, 40).find(v => v.check === 'max-risk').message, /^risk \$80\.00 \(size 2 x 80-tick stop/);
+  // A stop entry whose rationale names its own price as "buy stop" first: the real stop is measured.
+  const stopEntry = entryOrder({ type: 'stop', stopPrice: 21520, stopLossBracket: undefined, rationale: 'setup:orb long, buy stop 21510 over the high, stop 21480, target 21600' });
+  assert.match(run(stopEntry, 30).find(v => v.check === 'max-risk').message, /^risk \$80\.00 \(size 1 x 160-tick stop/);
   // The replayed 27-lot: market, no bracket, the stop only in the rationale.
   const replayed = entryOrder({ size: 27, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480, target 21540' });
   const v = run(replayed, 50);
