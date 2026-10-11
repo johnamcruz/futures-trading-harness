@@ -110,6 +110,66 @@ test('a link planted while the broker answers is refused, and the write never fo
   assert.deepStrictEqual(fs.readdirSync(elsewhere), []);
 });
 
+test('a link planted during the broker call is refused before mkdir can create directories through it', async () => {
+  const outDir = tmpDir();
+  const victim = tmpDir();
+  const sub = path.join(outDir, 'sub');
+  const client = fakeClient();
+  const activeContract = client.activeContract;
+  client.activeContract = async s => { fs.symlinkSync(victim, sub); return activeContract(s); };
+  await assert.rejects(fetchBarsToFile({ client, symbol: 'MNQ', count: 50, out: path.join(sub, 'a', 'b', 'x.json'), outDir }), /--out/);
+  assert.deepStrictEqual(fs.readdirSync(victim), [], 'no directory created outside the bars directory');
+});
+
+test('the real-path check refuses what the symlink walk cannot see, and the temp file is never an existing one', async () => {
+  const outDir = tmpDir();
+  const file = path.join(outDir, 'x.json');
+  fs.writeFileSync(file, '{}');
+  // A file whose real path is elsewhere though no link shows on the way (a mount, a filesystem quirk).
+  const realpathSync = fs.realpathSync;
+  fs.realpathSync = p => (path.resolve(p) === file ? path.join(tmpDir(), 'x.json') : realpathSync(p));
+  try {
+    assert.match(outError(file, outDir), /real path is outside/);
+  } finally {
+    fs.realpathSync = realpathSync;
+  }
+  assert.strictEqual(outError(file, outDir), null);
+  // The temp name made predictable and a link planted there: wx refuses it rather than write through.
+  const crypto = require('crypto');
+  const randomBytes = crypto.randomBytes;
+  const victim = path.join(tmpDir(), 'journal.jsonl');
+  fs.writeFileSync(victim, 'keep');
+  const out = path.join(outDir, 'MNQ-3m.json');
+  crypto.randomBytes = n => Buffer.alloc(n);
+  try {
+    fs.symlinkSync(victim, `${out}.${process.pid}.${'00'.repeat(6)}.tmp`);
+    await assert.rejects(fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, out, outDir }), /EEXIST/);
+  } finally {
+    crypto.randomBytes = randomBytes;
+  }
+  assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'keep');
+});
+
+test('a path given under the bars directory\'s real form (/private/tmp/fth on macOS) is the same directory', async () => {
+  // The bars directory under a parent that is a link, as /tmp is on macOS.
+  const real = tmpDir();
+  const parent = path.join(tmpDir(), 'tmp');
+  fs.symlinkSync(real, parent);
+  const outDir = path.join(parent, 'fth');
+  const realDir = path.join(fs.realpathSync(real), 'fth');
+  assert.strictEqual(outError(path.join(realDir, 'MNQ-3m.json'), outDir), null);
+  assert.strictEqual(outError(path.join(outDir, 'MNQ-3m.json'), outDir), null);
+  const r = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, out: path.join(realDir, 'a', 'MNQ-3m.json'), outDir });
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(outDir, 'a', 'MNQ-3m.json'), 'utf8')).count, 50);
+  assert.strictEqual(r.count, 50);
+  // Every other check still holds under that form.
+  fs.symlinkSync(tmpDir(), path.join(realDir, 'link'));
+  for (const bad of [path.join(realDir, 'x.txt'), path.join(realDir, 'link', 'x.json'), realDir, path.join(realDir, '..', 'x.json')]) {
+    assert.match(outError(bad, outDir), /--out/, bad);
+  }
+  if (fs.realpathSync('/tmp') !== '/tmp') assert.strictEqual(outError(path.join(fs.realpathSync('/tmp'), 'fth', 'MNQ-3m.json')), null);
+});
+
 test('scripts/bars.js refuses an --out outside /tmp/fth before asking the broker', () => {
   const home = tmpDir();
   const calls = path.join(home, 'calls.txt');

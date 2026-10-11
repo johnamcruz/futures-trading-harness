@@ -443,6 +443,61 @@ test('bar-file errors never echo the file\'s content (a script run on a credenti
   assert.throws(() => loadBars(path.join(dir, 'cell.csv')), /row 2: unreadable time$/);
   assert.throws(() => loadBars(path.join(dir, 'bad.json')), /bad\.json: not valid JSON$/);
   assert.throws(() => loadBars(path.join(dir, 'offminute.json')), /a bar at 20\d\d-\d\d-\d\dT\d\d:\d\d:30\.000Z is not on a minute boundary/);
+  // Parquet and Excel: a column name, a sheet name, or a worksheet target from the file stays out of the error.
+  const name = Buffer.from(secret);
+  const thriftName = Buffer.concat([Buffer.from([name.length]), name]);
+  // FileMetaData { 1: version 1, 2: schema [root (2 children), child] } in Thrift compact; child = nested or repeated.
+  const parquet = child => {
+    const meta = Buffer.concat([Buffer.from([0x15, 0x02, 0x19, 0x2c, 0x48, 6]), Buffer.from('schema'), Buffer.from([0x15, 0x02, 0x00]), child, Buffer.from([0x00, 0x00])]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32LE(meta.length);
+    return Buffer.concat([Buffer.from('PAR1'), meta, len, Buffer.from('PAR1')]);
+  };
+  fs.writeFileSync(path.join(dir, 'nested.parquet'), parquet(Buffer.concat([Buffer.from([0x48]), thriftName, Buffer.from([0x15, 0x02])])));
+  fs.writeFileSync(path.join(dir, 'repeated.parquet'), parquet(Buffer.concat([Buffer.from([0x35, 0x04, 0x18]), thriftName])));
+  assert.throws(() => loadBars(path.join(dir, 'nested.parquet')), /^Error: parquet: column 1 is nested, which is not supported$/);
+  assert.throws(() => loadBars(path.join(dir, 'repeated.parquet')), /^Error: parquet: column 1 is repeated, which is not supported$/);
+  // A stored (uncompressed) zip: the workbook names a sheet and a worksheet target that isn't there.
+  const zip = entries => {
+    const locals = [];
+    const central = [];
+    let offset = 0;
+    for (const [n, body] of Object.entries(entries)) {
+      const nb = Buffer.from(n);
+      const data = Buffer.from(body);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(data.length, 22);
+      local.writeUInt16LE(nb.length, 26);
+      const cd = Buffer.alloc(46);
+      cd.writeUInt32LE(0x02014b50, 0);
+      cd.writeUInt32LE(data.length, 20);
+      cd.writeUInt32LE(data.length, 24);
+      cd.writeUInt16LE(nb.length, 28);
+      cd.writeUInt32LE(offset, 42);
+      locals.push(local, nb, data);
+      central.push(cd, nb);
+      offset += 30 + nb.length + data.length;
+    }
+    const cdBuf = Buffer.concat(central);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(Object.keys(entries).length, 8);
+    eocd.writeUInt16LE(Object.keys(entries).length, 10);
+    eocd.writeUInt32LE(cdBuf.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, cdBuf, eocd]);
+  };
+  fs.writeFileSync(path.join(dir, 'book.xlsx'), zip({
+    'xl/workbook.xml': `<workbook><sheets><sheet name="${secret}" r:id="rId1"/></sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<Relationships><Relationship Id="rId1" Target="${secret}.xml"/></Relationships>`,
+  }));
+  assert.throws(() => loadBars(path.join(dir, 'book.xlsx')), /^Error: xlsx: the worksheet the workbook points to is missing$/);
+  const { readXlsx } = require('../../scripts/lib/backtest/xlsx');
+  assert.throws(() => readXlsx(path.join(dir, 'book.xlsx'), { sheet: 'Bars' }), /^Error: xlsx: no sheet named "Bars" \(the workbook has 1 sheet\(s\)\)$/);
+  cases['nested.parquet'] = null;
+  cases['book.xlsx'] = null;
   // Through the scripts agents run, on a file and on stdin.
   const script = (name, args, input = '') => spawnSync(process.execPath, [path.join(ROOT, 'scripts', name), ...args], { input, encoding: 'utf8', env: { PATH: process.env.PATH, FTH_HOME: dir } });
   for (const [name, args] of [['market-snapshot.js', []], ['mtf.js', []], ['strategies.js', ['scan']]]) {

@@ -78,13 +78,14 @@ function readXlsx(file, { sheet = null } = {}) {
   }));
   if (!sheets.length) throw new Error('xlsx: the workbook has no sheets');
   const chosen = sheet === null ? sheets[0] : sheets.find(s => s.name === sheet);
-  if (!chosen) throw new Error(`xlsx: no sheet named "${sheet}" (sheets: ${sheets.map(s => s.name).join(', ')})`);
+  // The workbook's own names (sheets, targets) stay out of errors: the bar loader's errors don't echo file content.
+  if (!chosen) throw new Error(`xlsx: no sheet named "${sheet}" (the workbook has ${sheets.length} sheet(s))`);
   const rels = xml('xl/_rels/workbook.xml.rels') || '';
   const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(r => r.includes(`Id="${chosen.rid}"`));
   let target = rel ? /Target="([^"]*)"/.exec(rel)[1] : 'worksheets/sheet1.xml';
   target = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
   const sheetXml = xml(target);
-  if (!sheetXml) throw new Error(`xlsx: worksheet ${target} is missing`);
+  if (!sheetXml) throw new Error('xlsx: the worksheet the workbook points to is missing');
 
   const shared = [];
   const sst = xml('xl/sharedStrings.xml');

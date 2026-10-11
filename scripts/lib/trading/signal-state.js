@@ -38,6 +38,9 @@ function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source =
 }
 
 function writeSignals(home, record) {
+  // The file name comes from these: a contract root and a minute count, nothing that could climb out of signals/.
+  if (!/^[A-Z0-9]+$/.test(familyRoot(record.symbol))) throw new Error(`signal record: the symbol must be a contract root, e.g. MNQ (got ${JSON.stringify(String(record.symbol))})`);
+  if (!/^\d+m$/.test(String(record.timeframe))) throw new Error(`signal record: the timeframe must be minutes, e.g. 3m (got ${JSON.stringify(String(record.timeframe))})`);
   const file = signalFile(home, record.symbol, record.timeframe);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;

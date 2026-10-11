@@ -72,6 +72,8 @@ function scan({ file, symbol, now: at, record = false } = {}, ctx) {
   return withText(text, () => {
     if (c.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records every bar itself');
     if (!symbol) throw new Error('--record needs --symbol <ROOT>');
+    // The record's file is named after it: a contract root only (as mtf and bars take it).
+    if (!/^[A-Z0-9]+$/.test(String(symbol).toUpperCase())) throw new Error('--record needs --symbol <ROOT>: a contract root, e.g. MNQ');
     const norm = normalizeBars(bars);
     const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
     const stepMs = Math.min(...diffs);

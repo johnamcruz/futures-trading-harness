@@ -38,7 +38,10 @@ function addWindow(list, { start, end, reason }, now = new Date()) {
 }
 
 function list(_args, ctx) {
-  const { env } = context(ctx);
+  const c = context(ctx);
+  // Read the clock as the CLI always has: a refused replay clock refuses the list too.
+  c.now();
+  const { env } = c;
   return { text: `${JSON.stringify(readList(loadConfig(env).blackoutsFile), null, 2)}\n` };
 }
 

@@ -85,6 +85,14 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   const rec = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: home }, now: clock() });
   assert.match(rec.stderr, /recorded for the order gate: .*MNQ-3m\.json/);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'signals', 'MNQ-3m.json'), 'utf8')).recordedAt, AT.toISOString());
+  // The record's file is named after the symbol: a contract root only, nothing that climbs out of signals/.
+  const esc = tmpDir();
+  const escHome = path.join(esc, 'a', 'home');
+  for (const symbol of ['../../x', 'MNQ/..', 'a b', '.']) {
+    assert.throws(() => strategies.scan({ file: CSV, symbol, record: true }, { env: { FTH_HOME: escHome }, now: clock() }), e => e instanceof cli.OpError && /^--record needs --symbol <ROOT>: a contract root/.test(e.message), symbol);
+  }
+  assert.deepStrictEqual(fs.readdirSync(esc, { recursive: true }), [], 'nothing written');
+  assert.match(strategies.scan({ file: CSV, symbol: 'mnq', record: true }, { env: { FTH_HOME: home }, now: clock() }).stderr, /MNQ-3m\.json/, 'a lowercase root still records');
   assert.strictEqual(JSON.parse(strategies.recent({ file: CSV, symbol: 'MNQ', count: 3 }, ctx).text).length, 3);
   assert.strictEqual(JSON.parse(strategies.recent({ file: CSV, symbol: 'MNQ', count: '2' }, ctx).text).length, 2, 'a CLI string count');
   for (const count of [0, 51, 2.5, 'x']) assert.throws(() => strategies.recent({ file: CSV, count }, ctx), /--bars: 1 to 50/);
@@ -134,6 +142,18 @@ test('blackouts: add at the clock\'s time, list, and the window checks', () => {
   assert.throws(() => blackouts.add({ start: '2026-10-13T12:20:00Z', end: '2026-10-13T12:40:00Z' }, { env, now }), /already ended/);
   assert.throws(() => blackouts.add({ start: 'x', end: 'y' }, { env, now }), /ISO times/);
   assert.deepStrictEqual(fs.readdirSync(path.join(dir, 'b')), ['blackouts.json'], 'no temp file left');
+  // A refused replay clock refuses the list too, by default as the CLI does.
+  const live = tmpDir();
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'] } } }));
+  const refused = { ...env, FTH_HOME: live, FTH_REPLAY_NOW: '2026-10-14T10:00:00Z' };
+  assert.throws(() => blackouts.list({}, { env: refused }), /not a replay broker/);
+  const reads = clock();
+  blackouts.list({}, { env, now: reads });
+  assert.strictEqual(reads.calls, 1);
+  const { spawnSync } = require('child_process');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'blackouts.js'), 'list'], { encoding: 'utf8', env: { PATH: process.env.PATH, ...refused } });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /\[blackouts\] .*not a replay broker/);
 });
 
 test('combine: status only (start, stop, record-day stay the user\'s, in scripts/combine.js)', () => {

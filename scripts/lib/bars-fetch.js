@@ -70,9 +70,13 @@ const inside = (file, dir) => {
 
 /** Why a bars file path is refused, or null: a .json file inside outDir, through no symlink. */
 function outError(out, outDir = OUT_DIR) {
-  const file = path.resolve(String(out));
   const dir = path.resolve(outDir);
-  const refused = why => `--out: a .json file under ${outDir}/ (${why}: ${file})`;
+  // The directory resolved through its parent only (/tmp/fth on macOS is /private/tmp/fth): a path given
+  // under that real form is the same place, and is checked as the /tmp/fth path below.
+  const realDir = path.join(realish(path.dirname(dir)), path.basename(dir));
+  const given = path.resolve(String(out));
+  const file = realDir !== dir && inside(given, realDir) ? path.join(dir, path.relative(realDir, given)) : given;
+  const refused = why => `--out: a .json file under ${outDir}/ (${why}: ${given})`;
   if (!file.endsWith('.json')) return refused('not a .json file');
   if (!inside(file, dir)) return refused('outside it');
   // The directory and everything below it, as they are now: no symlink anywhere, the file a regular one if it exists.
@@ -88,8 +92,7 @@ function outError(out, outDir = OUT_DIR) {
     // /tmp is shared: a /tmp/fth someone else made could be switched under us.
     if (i === -1 && typeof process.getuid === 'function' && st.uid !== process.getuid()) return refused(`${dir} belongs to another user`);
   }
-  // And by real path: the directory resolved through its parent only, the file inside it.
-  const realDir = path.join(realish(path.dirname(dir)), path.basename(dir));
+  // And by real path, the file inside the real directory (defense in depth: the walk above already refuses links).
   if (!inside(realish(file), realDir)) return refused('its real path is outside');
   return null;
 }
@@ -111,8 +114,11 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   const raw = await client.closedBars(contract.id, { minutes: timeframe, limit: count, now, daily });
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}; the market may be closed or the contract new`);
+  // Checked again after the broker call (seconds), before mkdir can follow a link planted meanwhile,
+  // and once more just before the write; the temp file is new, never followed.
+  const again = outError(file, outDir);
+  if (again) throw new Error(again);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  // Checked again just before the write (the broker took seconds); the temp file is new, never followed.
   const late = outError(file, outDir);
   if (late) throw new Error(late);
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
