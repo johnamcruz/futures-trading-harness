@@ -538,7 +538,9 @@ policy: { bundle: prop_portfolio_topstep_100k }   # models/<bundle>.json, once o
 - `node scripts/backtest.js --config <file> --prop prop_portfolio [--bundle <name>]`
   runs combine attempts from every start day: pass, blow, and timeout rates.
 
-See [docs/RL-DESIGN.md](docs/RL-DESIGN.md).
+See [docs/RL-DESIGN.md](docs/RL-DESIGN.md). The policy learns from the rules' setups; the
+design for replaying the reasoning trader over history and training a policy on
+its decisions is [docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md) (not built).
 
 ### Order flow
 
