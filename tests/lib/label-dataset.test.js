@@ -7,10 +7,10 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const ds = require('../../scripts/lib/rl/label-dataset');
 const live = require('../../scripts/lib/rl/live');
-const { buildObservation, marketFeatures, confluence, observationFields, observationVersion } = require('../../scripts/lib/rl/observation');
+const { buildObservation, marketFeatures, confluence, observationFields, observationVersion, OBSERVATION_SOURCES } = require('../../scripts/lib/rl/observation');
 const combine = require('../../scripts/lib/trading/combine');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
 const { specFor } = require('../../scripts/lib/trading/contracts');
@@ -182,6 +182,40 @@ test('the setup observed is the live screen\'s pick, never the teacher\'s choice
   assert.deepStrictEqual(build([{ runDir: makeRun({ scanResults: [] }).runDir }], { mode: 'env' }).summary.excluded, { 'no policy setup on the bar (env mode)': 1 });
 });
 
+test('what live would observe differently is excluded, never built: a screened scan, a policy\'s trade, a working-stop risk, an untrusted spec', () => {
+  // A scan a running policy screened (live-runner screen: components rewritten, the policy's own row).
+  const screened = SCAN_RESULTS.map(r => (r.name === 'orb' ? { ...r, candidate: false, note: 'traded through pp' } : r));
+  assert.deepStrictEqual(build([{ runDir: makeRun({ scanResults: screened }).runDir }]).summary.excluded, { 'scan screened by a running policy (not read yet)': 1 });
+  const policyRow = [...SCAN_RESULTS, { name: 'pp', signal: 'policy', candidate: false }];
+  assert.deepStrictEqual(build([{ runDir: makeRun({ scanResults: policyRow }).runDir }], { mode: 'env' }).summary.excluded, { 'scan screened by a running policy (not read yet)': 1 });
+  // In a trade: the risk from the working stop (open-trades.js note), no initial stop, or the policy's own trade.
+  const tradeWith = over => {
+    const run = makeRun({ labels: [tradeLabel()] });
+    fs.writeFileSync(path.join(run.home, 'logs', 'cycles', '2026-10-10', '000002-trade.json'), JSON.stringify({ context: { openTrades: [{ ...OPEN_TRADE, ...over }] } }));
+    return build([{ runDir: run.runDir }]).summary.excluded;
+  };
+  assert.deepStrictEqual(tradeWith({ notes: ['initial stop unknown: risk from the working stop'] }), { 'initial stop unknown (risk from the working stop)': 1 });
+  assert.deepStrictEqual(tradeWith({ initialStop: null }), { 'initial stop unknown (risk from the working stop)': 1 });
+  assert.deepStrictEqual(tradeWith({ setup: 'pp' }), { 'a running policy\'s trade (not read yet)': 1 });
+  assert.deepStrictEqual(tradeWith({}), {});
+  // A broker spec unlike the table for the family's mini: live skips the setup (no spec it trusts).
+  const run = makeRun();
+  recordBrokerSpecs(run.home, { broker: 'backtester', specs: { NQ: { tickValue: 4 } } });
+  assert.deepStrictEqual(build([{ runDir: run.runDir }]).summary.excluded, { 'no usable tick spec for the symbol or its family (live skips it)': 1 });
+  recordBrokerSpecs(run.home, { broker: 'backtester', specs: { NQ: { tickValue: 5 } } });
+  assert.strictEqual(build([{ runDir: run.runDir }]).rows.length, 1, 'a broker spec equal to the table is used');
+});
+
+test('the flat observation with no setup reads the policy strategy\'s timeframe for the session clock, as live does', () => {
+  const f = observationFields(STRATEGY.strategies);
+  const at = strategy => build([{ runDir: makeRun({ scanResults: [] }).runDir }], { strategy }).rows[0].obs[f.indexOf('session_clock')];
+  const three = at(STRATEGY);
+  const five = at({ ...STRATEGY, timeframe: '5m' });
+  // The 14:27 bar: closes 14:30 on 3m bars (09:30 ET, 930 minutes into the session), 14:32 if read as 5m.
+  assert.strictEqual(three, 930 / 1320);
+  assert.strictEqual(five, 932 / 1320);
+});
+
 test('outcomes and counterfactuals are targets, never inputs: the row carries them apart', () => {
   const l = label({ teacher: { action: 'short', setup: 'orb', stop: { multiple: 0.5 }, size: { step: 0.5 } }, gate: { decision: 'allowed' }, outcome: { result: 'win', net: 40, r: 2, maeR: -0.2, mfeR: 2.4 }, counterfactualFor: 'taken' });
   const row = build([{ runDir: makeRun({ labels: [l] }).runDir }]).rows[0];
@@ -242,19 +276,33 @@ test('action mapping: every teacher action in both modes, and what has no action
   assert.match(ds.mapAction(inTrade('none'), 'student').excluded, /unknown teacher action/);
   // env
   assert.deepStrictEqual(ds.mapAction(flat({ action: 'none' }), 'env', { pick }), { kind: 'setup', action: 0 });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 0.25), 'env', { pick }), { kind: 'setup', action: 1 });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 0.5), 'env', { pick }), { kind: 'setup', action: 1 });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 0.75), 'env', { pick }), { kind: 'setup', action: 2 });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick }), { kind: 'setup', action: 2 });
-  assert.deepStrictEqual(ds.mapAction(entry('short', null, 1), 'env', { pick }), { kind: 'setup', action: 2 }, 'env mode has no stop choice');
-  assert.deepStrictEqual(ds.mapAction(entry('long', 1, 1), 'env', { pick }), { excluded: 'entry not on the policy setup (env mode)' });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1, 'ema_cross'), 'env', { pick }), { excluded: 'entry not on the policy setup (env mode)' });
-  assert.deepStrictEqual(ds.mapAction(entry('short', 1, null), 'env', { pick }), { excluded: 'size step unknown (label the run with --budget)' });
+  // half and full: the policy's own plans at the setup, in micros; the teacher's size goes to the nearer (a tie to half).
+  const sz = teacher => ({ teacher, half: 10, full: 20 });
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 0.25), 'env', { pick, sized: sz(1) }), { kind: 'setup', action: 1 });
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick, sized: sz(15) }), { kind: 'setup', action: 1 }, 'a tie is half');
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 0.25), 'env', { pick, sized: sz(16) }), { kind: 'setup', action: 2 }, 'the step of the labeler\'s budget is not the plan');
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick, sized: sz(40) }), { kind: 'setup', action: 2 });
+  assert.deepStrictEqual(ds.mapAction(entry('short', null, null), 'env', { pick, sized: sz(20) }), { kind: 'setup', action: 2 }, 'env mode has no stop or step choice');
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick, sized: { teacher: 3, half: 0, full: 20 } }), { kind: 'setup', action: 2 }, 'no half plan fits: full');
+  assert.deepStrictEqual(ds.mapAction(entry('long', 1, 1), 'env', { pick, sized: sz(1) }), { excluded: 'entry not on the policy setup (env mode)' });
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1, 'ema_cross'), 'env', { pick, sized: sz(1) }), { excluded: 'entry not on the policy setup (env mode)' });
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick }), { excluded: 'entry size unknown against the policy plan (env mode)' });
+  assert.deepStrictEqual(ds.mapAction(entry('short', 1, 1), 'env', { pick, sized: sz(null) }), { excluded: 'entry size unknown against the policy plan (env mode)' });
   assert.deepStrictEqual(ds.mapAction(flat({ action: 'none' }), 'env', { pick: null }), { excluded: 'no policy setup on the bar (env mode)' });
   assert.deepStrictEqual(ds.mapAction(inTrade('hold'), 'env', { pastRatchet: true }), { kind: 'position', action: 0 });
   assert.deepStrictEqual(ds.mapAction(inTrade('exit'), 'env', { pastRatchet: true }), { kind: 'position', action: 1 });
   assert.deepStrictEqual(ds.mapAction(inTrade('hold'), 'env', { pastRatchet: false }), { excluded: 'before the ratchet (env mode asks only past it)' });
   assert.deepStrictEqual(ds.mapAction(inTrade('tighten'), 'env', { pastRatchet: true }), { excluded: 'tighten (env mode has none)' });
+  // The teacher's size in micros: the entry order its size came from (a mini counts its family's ratio).
+  const rootOf = id => String(id).split(':')[0];
+  const sized = (orders, contracts = 1, setup = 'orb') => ds.teacherMicros(label({ teacher: { action: 'short', setup, size: { contracts }, orders } }), rootOf);
+  assert.strictEqual(sized([{ tool: 'place_order', side: 'sell', size: 1, setup: 'orb', contractId: 'NQ:2026-03' }]), 10);
+  assert.strictEqual(sized([{ tool: 'place_order', side: 'sell', size: 3, setup: 'orb', contractId: 'MNQ' }], 3), 3);
+  assert.strictEqual(sized([{ tool: 'place_order', side: 'buy', size: 1, setup: 'orb', contractId: 'NQ' }]), null, 'not the entry (other side)');
+  assert.strictEqual(sized([{ tool: 'place_order', side: 'sell', size: 1, setup: 'orb', contractId: 'NQ', riskReducing: true }]), null, 'a protective order is no entry');
+  assert.strictEqual(sized([]), null);
+  assert.strictEqual(ds.microEq('ES', 2), 20);
+  assert.strictEqual(ds.microEq('MES', 2), 2);
   // Every student id names its own action, and the masks split flat from in-trade.
   for (const side of ['long', 'short']) for (const m of [0.5, 0.75, 1, 1.5, 2, 3]) for (const z of [0.25, 0.5, 0.75, 1]) assert.strictEqual(ds.STUDENT.actions[ds.studentEntryId(side, m, z)], `${side}:${m}atr:${z}`);
   assert.strictEqual(new Set(ds.STUDENT.actions).size, 52);
@@ -264,14 +312,22 @@ test('action mapping: every teacher action in both modes, and what has no action
 test('env mode rows: the setup the env asks about, a trade past the ratchet, and the rest excluded by reason', () => {
   const barList = makeBars();
   const skip = label();
-  const half = label({ key: 'k2', t: iso(T_FLAT), teacher: { action: 'short', setup: 'orb', stop: { multiple: 1 }, size: { step: 0.5 } }, gate: { decision: 'allowed' } });
-  const r1 = build([{ runDir: makeRun({ barList, labels: [skip, half, tradeLabel()] }).runDir }], { mode: 'env' });
-  assert.deepStrictEqual(r1.rows.map(r => [r.kind, r.action]), [['setup', 0], ['setup', 1]]);
+  // The policy's own half and full plans at this setup (live: plan(0.5), plan(1)), as the env sizes them.
+  const s = live.setupObservation({ account: ACCOUNT, cs: expectedCs(), strategy: STRATEGY, component: 'orb', symbol: 'MNQ', rawBars: closedBy(barList, T_FLAT).slice(-WINDOW), spec: specFor('MNQ'), scan: SCAN_RESULTS[1], results: SCAN_RESULTS });
+  const h = s.plan(0.5);
+  assert.ok(h && s.cp && h.size * (h.root === 'NQ' ? 10 : 1) < s.cp.size * (s.cp.root === 'NQ' ? 10 : 1), 'the fixture has a half plan under the full one');
+  const entry = (key, root, size, step) => label({ key, teacher: { action: 'short', setup: 'orb', stop: { multiple: 1 }, size: { step, contracts: size }, orders: [{ tool: 'place_order', side: 'sell', size, setup: 'orb', contractId: root, riskReducing: false }] }, gate: { decision: 'allowed' } });
+  // The labeler's step (of --budget) says 1 for the half plan and 0.25 for the full one: the plan decides.
+  const half = entry('k2', h.root, h.size, 1);
+  const full = entry('k3', s.cp.root, s.cp.size, 0.25);
+  const r1 = build([{ runDir: makeRun({ barList, labels: [skip, half, full, tradeLabel()] }).runDir }], { mode: 'env' });
+  assert.deepStrictEqual(r1.rows.map(r => [r.key, r.kind, r.action]), [['k-2026-03-03T14:30:02.000Z-flat', 'setup', 0], ['k2', 'setup', 1], ['k3', 'setup', 2]]);
   assert.strictEqual(r1.header.actionN, 3);
   assert.deepStrictEqual(r1.header.masks, { setup: [1, 1, 1], position: [1, 1, 0] });
   // The trade is at peakR under 2 (the ratchet): the env wouldn't ask.
   assert.strictEqual(r1.summary.excluded['before the ratchet (env mode asks only past it)'], 1);
-  assert.deepStrictEqual(r1.summary.actionCounts, { 'setup:half': 1, 'setup:skip': 1 });
+  assert.deepStrictEqual(r1.summary.actionCounts, { 'setup:full': 1, 'setup:half': 1, 'setup:skip': 1 });
+  assert.deepStrictEqual(r1.rows.map(r => r.teacher.onPick), [false, true, true]);
   // Past the ratchet (a bar since the fill reaches +2R): hold is the env's hold.
   const up = makeRun({ barList: makeBars(620, b => (b.t === `${DAY2}T14:45:00.000Z` ? { ...b, h: 20040 } : b)), labels: [tradeLabel()] });
   assert.deepStrictEqual(build([{ runDir: up.runDir }], { mode: 'env' }).rows.map(r => [r.kind, r.action]), [['position', 0]]);
@@ -369,6 +425,10 @@ test('refused: labels of another config or version, a non-policy strategy, the w
   } finally {
     fs.rmSync(inRepo, { recursive: true, force: true });
   }
+  // Nor inside a run home it read (where a resumed teacher would find what came after its decisions).
+  const home = path.resolve(runDir, '..', '..');
+  assert.throws(() => ds.writeDataset(path.join(home, 'datasets', 'd.jsonl'), build([{ runDir }])), /inside the run home/);
+  assert.ok(!fs.existsSync(path.join(home, 'datasets')));
 });
 
 test('the env server reports the observation version a dataset of its policy strategy carries', () => {
@@ -391,10 +451,15 @@ test('the observation version follows the fields, the profile settings and the c
   assert.notStrictEqual(observationVersion(['a', 'b'], { vpRows: 99 }), v);
   // The code that computes the observation is part of it: an edited formula with the same fields is another version.
   const { optionsFromParams } = require('../../scripts/lib/trading/volume-profile');
-  const recipe = code => require('crypto').createHash('sha256').update(JSON.stringify({ fields: observationFields(['a', 'b']), profile: optionsFromParams({}), ...(code ? { code } : {}) })).digest('hex');
-  assert.strictEqual(v, recipe([buildObservation, marketFeatures, confluence].map(fn => fn.toString())));
-  assert.notStrictEqual(v, recipe(null));
-  assert.notStrictEqual(v, recipe([`${buildObservation}`.replace('/ 1320', '/ 1321'), `${marketFeatures}`, `${confluence}`]));
+  const lib = path.join(ROOT, 'scripts', 'lib');
+  const recipe = edit => require('crypto').createHash('sha256').update(JSON.stringify({ fields: observationFields(['a', 'b']), profile: optionsFromParams({}),
+    code: OBSERVATION_SOURCES.map(f => [f, (edit || (x => x))(fs.readFileSync(path.join(lib, f), 'utf8'), f)]) })).digest('hex');
+  assert.strictEqual(v, recipe());
+  // Every module that feeds the observation's values is in it: an edit to any one is another version.
+  for (const f of ['rl/observation.js', 'rl/live.js', 'rl/label-dataset.js', 'trading/indicators.js', 'trading/mtf.js', 'trading/volume-profile.js', 'trading/combine.js', 'trading/prop-state.js']) {
+    assert.ok(OBSERVATION_SOURCES.includes(f), f);
+    assert.notStrictEqual(recipe((text, g) => (g === f ? `${text}// edit\n` : text)), v, f);
+  }
 });
 
 test('rl-dataset.js build: writes the dataset and its summary from a run dir or a labels dir with --run', () => {

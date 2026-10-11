@@ -63,13 +63,17 @@ class DatasetTest(unittest.TestCase):
     def test_an_observation_version_mismatch_is_refused(self):
         p = write(header(), rows())
         with self.assertRaisesRegex(dataset.DatasetError, "observation version"):
-            dataset.load(p, "b" * 64)
+            dataset.load(p, "b" * 64, "student")
         with self.assertRaisesRegex(dataset.DatasetError, "obs_version"):
-            dataset.load(p, None)
+            dataset.load(p, None, "student")
         with self.assertRaisesRegex(dataset.DatasetError, "other observation fields"):
-            dataset.load(p, VERSION, obs_fields=FIELDS[:-1])
+            dataset.load(p, VERSION, "student", obs_fields=FIELDS[:-1])
         with self.assertRaisesRegex(dataset.DatasetError, "not env"):
             dataset.load(p, VERSION, mode="env")
+        with self.assertRaisesRegex(dataset.DatasetError, "mode: one of"):
+            dataset.load(p, VERSION, None)
+        with self.assertRaises(TypeError):
+            dataset.load(p, VERSION)
 
     def test_bad_files_are_refused(self):
         cases = [
@@ -84,11 +88,16 @@ class DatasetTest(unittest.TestCase):
             (header(), [dict(rows()[0], kind="setup")] + rows()[1:], "unknown kind"),
             (header(), [dict(rows()[0], weight=-1)] + rows()[1:], "weight"),
             (header(), [dict(rows()[0], obs=[0, 1, None, 1])] + rows()[1:], "non-finite"),
+            (header(masks=dict(MASKS, flat=[2] + MASKS["flat"][1:])), rows(), "the flat mask is not"),
+            (header(masks=dict(MASKS, flat=[0] * len(ACTIONS))), rows(), "the flat mask is not"),
+            (header(masks={"flat": MASKS["flat"]}), rows(), "a student dataset has 52"),
+            (header(masks=dict(MASKS, setup=MASKS["flat"])), rows(), "a student dataset has 52"),
+            (header(actionN=3, masks={k: v[:3] for k, v in MASKS.items()}), rows(), "a student dataset has 52"),
         ]
         for h, rs, msg in cases:
             with self.subTest(msg=msg):
                 with self.assertRaisesRegex(dataset.DatasetError, msg):
-                    dataset.load(write(h, rs), VERSION)
+                    dataset.load(write(h, rs), VERSION, "student")
 
     def test_the_format_matches_the_node_builder(self):
         """The constants here are label-dataset.js's (the student's actions and masks, the format and version)."""
@@ -111,7 +120,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(ds.actions.tolist(), [2, 1])
         self.assertEqual(ds.weights.tolist(), [1.0, 1.0], "weight defaults to 1")
         with self.assertRaisesRegex(dataset.DatasetError, "not allowed for a position"):
-            dataset.load(write(h, [rs[0], dict(rs[1], action=2)]), VERSION)
+            dataset.load(write(h, [rs[0], dict(rs[1], action=2)]), VERSION, "env")
 
 
 if __name__ == "__main__":

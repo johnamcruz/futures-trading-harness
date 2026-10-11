@@ -137,8 +137,8 @@ broker.
 11. **Dataset.** `node scripts/rl-dataset.js build <run dir> ... --out <file.jsonl>`
    turns labelled runs into the rows a student policy trains on (several
    runs merge in time order; a labels folder written with `--out` needs its
-   run: `--run <run dir>`). Write it outside the repository (refused
-   inside). Each row is the observation live trading builds at the label's
+   run: `--run <run dir>`). Write it outside the repository and outside
+   the run homes it reads (refused there). Each row is the observation live trading builds at the label's
    decision time (the policy strategy's, `--strategy`, default
    `prop_portfolio`: the last bars closed by then, the setup the live
    screen picks on that bar, the account as an attempt of the strategy's
@@ -147,7 +147,10 @@ broker.
    decision as an action: `--mode student` (default: flat `none` or
    `long`/`short` at a stop multiple and size step, in a trade `hold`,
    `tighten`, `exit`) or `--mode env` (today's env: `skip`, `half`, `full`
-   at the policy's setup; `hold`, `close` past the ratchet). Outcomes and
+   at the policy's setup, half or full by the teacher's size against the
+   policy's own plans; `hold`, `close` past the ratchet). A run whose
+   policy screened its scans (an attempt running in its home) is excluded,
+   not read yet. Outcomes and
    counterfactuals are targets, never inputs. Only cloneable decisions
    become rows (refused intents only with `--include-refused`); the rest is
    counted by reason. Label with `--budget` first (an entry's size step

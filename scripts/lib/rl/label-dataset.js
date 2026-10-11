@@ -37,9 +37,10 @@
  *            id = 1 + side x 24 + multiple x 4 + step (side 0 long, 1 short),
  *            1..48; in a trade: 49 hold, 50 tighten, 51 exit.
  *   env      today's challenge env (challenge-env.js ACTIONS): at the policy's
- *            setup 0 skip, 1 half (size step <= 0.5), 2 full; in a trade past
- *            the ratchet 0 hold, 1 close. The teacher's none is a skip; an
- *            entry on the pick's strategy and side is half or full; other
+ *            setup 0 skip, 1 half, 2 full; in a trade past the ratchet 0
+ *            hold, 1 close. The teacher's none is a skip; an entry on the
+ *            pick's strategy and side is half or full by its size in micros
+ *            against the policy's own half and full plans (the nearer); other
  *            entries, a tighten, a trade before the ratchet, and a flat bar
  *            with no pick have no env action and are excluded.
  *
@@ -62,7 +63,8 @@ const { ACTIONS: ENV_ACTIONS, MASKS: ENV_MASKS } = require('./challenge-env');
 const combine = require('../trading/combine');
 const { exitPlan } = require('../trading/strategies');
 const { parseStandardName } = require('../broker/translator');
-const { familyRoot } = require('../trading/contracts');
+const { familyRoot, familyOf } = require('../trading/contracts');
+const { timeframeMs } = require('../trading/evaluator');
 const { tradingDayKey } = require('../trading/clock');
 const { historyBars } = require('../autotrader');
 const { FILL_GRACE_MS } = require('../runner');
@@ -95,9 +97,10 @@ function studentEntryId(side, multiple, step) {
 
 /**
  * The teacher's decision as the mode's action: { kind, action } or { excluded: reason }.
- * pick: the policy's setup on the bar (null: none); pastRatchet: in a trade, whether the env would ask.
+ * pick: the policy's setup on the bar (null: none); pastRatchet: in a trade, whether the env would ask;
+ * sized (env, an entry): { teacher, half, full } the teacher's size and the policy's half and full plans, in micros.
  */
-function mapAction(label, mode, { pick = null, pastRatchet = false } = {}) {
+function mapAction(label, mode, { pick = null, pastRatchet = false, sized = null } = {}) {
   const t = label.teacher || {};
   const inTrade = label.decision === 'in-trade';
   if (mode === 'student') {
@@ -124,9 +127,27 @@ function mapAction(label, mode, { pick = null, pastRatchet = false } = {}) {
   if (t.action === 'none') return { kind: 'setup', action: ENV_ACTIONS.setup.indexOf('skip') };
   if (!SIDES.includes(t.action)) return { excluded: `unknown teacher action (${t.action})` };
   if (t.setup !== pick.name || t.action !== pick.direction) return { excluded: 'entry not on the policy setup (env mode)' };
-  const step = t.size ? t.size.step : null;
-  if (!STEPS.includes(step)) return { excluded: 'size step unknown (label the run with --budget)' };
-  return { kind: 'setup', action: ENV_ACTIONS.setup.indexOf(step <= 0.5 ? 'half' : 'full') };
+  // half and full are the policy's own plan at this setup (live: plan(0.5) and plan(1)), in micro contracts:
+  // the teacher's size goes to the nearer one (a tie to half, the smaller risk).
+  if (!sized || !(sized.teacher > 0) || !(sized.full > 0)) return { excluded: 'entry size unknown against the policy plan (env mode)' };
+  const half = sized.half > 0 && Math.abs(sized.teacher - sized.half) <= Math.abs(sized.teacher - sized.full);
+  return { kind: 'setup', action: ENV_ACTIONS.setup.indexOf(half ? 'half' : 'full') };
+}
+
+/** Contracts in micros (a mini counts its family's ratio). */
+const microEq = (root, size) => {
+  const fam = familyOf(root);
+  return fam && root === fam.mini ? size * fam.ratio : size;
+};
+
+/** The teacher's entry size in micros: the entry order the label's size is from (its contract), or null. */
+function teacherMicros(label, rootOf) {
+  const t = label.teacher || {};
+  const size = t.size ? Number(t.size.contracts) : NaN;
+  if (!(size > 0)) return null;
+  const side = t.action === 'long' ? 'buy' : t.action === 'short' ? 'sell' : null;
+  const o = (t.orders || []).filter(x => x && x.tool === 'place_order' && !x.riskReducing && Number(x.size) === size && x.side === side && (x.setup || null) === (t.setup || null)).pop();
+  return o ? microEq(rootOf(o.contractId || label.symbol), size) : null;
 }
 
 /** Why a label is not a row before any observation is built (or null): not a decision, not cloneable, refused. */
@@ -236,10 +257,13 @@ function runRows(input, opts) {
   };
   const cache = labels.translatorCache(path.join(home, `contracts-${manifest.broker || ''}.json`));
   const rootOf = id => (id ? cache.root(String(id)) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
+  // As live (broker-specs.js, live-runner.js): a broker spec unlike the static table is no spec (live skips the setup).
   const specOf = root => {
     const s = labels.contractSpec(root, null, cache);
-    return s ? { tickSize: s.tickSize, tickValue: s.tickValue, feesPerSide: s.feesPerSide } : null;
+    return s && s.source !== 'mismatch' ? { tickSize: s.tickSize, tickValue: s.tickValue, feesPerSide: s.feesPerSide } : null;
   };
+  // The live screen needs specs for the root and both legs of its family (the plan may pick either).
+  const familySpecs = root => [root, ...(familyOf(root) ? [familyOf(root).micro, familyOf(root).mini] : [])].every(r => specOf(r));
   const scans = readScans(home);
   const barsBySym = new Map();
   const barsFor = sym => {
@@ -259,8 +283,8 @@ function runRows(input, opts) {
     const why = whyNot(label, { includeRefused });
     if (why) { exclude(label, why); continue; }
     const t = Date.parse(label.t);
-    const spec = specOf(label.symbol);
-    if (!spec) { exclude(label, 'no tick spec for the symbol'); continue; }
+    const spec = specOf(rootOf(label.symbol));
+    if (!spec || !familySpecs(rootOf(label.symbol))) { exclude(label, 'no usable tick spec for the symbol or its family (live skips it)'); continue; }
     // The runner's window at t: the last `window` bars closed at or before t (never one after).
     const all = barsFor(label.symbol);
     const window = windowOf(label.symbol);
@@ -279,11 +303,15 @@ function runRows(input, opts) {
     let kind;
     let pick = null;
     let pastRatchet = false;
+    let sized = null;
     if (label.decision === 'flat') {
       const list = scans.get(`${label.symbol}|${label.barT}`) || [];
       const scan = list.filter(s => Date.parse(s.at) <= t).pop();
       if (!scan) { exclude(label, 'no scan logged for the bar by t'); continue; }
       const results = (Array.isArray(scan.results) ? scan.results : []).filter(isObj);
+      // A scan a running policy screened (its components rewritten, its own row added) is not the raw scan live
+      // observes: not read yet (no replay starts an attempt today), never silently a bar without a setup.
+      if (results.some(r => r.signal === 'policy' || /^traded through/.test(String(r.note || '')))) { exclude(label, 'scan screened by a running policy (not read yet)'); continue; }
       const byName = new Map(results.map(r => [r.name, r]));
       // As the live screen (live-runner.js): the first of the policy's strategies that fired with a stop.
       pick = strategy.strategies.map(n => byName.get(n)).find(r => r && r.candidate && r.direction && r.stopDistance > 0) || null;
@@ -292,10 +320,12 @@ function runRows(input, opts) {
         const s = live.setupObservation({ account, cs, strategy, component: pick.name, symbol: rootOf(label.symbol), rawBars, spec, scan: pick, results, specOf });
         if (!s.cp) { exclude(label, 'no size fits the setup'); continue; }
         obs = s.obs;
+        const halfPlan = s.plan(0.5);
+        sized = { teacher: teacherMicros(label, rootOf), full: microEq(s.cp.root, s.cp.size), half: halfPlan ? microEq(halfPlan.root, halfPlan.size) : 0 };
       } else {
         const book = live.liveBook(rawBars, spec, strategy.params);
         const i = book.bars.length - 1;
-        obs = buildObservation({ cs, account, book, i, closeAt: new Date(Date.parse(book.bars[i].t) + tfMs), components: strategy.strategies });
+        obs = buildObservation({ cs, account, book, i, closeAt: new Date(Date.parse(book.bars[i].t) + (timeframeMs(strategy.timeframe) || 60000)), components: strategy.strategies });
       }
     } else {
       const trade = openTradeOf(home, label, rootOf);
@@ -303,6 +333,13 @@ function runRows(input, opts) {
         exclude(label, 'trade state unknown (no open trade with an initial stop in the cycle context)');
         continue;
       }
+      // Risk from the working stop (open-trades.js, when the entry named no stop) may be a trailed one: not the initial risk.
+      if (!Number.isFinite(trade.initialStop) || (Array.isArray(trade.notes) && trade.notes.some(n => /initial stop unknown/.test(String(n))))) {
+        exclude(label, 'initial stop unknown (risk from the working stop)');
+        continue;
+      }
+      // A policy strategy's trade (setup:<policy>): live observes its component, which the context doesn't name.
+      if (trade.setup === strategy.name) { exclude(label, 'a running policy\'s trade (not read yet)'); continue; }
       const progress = tradeProgress(rawBars, trade);
       pastRatchet = plan.trailActivateR !== null && progress.peakR >= plan.trailActivateR;
       obs = live.positionObservation({
@@ -310,12 +347,14 @@ function runRows(input, opts) {
         pos: { sign: trade.sign, entry: trade.entry, risk: trade.risk, size: Number(trade.size) || 1, contract: rootOf(trade.contractId), component: trade.setup || null, ...progress },
       });
     }
-    const mapped = mapAction(label, mode, { pick, pastRatchet });
+    const mapped = mapAction(label, mode, { pick, pastRatchet, sized });
     if (mapped.excluded) { exclude(label, mapped.excluded); continue; }
     kind = mapped.kind;
     rows.push({
       key: label.key, runId: label.runId, t: label.t, symbol: label.symbol, kind, action: mapped.action, obs,
-      teacher: { action: label.teacher.action, setup: label.teacher.setup || null, multiple: label.teacher.stop ? label.teacher.stop.multiple : null, step: label.teacher.size ? label.teacher.size.step : null, pick: pick ? pick.name : null },
+      teacher: { action: label.teacher.action, setup: label.teacher.setup || null, multiple: label.teacher.stop ? label.teacher.stop.multiple : null, step: label.teacher.size ? label.teacher.size.step : null, pick: pick ? pick.name : null,
+        // Whether the observed setup is the one the teacher traded (an entry on another strategy or side is not).
+        onPick: Boolean(pick) && label.teacher.setup === pick.name && label.teacher.action === pick.direction },
       // What came after the decision: targets and weights only, never an input.
       targets: {
         gate: label.gate ? label.gate.decision : null,
@@ -385,13 +424,16 @@ function buildDataset(inputs, { strategy, account, mode = 'student', includeRefu
     runs: runs.sort((a, b) => a.runId.localeCompare(b.runId)), rows: rows.length,
   };
   const summary = { ...header, actionCounts: Object.fromEntries(Object.entries(actionCounts).sort()), excluded: Object.fromEntries(Object.entries(excluded).sort()), labels: runs.reduce((a, r) => a + r.labels, 0) + (excluded['duplicate label'] || 0) };
-  return { header, rows, summary };
+  // The run homes (not written): a dataset holds what came after each decision, never where a resumed teacher reads.
+  const homes = inputs.map(x => path.resolve(labels.realDir(x.runDir), '..', '..'));
+  return { header, rows, summary, homes };
 }
 
 /** Write the dataset (JSONL: the header line, then one row per line) and <file>.summary.json, never inside the repository. */
 function writeDataset(file, built, { root = null } = {}) {
   const out = path.resolve(expandHome(file));
   if (root && labels.inside(out, root)) throw new Error(`${out} is inside the repository (${root}): datasets are written outside it`);
+  for (const home of built.homes || []) if (labels.inside(out, home)) throw new Error(`${out} is inside the run home ${home}: datasets hold what came after each decision; write them outside it`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const tmp = `${out}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, [JSON.stringify({ header: built.header }), ...built.rows.map(r => JSON.stringify(r))].join('\n') + '\n');
@@ -406,4 +448,4 @@ const summaryText = s => `${s.rows} rows (${s.mode} mode) from ${s.labels} label
   + `actions: ${Object.entries(s.actionCounts).map(([k, v]) => `${k} ${v}`).join(', ') || '-'}\n`
   + `excluded: ${Object.entries(s.excluded).map(([k, v]) => `${k} ${v}`).join('; ') || '-'}\n`;
 
-module.exports = { FORMAT, VERSION, MODES, STUDENT, ENV, FLAT_N, studentEntryId, mapAction, whyNot, attemptAt, tradeProgress, buildDataset, writeDataset, summaryText };
+module.exports = { FORMAT, VERSION, MODES, STUDENT, ENV, FLAT_N, studentEntryId, mapAction, microEq, teacherMicros, whyNot, attemptAt, tradeProgress, buildDataset, writeDataset, summaryText };

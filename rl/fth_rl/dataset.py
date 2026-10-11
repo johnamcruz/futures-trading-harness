@@ -36,10 +36,17 @@ class LabelDataset:
         return len(self.actions)
 
 
-def load(path, obs_version, obs_fields=None, mode=None):
+# Each mode's decision kinds and action count (label-dataset.js STUDENT and ENV).
+MODES = {"student": ({"flat", "position"}, 52), "env": ({"setup", "position"}, 3)}
+
+
+def load(path, obs_version, mode, obs_fields=None):
     """Read a dataset. obs_version: the observation version the trainer builds
-    (the env server's info "obsVersion"); a dataset built with another one is
-    refused. obs_fields and mode, when given, must match too."""
+    (the env server's info "obsVersion"); mode: the action space it trains
+    ("student" or "env"). A dataset built with another version or for another
+    mode is refused; obs_fields, when given, must match too."""
+    if mode not in MODES:
+        raise DatasetError(f"mode: one of {', '.join(MODES)}")
     if not isinstance(obs_version, str) or not obs_version:
         raise DatasetError("obs_version: the observation version the trainer builds (env server info obsVersion)")
     with open(path, encoding="utf8") as fh:
@@ -62,7 +69,7 @@ def load(path, obs_version, obs_fields=None, mode=None):
         )
     if obs_fields is not None and list(header.get("obsFields") or []) != list(obs_fields):
         raise DatasetError(f"{path}: built for other observation fields")
-    if mode is not None and header.get("mode") != mode:
+    if header.get("mode") != mode:
         raise DatasetError(f"{path}: a {header.get('mode')} dataset, not {mode}")
     dim = header.get("obsDim")
     n_actions = header.get("actionN")
@@ -71,9 +78,12 @@ def load(path, obs_version, obs_fields=None, mode=None):
         raise DatasetError(f"{path}: obsDim {dim} for {len(header.get('obsFields') or [])} fields")
     if not isinstance(n_actions, int) or n_actions < 1:
         raise DatasetError(f"{path}: actionN {n_actions}")
+    kinds_of_mode, n_of_mode = MODES[mode]
+    if n_actions != n_of_mode or set(masks_by_kind) != kinds_of_mode:
+        raise DatasetError(f"{path}: {n_actions} actions with masks for {sorted(masks_by_kind)}; a {mode} dataset has {n_of_mode} and {sorted(kinds_of_mode)}")
     for kind, m in masks_by_kind.items():
-        if len(m) != n_actions:
-            raise DatasetError(f"{path}: the {kind} mask has {len(m)} entries for {n_actions} actions")
+        if not isinstance(m, list) or len(m) != n_actions or any(v not in (0, 1) or isinstance(v, bool) for v in m) or not any(m):
+            raise DatasetError(f"{path}: the {kind} mask is not {n_actions} entries of 0 and 1")
     rows = []
     for i, line in enumerate(lines[1:], start=2):
         try:
