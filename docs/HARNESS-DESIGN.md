@@ -61,6 +61,28 @@ read-only calls.
 | Order gate | hook + gateway | hook + gateway | hook + gateway | gateway |
 | Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | custom argv |
 
+### Harness tools server (not yet registered)
+
+`node scripts/harness-tools-mcp.js` is an MCP server named `harness` (stdio,
+newline-delimited JSON-RPC) that offers the scripts agents run as tools, for
+any MCP client: `strategies_list`, `strategies_show`, `strategies_validate`,
+`strategies_scan`, `strategies_recent`, `market_snapshot`, `mtf_read`,
+`blackouts_list`, `blackouts_add`, `bars_fetch`, `combine_status`, `lessons`,
+`reconcile`. Each runs the same operation as its CLI
+(`scripts/lib/harness-tools/index.js`) and returns the CLI's output: its stdout
+with the operation's stderr notes appended, or on failure `isError` with
+`[<script>] <message>`. Arguments are checked against strict schemas
+(`registry.js`; unknown arguments refused); no tool takes an environment, a
+working directory, an output path, or a time (the harness clock, read per call
+from the server's environment, decides; a refused replay clock refuses as the
+CLI does). The only paths are bars files: regular `.json`/`.csv`/`.parquet`/
+`.xlsx` files of at most 50 MB under `FTH_BARS_DIR` (default
+`<FTH_HOME>/bars`) or `/tmp/fth`, with no symlink and one hard link
+(`paths.js`). `record` stays refused in autonomous runs. A reply over 256 KB is
+refused with how to narrow it, never truncated. No tool places, modifies or
+cancels an order, and the order-gate hook matches none of them. The server is
+not registered with any harness yet, and no allowlist or skill names it.
+
 ## Order gate
 
 `scripts/lib/trading/order-gate.js` (pure) is called through
