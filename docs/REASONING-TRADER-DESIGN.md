@@ -286,9 +286,10 @@ replay judge alike:
   attempt; training would stop at `sessions` days, and the output says when
   a month has more). The accounts have no minimum-days rule to apply.
 - **Approximations**, stated in the output: intraday equity is a round
-  trip's MAE (`maeDollars`) less its closing fee against the lower of the balance
-  when the position opened and when it closed (so profit banked by partial
-  exits doesn't hide it; trades open together are not added up; without MAE only the close
+  trip's MAE (`maeDollars`) less its closing fee, judged at each moment it may
+  have happened (at the close, when the position opened, and for one held
+  overnight at the start of the day), each on its own balance, floor and
+  room to the daily limit, the worst counting (trades open together are not added up; without MAE only the close
   is seen); at the daily limit the breaching close counts as the limit and
   what was still open is left out, as are positions opened after it that
   day and positions carried in from the month before.

@@ -279,6 +279,57 @@ test('verdict: a left-out contract whose position an unreadable fill made unknow
   assert.deepStrictEqual([apr.excluded.length, apr.profit], [0, net(300)]);
 });
 
+// Fills at minutes past 15:00 UTC on a day: [minute, contract, side, size, P&L (null: opening), MAE or undefined].
+function fillsOn(day, rows, idPrefix = day) {
+  const t = n => new Date(Date.parse(`${day}T15:00:00Z`) + n * 60000).toISOString();
+  return [{ t: t(59), day, kind: 'trade', trades: rows.map(([n, c, side, size, pnl, mae], k) => ({
+    id: `${idPrefix}-${k}`, contractId: c, creationTimestamp: t(n), profitAndLoss: pnl, fees: 0, side, size,
+    ...(mae !== undefined ? { roundTrip: { maeDollars: mae } } : {}),
+  })) }];
+}
+
+test('verdict: a position held overnight - the close past the daily limit is still capped (no MAE needed)', () => {
+  const days = {
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MNQ', 1, 1, 1500]]),
+    '2026-03-03': fillsOn('2026-03-03', [[0, 'MES', 0, 1, null], [1, 'MNQ', 1, 1, -2100], [2, 'MES', 1, 1, -500]]),
+  };
+  const m = evaluate(days, ACCOUNT).months[0];
+  assert.deepStrictEqual(m.days.map(d => d.pnl), [1500, -2000]);
+  assert.deepStrictEqual(m.excluded.map(x => [x.contract, x.why]), [['MES', 'flattened at the daily loss limit']]);
+});
+
+test('verdict: a position held overnight - its MAE is judged on each day\'s own floor, and from the start of the closing day', () => {
+  // 03-02: long 2, 1 closed at +$1500 (end of day: balance $101500, floor $98500). 03-03: the other closed at -$50.
+  const held = mae => ({
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MNQ', 1, 1, 1500]]),
+    '2026-03-03': fillsOn('2026-03-03', [[1, 'MNQ', 1, 1, -50, mae]]),
+  });
+  // MAE -$2000: on 03-02 equity $98000 vs that day's floor $97000; on 03-03 at most -$2000 from $101500. Never the floor.
+  const noDaily = { ...ACCOUNT, daily_loss_limit: 0 };
+  assert.strictEqual(evaluate(held(-2000), noDaily).months[0].verdict, 'NOT YET');
+  // MAE -$3100 from the start of 03-03 ($101500) reaches 03-03's floor ($98500).
+  const f = evaluate(held(-3100), noDaily).months[0];
+  assert.deepStrictEqual([f.verdict, f.fail.how], ['FAIL', 'equity reached $98400 (from the trade\'s MAE), floor $98500']);
+  // Banked today, drawn down first: 03-03 closes 1 at +$1500, then the other at -$50 after an MAE of -$2100.
+  const days = {
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null]]),
+    '2026-03-03': fillsOn('2026-03-03', [[1, 'MNQ', 1, 1, 1500], [2, 'MNQ', 1, 1, -50, -2100]]),
+  };
+  const b = evaluate(days, ACCOUNT).months[0];
+  assert.deepStrictEqual([b.days.map(d => d.pnl), b.events.length], [[0, -2000], 1]);
+});
+
+test('verdict: a reversal starts a new position\'s base; a loss on another contract in between counts at the close', () => {
+  const noDaily = { ...ACCOUNT, daily_loss_limit: 0 };
+  // Long 1, then sell 2 at +$1500 (closes the long, opens a short at $101500), short closed at -$50 after an MAE of -$3200.
+  const rev = { '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MNQ', 1, 2, 1500], [2, 'MNQ', 0, 1, -50, -3200]]) };
+  assert.strictEqual(evaluate(rev, noDaily).months[0].verdict, 'NOT YET', 'from $101500 the floor ($97000) is $4500 away');
+  // Long MNQ; an MES trade loses $1000; MNQ closes at +$100 after an MAE of -$2500: $99000 - $2500 is under $97000.
+  const other = { '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [2, 'MES', 1, 1, -1000], [3, 'MNQ', 1, 1, 100, -2500]]) };
+  const o = evaluate(other, noDaily).months[0];
+  assert.deepStrictEqual([o.verdict, o.fail.how], ['FAIL', 'equity reached $96500 (from the trade\'s MAE), floor $97000']);
+});
+
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {
   const accounts = [{ name: 'topstep_50k' }, { name: 'topstep_100k' }];
   const strategies = [{ name: 'p1', signal: 'policy', account: 'topstep_50k' }, { name: 'orb', signal: 'rules' }];
