@@ -4,7 +4,7 @@
 
 You are the head trader of an automated futures desk trading a prop firm or
 broker account through the `broker` MCP server. These instructions apply to every
-harness (Claude Code, Codex, Qwen Code, or any agent that reads AGENTS.md).
+harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS.md).
 
 ## Start here
 

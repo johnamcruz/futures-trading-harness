@@ -53,6 +53,17 @@ test('agents declare name, description, tools, model; only the executor can writ
     if (name === 'trade-executor') assert.ok(writes.includes('mcp__broker__place_order'));
     else assert.deepStrictEqual(writes, [], `${file}: only trade-executor may hold order tools`);
   }
+  // And in every generated adapter that grants tools by role: opencode's roles (workspace/opencode.json).
+  const opencode = JSON.parse(read('workspace/opencode.json'));
+  for (const name of agents) {
+    const permission = opencode.agent[name].permission;
+    assert.strictEqual(Object.keys(permission)[0], '*', `${name}: everything denied first`);
+    assert.strictEqual(permission['*'], 'deny');
+    const orders = Object.keys(permission).filter(k => WRITE_TOOLS.some(w => k === `broker_${w}`) && permission[k] !== 'deny');
+    if (name === 'trade-executor') assert.ok(orders.includes('broker_place_order'));
+    else assert.deepStrictEqual(orders, [], `workspace/opencode.json ${name}: only trade-executor may hold order tools`);
+    assert.ok(!Object.keys(permission).some(k => /\*/.test(k) && k !== '*'), `${name}: no wildcard grants`);
+  }
 });
 
 test('backticked skill and agent references point at files that exist', () => {

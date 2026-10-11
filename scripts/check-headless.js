@@ -6,10 +6,10 @@
  * risk-manager, and tries `node -e 1` through the shell. Prints what each step
  * reached. It places no orders and changes nothing.
  *
- *   node scripts/check-headless.js [--harness claude,codex,qwen] [--config autotrader.json] [--timeout 10]
+ *   node scripts/check-headless.js [--harness claude,codex,qwen,opencode] [--config autotrader.json] [--timeout 10]
  *
  * Default harnesses: the config's harness with --config (and its model, extra
- * args, workspace and bar directory), else all three (a harness that isn't
+ * args, workspace and bar directory), else all four (a harness that isn't
  * installed is reported so). The probe runs in paper mode. Qwen runs on the
  * workspace allowlist the runner writes at start: missing or different, the
  * Qwen probe stops and says so; --write-qwen-allowlist writes it (with no

@@ -6,7 +6,7 @@
  * childEnv: the same argv, allowlist, workspace and lock-down), with a probe
  * prompt that calls two harness tools, delegates once to a harness role by
  * name, and tries a shell command. The run's transcript (Claude stream-json,
- * Codex --json events, Qwen JSON) says what each step reached, whether a tool
+ * Codex --json events, Qwen JSON, opencode JSON events) says what each step reached, whether a tool
  * was called directly or through a harness's bridge wrapper (BRIDGE_TOOLS):
  *
  *   harness tools  blackouts_list and strategies_list: answered, errored, or not called
@@ -34,14 +34,16 @@ const { harnessHome } = require('./paths');
 const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 // Transcript parsing and the bridge wrappers (Qwen's tool_call), shared with the cycle log.
-const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS } = require('./transcript');
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall } = require('./transcript');
+const { denyTools } = require('./opencode');
+const { loadAgents } = require('./harness-sync');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
 const PROBE_TOOLS = ['blackouts_list', 'strategies_list'];
 const PROBE_ROLE = 'risk-manager';
 const PROBE_SHELL = 'node -e 1';
 const ROLE_REPLY = 'PROBE-ROLE-OK';
-const HARNESSES = ['claude', 'codex', 'qwen'];
+const HARNESSES = ['claude', 'codex', 'qwen', 'opencode'];
 // The role's exact names: as given, as a Codex role ([agents.risk_manager]), and as a Claude plugin agent.
 const ROLE_NAMES = new Set([PROBE_ROLE, PROBE_ROLE.replace(/-/g, '_'), `futures-trading-harness:${PROBE_ROLE}`]);
 
@@ -92,13 +94,17 @@ function readOnlyBroker(harness, argv) {
   return out;
 }
 
+/** opencode's broker narrowed in its per-run config: the tools denied for the session and every role (merged last). */
+const readOnlyOpencode = env => denyTools(env, PROBE_DENIED.map(n => `${BROKER_SERVER}_${n}`), loadAgents(path.resolve(__dirname, '..', '..')).map(a => a.name));
+
 function probeCommand(harness, root, env = process.env, { bin = null, config = {} } = {}) {
   const cfg = probeConfig(harness, config);
   // The prompt stays last for Codex (buildCommand puts it there); Qwen's flags may follow -p.
   const argv = readOnlyBroker(harness, buildCommand(cfg, probePrompt(), root, env));
   // A stand-in for the harness CLI (tests): its path replaces the program, node runs a .js one.
   if (bin) argv.splice(0, 1, ...(/\.[cm]?js$/.test(bin) ? [process.execPath, bin] : [bin]));
-  return { argv, cwd: path.resolve(root, cfg.workdir), env: childEnv(cfg, root, env) };
+  const runEnv = childEnv(cfg, root, env);
+  return { argv, cwd: path.resolve(root, cfg.workdir), env: harness === 'opencode' ? readOnlyOpencode(runEnv) : runEnv };
 }
 
 const AGENT_TOOLS = new Set(['Agent', 'Task', 'agent', 'task', 'spawn_agent']);
@@ -126,6 +132,14 @@ function analyze(text) {
   const walk = (v, depth) => {
     if (depth > 40 || v === null || typeof v !== 'object') return;
     if (Array.isArray(v)) { v.forEach(x => walk(x, depth + 1)); return; }
+    // opencode: a finished call (its main session's only), MCP tools as mcp__<server>__<tool>.
+    if (isOpencodeEvent(v)) {
+      if (v.type === 'tool_use' && v.part.type === 'tool') {
+        const { name, input, result } = opencodeCall(v.part);
+        calls.push({ id: v.part.callID, name, input, done: result });
+      }
+      return;
+    }
     if (v.type === 'tool_use' && typeof v.name === 'string') {
       const call = { id: v.id, ...unwrap(v.name, v.input) };
       calls.push(call);
@@ -237,4 +251,4 @@ function formatReport(res) {
 /** The harness a runner config trades with (its own, else the runner's default). */
 const configHarness = config => (config && config.harness) || DEFAULTS.harness;
 
-module.exports = { BRIDGE_TOOLS, PROBE_BROKER_TOOLS, PROBE_DENIED, readOnlyBroker, configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };
+module.exports = { BRIDGE_TOOLS, PROBE_BROKER_TOOLS, PROBE_DENIED, readOnlyBroker, readOnlyOpencode, configHarness, MARKER, PROBE_TOOLS, PROBE_ROLE, PROBE_SHELL, ROLE_REPLY, HARNESSES, probePrompt, probeConfig, probeCommand, qwenAllowlist, analyze, runProbe, passed, formatReport };

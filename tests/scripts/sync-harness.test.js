@@ -30,6 +30,10 @@ test('generated files parse in their harness formats', () => {
     if (rel.endsWith('.toml')) assert.match(content, /^sandbox_mode = "(read-only|workspace-write)"$/m);
   }
   assert.match(files['workspace/AGENTS.md'], /## Risk Management/);
+  // opencode's project config is JSON (no comments), one entry per role.
+  const opencode = JSON.parse(files['workspace/opencode.json']);
+  assert.deepStrictEqual(Object.keys(opencode.mcp), ['broker', 'harness']);
+  for (const f of fs.readdirSync(path.join(ROOT, 'agents')).filter(n => n.endsWith('.md'))) assert.strictEqual(opencode.agent[f.replace(/\.md$/, '')].mode, 'subagent', f);
   const ext = JSON.parse(files['qwen-extension/qwen-extension.json']);
   assert.strictEqual(ext.version, JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version);
   assert.match(ext.mcpServers.broker.args[0], /^\$\{extensionPath\}/);

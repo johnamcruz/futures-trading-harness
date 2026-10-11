@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, applyPlan, planBrokerEntry } = require('../../scripts/lib/install');
+const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, planOpencode, TARGETS, applyPlan, planBrokerEntry } = require('../../scripts/lib/install');
 const { activeBroker } = require('../../scripts/lib/broker/config');
 const { tmpDir } = require('../helpers');
 
@@ -211,4 +211,14 @@ test('the gateway is forwarded FTH_REPLAY_NOW (Codex passes only listed variable
   const { forwardedEnv } = require('../../scripts/lib/install');
   assert.ok(forwardedEnv({ env: [] }).includes('FTH_REPLAY_NOW'));
   assert.match(codexConfigBlock(path.resolve(__dirname, '..', '..'), activeBroker({ FTH_HOME: tmpDir() })), /"FTH_REPLAY_NOW"/);
+});
+
+test('opencode: nothing to write (its workspace config is generated); the steps say how to run it', () => {
+  const plan = planOpencode({ root: ROOT, home: tmpDir(), broker: activeBroker({ FTH_HOME: tmpDir() }) });
+  assert.deepStrictEqual(plan.writes, []);
+  const next = plan.next.join('\n');
+  assert.match(next, /opencode-ai/);
+  assert.match(next, new RegExp(`FTH_ROOT=${ROOT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(next, /check-headless\.js --harness opencode/);
+  assert.strictEqual(TARGETS.opencode, planOpencode);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regenerate the Codex, Qwen, and workspace files from agents/, commands/,
+ * Regenerate the Codex, Qwen, opencode, and workspace files from agents/, commands/,
  * rules/, and skills/.
  *
  *   node scripts/sync-harness.js          write

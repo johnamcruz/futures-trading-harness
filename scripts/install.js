@@ -2,7 +2,7 @@
 /**
  * Install the harness for one or more harnesses (install targets).
  *
- *   node scripts/install.js --target claude|codex|qwen|all [--broker <name>] [--entry /abs/<server>/dist/index.js] [--dry-run]
+ *   node scripts/install.js --target claude|codex|qwen|opencode|all [--broker <name>] [--entry /abs/<server>/dist/index.js] [--dry-run]
  *
  * The broker MCP server is the one in the broker config (mcp-configs/brokers.json,
  * yours in ~/.futures-trading-harness/brokers.json); --entry records its entry
@@ -16,6 +16,8 @@
  *         removes old harness hooks there (the extension provides them), writes
  *         workspace/.qwen/settings.json (the autonomous allowlist), and prints
  *         the extension command.
+ * opencode: writes nothing (workspace/opencode.json is generated and committed)
+ *         and prints the steps: install opencode, add your model provider.
  * Existing files are backed up to <file>.fth-backup before writing.
  */
 
