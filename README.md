@@ -293,7 +293,13 @@ plugin. It prints the remaining native commands:
 
 Check each harness headless afterwards (one real run per harness, in paper
 mode with the broker read-only: it calls the harness tools, delegates to a
-harness role, and tries a shell command, then prints what each reached):
+harness role, and tries a shell command, then prints what each reached). A
+tool reached through a harness's bridge (Qwen Code's deferred MCP tools,
+called via `tool_call`) counts once it answers; the bridge's refusal doesn't.
+Each run's raw transcript is kept at
+`~/.futures-trading-harness/logs/headless-<harness>-<time>.json` (under
+`FTH_HOME`; stderr beside it as `.stderr.log`), and its path printed, so a
+failure can be diagnosed without another run:
 
 ```bash
 node scripts/check-headless.js                      # claude, codex and qwen

@@ -31,6 +31,13 @@ test('check-headless: every harness reaches the harness tools and the role; the 
   assert.match(r.stdout, /subagent: risk-manager \(the harness role\), answered PROBE-ROLE-OK/);
   assert.match(r.stdout, /shell `node -e 1`: refused/);
   assert.match(r.stdout, /shell `node -e 1`: ran/);
+  // Each probe's raw transcript is kept under FTH_HOME/logs, its path printed.
+  const kept = [...r.stdout.matchAll(/^ {2}transcript: (.*)$/gm)].map(m => m[1]);
+  assert.strictEqual(kept.length, 2);
+  for (const [i, h] of ['claude', 'codex'].entries()) {
+    assert.match(path.basename(kept[i]), new RegExp(`^headless-${h}-.*\\.json$`));
+    assert.ok(require('fs').readFileSync(kept[i], 'utf8').includes('blackouts_list'), kept[i]);
+  }
 });
 
 test('check-headless: a run that delegates to no role fails; bad arguments are refused', { timeout: 120000 }, () => {

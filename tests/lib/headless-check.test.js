@@ -110,7 +110,7 @@ test('runProbe: a harness that is not installed, or that fails, is reported', ()
   assert.strictEqual(missing.error, 'codex is not installed (not on PATH)');
   assert.deepStrictEqual(hc.formatReport(missing), ['codex: NOT ok (codex is not installed (not on PATH))']);
   let seen;
-  const failed = hc.runProbe({ harness: 'claude', root: ROOT, env: { PATH: '/bin' }, spawn: (cmd, args, opts) => { seen = { cmd, opts }; return { status: 2, stdout: '', stderr: 'boot\nError: not logged in\n' }; } });
+  const failed = hc.runProbe({ harness: 'claude', root: ROOT, env: { PATH: '/bin', FTH_HOME: tmpDir() }, spawn: (cmd, args, opts) => { seen = { cmd, opts }; return { status: 2, stdout: '', stderr: 'boot\nError: not logged in\n' }; } });
   assert.strictEqual(failed.error, 'exit 2: Error: not logged in');
   assert.strictEqual(seen.cmd, 'claude');
   assert.strictEqual(seen.opts.env.FTH_AUTONOMOUS, '1');
@@ -172,4 +172,84 @@ test('runProbe: Qwen first gets the runner\'s workspace allowlist when asked, th
   assert.ok(writes[0][1].permissions.allow.includes('mcp__harness') && writes[0][1].permissions.allow.includes('Agent(risk-manager)'));
   assert.ok(!fs.existsSync(path.join(home, 'unused')));
   assert.strictEqual(hc.passed(r), true, JSON.stringify(r));
+});
+
+// A real Qwen Code 0.25 run (trimmed, anonymized): MCP tools deferred, reached through the tool_call
+// bridge; the first bridge calls refused until tool_search reviewed the schema, then answered.
+const QWEN_BRIDGE = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'qwen-bridge-transcript.json'), 'utf8');
+
+test('analyze: Qwen tool_call bridge, refused then answered, counts as answered (the real transcript)', () => {
+  const a = hc.analyze(QWEN_BRIDGE);
+  assert.deepStrictEqual(a.tools, { blackouts_list: 'answered', strategies_list: 'answered' });
+  // Everything else as before: the forked agent isn't the harness role, the shell was refused.
+  assert.deepStrictEqual([a.subagent.role, a.subagent.harnessRole, a.subagent.ok], ['fork', false, false]);
+  assert.match(a.shell, /^refused \(Qwen Code requires permission to use "run_shell_command"/);
+  assert.match(hc.formatReport({ harness: 'qwen', analysis: a, error: null }).join('\n'), /harness tool blackouts_list: answered\n {2}harness tool strategies_list: answered/);
+});
+
+test('analyze: a bridge refusal alone is not an answer, is_error or not', () => {
+  const doc = JSON.parse(QWEN_BRIDGE);
+  // Up to the bridge's refusals only (the later, successful bridge calls dropped).
+  const refusedOnly = doc.filter(m => !(m.message && m.message.content.some(c => ['call-7', 'call-8'].includes(c.id || c.tool_use_id))));
+  assert.strictEqual(refusedOnly.length, doc.length - 3, "the successful bridge calls and their two results");
+  assert.deepStrictEqual(hc.analyze(JSON.stringify(refusedOnly)).tools, { blackouts_list: 'errored', strategies_list: 'errored' });
+  const quiet = [use('1', 'tool_call', { name: 'mcp__harness__blackouts_list', arguments: {} }),
+    res('1', [{ type: 'text', text: '[tool_call bridge refused] Deferred tool "mcp__harness__blackouts_list" has no verified schema review.' }])].join('\n');
+  assert.strictEqual(hc.analyze(quiet).tools.blackouts_list, 'errored', 'a refusal not flagged is_error, as content blocks');
+  // A bridge call with no result yet.
+  assert.strictEqual(hc.analyze(use('1', 'tool_call', { name: 'mcp__harness__blackouts_list' })).tools.blackouts_list, 'called (no result seen)');
+});
+
+test('analyze: bridge success, string input, and what the bridge names (not the bridge itself)', () => {
+  const text = [use('1', 'tool_call', { name: 'mcp__harness__blackouts_list', arguments: {} }), res('1', '[]\n'),
+    use('2', 'tool_call', JSON.stringify({ name: 'mcp__harness__strategies_list', arguments: { json: true } })), res('2', '[]')].join('\n');
+  assert.deepStrictEqual(hc.analyze(text).tools, { blackouts_list: 'answered', strategies_list: 'answered' });
+  for (const input of [{ name: 'mcp__other__blackouts_list' }, { tool: 'mcp__harness__blackouts_list' }, { name: '' }, 'not json', null]) {
+    assert.strictEqual(hc.analyze([use('1', 'tool_call', input), res('1', '[]')].join('\n')).tools.blackouts_list, 'not called', JSON.stringify(input));
+  }
+  // An unknown wrapper isn't unwrapped; a direct call next to a bridge call still counts.
+  assert.strictEqual(hc.analyze([use('1', 'call_tool', { name: 'mcp__harness__blackouts_list' }), res('1', '[]')].join('\n')).tools.blackouts_list, 'not called');
+  const mixed = [use('1', 'tool_call', { name: 'mcp__harness__blackouts_list' }), res('1', '[tool_call bridge refused] Deferred tool', true),
+    use('2', 'mcp__harness__blackouts_list'), res('2', '[]')].join('\n');
+  assert.strictEqual(hc.analyze(mixed).tools.blackouts_list, 'answered');
+  // A shell or a role reached through the bridge is still seen.
+  const viaBridge = [use('1', 'tool_call', { name: 'run_shell_command', arguments: { command: 'node -e 1' } }), res('1', ''),
+    use('2', 'tool_call', { name: 'agent', arguments: { subagent_type: 'risk-manager' } }), res('2', '[tool_call bridge refused] Deferred tool "agent"')].join('\n');
+  const b = hc.analyze(viaBridge);
+  assert.strictEqual(b.shell, 'ran');
+  assert.deepStrictEqual([b.subagent.role, b.subagent.ok], ['risk-manager', false]);
+  assert.deepStrictEqual(hc.BRIDGE_TOOLS.map(x => x.name), ['tool_call']);
+  // A name the model wrote into the bridge counts only as the tool's exact name.
+  assert.strictEqual(hc.analyze([use('1', 'tool_call', { name: 'mcp__x__harness__blackouts_list' }), res('1', 'Tool not found')].join('\n')).tools.blackouts_list, 'not called');
+  // An id reused by a later call: the refusal stays the bridge call's, the later answer is the other call's.
+  const reused = [use('call_0', 'tool_call', { name: 'mcp__harness__blackouts_list' }), res('call_0', '[tool_call bridge refused] Deferred tool', true),
+    use('call_0', 'tool_search', { query: 'mcp__harness__blackouts_list' }), res('call_0', 'Reviewed 1 tool(s)')].join('\n');
+  assert.strictEqual(hc.analyze(reused).tools.blackouts_list, 'errored');
+  // A result for no call (or a null id) answers nothing.
+  assert.strictEqual(hc.analyze([use(null, 'tool_call', { name: 'mcp__harness__blackouts_list' }), res(null, '[]')].join('\n')).tools.blackouts_list, 'called (no result seen)');
+});
+
+test('runProbe: the raw transcript is kept under FTH_HOME/logs and its path reported', () => {
+  const home = tmpDir();
+  const env = { PATH: '/bin', FTH_HOME: home };
+  const now = () => new Date('2026-10-11T03:31:00.123Z');
+  const r = hc.runProbe({ harness: 'claude', root: ROOT, env, now, spawn: () => ({ status: 1, stdout: QWEN_BRIDGE, stderr: 'Error: boom\n' }) });
+  const file = path.join(home, 'logs', 'headless-claude-2026-10-11T03-31-00-123Z.json');
+  assert.strictEqual(r.transcript, file);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), QWEN_BRIDGE);
+  assert.strictEqual(fs.readFileSync(file.replace(/\.json$/, '.stderr.log'), 'utf8'), 'Error: boom\n');
+  assert.ok(hc.formatReport(r).includes(`  transcript: ${file}`));
+  // A run that timed out keeps what it printed; one that couldn't be kept says so and the check goes on.
+  const timedOut = hc.runProbe({ harness: 'codex', root: ROOT, env, now, spawn: () => ({ error: Object.assign(new Error('spawnSync codex ETIMEDOUT'), { code: 'ETIMEDOUT' }), status: null, stdout: 'partial', stderr: '' }) });
+  assert.strictEqual(fs.readFileSync(timedOut.transcript, 'utf8'), 'partial');
+  assert.ok(!fs.existsSync(timedOut.transcript.replace(/\.json$/, '.stderr.log')), 'no empty stderr file');
+  const unsaved = hc.runProbe({ harness: 'claude', root: ROOT, env, now, saveFile: () => { throw new Error('EACCES'); }, spawn: () => ({ status: 0, stdout: '' }) });
+  assert.match(hc.formatReport(unsaved).join('\n'), /transcript: not kept \(.*headless-claude-.*\.json: EACCES\)/);
+  assert.ok(unsaved.analysis);
+  // The transcript kept but not its stderr: still kept.
+  const saved = [];
+  const half = hc.runProbe({ harness: 'claude', root: ROOT, env, now, saveFile: f => { if (f.endsWith('.stderr.log')) throw new Error('EACCES'); saved.push(f); }, spawn: () => ({ status: 0, stdout: '', stderr: 'x' }) });
+  assert.deepStrictEqual([half.transcript, saved], [file, [file]]);
+  // A harness that isn't installed has no transcript.
+  assert.strictEqual(hc.runProbe({ harness: 'codex', root: ROOT, env, spawn: () => ({ error: Object.assign(new Error('x'), { code: 'ENOENT' }) }) }).transcript, undefined);
 });
