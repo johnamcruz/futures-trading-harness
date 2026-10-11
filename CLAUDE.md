@@ -23,7 +23,7 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 - `accounts/<name>/ACCOUNT.md`: prop account profiles (`scripts/lib/trading/accounts.js`);
   combine rules and micro/mini sizing in `scripts/lib/trading/combine.js`, live attempt
   state and the gate's prop checks in `prop-state.js`.
-- Policy strategies (`signal: policy`, e.g. `strategies/prop_portfolio_3m`) are the prop
+- Policy strategies (`signal: policy`, e.g. `strategies/prop_portfolio`) are the prop
   challenge as a strategy: they list rules strategies and carry `account`, `sizing`,
   `contracts`, `exit`, and `policy: { bundle }`. Only they have those keys.
 - `rl/`: Python trainer (MaskablePPO, `rl/fth_rl`) on the JS backtester via

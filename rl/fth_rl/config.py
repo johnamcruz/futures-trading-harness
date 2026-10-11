@@ -76,6 +76,33 @@ def windows_of(cfg):
     return out
 
 
+ROOT = re.compile(r"^[A-Z0-9]+$")
+
+
+def symbols_errors(raw):
+    """`symbols` (several markets, one shared account) or `symbol` (one); the
+    Node env (scripts/lib/rl/env-config.js) checks them against the strategy."""
+    if "symbol" in raw and "symbols" in raw:
+        return ['symbol, symbols: use one (symbols: ["MNQ", "MES", ...] trains on several markets with one account)']
+    if "symbol" not in raw and "symbols" not in raw:
+        return []  # the Node env refuses a config with neither (it names the data's market)
+    syms = raw["symbols"] if "symbols" in raw else [raw.get("symbol")]
+    if not (isinstance(syms, list) and syms and all(isinstance(x, str) and ROOT.match(x) for x in syms)):
+        return ['symbols: the data\'s contract roots, e.g. ["MNQ", "MES", "MYM", "M2K"] (micros and minis share their bars)']
+    if len(set(syms)) != len(syms):
+        return [f"symbols: {syms} lists a market twice"]
+    data = raw.get("data")
+    missing = [x for x in syms if not (isinstance(data, dict) and x in data)]
+    if missing:
+        return [f"data: a bar file for each of the symbols (missing {', '.join(missing)})"]
+    return []
+
+
+def symbols_of(cfg):
+    """The markets a config trains on, as a list."""
+    return list(cfg["symbols"]) if "symbols" in cfg else [cfg["symbol"]]
+
+
 def load_config(path, quick=False):
     path = Path(path).resolve()
     raw = json.loads(path.read_text())
@@ -88,7 +115,8 @@ def load_config(path, quick=False):
     if not NAME.match(str(cfg.get("name", ""))):
         errors.append("name: lowercase letters, digits, _ . -")
     if not NAME.match(str(cfg.get("strategy", ""))):
-        errors.append("strategy: the policy strategy to train (strategies/<name>/STRATEGY.md, signal: policy), e.g. prop_portfolio_3m")
+        errors.append("strategy: the policy strategy to train (strategies/<name>/STRATEGY.md, signal: policy), e.g. prop_portfolio")
+    errors += symbols_errors(raw)
     for k in ("account", "strategies"):
         if k in raw:
             errors.append(f"{k}: comes from the policy strategy's STRATEGY.md (ECC: the strategy document is the source)")

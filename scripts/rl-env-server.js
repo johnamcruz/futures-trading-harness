@@ -58,7 +58,7 @@ function main(argv) {
   const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
   const log = msg => process.stderr.write(`[rl-env] ${msg}\n`);
   const { env, meta } = envFromConfig(cfg, { root: ROOT, baseDir: path.dirname(file), log, hashData: !argv.includes('--no-hash') });
-  log(`${meta.strategies.join(', ')} on ${meta.symbol} ${meta.timeframe}m, account ${meta.account}, ${env.days.length} trading days`);
+  log(`${meta.strategies.join(', ')} on ${meta.symbols.join(', ')} ${meta.timeframe}m, account ${meta.account}, ${env.days.length} trading days`);
   serve({ env, meta, readLine: lineReader(0), writeLine: s => fs.writeSync(1, `${s}\n`) });
 }
 

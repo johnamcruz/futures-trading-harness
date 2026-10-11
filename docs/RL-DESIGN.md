@@ -7,7 +7,7 @@ strategies, the backtester's broker logic, and the order gate.
 ## The idea
 
 The prop challenge is a strategy. A **policy strategy** (`signal: policy`,
-e.g. `strategies/prop_portfolio_3m/STRATEGY.md`) lists the rules strategies
+e.g. `strategies/prop_portfolio/STRATEGY.md`) lists the rules strategies
 whose setups it trades (every 3-minute strategy, in priority order), the
 account profile, the sizing, the contract mode (micro, mini, or auto), and the
 exit. Its rules strategies find setups and pick the side; one policy, trained
@@ -100,6 +100,22 @@ Fields (see `accounts/topstep_100k/ACCOUNT.md`):
 - **Decisions**: at a setup, skip or enter with a size bucket; in a trade past
   the ratchet, hold or close. Before the ratchet the stop and trail run alone
   (a policy free to close early learns to bank small wins).
+- **Markets**: one or several (`symbols`, e.g. NQ, ES, YM, RTY by their
+  micros' bars) on one timeline against one combine: one balance, trailing
+  floor, and daily limit, as a real combine. The account trades one position
+  at a time across them, as the live gate enforces: a setup on one market
+  waits (is never asked) while another's trade is open or filling, so each
+  trade is sized from the whole cushion and a stopped trade never reaches the
+  floor or the daily limit. Two markets firing on one bar: the first in
+  `symbols` order is asked first. Attempts start on any market's trading
+  day. The observation has no market field (its inputs are scaled to the
+  account and to the market's ATR), so the observation, and every bundle
+  trained before several markets, are unchanged.
+- **Timeframe**: the policy strategy's `timeframe`, which every strategy it
+  lists must trade; they are never re-run on other bars (a 3-minute
+  strategy's EMA and ATR periods, swing lookbacks, and ATR stops on 1-minute
+  bars span a third of the time and give tighter stops: another strategy,
+  untested). The bundle is bound to it.
 - **Episode**: `sessions` trading days from a random start; it ends on pass,
   blow, or timeout.
 - **Reward**: + pass (more for a faster pass), heavy − for a blow, small − for
@@ -125,7 +141,7 @@ three JSON files:
 
 | File | Holds | Stage |
 |---|---|---|
-| `rl/configs/sweep/<family>.json` | The training config (the policy strategy, the data's symbol and file, windows, seeds, steps, network, PPO, reward, optional sizing and contracts overrides) plus `study` and `search_space` (`searched`, `anchored`). The account, strategies, timeframe, and exit come from the policy strategy's STRATEGY.md | `python rl/sweep.py --config <file> [--dry-run] [--n-trials N] [--n-jobs N]` |
+| `rl/configs/sweep/<family>.json` | The training config (the policy strategy, the data's markets (`symbols`) and a file for each, windows, seeds, steps, network, PPO, reward, optional sizing and contracts overrides) plus `study` and `search_space` (`searched`, `anchored`). The account, strategies, timeframe, and exit come from the policy strategy's STRATEGY.md | `python rl/sweep.py --config <file> [--dry-run] [--n-trials N] [--n-jobs N]` |
 | `rl/configs/retrain/<family>.json` | `sweep` (its config), `trial` (`"best"` or a number), `seeds`, `total_timesteps`, `n_envs` | `python rl/retrain.py --config <file> [--dry-run]` |
 | `rl/configs/ship/<family>.json` | `retrain`, `bundle` (the name strategies use), `min_pass_rate`, `models_dir` | `python rl/ship.py --config <file> [--dry-run]` |
 
@@ -157,15 +173,19 @@ three JSON files:
 5. The bundle records its training config, the simulator it ran in (the
    harness rules are always on), data hashes, the selection and out-of-sample
    reports, and the gate. Live trading re-checks the gate from the bundle's
-   own numbers, and uses a bundle only for the account, strategy, symbol,
-   timeframe, and sizing it was trained with, and only one trained and
+   own numbers, and uses a bundle only for the account, strategy, markets
+   (an index among its `symbols`), timeframe, sizing, and contract mode it
+   was trained with, and only one trained and
    validated on live fills: the next bar's open with at least the
    backtester's default slippage (1 tick per market fill). Training always
    fills that way; a config's `slippageTicks` may raise the slippage, never
    lower it, and `fill` can't be set. Retrain records the simulator its seeds
    were trained in (`candidates.json`: `engine`); retrain and ship refuse
    seeds from another, and the sweep fingerprint includes the fills, so an
-   older study doesn't resume with trials from both.
+   older study doesn't resume with trials from both. A study, its retrained
+   seeds (`candidates.json`: `env`), and ship are bound to the env the
+   strategy document sets (its strategies, account, markets, timeframe) and
+   refuse to continue after it changes (`trained on another env`).
 
 `<out>` is the sweep config's `out_dir`, else `<FTH_HOME>/rl/<family>`.
 `python rl/train_policy.py --config <training config>` runs all three stages
@@ -209,8 +229,12 @@ Rules:
   a started attempt, with a stale snapshot or a missed close, once the attempt
   passed or ended, at the daily limits, above the size budget, or not exactly
   as the verdict says (contract, side, size, stop ticks), or a second entry on
-  the same verdict (as in training, one entry per setup). The gateway also
-  refuses any entry while a position is open anywhere on the account, and
+  the same verdict (as in training, one entry per setup), and any entry once
+  another went in at or after the latest account snapshot (it doesn't hold
+  that trade yet: two markets firing on one bar would each be sized from the
+  whole cushion). The gateway also
+  refuses any entry while a position is open or an order is working anywhere
+  on the account, and
   while an attempt runs, any entry that isn't its policy strategy's. These
   checks fail closed and can't be skipped.
 - The agents see the account state and the live verdicts in every cycle

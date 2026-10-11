@@ -130,7 +130,7 @@ target fills.
 
 A policy strategy's trades exit by the policy strategy's own `exit` (its
 trail, and `max_bars` if set), whichever rules strategy found the setup: a
-`crt_1h` setup traded through `prop_portfolio_3m` has no CRT target.
+`crt_1h` setup traded through `prop_portfolio` has no CRT target.
 
 ### Settings
 

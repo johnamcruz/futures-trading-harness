@@ -52,7 +52,7 @@ def write_strategy(folder):
     d = Path(folder) / "strategies" / "ema_wide"
     d.mkdir(parents=True, exist_ok=True)
     (d / "STRATEGY.md").write_text(src)
-    prop = (REPO / "strategies" / "prop_portfolio_3m" / "STRATEGY.md").read_text()
+    prop = (REPO / "strategies" / "prop_portfolio" / "STRATEGY.md").read_text()
     head, body = prop.split("\n---\n", 1)
     lines = []
     for line in head.splitlines():
@@ -67,7 +67,7 @@ def write_strategy(folder):
         lines.append(line)
     d = Path(folder) / "strategies" / "prop_test"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "STRATEGY.md").write_text("\n".join(lines) + "\n---\n" + body.replace("prop_portfolio_3m", "prop_test"))
+    (d / "STRATEGY.md").write_text("\n".join(lines) + "\n---\n" + body.replace("prop_portfolio", "prop_test"))
     return d.parent
 
 

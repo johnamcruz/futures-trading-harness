@@ -17,6 +17,8 @@ max_contracts:
   M2K: 50
   NQ: 5
   ES: 5
+  YM: 5
+  RTY: 5
 sessions: 30                  # attempt length for training and evaluation (not a firm rule)
 fees_per_side:
   MNQ: 0.37
@@ -25,6 +27,8 @@ fees_per_side:
   M2K: 0.37
   NQ: 1.4
   ES: 1.4
+  YM: 1.4
+  RTY: 1.4
 ---
 
 # Account: Topstep $50K Trading Combine (`topstep_50k`)

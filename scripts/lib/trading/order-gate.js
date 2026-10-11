@@ -263,7 +263,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     }
   }
   if (named && named.account) {
-    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries }));
+    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries }));
   } else {
     // While an attempt runs, every entry (tagged or not) must come from a
     // policy strategy that trades it, so none skips the floor, the daily

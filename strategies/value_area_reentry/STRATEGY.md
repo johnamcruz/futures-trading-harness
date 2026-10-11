@@ -122,7 +122,7 @@ Long (short is the mirror image):
 
 ### Traded through a policy strategy
 
-Listed in `prop_portfolio_3m`, a re-entry exits by the policy strategy's own
+Listed in `prop_portfolio`, a re-entry exits by the policy strategy's own
 trail (2R / 0.5R), not by the value-area target and time stop above, as in
 training.
 
