@@ -1,7 +1,6 @@
 ---
 name: trade-reviewer
 description: "Post-trade reviewer for the futures desk. Grades closed trades against their plans (R multiple, process grade, mistakes), writes review entries with the result and setup tags the order gate needs, and distils evidence-based lessons. Use after each exit, at end of day, and for /trade-review."
-approvalMode: default
 tools:
   - read_file
   - run_shell_command

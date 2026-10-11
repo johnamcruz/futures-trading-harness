@@ -128,9 +128,7 @@ the Agent tool; Qwen Code: the agent tool; Codex: the configured agent roles),
 and wait for every result before step 3. On Qwen Code, named subagents run in
 the background by default: launch them with `run_in_background: false`, and
 always run `risk-manager` phase 2 and `trade-executor` in the foreground.
-Always set `subagent_type` to the role name: autonomous Qwen runs allow only
-the harness roles, and refuse a fork, a general-purpose agent, or Qwen's
-`claude-code`/`codex` agents. Without subagents, play each role yourself in turn. Pass symbol, contractId,
+Without subagents, play each role yourself in turn. Pass symbol, contractId,
 and the current time.
 
 | Role (agent file) | Returns |

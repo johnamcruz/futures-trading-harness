@@ -35,7 +35,7 @@ function parse(argv) {
     else if (flag === '--out') o.out = value();
     else if (flag === '--daily') o.daily = true;
     else if (flag === '--record') o.record = true;
-    else throw new Error(`unknown argument: ${argv[i]} (usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out /tmp/fth/<file>.json] [--record])`);
+    else throw new Error(`unknown argument: ${argv[i]} (usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out file] [--record])`);
   }
   return o;
 }

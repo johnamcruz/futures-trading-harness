@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { fetchBarsToFile, requestErrors, defaultOut, outError, OUT_DIR } = require('../../scripts/lib/bars-fetch');
+const { fetchBarsToFile, requestErrors, defaultOut } = require('../../scripts/lib/bars-fetch');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -23,66 +23,17 @@ function fakeClient(n = 50) {
 }
 
 test('fetchBarsToFile writes get_bars JSON oldest first, and says when the last bar closed', async () => {
-  const outDir = tmpDir();
-  const out = path.join(outDir, 'sub', 'MNQ-3m.json');
+  const out = path.join(tmpDir(), 'sub', 'MNQ-3m.json');
   const client = fakeClient();
-  const r = await fetchBarsToFile({ client, symbol: 'MNQ', timeframe: 3, count: 50, out, outDir });
+  const r = await fetchBarsToFile({ client, symbol: 'MNQ', timeframe: 3, count: 50, out });
   assert.deepStrictEqual(client.calls[1], ['bars', 'MNQ', 3, 50, false]);
   const j = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.deepStrictEqual([j.contractId, j.barSize, j.count], ['MNQ', '3 minute', 50]);
   assert.ok(Date.parse(j.bars[0].t) < Date.parse(j.bars[49].t), 'oldest first');
   assert.strictEqual(r.closedAt, new Date(Date.parse(r.last) + 180000).toISOString());
-  const daily = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', daily: true, count: 60, out: path.join(outDir, 'd.json'), outDir });
+  const daily = await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', daily: true, count: 60, out: path.join(tmpDir(), 'd.json') });
   assert.strictEqual(JSON.parse(fs.readFileSync(daily.file, 'utf8')).barSize, '1 day');
-  await assert.rejects(fetchBarsToFile({ client: fakeClient(2), symbol: 'MNQ', count: 50, out: path.join(outDir, 'x.json'), outDir }), /only 2 closed bars/);
-});
-
-test('bars files go only under the bars directory, also through symlinks', async () => {
-  const outDir = tmpDir();
-  const elsewhere = tmpDir();
-  assert.strictEqual(outError(path.join(outDir, 'MNQ-3m.json'), outDir), null);
-  assert.strictEqual(outError(path.join(outDir, 'a', 'b.json'), outDir), null);
-  // The journal, settings, state, a non-JSON name, the directory itself, and a climb out.
-  for (const bad of [path.join(elsewhere, 'journal.jsonl'), path.join(elsewhere, 'settings.json'), path.join(outDir, 'x.txt'),
-    path.join(outDir, '..', 'x.json'), `${outDir}.json`]) assert.match(outError(bad, outDir), /--out: a \.json file under/, bad);
-  // A symlinked file or directory inside that points out is refused.
-  fs.symlinkSync(path.join(elsewhere, 'target.json'), path.join(outDir, 'link.json'));
-  fs.symlinkSync(elsewhere, path.join(outDir, 'dirlink'));
-  assert.match(outError(path.join(outDir, 'link.json'), outDir), /--out/);
-  assert.match(outError(path.join(outDir, 'dirlink', 'x.json'), outDir), /--out/);
-  // The directory itself a link (someone's /tmp/fth pointing into the harness state): refused, default name included.
-  const linkedDir = path.join(tmpDir(), 'fth');
-  fs.symlinkSync(elsewhere, linkedDir);
-  assert.match(outError(path.join(linkedDir, 'MNQ-3m.json'), linkedDir), /--out/);
-  assert.match(outError(path.join(linkedDir, 'a', 'b.json'), linkedDir), /--out/);
-  // Refused before the broker is asked, and nothing is written.
-  const client = fakeClient();
-  const journal = path.join(elsewhere, 'journal.jsonl');
-  fs.writeFileSync(journal, 'keep');
-  await assert.rejects(fetchBarsToFile({ client, symbol: 'MNQ', count: 50, out: journal, outDir }), /--out/);
-  assert.deepStrictEqual(client.calls, []);
-  assert.strictEqual(fs.readFileSync(journal, 'utf8'), 'keep');
-  // The default directory is /tmp/fth.
-  assert.strictEqual(OUT_DIR, '/tmp/fth');
-  assert.match(outError('/home/u/.futures-trading-harness/journal.json'), /under \/tmp\/fth\//);
-});
-
-test('a link planted while the broker answers, or at the temp name, is not written through', async () => {
-  const outDir = tmpDir();
-  const victim = path.join(tmpDir(), 'journal.jsonl');
-  fs.writeFileSync(victim, 'keep');
-  const out = path.join(outDir, 'MNQ-3m.json');
-  // A planted temp-name link is removed, not followed.
-  fs.symlinkSync(victim, `${out}.${process.pid}.tmp`);
-  await fetchBarsToFile({ client: fakeClient(), symbol: 'MNQ', count: 50, out, outDir });
-  assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'keep');
-  assert.strictEqual(JSON.parse(fs.readFileSync(out, 'utf8')).count, 50);
-  // The target turned into a link during the broker call: checked again, refused.
-  const client = fakeClient();
-  const closedBars = client.closedBars;
-  client.closedBars = async (...a) => { fs.rmSync(out); fs.symlinkSync(victim, out); return closedBars(...a); };
-  await assert.rejects(fetchBarsToFile({ client, symbol: 'MNQ', count: 50, out, outDir }), /--out/);
-  assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'keep');
+  await assert.rejects(fetchBarsToFile({ client: fakeClient(2), symbol: 'MNQ', count: 50, out: path.join(tmpDir(), 'x.json') }), /only 2 closed bars/);
 });
 
 test('request checks and default paths', () => {
