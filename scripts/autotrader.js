@@ -329,7 +329,8 @@ async function main(argv) {
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
   // The harness tools server the cycles use answers with the registry's tools; else no trading (harness-tools/preflight.js).
-  if (!opts.dryRun) await startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once: arg(argv, '--once') || null, killSwitchFile });
+  const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once, killSwitchFile });
+  if (!opts.dryRun && arg(argv, '--once')) await preflight(arg(argv, '--once'));
   // Codex may write the blackouts directory from its sandbox, but can't create it.
   fs.mkdirSync(path.dirname(loadConfig(process.env).blackoutsFile), { recursive: true });
   workspaceBaseline = workspaceFingerprint(path.resolve(ROOT, cfg.workdir));
@@ -359,6 +360,7 @@ async function main(argv) {
 
   if (process.env.FTH_REPLAY_NOW) throw new Error('FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock. Replay drives one cycle per process (--once or --dry-run, a fresh run per cycle with the time set by the replay driver).');
   holdLock();
+  await preflight(null); // the live loop: only once it holds the lock (a second start must not switch off the first)
   const log = runnerLog(createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` }));
   // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
   let client;

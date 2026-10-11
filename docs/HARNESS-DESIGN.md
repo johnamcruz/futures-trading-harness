@@ -93,7 +93,9 @@ check probes that). On a failure a manual trade or premarket run is refused, a
 manual end of day only warns, and the live loop turns trading off with the kill
 switch while end of day and housekeeping keep running. `node scripts/check-headless.js` runs
 one real headless probe per harness (harness tools, a subagent by role, a shell
-attempt) and reports what each reached.
+attempt, in paper mode) and reports what each reached; Qwen runs on the
+runner's workspace allowlist (`--write-qwen-allowlist` writes it, with no
+runner trading: a running runner treats the change as a workspace change).
 
 ## Order gate
 

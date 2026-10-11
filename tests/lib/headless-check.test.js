@@ -28,7 +28,7 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   assert.deepStrictEqual(hc.probeCommand('codex', ROOT, env).argv.slice(0, 2), ['codex', 'exec']);
   assert.ok(hc.probeCommand('qwen', ROOT, env).argv.includes('--approval-mode'));
   // Paper mode, and the runner config's own settings (bar directory, model).
-  const cfgRun = hc.probeCommand('claude', ROOT, env, { config: { dataDir: '/data/bars', model: 'm1', paper: false } });
+  const cfgRun = hc.probeCommand('claude', ROOT, env, { config: { harness: 'claude', dataDir: '/data/bars', model: 'm1', paper: false } });
   assert.deepStrictEqual([cfgRun.env.FTH_PAPER, cfgRun.env.FTH_BARS_DIR, cfgRun.argv.includes('m1')], ['1', '/data/bars', true]);
   const fake = hc.probeCommand('qwen', ROOT, env, { bin: '/x/fake.js' });
   assert.deepStrictEqual(fake.argv.slice(0, 3), [process.execPath, '/x/fake.js', '-p']);
@@ -112,10 +112,28 @@ test('analyze: Codex started-then-completed items, a first delegation elsewhere,
   assert.strictEqual(hc.analyze(twice).shell, 'ran');
 });
 
-test('runProbe: Qwen first gets the runner\'s workspace allowlist, then the probe runs (stand-in CLI)', { timeout: 60000 }, () => {
+test('runProbe: Qwen without the runner\'s workspace allowlist stops and says so; nothing is written unless asked', () => {
+  const root = tmpDir();
+  let spawned = false;
+  const r = hc.runProbe({ harness: 'qwen', root, env: { HOME: root, FTH_HOME: root }, spawn: () => { spawned = true; return { status: 0, stdout: '' }; } });
+  assert.strictEqual(spawned, false);
+  assert.match(r.error, /workspace\/\.qwen\/settings\.json is missing: start the runner once .* --write-qwen-allowlist \(with no runner trading/);
+  assert.ok(!fs.existsSync(path.join(root, 'workspace', '.qwen')), 'not written');
+  const { file, content } = hc.qwenAllowlist(hc.probeConfig('qwen'), root, { HOME: root, FTH_HOME: root });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content.replace('mcp__harness', 'mcp__other'));
+  assert.match(hc.runProbe({ harness: 'qwen', root, env: { HOME: root, FTH_HOME: root }, spawn: () => { spawned = true; return {}; } }).error, /not the allowlist the runner writes/);
+  assert.strictEqual(spawned, false);
+  // Another harness's model and extra arguments don't carry over; the shared settings do.
+  const c = hc.probeConfig('codex', { harness: 'claude', model: 'claude-model', extraArgs: ['--x'], dataDir: '/data/bars' });
+  assert.deepStrictEqual([c.model, c.extraArgs, c.dataDir, c.paper], [hc.probeConfig('codex').model, [], '/data/bars', true]);
+  assert.strictEqual(hc.probeConfig('claude', { harness: 'claude', model: 'm' }).model, 'm');
+});
+
+test('runProbe: Qwen first gets the runner\'s workspace allowlist when asked, then the probe runs (stand-in CLI)', { timeout: 60000 }, () => {
   const home = tmpDir();
   const writes = [];
-  const r = hc.runProbe({ harness: 'qwen', root: ROOT, env: { ...process.env, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: '' }, bin: path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), writeFile: (f, c) => writes.push([f, JSON.parse(c)]) });
+  const r = hc.runProbe({ harness: 'qwen', root: ROOT, env: { ...process.env, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: '' }, bin: path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), writeAllowlist: true, writeFile: (f, c) => writes.push([f, JSON.parse(c)]) });
   assert.strictEqual(writes.length, 1);
   assert.strictEqual(writes[0][0], path.join(ROOT, 'workspace', '.qwen', 'settings.json'));
   assert.ok(writes[0][1].permissions.allow.includes('mcp__harness') && writes[0][1].permissions.allow.includes('Agent(risk-manager)'));

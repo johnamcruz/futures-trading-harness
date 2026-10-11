@@ -54,11 +54,13 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   const home = tmpDir();
   fs.mkdirSync(path.join(home, '.codex'));
   for (const toml of ['[mcp_servers.harness]\ncommand = "node"\n', '[mcp_servers."harness"]\ncommand = "node"\n', '[ mcp_servers . harness . env ]\nX = "1"\n',
-    'mcp_servers.harness.command = "node"\n', '[mcp_servers."broker"]\n', "mcp_servers.'broker'.args = []\n"]) {
+    'mcp_servers.harness.command = "node"\n', '[mcp_servers."broker"]\n', "mcp_servers.'broker'.args = []\n",
+    '[mcp_servers]\nharness = { command = "node" }\n', '[mcp_servers]\nharness.command = "node"\n', 'mcp_servers = { harness = { command = "x" } }\n',
+    '"mcp_servers".harness.command = "x"\n', '[mcp_servers]\nother = { command = "x" }\nbroker = { command = "y" }\n']) {
     fs.writeFileSync(path.join(home, '.codex', 'config.toml'), toml);
     assert.throws(() => planCodex({ root: ROOT, home, broker: BROKER }), /already defines \[mcp_servers\.(harness|broker)\]/, toml);
   }
-  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness_other]\ncommand = "x"\n[mcp_servers.brokerage]\n');
+  fs.writeFileSync(path.join(home, '.codex', 'config.toml'), '[mcp_servers.harness_other]\ncommand = "x"\n[mcp_servers.brokerage]\n[mcp_servers]\nharnessx = { command = "x" }\n[profiles]\nharness = "x"\n');
   assert.ok(planCodex({ root: ROOT, home, broker: BROKER }), 'other servers whose names start alike are fine');
 });
 

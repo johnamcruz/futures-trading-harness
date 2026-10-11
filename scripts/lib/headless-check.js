@@ -52,8 +52,11 @@ function probePrompt() {
 /** The runner's config for the probe: the given one (its model, extra args, workspace, bar directory), in paper mode. */
 function probeConfig(harness, config = {}) {
   if (!HARNESSES.includes(harness)) throw new Error(`unknown harness "${harness}" (${HARNESSES.join(', ')})`);
+  // Another harness's model and extra arguments don't apply to this one.
+  const { model: _m, extraArgs: _a, command: _c, ...shared } = config || {};
+  const own = config && config.harness === harness ? config : shared;
   // Paper: the broker server itself refuses every order, whatever the probe's run does.
-  return validateConfig({ ...config, harness, paper: true });
+  return validateConfig({ ...own, harness, paper: true });
 }
 
 /** argv, working directory and environment of the probe, exactly as the runner would start a cycle. */
@@ -149,16 +152,19 @@ function qwenAllowlist(cfg, root, env = process.env) {
   return { file, content };
 }
 
-function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = 10 * 60000, spawn = spawnSync, writeFile = null }) {
+function runProbe({ harness, root, env = process.env, bin = null, config = {}, timeoutMs = 10 * 60000, spawn = spawnSync, writeAllowlist = false, writeFile = null }) {
   const { argv, cwd, env: runEnv } = probeCommand(harness, root, env, { bin, config });
   if (harness === 'qwen') {
+    // The workspace allowlist is one of the runner's watched files: changing it switches a running
+    // runner's trading off. So only on request; otherwise a missing or different one is reported.
     const { file, content } = qwenAllowlist(probeConfig(harness, config), root, env);
-    const write = writeFile || ((f, c) => {
-      if (fs.existsSync(f) && fs.readFileSync(f, 'utf8') === c) return;
-      fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, c);
-    });
-    write(file, content);
+    const current = (() => { try { return fs.readFileSync(file, 'utf8'); } catch (_err) { return null; } })();
+    if (current !== content) {
+      if (!writeAllowlist) {
+        return { harness, status: null, analysis: null, error: `${file} is ${current === null ? 'missing' : 'not the allowlist the runner writes for this config'}: start the runner once (it writes it), pass --config <the runner's config>, or pass --write-qwen-allowlist (with no runner trading: a running runner sees the change and turns trading off)` };
+      }
+      (writeFile || ((f, c) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, c); }))(file, content);
+    }
   }
   const r = spawn(argv[0], argv.slice(1), { cwd, env: runEnv, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
   if (r.error) return { harness, status: null, error: r.error.code === 'ENOENT' ? `${argv[0]} is not installed (not on PATH)` : r.error.message, analysis: null };

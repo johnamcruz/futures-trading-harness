@@ -122,13 +122,33 @@ function codexConfigBlock(root, broker) {
   ].join('\n');
 }
 
+/**
+ * Whether Codex TOML (outside the harness block) defines mcp_servers.<name> in any form: a table
+ * ([mcp_servers.x], quoted, or a subtable), a dotted key, a key under [mcp_servers], or an inline table.
+ */
+function codexDefines(text, name) {
+  const key = `(?:${name}|"${name}"|'${name}')`;
+  const tbl = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')';
+  let inServers = false;
+  for (const raw of String(text).split('\n')) {
+    const l = raw.trim();
+    if (l.startsWith('[')) {
+      if (new RegExp(`^\\[\\s*${tbl}\\s*\\.\\s*${key}\\s*[\\].]`).test(l)) return true;
+      inServers = new RegExp(`^\\[\\s*${tbl}\\s*\\]`).test(l);
+      continue;
+    }
+    if (new RegExp(`^${tbl}\\s*\\.\\s*${key}\\s*[.=]`).test(l)) return true;
+    if (new RegExp(`^${tbl}\\s*=\\s*\\{.*[{,\\s]${key}\\s*[.=]`).test(l)) return true;
+    if (inServers && new RegExp(`^${key}\\s*[.=]`).test(l)) return true;
+  }
+  return false;
+}
+
 function planCodex({ root, home, broker }) {
   const file = path.join(home, '.codex', 'config.toml');
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   for (const name of [SERVER_NAME, HARNESS_SERVER]) {
-    // [mcp_servers.x], [mcp_servers."x"], [mcp_servers.x.env], or a dotted key (mcp_servers.x.command = ...).
-    const q = `\\s*\\.\\s*(?:${name}|"${name}"|'${name}')\\s*`;
-    if (new RegExp(`^\\s*(?:\\[\\s*mcp_servers${q}[\\].]|mcp_servers${q}\\.)`, 'm').test(outsideBlock(current))) {
+    if (codexDefines(outsideBlock(current), name)) {
       throw new Error(`${file} already defines [mcp_servers.${name}] outside the harness block; remove it first`);
     }
   }
@@ -320,6 +340,7 @@ module.exports = {
   TARGETS,
   upsertBlock,
   codexConfigBlock,
+  codexDefines,
   forwardedEnv,
   harnessToolsArgs,
   harnessToolsEnv,
