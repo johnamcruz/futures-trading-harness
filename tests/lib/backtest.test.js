@@ -402,6 +402,8 @@ test('bar-file errors never echo file content (a script run on a credentials fil
     'cell.csv': `time,open,high,low,close\n${secret},1,2,0,1\n`,
     // V8's parse error would quote this text.
     'bad.json': `[${secret}]`,
+    // A free-text time V8 still parses, off the minute: the error gives the parsed time, not the text.
+    'offminute.json': JSON.stringify([{ t: `Jan 2 2026 14:30:30 (${secret})`, o: 1, h: 2, l: 0, c: 1 }]),
   };
   for (const [name, text] of Object.entries(cases)) {
     const file = path.join(dir, name);

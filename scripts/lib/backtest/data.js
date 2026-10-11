@@ -127,7 +127,7 @@ function loadBars(file, opts = {}) {
   const bars = normalizeBars(readTable(file, opts)).map(b => ({ ...b, ms: Date.parse(b.t) }));
   const out = [];
   for (const b of bars) {
-    if (b.ms % MINUTE !== 0) throw new Error(`${file}: bar ${b.t} is not on a minute boundary`);
+    if (b.ms % MINUTE !== 0) throw new Error(`${file}: a bar at ${new Date(b.ms).toISOString()} is not on a minute boundary`);
     if (out.length && out[out.length - 1].ms === b.ms) out[out.length - 1] = b; // keep the last duplicate
     else out.push(b);
   }
