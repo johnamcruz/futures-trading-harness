@@ -70,13 +70,16 @@ guide resource once per session if it has one.
   Still working without a stop bracket (brackets rejected): don't leave it,
   since it would fill with no stop. `cancel_order` it (cancelling an entry
   only reduces risk), then read `list_open_orders` and `list_open_positions`
-  once to confirm. Gone and flat: journal a review tagged `result:nofill` and
-  `setup:<name>` (the gate counts a placed entry until it is reviewed) and
-  plan again next cycle. Filled before the cancel (in whole or part): place
-  its `[protect]` stop, or close it; it is a live, executed trade. Still
-  working (the cancel was refused, errored, or lost): cancel once more; if it
-  is still working, end the cycle as `error` with the entry still working and
-  no stop, and the next cycle cancels it first. The next cycle checks a
+  once to confirm. Whatever else it shows, any quantity that filled is
+  protected first: its `[protect]` stop, or close it. Gone and flat: journal
+  a review tagged `result:nofill` and `setup:<name>` (the gate counts a
+  placed entry until it is reviewed) and plan again next cycle. Filled before
+  the cancel (in whole or part): it is a live, executed trade, protected as
+  above. Still working (the cancel was refused, errored, or lost): cancel
+  once more; if it is still working, journal a note naming it as an entry
+  without a stop bracket and end the cycle as `error`, so the next cycle
+  cancels it first (interactively, tell the user it is still working with no
+  stop). The next cycle checks a
   working entry's fill and manages the position: the autonomous runner starts
   a cycle while an order is working or a position is open; interactively, the
   next check. Never wait or poll for a fill: no repeated `get_bars`,

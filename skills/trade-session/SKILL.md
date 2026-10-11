@@ -65,7 +65,9 @@ names them.
   `session-timing`) before planning.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
-  a pending entry from your own plan. New entries wait until no order is
+  a pending entry from your own plan that carries its stop bracket: an entry
+  without one (brackets rejected) is cancelled first, the cancel confirmed
+  (step 6), and a `result:nofill` review journalled. New entries wait until no order is
   working in the contract. The runner also cancels leftovers before each bar.
 - **Flat, with an earlier entry today that has no review** (it closed or was
   cancelled between cycles): run trade-review (`trade-reviewer` role) first.
@@ -305,8 +307,10 @@ mechanics). Cancelled: journal a review tagged `result:nofill` and the
 `setup:<name>` (the gate counts a placed entry until it is reviewed), and
 plan again next cycle (cycle result `no-trade`, entry cancelled: no stop
 bracket). Filled before the cancel and now protected: report it as executed.
-Still working after a second cancel: report `error`, the entry still working
-with no stop. Never wait or poll for the fill (broker-mcp skill, Order
+Any quantity that filled is protected first in every case. Still working
+after a second cancel: journal a note naming it as an entry without a stop
+bracket and report `error` (interactively, tell the user it is still working
+with no stop); the next cycle cancels it first. Never wait or poll for the fill (broker-mcp skill, Order
 mechanics).
 
 ### 7. Report

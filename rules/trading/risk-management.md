@@ -6,7 +6,7 @@
   `get_account_snapshot`), and at or below the plan's stated $ risk.
 - Every open position has a protective stop working at the exchange: a
   `stopLossBracket`, or a separate `[protect]` stop order placed as soon as the
-  fill shows in `list_open_positions`. If the stop can't be placed, close the
+  fill shows (the order's one status check, or the next cycle's read). If the stop can't be placed, close the
   position. An entry without a stop bracket that is still unfilled at its one
   status check is cancelled, not waited on (broker-mcp skill).
 - Never widen a stop, never average down, never add to a loser. You may

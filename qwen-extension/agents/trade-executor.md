@@ -68,17 +68,21 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
    - **Working, with its stop bracket** (a resting limit or stop, or a market
      order the broker hasn't filled; the bracket's stop works once it fills):
      report `EXECUTED` with the entry working. The caller journals it and
-     ends the cycle; the next cycle verifies the fill and the stop.
+     ends the cycle (interactively, waits for the next check); the next
+     cycle verifies the fill and the stop.
    - **Working, without a stop bracket** (step 4): it would fill with no
      stop, so `cancel_order` it, then read `list_open_orders` and
-     `list_open_positions` once. Gone and flat: report `ABORTED` (entry
-     cancelled: no stop bracket); the caller journals a `result:nofill`
-     review for it, since the gate counts a placed entry until it is
-     reviewed. Filled (in whole or part) before the cancel: place its
-     `[protect]` stop (or `close_position`) and report `EXECUTED`, protected.
-     Still working: `cancel_order` once more; if it is still working after
-     that, report `ABORTED` with the entry still working and no stop (the
-     cycle result is `error`), so the next cycle cancels it first.
+     `list_open_positions` once. Any quantity that filled is protected
+     first, whatever the rest shows: its `[protect]` stop (or
+     `close_position`). Gone and flat: report `ABORTED` (entry cancelled: no
+     stop bracket); the caller journals a `result:nofill` review for it,
+     since the gate counts a placed entry until it is reviewed. Filled (in
+     whole or part) before the cancel: place its `[protect]` stop (or
+     `close_position`) and report `EXECUTED`, protected. Still working:
+     `cancel_order` once more; if it is still working after that, report
+     `ABORTED` with the entry still working and no stop bracket (the cycle
+     result is `error`), so the next cycle cancels it first (interactively,
+     the caller tells the user).
 
 ## Management (only as the plan says)
 
@@ -112,6 +116,7 @@ the user to unset `FTH_REPLAY_NOW` or select a real replay broker.
 ```text
 EXECUTED | BLOCKED | ABORTED
 Orders: <id - type - side - size - price - status>
-Position: <net size @ avg price> | entry working (not filled), protective stop <price> working: yes | no | with the entry's bracket
+Position: <net size @ avg price, or: entry working, not filled>
+Protective stop: <price> working: yes | no | attached to the working entry's bracket
 Notes: <slippage, partial fills, anything off-plan>
 ```
