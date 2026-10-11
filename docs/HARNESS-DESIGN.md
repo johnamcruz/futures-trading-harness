@@ -83,11 +83,13 @@ Parquet or Excel: those readers trust their file) of at most 50 MB under `FTH_BA
 harness home's own, so a replay's run home and the live runner never share
 fetched bars), with no symlink and one hard link, in
 directories only the user owns and can write (`paths.js`). Only `bars_fetch`
-loads the user's `.env` (into a copy), as only `bars.js` does. `record` stays refused in autonomous runs (`FTH_AUTONOMOUS=1`, which every
+loads the user's `.env` (into a copy), as only `bars.js` does. `record` is never honoured in autonomous runs (`FTH_AUTONOMOUS=1`, which every
 harness hands its MCP servers: Claude and Qwen pass their environment, Codex
-forwards it), and whenever a live runner holds its lock
+forwards it): the call succeeds with its result and a `note: record ignored`
+line, and writes no record (the runner writes the gate's records). It is
+refused whenever a live runner holds its lock
 (`<FTH_HOME>/autotrader.lock`, its pid an autotrader's), whatever the
-server's environment; the scripts refuse it the same way. A reply over 256 KB is
+server's environment; the scripts do the same. A reply over 256 KB is
 refused with how to narrow it, never truncated. No tool places, modifies or
 cancels an order, and the order-gate hook matches none of them. The installer
 registers it as `harness` for every harness, as it registers `broker` (Claude:

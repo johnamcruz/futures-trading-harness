@@ -62,8 +62,13 @@ scripts. None places, changes, or cancels an order.
   `count`, no `json` or `detail`). Read a result from the reply itself: some
   harnesses move a long reply to a file you may not be allowed to read, so
   ask for the compact form (or `name` for one strategy), not the full one.
-- `record` is refused in autonomous runs, and whenever the autonomous runner
-  is running: it records every bar's read and signals itself.
+- In an autonomous run `record` is ignored, not refused: the call succeeds
+  with its normal result plus a line `[<script>] note: record ignored - the
+  autonomous runner records ...`. The result is correct; nothing was
+  recorded because the runner records every bar's read and signals itself.
+  Don't retry or doubt the read over it; just leave `record` off. Outside an
+  autonomous run, `record` is refused whenever the autonomous runner is
+  running, for the same reason.
 
 Only the user's commands stay scripts: starting, stopping, or recording a day
 of a prop attempt (`combine.js start | stop | record-day`), backtests,

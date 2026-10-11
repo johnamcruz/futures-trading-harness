@@ -24,7 +24,7 @@ const SERVER_NAME = 'harness';
 const SYMBOL = { type: 'string', pattern: '^[A-Z0-9]{1,8}$', description: 'A contract root, upper case (e.g. MNQ, MES).' };
 const BARS = { type: 'string', minLength: 1, maxLength: 1024, description: 'A bars file by absolute path (.json or .csv, at most 50 MB) under the bars directory (FTH_BARS_DIR, default <FTH_HOME>/bars) or <FTH_HOME>/bars-scratch (where bars_fetch writes).' };
 const JSON_FLAG = { type: 'boolean', description: 'The full result as JSON instead of text.' };
-const RECORD = { type: 'boolean', description: 'Also record the result for the order gate (refused in autonomous runs and while the autonomous runner runs: it records them).' };
+const RECORD = { type: 'boolean', description: 'Also record the result for the order gate (ignored in autonomous runs, where the reply notes it, and refused while the autonomous runner runs: it records them).' };
 const ISO = { type: 'string', maxLength: 40, pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,3})?)?(Z|[+-]\\d{2}:\\d{2})$' };
 
 const object = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });

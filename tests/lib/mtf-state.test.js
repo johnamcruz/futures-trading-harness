@@ -77,7 +77,7 @@ test('checkTrend: refuses a trend strategy against the prevailing trend, without
   assert.strictEqual(check(tmpDir(), { style: 'reversal' }), null);
 });
 
-test('scripts/mtf.js --record writes the record the gate reads, and refuses in autonomous runs', () => {
+test('scripts/mtf.js --record writes the record the gate reads, and ignores it (with a note) in autonomous runs', () => {
   const home = tmpDir();
   const run = (args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'mtf.js'), NQ, ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: home, FTH_AUTONOMOUS: '', ...env } });
   const ok = run(['--record', '--symbol', 'MNQ']);
@@ -89,7 +89,10 @@ test('scripts/mtf.js --record writes the record the gate reads, and refuses in a
   const noSym = run(['--record']);
   assert.strictEqual(noSym.status, 1);
   assert.match(noSym.stderr, /needs --symbol/);
-  const auto = run(['--record', '--symbol', 'MNQ'], { FTH_AUTONOMOUS: '1' });
-  assert.strictEqual(auto.status, 1);
-  assert.match(auto.stderr, /the autonomous runner records the read itself/);
+  const autoHome = tmpDir();
+  const auto = run(['--record', '--symbol', 'MNQ'], { FTH_AUTONOMOUS: '1', FTH_HOME: autoHome });
+  assert.strictEqual(auto.status, 0, auto.stderr);
+  assert.strictEqual(auto.stdout, ok.stdout, 'the same read');
+  assert.strictEqual(auto.stderr, '[mtf] note: --record ignored - the autonomous runner records the read itself\n');
+  assert.ok(!fs.existsSync(path.join(autoHome, 'mtf')), 'nothing recorded');
 });

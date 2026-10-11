@@ -80,7 +80,13 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   assert.throws(() => strategies.scan({ file: CSV, now: 'bogus' }, ctx), /--now: not a time \(bogus\)/);
   // record: the scan printed, then the refusal.
   assert.throws(() => strategies.scan({ file: CSV, record: true }, ctx), e => e instanceof cli.OpError && /--record needs --symbol/.test(e.message) && e.text.startsWith('[\n'));
-  assert.throws(() => strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_AUTONOMOUS: '1' }, now: clock() }), /autonomous runner records every bar/);
+  // In an autonomous run record is ignored, not refused: the scan comes back with a note, and nothing is recorded.
+  const autoHome = tmpDir();
+  const auto = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: autoHome, FTH_AUTONOMOUS: '1' }, now: clock() });
+  assert.deepStrictEqual(JSON.parse(auto.text), byClock);
+  assert.strictEqual(auto.stderr, '[strategies] note: --record ignored - the autonomous runner records every bar itself\n');
+  assert.strictEqual(auto.code, undefined);
+  assert.deepStrictEqual(fs.readdirSync(autoHome), [], 'nothing recorded');
   const home = tmpDir();
   const rec = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: home }, now: clock() });
   assert.match(rec.stderr, /recorded for the order gate: .*MNQ-3m\.json/);
@@ -115,7 +121,7 @@ test('market-snapshot: parameters checked by name and as numbers, in argv order'
   assert.throws(() => marketSnapshot.parseArgv([]), /usage/);
 });
 
-test('mtf: the read, the record at the harness clock, and a refused record after the read', () => {
+test('mtf: the read, the record at the harness clock, a refused record after the read, and record ignored in autonomous runs', () => {
   assert.match(mtf.mtf({ file: CSV }, { env: {}, now: clock() }).text, /^4h: /);
   assert.ok(JSON.parse(mtf.mtf({ file: CSV, json: true, tf: [15, 60] }, { env: {} }).text).frames.length >= 2);
   const home = tmpDir();
@@ -125,7 +131,15 @@ test('mtf: the read, the record at the harness clock, and a refused record after
   assert.match(r.stderr, /\[mtf\] recorded for the order gate: .*MNQ\.json/);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'mtf', 'MNQ.json'), 'utf8')).recordedAt, AT.toISOString());
   assert.throws(() => mtf.mtf({ file: CSV, record: true, symbol: 'MN Q' }, { env: {}, now: clock() }), e => e instanceof cli.OpError && /--symbol=<ROOT>/.test(e.message) && /^4h: /.test(e.text));
-  assert.throws(() => mtf.mtf({ file: CSV, record: true, symbol: 'MNQ' }, { env: { FTH_AUTONOMOUS: '1' } }), /runner records the read itself/);
+  // Autonomous: the read with a note, nothing recorded (even with no symbol: record is not honoured at all).
+  const autoHome = tmpDir();
+  const plain = mtf.mtf({ file: CSV }, { env: {}, now: clock() }).text;
+  for (const args of [{ symbol: 'MNQ' }, {}, { symbol: 'MN Q' }]) {
+    const a = mtf.mtf({ file: CSV, record: true, ...args }, { env: { FTH_HOME: autoHome, FTH_AUTONOMOUS: '1' }, now: clock(), tool: true });
+    assert.strictEqual(a.text, plain);
+    assert.strictEqual(a.stderr, '[mtf] note: record ignored - the autonomous runner records the read itself\n', 'the tool\'s wording');
+  }
+  assert.deepStrictEqual(fs.readdirSync(autoHome), [], 'nothing recorded');
   assert.throws(() => mtf.mtf({}, {}), /usage: mtf\.js/);
   assert.deepStrictEqual(mtf.parseArgv(['f', '--symbol', 'MNQ', '--tf=15, 60', '--record']), { tf: [15, 60], daily: null, json: false, file: 'f', record: true, symbol: 'MNQ' });
   assert.throws(() => mtf.parseArgv(['f', 'g']), /unknown argument: g/);
@@ -210,7 +224,19 @@ test('bars: fetch through the broker; only its own arguments reach the file writ
   await assert.rejects(bars.fetch({ symbol: 'MNQ', count: 10, out: '/tmp/fth/MNQ-1m.json' }, { env, now }), /--out: a \.json file under .*bars-scratch\/ \(outside it/);
   assert.ok(!fs.existsSync(path.join(home, 'x.json')));
   await assert.rejects(bars.fetch({ symbol: 'MNQ', daily: true, record: true }, { env, now }), /--record reads trigger bars/);
-  await assert.rejects(bars.fetch({ symbol: 'MNQ', record: true }, { env: { ...env, FTH_AUTONOMOUS: '1' }, now }), /runner records the read itself/);
+  // Autonomous: the bars are fetched, record is ignored with a note, and no read is recorded (daily too: record is not honoured at all).
+  const autoHome = tmpDir();
+  fs.copyFileSync(path.join(home, 'brokers.json'), path.join(autoHome, 'brokers.json'));
+  const autoEnv = { ...env, FTH_HOME: autoHome, FTH_AUTONOMOUS: '1' };
+  const a = await bars.fetch({ symbol: 'MNQ', timeframe: 1, count: 10, record: true }, { env: autoEnv, now });
+  assert.ok(a.text.startsWith('wrote 6 1-minute bars for MNQ ') && !/recorded/.test(a.text), a.text);
+  assert.strictEqual(a.stderr, '[bars] note: --record ignored - the autonomous runner records the read itself\n');
+  const d = await bars.fetch({ symbol: 'MNQ', daily: true, count: 5, record: true }, { env: autoEnv, now, tool: true });
+  assert.strictEqual(d.stderr, '[bars] note: record ignored - the autonomous runner records the read itself\n');
+  assert.ok(!fs.existsSync(path.join(autoHome, 'mtf')), 'no mtf record');
+  assert.ok(fs.existsSync(path.join(home, 'mtf', 'MNQ.json')), 'the same call outside autonomous mode recorded');
+  // A broker failure is still a failure, not hidden behind the note.
+  await assert.rejects(bars.fetch({ symbol: 'MNQ', record: true }, { env: { PATH: process.env.PATH, FTH_HOME: tmpDir(), FTH_AUTONOMOUS: '1', FTH_BROKER: 'nope' }, now }), e => /^unknown broker "nope"/.test(e.message) && !/note: /.test(e.message));
   assert.deepStrictEqual(bars.parseArgv(['--symbol=mnq', '--timeframe', '5', '--daily', '--out', 'f.json']), { symbol: 'MNQ', timeframe: 5, daily: true, count: null, out: 'f.json', record: false });
 });
 

@@ -18,8 +18,8 @@
  *
  * scan with record also records which rules strategies fired on the last
  * closed bar (only those on the bars' timeframe), for the order gate's trigger
- * check (trading/signal-state.js); refused in autonomous runs, where the
- * runner records every bar.
+ * check (trading/signal-state.js); ignored in autonomous runs, where the
+ * runner records every bar (the scan is returned with a note saying so).
  */
 
 const fs = require('fs');
@@ -29,7 +29,7 @@ const { buildSignals, writeSignals } = require('../trading/signal-state');
 const { timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
-const { context, say, withText, options } = require('./cli');
+const { context, say, ignoredRecord, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 const { scanSummary, recentLines } = require('./compact');
 
@@ -90,9 +90,10 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   const results = scanStrategies(strategies, bars, { symbol, now });
   const text = scanText(results, bars, { view, name, symbol });
   if (!record) return { text };
+  const ignored = ignoredRecord(c, 'strategies', 'the autonomous runner records every bar itself');
+  if (ignored) return { text, stderr: ignored };
   return withText(text, () => {
     const record = say(c, '--record', 'record');
-    if (c.env.FTH_AUTONOMOUS === '1') throw new Error(`${record}: the autonomous runner records every bar itself`);
     const pid = liveRunner(c.env);
     if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
     if (!symbol) throw new Error(say(c, '--record needs --symbol <ROOT>', 'record needs symbol (a contract root)'));

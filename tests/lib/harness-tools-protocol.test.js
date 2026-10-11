@@ -130,10 +130,12 @@ test('callTool: the clock is read first where the CLI reads it first; deep argum
 test('callTool: numbers and booleans sent as strings are repaired before validation and reach the operation; out of range still refused', async () => {
   const home = tmpDir();
   const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
-  // record "true" reaches bars.js as true (args() reads record === true), and timeframe "3" as minutes.
-  const r = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '3', record: 'true' }, { env: auto });
-  assert.doesNotMatch(r.content[0].text, /invalid arguments/);
-  assert.match(r.content[0].text, /^\[bars\] record: the autonomous runner records the read itself$/m);
+  // record "true" reaches bars.js as true (args() reads record === true: the autonomous note says it was asked), and timeframe "3" as minutes.
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
+  const r = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '3', count: '10', record: 'true' }, { env: { ...process.env, ...auto, FTH_ENV_FILE: path.join(home, 'none.env'), FTH_REPLAY_NOW: '' } });
+  assert.strictEqual(r.isError, undefined, r.content[0].text);
+  assert.match(r.content[0].text, /^wrote \d+ 3-minute bars for MNQ /);
+  assert.match(r.content[0].text, /^\[bars\] note: record ignored - the autonomous runner records the read itself$/m);
   const out = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '90' }, { env: auto });
   assert.match(out.content[0].text, /^\[harness\] invalid arguments for bars_fetch: timeframe: minutes per bar, 1 to 60, or "daily" \(got 90\)/);
   const frac = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: '1.5' }, { env: auto });
@@ -190,6 +192,46 @@ test('callTool: a Parquet or Excel file under the bars directory is refused by e
   }
 });
 
+test('callTool: in an autonomous run record is ignored, not an error: the result with a note, and nothing the gate reads is written', async () => {
+  const home = tmpDir();
+  fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
+  fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(home, 'bars', 'NQ-3m.csv'));
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
+  const bars = path.join(home, 'bars', 'NQ-3m.csv');
+  const base = { ...process.env, FTH_HOME: home, FTH_ENV_FILE: path.join(home, 'none.env'), FTH_REPLAY_NOW: '' };
+  const auto = { ...base, FTH_AUTONOMOUS: '1' };
+  const manual = { ...base, FTH_AUTONOMOUS: '' };
+  const cases = [
+    ['strategies_scan', { bars, symbol: 'MNQ' }, 'strategies', 'every bar', path.join(home, 'signals', 'MNQ-3m.json')],
+    ['mtf_read', { bars, symbol: 'MNQ' }, 'mtf', 'the read', path.join(home, 'mtf', 'MNQ.json')],
+    ['bars_fetch', { symbol: 'MNQ', timeframe: 3, count: 10 }, 'bars', 'the read', path.join(home, 'mtf', 'MNQ.json')],
+  ];
+  for (const [tool, args, tag, what] of cases) {
+    const plain = await callTool(tool, args, { env: auto });
+    const r = await callTool(tool, { ...args, record: true }, { env: auto });
+    assert.strictEqual(r.isError, undefined, `${tool}: ${r.content[0].text}`);
+    const note = `[${tag}] note: record ignored - the autonomous runner records ${what} itself\n`;
+    assert.ok(r.content[0].text.endsWith(note), `${tool}: ${r.content[0].text}`);
+    // The result is the one without record (bars_fetch rewrites its file: the same line), plus the note.
+    assert.strictEqual(r.content[0].text, `${plain.content[0].text}${note}`, tool);
+    assert.doesNotMatch(r.content[0].text, /recorded for the order gate/, tool);
+  }
+  assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing the order gate reads was written');
+  // Without the autonomous flag the same calls record, as before.
+  for (const [tool, args, , , file] of cases) {
+    const r = await callTool(tool, { ...args, record: true }, { env: manual });
+    assert.strictEqual(r.isError, undefined, `${tool}: ${r.content[0].text}`);
+    assert.match(r.content[0].text, /recorded for the order gate/, tool);
+    assert.doesNotMatch(r.content[0].text, /note: record ignored/, tool);
+    assert.ok(fs.existsSync(file), `${tool}: ${file}`);
+  }
+  // A real failure in an autonomous run with record stays an error: the broker's, not a note (an unknown broker).
+  const failed = await callTool('bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, { env: { ...auto, FTH_BROKER: 'nope' } });
+  assert.strictEqual(failed.isError, true);
+  assert.match(failed.content[0].text, /^\[bars\] unknown broker "nope"/m);
+  assert.doesNotMatch(failed.content[0].text, /note: record ignored/);
+});
+
 test('callTool: record is refused while an autonomous runner holds its lock, whatever the server\'s environment', async () => {
   const { spawn } = require('child_process');
   const home = tmpDir();
@@ -225,11 +267,10 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
   const bars = path.join(home, 'bars', 'NQ-3m.csv');
   const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
   const cases = [
-    ['strategies_scan', { bars, symbol: 'MNQ', record: true }, auto, /^\[strategies\] record: the autonomous runner records every bar itself$/m],
-    ['mtf_read', { bars, symbol: 'MNQ', record: true }, auto, /^\[mtf\] record: the autonomous runner records the read itself$/m],
+    ['strategies_scan', { bars, symbol: 'MNQ', record: true }, auto, /^\[strategies\] note: record ignored - the autonomous runner records every bar itself$/m],
+    ['mtf_read', { bars, symbol: 'MNQ', record: true }, auto, /^\[mtf\] note: record ignored - the autonomous runner records the read itself$/m],
     ['mtf_read', { bars, record: true }, { FTH_HOME: home }, /^\[mtf\] record needs symbol \(a contract root, e.g\. MNQ\)$/m],
     ['bars_fetch', { symbol: 'MNQ', timeframe: 'daily', record: true }, { FTH_HOME: home }, /^\[bars\] record reads trigger bars \(minutes\), not timeframe "daily"$/m],
-    ['bars_fetch', { symbol: 'MNQ', timeframe: 3, record: true }, auto, /^\[bars\] record: the autonomous runner records the read itself$/m],
     // An impossible date that fits the pattern reaches the operation.
     ['blackouts_add', { start: '2999-02-30T10:00:00Z', end: '2999-02-30T09:00:00Z', reason: 'x' }, { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'b.json') }, /^\[blackouts\] start and end must be ISO times with end after start$/m],
   ];

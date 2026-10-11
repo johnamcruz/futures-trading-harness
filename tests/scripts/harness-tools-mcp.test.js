@@ -4,7 +4,7 @@
 // the harness's own MCP client: the handshake and tool list; each tool's text equal to what the
 // matching CLI prints on the parity fixtures (stdout, then its stderr notes; a failure's
 // `[script] message`), each side on its own identical fixture home; bars path attacks refused
-// without echoing a file; unknown arguments refused; record refused in autonomous runs; the
+// without echoing a file; unknown arguments refused; record ignored (with a note, not an error) in autonomous runs; the
 // output cap; and the replay clock honored and refused as the CLIs honor and refuse it.
 
 const test = require('node:test');
@@ -235,7 +235,7 @@ test('harness-tools server: bars path attacks are refused without echoing a file
   }
 });
 
-test('harness-tools server: a symlinked bars directory, record in autonomous runs, and the output cap are refused', { timeout: 120000 }, async () => {
+test('harness-tools server: a symlinked bars directory and the output cap are refused; record in autonomous runs is ignored with a note', { timeout: 120000 }, async () => {
   const home = fixtureHome();
   const linkedDir = path.join(home, 'bars-link');
   fs.symlinkSync(path.join(home, 'bars'), linkedDir);
@@ -251,12 +251,12 @@ test('harness-tools server: a symlinked bars directory, record in autonomous run
     assert.strictEqual(viaLink.isError, true);
     assert.match(viaLink.text, /bars-link is a symlink/);
     for (const [tool, args, why] of [
-      ['strategies_scan', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[strategies\] record: the autonomous runner records every bar itself/],
-      ['mtf_read', { bars: tmpBars, symbol: 'MNQ', record: true }, /\[mtf\] record: the autonomous runner records the read itself/],
-      ['bars_fetch', { symbol: 'MNQ', timeframe: 7, record: true }, /\[bars\] record: the autonomous runner records the read itself/],
+      ['strategies_scan', { bars: tmpBars, symbol: 'MNQ', record: true }, /\n\[strategies\] note: record ignored - the autonomous runner records every bar itself\n$/],
+      ['mtf_read', { bars: tmpBars, symbol: 'MNQ', record: true }, /^Trend rule: [^]*\n\[mtf\] note: record ignored - the autonomous runner records the read itself\n$/m],
+      ['bars_fetch', { symbol: 'MNQ', timeframe: 7, record: true }, /^wrote \d+ 7-minute bars for [^]*\n\[bars\] note: record ignored - the autonomous runner records the read itself\n$/],
     ]) {
       const r = await call(client, tool, args);
-      assert.strictEqual(r.isError, true, tool);
+      assert.strictEqual(r.isError, false, `${tool}: ${r.text}`);
       assert.match(r.text, why, tool);
     }
     assert.ok(!fs.existsSync(path.join(home, 'signals')) && !fs.existsSync(path.join(home, 'mtf')), 'nothing recorded');
