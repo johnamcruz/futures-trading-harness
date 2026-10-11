@@ -154,6 +154,7 @@ function createRunner(deps) {
       log(why, 'error');
     }
   };
+  const partnerLookups = new Set();
   // The other contract of the family (NQ for MNQ): a prop budget may size into it, so its specs are recorded too.
   async function lookUpPartner(root) {
     const fam = familyOf(root);
@@ -184,7 +185,11 @@ function createRunner(deps) {
       return { ...sym, lookupFailedAt: now.getTime() };
     }
     checkSpec(String(sym.symbol).toUpperCase(), c);
-    lookUpPartner(String(sym.symbol).toUpperCase()); // not awaited: it never holds up the symbol's poll (it catches its own errors)
+    // Not awaited here (it never holds up the symbol's poll; it catches its own errors): the step awaits it
+    // before it returns, so a one-step process (replay) never closes the broker under it.
+    const lookup = lookUpPartner(String(sym.symbol).toUpperCase());
+    partnerLookups.add(lookup);
+    lookup.finally(() => partnerLookups.delete(lookup));
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
       return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
@@ -602,6 +607,9 @@ function createRunner(deps) {
         // the kill switch could not be written either; keep going
       }
       return Math.min(MAX_RETRY_MS, IDLE_MS * 2 ** Math.min(errors, 4));
+    } finally {
+      // The partner lookups this step started (after its polls and orders): settled before the step returns.
+      await Promise.all([...partnerLookups]);
     }
   }
 

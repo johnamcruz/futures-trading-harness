@@ -878,3 +878,28 @@ test('the broker\'s tick specs at the contract lookup: the family\'s other contr
   assert.strictEqual(logs.filter(m => /^ES: contract lookup failed \(HTTP 500\); a prop entry that may size into ES is refused until the broker's tick specs for it are recorded/.test(m)).length, 1, `once a day, however often it is retried: ${logs.join('\n')}`);
   assert.ok(asked.filter(s => s === 'ES').length >= 2, 'retried at the re-checks');
 });
+
+test('the partner lookup never holds up the symbol\'s poll, and the step settles it before returning (a one-step replay process never closes the broker under it)', async () => {
+  const clockRef = { t: et(10, 0) };
+  const events = [];
+  let release;
+  const gate = new Promise(r => { release = r; });
+  const runner = bareRunner({
+    cfg: { timeframe: 3 }, clockRef,
+    client: {
+      async activeContract(s) {
+        if (s === 'NQ') { events.push('partner asked'); await gate; events.push('partner answered'); }
+        return { id: s, tickSize: 0.25, tickValue: s === 'NQ' ? 5 : 0.5 };
+      },
+      async closedBars() { events.push('polled'); return []; },
+    },
+  });
+  let done = false;
+  const stepping = runner.step().then(() => { done = true; });
+  for (let i = 0; i < 20 && !events.includes('polled'); i += 1) await new Promise(r => setImmediate(r));
+  assert.ok(events.includes('polled') && !events.includes('partner answered'), `polled while the partner lookup waits: ${events.join(', ')}`);
+  assert.strictEqual(done, false, 'the step waits for the lookup it started');
+  release();
+  await stepping;
+  assert.deepStrictEqual(events.slice(-1), ['partner answered']);
+});
