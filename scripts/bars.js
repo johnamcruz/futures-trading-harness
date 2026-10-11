@@ -8,55 +8,24 @@
  *   (default count: what the runner keeps, 250 hours of bars, enough for the 4h trend: 5000 3m bars)
  *   node scripts/bars.js --symbol MNQ --daily [--count 60]          daily bars for mtf.js --daily
  *
- * --record also records the multi-timeframe read for the order gate (as
- * mtf.js --record); refused in autonomous runs, where the runner records it.
- * Prints one line: the file, the contract, the bar count, and when the last
- * bar closed.
+ * --out takes a .json file under /tmp/fth/ (and nothing else). --record also
+ * records the multi-timeframe read for the order gate (as mtf.js --record);
+ * refused in autonomous runs, where the runner records it. Prints one line:
+ * the file, the contract, the bar count, and when the last bar closed.
+ * The operation lives in scripts/lib/harness-tools/bars.js.
  */
 
 'use strict';
 
-require('./lib/env-file').loadEnvForCli('bars');
+const { fetch, parseArgv } = require('./lib/harness-tools/bars');
+const { runCli } = require('./lib/harness-tools/cli');
 
-const { fetchBarsToFile } = require('./lib/bars-fetch');
-const path = require('path');
-const { withAdapter } = require('./lib/broker/adapter');
-const { writeMtfRecord, recordFile } = require('./lib/trading/mtf-state');
-const { harnessHome } = require('./lib/paths');
-const { harnessNow } = require('./lib/trading/harness-now');
-
-function parse(argv) {
-  const o = { symbol: null, timeframe: 3, daily: false, count: null, out: null, record: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const [flag, inline] = argv[i].split(/=(.*)/s);
-    const value = () => (inline !== undefined ? inline : argv[++i]);
-    if (flag === '--symbol') o.symbol = String(value() || '').toUpperCase();
-    else if (flag === '--timeframe') o.timeframe = Number(value());
-    else if (flag === '--count') o.count = Number(value());
-    else if (flag === '--out') o.out = value();
-    else if (flag === '--daily') o.daily = true;
-    else if (flag === '--record') o.record = true;
-    else throw new Error(`unknown argument: ${argv[i]} (usage: bars.js --symbol MNQ [--timeframe 3 | --daily] [--count N] [--out file] [--record])`);
-  }
-  return o;
+/** Run with argv (after the script name): loads the user's .env, prints, and sets the exit code. */
+function main(argv) {
+  require('./lib/env-file').loadEnvForCli('bars');
+  return runCli('bars', () => fetch(parseArgv(argv)));
 }
 
-async function main(argv) {
-  const o = parse(argv);
-  // Bars up to the harness clock: a replay broker's replayed time, else the wall clock.
-  const now = harnessNow();
-  if (o.record && o.daily) throw new Error('--record reads trigger bars (minutes), not daily bars');
-  if (o.record && process.env.FTH_AUTONOMOUS === '1') throw new Error('--record: the autonomous runner records the read itself');
-  const r = await withAdapter({ root: path.resolve(__dirname, '..'), env: process.env }, broker => fetchBarsToFile({ client: broker, ...o, now }));
-  process.stdout.write(`wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`);
-  if (o.record) {
-    const rec = writeMtfRecord(harnessHome(), o.symbol, r.bars, { source: r.file, now });
-    process.stdout.write(`${rec.line} (recorded for the order gate: ${recordFile(harnessHome(), o.symbol)})\n`);
-  }
-  return 0;
-}
+if (require.main === module) main(process.argv.slice(2));
 
-main(process.argv.slice(2)).then(code => { process.exitCode = code; }, err => {
-  process.stderr.write(`[bars] ${err.message}\n`);
-  process.exitCode = 1;
-});
+module.exports = { main };

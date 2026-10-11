@@ -6,60 +6,32 @@
  *
  *   node scripts/blackouts.js add --start 2026-10-14T12:25:00Z --end 2026-10-14T12:40:00Z --reason "CPI"
  *   node scripts/blackouts.js list
+ *
+ * The operations live in scripts/lib/harness-tools/blackouts.js.
  */
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const { addWindow, list, add } = require('./lib/harness-tools/blackouts');
 const { loadConfig } = require('./lib/trading/config');
 const { harnessNow } = require('./lib/trading/harness-now');
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 function option(args, name) {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];
 }
 
-function readList(file) {
-  if (!fs.existsSync(file)) return [];
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!Array.isArray(parsed)) throw new Error(`${file} must contain a JSON array`);
-  return parsed;
-}
-
-/** Merge a new window into the list; returns the list to write. */
-function addWindow(list, { start, end, reason }, now = new Date()) {
-  const s = Date.parse(start);
-  const e = Date.parse(end);
-  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) throw new Error('--start and --end must be ISO times with end after start');
-  if (e - s > MAX_WINDOW_MS) throw new Error('a blackout window may be at most 12 hours');
-  if (e < now.getTime()) throw new Error('that window has already ended');
-  const kept = list.filter(b => !(Date.parse(b && b.end) < now.getTime() - DAY_MS));
-  const entry = { start: new Date(s).toISOString(), end: new Date(e).toISOString(), reason: String(reason || '').slice(0, 120) };
-  if (!kept.some(b => b.start === entry.start && b.end === entry.end)) kept.push(entry);
-  return kept.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-}
-
+/** Run one command; prints with `out` and returns the exit code (throws on failure). */
 function run(argv, { env = process.env, now = harnessNow(env), out = s => process.stdout.write(s) } = {}) {
   const [cmd, ...args] = argv;
-  const file = loadConfig(env).blackoutsFile;
-  if (cmd === 'list') {
-    out(`${JSON.stringify(readList(file), null, 2)}\n`);
-    return 0;
-  }
-  if (cmd === 'add') {
-    const next = addWindow(readList(file), { start: option(args, '--start'), end: option(args, '--end'), reason: option(args, '--reason') }, now);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
-    fs.renameSync(tmp, file);
-    out(`blackouts: ${next.length} window(s) in ${file}\n`);
-    return 0;
-  }
-  throw new Error('usage: blackouts.js add --start <ISO> --end <ISO> --reason <text> | list');
+  loadConfig(env);
+  const ctx = { env, now: () => now };
+  let r;
+  if (cmd === 'list') r = list({}, ctx);
+  else if (cmd === 'add') r = add({ start: option(args, '--start'), end: option(args, '--end'), reason: option(args, '--reason') }, ctx);
+  else throw new Error('usage: blackouts.js add --start <ISO> --end <ISO> --reason <text> | list');
+  out(r.text);
+  return 0;
 }
 
 if (require.main === module) {

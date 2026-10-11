@@ -54,7 +54,9 @@ function commands() {
 }
 
 const COMMANDS = commands();
-const source = script => fs.readFileSync(path.join(ROOT, 'scripts', script), 'utf8');
+// A CLI and its operations (scripts/lib/harness-tools/<script>, which parses its argv).
+const source = script => [path.join(ROOT, 'scripts', script), path.join(ROOT, 'scripts', 'lib', 'harness-tools', script)]
+  .filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n');
 
 test('skills: every script and rl entry point the docs name exists', () => {
   const missing = [];

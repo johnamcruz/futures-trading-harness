@@ -8,47 +8,17 @@
  * Input: the JSON returned by get_bars ({ bars: [{t,o,h,l,c,v}] })
  * or a bare array of bars. Output: JSON (see scripts/lib/trading/market-snapshot.js).
  * Use closed bars only (includePartialBar=false), oldest first.
+ * The operation lives in scripts/lib/harness-tools/market-snapshot.js.
  */
 
 'use strict';
 
-const { readBarsArg } = require('./lib/backtest/data');
-const { PARAMS, snapshot } = require('./lib/trading/market-snapshot');
+const { snapshot, parseArgv } = require('./lib/harness-tools/market-snapshot');
+const { runCli } = require('./lib/harness-tools/cli');
 
-function parseArgs(argv) {
-  const overrides = {};
-  let file = null;
-  // --name=value or --name value.
-  const args = [];
-  for (let i = 0; i < argv.length; i += 1) {
-    const bare = /^--[A-Za-z0-9]+$/.test(argv[i]);
-    if (bare && argv[i + 1] !== undefined) { args.push(`${argv[i]}=${argv[i + 1]}`); i += 1; } else args.push(argv[i]);
-  }
-  for (const arg of args) {
-    const m = /^--([A-Za-z0-9]+)=(.+)$/.exec(arg);
-    if (m) {
-      if (!(m[1] in PARAMS)) throw new Error(`unknown parameter --${m[1]} (known: ${Object.keys(PARAMS).join(', ')})`);
-      const n = Number(m[2]);
-      if (!Number.isFinite(n)) throw new Error(`--${m[1]} must be a number`);
-      overrides[m[1]] = n;
-    } else if (file === null) {
-      file = arg;
-    } else {
-      throw new Error(`unexpected argument: ${arg}`);
-    }
-  }
-  if (file === null) throw new Error('usage: market-snapshot.js <bars.json | -> [--param=value ...]');
-  return { file, overrides };
-}
+/** Run with argv (after the script name): prints and sets the exit code. */
+const main = argv => runCli('market-snapshot', () => snapshot(parseArgv(argv)));
 
-function main() {
-  try {
-    const { file, overrides } = parseArgs(process.argv.slice(2));
-    process.stdout.write(`${JSON.stringify(snapshot(readBarsArg(file), overrides), null, 2)}\n`);
-  } catch (err) {
-    process.stderr.write(`[market-snapshot] ${err.message}\n`);
-    process.exit(1);
-  }
-}
+if (require.main === module) main(process.argv.slice(2));
 
-main();
+module.exports = { main };
