@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "runId": "opencode-e2e-2",
+  "hash": "03ed80769879d638e5c4d401ce49a4280ad295de2c3de37abd3c457d45a72d68",
+  "broker": "backtester",
+  "start": "2026-06-02T00:00:00.000Z",
+  "end": "2026-06-03T00:00:00.000Z",
+  "harness": "custom",
+  "model": null,
+  "autotraderFile": null,
+  "createdAt": "2026-10-11T18:53:39.809Z",
+  "lastT": "2026-06-02T19:50:00.000Z",
+  "daysDone": [
+    "2026-06-02"
+  ],
+  "tradesSince": "2026-06-02T19:50:00.000Z"
+}

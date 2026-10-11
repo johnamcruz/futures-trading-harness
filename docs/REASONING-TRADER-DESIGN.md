@@ -260,8 +260,40 @@ cycles, failed cycles, the stand-aside rate (trade cycles reporting
 `no-trade`), trades (closed round trips, net of fees), win rate, mean R,
 expectancy, net, MAE and MFE in R when the broker reports them, and the
 gate's refusals by check. Next to the rules-only baseline and the current
-policy (from `scripts/backtest.js` on the same window) and pass and blow
-rates over combine attempts: later, with a prop attempt per run.
+policy (from `scripts/backtest.js` on the same window): later.
+
+The combine verdict (`scripts/lib/replay/verdict.js`) scores each calendar
+month as a prop attempt, so a year replayed month by month reads as months
+passed and failed, as RL is trained to pass them. A real attempt inside a
+replay isn't used: while one runs, the gate lets only the policy strategy
+enter. Instead the report replays the run's fills through `combine.js`,
+the state machine the RL env and the backtester drive, so training and
+replay judge alike:
+
+- **Fresh each month** (the default): every calendar month, by CME trading
+  day (17:00 Chicago, `clock.js` `tradingDayKey`), starts at the account's
+  starting balance; a fill at 17:30 Chicago on the 31st is the next month's.
+- **Money**: every fill's realized P&L less its fees, as the balance moves
+  (fees on the opening fill too).
+- **Rules** (`accounts/<name>/ACCOUNT.md`): a pass is checked at a day's end
+  (profit at the target; the best day at most `consistency_pct` of the
+  profit); equity at the max-loss floor fails the month (`trailing_eod`: the
+  floor trails the highest end-of-day balance and locks at the start;
+  `static`: fixed); the firm's daily limit flattens the trade there and
+  stops the day, not the attempt. `sessions` is the training length, not a
+  firm rule: a month never times out (as `prop-state.js` for a live
+  attempt). The accounts have no minimum-days rule to apply.
+- **Approximations**, stated in the output: intraday equity is a round
+  trip's MAE (`maeDollars`) less its closing fee against the balance when it
+  closed (trades open together are not added up; without MAE only the close
+  is seen); positions opened after the daily limit that day, or carried in
+  from the month before, are left out.
+- **Output** per month: PASS and the day, FAIL with the rule and day, or
+  NOT YET with profit vs target, what consistency still needs, and days
+  traded; the max loss used vs the limit, the daily P&L path, and a year
+  summary. Account: `--account`, else the runner config's `account` when it
+  names an account profile, else the policy strategies' account, else
+  `topstep_100k`.
 
 ### Cost
 

@@ -8,7 +8,9 @@
  *
  *   node scripts/replay.js run --config replay.json [--max-cycles N]   run (or resume) a replay
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
- *   node scripts/replay.js report <run dir | --config replay.json>     month by month; writes report.md
+ *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>]   month by month, with each
+ *       month's combine verdict (a fresh attempt each month; account: --account, the runner config's, the prop
+ *       strategy's, else topstep_100k); writes report.md
  *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
  *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups;
  *       --out: write elsewhere (required for an unfinished run, outside its run home)
@@ -33,11 +35,13 @@ const { decisionPoints, tradingDays } = require('./lib/replay/schedule');
 const { seedRunHome, runReplay } = require('./lib/replay/driver');
 const { readRun } = require('./lib/replay/store');
 const { summarize, toMarkdown, toText } = require('./lib/replay/report');
+const { resolveAccount, evaluate, verdictText, verdictMarkdown } = require('./lib/replay/verdict');
+const { loadAccounts, accountNamed } = require('./lib/trading/accounts');
 const { writeLabels, summaryText } = require('./lib/replay/labels');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -66,12 +70,17 @@ function points(run) {
 
 function report(argv) {
   const dir = arg(argv, '--config') ? load(argv).paths.runDir : argv[1];
-  if (!dir) throw new Error(USAGE);
+  if (!dir || dir.startsWith('--')) throw new Error(USAGE);
   const { manifest, days } = readRun(path.resolve(dir));
   const summary = summarize(days);
+  // The combine verdict: the account named, else the run's runner config's, the prop strategy's, or the default.
+  let runner = {};
+  try { runner = JSON.parse(fs.readFileSync(path.join(dir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { /* none: no runner account */ }
+  const pick = resolveAccount({ override: arg(argv, '--account'), runnerAccount: runner.account, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts });
+  const verdict = evaluate(days, accountNamed(ROOT, pick.name, process.env), { daysDone: manifest.daysDone || null, why: pick.why });
   const file = path.join(path.resolve(dir), 'report.md');
-  fs.writeFileSync(file, toMarkdown(summary, manifest));
-  process.stdout.write(toText(summary));
+  fs.writeFileSync(file, `${toMarkdown(summary, manifest)}\n${verdictMarkdown(verdict)}`);
+  process.stdout.write(toText(summary) + verdictText(verdict));
   say(`wrote ${file}`);
   return 0;
 }
