@@ -216,7 +216,8 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   }
   // An Attempt line that names the account but says it isn't running doesn't confirm it.
   for (const t of ['Attempt: topstep_100k not active', 'Attempt: topstep_100k not started (should be active)', 'Attempt: topstep_100k listed active but not running',
-    'Attempt: topstep_100k status: active? none running', 'Attempt: topstep_100k was active, now none', 'Attempt: topstep_100k active but not running']) {
+    'Attempt: topstep_100k status: active? none running', 'Attempt: topstep_100k was active, now none', 'Attempt: topstep_100k active but not running',
+    'Attempt: topstep_100k active, budget $900, none currently running']) {
     assert.strictEqual(record(t, active).phase1, null, t);
   }
   // Exact names: a longer account name never stands in for this one.
