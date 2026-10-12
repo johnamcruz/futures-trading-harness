@@ -94,7 +94,7 @@ function briefingRecorder(home, cfg, now, env = process.env) {
     try {
       // The news blackouts (premarket records them): the briefing says which is in force or next.
       let blackouts = null;
-      try { blackouts = readBlackouts(loadConfig(env).blackoutsFile); } catch (_err) { blackouts = null; }
+      try { blackouts = readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { blackouts = { items: [], error: err.message }; }
       return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);

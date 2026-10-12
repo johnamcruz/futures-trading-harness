@@ -199,9 +199,11 @@ again.
   rules) and the rules below (the trend rule, the multi-timeframe table,
   its min R:R). A setup the trend rule allows, `aligned` for its side, with
   room past what it needs and confluence with it is the opportunity this
-  harness looks for: take it at the strategy's normal size and let its own
-  exit work (don't bank before its trail or target). A policy strategy's
-  verdict is placed as given; the facts never change it.
+  harness looks for, when the rest of this step agrees and it isn't
+  `blocked`: the strategy's normal size (position-sizing and the prop
+  budget), and let its own exit work (don't bank before its trail or
+  target). A policy strategy's verdict is placed as given; the facts never
+  change it.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value

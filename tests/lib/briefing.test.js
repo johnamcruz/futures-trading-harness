@@ -254,7 +254,7 @@ test('a setup\'s facts, never a grade: the trend rule and the read for its side,
   assert.ok(!('grade' in a) && !('why' in a) && !('blocked' in a));
   assert.match(g({ stopDistance: 16.67 }).facts[2], /round number at 1\.5R; it needs 2R \(the level comes first\)/);
   assert.deepStrictEqual(g({ mtf: { style: 'trend', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
-  assert.match(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], /^a reversal strategy: the trend rule doesn't bind it/);
+  assert.match(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
   assert.strictEqual(g({ confluence: { with: [], against: ['ema_cross'] } }).facts[3], 'confluence: none with it; against ema_cross');
   assert.strictEqual(g({}, { vwapSide: 'above' }).facts[4], 'price above the VWAP (the other side)');
   assert.strictEqual(g({}, { vwapSide: null }).facts[4], 'the VWAP unknown');
@@ -381,4 +381,37 @@ test('bar_briefing by month: a note only when the month differs from the briefin
   assert.match(barBriefing({ symbol: 'MNQ:2026-09' }, { env }).text, /^Note: you asked for MNQ:2026-09; this briefing is for NQ:2026-06/);
   assert.doesNotMatch(barBriefing({ symbol: 'MNQ:2026-06' }, { env }).text, /^Note:/);
   assert.doesNotMatch(barBriefing({ symbol: 'MNQ' }, { env }).text, /^Note:/);
+});
+
+test('levels merge within the contract\'s own tick (contracts.js), in the nearest levels too; VWAP rounded; an unknown R spelled out', () => {
+  const near = symbol => B.buildBriefing({ symbol, bars: at(370), minutes: 3 }).sections.m3.data.nearestLiquidity.below.map(x => x.name);
+  // The opening range high 27068 and the last 3m swing low 27067: two levels a point apart on NQ, one on YM (tick 1).
+  assert.ok(near('NQ').includes('opening range high') && near('NQ').includes('last 3m swing low'), near('NQ').join(' | '));
+  assert.ok(near('YM').includes('opening range high / last 3m swing low'), near('YM').join(' | '));
+  assert.ok(near('YM:2026-06').includes('opening range high / last 3m swing low'), 'a contract by month uses its root\'s tick');
+  const d = build(370).sections.m3.data;
+  for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below]) assert.strictEqual(x.price, Math.round(x.price * 100) / 100, `${x.name} ${x.price}`);
+  assert.ok([...d.nearestLiquidity.above, ...d.nearestLiquidity.below].some(x => /^VWAP/.test(x.name)), 'control: the VWAP is among them');
+  // A candidate without a stop has no R: the summary says so.
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', entryRef: 1, stopDistance: null, mtf: { style: 'trend', longAllowed: true }, confluence: { with: [], against: [] }, exit: {} }];
+  const text = B.renderBriefing(build(1300, null, { scan }), { now: new Date(build(1300).closedAt) });
+  assert.match(text, /orb long: .*its stop is unknown, so no R/);
+  assert.match(text, /levels ahead in its R: [^\n]*\(\d[\d.]* pts, R unknown\)/);
+});
+
+test('a reversal setup says whether it fades the prevailing trend (half size, nearest target) or goes with it', () => {
+  const r = { name: 'crt_1h', direction: 'short', status: 'active', entryRef: 100, stopDistance: 10, exit: {}, confluence: { with: [], against: [] } };
+  const fact = mtf => B.candidate({ ...r, mtf: { style: 'reversal', shortAllowed: true, ...mtf } }, 100, [], {}).facts[0];
+  assert.strictEqual(fact({ prevailing: { minutes: 240, label: '4h', trend: 'up' } }), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
+  assert.strictEqual(fact({ prevailing: { minutes: 60, label: '1h', trend: 'down' } }), 'a reversal strategy, with the prevailing 1h down trend');
+  assert.strictEqual(fact({ prevailing: null }), 'a reversal strategy, no prevailing trend read');
+  assert.strictEqual(B.candidate({ ...r, mtf: { style: 'trend', shortAllowed: true } }, 100, [], { vwapSide: 'at' }).facts[4], 'price at the VWAP');
+});
+
+test('news: a blackout entry without a valid start and end is unknown (the gate refuses entries), and blocks a candidate', () => {
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', entryRef: 1, stopDistance: 10, mtf: { style: 'trend', longAllowed: true }, confluence: { with: [], against: [] }, exit: {} }];
+  const d = build(1300, null, { scan, blackouts: { items: [{ reason: 'CPI', start: 'garbage', end: '2099-01-01T00:00:00Z' }] } }).sections.m3.data;
+  assert.strictEqual(d.news.inBlackout, null);
+  assert.match(d.news.error, /an entry without a valid start and end\): the order gate refuses entries/);
+  assert.strictEqual(d.candidates[0].blocked, 'news unknown (the blackouts file can\'t be read)');
 });

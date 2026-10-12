@@ -290,14 +290,19 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const allowed = up ? mtf.longAllowed : mtf.shortAllowed;
   const align = (alignment && alignment[up ? 'long' : 'short']) || null;
   const conf = r.confluence || { with: [], against: [] };
+  // A reversal strategy may fade the prevailing trend; when it does, the skills' rule is half size and the nearest target.
+  const prev = mtf.prevailing || null;
+  const fading = prev && (up ? prev.trend === 'down' : prev.trend === 'up');
+  const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)`
+    : prev ? `a reversal strategy, with the prevailing ${prev.label} ${prev.trend} trend` : 'a reversal strategy, no prevailing trend read';
   const facts = [
-    mtf.style === 'reversal' ? 'a reversal strategy: the trend rule doesn\'t bind it (the multi-timeframe table\'s reversal row does)'
+    mtf.style === 'reversal' ? reversalFact
       : allowed === false ? `against the trend rule for a ${r.direction}` : allowed === true ? `the trend rule allows a ${r.direction}` : 'the trend rule unknown',
     `multi-timeframe read for a ${r.direction}: ${align || 'unknown'}`,
     inTheWay ? `first level in its way: ${inTheWay.name} at ${inTheWay.R}R; it needs ${needR}R (${inTheWay.R >= needR ? 'room past it' : 'the level comes first'})`
       : R > 0 ? `no level in its way found; it needs ${needR}R` : 'its stop is unknown, so no R',
     `confluence: ${(conf.with || []).length ? `with ${conf.with.join(', ')}` : 'none with it'}${(conf.against || []).length ? `; against ${conf.against.join(', ')}` : ''}`,
-    vwapSide ? `price ${vwapSide} the VWAP (${(up ? vwapSide === 'above' : vwapSide === 'below') ? 'its side' : 'the other side'})` : 'the VWAP unknown',
+    vwapSide === 'at' ? 'price at the VWAP' : vwapSide ? `price ${vwapSide} the VWAP (${(up ? vwapSide === 'above' : vwapSide === 'below') ? 'its side' : 'the other side'})` : 'the VWAP unknown',
     ...(lunch ? ['lunch lull'] : []),
   ];
   const newsBlock = !news || news.inBlackout === false ? null : news.inBlackout === true ? 'news blackout' : 'news unknown (the blackouts file can\'t be read)';
@@ -317,6 +322,9 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
 function newsState(blackouts, at) {
   // An unreadable blackouts file: unknown (the gate refuses entries then), never "no blackout".
   if (blackouts && blackouts.error) return { inBlackout: null, error: `the blackouts file can't be read (${blackouts.error}): the order gate refuses entries` };
+  // An entry without a valid start and end: the gate reads the whole file as unreadable (order-gate checkBlackouts).
+  const bad = ((blackouts && blackouts.items) || []).find(x => !(x && Number.isFinite(Date.parse(x.start)) && Number.isFinite(Date.parse(x.end))));
+  if (bad) return { inBlackout: null, error: 'the blackouts file can\'t be read (an entry without a valid start and end): the order gate refuses entries' };
   const items = ((blackouts && blackouts.items) || []).filter(x => Date.parse(x.end) > at.getTime()).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   const now = items.find(x => Date.parse(x.start) <= at.getTime());
   if (now) return { inBlackout: true, reason: now.reason || null, until: now.end };
