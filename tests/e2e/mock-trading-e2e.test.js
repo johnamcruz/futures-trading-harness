@@ -108,7 +108,12 @@ function signalOnFiredBar(w) {
   const fired = results.find(r => r.name === 'bos' && r.candidate);
   assert.ok(fired, 'bos fired on the bar');
   fs.appendFileSync(w.journal, `${JSON.stringify({ ts: now.toISOString(), kind: 'plan', contractId: 'MNQ', tags: ['setup:bos', 'MNQ'], text: 'bos long on the break' })}\n`);
-  exchange.update(w.state, s => { s.prices[MNQ_ID] = last.c; });
+  // The broker's bars are the ones the scan read (the gateway's regime check fetches them).
+  exchange.update(w.state, s => { s.prices[MNQ_ID] = last.c; s.bars = { ...(s.bars || {}), [MNQ_ID]: bars.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v })) }; });
+  // The window the gateway's regime check reads is the evaluator's: the last 500 closed bars, across breaks.
+  const { barsRequest } = require('../../scripts/lib/trading/account-gate');
+  const served = exchange.HANDLERS.get_bars(exchange.read(w.state), { ...barsRequest(MNQ_ID, '3m'), endTime: now.toISOString() });
+  assert.deepStrictEqual(served.bars.map(b => b.t), bars.slice(-500).map(b => b.t));
   const ticks = Math.ceil(fired.stopDistance / 0.25);
   return { price: last.c, ticks, side: fired.direction, now };
 }
@@ -440,6 +445,8 @@ test('mock trading: the runner trails a winner\'s stop through the gateway (2R o
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
   const w = world(at.toISOString());
   const t = await enterBos(w);
+  // From here the broker's bars follow the price this test sets (the entry's regime check read the real ones).
+  exchange.update(w.state, s => { delete s.bars; });
   const startStop = working(w).find(o => o.type === 4).stopPrice;
   assert.strictEqual(startStop, t.stop);
   const up = t.price + 3 * t.risk;

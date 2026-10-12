@@ -163,6 +163,14 @@ function bars(s, a) {
   const step = (a.unit === 'day' ? 1440 : Number(a.unitNumber) || 1) * 60000;
   const end = Math.min(a.endTime ? Date.parse(a.endTime) : s.nowMs, s.nowMs);
   const start = a.startTime ? Date.parse(a.startTime) : end - step * (a.limit || 100);
+  // Real bars when the test set them (s.bars[contractId], the bar size the test uses): closed ones up to now, so the
+  // gate reads the same market the scan did (e.g. its regime check).
+  const real = (s.bars || {})[a.contractId];
+  if (Array.isArray(real)) {
+    // As a broker does: with no startTime, the last `limit` closed bars by count (across breaks), else from startTime.
+    const closed = real.filter(b => Date.parse(b.t) + step <= end && (!a.startTime || Date.parse(b.t) >= start));
+    return { contractId: a.contractId, barSize: `${a.unitNumber || 1} ${a.unit || 'minute'}`, count: Math.min(closed.length, a.limit || 100), bars: closed.slice(-(a.limit || 100)) };
+  }
   const out = [];
   const price = s.prices[a.contractId] || 0;
   // Only closed bars (the harness asks without the partial one), flat at the current price.

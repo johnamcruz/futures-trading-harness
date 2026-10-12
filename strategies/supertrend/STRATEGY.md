@@ -5,6 +5,8 @@ version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
+regimes: [trend, transition]   # harness filter: never in a range (chop)
+regime_gate: true             # the order gate refuses an entry outside these regimes too
 signal: rules
 rules:
   long:
@@ -35,6 +37,7 @@ stop 0.5 × ATR(20)); the only original-bot strategy with a 1-minute model.
 
 **Context filter** (harness judgment; the source takes every flip)
 
+- Regime (harness filter, not in the source): trend or transition only (`regimes: [trend, transition]`); in a range (chop) the scan never lists it and the order gate refuses its entry (`regime_gate: true`).
 - ADX(14) ≥ 18, or rising for 5 bars.
 - 15-minute trend in the flip direction (EMA 20 slope or a 15m BOS).
 - The flip bar closes beyond the last 3-minute swing in the new direction.

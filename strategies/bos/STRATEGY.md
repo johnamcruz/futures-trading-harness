@@ -5,6 +5,8 @@ version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
+regimes: [trend, transition]   # harness filter: never in a range (chop)
+regime_gate: true             # the order gate refuses an entry outside these regimes too
 signal: rules
 rules:
   long:
@@ -36,6 +38,7 @@ Source: the original bot's `bos.py` (SWING_K=2 confirmed fractals, stop
 
 ### Context filter (harness judgment)
 
+- Regime (harness filter, not in the source): trend or transition only (`regimes: [trend, transition]`); in a range (chop) the scan never lists it and the order gate refuses its entry (`regime_gate: true`).
 - The break is in the direction of the 15-minute or 1-hour structure (a true
   BOS, not a CHoCH against the trend).
 - ADX(14) ≥ 18 preferred.

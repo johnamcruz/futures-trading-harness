@@ -6,6 +6,8 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
+regimes: [trend, transition]   # harness filter: never in a range (chop)
+regime_gate: true             # the order gate refuses an entry outside these regimes too
 signal: rules
 rules:
   long:
@@ -65,6 +67,7 @@ The prior RTH day's profile (`prior_vah`, `prior_val`) is fixed for the day
 
 ### Context filter (harness judgment)
 
+- Regime (harness filter, not in the source): trend or transition only (`regimes: [trend, transition]`); in a range (chop) the scan never lists it and the order gate refuses its entry (`regime_gate: true`).
 - Market-snapshot `volumeProfile.priorRth`: `lvnAbove` (long) close above
   the entry with no high-volume node in between is open air: the A setup. A
   high-volume node (`hvnAbove`) within 1R is where the move likely stalls;

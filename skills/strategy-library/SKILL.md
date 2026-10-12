@@ -65,7 +65,9 @@ the regime, or what failed). For one strategy's full result, call it with
 market-snapshot with each strategy's `params`, and a full result reports:
 `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`), `confluence` (on a strategy
+`inRegime` (fits the strategy's `regimes`: the trend-following strategies, `ema_cross`, `supertrend`, `keltner`, `bos`,
+`orb`, `value_area_breakout` and `vwap_reclaim`, never trade a range, and the order gate refuses
+their entries there too), `confluence` (on a strategy
 that fired: the other strategies on its timeframe that fired the same side,
 `with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
 1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for

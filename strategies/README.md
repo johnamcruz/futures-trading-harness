@@ -39,6 +39,11 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | active |
 | `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | active |
 
+The trend-following strategies (`ema_cross`, `supertrend`, `keltner`, `bos`, `orb`,
+`value_area_breakout`: trend or transition; `vwap_reclaim`: trend) are regime-gated
+(`regimes`, `regime_gate: true`): in a range the scan never lists them and the order gate
+refuses their entries.
+
 The value area strategies read the prior RTH day's volume profile
 (`prior_poc prior_vah prior_val`, `scripts/lib/trading/volume-profile.js`):
 a bar-based profile any strategy can use, also as a developing session
