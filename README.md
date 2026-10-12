@@ -14,9 +14,12 @@ and status in code.
 The architecture is one canonical tree of agents, skills, commands, rules, and
 profile-gated hooks, with native adapters generated for each harness.
 
-It also trains a reinforcement-learning policy to **pass prop-firm combines**
-(Topstep 100K by default: $6,000 target, $3,000 trailing max loss, $2,000
-daily limit) across all the strategies, in micros or minis; see
+Its goal is to **pass prop-firm combines** (Topstep 100K by default: $6,000
+target, $3,000 trailing max loss, $2,000 daily limit) before the next renewal,
+in 40-50% of attempts without ever blowing the account, then trade the funded
+account. The edge comes from the model trading with the skills and strategies;
+the numbers they trade with are to be learned from history (a learned rulebook,
+replacing the earlier reinforcement-learning policy); see
 [Passing prop challenges](#passing-prop-challenges).
 
 ## Architecture in brief
@@ -104,7 +107,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 | Firm rules | The prop firm (its account profile) | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
 | Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
-| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the policy's verdict; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
+| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the sizing verdict, the balance reconciled with the broker's fills; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
 | Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads incl. the home's `bars-scratch`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. opencode: the same in the generated `workspace/opencode.json` (everything denied, then the broker and harness tools, skills, the roles, reading; no shell, edits or web fetch), the runner's directories and the same lock-down passed per run. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
@@ -249,7 +252,7 @@ strategies are ported from an earlier Python trading bot.
 | Path | Contents |
 |---|---|
 | `agents/` | 8 roles: 4 analysts, risk manager, executor, reviewer, strategy researcher (canonical, Claude format) |
-| `skills/` | 20 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
+| `skills/` | 21 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
 | `strategies/` | Strategy documents and the template |
 | `accounts/` | Prop account profiles (`ACCOUNT.md`): Topstep 50K, 100K, 150K combines |
 | `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/mtf` |
@@ -469,6 +472,10 @@ node scripts/replay.js run --config replay.json    # run, or resume after the la
 node scripts/replay.js report <run home>/replay/<runId>
 ```
 
+With `"prop": "topstep_100k"` in the config, a fresh run starts that combine
+attempt before the first decision, and its broker stops the day at that
+account's own daily loss limit ($2,000 for 100K), as the firm does.
+
 The report is month by month: cycles, trades, win rate, mean R, expectancy,
 stand-aside rate, the gate's refusals by check, and MAE/MFE when the broker
 reports them. See the `replay` skill and
@@ -533,7 +540,7 @@ timeframe: 3m                # the one bar-size setting: every listed strategy t
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
-contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)
+contracts: auto              # micro | mini | auto, only with no contract selected: the verdict is sized in the selected one (the runner's symbols)
 ```
 
 - `node scripts/combine.js start --account topstep_100k` starts an attempt;
@@ -541,10 +548,17 @@ contracts: auto              # micro | mini | auto: sized in micros, traded as m
   runner snapshots the balance every bar and records each day's close; the
   order gate refuses that strategy's entries without a started attempt, a
   fresh snapshot, or room under the daily limits and the size budget.
+- The balance is checked against the broker's own fills: each day's first
+  flat snapshot anchors it, and when something has moved (the balance, a
+  position, an order of ours) the broker's balance must equal that anchor
+  plus every fill since (P&L less fees and commissions). A mismatch, or fills
+  that can't be read, refuses entries until it reconciles; exits always go.
+  Nothing moved, no broker call.
 - At each setup the runner records the verdict (`full` with the contract,
   size, and stop ticks, or `skip` with the reason); the order gate holds the
-  entry to it, and the agents' priority order may still skip or halve it.
-  The verdict never picks the side.
+  entry to it, and the agents' priority order (the `strategy-library` skill)
+  may still skip or halve it. The verdict never picks the side, and it is
+  sized in the selected contract (MNQ selected: MNQ, never switched to NQ).
 - `node scripts/backtest.js --config <file> --prop prop_portfolio`
   runs combine attempts from every start day: pass, blow, and timeout rates,
   by month.
