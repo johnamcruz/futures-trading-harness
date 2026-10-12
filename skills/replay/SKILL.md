@@ -112,9 +112,10 @@ broker.
    an attempt runs in the run home. The warning never stops a cycle, and
    without an attempt the policy owns no setups (its component strategies
    trade as before), so leaving it is a replay without the prop policy. To
-   replay the policy, start an attempt in the run home at the replayed time
-   after the first step created the home (`run --max-cycles 1`), then resume:
-   `FTH_HOME=<workDir>/<runId> FTH_BROKERS_FILE=<workDir>/<runId>/brokers.json FTH_BROKER=<replay broker> FTH_REPLAY_NOW=<start, UTC> node scripts/combine.js start --account topstep_100k`.
+   replay the policy, set `"prop": "topstep_100k"` in the replay config: a
+   fresh run starts that attempt at `start`, before the first decision, so
+   every trade of the window is inside it (a resumed run keeps the attempt it
+   has).
    The policy strategy must be `active` (`prop_portfolio` is): while an
    attempt runs, the order gate takes entries only from a policy strategy
    that trades it, and a policy owns its strategies' setups only when

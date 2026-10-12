@@ -104,7 +104,7 @@ Where it is enforced:
   records the symbols it trades): don't trade interactively next to it.
 
 The last line of the read states it: `Trend rule: prevailing trend 4h up;
-trend strategies may not go short, reversal strategies (mtf: reversal) may.`
+trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.`
 The daily (`daily`) is context for your judgment; the rule reads the
 intraday frames.
 
@@ -119,8 +119,8 @@ From the highest timeframe down, for each side:
 | `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)`; skip if that is 0 (at size 1, every `mixed` read is a skip). Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |
 
-A policy strategy's verdict is already sized by its policy: the read goes in
-the plan, but it doesn't halve the verdict.
+A policy strategy's verdict is a ceiling: the read halves or skips it like
+any setup (the trade-session skill's priority order).
 
 The `bias` (long, short, or neutral) weights the higher timeframes more
 (score out of ±max): use it for the game plan's headline.
@@ -176,7 +176,7 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
 15m: DOWN (close 21652.25 vs EMA20 21661, EMA20 vs EMA50 21664.5, structure LH/LL), ADX 18.2, ...
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
-Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
+Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 
 -> Longs are a pullback: wait for a 3m shift up (ema_cross or bos long), target the 1h swing high.
    Shorts are counter: a 3m keltner short is refused (scan and gate); only a
@@ -187,7 +187,7 @@ mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the par
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.59, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
-Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
+Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 
 -> Longs: mixed (half size and the nearest target; at size 1, a skip). Shorts: against the 4-hour trend, refused for trend strategies.
 ```

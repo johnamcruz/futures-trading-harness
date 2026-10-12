@@ -144,6 +144,27 @@ function rolesInTranscript(text) {
   return counts;
 }
 
+/**
+ * Phase 2's answer: the latest phase-2 report (the last to return) must say `VERDICT: APPROVE` (agents/risk-manager.md);
+ * a VETO, or no verdict line, is not an approval (fails closed).
+ */
+const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
+/**
+ * A report's verdict (agents/risk-manager.md: `VERDICT: APPROVE ...` or `VERDICT: VETO ...`), read the way a model
+ * writes it (markdown around the word or the label, a dash for the colon, "APPROVED", "VETOED"): `VETO` when any
+ * verdict in it is a veto (a report that mentions both is not an approval), else `APPROVE` when one approves, else
+ * null (no verdict line).
+ */
+function verdictOf(text) {
+  const found = [...String(text || '').matchAll(/\bVERDICT\b[\s*_`:\-\u2013\u2014]*(APPROVE|VETO)\w*/gi)].map(m => m[1].toUpperCase());
+  return found.includes('VETO') ? 'VETO' : found.includes('APPROVE') ? 'APPROVE' : null;
+}
+
+function approved(phase2) {
+  const last = phase2.slice().sort((a, b) => a.end - b.end)[phase2.length - 1];
+  return verdictOf(last.text) === 'APPROVE';
+}
+
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
 function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   if (!CYCLES.includes(cycle)) return [];
@@ -165,14 +186,18 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   const ranAfter = needed.filter(r => fresh.some(c => c.role === r)).map(firstEnd);
   if (counted.includes('risk-manager')) {
     // Phase 1 served from the cache: phase 2 is a risk-manager call started after every analyst that ran.
-    if (!rm.some(c => c.start > Math.max(-Infinity, ...ranAfter))) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
+    const p2 = rm.filter(c => c.start > Math.max(-Infinity, ...ranAfter));
+    if (!p2.length) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
+    else if (!approved(p2)) missing.push(NOT_APPROVED);
     return missing;
   }
   if (!rm.length) return [...missing, 'risk-manager phase 1', `${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`];
   // Phase 2 reviews the plan: it starts once phase 1 (and every analyst) has returned.
   const phase1End = Math.min(...rm.map(c => c.end));
   const after = Math.max(phase1End, ...ranAfter);
-  if (!rm.some(c => c.start > after)) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
+  const p2 = rm.filter(c => c.start > after);
+  if (!p2.length) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
+  else if (!approved(p2)) missing.push(NOT_APPROVED);
   return missing;
 }
 
@@ -201,8 +226,8 @@ function checkRolesRan(transcriptPath, cycle, cached = []) {
   }
   const missing = missingRoles(roleCalls(texts.join('\n')), cycle, cached);
   return missing.length
-    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again (a role whose report the cycle prompt gave from the cache counts), then risk-manager phase 2, before its trade-executor call.`
+    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan };
+module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, verdictOf };

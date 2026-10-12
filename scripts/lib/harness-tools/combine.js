@@ -52,13 +52,19 @@ function status({ account: name, json = false } = {}, ctx) {
   const c = context(ctx);
   const home = harnessHome(c.env);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
-  const accounts = name ? [accountNamed(c.root, name, c.env)] : loadAccounts(c.root, c.env).accounts.filter(a => a.valid);
+  // An account name that isn't a profile (a run id, a broker account) reads every started attempt, and says so.
+  let known = name;
+  let note = '';
+  if (name) {
+    try { accountNamed(c.root, name, c.env); } catch (_err) { known = null; note = `no account profile named ${name}: every started attempt\n`; }
+  }
+  const accounts = known ? [accountNamed(c.root, known, c.env)] : loadAccounts(c.root, c.env).accounts.filter(a => a.valid);
   const { strategies } = loadStrategies(c.root, c.env);
-  const rows = accounts.map(a => statusOf(home, a, now, strategies)).filter(r => name || r.started);
+  const rows = accounts.map(a => statusOf(home, a, now, strategies)).filter(r => known || r.started);
   const verdicts = liveVerdicts(home, now);
-  if (json) return { text: `${JSON.stringify({ attempts: rows, verdicts }, null, 2)}\n` };
-  if (!rows.length) return { text: say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') };
-  let text = '';
+  if (json) return { text: `${JSON.stringify({ attempts: rows, verdicts, ...(note ? { note: note.trim() } : {}) }, null, 2)}\n` };
+  if (!rows.length) return { text: note + say(c, 'no attempt is started (node scripts/combine.js start --account <name>)\n', 'no attempt is started (starting one is the user\'s: combine.js start --account <name>)\n') };
+  let text = note;
   for (const r of rows) {
     text += !r.started ? `${r.account}: no attempt started\n`
       : `${r.account}: ${r.status}, balance $${r.balance} (floor $${r.floor}, cushion $${r.cushion}), profit $${r.profit} of $${r.target}, `

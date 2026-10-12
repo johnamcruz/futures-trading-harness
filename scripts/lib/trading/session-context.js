@@ -11,10 +11,13 @@
  *                     this trading day (since 18:00 ET)
  *   newsLine          the news blackouts (scripts/blackouts.js): one in force
  *                     now, else the next one today, else that none is recorded
+ *   unreviewedLine    today's closed entries with no review yet, per symbol (the gate refuses the next
+ *                     entry on that root until each is reviewed: order-gate review-before-next-entry)
  */
 
 const { zonedParts, tradingDayKey } = require('./clock');
-const { entryTime, hasTag } = require('./journal');
+const { entryTime, hasTag, entriesSince, contractRoot, mayBeRoot } = require('./journal');
+const { tradingDayStart } = require('./clock');
 
 const pad = n => String(n).padStart(2, '0');
 const parts = t => zonedParts(new Date(t), 'America/New_York');
@@ -58,4 +61,26 @@ function newsLine(blackouts, now) {
   return 'No news blackout recorded for the rest of today.';
 }
 
-module.exports = { et, etStamp, premarketPlan, newsLine, PLAN_CHARS };
+/**
+ * The symbols with today's entries still unreviewed once nothing is left working on them (no position, no working
+ * order), as one prompt line (null: none, or the positions unknown).
+ * Counted as the gate counts them (order-gate successfulEntries against liveReviews, per contract root).
+ */
+function unreviewedLine(symbols, entries, positions, now, orders = []) {
+  const { successfulEntries, liveReviews } = require('./order-gate');
+  // Positions unknown (the account read failed): an open trade can't be told from a closed one, so say nothing.
+  if (!Array.isArray(positions)) return null;
+  const day = entriesSince(entries || [], tradingDayStart(now));
+  // Still being managed: an open position, or a working order (an entry not filled yet, or its stop) on the root.
+  const open = new Set([...positions.filter(p => p && p.size), ...(orders || []).filter(o => o && o.contractId)].map(p => contractRoot(p.contractId)));
+  const out = [];
+  for (const sym of symbols) {
+    const root = contractRoot(sym);
+    if ([...open].some(r => mayBeRoot(r, root) || mayBeRoot(root, r))) continue; // still being managed
+    const n = successfulEntries(day).filter(e => mayBeRoot(e.contractId, root)).length - liveReviews(day, root).length;
+    if (n > 0) out.push(`${sym}: ${n} closed entr${n === 1 ? 'y' : 'ies'} today with no review`);
+  }
+  return out.length ? `Unreviewed: ${out.join('; ')}. Run trade-review (the trade-reviewer role) first: the gate refuses a new entry on that symbol until each is reviewed.` : null;
+}
+
+module.exports = { et, etStamp, premarketPlan, newsLine, unreviewedLine, PLAN_CHARS };

@@ -187,7 +187,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         price, bar: { t: bar.t, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v, rangeAtr: atr14 > 0 ? round2((bar.h - bar.l) / atr14) : null },
         et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(),
         // R: every distance below is in points and R; 1R here is the reference stop (a setup's own stop is its 1R).
-        oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: '0.5 x ATR(20), the reference stop' } : null,
+        oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: `0.5 x ATR(20) ${round2(2 * oneR)}, the reference stop` } : null,
         news,
         regime: snap.regime ? { primary: snap.regime.primary, volatility: snap.regime.volatility, tags: snap.regime.tags, metrics: snap.regime.metrics } : null,
         trend: { ema9: round2(t.emaFast), ema20: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend ? { direction: t.supertrend.direction, line: round2(t.supertrend.line) } : null, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },

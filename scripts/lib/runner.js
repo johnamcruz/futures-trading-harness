@@ -81,6 +81,8 @@ function createRunner(deps) {
     journalEntries = () => [],
     // Today's premarket plan for a symbol (trading/session-context.js): (symbol, entries, now) -> one line.
     premarketPlan = () => null,
+    // Today's closed entries with no review (trading/session-context.js unreviewedLine): (symbols, entries, positions, at, orders) -> line or null.
+    unreviewed = () => null,
     // The news blackouts (trading/session-context.js): (now) -> one line.
     news = () => null,
     // The record of the last reviewed trades: ({ entries }) -> "4W/6L, E -0.12R" or null.
@@ -966,6 +968,7 @@ function createRunner(deps) {
             bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
           }));
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
+          const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(items.map(x => x.symbol), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
@@ -978,7 +981,7 @@ function createRunner(deps) {
             manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
             cyclesLeft,
-            manageAlso, journalRead: entries !== null, cached: served,
+            manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
@@ -995,7 +998,7 @@ function createRunner(deps) {
             cyclesLeft,
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
             manageOnly, recovered: recover, unavailable,
-            cachedRoles: served ? served.roles : [],
+            action: again.action, cachedRoles: served ? served.roles : [],
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));

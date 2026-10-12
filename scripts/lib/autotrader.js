@@ -355,11 +355,24 @@ function historyText(history) {
 
 // The roles a cycle runs before an entry (trade-session skill), which the order gate checks (roles-ran.js): each
 // carries its skills (structure and liquidity, trend and momentum, VWAP and volume profile, sizing and pacing).
-const roster = cfg => (ROSTER[cfg.cycle] || '').replace(/; the gate refuses an entry until (all|both) have reported\./, ROLES_CHECKED.has(cfg.harness) ? '$&' : '.');
-const ROSTER = {
-  full: ' Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2; the gate refuses an entry until all have reported.',
-  lean: ' Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported.',
-};
+const ANALYST_ROLES = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
+/**
+ * The roles a cycle launches before an entry (trade-session skill), which the order gate checks (roles-ran.js): each
+ * carries its skills (structure and liquidity, trend and momentum, VWAP and volume profile, sizing and pacing). Only
+ * the roles still to run are named (a cached report is that role's report); phase 2 reviews a plan, so it runs only
+ * when there is one.
+ */
+function roster(cfg, cachedRoles = []) {
+  const gate = ROLES_CHECKED.has(cfg.harness);
+  const p1 = cachedRoles.includes('risk-manager') ? [] : ['risk-manager (phase 1)'];
+  const p2 = 'then risk-manager phase 2 on your plan, if any';
+  const tail = gate ? `; the gate refuses an entry until all report and phase 2 approves.` : '.';
+  if (cfg.cycle === 'lean') return ` Lean cycle: on a candidate, ${p1.length ? 'risk-manager phase 1, ' : ''}${p2}${tail}`;
+  if (cfg.cycle !== 'full') return '';
+  const launch = [...ANALYST_ROLES.filter(r => !cachedRoles.includes(r)), ...p1];
+  const list = launch.length > 1 ? `${launch.slice(0, -1).join(', ')} and ${launch[launch.length - 1]}` : launch[0];
+  return ` Full cycle: ${launch.length ? `${list} as parallel subagents, ` : ''}plan from their reports, ${p2}${tail}`;
+}
 
 /**
  * The reports the runner served from its report cache (report-cache.js): those roles aren't launched again this
@@ -369,7 +382,7 @@ function cachedText(cached) {
   if (!cached || !Array.isArray(cached.reports) || !cached.reports.length) return '';
   const roles = cached.reports.map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
   const until = cached.reports.map(r => r.until).filter(Boolean).sort()[0];
-  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''} Launch the roles not listed here as above, then risk-manager phase 2 (always this cycle).`
+  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (from ${etTime(r.at)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
@@ -391,7 +404,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries }) =>
@@ -431,7 +444,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -445,6 +458,20 @@ function prompts(cfg, now, root = '') {
 const STREAMED_TRANSCRIPT = new Set(['claude', 'opencode']);
 // Harnesses whose order gate sees the cycle's roles: the streamed transcript, or Qwen Code's hook (its chat file).
 const ROLES_CHECKED = new Set([...STREAMED_TRANSCRIPT, 'qwen']);
+
+// Roles outside the trading desk: a trade or manage cycle never launches them (the trade-session skill's roles only).
+const OFF_DESK = ['strategy-researcher'];
+
+/**
+ * The roles a cycle may not launch, which the harness enforces where it can (opencode: per-run permissions): the
+ * analysts whose report the runner served from its cache (their report is in the prompt; risk-manager stays, for
+ * phase 2), and in a trade or manage cycle the roles outside the trading desk.
+ */
+function deniedRoles(context) {
+  const c = context || {};
+  const cached = (c.cachedRoles || []).filter(r => typeof r === 'string' && r !== 'risk-manager');
+  return [...cached, ...(['trade', 'manage'].includes(c.action) ? OFF_DESK : [])];
+}
 
 /** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env, context = null) {
@@ -477,7 +504,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir) });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context) });
   }
   return env;
 }
@@ -714,6 +741,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   runnerArgv,
+  deniedRoles,
   cycleOutcome,
   accountText,
   historyText,

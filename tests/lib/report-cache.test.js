@@ -170,3 +170,12 @@ test('a report whose Data line gives the versions as clock times (m15@14:00) is 
   assert.deepStrictEqual(cache.analysts[ANALYSTS[0]].versions, { m15: a.sections.m15.version, h1: a.sections.h1.version, day: a.sections.day.version });
   assert.deepStrictEqual(RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY }).roles, [ANALYSTS[0]]);
 });
+
+test('a risk-manager report carrying a verdict is a plan review, never cached as phase 1 (run C served a 10:03 VETO for 30 minutes)', () => {
+  const { a } = pair();
+  const now = new Date(a.closedAt);
+  for (const v of ['VERDICT: VETO - mixed alignment', 'VERDICT: APPROVE - size 1', '**VERDICT:** VETO - room', '**VERDICT** - APPROVED', 'verdict: vetoed']) {
+    assert.strictEqual(RC.recordReports({ output: task('risk-manager', `Checks\n${v}`, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).phase1, null, v);
+  }
+  assert.ok(RC.recordReports({ output: task('risk-manager', '## Risk state: 2 trades left, budget $900', [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).phase1, 'control: a state report is cached');
+});

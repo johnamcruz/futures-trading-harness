@@ -622,8 +622,9 @@ live record.
 8. Stage 2: the label dataset (done), then widened observation and env,
    cloning, fine-tuning, the pipeline; then the one out-of-sample look.
 
-A prop attempt is started per run by hand (`combine.js start` in the run
-home after its first step; `skills/replay/SKILL.md`, The prop policy). Not
+A run's prop attempt starts at the window's first moment, before the first
+decision, when its config names the account (`"prop": "topstep_100k"`;
+`skills/replay/SKILL.md`, The prop policy). Not
 built yet: the blackouts rebuilt from the historical calendar for each day (the premarket
 agents record what they find), and anonymization in the replay broker.
 

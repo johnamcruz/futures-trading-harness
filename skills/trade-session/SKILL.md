@@ -56,7 +56,8 @@ names them.
   stop to `trailGivebackR` behind the best price since entry, rounded to the
   tick, toward the market only; if the bar already traded through that new
   level, close at market instead; after `maxBars` bars in the trade, close at
-  market (time stop). The strategy bodies' "don't move the stop yourself"
+  market (time stop). Each stop move and close goes through the
+  trade-executor role, as all management does. The strategy bodies' "don't move the stop yourself"
   means: not while the runner trails it.
 - **Fresh data or no decision**: the last closed bar in the bars file must be
   no older than one bar of its timeframe (plus a minute) at the cycle's time,
@@ -120,7 +121,8 @@ argue a trend strategy into a counter-trend trade. For the candidate's side: `al
 size, `floor(size / 2)`, and skip if that is 0 (with the size-1 micro rule of
 position-sizing, every mixed read is a skip); `counter` → skip (a trend strategy can't take it), unless it is a
 reversal strategy judged as the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
-A policy verdict (below) is already sized: don't halve it.
+A policy verdict (below) is a ceiling: the priority order (step 3) halves or
+skips it like any setup.
 
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
 gate refuses a rules strategy's entry unless that strategy fired, on that
@@ -178,11 +180,15 @@ holds: in a one-symbol cycle, an analyst's report while the bar briefing
 parts it was built on are current (until the next 15m close); `risk-manager`
 phase 1 while the account is unchanged (no fill, order, balance or attempt
 change, same day, and no `trade-executor` call in the cycle that wrote it).
-Don't launch a role whose report the prompt gives: use that report for its
+Don't launch a role whose report the prompt gives (where the harness can, it
+refuses the launch; in a trade cycle it also refuses roles outside the desk,
+such as `strategy-researcher`): use that report for its
 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side,
 the candidates) from the bar briefing. Phase 2 reviews this bar's plan and
 is never cached. Cached reports count for the cycle's first entry only: after a
-`trade-executor` call, the next entry needs every role again.
+`trade-executor` call, the next entry needs every role again, and where the
+harness refuses a cached role's launch (opencode) that is the next cycle: a
+`trade-executor` call ends this cycle's entries.
 
 Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
@@ -222,8 +228,32 @@ again, except those its prompt gives under "Cached reports".
   harness looks for, when the rest of this step agrees and it isn't
   `blocked`: the strategy's normal size (position-sizing and the prop
   budget), and let its own exit work (don't bank before its trail or
-  target). A policy strategy's verdict is placed as given; the facts never
-  change it.
+  target). The priority order below decides: a policy strategy's verdict
+  too.
+- **The priority order: the rule for every setup** (a rules strategy's
+  candidate or a policy verdict). A verdict is a ceiling on size, never an
+  order. Contradicting facts mean no trade; confluence means trade. Go down
+  the list; a higher step wins, and each step can only lower the size, never
+  raise it: the size is the smaller of the verdict's (or position-sizing's)
+  and what the steps allow.
+  1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
+     or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
+     refusal.
+  2. **The trend rule**: a trend strategy against the prevailing trend → no
+     trade (the scan and the gate refuse it anyway). A reversal strategy may
+     fade it only at a higher-timeframe level, at half size.
+  3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
+     before the room it needs (`needR`) → no trade.
+  4. **The multi-timeframe read for its side**: `aligned` → full;
+     `pullback` with the trigger turned back with the bias → full;
+     `mixed` → half (`floor(size / 2)`; 0 → no trade, so at size 1 every
+     mixed read is a skip); `counter` on a non-reversal setup → no trade.
+  5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
+     → any skip rule hit: no trade.
+  6. **Confluence**: another strategy firing the other side → no trade;
+     confluence with it supports the full size; none changes nothing alone.
+  7. **Secondary context** (the VWAP side, the lunch lull, participation):
+     cuts to half, never vetoes alone.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value
@@ -232,12 +262,12 @@ again, except those its prompt gives under "Cached reports".
   with it, say why in the plan.
 - **A prop attempt with a policy strategy is running** (the prompt lists
   verdicts, or `combine_status` names a policy strategy): the policy's
-  verdict is the only trade. Plan exactly the verdict (`setup:<policy
-  strategy>`, its contract and side, at most its size, its stop ticks) per the
-  `prop-challenge-pacing` skill, or no trade when there is none or it says
-  skip. Never plan the component strategy (e.g. `orb`) yourself; the gate
-  refuses it. The rest of this step still decides whether the market permits
-  it (events, red flags).
+  verdict is the only trade there can be. Plan it (`setup:<policy
+  strategy>`, its contract and side, its stop ticks, at most its size) per the
+  `prop-challenge-pacing` skill only when the priority order says take, at
+  the size it allows; no trade when there is none, it says skip, or the
+  order says no. Never plan the component strategy (e.g. `orb`) yourself; the
+  gate refuses it.
 - **Today's premarket plan and the news** (the prompt's "premarket plan"
   and blackout lines): start from the plan's bias and levels, and say in the
   plan if the day so far has invalidated it. A blackout in force means no
@@ -279,9 +309,8 @@ again, except those its prompt gives under "Cached reports".
 - **Confluence.** Several strategies firing the same side on the bar (the
   scan's `confluence.with`, the prompt's "fired on this bar" line) is a
   stronger setup: say so in the plan, and prefer it over a lone signal. Strategies firing
-  both sides (`confluence.against`) is a conflict: stand aside, unless the
-  one you'd take is a reversal at a higher-timeframe level and the plan says
-  why the others are wrong. The backtest reports results by confluence
+  both sides (`confluence.against`) is a conflict: stand aside (the priority
+  order, step 6: no exception). The backtest reports results by confluence
   (`byConfluence`); trust it over a feeling that agreement helps.
 - Otherwise pick at most one strategy that is a `candidate` in the scan in
   this direction on the last closed bar (candidates are already in session and

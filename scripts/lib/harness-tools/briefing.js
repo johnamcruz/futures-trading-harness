@@ -6,6 +6,8 @@
  * part with its version and how long it holds.
  *
  *   bar_briefing { symbol, json }   symbol: a contract root (MNQ and NQ share one)
+ *   briefedThisCycle(env, symbol)   in an autonomous cycle, this bar's briefing for the symbol (null outside one, or
+ *                                   when it isn't this bar's): the tools that recompute what it holds point to it
  */
 
 const { readBriefing, renderBriefing, current } = require('../trading/briefing');
@@ -62,4 +64,18 @@ function parseArgv(argv) {
 
 const OPS = { bar_briefing: barBriefing };
 
-module.exports = { OPS, USAGE, barBriefing, parseArgv };
+/** This cycle's briefing for the symbol (its family), or null: no cycle bar, no briefing, or another bar's. */
+function briefedThisCycle(env, symbol) {
+  let sym = symbol;
+  if (!sym) {
+    // Without a symbol: the cycle's only one, if it has one.
+    try { const keys = Object.keys(JSON.parse(env.FTH_CYCLE_BARS || '{}')); sym = keys.length === 1 ? keys[0] : null; } catch (_err) { sym = null; }
+  }
+  const root = /^([A-Z0-9]{1,8})/.exec(String(sym || ''));
+  if (!root) return null;
+  const bar = cycleBarOf(env, root[1]);
+  const b = bar ? readBriefing(harnessHome(env), root[1]) : null;
+  return b && b.asOf === bar ? b : null;
+}
+
+module.exports = { OPS, USAGE, barBriefing, briefedThisCycle, parseArgv };

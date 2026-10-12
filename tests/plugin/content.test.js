@@ -186,7 +186,7 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
   const ts = read('skills/trade-session/SKILL.md');
   for (const re of [
     /Every other role runs every full cycle: each carries skills the decision needs/,
-    /\*\*Cached reports\.\*\*[^]*?in a one-symbol cycle, an analyst's report while the bar briefing\s+parts it was built on are current \(until the next 15m close\); `risk-manager`\s+phase 1 while the account is unchanged[^]*?Don't launch a role whose report the prompt gives[^]*?Phase 2 reviews this bar's plan and\s+is never cached\. Cached reports count for the cycle's first entry only: after a\s+`trade-executor` call, the next entry needs every role again\./,
+    /\*\*Cached reports\.\*\*[^]*?in a one-symbol cycle, an analyst's report while the bar briefing\s+parts it was built on are current \(until the next 15m close\); `risk-manager`\s+phase 1 while the account is unchanged[^]*?Don't launch a role whose report the prompt gives[^]*?Phase 2 reviews this bar's plan and\s+is never cached\. Cached reports count for the cycle's first entry only: after a\s+`trade-executor` call, the next entry needs every role again, and where the\s+harness refuses a cached role's launch \(opencode\) that is the next cycle: a\s+`trade-executor` call ends this cycle's entries\./,
     /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle or were given under "Cached reports",\s+`risk-manager` twice \(phase 1, then phase 2 once phase 1 and the analysts\s+that ran have returned; phase 2 alone when phase 1 was cached\), each in the foreground/,
     /since the last `trade-executor` call:\s+each entry has its own round of reports/,
     /the refused `trade-executor` call itself ends the round, so\s+report the block and end the cycle \(step 6\)/,
@@ -206,7 +206,19 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
     assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
     assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
   }
-  assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this step agrees and it isn't\s+`blocked`[^]*?A policy strategy's\s+verdict is placed as given; the facts never\s+change it\./);
+  assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this step agrees and it isn't\s+`blocked`[^]*?The priority order below decides: a policy strategy's verdict\s+too\./);
+  const ts2 = read('skills/trade-session/SKILL.md');
+  assert.match(ts2, /\*\*The priority order: the rule for every setup\*\*[^]*?A verdict is a ceiling on size, never an\s+order\. Contradicting facts mean no trade; confluence means trade\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
+  for (const f of ['skills/trade-session/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
+    assert.doesNotMatch(read(f), /Place exactly the verdict|the facts never\s+change it|doesn't halve the verdict|is already sized: don't halve it|Never argue with\s+it/, f);
+  }
+  assert.match(read('agents/risk-manager.md'), /Judge every setup, a policy verdict too, by the trade-session skill's\s+priority order/);
+  assert.match(read('skills/prop-challenge-pacing/SKILL.md'), /\*\*A verdict is a ceiling, never an order\*\*/);
+  // Interactive management (no runner) closes through the trade-executor too (it holds the order tools in every harness config).
+  assert.match(read('skills/trade-session/SKILL.md'), /close at\s+market \(time stop\)\. Each stop move and close goes through the\s+trade-executor role, as all management does\./);
+  // Step 6 has no exception: a conflict is no trade, a reversal too.
+  assert.match(read('agents/risk-manager.md'), /`confluence\.against`\) → VETO \(the priority order, step 6\)\./);
+  assert.match(read('skills/trade-session/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
   for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');

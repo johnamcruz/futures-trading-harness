@@ -10,7 +10,7 @@ const { roleCalls, rolesInTranscript, missingRoles, checkRolesRan, ANALYSTS } = 
 const { tmpDir } = require('../helpers');
 
 // opencode `run --format json`: one tool_use event per finished call, with its start and end times.
-const oc = (subagent_type, [start, end] = [null, null], { status = 'completed', input = {}, output = '<task id="s" state="completed"><task_result>report</task_result></task>', metadata } = {}) => JSON.stringify({
+const oc = (subagent_type, [start, end] = [null, null], { status = 'completed', input = {}, output = '<task id="s" state="completed"><task_result>VERDICT: APPROVE - size 1</task_result></task>', metadata } = {}) => JSON.stringify({
   type: 'tool_use', timestamp: 1, sessionID: 'ses_main',
   part: { type: 'tool', tool: 'task', state: { status, input: { description: 'x', prompt: 'y', subagent_type, ...input }, output, ...(metadata ? { metadata } : {}), ...(start !== null ? { time: { start, end } } : {}) } },
 });
@@ -36,9 +36,9 @@ test('opencode: completed foreground task calls count by role; errored, running 
 
 test('Claude: a Task/Agent call counts once its tool_result returned without an error, in the foreground', () => {
   const call = (id, subagent_type, extra = {}, name = 'Task') => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input: { subagent_type, prompt: 'p', ...extra } }] } });
-  const result = (id, is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'report' }] } });
+  const result = (id, is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'VERDICT: APPROVE - size 1' }] } });
   assert.deepStrictEqual(calls([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', {}, 'Agent'), result('b')].join('\n')),
-    [{ role: 'risk-manager', start: 0, end: 1, text: 'report' }, { role: 'trend-momentum-analyst', start: 2, end: 3, text: 'report' }]);
+    [{ role: 'risk-manager', start: 0, end: 1, text: 'VERDICT: APPROVE - size 1' }, { role: 'trend-momentum-analyst', start: 2, end: 3, text: 'VERDICT: APPROVE - size 1' }]);
   assert.deepStrictEqual(calls([call('a', 'risk-manager'), result('a', true)].join('\n')), [], 'an errored call');
   assert.deepStrictEqual(calls(call('a', 'risk-manager')), [], 'no result yet');
   assert.deepStrictEqual(calls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
@@ -47,7 +47,7 @@ test('Claude: a Task/Agent call counts once its tool_result returned without an 
 test('Qwen Code parts: a task call counts once answered with no error', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response } }] } });
-  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1, text: 'report' }]);
+  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'VERDICT: APPROVE - size 1' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1, text: 'VERDICT: APPROVE - size 1' }]);
   assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })].join('\n')), []);
 });
 
@@ -96,7 +96,7 @@ test('checkRolesRan: a Claude subagent\'s transcript (the trade-executor\'s hook
   const sub = path.join(dir, 'sess-1', 'subagents', 'agent-x.jsonl');
   fs.mkdirSync(path.dirname(sub), { recursive: true });
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type } }] } });
-  const result = id => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'r' }] } });
+  const result = id => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'VERDICT: APPROVE - size 1' }] } });
   const lines = [...ANALYSTS.flatMap((r, i) => [call(`a${i}`, r)]), call('p1', 'risk-manager'), ...ANALYSTS.map((_r, i) => result(`a${i}`)), result('p1'), call('p2', 'risk-manager'), result('p2')];
   fs.writeFileSync(main, lines.join('\n'));
   fs.writeFileSync(sub, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'o', name: 'mcp__broker__place_order', input: {} }] } }));
@@ -108,7 +108,7 @@ test('checkRolesRan: a Claude subagent\'s transcript (the trade-executor\'s hook
 test('every trade-executor launch ends the round: running in parallel, errored, in the background, or without times', () => {
   // Claude: the call placing this order has no result yet (the current one); a second one running at once is refused.
   const call = (id, subagent_type, extra = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p', ...extra } }] } });
-  const result = (id, content = 'report', is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content }] } });
+  const result = (id, content = 'VERDICT: APPROVE - size 1', is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content }] } });
   const round = (p) => [...ANALYSTS.map((r, i) => call(`${p}a${i}`, r)), call(`${p}p1`, 'risk-manager'), ...ANALYSTS.map((_r, i) => result(`${p}a${i}`)), result(`${p}p1`), call(`${p}p2`, 'risk-manager'), result(`${p}p2`)];
   const m = lines => missingRoles(roleCalls(lines.join('\n')), 'full');
   assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor')]), [], 'the current launch, running');
@@ -139,7 +139,7 @@ test('Claude: a subagent that only acknowledged a background launch has not repo
 
 test('Qwen Code: every trade-executor launch ends the round too, one at a time', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
-  const answer = id => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response: { output: 'report' } } }] } });
+  const answer = id => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response: { output: 'VERDICT: APPROVE - size 1' } } }] } });
   const round = p => [...ANALYSTS.map((r, i) => call(`${p}a${i}`, r)), call(`${p}p1`, 'risk-manager'), ...ANALYSTS.map((_r, i) => answer(`${p}a${i}`)), answer(`${p}p1`), call(`${p}p2`, 'risk-manager'), answer(`${p}p2`)];
   const m = lines => missingRoles(roleCalls(lines.join('\n')), 'full');
   assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor')]), [], 'the current launch, running');
@@ -198,4 +198,36 @@ test('roles served from the report cache count as returned; phase 2 still runs, 
   const exec = oc('trade-executor', [50, 60]);
   assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'full', all), [...ANALYSTS, `${P2} and the analysts returned)`]);
   assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'lean', ['risk-manager']), [`${P2} returned)`]);
+});
+
+test('phase 2 must approve: a VETO, or a report with no verdict, refuses the entry; the latest phase-2 verdict counts', () => {
+  const rm = (span, verdict) => oc('risk-manager', span, { output: `<task id="s" state="completed"><task_result>Checks...\n${verdict}</task_result></task>` });
+  const round = p2 => [...ANALYSTS.map(r => oc(r, [10, 20])), rm([10, 18], '## Risk state'), p2];
+  const NO = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
+  assert.deepStrictEqual(miss(round(rm([30, 40], 'VERDICT: APPROVE - size 1, risk $40, ok')), 'full'), []);
+  assert.deepStrictEqual(miss(round(rm([30, 40], 'VERDICT: VETO - mixed alignment at size 1: stand aside')), 'full'), [NO], 'B 10:00: a VETO, then the order anyway');
+  assert.deepStrictEqual(miss(round(rm([30, 40], 'looks fine to me')), 'full'), [NO], 'no verdict line: not an approval');
+  assert.deepStrictEqual(miss(round(rm([30, 40], '**VERDICT:** APPROVE - size 2')), 'full'), [], 'markdown bold around the label');
+  // The latest phase 2 decides: a VETO then a fresh APPROVE (a revised plan) passes; the reverse doesn't.
+  assert.deepStrictEqual(miss([...round(rm([30, 40], 'VERDICT: VETO - x')), rm([50, 60], 'VERDICT: APPROVE - size 1')], 'full'), []);
+  assert.deepStrictEqual(miss([...round(rm([30, 40], 'VERDICT: APPROVE - size 1')), rm([50, 60], 'VERDICT: VETO - x')], 'full'), [NO]);
+  // A report that quotes an earlier APPROVE and ends with VETO: its last verdict counts.
+  assert.deepStrictEqual(miss(round(rm([30, 40], 'The plan said VERDICT: APPROVE earlier.\nVERDICT: VETO - room')), 'full'), [NO]);
+  // With phase 1 cached the same holds; a lean cycle too.
+  assert.deepStrictEqual(missingRoles(roleCalls(rm([30, 40], 'VERDICT: VETO - x')), 'full', [...ANALYSTS, 'risk-manager']), [NO]);
+  assert.deepStrictEqual(miss([rm([1, 2], 'state'), rm([3, 4], 'VERDICT: VETO - x')], 'lean'), [NO]);
+  assert.deepStrictEqual(miss([rm([1, 2], 'state'), rm([3, 4], 'VERDICT: APPROVE - size 1')], 'lean'), []);
+});
+
+test('verdictOf: read as a model writes it; any veto in the report is no approval', () => {
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  for (const t of ['VERDICT: APPROVE - size 1', '**VERDICT**: APPROVE - size 1', 'VERDICT: **APPROVE**', 'VERDICT - APPROVE', 'VERDICT: APPROVED', 'VERDICT : APPROVE', 'verdict: approve', 'VERDICT — APPROVE']) assert.strictEqual(verdictOf(t), 'APPROVE', t);
+  for (const t of [
+    'If aligned: VERDICT: APPROVE. ... **VERDICT**: VETO - trend rule',
+    'VERDICT: VETO - mixed: re-plan at size 2 for a VERDICT: APPROVE',
+    'VERDICT: VETO - room\n(phase 1 earlier: VERDICT: APPROVE)',
+    'Previous: VERDICT: APPROVE\nFinal VERDICT: VETOED',
+    '**VERDICT**: VETO - room',
+  ]) assert.strictEqual(verdictOf(t), 'VETO', t);
+  for (const t of ['looks fine', 'APPROVE', 'risk state: 2 trades left', '', null]) assert.strictEqual(verdictOf(t), null, String(t));
 });

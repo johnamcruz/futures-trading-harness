@@ -15,7 +15,7 @@ const et = (h, m, s = 0) => DAY + ((h + 4) * 60 + m) * 60000 + s * 1000;
  * Fake market: bars aligned to the timeframe, published `publishMs` after the
  * close; optional outages (no bars) and a contract roll at `rollAt`.
  */
-function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null }) {
+function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null, accountState = null }) {
   let requests = 0;
   // Standard contract names (the contract translator's): the root, or root:YYYY-MM for another month.
   const contractAt = (t, symbol) => (rollAt && t >= rollAt ? `${symbol}:2027-03` : symbol);
@@ -35,6 +35,7 @@ function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null })
           return { t: new Date(t).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 };
         });
       },
+      ...(accountState ? { async accountState() { return accountState; }, async accountBalance() { return 100000; } } : {}),
       async netPosition() { return positions.net; },
       async workingOrders() { return positions.working; },
     }),
@@ -960,6 +961,7 @@ test('the report cache: valid reports go into the trade prompt and the gate\'s c
   // The first cycle: nothing cached, every role runs; later ones carry the report and name the role to the gate.
   assert.doesNotMatch(trade[0].prompt, /Cached reports/);
   assert.deepStrictEqual(trade[0].context.cachedRoles, []);
+  assert.ok(trade.every(c => c.context.action === 'trade'), 'a trade cycle names itself (the roles it may not launch follow from it)');
   assert.match(trade[1].prompt, /don't launch trend-momentum-analyst this cycle[^]*--- trend-momentum-analyst report/);
   assert.deepStrictEqual(trade[1].context.cachedRoles, [report.role]);
   // Served for this cycle's bar and contract, with the account the prompt was given; recorded after it, with the roles served.
@@ -988,4 +990,36 @@ test('the report cache: valid reports go into the trade prompt and the gate\'s c
   assert.ok(m.cycles.some(c => c.action === 'manage'), 'control: manage-only cycles ran');
   assert.strictEqual(manage.filter(([k]) => k === 'serve').length, trades);
   assert.strictEqual(manage.filter(([k]) => k === 'record').length, trades);
+});
+
+test('the trade prompt names today\'s unreviewed entries, from the journal and the account the runner read', async () => {
+  const calls = [];
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }), positions: { net: 0, working: 0 },
+    deps: {
+      journalEntries: () => [{ ts: new Date(et(9, 45)).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:keltner short', data: { result: { success: true } } }],
+      unreviewed: (symbols, entries, positions, at, orders) => { calls.push({ symbols, entries: entries.length, positions, orders }); return 'Unreviewed: MNQ: 1 closed entry today with no review.'; },
+    },
+  });
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 1);
+  assert.match(trade[0].prompt, /Unreviewed: MNQ: 1 closed entry today with no review\./);
+  assert.deepStrictEqual(calls[0].symbols, ['MNQ']);
+  assert.strictEqual(calls[0].entries, 1, 'the journal the prompt read');
+  // This fake broker reads no account state: the positions are unknown (null), never an empty, flat account.
+  assert.strictEqual(calls[0].positions, null);
+  assert.ok(Array.isArray(calls[0].orders));
+});
+
+test('the Unreviewed line gets the account\'s positions and working orders as the runner read them', async () => {
+  const calls = [];
+  const order = { id: 9, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21400 };
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7),
+    market: fakeMarket({ minutes: 3, accountState: { positions: [], orders: [order] } }), positions: { net: 0, working: 1 },
+    deps: { journalEntries: () => [], unreviewed: (symbols, entries, positions, at, orders) => { calls.push({ positions, orders }); return null; } },
+  });
+  assert.ok(calls.length >= 1);
+  assert.deepStrictEqual(calls[0].positions, []);
+  assert.deepStrictEqual(calls[0].orders.map(o => o.id), [9], 'the working order reaches it (an entry not filled yet is not "closed")');
 });

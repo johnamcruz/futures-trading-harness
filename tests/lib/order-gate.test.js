@@ -1106,7 +1106,7 @@ test('max-risk: a policy strategy\'s entry is checked against its own cap, not i
 // --- Roles: an autonomous cycle's entry waits for its roles' reports (roles-ran.js). ---
 const fs = require('fs');
 const path = require('path');
-const ocEvent = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'ok' } } });
+const ocEvent = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1' } } });
 const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(name => ocEvent('skill', { name }));
 const ocRoles = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].map(subagent_type => ocEvent('task', { subagent_type }));
 

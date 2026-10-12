@@ -65,7 +65,10 @@ test('the main session gets what the other adapters allow an autonomous run: no 
   for (const p of ['bash', 'edit', 'webfetch', 'question', 'lsp', 'codesearch', 'doom_loop', 'some_future_tool']) assert.strictEqual(decide(session, p), 'deny', p);
   for (const p of ['skill', 'websearch', 'todowrite', 'glob', 'grep', 'list']) assert.strictEqual(decide(session, p), 'allow', p);
   // The broker (orders through the gateway's gate) and the harness tools.
-  for (const t of [...ORDER_TOOLS, 'broker_get_bars', 'harness_strategies_scan', 'harness_blackouts_list']) assert.strictEqual(decide(session, t), 'allow', t);
+  for (const t of [...ORDER_TOOLS.filter(t => t !== 'broker_place_order'), 'broker_get_bars', 'harness_strategies_scan', 'harness_blackouts_list']) assert.strictEqual(decide(session, t), 'allow', t);
+  // An entry is the trade-executor's alone: the main session (the head trader) can't place one; it keeps the reads
+  // and the risk-reducing calls (close, partial close, cancel, modify).
+  assert.strictEqual(decide(session, 'broker_place_order'), 'deny');
   // Reading: anything inside the project but a .env; outside it, nothing (the runner adds its directories).
   assert.strictEqual(decide(session, 'read', 'strategies/orb/STRATEGY.md'), 'allow');
   for (const f of ['.env', 'workspace/.env', '../x/.env.local']) assert.strictEqual(decide(session, 'read', f), 'deny', f);
@@ -96,6 +99,7 @@ test('a hostile user config (everything allowed, its own default agent, rules fo
     const head = headRules(merged);
     for (const p of ['bash', 'edit', 'webfetch']) assert.strictEqual(decide(head, p), 'deny', p);
     assert.strictEqual(decide(head, 'task', 'general'), 'deny');
+    assert.strictEqual(decide(head, 'broker_place_order'), 'deny', 'a hostile config can\'t give the head trader entries');
     const risk = [...rules(merged.permission), ...rules(merged.agent['risk-manager'].permission)];
     for (const p of ['bash', 'task', 'broker_place_order']) assert.strictEqual(decide(risk, p), 'deny', `risk-manager: ${p}`);
     assert.strictEqual(decide(risk, 'broker_get_account_snapshot'), 'allow');
@@ -232,4 +236,29 @@ test('runEnv strips opencode\'s background subagents: a role must report in the 
   assert.strictEqual(env.OPENCODE_EXPERIMENTAL, undefined);
   assert.strictEqual(env.OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS, undefined);
   assert.strictEqual(env.KEEP, '1');
+});
+
+test('a run\'s denied roles and the head trader\'s place_order deny hold through the merge with the project config and a hostile user config', () => {
+  const run = oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, deniedRoles: ['market-structure-analyst', 'strategy-researcher'] });
+  const user = { permission: { broker_place_order: 'allow', task: { 'market-structure-analyst': 'allow' } }, agent: { [oc.HEAD_AGENT]: { permission: { broker_place_order: 'allow', task: { 'strategy-researcher': 'allow' } } } } };
+  for (const merged of [merge(config, run), merge(merge(user, config), run), merge(user, run)]) {
+    // The denials hold whatever the other configs say (a hostile one can only deny more, never allow).
+    const head = headRules(merged);
+    assert.strictEqual(decide(head, 'task', 'market-structure-analyst'), 'deny');
+    assert.strictEqual(decide(head, 'task', 'strategy-researcher'), 'deny');
+    assert.strictEqual(decide(head, 'broker_place_order'), 'deny');
+    assert.strictEqual(decide([...rules(merged.permission), ...rules(merged.agent['trade-executor'].permission)], 'broker_place_order'), 'allow');
+  }
+  // Accepted, pinned: a user config that names the head trader's own broker tools (the harness's agent) leaves them
+  // denied after the merge (opencode appends the run's '*' after the user's keys), the risk-reducing ones too; the
+  // trade-executor keeps them by its own permissions, and the runner flattens and trails without the model.
+  const named = { agent: { [oc.HEAD_AGENT]: { permission: { broker_close_position: 'allow', broker_cancel_order: 'allow', broker_place_order: 'allow' } } } };
+  const hm = merge(merge(named, config), run);
+  assert.strictEqual(decide(headRules(hm), 'broker_place_order'), 'deny');
+  const exec = [...rules(hm.permission), ...rules(hm.agent['trade-executor'].permission)];
+  for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_place_order']) assert.strictEqual(decide(exec, t), 'allow', `trade-executor: ${t}`);
+  // As the runner runs it (the project config, then the run's): the other roles and the risk-reducing calls stay allowed.
+  const head = headRules(merge(config, run));
+  for (const r of ['trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(decide(head, 'task', r), 'allow', r);
+  for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_partial_close_position', 'broker_modify_order', 'broker_get_bars']) assert.strictEqual(decide(head, t), 'allow', t);
 });

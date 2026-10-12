@@ -23,7 +23,7 @@ const { SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
 const { openAdapter, tradingBlocked } = require('./broker/adapter');
 const { dayKey } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
-const { premarketPlan, newsLine } = require('./trading/session-context');
+const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
 const { loadStrategies, scan } = require('./trading/strategies');
@@ -170,6 +170,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     recentTrades: ({ entries } = {}) => recentTrades(entries || journal(), 10),
     tradesSummary: ({ entries } = {}) => formSummary(entries || journal(), 10),
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
+    unreviewed: (symbols, entries, positions, at, orders) => unreviewedLine(symbols, entries, positions, at, orders),
     news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),

@@ -136,7 +136,7 @@ test('child env names the roles served from the report cache (FTH_CYCLE_CACHED);
   assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_CACHED: 'risk-manager' }).FTH_CYCLE_CACHED, undefined, 'a manual run serves none');
 });
 
-test('a trade prompt carries the cached reports whole, says not to launch those roles, and that phase 2 runs this cycle', () => {
+test('a trade prompt carries the cached reports whole, launches only the other roles, and never sends a cached report back', () => {
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
   const cached = { roles: ['trend-momentum-analyst', 'risk-manager'], reports: [
@@ -144,7 +144,9 @@ test('a trade prompt carries the cached reports whole, says not to launch those 
     { role: 'risk-manager', text: 'Phase 1: 2 trades left', at: '2026-10-07T14:21:00Z', until: null },
   ] };
   const p = prompts(validateConfig({}), now).trade(items, { cached });
-  assert.match(p, /Cached reports, still valid this bar[^]*don't launch trend-momentum-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned\. An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts[^]*then risk-manager phase 2 \(always this cycle\)\./);
+  assert.match(p, /Full cycle: market-structure-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any/, 'only the roles still to run');
+  assert.doesNotMatch(p.split('Cached reports')[0], /trend-momentum-analyst|risk-manager \(phase 1\)/, 'the cached ones are not in the roster');
+  assert.match(p, /Cached reports, still valid this bar[^]*don't launch trend-momentum-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned\. An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts[^]*A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo\./);
   assert.match(p, /\n--- trend-momentum-analyst report \(from 10:21 ET\) ---\nData: bar_briefing m15@x\nBias: long \(high\)\n--- end of trend-momentum-analyst report ---/);
   assert.match(p, /\n--- risk-manager phase 1 report \(from 10:21 ET\) ---\nPhase 1: 2 trades left\n/);
   // None cached, manage-only or paper: no cached section.
@@ -163,16 +165,16 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
   assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
   assert.match(full, /strategy-library before deciding \(the order gate refuses an entry without them\)/);
-  assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2; the gate refuses an entry until all have reported\./);
-  assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported\./);
+  assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
+  assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   // No entries possible: no roster.
   assert.doesNotMatch(prompts(validateConfig({}), now).trade(items, { manageOnly: true }), /Full cycle:/);
   assert.doesNotMatch(prompts(validateConfig({ paper: true }), now).trade(items), /Full cycle:/);
   // A harness whose gate can't see the roles (Codex, custom) is told the roster, not a refusal it won't get.
   const codex = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
-  assert.match(codex, /Full cycle: market-structure-analyst[^]*then risk-manager phase 2\./);
-  assert.doesNotMatch(codex, /the gate refuses an entry until all have reported/);
-  assert.match(prompts(validateConfig({ harness: 'qwen' }), now).trade(items), /the gate refuses an entry until all have reported/);
+  assert.match(codex, /Full cycle: market-structure-analyst[^]*then risk-manager phase 2 on your plan, if any\./);
+  assert.doesNotMatch(codex, /the gate refuses an entry until all report/);
+  assert.match(prompts(validateConfig({ harness: 'qwen' }), now).trade(items), /the gate refuses an entry until all report and phase 2 approves/);
 });
 
 test('child env locks the gate and paper mode disables trading', () => {
@@ -899,4 +901,25 @@ test('cycleOutcome: what a cycle hands the runner - the transcript is the standa
   assert.strictEqual(cycleOutcome(res, { intact: false, action: 'trade' }).ok, false);
   assert.strictEqual(cycleOutcome(res, { intact: false, action: 'eod' }).ok, true);
   assert.strictEqual(cycleOutcome({ ...res, ok: false }, { intact: true, action: 'eod' }).ok, false);
+});
+
+test('deniedRoles: the analysts served from the cache, and in a trade or manage cycle the roles outside the desk; opencode enforces them per run', () => {
+  const { deniedRoles } = require('../../scripts/lib/autotrader');
+  const cached = ['market-structure-analyst', 'trend-momentum-analyst', 'risk-manager'];
+  assert.deepStrictEqual(deniedRoles({ action: 'trade', cachedRoles: cached }), ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher'], 'risk-manager stays: phase 2 always runs');
+  assert.deepStrictEqual(deniedRoles({ action: 'manage', cachedRoles: [] }), ['strategy-researcher']);
+  assert.deepStrictEqual(deniedRoles({ action: 'premarket' }), []);
+  assert.deepStrictEqual(deniedRoles(null), []);
+  // The per-run opencode config: the session and the head trader may not launch them; the others stay allowed.
+  const ctx = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z' } }], cachedRoles: cached };
+  const env = childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, ctx);
+  const conf = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  for (const task of [conf.permission.task, conf.agent['fth-head-trader'].permission.task]) {
+    assert.strictEqual(task['*'], 'deny');
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.ok(task[r] !== 'allow', r);
+    for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(task[r], 'allow', r);
+  }
+  // A premarket run may launch every role.
+  const pre = JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, { action: 'premarket' }).OPENCODE_CONFIG_CONTENT);
+  for (const r of ['market-structure-analyst', 'strategy-researcher']) assert.strictEqual(pre.permission.task[r], 'allow', r);
 });

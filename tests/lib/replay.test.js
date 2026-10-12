@@ -730,3 +730,42 @@ test('runner wiring under replay: the server must attest the replayed time; bars
   assert.deepStrictEqual((await wrapped.closedBars('MNQ', { minutes: 3 })).map(b => b.t), ['2026-10-07T13:27:00.000Z', '2026-10-07T13:30:00.000Z']);
   assert.strictEqual(wrapped.other, 1);
 });
+
+test('driver: a run with prop starts that attempt at the window\'s first moment, before the first decision, once', async () => {
+  const { readAttempt } = require('../../scripts/lib/trading/prop-state');
+  const w = userWorld({ end: '2026-10-07T19:47:00Z', start: '2026-10-07T19:40:00Z', prop: 'topstep_100k' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const seen = [];
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) {
+      seen.push(readAttempt(w.run.paths.runHome, 'topstep_100k'));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` };
+    },
+    async trades() { return []; },
+  };
+  await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, maxCycles: 1 });
+  assert.ok(seen[0], 'the attempt exists at the first decision');
+  assert.strictEqual(seen[0].startedAt, '2026-10-07T19:40:00.000Z', 'started at the window\'s start (the replayed time)');
+  // Resumed: the same attempt with what it recorded, never restarted.
+  const { combineFile, endAttempt } = require('../../scripts/lib/trading/prop-state');
+  const file = combineFile(w.run.paths.runHome, 'topstep_100k');
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  rec.days.push({ day: '2026-10-06', balance: 100250 });
+  fs.writeFileSync(file, JSON.stringify(rec));
+  await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps, maxCycles: 1 });
+  assert.deepStrictEqual(readAttempt(w.run.paths.runHome, 'topstep_100k').days, [{ day: '2026-10-06', balance: 100250 }], 'a recorded day survives the resume');
+  // Ended by the user mid-run: a resume doesn't start a new one.
+  endAttempt(w.run.paths.runHome, 'topstep_100k');
+  await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.strictEqual(readAttempt(w.run.paths.runHome, 'topstep_100k'), null);
+  assert.ok(seen.slice(0, 2).every(a => a && a.startedAt === '2026-10-07T19:40:00.000Z'));
+  // Without prop, none; an unknown account or a bad name is a config error.
+  const plain = userWorld({ end: '2026-10-07T19:47:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(plain.run, { root: ROOT, userEnv: plain.env });
+  await runReplay({ run: plain.run, baseEnv: plain.env, root: ROOT, deps: { ...deps, async step(point) { seen.push('plain'); return deps.step(point); } }, maxCycles: 1 });
+  assert.strictEqual(readAttempt(plain.run.paths.runHome, 'topstep_100k'), null);
+  assert.throws(() => userWorld({ prop: 'Not A Name' }), /prop: an account profile name/);
+  // An unknown profile is refused with the config, before any run state exists.
+  assert.throws(() => userWorld({ prop: 'topstep_7k' }), /prop: unknown account "topstep_7k"/);
+});
