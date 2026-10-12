@@ -295,7 +295,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const pm = /^(\S+) (up|down)$/.exec(String(mtf.prevailing || ''));
   const prev = pm ? { label: pm[1], trend: pm[2] } : null;
   const fading = prev && (up ? prev.trend === 'down' : prev.trend === 'up');
-  const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule allows it; the priority order, step 2 (strategy-library), sizes it`
+  const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)`
     : prev ? `a reversal strategy, with the prevailing ${prev.label} ${prev.trend} trend` : 'a reversal strategy, no prevailing trend read';
   const facts = [
     mtf.style === 'reversal' ? reversalFact

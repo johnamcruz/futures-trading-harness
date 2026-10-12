@@ -224,6 +224,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(rm, /the priority order's step 2 \(the gate refuses a trend\s+strategy against it anyway\)/);
   assert.match(rm, /within the verdict for a policy strategy; the priority order's size\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /Halvings don't compound: however many\s+steps halve, the size is halved once\./);
+  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /crt_1h raid of the 1h high could short \(the priority order, step 2, decides it:\s+level, size, target\)\./);
   assert.match(rm, /`m3` `candidates` is `null` \(the scan failed or the bar wasn't\s+scanned\): VETO a rules strategy/);
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
@@ -290,7 +291,7 @@ test('the priority order is written once, in strategy-library, and every role th
   const sl = read('skills/strategy-library/SKILL.md');
   assert.match(sl, /### The priority order: the rule for every setup/);
   // Its rule text appears nowhere else: the other skills and agents point to it.
-  const RULE = [/`mixed` → half/, /floor\(size \/ 2\)/, /\*\*Hard stops → no trade\*\*/, /\*\*Secondary context\*\*/, /The priority order: the rule for every setup/, /trade-session(\s+skill's)?\s+priority\s+order/];
+  const RULE = [/`mixed` → half/, /floor\(size \/ 2\)/, /\*\*Hard stops → no trade\*\*/, /\*\*Secondary context\*\*/, /The priority order: the rule for every setup/, /trade-session(\s+skill's)?\s+priority\s+order/, /half size and the nearest\s+target/, /never twice/];
   const dir = (d, pick) => (fs.existsSync(path.join(ROOT, d)) ? fs.readdirSync(path.join(ROOT, d)).map(pick).filter(Boolean) : []);
   const docs = [...dir('skills', d => `skills/${d}/SKILL.md`), ...dir('agents', f => `agents/${f}`), ...dir('rules/trading', f => `rules/trading/${f}`),
     ...dir('strategies', d => `strategies/${d}/STRATEGY.md`), ...dir('commands', f => (f.endsWith('.md') ? `commands/${f}` : null)), ...dir('docs', f => (f.endsWith('.md') ? `docs/${f}` : null))]
