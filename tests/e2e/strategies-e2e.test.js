@@ -30,9 +30,9 @@ const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal 
 // Active strategies whose setup the 6-day NQ fixture never produces (checked below: they load, validate and scan);
 // the rest are driven end to end. A fixture where these fire would drive them too.
 const NOT_ON_FIXTURE = {
-  vwap_reclaim: 'price never comes back within 1.5 ATR of the VWAP on this fixture',
-  value_area_breakout: 'no two closes beyond the prior value area on above-average volume on this fixture',
-  value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture',
+  vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
+  value_area_breakout: 'no two closes beyond the prior value area on above-average volume on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
+  value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
 };
 const ACTIVE = ACTIVE_ALL.filter(s => !NOT_ON_FIXTURE[s.name]);
 
@@ -57,7 +57,10 @@ test('the active strategies are the ones this test drives, and the ones the fixt
     const s = ACTIVE_ALL.find(x => x.name === name);
     assert.ok(s && s.valid, name);
     assert.strictEqual(firstFire(s), -1, `${name} fires on the fixture now: drive it end to end instead`);
-    for (let i = 300; i < BARS.length; i += 97) assert.ok('candidate' in ev.at(s, i, { describe: true }), name);
+    for (let i = 300; i < BARS.length; i += 97) {
+      const r = ev.at(s, i, { describe: true });
+      assert.ok(r.candidate === false && !r.error && r.rules && r.rules.long.length > 0, `${name} at bar ${i}: ${JSON.stringify(r).slice(0, 200)}`);
+    }
   }
 });
 
