@@ -522,6 +522,17 @@ test('verdict: an MAE event is used only for its own round trip, inside it; a po
   assert.deepStrictEqual([a.verdict, a.passDay], ['PASS', '2026-03-03']);
 });
 
+test('verdict: a round trip opened and closed at one instant is judged at its close, not against the next position', () => {
+  const wide = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 10000 };
+  const T5 = '2026-03-02T15:05:00.000Z';
+  // Entry and stop in one bar (stamped 15:05, MAE -$1500 at 15:05), then a new position at 15:05 closed at +$100.
+  for (const next of [[[5, 'MNQ', 0, 1, null]], []]) {
+    const rows = [[5, 'MNQ', 0, 1, null], [5, 'MNQ', 1, next.length ? 1 : 2, -1500, -1500, 5, T5], ...next, [9, 'MNQ', next.length ? 1 : 0, 1, 100]];
+    const m = evaluate({ '2026-03-02': fillsOn('2026-03-02', rows) }, wide).months[0];
+    assert.deepStrictEqual([m.days.map(d => d.pnl), m.events.length], [[-1400], 0], next.length ? 're-entry' : 'reversal');
+  }
+});
+
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {
   const accounts = [{ name: 'topstep_50k' }, { name: 'topstep_100k' }];
   const strategies = [{ name: 'p1', signal: 'policy', account: 'topstep_50k' }, { name: 'orb', signal: 'rules' }];
@@ -545,4 +556,6 @@ test('verdict on the opencode-e2e-2 replay (one day, two trades): NOT YET, far f
   assert.match(fs.readFileSync(path.join(dir, 'report.md'), 'utf8'), /## Combine verdict[\s\S]*\| 2026-06 \| NOT YET/);
   const named = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'report', dir, '--account', 'topstep_50k'], { env: { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir }, encoding: 'utf8' });
   assert.match(named, /Combine verdict: topstep_50k \(--account\)/);
+  const first = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'report', '--account', 'topstep_50k', dir], { env: { PATH: process.env.PATH, HOME: dir, FTH_HOME: dir }, encoding: 'utf8' });
+  assert.match(first, /Combine verdict: topstep_50k \(--account\)/, 'the flag before the run dir');
 });

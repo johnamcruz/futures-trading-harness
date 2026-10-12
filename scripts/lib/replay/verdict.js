@@ -113,9 +113,10 @@ function fillsOf(days) {
         // a market fill at its bar's open, before the bar's range, and an MAE from that range with the same
         // time): the account as it was then. Its round trip's entry
         // ties it to the position it belongs to; without one (or with a time outside the round trip) it is
-        // judged at the close instead.
+        // judged at the close instead. One at the close's own time is judged there too: after the close
+        // (where it would sort), its position is gone and a new one may have opened at that time.
         const entryMs = rt ? Date.parse(rt.entryTime) : NaN;
-        if (fill.closing && fill.mae !== null && fill.maeMs !== null && Number.isFinite(entryMs) && entryMs <= fill.maeMs && fill.maeMs <= fill.ms) {
+        if (fill.closing && fill.mae !== null && fill.maeMs !== null && Number.isFinite(entryMs) && entryMs <= fill.maeMs && fill.maeMs < fill.ms) {
           out.push({ kind: 'mae', ms: fill.maeMs, order: 1e12 + (order += 1), day: tradingDayKey(new Date(fill.maeMs)), contract: fill.contract, entryMs, mae: fill.mae, fees: fill.fees, close: fill });
         }
       }
