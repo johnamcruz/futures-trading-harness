@@ -17,7 +17,7 @@
  * the valid ones in the next cycle's prompt, and names them to the order gate (FTH_CYCLE_CACHED), whose
  * roles-ran check counts them as returned.
  *
- *   reportVersions(text)                        { m15, h1, day } from a report's Data line, or null
+ *   reportVersions(text, current)               { m15, h1, day } from a report's Data line, or null
  *   accountKey(account)                         the account facts phase 1 rests on, as text
  *   serveReports({ cache, briefings, symbols, account, day })  { roles, reports: [{ role, text, at, until }] }
  *   recordReports({ prev, output, served, briefings, symbols, account, day, now })  the new cache
@@ -33,15 +33,21 @@ const CACHED_ROLES = [...ANALYSTS, PHASE1];
 const PARTS = ['m15', 'h1', 'day'];
 const MAX_TEXT = 8000; // a longer report isn't cached (never served cut): the role runs again
 
-/** The briefing versions a report names in its Data line (`Data: bar_briefing m3@..., m15@..., h1@..., day@...`). */
-function reportVersions(text) {
+/**
+ * The briefing versions a report names in its Data line (`Data: bar_briefing m3@..., m15@..., h1@..., day@...`). A
+ * role may shorten a version to its clock time (`m15@14:00`, the version's own UTC time): with `current` (this bar's
+ * versions, when the report is recorded right after its cycle) that names the current version and is stored in full.
+ */
+function reportVersions(text, current = null) {
   const line = String(text || '').split('\n').find(l => /^\s*\**Data:?\**/i.test(l) && /bar_briefing/.test(l));
   if (!line) return null;
   const out = {};
   for (const p of PARTS) {
-    const m = new RegExp(`\\b${p}@(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z)`).exec(line);
+    const m = new RegExp(`\\b${p}@(\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z|\\d{2}:\\d{2}\\b)`).exec(line);
     if (!m) return null;
-    out[p] = `${p}@${m[1]}`;
+    if (m[1].length > 5) out[p] = `${p}@${m[1]}`;
+    else if (current && current[p] && current[p].slice(p.length + 12, p.length + 17) === m[1]) out[p] = current[p];
+    else return null;
   }
   return out;
 }
@@ -114,7 +120,7 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
   for (const role of ANALYSTS) {
     const mine = calls.filter(c => c.role === role);
     const last = mine.sort((a, b) => a.end - b.end)[mine.length - 1];
-    const versions = last ? reportVersions(last.text) : null;
+    const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
     if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString() };
     else if (served.includes(role) && keep && keep.analysts && keep.analysts[role]) cache.analysts[role] = keep.analysts[role];

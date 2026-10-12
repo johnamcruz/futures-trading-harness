@@ -162,7 +162,10 @@ the parts it rests on (`m15`, `h1`, `day`) are still current, so it counts.
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
 (risk-manager, trade-executor, …), never to a generic, forked, or other-CLI
-agent: autonomous runs may allow only the harness roles. Launch each so you wait
+agent: autonomous runs may allow only the harness roles. A role's call is that
+role's own analysis (the order gate counts it as its report): never ask a role
+to read, load or summarize skills or files for you; load skills yourself (your
+skill tool, or without one read their `SKILL.md`). Launch each so you wait
 for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents (interactively), play each role yourself in turn; in an autonomous

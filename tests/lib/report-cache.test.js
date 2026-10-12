@@ -37,6 +37,12 @@ test('reportVersions: the m15, h1 and day versions a report names in its Data li
   assert.strictEqual(RC.reportVersions('Data: get_bars, market_snapshot'), null, 'a fallback report (no briefing) is never cached');
   assert.strictEqual(RC.reportVersions(`Bias: long\n${data(b).replace(/, h1@[^,]+/, '')}`), null);
   assert.strictEqual(RC.reportVersions(''), null);
+  // Shortened to each version's clock time (UTC, as the version reads): the current versions, given them; else none.
+  const cur = { m15: b.sections.m15.version, h1: b.sections.h1.version, day: b.sections.day.version };
+  const short = `Data: bar_briefing ${['m3', 'm15', 'h1', 'day'].map(p => `${p}@${b.sections[p].version.slice(p.length + 12, p.length + 17)}`).join(', ')} (all from bar_briefing)`;
+  assert.deepStrictEqual(RC.reportVersions(short, cur), cur);
+  assert.strictEqual(RC.reportVersions(short), null, 'without the current versions a clock time names nothing');
+  assert.strictEqual(RC.reportVersions(short.replace(/m15@\d\d:\d\d/, 'm15@23:59'), cur), null, 'another time');
 });
 
 test('an analyst\'s report is served while the briefing parts it was built on hold, then not', () => {
@@ -154,4 +160,13 @@ test('review fixes: one-symbol cycles only for analysts; an account not read who
   const long = `${data(a)}\n${'x'.repeat(9000)}\nBias: long`;
   assert.deepStrictEqual(RC.recordReports({ output: task(ANALYSTS[0], long, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).analysts, {});
   assert.strictEqual(RC.recordReports({ output: task('risk-manager', 'y'.repeat(9000), [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).phase1, null);
+});
+
+test('a report whose Data line gives the versions as clock times (m15@14:00) is cached and served like a full one', () => {
+  const { a, b } = pair();
+  const hhmm = p => a.sections[p].version.slice(p.length + 12, p.length + 17);
+  const report = `Data: bar_briefing m3@${hhmm('m3')}, m15@${hhmm('m15')}, h1@${hhmm('h1')}, day@${hhmm('day')} (all from bar_briefing)\nBias: short (medium)`;
+  const cache = RC.recordReports({ output: task(ANALYSTS[0], report, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });
+  assert.deepStrictEqual(cache.analysts[ANALYSTS[0]].versions, { m15: a.sections.m15.version, h1: a.sections.h1.version, day: a.sections.day.version });
+  assert.deepStrictEqual(RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY }).roles, [ANALYSTS[0]]);
 });

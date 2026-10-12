@@ -373,6 +373,10 @@ function cachedText(cached) {
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (from ${etTime(r.at)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
+// How the skills are loaded: Claude, opencode and Qwen Code have a skill tool (which the gate sees, skills-loaded.js);
+// Codex reads them (it carries them in AGENTS.md); a custom harness, either.
+const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
+
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 const RESULT_LINE = ' End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
 
@@ -382,7 +386,7 @@ function prompts(cfg, now, root = '') {
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
   const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
   return {
-    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (18:00 ET to 16:00 ET): today's calendar means that day's.${RESULT_LINE}`,
+    premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.${RESULT_LINE}`,
     /**
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
@@ -427,7 +431,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);

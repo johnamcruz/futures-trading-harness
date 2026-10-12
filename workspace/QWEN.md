@@ -15,9 +15,10 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
   multi-timeframe read, blackouts, the prop status, lessons, reconcile) are
   tools on the `harness` MCP server (the `harness-tools` skill). Use the tools;
   the scripts in `<root>/scripts/` are for people at a terminal.
-- Before trading, read the skill you need from `<root>/skills/<name>/SKILL.md`
-  if your harness has not loaded it. Start with `trade-session`, `premarket`,
-  `end-of-day`, or `autonomous-trading`.
+- Before trading, load the skill you need yourself (your skill tool, or read
+  `<root>/skills/<name>/SKILL.md` if your harness has none), never through a
+  role: a role's call is its own analysis. Start with `trade-session`,
+  `premarket`, `end-of-day`, or `autonomous-trading`.
 - Strategies are Markdown files: the `strategies_list` tool lists them.
 - Delegate to the agent roles below with your harness's subagents; without
   subagents, read the role file and play the role yourself.
@@ -40,9 +41,11 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 
 ## Execution
 
-- **Hard rule: trade only in the CME Globex session, 18:00 ET to 16:00 ET
-  (Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends),
-  and never carry a position past the 16:00 ET close.** Every position is
+- **Hard rule: trade only in the CME Globex session, which opens at 18:00 ET
+  and runs overnight until 16:00 ET the next day (Sunday evening to Friday
+  afternoon). The market is open all of that time, the regular session
+  09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on
+  weekends. Never carry a position past the 16:00 ET close.** Every position is
   flat by end of day (`eodAt`, no later than 16:00 ET). The order gate
   refuses entries outside the session whatever the configuration says, and
   the runner closes any position it finds outside it. Exits are always
@@ -99,7 +102,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   high-water mark (end-of-day or intraday: see the account profile). Know the cushion
   (balance − floor) before every session; size so one bad day can't breach it.
 - **Flat by 16:00 ET:** firms auto-flatten open positions near the close (often
-  15:10 CT, 16:10 ET); the harness is stricter. Its session is 18:00 ET to 16:00 ET, no new
+  15:10 CT, 16:10 ET); the harness is stricter. Its session runs from 18:00 ET until 16:00 ET the next day, no new
   entries from 15:45 ET, and end of day (15:50 ET) closes positions and
   cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
   the weekend.
@@ -148,7 +151,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `multi-timeframe-analysis` (skills/multi-timeframe-analysis/SKILL.md): Top-down futures analysis across timeframes - daily and 4h for context, 1h for bias, 15m for the setup, the trigger timeframe (3m/1m) for the entry. A mechanical read (the harness tool mtf_read) gives each timeframe's trend and labels a long or a short aligned, pullback, counter, or mixed. The trend rule is enforced in code - a trend strategy never enters against the prevailing 4h/1h/15m trend, only a reversal strategy (one marked mtf reversal) may fade it - by the scan, the backtester, and the order gate. Use for every bias, game plan, and trade plan, and whenever timeframes disagree.
 - `policy-training` (skills/policy-training/SKILL.md): Train, sweep, validate, and ship the policy of a policy strategy (a strategy with signal policy) - MaskablePPO in Python on the harness's own backtester, Optuna sweep -> retrain -> ship from JSON config families - that learns which of its strategies' setups to take, at what size in micros or minis, and when to bank a trade past the ratchet. Use when the user wants a strategy to pass combines with a trained policy, wants a hyperparameter sweep, or asks how a policy was validated.
 - `position-sizing` (skills/position-sizing/SKILL.md): Size futures trades from the stop distance, tick value, and the remaining daily loss allowance, with contract specs for CME micros and minis. Use for every plan before an order, and whenever volatility changes.
-- `premarket` (skills/premarket/SKILL.md): Read-only premarket preparation - parallel analyst, news, and risk roles, then a game plan with levels, strategies in play, risk budget, and order-gate news blackouts. Use before the session opens or when the user asks for a plan of the day. Places no orders.
+- `premarket` (skills/premarket/SKILL.md): Read-only premarket preparation - parallel analyst, news, and risk roles, then a game plan with levels, strategies in play, risk budget, and order-gate news blackouts. Use at the start of the trading day (just after the 18:00 ET open) or when the user asks for a plan of the day. Places no orders.
 - `prop-challenge-pacing` (skills/prop-challenge-pacing/SKILL.md): Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md; the harness tool combine_status, and the user's combine.js to start or stop one) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
 - `replay` (skills/replay/SKILL.md): Replay the live harness over history - the same runner, harness CLI, agents, skills, scripts, order gate and broker interface, cycle by cycle on a replay broker (backtester-mcp) that simulates only the data, the clock and the fills - to measure how the reasoning trader would have traded. Use when the user wants to set up, run, resume, or read a replay of the autonomous trader; replay runs are the user's to start.
 - `session-timing` (skills/session-timing/SKILL.md): Futures session clock for CME equity index, metals, and energy - Globex vs RTH, opening drive, lunch lull, close, prop-firm cut-offs, and scheduled news. Use when timing an entry, choosing strategies for the time of day, or setting news blackouts.

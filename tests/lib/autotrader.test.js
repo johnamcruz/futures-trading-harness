@@ -157,6 +157,12 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
   const full = prompts(validateConfig({}), now).trade(items);
+  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, and strategy-library before deciding/);
+  // Codex has no skill tool (it carries the skills in AGENTS.md): it reads them, and its gate can't see them loaded.
+  const cx = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
+  assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
+  assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding, then run/);
+  assert.match(full, /strategy-library before deciding \(the order gate refuses an entry without them\)/);
   assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2; the gate refuses an entry until all have reported\./);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported\./);
   // No entries possible: no roster.
@@ -603,6 +609,9 @@ test('cycle history in the prompt: repeated results collapse into one, long ones
 });
 
 test('a busy cycle prompt stays lean: every line is decision context, and the whole fits a budget', () => {
+  // The prompt names the harness home: a fixed one, so the budget doesn't depend on who runs the tests.
+  const savedHome = process.env.FTH_HOME;
+  process.env.FTH_HOME = '/home/u/.fth';
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
   const bars = Array.from({ length: 10 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 8, 14, 3 * k)).toISOString(), o: 21500.25, h: 21510.75, l: 21490.5, c: 21505.25, v: 1234 }));
@@ -626,6 +635,7 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   });
   // 4700: 4500 plus the required last-line instruction (RESULT_LINE, ~220 characters, with its plain-text rule).
   // 4900: the full cycle's roster (the roles the gate requires) is decision context too.
+  if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
   assert.ok(p.length < 4900, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
