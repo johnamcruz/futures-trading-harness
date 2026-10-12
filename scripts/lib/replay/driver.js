@@ -232,14 +232,15 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     runId: run.runId, hash: configHash(run, baseEnv),
     info: { broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
+  const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
-  // the window is inside it. Once only (a resumed run keeps the one it has).
-  if (run.prop && !readAttempt(paths.runHome, run.prop)) {
+  // the window is inside it. Only on a fresh run (nothing recorded yet): a resumed run keeps the attempt it has, or
+  // the user's choice to end it.
+  if (run.prop && !recorded.size && !readAttempt(paths.runHome, run.prop)) {
     startAttempt(paths.runHome, accountNamed(root || run.root, run.prop, startEnv), run.start);
     log(`started a ${run.prop} attempt at ${run.start.toISOString()}`);
   }
-  const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
-  const recorded = store.recordedTimes(paths.runDir);
   recoverPending(paths, manifest, log, recorded);
   const todo = store.remaining(manifest, points, recorded);
   // An end-of-day retry queued before the last stop (--max-cycles, the kill switch, the error limit, a crash): it runs first.

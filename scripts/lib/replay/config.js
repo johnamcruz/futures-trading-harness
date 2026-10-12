@@ -124,6 +124,10 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
   for (const k of ['premarket', 'endOfDay']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
+  else if (r.prop !== undefined && root) {
+    // Checked here, before any run state is written (a typo found later would change the config of a started run).
+    try { require('../trading/accounts').accountNamed(root, r.prop, env); } catch (err) { errors.push(`prop: ${err.message}`); }
+  }
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
