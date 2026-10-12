@@ -176,7 +176,8 @@ test('combine: status only (start, stop, record-day stay the user\'s, in scripts
   assert.strictEqual(combine.status({}, ctx).text, 'no attempt is started (node scripts/combine.js start --account <name>)\n');
   assert.deepStrictEqual(JSON.parse(combine.status({ json: true }, ctx).text), { attempts: [], verdicts: [] });
   assert.strictEqual(combine.status({ account: 'topstep_50k' }, ctx).text, 'topstep_50k: no attempt started\n');
-  assert.throws(() => combine.status({ account: 'nope' }, ctx), /unknown account "nope"/);
+  // A name that isn't a profile (a run id, the broker's account) reads every started attempt, and says so.
+  assert.match(combine.status({ account: 'nope' }, ctx).text, /^no account profile named nope: every started attempt\n/);
   require('../../scripts/lib/trading/prop-state').startAttempt(home, require('../../scripts/lib/trading/accounts').accountNamed(ROOT, 'topstep_50k', {}), AT);
   assert.match(combine.status({}, ctx).text, /^topstep_50k: active, balance \$50000 .*entries blocked/);
   assert.strictEqual(JSON.parse(combine.status({ json: true }, ctx).text).attempts[0].startedAt, AT.toISOString());

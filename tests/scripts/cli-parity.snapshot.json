@@ -255,9 +255,9 @@
     "stderr": ""
   },
   "combine status unknown account": {
-    "status": 1,
-    "stdout": "",
-    "stderr": "[combine] unknown account \"nope\" (accounts/<name>/ACCOUNT.md)\n"
+    "status": 0,
+    "stdout": "no account profile named nope: every started attempt\ntopstep_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the topstep_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stderr": ""
   },
   "combine record-day": {
     "status": 0,

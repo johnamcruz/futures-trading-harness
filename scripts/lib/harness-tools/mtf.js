@@ -26,6 +26,11 @@ const USAGE = 'usage: mtf.js <bars.json | bars.csv | -> [--tf=15,60,240] [--dail
 function mtf({ file = null, tf = [15, 60, 240], daily = null, json = false, record = false, symbol = null } = {}, ctx) {
   const c = context(ctx);
   if (!file) throw new Error(USAGE);
+  // Read once: in a cycle whose bar briefing is current, the default intraday read is the briefing's (m15, h1).
+  const defaultTf = Array.isArray(tf) && tf.join(',') === '15,60,240';
+  if (!daily && !record && !json && defaultTf && require('./briefing').briefedThisCycle(c.env, symbol)) {
+    return { text: 'This bar\'s briefing is current (bar_briefing): its m15 alignment and frame, its h1 frames and its trend rule are this read. Read it there, once per role (trade-session: read once); mtf_read runs with a daily file, other timeframes, or without a current briefing.\n' };
+  }
   const bars = readBarsArg(file);
   const read = mtfRead(bars, { timeframes: tf, daily: daily ? readBarsArg(daily) : null });
   const text = json ? `${JSON.stringify(read, null, 2)}\n` : `${read.lines.join('\n')}\n`;

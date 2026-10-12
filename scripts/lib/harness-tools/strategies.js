@@ -86,6 +86,10 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   const c = context(ctx);
   const { strategies } = load(c);
   if (!file) throw new Error('scan needs a bars file (get_bars JSON, CSV, Parquet) or -');
+  // Read once: in a cycle whose bar briefing is current, the summary scan is what the briefing's m3 candidates hold.
+  if (view === 'summary' && !record && !at && require('./briefing').briefedThisCycle(c.env, symbol)) {
+    return { text: `This bar's briefing is current (bar_briefing {"symbol": "${symbol}"}): its m3 candidates are this scan (each with its stop, exit and facts), and the trend rule and alignment are in it too. Read it there, once per role (trade-session: read once); strategies_show gives a strategy's rules, and strategies_scan with name one strategy's full result.\n` };
+  }
   const bars = readBarsArg(file);
   // The harness clock (a replay broker's replayed time), refused when unusable even with --now.
   const clock = c.now();
