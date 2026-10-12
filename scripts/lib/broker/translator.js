@@ -173,21 +173,22 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   const notTicker = new Set(); // ids the broker described with a name that is no futures ticker
 
   const warned = new Set();
-  const remember = c => {
+  // `readAt`: one time for every contract of one answer, so the answer's front month is the spec kept.
+  const remember = (c, readAt = now().toISOString()) => {
     const t = c && c.id ? parseTicker(c.name, now()) : null;
     if (!t) return null;
     cache.ids[c.id] = { root: t.root, month: t.month };
-    recordSpec(t.root, c);
+    recordSpec(t.root, c, readAt);
     return t;
   };
   // The broker's tick spec for the root; a reply without sane numbers records nothing.
-  const recordSpec = (root, c) => {
+  const recordSpec = (root, c, readAt) => {
     const { validSpec, specMismatch } = require('../trading/broker-specs');
     const v = validSpec(c);
     if (!v) return;
-    const readAt = now().toISOString();
     const active = c.activeContract === true;
-    // In one answer listing several months, the front month's spec is the one kept.
+    // In one answer listing several months (one readAt, however long the answer takes to record), the front month's
+    // spec is the one kept.
     const had = cache.specs[root];
     if (had && had.readAt === readAt && had.active && !active) return;
     cache.specs[root] = {
@@ -203,7 +204,8 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   /** The contracts of a root, from search_contracts; refreshes its front month. */
   async function lookUpRoot(root) {
     const list = parseJson(await call('search_contracts', { searchText: root, live: false }));
-    const mine = (Array.isArray(list) ? list : []).filter(c => { const t = remember(c); return t && t.root === root; });
+    const at = now().toISOString();
+    const mine = (Array.isArray(list) ? list : []).filter(c => { const t = remember(c, at); return t && t.root === root; });
     const active = mine.filter(c => c.activeContract);
     // The broker's own front month; without the flag, the nearest month.
     const front = (active.length ? active : mine).slice().sort((a, b) => cache.ids[a.id].month.localeCompare(cache.ids[b.id].month))[0];
@@ -306,8 +308,9 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
       // Contract lists carry each contract's ticker: learn them all at once, no lookup per id.
       const items = (Array.isArray(data) ? data : [data]).filter(c => c && typeof c.id === 'string' && c.name !== undefined);
       let learned = false;
+      const at = now().toISOString(); // one read time for the whole answer: its front month's spec is kept
       for (const c of items) {
-        if (remember(c)) learned = true;
+        if (remember(c, at)) learned = true;
         else notTicker.add(c.id);
       }
       if (learned) save();
