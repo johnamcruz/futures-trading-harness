@@ -31,12 +31,14 @@
  * launch still running or in the background ends it at its start; the one
  * placing this order excepted), so each entry has its own round of reports.
  * opencode prints a call when it ends, so two trade-executors launched at once
- * both see the same round. The gateway's account gate (account-gate.js)
- * covers the second entry: on the same root, position-open (counting orders in
- * flight) and working-orders refuse it, as does review-before-next-entry once
- * the first is journalled; on another root, prop-one-position on a prop
- * attempt and correlated-exposure for a same-direction equity index once the
- * first position shows. Otherwise only the autonomous-trading skill's
+ * both see the same round. The gateway covers the second entry. On the same
+ * root (account-gate.js counts MNQ and NQ as one root), the account gate's
+ * position-open (counting orders sent moments ago) and working-orders refuse
+ * it, and order-gate.js's review-before-next-entry does once the first entry,
+ * on that exact contract root, is journalled. On another root, prop-one-position
+ * refuses it on a prop attempt (any open position, recent order, or working
+ * order), and correlated-exposure refuses a same-direction equity-index entry
+ * once the first position shows. Otherwise only the autonomous-trading skill's
  * one-entry rule and max-entries limit it.
  *
  *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }
