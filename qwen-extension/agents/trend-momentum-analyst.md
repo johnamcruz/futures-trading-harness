@@ -2,11 +2,9 @@
 name: trend-momentum-analyst
 description: "Read-only futures analyst for trend and momentum regime - EMA alignment, ADX strength and slope, SuperTrend, Keltner expansion, ATR volatility - and a strategy-library scan of mechanical strategy triggers. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder)."
 tools:
-  - read_file
   - skill
   - mcp__broker__search_contracts
   - mcp__broker__get_contract
-  - mcp__broker__get_bars
   - mcp__harness__bars_fetch
   - mcp__harness__market_snapshot
   - mcp__harness__mtf_read

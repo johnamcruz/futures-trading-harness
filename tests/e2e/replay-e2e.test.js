@@ -78,6 +78,9 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
     assert.ok(cycle.prompt.includes(`(${r.t})`), 'the prompt is dated at the replayed time');
     const barOpen = new Date(Date.parse(r.t) - 2000 - 180000).toISOString();
     assert.strictEqual(cycle.context.symbols[0].bar.t, barOpen, 'the bar that just closed at the replayed time');
+    // The cycle's harness knows that bar (the bar briefing for it is the cycle's own), and the runner briefed it.
+    assert.ok(cycle.transcript.includes(`FTH_CYCLE_BARS=${JSON.stringify({ MNQ: barOpen })}`), cycle.transcript.slice(0, 400));
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(w.runHome, 'briefing', 'MNQ.json'), 'utf8')).symbol, 'MNQ');
     assert.ok(c.file.startsWith(w.runHome), 'the cycle log is in the run home');
     // The entry is refused by the gate (no plan); every refusal is in the line.
     assert.ok(r.refusals.length >= 1 && r.refusals.every(x => x.tool === 'place_order' && x.checks.length), JSON.stringify(r.refusals));

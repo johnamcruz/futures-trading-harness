@@ -49,7 +49,7 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   assert.ok(section.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'harness-tools-mcp.js'))}]`));
   assert.match(section, /^default_tools_approval_mode = "approve"$/m);
   const vars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(section)[1]);
-  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_SYMBOLS', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY']) {
+  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_SYMBOLS', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY', 'FTH_CYCLE_BARS']) {
     assert.ok(vars.includes(v), v);
   }
   const brokerVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);

@@ -2,11 +2,9 @@
 name: volume-liquidity-analyst
 description: "Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder)."
 tools:
-  - read_file
   - skill
   - mcp__broker__search_contracts
   - mcp__broker__get_contract
-  - mcp__broker__get_bars
   - mcp__broker__get_quote
   - mcp__harness__bars_fetch
   - mcp__harness__market_snapshot

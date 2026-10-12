@@ -25,7 +25,8 @@ function barBriefing({ symbol = null, json = false } = {}, ctx) {
   // the cycle decides (FTH_CYCLE_BARS, from the runner) is the test, however long the cycle runs; else the clock.
   const cycleBar = cycleBarOf(c.env, symbol);
   if (cycleBar ? cycleBar !== b.asOf : !current(b, c.now())) return { text: `The bar briefing for ${symbol} is old (its bar closed ${b.closedAt}; it held until ${b.sections.m3.validUntil}): no current briefing. ${fallback}\n` };
-  return { text: json ? `${JSON.stringify(b)}\n` : renderBriefing(b, { now: c.now() }) };
+  // This cycle's bar: rendered as of that bar, so no part reads as expired while the cycle decides it.
+  return { text: json ? `${JSON.stringify(b)}\n` : renderBriefing(b, { now: cycleBar ? new Date(b.closedAt) : c.now() }) };
 }
 
 /** The bar this cycle decides for `symbol`'s index family, or null outside a cycle (or a cycle without it). */

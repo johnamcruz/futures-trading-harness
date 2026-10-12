@@ -899,8 +899,8 @@ function createRunner(deps) {
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
-          // A bar not scanned (manage only) still gets its briefing: the file is always this bar's.
-          briefItem(item, null, 'not scanned this bar (manage only)');
+          // A bar not scanned (manage only, or no cycle) still gets its briefing: the file is always this bar's.
+          briefItem(item, null, 'not scanned this bar');
           if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
           else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }

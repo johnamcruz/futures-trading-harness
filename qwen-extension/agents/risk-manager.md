@@ -76,7 +76,8 @@ the levels) and the analysts' reports: don't fetch bars or run
 Your own calls are the account reads phase 1 needs, `order_plan` (step 5),
 and `strategies_show` for a strategy's rules; each once. When the briefing
 answers that there is no current one, take the candidates, the trend rule
-and the alignment from the cycle prompt and the analysts' reports instead.
+and the alignment from the plan the caller gives you and the analysts'
+reports instead; don't fetch bars for them.
 
 Check, in order, and stop at the first failure:
 

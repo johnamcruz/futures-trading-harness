@@ -202,7 +202,9 @@ test('in a cycle, the briefing is current exactly when it is for the bar the cyc
   const late = '2099-01-01T00:00:00Z';
   const env = bars => ({ FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: late, FTH_CYCLE_BARS: JSON.stringify(bars) });
   // The cycle's own bar, an hour or a year later: still this cycle's briefing (MNQ and NQ are one family).
-  assert.match(barBriefing({ symbol: 'NQ' }, { env: env({ MNQ: b.asOf }) }).text, /^Bar briefing NQ 3m/);
+  const inCycle = barBriefing({ symbol: 'NQ' }, { env: env({ MNQ: b.asOf }) }).text;
+  assert.match(inCycle, /^Bar briefing NQ 3m/);
+  assert.doesNotMatch(inCycle, /EXPIRED/, 'rendered as of the cycle\'s bar: nothing reads as expired while the cycle decides it');
   // Another bar: old.
   assert.match(barBriefing({ symbol: 'NQ' }, { env: env({ NQ: '2026-01-01T00:00:00.000Z' }) }).text, /is old/);
   // Outside a cycle (or a cycle without this symbol), the clock decides.

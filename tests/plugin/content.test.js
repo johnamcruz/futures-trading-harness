@@ -219,5 +219,10 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ht, /`m3`, every bar: [^|]*today so far \(open, opening range, IB, day type\), the overnight range so far, the developing session profile/);
   assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile/);
   assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
-  assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the cycle prompt and the analysts' reports instead/);
+  assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the plan the caller gives you and the analysts'\s+reports instead; don't fetch bars for them\./);
+  // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.
+  for (const a of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
+    const tools = /^tools: (.*)$/m.exec(read(`agents/${a}.md`))[1].split(',').map(t => t.trim());
+    assert.ok(!tools.includes('Read') && !tools.includes('mcp__broker__get_bars'), a);
+  }
 });

@@ -790,6 +790,21 @@ test('every scanned bar records its signals for the gate, also on the default ba
   assert.ok(recorded.length >= 3 && recorded.every(([s, t, n]) => s === 'MNQ' && t && n === 1), JSON.stringify(recorded));
 });
 
+test('a manage-only bar (the daily cycle cap reached, a position open) is briefed too, unscanned: the file is always the latest bar\'s', async () => {
+  const market = fakeMarket({ minutes: 3 });
+  const briefed = [];
+  const r = await simulate({
+    cfg: { timeframe: 3, maxCyclesPerDay: 5, account: '1' }, from: et(10, 0), to: et(11, 0), market, positions: { net: 1, working: 1 },
+    deps: { recordBriefing: (item, results, scanError) => briefed.push([item.bar.t, results, scanError]) },
+  });
+  const manage = r.cycles.filter(c => c.action === 'manage');
+  assert.ok(manage.length >= 1);
+  const unscanned = briefed.filter(([, results, err]) => results === null && err === 'not scanned this bar');
+  assert.ok(unscanned.length >= manage.length, JSON.stringify(briefed.slice(-3)));
+  // Each bar is briefed once.
+  assert.strictEqual(new Set(briefed.map(([t]) => t)).size, briefed.length);
+});
+
 test('every scanned bar records its bar briefing after the scan; a failed briefing is logged and never stops the pass', async () => {
   const recorded = [];
   const scan = [{ name: 'orb', signal: 'rules', status: 'active', candidate: true, direction: 'long', stopDistance: 5 }];
