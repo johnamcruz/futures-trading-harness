@@ -128,6 +128,31 @@ test('child env names the cycle and, for a harness that streams its transcript, 
   assert.strictEqual(qwen.FTH_CYCLE_TRANSCRIPT, undefined);
 });
 
+test('child env names the roles served from the report cache (FTH_CYCLE_CACHED); none: unset, a stale one dropped', () => {
+  const cfg = validateConfig({ harness: 'opencode' });
+  const ctx = { symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z' } }], cachedRoles: ['market-structure-analyst', 'risk-manager'] };
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth' }, ctx).FTH_CYCLE_CACHED, 'market-structure-analyst,risk-manager');
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_CACHED: 'risk-manager' }, { ...ctx, cachedRoles: [] }).FTH_CYCLE_CACHED, undefined);
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_CACHED: 'risk-manager' }).FTH_CYCLE_CACHED, undefined, 'a manual run serves none');
+});
+
+test('a trade prompt carries the cached reports whole, says not to launch those roles, and that phase 2 runs this cycle', () => {
+  const now = new Date('2026-10-07T14:30:00Z');
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
+  const cached = { roles: ['trend-momentum-analyst', 'risk-manager'], reports: [
+    { role: 'trend-momentum-analyst', text: 'Data: bar_briefing m15@x\nBias: long (high)', at: '2026-10-07T14:21:00Z', until: '2026-10-07T14:45:00.000Z' },
+    { role: 'risk-manager', text: 'Phase 1: 2 trades left', at: '2026-10-07T14:21:00Z', until: null },
+  ] };
+  const p = prompts(validateConfig({}), now).trade(items, { cached });
+  assert.match(p, /Cached reports, still valid this bar[^]*don't launch trend-momentum-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned\. An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts[^]*then risk-manager phase 2 \(always this cycle\)\./);
+  assert.match(p, /\n--- trend-momentum-analyst report \(from 10:21 ET\) ---\nData: bar_briefing m15@x\nBias: long \(high\)\n--- end of trend-momentum-analyst report ---/);
+  assert.match(p, /\n--- risk-manager phase 1 report \(from 10:21 ET\) ---\nPhase 1: 2 trades left\n/);
+  // None cached, manage-only or paper: no cached section.
+  assert.doesNotMatch(prompts(validateConfig({}), now).trade(items), /Cached reports/);
+  assert.doesNotMatch(prompts(validateConfig({}), now).trade(items, { cached, manageOnly: true }), /Cached reports/);
+  assert.doesNotMatch(prompts(validateConfig({ paper: true }), now).trade(items, { cached }), /Cached reports/);
+});
+
 test('a trade prompt names the roles its cycle runs before an entry, as the gate checks them', () => {
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];

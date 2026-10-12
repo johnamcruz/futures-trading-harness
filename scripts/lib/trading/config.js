@@ -11,6 +11,9 @@ const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
 const { selectionOf } = require('./contracts');
 
+// The roles whose report the runner may serve from its cache (report-cache.js): the analysts and risk-manager phase 1.
+const CACHEABLE = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
+
 // Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
 // Strategies narrow their own hours with `sessions` (e.g. [ny]).
 const DEFAULT_ENTRY_HOURS = '';
@@ -93,6 +96,9 @@ function loadConfig(env = process.env) {
     // The cycle's transcript as the harness streams it (FTH_CYCLE_TRANSCRIPT, set by the runner): the gateway's
     // view of which skills loaded and which roles ran (a hook passes its own transcript_path instead).
     cycleTranscript: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null,
+    // The roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js): roles-ran
+    // counts them as returned. Only role names the cache can hold; anything else is ignored.
+    cycleCached: String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x)),
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
     // Unset in an autonomous run, the selection is lost: an error, every entry refused.

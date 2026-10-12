@@ -12,6 +12,8 @@
  *   replayUnattested(serverConfig, at)     why a replay server doesn't attest the replayed time, or null
  *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
  *                loadState, saveState, killSwitchFile, log, event })   createRunner(...) with every dependency
+ *   reportCacheFor(home, cfg)             the runner's report cache (report-cache.js), or null for a harness whose
+ *                                         cycle output doesn't carry its roles' reports
  */
 
 const fs = require('fs');
@@ -31,6 +33,8 @@ const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { writeMtfRecord } = require('./trading/mtf-state');
 const { buildBriefing, readBriefing, writeBriefing, removeBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
+const RC = require('./trading/report-cache');
+const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
 
@@ -103,6 +107,31 @@ function briefingRecorder(home, cfg, now, env = process.env) {
   };
 }
 
+/**
+ * The report cache over the harness home: the briefings the runner recorded for this bar decide which analyst
+ * reports still hold, the account decides phase 1's. Claude and opencode stream their cycle's tool results (each
+ * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts.
+ */
+function reportCacheFor(home, cfg) {
+  if (!['claude', 'opencode'].includes(cfg.harness)) return null;
+  const briefings = symbols => Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
+  return {
+    serve: ({ symbols, account, now }) => {
+      const s = RC.serveReports({ cache: RC.readCache(home), briefings: briefings(symbols), symbols, account, day: tradingDayKey(now) });
+      const reports = cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports;
+      return { roles: reports.map(r => r.role), reports };
+    },
+    record: ({ symbols, account, now, output, served }) => {
+      try {
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now }));
+      } catch (err) {
+        RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
+        throw err;
+      }
+    },
+  };
+}
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
@@ -146,6 +175,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
     recordBriefing: briefingRecorder(home, cfg, now, env),
+    reportCache: reportCacheFor(home, cfg),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
     scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,
@@ -158,4 +188,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, briefingRecorder, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

@@ -73,7 +73,10 @@ description: Rules for running the trading harness unattended (headless, schedul
    counts as that role) reads each of these at most once and reuses it:
    `strategies_scan` (one with `name` is a separate read), `mtf_read` (one
    call, with `daily` when you have the daily file), `get_account_snapshot`,
-   `get_quote`, `get_bars`. A full cycle still runs its analysts in parallel.
+   `get_quote`, `get_bars`. A full cycle still runs its analysts in parallel,
+   except those whose report the prompt gives under "Cached reports"
+   (trade-session step 2): those reports are this cycle's; don't launch the
+   role again.
    Don't repeat what the prompt or a role gave you (the trade-executor's
    report is the after-order read of trade-session step 6), except:
    - The prompt lacks `remainingBeforeLimit` (and, without a prop attempt,

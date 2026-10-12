@@ -945,3 +945,40 @@ test('the partner lookup never holds up the symbol\'s poll, and the step settles
   await stepping;
   assert.deepStrictEqual(events.slice(-1), ['partner answered']);
 });
+
+test('the report cache: valid reports go into the trade prompt and the gate\'s cached roles; each cycle\'s output is recorded; a failure runs every role', async () => {
+  const served = [];
+  const recorded = [];
+  const report = { role: 'trend-momentum-analyst', text: 'Data: bar_briefing m15@x\nBias: long', at: '2026-10-07T14:00:00Z', until: '2026-10-07T14:45:00.000Z' };
+  const reportCache = {
+    serve: q => { served.push(q); return served.length > 1 ? { roles: [report.role], reports: [report] } : { roles: [], reports: [] }; },
+    record: q => recorded.push(q),
+  };
+  const r = await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 12), market: fakeMarket({ minutes: 3 }), deps: { reportCache } });
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 2);
+  // The first cycle: nothing cached, every role runs; later ones carry the report and name the role to the gate.
+  assert.doesNotMatch(trade[0].prompt, /Cached reports/);
+  assert.deepStrictEqual(trade[0].context.cachedRoles, []);
+  assert.match(trade[1].prompt, /don't launch trend-momentum-analyst this cycle[^]*--- trend-momentum-analyst report/);
+  assert.deepStrictEqual(trade[1].context.cachedRoles, [report.role]);
+  // Served for this cycle's bar and contract, with the account the prompt was given; recorded after it, with the roles served.
+  assert.deepStrictEqual(served[0].symbols.map(s => s.symbol), ['MNQ']);
+  assert.strictEqual(served[0].symbols[0].bar, trade[0].context.symbols[0].bar.t);
+  assert.strictEqual(recorded.length, trade.length);
+  assert.deepStrictEqual(recorded.map(q => q.served), [[], ...trade.slice(1).map(() => [report.role])]);
+  assert.ok(recorded.every(q => typeof q.output === 'string'));
+  // A cache that can't be read: logged, and the cycle runs every role.
+  const logs = [];
+  const broken = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),
+    deps: { reportCache: { serve: () => { throw new Error('bad cache'); }, record: () => {} }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  const t = broken.cycles.filter(c => c.action === 'trade');
+  assert.ok(t.length >= 1 && t.every(c => !/Cached reports/.test(c.prompt) && c.context.cachedRoles.length === 0));
+  assert.ok(logs.some(l => /the report cache: every role runs this cycle.*bad cache/.test(l)), logs.join('\n'));
+  // Paper mode lists no roles to launch, so nothing is served.
+  const paper = [];
+  await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3, paper: true }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }), deps: { reportCache: { serve: q => paper.push(q), record: () => {} } } });
+  assert.deepStrictEqual(paper, []);
+});
