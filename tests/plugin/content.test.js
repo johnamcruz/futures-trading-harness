@@ -150,7 +150,9 @@ test('order docs check a new order once and never wait or poll for a fill; the c
       // The next cycle tells a bracketed working entry by the note; no note means cancel; a partial fill's unbracketed rest is cancelled.
       /journal a note that the entry is working \(its order\s+id, and that its stop bracket is attached\)/,
       /tell by the entry's\s+own `order_placed` journal record \(`journal_read \{kind:"order_placed"\}`[^]*?`data\.result\.orderId`[^]*?`stopLossBracket`[^]*?An entry without one, or with no such record,\s+is cancelled first/,
-      /an entry order still working beside it without a stop bracket \(the rest of a partial fill; tell by its `order_placed` record, as for a flat account below\) is cancelled first/,
+      /an entry order on the position's side \(one that would add to it\) still working without a stop bracket \(the rest of a partial fill; tell by its `order_placed` record, as for a flat account below\) is cancelled first/,
+      /The position's own stop and target \(bracket legs, `\[protect\]` and `\[exit\]` orders, on the opposite side\) are never cancelled here/,
+      /`journal_read \{kind:"order_placed"\}`, kind\s+only, no `contractId` filter/,
       // The next cycle cancels an unbracketed working entry instead of keeping it as its own pending entry.
       /Keep only\s+a pending entry from your own plan that carries its stop bracket\./],
     'agents/trade-executor.md': [/Check the entry's status once/, /Working, with its stop bracket[^]*?report `EXECUTED` with the entry working, its order id, and that its\s+stop bracket is attached/, /Never wait or poll for a fill/,

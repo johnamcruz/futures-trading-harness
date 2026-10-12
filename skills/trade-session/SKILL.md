@@ -42,7 +42,7 @@ names them.
   enter, and the harness tool `combine_status` for an attempt. Every
   decision below (take, skip, size, manage, stand down) is made with these
   numbers.
-- **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order still working beside it without a stop bracket (the rest of a partial fill; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop; apply
+- **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order on the position's side (one that would add to it) still working without a stop bracket (the rest of a partial fill; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop. The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only. If the strategy's
@@ -67,7 +67,8 @@ names them.
   or target) right away; they could fill into an unplanned position. Keep only
   a pending entry from your own plan that carries its stop bracket. An order
   list may not show a bracket before the entry fills, so tell by the entry's
-  own `order_placed` journal record (`journal_read {kind:"order_placed"}`: the
+  own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind
+  only, no `contractId` filter: the
   one whose `data.result.orderId` is the order; its `data.request` has
   `stopLossBracket` when the bracket went with it); step 6's note on a
   working entry adds context. An entry without one, or with no such record,
