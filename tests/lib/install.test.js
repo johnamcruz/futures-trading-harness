@@ -38,7 +38,7 @@ test('codex block wires the gateway and every agent role', () => {
   assert.match(block, /"FTH_KILL_SWITCH_FILE"/);
   // The runner's exchange calendar reaches the gateway (Codex forwards only listed variables).
   const gatewayVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);
-  for (const v of ['FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_REPLAY_NOW', 'FTH_HOME']) assert.ok(gatewayVars.includes(v), `gateway: ${v}`);
+  for (const v of ['FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_REPLAY_NOW', 'FTH_HOME', 'FTH_SYMBOLS']) assert.ok(gatewayVars.includes(v), `gateway: ${v}`);
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 
@@ -49,7 +49,7 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   assert.ok(section.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'harness-tools-mcp.js'))}]`));
   assert.match(section, /^default_tools_approval_mode = "approve"$/m);
   const vars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(section)[1]);
-  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY']) {
+  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_SYMBOLS', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY']) {
     assert.ok(vars.includes(v), v);
   }
   const brokerVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);

@@ -21,6 +21,7 @@ const { normalizeBars } = require('./indicators');
 const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
 const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
+const { familyOf, selectedLeg } = require('./contracts');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
@@ -331,7 +332,7 @@ function loadStrategies(pluginRoot, env = process.env) {
     const { familyRoot } = require('./contracts');
     for (const r of s.instruments) {
       const ok = s.strategies.some(n => byName.get(n) && (byName.get(n).instruments || []).some(x => familyRoot(x) === familyRoot(r)));
-      if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro in their instruments)`);
+      if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro or mini in their instruments)`);
     }
     if (errs.length) Object.assign(s, { valid: false, errors: errs });
   }
@@ -339,12 +340,46 @@ function loadStrategies(pluginRoot, env = process.env) {
 }
 
 /**
+ * Why strategy `s` may not trade contract root `root`, or null when it may.
+ * `selected`: the contracts the user selected (the runner's symbols, or
+ * FTH_SYMBOLS; contracts.js parseSelection), null when unknown.
+ *
+ * A rules strategy trades one leg of a micro/mini family (contracts.js
+ * FAMILIES): the selected one. Listing either leg, it trades the selected leg
+ * (listing MNQ covers a selected NQ), and never the other one (selecting MNQ,
+ * an NQ entry is refused, and the other way round), so it never alternates
+ * between the two. With no leg of the family selected, it trades exactly the
+ * roots it lists, and nothing of a family it lists both legs of (fails closed). Manual and policy strategies always trade exactly the roots
+ * they list (a policy strategy's sizing picks its leg).
+ */
+function rootRefusal(s, root, selected = null) {
+  const r = String(root || '').toUpperCase();
+  const list = (s && Array.isArray(s.instruments)) ? s.instruments : [];
+  const fam = s && s.signal === 'rules' ? familyOf(r) : null;
+  if (fam && (list.includes(fam.micro) || list.includes(fam.mini))) {
+    const pick = selectedLeg(r, selected);
+    if (pick) return pick === r ? null : `trades ${pick} (the selected contract), not ${r}`;
+    // No leg selected and both listed: which one is the user's to say (fails closed).
+    if (list.includes(fam.micro) && list.includes(fam.mini)) {
+      return `lists both ${fam.micro} and ${fam.mini}, and neither is selected: it trades one, the selected contract (the runner's symbols, or FTH_SYMBOLS=${r})`;
+    }
+    if (!list.includes(r)) {
+      return `does not trade ${r} (instruments: ${list.join(', ')}); it trades the other leg of a family it lists only when that leg is the selected contract: select ${r} (the runner's symbols, or FTH_SYMBOLS=${r})`;
+    }
+  }
+  return r && list.includes(r) ? null : `does not trade ${r || 'an unnamed contract'} (instruments: ${list.join(', ')})`;
+}
+
+/** Does strategy `s` trade contract root `root`, given the selected contracts? (rootRefusal) */
+const tradesRoot = (s, root, selected = null) => rootRefusal(s, root, selected) === null;
+
+/**
  * Evaluate every valid, non-disabled strategy for `symbol` on the last closed
  * bar. Mechanical strategies report fired/not fired with filter results;
  * manual strategies are listed for the LLM to evaluate from their Markdown
  * body. Sessions are checked at `now` (default: the last bar's close).
  */
-function scan(strategies, bars, { symbol, now = null } = {}) {
+function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
   const root = String(symbol || '').toUpperCase();
   const norm = normalizeBars(bars);
   if (norm.length < 3) throw new Error(`need at least 3 bars, got ${norm.length}`);
@@ -352,7 +387,7 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
   const results = [];
   for (const s of strategies) {
     if (!s.valid || s.status === 'disabled') continue;
-    if (root && !s.instruments.includes(root)) continue;
+    if (root && !tradesRoot(s, root, selected)) continue;
     if (s.signal === 'policy') {
       results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` });
       continue;
@@ -373,11 +408,11 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
  * 5 bars"). Each bar is judged as the live scan judged it at its close
  * (causal: one evaluator, bar i sees bars 0..i).
  */
-function recentSignals(strategies, bars, { symbol, count = 5 } = {}) {
+function recentSignals(strategies, bars, { symbol, count = 5, selected = null } = {}) {
   const root = String(symbol || '').toUpperCase();
   const norm = normalizeBars(bars);
   const ev = createEvaluator(norm);
-  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || s.instruments.includes(root)));
+  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || tradesRoot(s, root, selected)));
   const out = [];
   for (let i = Math.max(0, norm.length - count); i < norm.length; i += 1) {
     const fired = [];
@@ -411,12 +446,15 @@ function withConfluence(results) {
 }
 
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */
-function checkStrategyForOrder(strategies, name, contractRoot, now, side = null) {
+function checkStrategyForOrder(strategies, name, contractRoot, now, side = null, selection = { symbols: null }) {
+  // An unreadable selection: no entries until it names one contract per index (fails closed).
+  if (selection && selection.error) return `${selection.error}. No entries until it is fixed.`;
   const s = strategies.find(x => x.name === name);
   if (!s) return `setup:${name} is not a known strategy. Add strategies/${name}/STRATEGY.md or use an existing setup tag.`;
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
-  if (!s.instruments.includes(contractRoot)) return `setup:${name} does not trade ${contractRoot} (instruments: ${s.instruments.join(', ')}).`;
+  const notTraded = rootRefusal(s, contractRoot, selection ? selection.symbols : null);
+  if (notTraded) return `setup:${name} ${notTraded}.`;
   if (!inSessions(s, now)) return `setup:${name} is outside its sessions (${s.sessions.join(', ')}).`;
   const sideName = String(side === null || side === undefined ? '' : side).toLowerCase();
   if (s.compiledRules && (sideName === 'buy' || sideName === 'sell')) {
@@ -438,4 +476,6 @@ module.exports = {
   loadStrategies,
   scan,
   checkStrategyForOrder,
+  tradesRoot,
+  rootRefusal,
  recentSignals };

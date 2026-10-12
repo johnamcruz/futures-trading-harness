@@ -250,7 +250,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     : 'Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');
   if (setup && strategies) {
-    add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now, input.side));
+    add('strategy', checkStrategyForOrder(strategies, setup[1].toLowerCase(), contractRoot(input.contractId), now, input.side, config.selection));
   }
   // Hard rules, outside the skippable checks: the prop challenge's account and policy.
   const named = setup && strategies ? strategies.find(x => x.name === setup[1].toLowerCase()) : null;

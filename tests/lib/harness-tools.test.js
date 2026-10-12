@@ -82,7 +82,7 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   assert.throws(() => strategies.scan({ file: CSV, record: true }, ctx), e => e instanceof cli.OpError && /--record needs --symbol/.test(e.message) && e.text.startsWith('[\n'));
   // In an autonomous run record is ignored, not refused: the scan comes back with a note, and nothing is recorded.
   const autoHome = tmpDir();
-  const auto = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: autoHome, FTH_AUTONOMOUS: '1' }, now: clock() });
+  const auto = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: autoHome, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }, now: clock() });
   assert.deepStrictEqual(JSON.parse(auto.text), byClock);
   assert.strictEqual(auto.stderr, '[strategies] note: --record ignored - the autonomous runner records every bar itself\n');
   assert.strictEqual(auto.code, undefined);

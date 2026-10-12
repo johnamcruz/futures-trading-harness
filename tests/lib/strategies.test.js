@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { compileRules } = require('../../scripts/lib/trading/rules');
-const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, tradesRoot, rootRefusal, recentSignals } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { run } = require('../../scripts/strategies');
 const { tmpDir } = require('../helpers');
@@ -194,6 +194,110 @@ test('a rules strategy with no short rules cannot be used to sell into an entry'
   const now = new Date(Date.UTC(2026, 9, 7, 15, 0));
   assert.match(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'sell'), /no short rules/);
   assert.strictEqual(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'buy'), null);
+});
+
+test('tradesRoot: a rules strategy trades the selected leg of a micro/mini family it lists, never the other; unknown selection: exactly its list', () => {
+  const rules = list => ({ signal: 'rules', instruments: list });
+  const micro = rules(['MNQ', 'MES']);
+  // Selected MNQ: MNQ, not NQ. Selected NQ: NQ (listing MNQ covers it), not MNQ.
+  assert.strictEqual(tradesRoot(micro, 'MNQ', ['MNQ']), true);
+  assert.strictEqual(tradesRoot(micro, 'NQ', ['MNQ']), false);
+  assert.strictEqual(tradesRoot(micro, 'NQ', ['NQ']), true);
+  assert.strictEqual(tradesRoot(micro, 'nq', ['NQ']), true);
+  assert.strictEqual(tradesRoot(micro, 'MNQ', ['NQ']), false);
+  assert.strictEqual(rootRefusal(micro, 'MNQ', ['NQ', 'MES']), 'trades NQ (the selected contract), not MNQ');
+  assert.strictEqual(rootRefusal(micro, 'NQ', ['MNQ']), 'trades MNQ (the selected contract), not NQ');
+  // Listing both legs doesn't let it alternate: only the selected one.
+  assert.strictEqual(tradesRoot(rules(['MNQ', 'NQ']), 'MNQ', ['NQ']), false);
+  assert.strictEqual(tradesRoot(rules(['MNQ', 'NQ']), 'NQ', ['NQ']), true);
+  // Each family by its own selection: ES selected, MNQ (no Nasdaq leg selected) is its list.
+  assert.strictEqual(tradesRoot(micro, 'ES', ['ES']), true);
+  assert.strictEqual(tradesRoot(micro, 'MES', ['ES']), false);
+  assert.strictEqual(tradesRoot(micro, 'MNQ', ['ES']), true);
+  assert.strictEqual(tradesRoot(micro, 'NQ', ['ES']), false);
+  // Unknown selection, both legs listed: neither (which one is the user's to say).
+  for (const r of ['MNQ', 'NQ']) assert.match(rootRefusal(rules(['MNQ', 'NQ']), r, null), /^lists both MNQ and NQ, and neither is selected: .*FTH_SYMBOLS=/, r);
+  assert.strictEqual(tradesRoot(rules(['MNQ', 'NQ', 'MES']), 'MES', null), true, 'another family: its list');
+  // Unknown selection (fails closed): exactly the roots listed, with how to select the other leg.
+  assert.strictEqual(tradesRoot(micro, 'MNQ', null), true);
+  assert.strictEqual(tradesRoot(micro, 'NQ', null), false);
+  assert.match(rootRefusal(micro, 'NQ', null), /^does not trade NQ \(instruments: MNQ, MES\); .*select NQ \(the runner's symbols, or FTH_SYMBOLS=NQ\)$/);
+  // Nothing outside its families, selected or not.
+  for (const r of ['MYM', 'YM', 'GC', 'MGC', 'CL', 'MCL', '', null, undefined, 'MNQX', 'CON.F.US.ENQ.Z25']) {
+    assert.strictEqual(tradesRoot(micro, r, [r ? String(r) : 'GC']), false, String(r));
+    assert.strictEqual(tradesRoot(micro, r, null), false, String(r));
+  }
+  assert.strictEqual(tradesRoot(rules(['GC']), 'MGC', ['MGC']), true);
+  assert.strictEqual(tradesRoot(rules(['SIL']), 'SI', ['SI']), true);
+  assert.strictEqual(tradesRoot(rules(['GC']), 'SI', ['SI']), false);
+  assert.strictEqual(tradesRoot(rules(['CL']), 'CL', ['CL']), true);
+  assert.strictEqual(tradesRoot(rules(['CL']), 'MCL', ['MCL']), false);
+  // Manual and policy strategies: exactly what they list, whatever is selected.
+  assert.strictEqual(tradesRoot({ signal: 'manual', instruments: ['MNQ'] }, 'NQ', ['NQ']), false);
+  assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ'] }, 'NQ', ['NQ']), false);
+  assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ', 'NQ'] }, 'NQ', ['MNQ']), true, 'a policy strategy\'s leg is its sizing\'s (unchanged here)');
+  assert.strictEqual(tradesRoot({ signal: 'rules' }, 'MNQ', ['MNQ']), false, 'no instruments: nothing');
+});
+
+test('selection: FTH_SYMBOLS is one contract per index; anything else is an error the gate refuses on', () => {
+  const { parseSelection, selectedSymbols } = require('../../scripts/lib/trading/contracts');
+  assert.deepStrictEqual(parseSelection(undefined), { symbols: null });
+  assert.deepStrictEqual(parseSelection('  '), { symbols: null });
+  assert.deepStrictEqual(parseSelection('NQ, mes'), { symbols: ['NQ', 'MES'] });
+  assert.match(parseSelection('MNQ,NQ').error, /selects two contracts of one index \(MNQ, NQ\)/);
+  assert.match(parseSelection('MNQ,,MES').error, /not a comma-separated list/);
+  assert.match(parseSelection('MNQ;rm -rf').error, /not a comma-separated list/);
+  assert.throws(() => selectedSymbols({ FTH_SYMBOLS: 'ES,MES' }), /two contracts of one index/);
+  assert.strictEqual(selectedSymbols({}), null);
+  // An autonomous run's runner always sets it: unset there, the selection is lost (an error, never "its list").
+  assert.throws(() => selectedSymbols({ FTH_AUTONOMOUS: '1' }), /FTH_SYMBOLS is not set in this autonomous run, .*a harness config installed before it was forwarded, which the user fixes by re-running node scripts\/install\.js --target <harness> \(e\.g\. codex\)$/);
+  assert.deepStrictEqual(selectedSymbols({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'NQ' }), ['NQ']);
+  assert.match(parseSelection('', { required: true }).error, /not set/);
+  assert.deepStrictEqual(parseSelection('MNQLONGROOT'), { symbols: ['MNQLONGROOT'] }, 'any root the runner accepts');
+});
+
+test('order check: a rules strategy trades the selected leg only; an unreadable selection refuses every entry', () => {
+  const s = { name: 'micro', valid: true, status: 'active', signal: 'rules', instruments: ['MNQ', 'MES'], sessions: [], compiledRules: { long: [{}], short: [{}] } };
+  const now = new Date(Date.UTC(2026, 9, 7, 15, 0));
+  const sel = symbols => ({ symbols });
+  assert.strictEqual(checkStrategyForOrder([s], 'micro', 'NQ', now, 'buy', sel(['NQ'])), null);
+  assert.strictEqual(checkStrategyForOrder([s], 'micro', 'MNQ', now, 'buy', sel(['MNQ'])), null);
+  assert.strictEqual(checkStrategyForOrder([s], 'micro', 'NQ', now, 'buy', sel(['MNQ'])), 'setup:micro trades MNQ (the selected contract), not NQ.');
+  assert.strictEqual(checkStrategyForOrder([s], 'micro', 'MNQ', now, 'buy', sel(['NQ'])), 'setup:micro trades NQ (the selected contract), not MNQ.');
+  // Unknown selection: its list only (the default when none is passed).
+  assert.strictEqual(checkStrategyForOrder([s], 'micro', 'MNQ', now, 'buy'), null);
+  assert.match(checkStrategyForOrder([s], 'micro', 'NQ', now, 'buy'), /^setup:micro does not trade NQ \(instruments: MNQ, MES\); .*FTH_SYMBOLS=NQ\)\.$/);
+  for (const r of ['RTY', 'M2K', 'GC', 'CL']) assert.match(checkStrategyForOrder([s], 'micro', r, now, 'buy', sel([r])), new RegExp(`^setup:micro does not trade ${r} \\(instruments: MNQ, MES\\)`), r);
+  // The other checks still apply on the selected mini: status, sides.
+  assert.match(checkStrategyForOrder([{ ...s, status: 'paper' }], 'micro', 'NQ', now, 'buy', sel(['NQ'])), /status "paper"/);
+  assert.match(checkStrategyForOrder([{ ...s, compiledRules: { long: [{}], short: [] } }], 'micro', 'NQ', now, 'sell', sel(['NQ'])), /no short rules/);
+  // An unreadable selection: refused, whatever the strategy.
+  assert.match(checkStrategyForOrder([s], 'micro', 'MNQ', now, 'buy', { error: 'FTH_SYMBOLS selects two contracts of one index (MNQ, NQ): select one per index, e.g. MNQ or NQ' }), /^FTH_SYMBOLS selects two contracts .*No entries until it is fixed\.$/);
+});
+
+test('scan and recent signals follow the selected leg: NQ selected, NQ\'s bars get the micro-listed rules strategies and MNQ\'s none', () => {
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  // Bars where bos and ema_cross fired long (the parity bar, tests/e2e/mock-trading-e2e.test.js).
+  const parity = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).filter(x => Date.parse(x.t) <= Date.parse('2026-04-28T04:09:00.000Z'));
+  const { strategies } = loadStrategies(ROOT, {});
+  const at = new Date(Date.parse(parity.at(-1).t) + 180000);
+  const strip = rs => rs.map(r => JSON.stringify(r));
+  const micro = scan(strategies, parity, { symbol: 'MNQ', now: at, selected: ['MNQ'] });
+  assert.ok(micro.find(r => r.name === 'bos').candidate, 'bos fired');
+  assert.deepStrictEqual(strip(scan(strategies, parity, { symbol: 'NQ', now: at, selected: ['NQ'] })), strip(micro));
+  assert.deepStrictEqual(strip(scan(strategies, parity, { symbol: 'MNQ', now: at })), strip(micro), 'unknown selection: its list');
+  // The leg not selected: only the policy strategies (which list both legs; their sizing picks one).
+  const policyOnly = rs => rs.every(r => r.signal === 'policy');
+  assert.ok(policyOnly(scan(strategies, parity, { symbol: 'NQ', now: at, selected: ['MNQ'] })));
+  assert.ok(policyOnly(scan(strategies, parity, { symbol: 'MNQ', now: at, selected: ['NQ'] })));
+  assert.ok(policyOnly(scan(strategies, parity, { symbol: 'NQ', now: at })), 'unknown selection: no micro-listed rules strategy on NQ');
+  assert.deepStrictEqual(scan(strategies, parity, { symbol: 'GC', now: at, selected: ['GC'] }), [], 'no bundled strategy lists gold');
+  const recentMicro = recentSignals(strategies, parity, { symbol: 'MNQ', count: 3, selected: ['MNQ'] });
+  assert.ok(recentMicro.at(-1).fired.includes('bos long'), JSON.stringify(recentMicro));
+  assert.deepStrictEqual(recentSignals(strategies, parity, { symbol: 'NQ', count: 3, selected: ['NQ'] }), recentMicro);
+  for (const [symbol, selected] of [['NQ', ['MNQ']], ['MNQ', ['NQ']], ['NQ', null], ['GC', ['GC']]]) {
+    assert.ok(recentSignals(strategies, parity, { symbol, count: 3, selected }).every(x => x.fired.length === 0), `${symbol} ${selected}`);
+  }
 });
 
 test('timeframes, empty sessions, and zero ATR stops are rejected', () => {

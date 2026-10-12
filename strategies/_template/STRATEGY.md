@@ -3,7 +3,7 @@ name: my_strategy
 description: One or two sentences - what the strategy trades, the edge it exploits, and when it applies (at least 40 characters).
 version: 1
 status: paper                 # paper | active | disabled. New strategies start as paper.
-instruments: [MNQ, MES]       # contract roots the strategy may trade
+instruments: [MNQ, MES]       # contract roots the strategy may trade (a rules strategy trades the selected leg of a micro/mini family it lists: MNQ covers a selected NQ)
 timeframe: 3m                 # trigger timeframe: 1m, 3m, 5m, 15m, 1h ...
 sessions: [ny]                # optional; asia (18:00-03:00 ET), london (03:00-09:30 ET), ny (09:30-16:00 ET), or "HH:MM-HH:MM@Zone". Omit for the whole 18:00-16:00 ET session
 regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol

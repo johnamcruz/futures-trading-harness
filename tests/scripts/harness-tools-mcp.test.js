@@ -246,7 +246,7 @@ test('harness-tools server: a symlinked bars directory and the output cap are re
   const big = path.join(home, 'more-strategies', 'big');
   fs.mkdirSync(big, { recursive: true });
   fs.writeFileSync(path.join(big, 'STRATEGY.md'), `---\nname: big\n---\n${'x'.repeat(300 * 1024)}\n`);
-  const client = server(envFor(home, { FTH_AUTONOMOUS: '1', FTH_BARS_DIR: linkedDir, FTH_STRATEGIES_DIRS: path.join(home, 'more-strategies') }));
+  const client = server(envFor(home, { FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_BARS_DIR: linkedDir, FTH_STRATEGIES_DIRS: path.join(home, 'more-strategies') }));
   try {
     const viaLink = await call(client, 'market_snapshot', { bars: path.join(linkedDir, 'NQ-3m.csv') });
     assert.strictEqual(viaLink.isError, true);

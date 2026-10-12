@@ -82,6 +82,58 @@ test('order_plan: units follow the instrument (MES $1.25 a tick on the same dist
   assert.strictEqual(r.plan.riskUsd, 22.5);
 });
 
+test('order_plan: the selected leg only - NQ selected, bos (listing MNQ) plans NQ in NQ\'s own dollars and specs; MNQ selected, NQ is refused', () => {
+  const { file, home, ctx } = setup();
+  const nqCtx = { ...ctx, env: { ...ctx.env, FTH_SYMBOLS: 'NQ' } };
+  // The same 18-tick stop, at NQ's $5.00 a tick.
+  const r = plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long', accountId: 7 }, nqCtx);
+  assert.match(r.text, /^bos long: 1 NQ at market \(entry ref 27427\.50\) \| stop 27423\.00, .*18 ticks \(\$90\.00\/NQ contract\)/);
+  assert.strictEqual(r.args.contractId, 'NQ');
+  assert.strictEqual(r.plan.riskUsd, 90);
+  assert.match(r.args.rationale, /^setup:bos long .*1 NQ risks \$90\.00$/);
+  // NQ selected: MNQ is refused, as the gate refuses it; MNQ selected: NQ is refused.
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, nqCtx), /^Error: bos trades NQ \(the selected contract\), not MNQ$/);
+  const mnqCtx = { ...ctx, env: { ...ctx.env, FTH_SYMBOLS: 'MNQ,MES' } };
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, mnqCtx).args.contractId, 'MNQ');
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, mnqCtx), /bos trades MNQ \(the selected contract\), not NQ/);
+  // No selection: its list only (NQ refused, saying how to select it); an unreadable one refuses.
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, ctx), /bos does not trade NQ \(instruments: MNQ, MES, MYM, M2K\); .*FTH_SYMBOLS=NQ/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, env: { ...ctx.env, FTH_SYMBOLS: 'MNQ,NQ' } }), /FTH_SYMBOLS selects two contracts of one index/);
+  // The mini's own broker specs: MNQ's recorded doesn't do for NQ.
+  const bare = tmpDir();
+  recordBrokerSpecs(bare, { roots: ['MNQ'] });
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, { ...ctx, env: { FTH_HOME: bare, FTH_SYMBOLS: 'NQ' } }), /no tick specs from the broker for NQ yet: .*; no order/);
+  // risk.max_risk_usd in the mini's dollars: $9 fits one MNQ, never one NQ ($90).
+  const root = path.join(home, 'plugin');
+  fs.mkdirSync(path.join(root, 'strategies', 'bos'), { recursive: true });
+  const doc = fs.readFileSync(path.join(ROOT, 'strategies', 'bos', 'STRATEGY.md'), 'utf8').replace('  min_rr: 1.5\n', '  min_rr: 1.5\n  max_risk_usd: 9\n');
+  fs.writeFileSync(path.join(root, 'strategies', 'bos', 'STRATEGY.md'), doc);
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, { ...ctx, root }).plan.size, 1);
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, { ...nqCtx, root }), /one NQ at a 18-tick stop risks \$90\.00, over bos's risk\.max_risk_usd \$9: no size fits/);
+});
+
+test('strategies_scan and strategies_recent follow the selected leg (FTH_SYMBOLS), as order_plan and the gate do', () => {
+  const { file, ctx } = setup();
+  const withSel = v => ({ ...ctx, env: { ...ctx.env, FTH_SYMBOLS: v } });
+  const scanned = (symbol, c) => JSON.parse(strategiesOps.scan({ file, symbol }, c).text).map(r => r.name);
+  const recentBos = (symbol, c) => JSON.parse(strategiesOps.recent({ file, symbol, count: 1 }, c).text)[0].fired.includes('bos long');
+  assert.ok(scanned('NQ', withSel('NQ')).includes('bos'), 'NQ selected: bos (listing MNQ) scans NQ');
+  assert.ok(!scanned('NQ', withSel('MNQ')).includes('bos'), 'MNQ selected: not NQ');
+  assert.ok(!scanned('NQ', ctx).includes('bos'), 'nothing selected: its list only');
+  assert.ok(!scanned('MNQ', withSel('NQ')).includes('bos'), 'NQ selected: not MNQ');
+  assert.ok(scanned('MNQ', ctx).includes('bos'));
+  assert.strictEqual(recentBos('NQ', withSel('NQ')), true);
+  assert.strictEqual(recentBos('NQ', withSel('MNQ')), false);
+  assert.strictEqual(recentBos('MNQ', withSel('NQ')), false);
+  assert.throws(() => strategiesOps.scan({ file, symbol: 'MNQ' }, withSel('MNQ,NQ')), /FTH_SYMBOLS selects two contracts of one index/);
+  assert.throws(() => strategiesOps.recent({ file, symbol: 'MNQ' }, withSel('MNQ,NQ')), /FTH_SYMBOLS selects two contracts of one index/);
+  // An autonomous run without it has lost its selection: the scan, recent and order_plan refuse.
+  const lost = { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } };
+  assert.throws(() => strategiesOps.scan({ file, symbol: 'MNQ' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.throws(() => strategiesOps.recent({ file, symbol: 'MNQ' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
+});
+
 test('order_plan: the caller chooses; it refuses, with the reason, rather than pick', () => {
   const { file, ctx } = setup();
   const refuse = (args, why) => assert.throws(() => plan({ file, symbol: 'MNQ', ...args }, ctx), why);
@@ -91,7 +143,9 @@ test('order_plan: the caller chooses; it refuses, with the reason, rather than p
   refuse({ strategy: 'orb', side: 'long' }, /orb is not a candidate on the last closed bar \(no rule set fired .*\); no order/);
   refuse({ strategy: 'nope', side: 'long' }, /unknown strategy "nope"/);
   refuse({ strategy: 'bos', side: 'long', accountId: 1.5 }, /accountId: the broker account's id/);
-  assert.throws(() => plan({ file, symbol: 'ES', strategy: 'bos', side: 'long' }, ctx), /bos does not trade ES/);
+  // A contract outside every family bos lists (MNQ, MES, MYM, M2K): refused, its family named too.
+  assert.throws(() => plan({ file, symbol: 'GC', strategy: 'bos', side: 'long' }, ctx), /bos does not trade GC \(instruments: MNQ, MES, MYM, M2K\)/);
+  assert.throws(() => plan({ file, symbol: 'CL', strategy: 'bos', side: 'long' }, ctx), /bos does not trade CL/);
   assert.throws(() => plan({ file, symbol: 'mnq\n', strategy: 'bos', side: 'long' }, ctx), /symbol: a contract root/);
   assert.throws(() => plan({ symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), /needs a bars file/);
   // A manual strategy's trigger and stop are the model's, from STRATEGY.md: nothing to calculate.

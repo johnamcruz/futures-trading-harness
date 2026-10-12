@@ -16,7 +16,7 @@ const store = require('../../scripts/lib/replay/store');
 const { seedRunHome, runReplay, withEntry, EOD_RETRIES } = require('../../scripts/lib/replay/driver');
 const { specFor } = require('../../scripts/lib/trading/contracts');
 const { summarize, toMarkdown, toText } = require('../../scripts/lib/replay/report');
-const { openRunnerBroker, wireRunner } = require('../../scripts/lib/runner-wiring');
+const { openRunnerBroker, wireRunner, runnerScan } = require('../../scripts/lib/runner-wiring');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const iso = s => new Date(s);
@@ -630,6 +630,21 @@ test('runner wiring: the broker must trade for a live account; the runner is bui
   const runner = wireRunner({ cfg: cfgOf({}), root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date('2026-10-10T15:00:00Z'), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {} });
   assert.strictEqual(typeof runner.step, 'function');
   assert.strictEqual(typeof (await runner.step()), 'number', 'a Saturday: nothing to do');
+});
+
+test('runner wiring: the runner scans with its symbols as the selected contracts - NQ selected, the micro-listed rules strategies scan NQ; MNQ selected, they don\'t', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).filter(x => Date.parse(x.t) <= Date.parse('2026-04-28T04:09:00.000Z'));
+  const { strategies } = loadStrategies(ROOT, {});
+  const at = new Date(Date.parse(bars.at(-1).t) + 180000);
+  const names = rs => rs.map(r => r.name).sort();
+  const nq = runnerScan(strategies, cfgOf({ symbols: ['NQ'] }), 'NQ', bars, at);
+  assert.ok(nq.find(r => r.name === 'bos').candidate, 'bos (listing MNQ) scans the selected NQ and fired');
+  assert.deepStrictEqual(names(nq), names(runnerScan(strategies, cfgOf({ symbols: ['MNQ'] }), 'MNQ', bars, at)));
+  // Only the runner timeframe's strategies (3m here), and none of the micro-listed rules ones on the leg not selected.
+  assert.ok(nq.every(r => r.timeframe === undefined || r.timeframe === '3m'));
+  assert.ok(runnerScan(strategies, cfgOf({ symbols: ['MNQ'] }), 'NQ', bars, at).every(r => r.signal === 'policy'));
 });
 
 test('replay config: brokerEnv names the replay server\'s own variables only; a live broker\'s is refused', () => {

@@ -105,6 +105,17 @@ test('engine: entry at the signal close, stop at 1R, fixed target at min_rr', ()
   assert.strictEqual(t.net, 4, '8 ticks x $0.50');
 });
 
+test('engine: a rules strategy listing the micro trades the mini\'s bars (as the live scan does), in the mini\'s dollars; nothing outside its families', () => {
+  const path = [[100, 101, 99.9, 101], [101, 101.5, 100.5, 101.2], [101.2, 103.5, 101, 103]];
+  const on = (symbol, tickValue, s = strategy()) => runEngine([{ symbol, bars: bars(path), tickSize: 0.25, tickValue, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0 }).trades;
+  const nq = on('NQ', 5);
+  assert.deepStrictEqual(nq.map(t => [t.contract, t.entry, t.exit, t.r, t.net]), [['NQ', 101, 103, 2, 40]], '8 ticks x $5.00');
+  assert.deepStrictEqual(on('MNQ', 0.5).map(t => [t.entry, t.exit, t.r, t.net]), [[101, 103, 2, 4]], 'the same trade, a tenth of the dollars');
+  assert.deepStrictEqual(on('ES', 12.5), [], 'another index');
+  assert.deepStrictEqual(on('GC', 10), []);
+  assert.deepStrictEqual(on('NQ', 5, strategy({ signal: 'manual' })), [], 'manual strategies are never backtested');
+});
+
 test('engine: a bar touching both stop and target is a loss; a gap through the stop fills at the open', () => {
   assert.deepStrictEqual(run([[100, 101, 99.9, 101], [101, 104, 99.5, 101]]).map(t => [t.reason, t.r]), [['stop', -1]]);
   assert.deepStrictEqual(run([[100, 101, 99.9, 101], [99, 99.5, 98, 98.5]]).map(t => [t.reason, t.exit, t.r]), [['stop', 99, -2]]);
@@ -137,6 +148,9 @@ test('report: R stats as the original bot reports them, plus dollars and drawdow
 test('config: data, symbols and limits are validated', () => {
   assert.throws(() => validateBacktestConfig({ symbols: ['MNQ'] }, ROOT), /data:/);
   assert.throws(() => validateBacktestConfig({ symbols: ['XYZ'], data: { XYZ: 'a.csv' } }, ROOT), /tickSize and tickValue/);
+  // One contract per index, as the runner selects: MNQ or NQ, never both.
+  assert.throws(() => validateBacktestConfig({ symbols: ['MNQ', 'NQ'], data: { MNQ: 'a.csv', NQ: 'a.csv' } }, ROOT), /symbols: one contract per index \(MNQ or NQ, not both\)/);
+  assert.strictEqual(validateBacktestConfig({ symbols: ['NQ', 'MES'], data: { NQ: 'a.csv', MES: 'a.csv' } }, ROOT).markets.length, 2);
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, start: '2025-02-01', end: '2025-01-01' }, ROOT), /end must be after start/);
   const ok = validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT);
   assert.deepStrictEqual([ok.markets[0].tickSize, ok.markets[0].tickValue], [0.25, 0.5]);
