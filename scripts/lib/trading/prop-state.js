@@ -305,7 +305,8 @@ function entrySinceSnapshot(home, accountName, entries = []) {
  * Did the harness send an order (any: entry, exit or stop) that went through at or after `sinceIso`? From the
  * journal's `order_placed` records. A record with an unreadable time counts (fails closed). A round trip
  * between two flat snapshots can leave the balance unchanged when the broker hasn't booked it: this is what
- * tells the runner to read the fills anyway.
+ * tells the runner to read the fills anyway. Not seen: an order placed outside the harness (by hand) that
+ * leaves the balance exactly unchanged; any balance change is read.
  */
 function orderSince(entries, sinceIso) {
   const at = Date.parse(sinceIso);
