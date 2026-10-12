@@ -47,8 +47,7 @@ Load the skills `position-sizing`, `prop-challenge-pacing`,
    these numbers; plan within them. Otherwise ask for (or read from the latest
    plan) the firm's cushion to the trailing loss floor if you can't derive it.
 6. Approve a policy strategy's entry only as its verdict says: that contract
-   (micro or mini) and side, at most its size (the trade-session priority
-   order may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
+   (micro or mini) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
    refuses it). The verdict's size replaces the position-sizing caps (25% of
    the daily allowance, 10% of the cushion, size 1); the budget it was sized
@@ -119,7 +118,7 @@ its facts; the order decides.
    ticks, the sides they sit on, and the risk per contract with the plan's;
    different stop ticks or a stop on the wrong side is a VETO with
    order_plan's stop as the fix. Size is not order_plan's to set: a plan may
-   be smaller (a `mixed` read halves it, a reversal fade is at most half), a
+   be smaller (the priority order may halve it), a
    policy verdict's entry is at most order_plan's size, and a rules
    strategy's size follows position-sizing; then risk $ = risk per contract ×
    the plan's size. Its refusal (not a candidate now, the other side, a

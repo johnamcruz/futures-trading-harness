@@ -33,7 +33,7 @@ The harness tracks the attempt and enforces it:
 - At each setup the runner records a verdict: the strategy that fired, the
   side, `skip` / `half` / `full`, the contract (MNQ or NQ, MES or ES, ...), the largest
   size, and the stop in ticks. **A verdict is a ceiling, never an order**:
-  take it only when the trade-session skill's priority order says so (it may
+  take it only when the priority order (the strategy-library skill) says so (it may
   skip it or halve it), and then exactly as given: rationale
   `setup:<policy strategy> ...`, that contract and side, at most that size,
   `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the

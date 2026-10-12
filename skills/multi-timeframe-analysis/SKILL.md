@@ -189,5 +189,5 @@ mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the par
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
 Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.
 
--> Longs: mixed (half size and the nearest target; at size 1, a skip). Shorts: against the 4-hour trend, refused for trend strategies.
+-> Longs: mixed (the priority order's step 4 sizes it). Shorts: against the 4-hour trend, refused for trend strategies.
 ```

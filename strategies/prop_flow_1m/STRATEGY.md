@@ -41,7 +41,7 @@ As `prop_portfolio`: the first flow strategy with a setup on the closed
 1-minute bar is the setup, sized from the cushion in micros or minis, and the
 trained policy (once shipped) takes it, halves it, or skips it, and may bank a
 trade past +2R. A verdict is a ceiling: take it with `setup:prop_flow_1m`, exactly as given
-and at most its size, when the trade-session priority order says so.
+and at most its size, when the priority order (the strategy-library skill) says so.
 
 ## Examples
 

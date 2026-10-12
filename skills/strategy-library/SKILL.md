@@ -101,19 +101,22 @@ verdict). A verdict is a ceiling on size, never an order. Contradicting
 facts mean no trade; confluence means trade. Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
+Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
+at size 1 every halving is a skip).
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
    refusal.
 2. **The trend rule**: a trend strategy against the prevailing trend → no
    trade (the scan and the gate refuse it anyway). A reversal strategy may
-   fade it only at a higher-timeframe level, at half size.
+   fade it only at a higher-timeframe level, at half size and the nearest
+   target.
 3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
    before the room it needs (`needR`) → no trade.
 4. **The multi-timeframe read for its side**: `aligned` → full;
-   `pullback` with the trigger turned back with the bias → full;
-   `mixed` → half (`floor(size / 2)`; 0 → no trade, so at size 1 every
-   mixed read is a skip); `counter` on a non-reversal setup → no trade.
+   `pullback` → no trade until the trigger timeframe turns back with the
+   bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a
+   non-reversal setup → no trade.
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
 6. **Confluence**: another strategy firing the other side → no trade;

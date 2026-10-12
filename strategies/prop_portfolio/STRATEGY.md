@@ -70,8 +70,7 @@ Without a `policy` bundle it takes every setup at the account's size budget
    bundle is shipped (no `policy:` line), every setup gets the full size its
    budget allows (step 3), or a skip when the budget can't fund one contract
    at its stop or the attempt blocks entries; the trail manages the trade.
-5. A verdict is a ceiling: take it only when the trade-session priority
-   order says so (it may skip it or halve it), and then exactly as given: `setup:prop_portfolio`, the verdict's
+5. A verdict is a ceiling: take it only when the priority order (the strategy-library skill) says so (it may skip it or halve it), and then exactly as given: `setup:prop_portfolio`, the verdict's
    contract and side, at most its size, with `stopLossBracket.ticks` equal to
    its stop ticks. The order gate refuses anything else, any entry while a
    position is open or an entry went in since the last account snapshot, and
