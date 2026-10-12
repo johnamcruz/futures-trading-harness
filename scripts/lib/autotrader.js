@@ -653,6 +653,15 @@ function cycleResult(output) {
   return results.length ? `CYCLE RESULT: ${results[results.length - 1]}` : null;
 }
 
+/**
+ * What a cycle returns to the runner: ok (an end of day did its job if the run succeeded, whatever the workspace
+ * guard said), its result line and exit code, and its transcript, the standard output alone (what the gate reads),
+ * that the runner records the roles' reports from (report-cache.js).
+ */
+function cycleOutcome(res, { result, intact, action }) {
+  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '' };
+}
+
 /** The result a run is logged with: a failed run's error (whatever it wrote), else its line, else "(none reported)". */
 function runResult(res) {
   if (!res.ok) return `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`;
@@ -701,6 +710,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   runnerArgv,
+  cycleOutcome,
   accountText,
   historyText,
   endOfDayAt,

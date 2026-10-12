@@ -141,7 +141,8 @@ multi-timeframe read); the two-of-three-analysts rule in step 3 doesn't
 apply: the briefing's alignment for the side and the trend rule decide.
 In an autonomous run the order gate refuses an entry (`[roles-ran]`) until
 `risk-manager` has returned twice this cycle (phase 1 and phase 2), or once
-(phase 2) when the prompt gives phase 1 under "Cached reports".
+(phase 2) when the prompt gives phase 1 under "Cached reports" (for the
+cycle's first entry only: after a `trade-executor` call, phase 1 and 2 again).
 
 **Full cycle** (default):
 

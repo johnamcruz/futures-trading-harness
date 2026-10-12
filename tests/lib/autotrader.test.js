@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
+const { cycleOutcome, validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -878,4 +878,15 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
   // Without a live file nothing is written.
   const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r2.ok, true);
+});
+
+test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {
+  const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\n', stdout: '{"a":1}\n' };
+  assert.deepStrictEqual(cycleOutcome(res, { result: 'CYCLE RESULT: no-trade - x', intact: true, action: 'trade' }),
+    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\n' });
+  assert.strictEqual(cycleOutcome({ ...res, stdout: undefined }, { intact: true, action: 'trade' }).transcript, '');
+  // The workspace guard tripped: a trade cycle failed, an end of day that ran still did its job.
+  assert.strictEqual(cycleOutcome(res, { intact: false, action: 'trade' }).ok, false);
+  assert.strictEqual(cycleOutcome(res, { intact: false, action: 'eod' }).ok, true);
+  assert.strictEqual(cycleOutcome({ ...res, ok: false }, { intact: true, action: 'eod' }).ok, false);
 });
