@@ -552,6 +552,35 @@ test('verdict: an MAE timed at its own close is judged at that moment, not at ev
   }
 });
 
+test('verdict: an MAE at a partial exit\'s price, other fills at that instant, the realized part and the entry tie at the close', () => {
+  const wide = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 10000 };
+  // MNQ long 2, MES long 1; 15:05: 1 MNQ stopped at -$1050 (MAE -$2100 there), then MES closes +$1500 at the same
+  // stamp; MNQ's last lot closes at -$50. MNQ was at -$2100 with the day at $0: the day stops.
+  const rows = [[0, 'MNQ', 0, 2, null], [1, 'MES', 0, 1, null], [5, 'MNQ', 1, 1, -1050], [5, 'MES', 1, 1, 1500], [9, 'MNQ', 1, 1, -50, -2100, 5]];
+  const m = evaluate({ '2026-03-02': fillsOn('2026-03-02', rows) }, wide).months[0];
+  assert.deepStrictEqual([m.days.map(d => d.pnl), m.events.length], [[-2000], 1]);
+  // MNQ long 2; at 15:05 1 lot stopped at -$500 and the other closed at -$100, MAE -$1000 at 15:05 (static $1200 max
+  // loss, no daily limit): equity at the MAE was $99000, above the $98800 floor.
+  const tight = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 1200, daily_loss_limit: 0 };
+  const same = fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [5, 'MNQ', 1, 1, -500], [5, 'MNQ', 1, 1, -100, -1000, 5]]);
+  const t = evaluate({ '2026-03-02': same }, tight).months[0];
+  assert.deepStrictEqual([t.verdict, t.maxLossUsed], ['NOT YET', 1000]);
+  // An entryTime that matches no position: every state since the open is judged instead (one after an MES loss).
+  const odd = fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [2, 'MES', 1, 1, -2000], [3, 'MES', 0, 1, null], [4, 'MES', 1, 1, 2000], [9, 'MNQ', 1, 1, -1500, -1500, 9, '2026-03-02T15:01:00.000Z']]);
+  assert.strictEqual(evaluate({ '2026-03-02': odd }, { ...ACCOUNT, daily_loss_limit: 0 }).months[0].verdict, 'FAIL');
+  // The day's room counts the realized part too: 1 lot stopped at -$1000 at 15:05, the other closed at -$50 then, MAE
+  // -$1500 at 15:05 (the other lot at -$500): the day was at -$1500 at worst, no stop.
+  const day = fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [5, 'MNQ', 1, 1, -1000], [5, 'MNQ', 1, 1, -50, -1500, 5]]);
+  const d = evaluate({ '2026-03-02': day }, wide).months[0];
+  assert.deepStrictEqual([d.days.map(x => x.pnl), d.events.length], [[-1050], 0]);
+  // A partial at the MAE's time whose round trip's entry matches no position: not judged there; every state is.
+  const oddPartial = fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MES', 0, 1, null], [2, 'MES', 1, 1, -2000], [3, 'MES', 0, 1, null], [4, 'MES', 1, 1, 2000], [6, 'MNQ', 1, 1, 0], [9, 'MNQ', 1, 1, 0, -1500, 6, '2026-03-02T15:01:00.000Z']]);
+  assert.strictEqual(evaluate({ '2026-03-02': oddPartial }, { ...ACCOUNT, daily_loss_limit: 0 }).months[0].verdict, 'FAIL');
+  // A close with no MAE exactly at the limit says so without an MAE.
+  const flat = evaluate({ '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [5, 'MNQ', 1, 1, -2000]]) }, wide).months[0];
+  assert.match(flat.events[0].text, /flattened there \(MNQ closed at \$-2000, counted as \$-2000\)/);
+});
+
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {
   const accounts = [{ name: 'topstep_50k' }, { name: 'topstep_100k' }];
   const strategies = [{ name: 'p1', signal: 'policy', account: 'topstep_50k' }, { name: 'orb', signal: 'rules' }];
