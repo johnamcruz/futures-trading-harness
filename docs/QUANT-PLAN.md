@@ -72,11 +72,10 @@ The replay report's combine verdict is per calendar month; the window's own
 attempt is read with `combine.js status`.
 
 While an attempt runs, only the policy strategy may enter, so the policy
-must be `active` where the replay runs. `prop_portfolio` stays `paper` in
-the repository until a trained bundle passes the promotion gate; the label
-runs use a checkout of the harness whose only change is `status: active` on
-it (never committed). Without a bundle the policy sizes each setup by its
-`sizing` rules (skip, half or full), which is what the labels record.
+must be `active`: `prop_portfolio` is, for live and replay alike. Until a
+trained bundle is shipped, it sizes each setup by its `sizing` rules (the
+full size its budget allows, or a skip), which is what the labels record;
+the policy trained on the labels then decides skip, half or full.
 
 ### Windows
 
