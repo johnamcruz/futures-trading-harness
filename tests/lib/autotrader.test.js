@@ -605,7 +605,7 @@ test('cycle history in the prompt: repeated results collapse into one, long ones
     { at: at(15), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
   ];
   const t = historyText(h);
-  assert.match(t, /Your last 6 cycle\(s\), oldest first: 10:00-10:09 ET \(4 cycles\) MNQ: no-trade - nothing fired \| 10:12 ET MNQ: executed - orb long x+… \| 10:15 ET MNQ: no-trade - nothing fired\./);
+  assert.match(t, /Your last 6 cycle\(s\), oldest first \(not facts\): 10:00-10:09 ET \(4 cycles\) MNQ: no-trade - nothing fired \| 10:12 ET MNQ: executed - orb long x+… \| 10:15 ET MNQ: no-trade - nothing fired\. Don't flip-flop without a new reason\.$/);
   assert.ok(t.length < 400, `${t.length} chars`);
   assert.strictEqual(historyText([]), '');
 });

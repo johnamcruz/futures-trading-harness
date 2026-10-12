@@ -350,7 +350,8 @@ function historyText(history) {
     if (last && last.text === short && last.sym === sym) { last.n += 1; last.to = h.at; } else runs.push({ text: short, sym, n: 1, from: h.at, to: h.at });
   }
   const when = r => (r.n > 1 ? `${etTime(r.from).replace(' ET', '')}-${etTime(r.to)} (${r.n} cycles)` : etTime(r.from));
-  return ` Your last ${list.length} cycle(s), oldest first: ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
+  // Past conclusions, not facts (autonomous-trading skill): a wrong one must not steer later cycles against the facts.
+  return ` Your last ${list.length} cycle(s), oldest first (not facts): ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason.`;
 }
 
 // The roles a cycle runs before an entry (trade-session skill), which the order gate checks (roles-ran.js): each

@@ -117,7 +117,7 @@ function reportCacheFor(home, cfg) {
   const briefings = symbols => Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
   return {
     serve: ({ symbols, account, now }) => {
-      const s = RC.serveReports({ cache: RC.readCache(home), briefings: briefings(symbols), symbols, account, day: tradingDayKey(now) });
+      const s = RC.serveReports({ cache: RC.readCache(home), briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now });
       const reports = cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports;
       return { roles: reports.map(r => r.role), reports };
     },

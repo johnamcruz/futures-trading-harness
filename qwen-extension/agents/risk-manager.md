@@ -43,8 +43,10 @@ Load the skills `position-sizing`, `prop-challenge-pacing`,
    Recent `lesson` entries that restrict setups.
 5. If a policy strategy (`signal: policy`) is in play, call the harness
    tool `combine_status`: the attempt (floor, cushion, size budget,
-   sessions left, any entry block) and the live verdicts. The gate enforces
-   these numbers; plan within them. Otherwise ask for (or read from the latest
+   sessions left, any entry block) and the live verdicts. Report each attempt
+   exactly as it lists it: an `active` attempt is running, so never say no
+   attempt is running when it lists one. The gate enforces these numbers;
+   plan within them. Otherwise ask for (or read from the latest
    plan) the firm's cushion to the trailing loss floor if you can't derive it.
 6. Approve a policy strategy's entry only as its verdict says: that contract
    (the selected one) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
@@ -62,6 +64,7 @@ Tradable: yes | no (<reason>)
 P&L today <$>, remaining before daily limit <$>, cushion <$ or unknown>
 Open: <positions and working orders, with protective stops yes/no>
 Streak: <n> losses in a row, <n> losses today; cooldown until <time> | none
+Attempt: <account> <status, exactly as combine_status lists it>, cushion <$>, budget <$> | none listed
 Budget: per trade <$>, rest of day <$>
 Restricted setups: <from lessons>
 Stand-down conditions: <any that apply now>

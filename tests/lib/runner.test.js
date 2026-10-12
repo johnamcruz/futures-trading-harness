@@ -844,7 +844,7 @@ test('the trade prompt carries the last closed bars and the model\'s own last cy
   const bars = Array.from({ length: 12 }, (_, k) => ({ t: new Date(et(9, 30) + k * 180000).toISOString(), o: 100 + k, h: 101 + k, l: 99 + k, c: 100.5 + k, v: 10 + k }));
   const p = prompts(cfg, new Date(et(10, 6)), '/r').trade([{ symbol: 'MNQ', bar: { t: bars[11].t, c: 111.5, file: '/f', contractId: 'C', recent: bars.slice(-10) } }], { history: r.runner.state.history });
   assert.match(p, /MNQ last 10 closed 3m bars \(ET open time, oldest first\): 09:36 O 102 H 103 L 101 C 102\.5 V 12 \(\+0\.5\);/);
-  assert.match(p, /Your last \d cycle\(s\), oldest first: .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
+  assert.match(p, /Your last \d cycle\(s\), oldest first \(not facts\): .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
 });
 
 test('a failed strategy scan is named in the prompt; end-of-day and premarket cycles log their context', async () => {
