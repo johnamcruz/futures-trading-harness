@@ -290,7 +290,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const allowed = up ? mtf.longAllowed : mtf.shortAllowed;
   const align = (alignment && alignment[up ? 'long' : 'short']) || null;
   const conf = r.confluence || { with: [], against: [] };
-  // A reversal strategy may fade the prevailing trend; when it does, the priority order's step 2 (strategy-library) sizes it.
+  // A reversal strategy may fade the prevailing trend; when it does, the priority order's step 2 (strategy-library) decides it.
   // The scan's trend-rule summary names it as text: '4h up' (mtf.ruleSummary).
   const pm = /^(\S+) (up|down)$/.exec(String(mtf.prevailing || ''));
   const prev = pm ? { label: pm[1], trend: pm[2] } : null;

@@ -291,7 +291,7 @@ test('the priority order is written once, in strategy-library, and every role th
   const sl = read('skills/strategy-library/SKILL.md');
   assert.match(sl, /### The priority order: the rule for every setup/);
   // Its rule text appears nowhere else: the other skills and agents point to it.
-  const RULE = [/`mixed` → half/, /floor\(size \/ 2\)/, /\*\*Hard stops → no trade\*\*/, /\*\*Secondary context\*\*/, /The priority order: the rule for every setup/, /trade-session(\s+skill's)?\s+priority\s+order/, /half size and the nearest\s+target/, /never twice/];
+  const RULE = [/`mixed` → half/, /floor\(size \/ 2\)/, /\*\*Hard stops → no trade\*\*/, /\*\*Secondary context\*\*/, /The priority order: the rule for every setup/, /trade-session(\s+skill's)?\s+priority\s+order/, /half\s+size\s+and\s+the\s+nearest\s+target/, /never\s+twice/, /step 2, sizes it/];
   const dir = (d, pick) => (fs.existsSync(path.join(ROOT, d)) ? fs.readdirSync(path.join(ROOT, d)).map(pick).filter(Boolean) : []);
   const docs = [...dir('skills', d => `skills/${d}/SKILL.md`), ...dir('agents', f => `agents/${f}`), ...dir('rules/trading', f => `rules/trading/${f}`),
     ...dir('strategies', d => `strategies/${d}/STRATEGY.md`), ...dir('commands', f => (f.endsWith('.md') ? `commands/${f}` : null)), ...dir('docs', f => (f.endsWith('.md') ? `docs/${f}` : null))]

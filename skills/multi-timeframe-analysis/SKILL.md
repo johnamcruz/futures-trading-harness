@@ -130,7 +130,8 @@ Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `cisd_ote`,
 against the lower timeframes by design, and the trend rule lets them fade
 the prevailing trend. Judge the setup against the timeframe above its range
 candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against
-that one too, it is a `counter` reversal (the priority order, step 2, sizes it).
+that one too, it is a `counter` reversal (the priority order, step 2, decides it: level,
+size, target).
 
 ### 5. Levels flow down
 
