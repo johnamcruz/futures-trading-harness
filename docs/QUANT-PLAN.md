@@ -87,8 +87,10 @@ stratified and seeded (drawn once and recorded): each split's range is cut
 into equal buckets, and one random weekday start is drawn per bucket, each
 window inside its own bucket (a start is drawn no later than 30 weekdays
 before its bucket ends), so windows never overlap. A window with a holiday
-has fewer than 30 sessions, so its attempt may end still active, one or two
-sessions short of the attempt's length; it is read as it stands.
+has fewer than 30 sessions (one or two short of the attempt's length). A
+replayed attempt never times out (it runs until it passes or blows), so a
+window that does neither ends `active` whatever its session count, and is
+read as it stands, by sessions done.
 
 | Split | Range | Reasoning-model windows | Used for |
 | --- | --- | --- | --- |
