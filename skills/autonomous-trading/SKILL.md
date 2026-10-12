@@ -37,7 +37,11 @@ description: Rules for running the trading harness unattended (headless, schedul
    `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate's
    decisions in `logs/gate-log.jsonl`). The prompt also carries the last 10
    closed bars and your last 10 cycle results: read them, and don't reverse a
-   recent decision without saying what changed. It carries today's premarket
+   recent decision without saying what changed. Those results are your past
+   conclusions, not facts: where one contradicts this prompt's account or
+   attempt line (e.g. it says no attempt is running and the prompt lists an
+   active one), the prompt's facts win, and you say the earlier result was
+   wrong. It carries today's premarket
    plan, the news blackouts (in force, or the next one), the day so far (the
    "day:" line; outside RTH the "overnight" line), each fired strategy's track
    record (a `paper` one is marked: plan it only), and each open trade's state

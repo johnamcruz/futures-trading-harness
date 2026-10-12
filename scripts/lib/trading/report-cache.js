@@ -9,8 +9,10 @@
  *     contracts: until the next 15m close (an h1 or day change comes at a 15m close too). Its 15m-and-up view is
  *     what is reused; the 3m facts (the trigger, the VWAP side, the candidates) come from each bar's briefing.
  *   - risk-manager phase 1 (the account's state, limits, budget) holds while the account is unchanged (balance,
- *     positions, working orders, prop attempts) on the same trading day; never from a cycle that launched a
- *     trade-executor, nor on an account that wasn't read whole.
+ *     positions, working orders, prop attempts) on the same trading day, for at most PHASE1_MAX_AGE_MS; never from
+ *     a cycle that launched a trade-executor, nor on an account that wasn't read whole, nor a report that says no
+ *     attempt is running while the account's attempts list an active one (a wrong report would be served every
+ *     cycle the account stays unchanged).
  *   - risk-manager phase 2 reviews this bar's plan: never cached.
  *
  * The runner records the reports from each cycle's transcript (the roles can't write the harness home), serves
@@ -19,7 +21,8 @@
  *
  *   reportVersions(text, current)               { m15, h1, day } from a report's Data line, or null
  *   accountKey(account)                         the account facts phase 1 rests on, as text
- *   serveReports({ cache, briefings, symbols, account, day })  { roles, reports: [{ role, text, at, until }] }
+ *   serveReports({ cache, briefings, symbols, account, day, now })  { roles, reports: [{ role, text, at, until }] }
+ *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
  *   recordReports({ prev, output, served, briefings, symbols, account, day, now })  the new cache
  *   cacheFile(home), readCache(home), writeCache(home, cache)
  */
@@ -32,6 +35,17 @@ const PHASE1 = 'risk-manager';
 const CACHED_ROLES = [...ANALYSTS, PHASE1];
 const PARTS = ['m15', 'h1', 'day'];
 const MAX_TEXT = 8000; // a longer report isn't cached (never served cut): the role runs again
+// Phase 1 is read again at least this often, even on an unchanged account: a cached report is a claim, not a fact.
+const PHASE1_MAX_AGE_MS = 30 * 60000;
+
+// "no attempt is running", "no prop attempt running", "no active attempt", "wait for a prop attempt to be started", ...
+const NO_ATTEMPT = /\bno\s+(?:prop\s+|active\s+|combine\s+|running\s+)*attempts?\b(?![^.\n|]*\b(?:restrict|limit|lesson))|\battempts?\s+(?:is|are)\s+not\s+(?:currently\s+)?(?:running|started|active)|\bwait\s+for\s+an?\s+(?:prop\s+)?attempt\s+to\s+(?:be\s+)?start/i;
+
+/** A report that says no attempt is running while the account's attempts list an active one: never cached. */
+function deniesActiveAttempt(text, account) {
+  const active = account && Array.isArray(account.attempts) && account.attempts.some(x => x && x.status === 'active');
+  return Boolean(active && NO_ATTEMPT.test(String(text || '')));
+}
 
 /**
  * The briefing versions a report names in its Data line (`Data: bar_briefing m3@..., m15@..., h1@..., day@...`). A
@@ -90,7 +104,7 @@ function accountKey(a) {
 const sameSymbols = (cache, symbols) => JSON.stringify(cache.symbols || []) === JSON.stringify(symbols.map(s => [s.symbol, s.contractId || null]));
 
 /** The cached reports still valid for this cycle, and the roles they stand for. */
-function serveReports({ cache, briefings, symbols, account, day }) {
+function serveReports({ cache, briefings, symbols, account, day, now = null }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
   const reports = [];
@@ -102,7 +116,11 @@ function serveReports({ cache, briefings, symbols, account, day }) {
   }
   const p1 = cache.phase1;
   const key = accountKey(account);
-  if (p1 && key && p1.account === key && p1.day === day) reports.push({ role: PHASE1, text: p1.text, at: p1.at, until: null });
+  // Without the clock its age can't be known: not served (fails closed, the role runs).
+  const age = now ? now.getTime() - Date.parse(p1 && p1.at) : NaN;
+  if (p1 && key && p1.account === key && p1.day === day && age >= 0 && age < PHASE1_MAX_AGE_MS && !deniesActiveAttempt(p1.text, account)) {
+    reports.push({ role: PHASE1, text: p1.text, at: p1.at, until: null });
+  }
   return { roles: reports.map(r => r.role), reports };
 }
 
@@ -132,7 +150,8 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
   else {
     const rm = calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
     // A report with a verdict is a plan's review (phase 2), never the account's state: not cached as phase 1.
-    if (rm && key && fits(rm.text) && verdictOf(rm.text) === null) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
+    // Nor one that denies an active attempt: served on every unchanged bar, it would block the whole day.
+    if (rm && key && fits(rm.text) && verdictOf(rm.text) === null && !deniesActiveAttempt(rm.text, account)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
   }
   return cache;
 }
@@ -160,4 +179,4 @@ function removeCache(home) {
   try { fs.unlinkSync(cacheFile(home)); } catch (_err) { /* none */ }
 }
 
-module.exports = { CACHED_ROLES, PHASE1, reportVersions, accountKey, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };
+module.exports = { CACHED_ROLES, PHASE1, PHASE1_MAX_AGE_MS, deniesActiveAttempt, reportVersions, accountKey, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };
