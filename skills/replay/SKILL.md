@@ -115,7 +115,10 @@ broker.
    replay the policy, set `"prop": "topstep_100k"` in the replay config: a
    fresh run starts that attempt at `start`, before the first decision, so
    every trade of the window is inside it (a resumed run keeps the attempt it
-   has).
+   has). Its broker stops the day at that account's own daily loss limit
+   (`daily_loss_limit` in its `ACCOUNT.md`, e.g. $2,000 for `topstep_100k`),
+   not the replay server's default, so the room the agents size from is the
+   firm's.
    The policy strategy must be `active` (`prop_portfolio` is): while an
    attempt runs, the order gate takes entries only from a policy strategy
    that trades it, and a policy owns its strategies' setups only when

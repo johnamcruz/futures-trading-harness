@@ -18,15 +18,18 @@
  */
 
 const { loadAccounts } = require('../trading/accounts');
-const { contractRoot } = require('../trading/journal');
+const { contractRoot, readJournal, resolveJournalPath } = require('../trading/journal');
 const { familyOf } = require('../trading/contracts');
 const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const { loadBundle, bundleMismatch, legMismatch } = require('./policy-bundle');
 const live = require('./live');
 const combine = require('../trading/combine');
+const { tradingDayKey } = require('../trading/clock');
 
-function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {} }) {
+function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {}, journal = null }) {
+  // The broker's journal (the harness's own order records): read only to know whether an order went through.
+  const journalEntries = journal || (() => readJournal(resolveJournalPath({ ...env, FTH_HOME: home })));
   const bundles = new Map();
   const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
   const warned = new Set();
@@ -69,7 +72,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     return live.stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
   }
 
-  async function balances(now, fn, { flat = false, closeOf = null } = {}) {
+  async function balances(now, fn, { flat = false, closeOf = null, withFills = false } = {}) {
     const list = accounts();
     if (!list.length || !accountId) return;
     if (list.length > 1) warnOnce('many', `strategies trade ${list.length} account profiles (${list.map(a => a.name).join(', ')}) on one live account; each sees the same balance`);
@@ -86,7 +89,35 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
         continue;
       }
-      fn(a, balance, now, open, openIds);
+      // The fills since the day's anchor, to check the balance against (prop-state balanceCheck): only when flat,
+      // on a day already anchored, and only when something moved (the balance, a position closed) or the last
+      // check didn't pass; otherwise that check carries forward with no broker call. A broker that can't list
+      // them refuses entries, never skips the check.
+      let fills;
+      let fillsError = null;
+      let unchanged = false;
+      const r = withFills && !open ? live.readAttempt(home, a.name) : null;
+      const prev = r && r.snapshot;
+      if (r && r.anchor && r.anchor.day === tradingDayKey(now)) {
+        // Unchanged: flat before and now, the same balance, a check that passed, and no order of ours since
+        // (a round trip between two snapshots leaves both flat). A journal that can't be read counts as moved.
+        let ordered;
+        try {
+          ordered = prev ? live.orderSince(journalEntries(), prev.at) : true;
+        } catch (_err) {
+          ordered = true;
+        }
+        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && live.reconciled(prev.balanceCheck) && !ordered);
+        if (!unchanged) {
+          try {
+            fills = await client.fillsSince(accountId, new Date(r.anchor.at));
+          } catch (err) {
+            fillsError = (err && err.message) || String(err) || 'the fills could not be read';
+          }
+          if (fills === undefined && !fillsError) fillsError = 'the broker returned no fills list';
+        }
+      }
+      fn(a, balance, now, open, openIds, { fills, fillsError, unchanged });
     }
   }
 
@@ -130,7 +161,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       return out;
     },
     /** Every bar: the balance and open positions now. */
-    snapshot: now => balances(now, (a, b, t, open, openIds) => live.snapshot(home, a, b, t, { open, openIds })),
+    snapshot: now => balances(now, (a, b, t, open, openIds, check) => live.snapshot(home, a, b, t, { open, openIds, ...check }), { withFills: true }),
     /**
      * After the end-of-day flatten: the closing balance of trading day `day`
      * (YYYY-MM-DD). For a catch-up (a day that has ended), the balance then,

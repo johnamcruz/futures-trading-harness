@@ -20,7 +20,8 @@
  *   endOfDay       the agents' end-of-day review (default true); end of day always flattens
  *   prop           a prop account profile (e.g. topstep_100k): a fresh run starts its attempt at `start`, before the
  *                  first decision, so every trade of the window is inside it (default: none)
- *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's)
+ *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`, its
+ *                  maxDailyLoss is the account's daily_loss_limit
  *
  * Isolation: the run home is a fresh harness home (FTH_HOME) of its own, never
  * the default home, the caller's FTH_HOME, or inside the repository; it holds
@@ -50,7 +51,7 @@ const { holidayDates } = require('./schedule');
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
 // Backtester-mcp's variables (its README); another replay broker names its own.
-const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END' };
+const BROKER_ENV = { clockFile: 'BACKTESTER_CLOCK_FILE', stateDir: 'BACKTESTER_STATE_DIR', runId: 'BACKTESTER_RUN_ID', start: 'BACKTESTER_START', end: 'BACKTESTER_END', maxDailyLoss: 'BACKTESTER_MAX_DAILY_LOSS' };
 // Overrides that could send a child's records, gate log, kill switch or settings outside the run home,
 // or change how it runs. Each is set explicitly (never just removed: a child's .env load fills a missing
 // or empty variable from <FTH_HOME>/.env and the repo's .env).
@@ -123,10 +124,11 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const everyNth = r.everyNthBar === undefined ? 1 : r.everyNthBar;
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
   for (const k of ['premarket', 'endOfDay']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
+  let propAccount = null;
   if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   else if (r.prop !== undefined && root) {
     // Checked here, before any run state is written (a typo found later would change the config of a started run).
-    try { require('../trading/accounts').accountNamed(root, r.prop, env); } catch (err) { errors.push(`prop: ${err.message}`); }
+    try { propAccount = require('../trading/accounts').accountNamed(root, r.prop, env); } catch (err) { errors.push(`prop: ${err.message}`); }
   }
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
@@ -159,7 +161,11 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const cfg = validateConfig(derived);
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
-    prop: r.prop || null, brokerEnv, paths, derived, cfg, autotraderFile, root,
+    prop: r.prop || null,
+    // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
+    // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
+    propDailyLoss: propAccount ? Number(propAccount.daily_loss_limit) || 0 : null,
+    brokerEnv, paths, derived, cfg, autotraderFile, root,
   };
 }
 
@@ -193,6 +199,7 @@ function replayEnv(base, run, { at }) {
   set(run.brokerEnv.runId, run.runId);
   set(run.brokerEnv.start, run.start.toISOString());
   set(run.brokerEnv.end, run.end.toISOString());
+  if (run.propDailyLoss !== null && run.propDailyLoss !== undefined) set(run.brokerEnv.maxDailyLoss, String(run.propDailyLoss));
   if (broker.replay === true) set(broker.journalEnv, run.paths.journal); // a live broker is refused by brokerErrors
   return env;
 }
@@ -243,7 +250,10 @@ function configHash(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
   const b = activeBroker(env);
-  const own = new Set(Object.values(run.brokerEnv).concat(b.journalEnv));
+  // The variables the driver sets are the run's own; maxDailyLoss is only when it sets it (a combine replay):
+  // otherwise the user's value is a broker setting of the run, so a change makes it another run.
+  const setsLimit = run.propDailyLoss !== null && run.propDailyLoss !== undefined;
+  const own = new Set(Object.entries(run.brokerEnv).filter(([k]) => k !== 'maxDailyLoss' || setsLimit).map(([, v]) => v).concat(b.journalEnv));
   const brokerSettings = Object.fromEntries((b.env || []).filter(k => !own.has(k)).sort().map(k => [k, env[k] ?? null]));
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,

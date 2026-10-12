@@ -60,9 +60,10 @@ function setup({ policy = 'always_2', start = true, models = {}, contracts = 'mi
     async accountBalance(id) { balances.push(id); return 50250; },
     async accountState() { return { positions: client.open, orders: [] }; },
     fills: [],
+    journal: [],
     async fillsSince(id, start) { client.fillsFrom = start.toISOString(); return client.fills.filter(f => Date.parse(f.creationTimestamp) >= start.getTime()); },
   };
-  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy], log: m => logs.push(m) });
+  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy], log: m => logs.push(m), journal: () => client.journal });
   return { hooks, home, account, strategy, logs, balances, client };
 }
 
@@ -289,4 +290,91 @@ test('owners: the strategies an active policy with a running attempt owns on the
   assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'GC' }).size, 0, 'another instrument');
   const off = setup({ policy: null, start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
+});
+
+test('each bar the snapshot checks the broker\'s balance against its fills since the day\'s anchor; a broker that can\'t list them refuses entries', async () => {
+  const { hooks, home, account, client } = setup();
+  const t = s => new Date(`2026-10-07T${s}Z`);
+  await hooks.snapshot(t('13:30:00'));
+  assert.strictEqual(client.fillsFrom, undefined, 'the first snapshot of the day anchors: no fills to read yet');
+  // The broker shows $50,250 but its fills since the anchor made -$41.24: entries stop.
+  client.fills = [{ creationTimestamp: '2026-10-07T14:00:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T14:02:00Z', profitAndLoss: -40.5, fees: 0.37 }];
+  await hooks.snapshot(t('14:03:00'));
+  assert.strictEqual(client.fillsFrom, '2026-10-07T13:30:00.000Z', 'the fills since the anchor');
+  assert.match(prop.combineBlock(home, account.name, t('14:03:30')), /doesn't reconcile: the broker reports \$50250, .* gives \$50208\.76/);
+  // A position open: not checked (and not read).
+  client.fillsFrom = undefined;
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('14:06:00'));
+  assert.strictEqual(client.fillsFrom, undefined);
+  client.open = [];
+  // search_trades fails: entries wait, the runner goes on.
+  client.fillsSince = async () => { throw new Error('search_trades: 503'); };
+  await hooks.snapshot(t('14:09:00'));
+  assert.match(prop.combineBlock(home, account.name, t('14:09:30')), /couldn't be checked against the broker's fills \(search_trades: 503\)/);
+});
+
+test('the fills are read only when something moved: an unchanged, reconciled account costs no broker call; a position open never anchors', async () => {
+  const { hooks, home, account, client } = setup();
+  const t = s => new Date(`2026-10-07T${s}Z`);
+  let calls = 0;
+  const list = client.fillsSince.bind(client);
+  client.fillsSince = async (id, start) => { calls += 1; return list(id, start); };
+  // A position open at the day's first snapshot: no anchor yet (a fill during the read would count twice).
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('13:30:00'));
+  assert.strictEqual(prop.readAttempt(home, account.name).anchor, null);
+  client.open = [];
+  await hooks.snapshot(t('13:33:00'));
+  assert.strictEqual(prop.readAttempt(home, account.name).anchor.at, '2026-10-07T13:33:00.000Z', 'the first flat snapshot anchors');
+  assert.strictEqual(calls, 0);
+  // The first check after the anchor reads the fills once; then nothing moved: no call, the check carries forward.
+  await hooks.snapshot(t('13:36:00'));
+  await hooks.snapshot(t('13:39:00'));
+  await hooks.snapshot(t('13:42:00'));
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(prop.combineBlock(home, account.name, t('13:42:30')), null);
+  // A position opened and closed: read again when flat.
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('13:45:00'));
+  client.open = [];
+  await hooks.snapshot(t('13:48:00'));
+  assert.strictEqual(calls, 2);
+  // The balance moved with no fill to explain it: read, mismatch, and read again every bar until it reconciles.
+  client.accountBalance = async () => 50200;
+  await hooks.snapshot(t('13:51:00'));
+  await hooks.snapshot(t('13:54:00'));
+  assert.strictEqual(calls, 4);
+  assert.match(prop.combineBlock(home, account.name, t('13:54:30')), /doesn't reconcile/);
+  // A broker that rejects with no Error still refuses entries.
+  client.fillsSince = async () => { throw 'gateway down'; };
+  await hooks.snapshot(t('13:57:00'));
+  assert.match(prop.combineBlock(home, account.name, t('13:57:30')), /couldn't be checked .*gateway down/);
+});
+
+test('a round trip between two flat snapshots at the same balance is read anyway: our own order since the last snapshot counts as a change', async () => {
+  const { hooks, home, account, client } = setup();
+  const t = s => new Date(`2026-10-07T${s}Z`);
+  let calls = 0;
+  const list = client.fillsSince.bind(client);
+  client.fillsSince = async (id, start) => { calls += 1; return list(id, start); };
+  await hooks.snapshot(t('13:33:00'));
+  await hooks.snapshot(t('13:36:00'));
+  assert.strictEqual(calls, 1, 'reconciled at $50,250');
+  // The cycle after the 13:36 snapshot enters and is stopped out before 13:39; the broker hasn't booked the loss.
+  const placed = (ts, text) => ({ ts, kind: 'order_placed', contractId: CONTRACT, text, data: { result: { success: true } } });
+  client.journal = [placed('2026-10-07T13:37:00Z', 'setup:prop_x long'), placed('2026-10-07T13:37:01Z', '[protect] stop')];
+  client.fills = [{ creationTimestamp: '2026-10-07T13:37:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T13:38:30Z', profitAndLoss: -40.5, fees: 0.37 }];
+  await hooks.snapshot(t('13:39:00'));
+  assert.strictEqual(calls, 2, 'read despite the same balance and flat both times');
+  assert.match(prop.combineBlock(home, account.name, t('13:39:30')), /doesn't reconcile: the broker reports \$50250, .* gives \$50208\.76/);
+  // A journal that can't be read counts as moved too.
+  client.accountBalance = async () => 50208.76;
+  await hooks.snapshot(t('13:42:00'));
+  assert.strictEqual(prop.combineBlock(home, account.name, t('13:42:30')), null);
+  const before = calls;
+  client.journal = null;
+  const broken = createPropHooks({ root: ROOT, env: {}, home, client, accountId: '7', strategies: () => [{ ...setup().strategy }], journal: () => { throw new Error('EACCES'); } });
+  await broken.snapshot(t('13:45:00'));
+  assert.strictEqual(calls, before + 1);
 });
