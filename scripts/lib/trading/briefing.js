@@ -14,13 +14,14 @@
  *          VWAP in RTH, else the session's), participation, 3m swings and
  *          liquidity, today so far (open, gap, opening type, opening range,
  *          IB, day type), the overnight range so far, the developing session
- *          profile, where price is against the value areas, IB and prior RTH
+ *          profile, the latest BOS or CHoCH, sweeps of the key levels in the
+ *          last 10 bars, the 1h swings not traded back to, where price is against the value areas, IB and prior RTH
  *          range, the scan's candidates, the trend rule  until the next base-bar close
- *   m15    the 15m read (trend, structure, swings), the alignment per side,
+ *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
  *                                                         until the next 15m close
- *   h1     the 1h and 4h reads                            until the next 1h close
+ *   h1     the 1h and 4h reads, the 1h's latest BOS or CHoCH   until the next 1h close
  *   day    the prior RTH day and its volume profile      until the first bar after the 16:00 ET RTH close
  *
  * A value lives in the section whose clock it changes on: anything that
@@ -51,6 +52,7 @@ const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay } = require('./clock');
 const { familyRoot } = require('./contracts');
+const { pivots, lastBreaks, sweeps, untestedSwings } = require('./structure-events');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const SPIKE_ATR = 2;
@@ -93,7 +95,7 @@ const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes)
 const brief = f => (f ? { trend: f.trend, bias: f.bias, structure: f.votes && f.votes.structure, close: f.close, emaFast: f.emaFast, emaSlow: f.emaSlow, adx: f.adx, atr: f.atr, swingHigh: f.levels && f.levels.swingHigh, swingLow: f.levels && f.levels.swingLow, prevHigh: f.levels && f.levels.prevHigh, prevLow: f.levels && f.levels.prevLow } : null);
 
 /** Each section's data, levels it rests on, and expiry, from this bar's snapshot and read. */
-function computeSections({ snap, snap15, read, scan, scanError, minutes, closedAt }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, minutes, closedAt }) {
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -121,6 +123,17 @@ function computeSections({ snap, snap15, read, scan, scanError, minutes, closedA
         swings3m: snap.structure,
         // Liquidity on the trigger bars: the recent swing points, equal highs and lows, open fair value gaps.
         liquidity: snap.liquidity ? { swingHighs: snap.liquidity.swingHighs, swingLows: snap.liquidity.swingLows, equalHighs: snap.liquidity.equalHighs, equalLows: snap.liquidity.equalLows, openFvgs: snap.liquidity.openFvgs } : null,
+        // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of the key liquidity (the
+        // prior RTH and overnight highs and lows, equal highs and lows, the last 3m swings) in the last 10 bars, and the 1h swings not traded back to (that changes on any bar, so it lives here).
+        structure: lastBreaks(bars),
+        sweeps: sweeps(bars, [
+          ['prior RTH high', (lv.priorRth || {}).high, 'high'], ['prior RTH low', (lv.priorRth || {}).low, 'low'],
+          ['overnight high', (lv.overnight || {}).high, 'high'], ['overnight low', (lv.overnight || {}).low, 'low'],
+          ['last 3m swing high', (snap.structure || {}).lastSwingHigh, 'high'], ['last 3m swing low', (snap.structure || {}).lastSwingLow, 'low'],
+          ...((snap.liquidity || {}).equalHighs || []).map(x => ['equal highs', Math.max(...x.prices), 'high']),
+          ...((snap.liquidity || {}).equalLows || []).map(x => ['equal lows', Math.min(...x.prices), 'low']),
+        ].map(([name, price, side]) => ({ name, price, side })), 10).slice(0, 5),
+        untested1hSwings: untestedSwings(bars, [...pivots(c60).filter(x => x.type === 'high').slice(-4), ...pivots(c60).filter(x => x.type === 'low').slice(-4)]),
         // Today so far and the developing levels: they move bar by bar, so they live here, never in a cached section.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, ibHigh: day.ibHigh, ibLow: day.ibLow, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
@@ -146,6 +159,7 @@ function computeSections({ snap, snap15, read, scan, scanError, minutes, closedA
       data: {
         frame: brief(f15),
         alignment: read.alignment,
+        structure: lastBreaks(c15),
         // The 15m candles' own indicators (completed candles only).
         indicators: snap15 ? {
           regime: snap15.regime && { primary: snap15.regime.primary, volatility: snap15.regime.volatility },
@@ -159,7 +173,7 @@ function computeSections({ snap, snap15, read, scan, scanError, minutes, closedA
     h1: {
       validUntil: nextClose(closedAt, 60),
       levels: [['1h swing high', f60 && f60.levels.swingHigh], ['1h swing low', f60 && f60.levels.swingLow]].filter(([, p]) => Number.isFinite(p)),
-      data: { h1: brief(f60), h4: brief(frameOf(read, 240)) },
+      data: { h1: brief(f60), h4: brief(frameOf(read, 240)), structure: lastBreaks(c60) },
     },
     day: {
       // The prior RTH day changes at the RTH close (16:00 ET).
@@ -193,9 +207,11 @@ function buildBriefing({ symbol, bars: raw, minutes, prev = null, scan = [], sca
   const snap = snapshot({ bars });
   const read = mtfRead(bars);
   // The 15m candles' own snapshot, from completed candles only (the one forming isn't in it).
-  const c15 = candles(bars, 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  const done = m => candles(bars, m).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  const c15 = done(15);
+  const c60 = done(60);
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
-  const fresh = computeSections({ snap, snap15, read, scan, scanError, minutes, closedAt });
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, minutes, closedAt });
   const atr = (snap.volatility || {}).atr14;
   const ctx = { prevClose: prev && prev.price, close: last.c, rangeAtr: atr > 0 ? (last.h - last.l) / atr : 0 };
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && Date.parse(prev.closedAt) < closedAt.getTime();

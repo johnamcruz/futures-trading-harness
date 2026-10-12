@@ -45,14 +45,18 @@ never paste a long `get_bars` reply into a file.
    `market_snapshot` and `mtf_read` on the 3m file.
 3. Per timeframe: the last swing highs/lows (`liquidity.swingHighs` /
    `swingLows` in the snapshot) with prices and times, trend
-   classification, the latest BOS or CHoCH, and the dealing range with its 50%.
+   classification, the latest BOS or CHoCH (the briefing's `structure` in
+   `m3`, `m15` and `h1`: computed from confirmed swings, never by eye), and
+   the dealing range with its 50%.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
    formed, equal highs/lows (`liquidity.equalHighs` / `equalLows`), open fair
-   value gaps (`liquidity.openFvgs`), untested 1h swings.
+   value gaps (`liquidity.openFvgs`), untested 1h swings (`m3`
+   `untested1hSwings`).
 5. Which structure strategies are live for this symbol (`strategies_list`;
    e.g. `setup:bos`, `setup:cisd_ote`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
-   evaluate from their STRATEGY.md body.
+   evaluate from their STRATEGY.md body (`strategies_show`) against the
+   briefing's numbers; what no tool computes, say is not computed.
 
 ## Output (keep it under 250 words)
 

@@ -220,6 +220,11 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile/);
   assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
   assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the plan the caller gives you and the analysts'\s+reports instead; don't fetch bars for them\./);
+  assert.match(read('agents/market-structure-analyst.md'), /the latest BOS or CHoCH \(the briefing's `structure` in\s+`m3`, `m15` and `h1`: computed from confirmed swings, never by eye\)/);
+  assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
+  // Codex can't take Read away (its sandbox reads files): a role without Read is told not to read files.
+  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\): take bars and market data only through the tools above\./);
+  assert.doesNotMatch(read('.codex/agents/risk-manager.toml'), /Do not read files/, 'a role that has Read may');
   // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.
   for (const a of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     const tools = /^tools: (.*)$/m.exec(read(`agents/${a}.md`))[1].split(',').map(t => t.trim());

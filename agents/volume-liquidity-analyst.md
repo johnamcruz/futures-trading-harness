@@ -47,8 +47,9 @@ never paste a long `get_bars` reply into a file.
    wide range).
 5. Liquidity (snapshot `levels` and `liquidity`): untaken pools above and
    below (prior-day/overnight highs/lows, `equalHighs` / `equalLows`, round
-   numbers), recent sweeps (wick through, close back inside), and
-   `openFvgs` on 3m/15m.
+   numbers), recent sweeps (the briefing's `m3` `sweeps`: a high wicked above
+   and closed back below, or a low wicked below and closed back above, in the
+   last 10 bars, computed; never by eye), and `openFvgs`.
 6. Volume profile (snapshot `volumeProfile`, computed; never estimate it by
    hand): the prior RTH day's POC, VAH and VAL (`priorRth`), where price is
    (`price`: above, inside, or below value), the developing session's

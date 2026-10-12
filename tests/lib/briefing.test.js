@@ -214,3 +214,16 @@ test('in a cycle, the briefing is current exactly when it is for the bar the cyc
   assert.deepStrictEqual(JSON.parse(childEnv(validateConfig({}), '/r', { FTH_HOME: home }, ctx).FTH_CYCLE_BARS), { MNQ: b.asOf, MES: '2026-01-01T00:00:00.000Z' });
   assert.strictEqual(childEnv(validateConfig({}), '/r', { FTH_HOME: home, FTH_CYCLE_BARS: '{"MNQ":"x"}' }).FTH_CYCLE_BARS, undefined, 'never a stale one');
 });
+
+test('the briefing carries the structure events the analysts report: BOS or CHoCH per timeframe, sweeps, untested 1h swings', () => {
+  const b = build(1300);
+  for (const s of ['m3', 'm15', 'h1']) {
+    const st = b.sections[s].data.structure;
+    assert.ok(st && 'last' in st && 'previous' in st, s);
+    if (st.last) assert.ok(['BOS', 'CHoCH'].includes(st.last.kind) && ['up', 'down'].includes(st.last.direction), s);
+  }
+  const d = b.sections.m3.data;
+  assert.ok(Array.isArray(d.sweeps) && d.sweeps.length <= 5);
+  for (const x of d.sweeps) assert.ok(['high', 'low'].includes(x.side) && x.name && Number.isFinite(x.price));
+  assert.ok(Array.isArray(d.untested1hSwings));
+});
