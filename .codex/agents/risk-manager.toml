@@ -90,8 +90,7 @@ it.
    `alignment.short`): `pullback` → VETO until the trigger timeframe
    turns back; `mixed` → half size (`floor(size / 2)`, VETO if 0).
    Conflict: other strategies fired the other side on the same bar (the
-   scan's `confluence.against`) → VETO unless the plan is a reversal at a
-   higher-timeframe level and says why.
+   scan's `confluence.against`) → VETO (the priority order, step 6).
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits (an entry over `maxOrderSize`: VETO,
    the gate refuses it anyway).

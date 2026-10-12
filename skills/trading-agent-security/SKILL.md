@@ -31,11 +31,13 @@ An injection or a bad tool path turns directly into money lost.
      from inside the session; only the allowlisted scripts run; `.env` files
      can't be read.
    - Harness permissions: interactive sessions keep `place_order`,
-     `modify_order`, `close_position` on "ask" until trust is earned.
-     Autonomous runs pre-approve the broker tools for the whole session (the
-     head trader included); the rule that only the trade-executor places
-     orders is the agents' discipline, and the gates check every order
-     whoever sends it.
+     `modify_order`, `close_position` on "ask" until trust is earned (in
+     opencode the head trader has no `place_order` at all, interactive or
+     not). Autonomous runs pre-approve the broker tools for the whole session;
+     in opencode an entry is the trade-executor's alone (the head trader keeps
+     the reads and the risk-reducing calls), elsewhere that rule is the
+     agents' discipline. The gates check every order whoever sends it, and an
+     autonomous entry needs risk-manager phase 2's `VERDICT: APPROVE`.
    - Both gates check that an entry agrees with its own rationale (side,
      stop and target sides, ticks, brackets), that a rules strategy's trigger
      fired on that side on a recent bar (the signal record), and the trend

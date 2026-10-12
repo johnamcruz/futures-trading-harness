@@ -214,6 +214,9 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   }
   assert.match(read('agents/risk-manager.md'), /Judge every setup, a policy verdict too, by the trade-session skill's\s+priority order/);
   assert.match(read('skills/prop-challenge-pacing/SKILL.md'), /\*\*A verdict is a ceiling, never an order\*\*/);
+  // Step 6 has no exception: a conflict is no trade, a reversal too.
+  assert.match(read('agents/risk-manager.md'), /`confluence\.against`\) → VETO \(the priority order, step 6\)\./);
+  assert.match(read('skills/trade-session/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
   for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');
