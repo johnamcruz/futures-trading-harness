@@ -307,7 +307,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const transcript = transcriptPath || config.cycleTranscript;
   add('skills-loaded', checkSkillsLoaded(transcript));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
-  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle) : null);
+  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || []) : null);
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);

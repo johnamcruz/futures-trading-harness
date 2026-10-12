@@ -1156,3 +1156,23 @@ test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript fro
   fs.writeFileSync(file, '');
   assert.ok(!checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.some(v => v.check === 'roles-ran'));
 });
+
+test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED) count as returned; phase 2 still runs', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const live = replaySetup({ replay: false });
+  const file = path.join(require('../helpers').tmpDir(), 'cycle-transcript.jsonl');
+  const analysts = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
+  const base = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ' };
+  const refused = env => checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.find(v => v.check === 'roles-ran');
+  // Only phase 2 ran this cycle: refused without the cache, accepted with every other role served from it.
+  fs.writeFileSync(file, [...ocSkills, ocEvent('task', { subagent_type: 'risk-manager' })].join('\n'));
+  assert.match(refused(base).message, /not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst/);
+  assert.strictEqual(refused({ ...base, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }), undefined);
+  // Two analysts cached, the third neither cached nor run: refused for it alone.
+  assert.match(refused({ ...base, FTH_CYCLE_CACHED: `${analysts.slice(0, 2).join(',')},risk-manager` }).message, /not returned yet: volume-liquidity-analyst\./);
+  // Nothing ran at all: phase 2 is still needed, cache or not.
+  fs.writeFileSync(file, ocSkills.join('\n'));
+  assert.match(refused({ ...base, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }).message, /risk-manager phase 2/);
+  // A name the cache can't hold (phase 2, the executor, anything else) counts for nothing.
+  assert.ok(refused({ ...base, FTH_CYCLE_CACHED: 'risk-manager phase 2,trade-executor,whatever' }));
+});

@@ -41,10 +41,14 @@
  * once the first position shows. Otherwise only the autonomous-trading skill's
  * one-entry rule and max-entries limit it.
  *
- *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }
- *   rolesInTranscript(text)              Map role -> calls that count
- *   missingRoles(calls, cycle)           what a cycle still lacks, as text, [] when complete
- *   checkRolesRan(transcriptPath, cycle) the gate's message, or null
+ * Roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js: an analyst's report
+ * built on the briefing parts still current, risk-manager phase 1 on the account unchanged) count as returned;
+ * phase 2 is never cached and still starts after every analyst that ran.
+ *
+ *   roleCalls(text)                              { calls: [{ role, start, end, text }] that count, launches: trade-executor launches }
+ *   rolesInTranscript(text)                      Map role -> calls that count
+ *   missingRoles(calls, cycle, cached)           what a cycle still lacks, as text, [] when complete
+ *   checkRolesRan(transcriptPath, cycle, cached) the gate's message, or null
  */
 
 const fs = require('fs');
@@ -64,6 +68,10 @@ const resultText = c => (typeof c === 'string' ? c : Array.isArray(c) ? String((
 const roleOf = v => (typeof v === 'string' && v.trim() ? v.trim().split(':').pop() : null);
 const isObj = v => Boolean(v) && typeof v === 'object';
 const num = v => (Number.isFinite(v) ? v : null);
+// A subagent's report: opencode wraps it in <task ...><task_result>...</task_result></task>; Claude's tool result is
+// a string or text blocks; Qwen's response carries an output string.
+const allText = c => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter(x => isObj(x) && typeof x.text === 'string').map(x => x.text).join('\n') : '');
+const taskResult = o => { const m = /<task_result>\n?([^]*?)\n?<\/task_result>/.exec(String(o || '')); return m ? m[1] : String(o || ''); };
 
 /** The subagent calls that returned in the foreground without an error, with their start and end, in order. */
 function roleCalls(text) {
@@ -91,7 +99,7 @@ function roleCalls(text) {
         // Every launch ends the round, whatever its state; without times it ends every round so far (fails closed).
         launches.push({ start: num(t.start) ?? Infinity, end: background ? null : (num(t.end) ?? Infinity), background });
       } else if (st.status === 'completed' && !background) {
-        calls.push({ role, start: num(t.start) ?? i, end: num(t.end) ?? i });
+        calls.push({ role, start: num(t.start) ?? i, end: num(t.end) ?? i, text: taskResult(st.output) });
       }
     }
     const msg = isObj(ev.message) ? ev.message : {};
@@ -105,7 +113,7 @@ function roleCalls(text) {
         // A launch acknowledgment (a subagent run in the background, by request or by default) is not a report.
         const ack = call.background || LAUNCHED.test(resultText(c.content));
         if (call.role === EXECUTOR) launches.push({ start: call.start, end: ack ? null : i, background: ack });
-        else if (c.is_error !== true && !ack) calls.push({ role: call.role, start: call.start, end: i });
+        else if (c.is_error !== true && !ack) calls.push({ role: call.role, start: call.start, end: i, text: allText(c.content) });
         claude.delete(c.tool_use_id);
       }
     }
@@ -119,7 +127,7 @@ function roleCalls(text) {
         const call = qwen.get(fr.id);
         const r = fr.response;
         if (call.role === EXECUTOR) launches.push({ start: call.start, end: call.background ? null : i, background: call.background });
-        else if (!call.background && isObj(r) && !Object.prototype.hasOwnProperty.call(r, 'error')) calls.push({ role: call.role, start: call.start, end: i });
+        else if (!call.background && isObj(r) && !Object.prototype.hasOwnProperty.call(r, 'error')) calls.push({ role: call.role, start: call.start, end: i, text: typeof r.output === 'string' ? r.output : '' });
         qwen.delete(fr.id);
       }
     }
@@ -137,7 +145,7 @@ function rolesInTranscript(text) {
 }
 
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
-function missingRoles({ calls = [], launches = [] }, cycle) {
+function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   if (!CYCLES.includes(cycle)) return [];
   // The trade-executor launch placing this order may still be running (Claude, Qwen: no result yet); any other
   // launch, finished, errored, running or in the background, ends the round: its end, else its start.
@@ -148,13 +156,22 @@ function missingRoles({ calls = [], launches = [] }, cycle) {
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
   const missing = [];
-  const needed = cycle === 'full' ? ANALYSTS : [];
+  // Roles served from the report cache count in the cycle's first round only: after a trade-executor launch (an
+  // entry, or an attempt at one) the account and the plan changed, so every role runs again.
+  const counted = lastExec === -Infinity ? cached : [];
+  const needed = cycle === 'full' ? ANALYSTS.filter(r => !counted.includes(r)) : [];
   for (const r of needed) if (!fresh.some(c => c.role === r)) missing.push(r);
   const rm = fresh.filter(c => c.role === 'risk-manager');
+  const ranAfter = needed.filter(r => fresh.some(c => c.role === r)).map(firstEnd);
+  if (counted.includes('risk-manager')) {
+    // Phase 1 served from the cache: phase 2 is a risk-manager call started after every analyst that ran.
+    if (!rm.some(c => c.start > Math.max(-Infinity, ...ranAfter))) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
+    return missing;
+  }
   if (!rm.length) return [...missing, 'risk-manager phase 1', `${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`];
   // Phase 2 reviews the plan: it starts once phase 1 (and every analyst) has returned.
   const phase1End = Math.min(...rm.map(c => c.end));
-  const after = Math.max(phase1End, ...needed.filter(r => fresh.some(c => c.role === r)).map(firstEnd));
+  const after = Math.max(phase1End, ...ranAfter);
   if (!rm.some(c => c.start > after)) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
   return missing;
 }
@@ -164,7 +181,7 @@ function missingRoles({ calls = [], launches = [] }, cycle) {
  * transcript or no cycle (an interactive session) -> null. A transcript the
  * runner named but that can't be read -> refused (fails closed).
  */
-function checkRolesRan(transcriptPath, cycle) {
+function checkRolesRan(transcriptPath, cycle, cached = []) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
   // A Claude subagent's hook gets its own transcript: the roles ran in its main session's.
   const files = transcriptFiles(transcriptPath).reverse();
@@ -182,9 +199,9 @@ function checkRolesRan(transcriptPath, cycle) {
       if (file === transcriptPath) return `The cycle's transcript can't be read (${err.code || err.message}), so the gate can't see which roles ran: no entry this cycle.`;
     }
   }
-  const missing = missingRoles(roleCalls(texts.join('\n')), cycle);
+  const missing = missingRoles(roleCalls(texts.join('\n')), cycle, cached);
   return missing.length
-    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2, before its trade-executor call.`
+    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again (a role whose report the cycle prompt gave from the cache counts), then risk-manager phase 2, before its trade-executor call.`
     : null;
 }
 

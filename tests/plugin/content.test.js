@@ -185,8 +185,9 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const ts = read('skills/trade-session/SKILL.md');
   for (const re of [
-    /Every role runs every full cycle: each carries skills the decision needs/,
-    /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle, `risk-manager` twice \(phase 1, then phase\s+2 once phase 1 and the analysts have returned\), each in the foreground/,
+    /Every other role runs every full cycle: each carries skills the decision needs/,
+    /\*\*Cached reports\.\*\*[^]*?in a one-symbol cycle, an analyst's report while the bar briefing\s+parts it was built on are current \(until the next 15m close\); `risk-manager`\s+phase 1 while the account is unchanged[^]*?Don't launch a role whose report the prompt gives[^]*?Phase 2 reviews this bar's plan and\s+is never cached\. Cached reports count for the cycle's first entry only: after a\s+`trade-executor` call, the next entry needs every role again\./,
+    /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle or were given under "Cached reports",\s+`risk-manager` twice \(phase 1, then phase 2 once phase 1 and the analysts\s+that ran have returned; phase 2 alone when phase 1 was cached\), each in the foreground/,
     /since the last `trade-executor` call:\s+each entry has its own round of reports/,
     /the refused `trade-executor` call itself ends the round, so\s+report the block and end the cycle \(step 6\)/,
     /in an autonomous\s+run there is no stand-in: without the roles' reports, no entry/,

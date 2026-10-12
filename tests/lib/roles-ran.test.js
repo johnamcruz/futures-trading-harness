@@ -38,7 +38,7 @@ test('Claude: a Task/Agent call counts once its tool_result returned without an 
   const call = (id, subagent_type, extra = {}, name = 'Task') => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input: { subagent_type, prompt: 'p', ...extra } }] } });
   const result = (id, is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'report' }] } });
   assert.deepStrictEqual(calls([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', {}, 'Agent'), result('b')].join('\n')),
-    [{ role: 'risk-manager', start: 0, end: 1 }, { role: 'trend-momentum-analyst', start: 2, end: 3 }]);
+    [{ role: 'risk-manager', start: 0, end: 1, text: 'report' }, { role: 'trend-momentum-analyst', start: 2, end: 3, text: 'report' }]);
   assert.deepStrictEqual(calls([call('a', 'risk-manager'), result('a', true)].join('\n')), [], 'an errored call');
   assert.deepStrictEqual(calls(call('a', 'risk-manager')), [], 'no result yet');
   assert.deepStrictEqual(calls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
@@ -47,7 +47,7 @@ test('Claude: a Task/Agent call counts once its tool_result returned without an 
 test('Qwen Code parts: a task call counts once answered with no error', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response } }] } });
-  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1 }]);
+  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1, text: 'report' }]);
   assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })].join('\n')), []);
 });
 
@@ -170,4 +170,32 @@ test('Claude: a launch acknowledgment as plain string content is not a report, a
   const { launches } = roleCalls([call('e', 'trade-executor'), result('e', ack)].join('\n'));
   assert.deepStrictEqual(launches, [{ start: 0, end: null, background: true }]);
   assert.ok(missingRoles({ calls: roleCalls(round.join('\n')).calls, launches: [{ start: 50, end: null, background: true }] }, 'full').length > 0);
+});
+
+test('each call carries its report text: opencode\'s task_result, Claude\'s text blocks, Qwen\'s output', () => {
+  assert.strictEqual(calls(oc('risk-manager', [1, 2], { output: '<task id="s" state="completed">\n<task_result>\nBias: long\nmore\n</task_result>\n</task>' }))[0].text, 'Bias: long\nmore');
+  const claude = [JSON.stringify({ message: { content: [{ type: 'tool_use', id: 'a', name: 'Task', input: { subagent_type: 'risk-manager' } }] } }),
+    JSON.stringify({ message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: [{ type: 'text', text: 'one' }, { type: 'text', text: 'two' }] }] } })];
+  assert.strictEqual(calls(claude.join('\n'))[0].text, 'one\ntwo');
+});
+
+test('roles served from the report cache count as returned; phase 2 still runs, after every analyst that ran', () => {
+  const two = ANALYSTS.slice(1);
+  // Market structure cached: the other two analysts, phase 1, then phase 2 after them.
+  assert.deepStrictEqual(missingRoles(roleCalls([...two.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])].join('\n')), 'full', [ANALYSTS[0]]), []);
+  assert.deepStrictEqual(missingRoles(roleCalls([...two.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])].join('\n')), 'full', []), [ANALYSTS[0]], 'control: not cached, it must run');
+  // Everything but phase 2 cached: one risk-manager call is phase 2; none at all is refused.
+  const all = [...ANALYSTS, 'risk-manager'];
+  assert.deepStrictEqual(missingRoles(roleCalls(oc('risk-manager', [30, 40])), 'full', all), []);
+  assert.deepStrictEqual(missingRoles(roleCalls(''), 'full', all), ['risk-manager phase 2 (started after the cached reports were given)']);
+  // Phase 1 cached, one analyst ran: phase 2 must start after it returned.
+  const cached = [...ANALYSTS.slice(0, 2), 'risk-manager'];
+  assert.deepStrictEqual(missingRoles(roleCalls([oc(ANALYSTS[2], [10, 20]), oc('risk-manager', [15, 25])].join('\n')), 'full', cached), ['risk-manager phase 2 (started after the analysts)']);
+  assert.deepStrictEqual(missingRoles(roleCalls([oc(ANALYSTS[2], [10, 20]), oc('risk-manager', [21, 25])].join('\n')), 'full', cached), []);
+  // A lean cycle with phase 1 cached: phase 2 alone.
+  assert.deepStrictEqual(missingRoles(roleCalls(oc('risk-manager', [1, 2])), 'lean', ['risk-manager']), []);
+  // Each entry has its own round: after a trade-executor launch the cache counts no more, every role runs again.
+  const exec = oc('trade-executor', [50, 60]);
+  assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'full', all), [...ANALYSTS, `${P2} and the analysts returned)`]);
+  assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'lean', ['risk-manager']), [`${P2} returned)`]);
 });

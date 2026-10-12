@@ -1468,6 +1468,11 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /roles-ran/);
   fs.writeFileSync(transcript, skills.join('\n'));
   assert.match(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /\[roles-ran\]/);
+  // Roles the runner served from its report cache (FTH_CYCLE_CACHED) count: only phase 2 ran this cycle.
+  fs.writeFileSync(transcript, [...skills, ...role('p2', 'risk-manager')].join('\n'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\]/, 'control: nothing cached');
+  const cached = { ...env, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' };
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, cached).stderr, /roles-ran/);
   // An exit is never held for roles.
   fs.writeFileSync(transcript, '');
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);

@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
+const { cycleOutcome, validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -126,6 +126,31 @@ test('child env names the cycle and, for a harness that streams its transcript, 
   // Qwen Code's JSON output comes at the end, not as it happens: no live file (its hook passes its own transcript), and a stale one is dropped.
   const qwen = childEnv(validateConfig({ harness: 'qwen' }), '/r', { ...home, FTH_CYCLE_TRANSCRIPT: '/old' });
   assert.strictEqual(qwen.FTH_CYCLE_TRANSCRIPT, undefined);
+});
+
+test('child env names the roles served from the report cache (FTH_CYCLE_CACHED); none: unset, a stale one dropped', () => {
+  const cfg = validateConfig({ harness: 'opencode' });
+  const ctx = { symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z' } }], cachedRoles: ['market-structure-analyst', 'risk-manager'] };
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth' }, ctx).FTH_CYCLE_CACHED, 'market-structure-analyst,risk-manager');
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_CACHED: 'risk-manager' }, { ...ctx, cachedRoles: [] }).FTH_CYCLE_CACHED, undefined);
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_CACHED: 'risk-manager' }).FTH_CYCLE_CACHED, undefined, 'a manual run serves none');
+});
+
+test('a trade prompt carries the cached reports whole, says not to launch those roles, and that phase 2 runs this cycle', () => {
+  const now = new Date('2026-10-07T14:30:00Z');
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
+  const cached = { roles: ['trend-momentum-analyst', 'risk-manager'], reports: [
+    { role: 'trend-momentum-analyst', text: 'Data: bar_briefing m15@x\nBias: long (high)', at: '2026-10-07T14:21:00Z', until: '2026-10-07T14:45:00.000Z' },
+    { role: 'risk-manager', text: 'Phase 1: 2 trades left', at: '2026-10-07T14:21:00Z', until: null },
+  ] };
+  const p = prompts(validateConfig({}), now).trade(items, { cached });
+  assert.match(p, /Cached reports, still valid this bar[^]*don't launch trend-momentum-analyst, risk-manager \(phase 1\) this cycle; the order gate counts them as returned\. An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts[^]*then risk-manager phase 2 \(always this cycle\)\./);
+  assert.match(p, /\n--- trend-momentum-analyst report \(from 10:21 ET\) ---\nData: bar_briefing m15@x\nBias: long \(high\)\n--- end of trend-momentum-analyst report ---/);
+  assert.match(p, /\n--- risk-manager phase 1 report \(from 10:21 ET\) ---\nPhase 1: 2 trades left\n/);
+  // None cached, manage-only or paper: no cached section.
+  assert.doesNotMatch(prompts(validateConfig({}), now).trade(items), /Cached reports/);
+  assert.doesNotMatch(prompts(validateConfig({}), now).trade(items, { cached, manageOnly: true }), /Cached reports/);
+  assert.doesNotMatch(prompts(validateConfig({ paper: true }), now).trade(items, { cached }), /Cached reports/);
 });
 
 test('a trade prompt names the roles its cycle runs before an entry, as the gate checks them', () => {
@@ -847,7 +872,21 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
   assert.strictEqual(fs.readFileSync(seen, 'utf8'), '{"a":1}\n', 'mid-run: the first line only (stderr is not the transcript), the leftover gone');
   assert.ok(!fs.existsSync(live), 'removed once the run ended (the cycle log keeps the transcript)');
   assert.match(r.output, /\{"b":2\}/);
+  // The stdout alone (what the runner records reports from, as the gate reads it): no stderr in it.
+  assert.strictEqual(r.stdout, `{"a":1}\n{"b":2}\n`);
+  assert.match(r.output, /oops/);
   // Without a live file nothing is written.
   const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r2.ok, true);
+});
+
+test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {
+  const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\n', stdout: '{"a":1}\n' };
+  assert.deepStrictEqual(cycleOutcome(res, { result: 'CYCLE RESULT: no-trade - x', intact: true, action: 'trade' }),
+    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\n' });
+  assert.strictEqual(cycleOutcome({ ...res, stdout: undefined }, { intact: true, action: 'trade' }).transcript, '');
+  // The workspace guard tripped: a trade cycle failed, an end of day that ran still did its job.
+  assert.strictEqual(cycleOutcome(res, { intact: false, action: 'trade' }).ok, false);
+  assert.strictEqual(cycleOutcome(res, { intact: false, action: 'eod' }).ok, true);
+  assert.strictEqual(cycleOutcome({ ...res, ok: false }, { intact: true, action: 'eod' }).ok, false);
 });

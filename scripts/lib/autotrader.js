@@ -361,6 +361,18 @@ const ROSTER = {
   lean: ' Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported.',
 };
 
+/**
+ * The reports the runner served from its report cache (report-cache.js): those roles aren't launched again this
+ * cycle, and the order gate counts them as returned (FTH_CYCLE_CACHED).
+ */
+function cachedText(cached) {
+  if (!cached || !Array.isArray(cached.reports) || !cached.reports.length) return '';
+  const roles = cached.reports.map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
+  const until = cached.reports.map(r => r.until).filter(Boolean).sort()[0];
+  return ` Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''} Launch the roles not listed here as above, then risk-manager phase 2 (always this cycle).`
+    + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (from ${etTime(r.at)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
+}
+
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 const RESULT_LINE = ' End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
 
@@ -375,7 +387,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries }) =>
@@ -415,7 +427,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : roster(cfg)}${RESULT_LINE}`;
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -449,6 +461,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const bars = ((context && context.symbols) || []).filter(x => x && x.symbol && x.bar && x.bar.t).map(x => [x.symbol, x.bar.t]);
   if (bars.length) env.FTH_CYCLE_BARS = JSON.stringify(Object.fromEntries(bars));
   else delete env.FTH_CYCLE_BARS;
+  // The roles served from the report cache this cycle (their reports are in the prompt): roles-ran counts them.
+  const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
+  if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
+  else delete env.FTH_CYCLE_CACHED;
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -637,6 +653,15 @@ function cycleResult(output) {
   return results.length ? `CYCLE RESULT: ${results[results.length - 1]}` : null;
 }
 
+/**
+ * What a cycle returns to the runner: ok (an end of day did its job if the run succeeded, whatever the workspace
+ * guard said), its result line and exit code, and its transcript, the standard output alone (what the gate reads),
+ * that the runner records the roles' reports from (report-cache.js).
+ */
+function cycleOutcome(res, { result, intact, action }) {
+  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '' };
+}
+
 /** The result a run is logged with: a failed run's error (whatever it wrote), else its line, else "(none reported)". */
 function runResult(res) {
   if (!res.ok) return `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`;
@@ -685,6 +710,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   runnerArgv,
+  cycleOutcome,
   accountText,
   historyText,
   endOfDayAt,

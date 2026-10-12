@@ -91,6 +91,9 @@ function createRunner(deps) {
     recordSignals = () => {},
     // The bar briefing (trading/briefing.js): the analysis by timeframe, reused until each part expires.
     recordBriefing = () => {},
+    // The report cache (trading/report-cache.js): serve({ symbols, account, now }) -> { roles, reports } still valid,
+    // record({ symbols, account, now, output, served }) after the cycle. null: every role runs every cycle.
+    reportCache = null,
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -968,11 +971,14 @@ function createRunner(deps) {
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
           // Trade cycles left today after this one (the cap counts this cycle).
           const cyclesLeft = Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0) - 1) : null;
+          // The reports still valid from earlier cycles (the roles the prompt lists: not when it lists none).
+          const cacheSymbols = items.map(x => ({ symbol: x.symbol, bar: x.bar.t, contractId: x.bar.contractId || null }));
+          const served = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow }), null) : null;
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
             cyclesLeft,
-            manageAlso, journalRead: entries !== null,
+            manageAlso, journalRead: entries !== null, cached: served,
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
@@ -989,10 +995,14 @@ function createRunner(deps) {
             cyclesLeft,
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
             manageOnly, recovered: recover, unavailable,
+            cachedRoles: served ? served.roles : [],
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
-          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly });
+          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [] });
+          // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
+          // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [] }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           state = { ...state, history: [...((state && state.history) || []), { at: cycleNow.toISOString(), symbols: run.map(x => x.symbol), result: (r && r.result) || null }].slice(-10) };

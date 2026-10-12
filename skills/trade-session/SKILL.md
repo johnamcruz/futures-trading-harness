@@ -140,7 +140,9 @@ analysts" read as the bar briefing (without one, your own snapshot, scan and
 multi-timeframe read); the two-of-three-analysts rule in step 3 doesn't
 apply: the briefing's alignment for the side and the trend rule decide.
 In an autonomous run the order gate refuses an entry (`[roles-ran]`) until
-`risk-manager` has returned twice this cycle (phase 1 and phase 2).
+`risk-manager` has returned twice this cycle (phase 1 and phase 2), or once
+(phase 2) when the prompt gives phase 1 under "Cached reports" (for the
+cycle's first entry only: after a `trade-executor` call, phase 1 and 2 again).
 
 **Full cycle** (default):
 
@@ -153,7 +155,9 @@ without a current briefing, the tools it called. A report with no `Data:`
 line, or naming another bar's `m3` version while this bar's briefing is
 current, didn't read this bar: run that analyst again once; if it still
 doesn't, stand aside. An old briefing (the tool says so) counts as none:
-the roles read the bars themselves.
+the roles read the bars themselves. A report the prompt gives under "Cached
+reports" names an earlier bar's versions by design: the runner checked that
+the parts it rests on (`m15`, `h1`, `day`) are still current, so it counts.
 
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
@@ -165,20 +169,33 @@ subagents (interactively), play each role yourself in turn; in an autonomous
 run there is no stand-in: without the roles' reports, no entry. Pass symbol,
 contractId, and the current time.
 
-Every role runs every full cycle: each carries skills the decision needs
+**Cached reports.** The autonomous runner keeps each role's last report and
+gives it again under "Cached reports" in the prompt while what it rests on
+holds: in a one-symbol cycle, an analyst's report while the bar briefing
+parts it was built on are current (until the next 15m close); `risk-manager`
+phase 1 while the account is unchanged (no fill, order, balance or attempt
+change, same day, and no `trade-executor` call in the cycle that wrote it).
+Don't launch a role whose report the prompt gives: use that report for its
+15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side,
+the candidates) from the bar briefing. Phase 2 reviews this bar's plan and
+is never cached. Cached reports count for the cycle's first entry only: after a
+`trade-executor` call, the next entry needs every role again.
+
+Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
 session timing, sizing and pacing), and neither the prompt's facts (the
 trend rule, which strategies fired) nor the bar briefing are their reports:
 the briefing is their input, not their analysis. In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
-returned as subagents this cycle, `risk-manager` twice (phase 1, then phase
-2 once phase 1 and the analysts have returned), each in the foreground (a
+returned as subagents this cycle or were given under "Cached reports",
+`risk-manager` twice (phase 1, then phase 2 once phase 1 and the analysts
+that ran have returned; phase 2 alone when phase 1 was cached), each in the foreground (a
 background launch hasn't reported), and since the last `trade-executor` call:
 each entry has its own round of reports. The refusal names the roles that
 were missing; the refused `trade-executor` call itself ends the round, so
 report the block and end the cycle (step 6): the next cycle runs every role
-again.
+again, except those its prompt gives under "Cached reports".
 
 | Role (agent file) | Returns |
 |---|---|
