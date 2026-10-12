@@ -12,12 +12,16 @@ const strategiesOps = require('../../scripts/lib/harness-tools/strategies');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
+const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
 const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // The parity bar where bos (and ema_cross) fired long (tests/e2e/mock-trading-e2e.test.js), and just after it closed.
 const FIRED_BAR = '2026-04-28T04:09:00.000Z';
 const NOW = new Date(Date.parse(FIRED_BAR) + 180000 + 20000);
+
+// The runner's signal record for a 3m bar of MNQ (the bar the gate ties a policy verdict to).
+const recordBar = (home, t) => writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t }, stepMs: 180000, now: NOW }));
 
 function setup({ specs = true } = {}) {
   const home = tmpDir();
@@ -159,6 +163,7 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), /a topstep_100k attempt is running: only the policy strategy that trades it may enter/);
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio has no verdict for MNQ/);
   prop.snapshot(home, account, 100000, NOW);
+  recordBar(home, FIRED_BAR);
   const verdict = over => prop.appendVerdict(home, {
     at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
     bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', policy: null, action: 'full', contract: 'NQ', maxSize: 12, ...over,
@@ -187,6 +192,12 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio's verdict is for the bar opened 2026-04-28T04:06:00\.000Z, not the last closed bar of these bars \(opened 2026-04-28T04:09:00\.000Z\)/);
   verdict({ bar: undefined });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /verdict is for the bar opened undefined/, 'no bar: refused');
+  // The verdict on the bars' last bar, but the runner has recorded a newer bar (no verdict for its setup): the gate's
+  // own check, so order_plan and the gate agree.
+  verdict();
+  recordBar(home, new Date(Date.parse(FIRED_BAR) + 180000).toISOString());
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the order gate would refuse this entry: \[policy\] setup:prop_portfolio: the latest verdict is for the 3m bar opened 2026-04-28T04:09:00\.000Z; the setup on the bar opened 2026-04-28T04:12:00\.000Z has no verdict yet/);
+  recordBar(home, FIRED_BAR);
   // The attempt's own block (here: a position open on the account), with order_plan's reason, not only the gate's.
   verdict();
   prop.snapshot(home, account, 100000, NOW, { open: 1, openIds: [42] });
@@ -207,6 +218,7 @@ test('order_plan: a policy strategy is sized with the broker\'s tick values, and
   const account = accountNamed(ROOT, 'topstep_100k', {});
   prop.startAttempt(home, account, NOW);
   prop.snapshot(home, account, 100000, NOW);
+  recordBar(home, FIRED_BAR);
   prop.appendVerdict(home, {
     at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
     bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', policy: null, action: 'full', contract: 'NQ', maxSize: 12,

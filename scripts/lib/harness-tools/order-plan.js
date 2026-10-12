@@ -23,7 +23,8 @@
  * size), capped by the attempt's size budget now (prop-state.js budgetPlan,
  * as the gate checks it), on the verdict's setup, which must still be its
  * component's candidate on the bar, and on the verdict's own bar (the last
- * closed bar of the bars given).
+ * closed bar of the bars given, compared as the gate compares it with the
+ * signal record's last bar: signal-state.js sameBar).
  *
  * Tick specs are the broker's (trading/broker-specs.js), as the gate checks
  * them: none recorded for the contract (or, for a policy strategy, either
@@ -41,7 +42,7 @@ const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
 const { resolveJournalPath, readJournal, entriesSince } = require('../trading/journal');
 const { tradingDayStart } = require('../trading/clock');
-const { FUTURE_TOLERANCE_MIN } = require('../trading/signal-state');
+const { FUTURE_TOLERANCE_MIN, sameBar } = require('../trading/signal-state');
 const { harnessHome } = require('../paths');
 const { context, say } = require('./cli');
 const { whyNot } = require('./compact');
@@ -91,7 +92,7 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf }) {
   if (v.action === 'skip' || !(v.maxSize >= 1)) throw new Error(`${s.name} skipped the setup${v.reason ? ` (${v.reason})` : ''}; no order`);
   if (want !== v.direction) throw new Error(`${s.name}'s verdict is for a ${v.direction} entry, not ${want}; no order`);
   // The verdict's stop ticks were sized on its own bar: never paired with another bar's entry.
-  if (!(Date.parse(v.bar) === Date.parse(lastBar))) {
+  if (!sameBar(v.bar, lastBar)) {
     throw new Error(`${s.name}'s verdict is for the bar opened ${v.bar}, not the last closed bar of these bars (opened ${lastBar}): plan it on bars ending at the verdict's bar; no order`);
   }
   const r = candidateOf(results, v.component, root, v.direction);

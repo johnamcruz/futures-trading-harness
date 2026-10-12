@@ -840,6 +840,9 @@ test('under a policy, a failed account check means no verdict: named, and the co
   assert.match(p, /trendy long \(its policy has no verdict this bar: not an entry\)/);
   assert.doesNotMatch(p, /These are .*'s components/);
   assert.ok(r.logs.some(l => /^ERROR MNQ: account check failed \(HTTP 502\)/.test(l)), r.logs.filter(l => /^ERROR/.test(l)).join(' / '));
+  // The bar is still recorded (signals and decision log): the gate ties a verdict to the last recorded bar, so the
+  // previous bar's verdict can't pass for this one.
+  assert.ok(r.scans.length >= 1 && r.scans.every(x => /^account check failed \(HTTP 502\)/.test(x.decision.reason) && x.results === candidate), JSON.stringify(r.scans.map(x => x.decision)));
 });
 
 test('a prop account with no active policy: a failed account check leaves plain strategies tradable', async () => {

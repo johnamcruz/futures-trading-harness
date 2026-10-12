@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { buildSignals, writeSignals, readSignals, signalFile, checkTrigger, FUTURE_TOLERANCE_MIN } = require('../../scripts/lib/trading/signal-state');
+const { buildSignals, writeSignals, readSignals, signalFile, checkTrigger, FUTURE_TOLERANCE_MIN, barMs, sameBar, recordTimeframe, lastRecordedBar } = require('../../scripts/lib/trading/signal-state');
 const { tmpDir, trendHome } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -99,4 +99,35 @@ test('checkTrigger: a trend strategy is refused on a conflicting bar; FTH_MIN_CO
   const alone = trendHome(tmpDir(), { fired: [{ name: 'orb', direction: 'long', confluence: { with: [], against: [] } }] });
   assert.match(checkTrigger(alone, { root: 'MNQ', side: 'buy', strategy: 'orb', now, minConfluence: 2 }), /fired alone \(1 of the 2 agreeing strategies/);
   assert.strictEqual(checkTrigger(alone, { root: 'MNQ', side: 'buy', strategy: 'orb', now }), null);
+});
+
+test('sameBar: bar times are compared as instants, whatever their text; an unreadable one is no bar', () => {
+  assert.strictEqual(sameBar('2026-10-07T13:57:00Z', '2026-10-07T13:57:00.000Z'), true);
+  assert.strictEqual(sameBar('2026-10-07T13:57:00Z', '2026-10-07T09:57:00-04:00'), true, 'the same instant in another offset');
+  assert.strictEqual(sameBar('2026-10-07T13:57:00Z', '2026-10-07T13:54:00Z'), false);
+  for (const bad of [undefined, null, '', '  ', 'not a time', 1791380220000, {}]) {
+    assert.strictEqual(sameBar(bad, bad), false, `${JSON.stringify(bad)} names no bar`);
+    assert.ok(Number.isNaN(barMs(bad)));
+  }
+});
+
+test('recordTimeframe: a strategy timeframe as the record names it (minutes)', () => {
+  assert.strictEqual(recordTimeframe('3m'), '3m');
+  assert.strictEqual(recordTimeframe('1h'), '60m', 'the runner names a 1h record by its minutes');
+  for (const bad of [undefined, '', '0m', '3 m', '1d', '../x']) assert.strictEqual(recordTimeframe(bad), null, bad);
+});
+
+test('lastRecordedBar: the last recorded bar of the family and timeframe; fails closed on a missing or unreadable record', () => {
+  const home = tmpDir();
+  assert.match(lastRecordedBar(home, 'MNQ', '3m').error, /no 3m signal record for MNQ, so the bar the setup is on is unknown/);
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:54:00.000Z' }, stepMs: 180000, now }));
+  assert.deepStrictEqual(lastRecordedBar(home, 'NQ', '3m'), { bar: '2026-10-07T13:54:00.000Z', timeframe: '3m' }, 'the mini reads the family record');
+  assert.match(lastRecordedBar(home, 'MNQ', '1m').error, /no 1m signal record/);
+  assert.match(lastRecordedBar(home, 'MNQ', 'weekly').error, /timeframe \(weekly\) names no signal record/);
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:00:00.000Z' }, stepMs: 3600000, now }));
+  assert.strictEqual(lastRecordedBar(home, 'MNQ', '1h').bar, '2026-10-07T13:00:00.000Z');
+  fs.writeFileSync(signalFile(home, 'MNQ', '3m'), JSON.stringify({ symbol: 'MNQ', timeframe: '3m', asOf: 'garbage', candidates: [] }));
+  assert.match(lastRecordedBar(home, 'MNQ', '3m').error, /unreadable \(no bar time\)/);
+  fs.writeFileSync(signalFile(home, 'MNQ', '3m'), '{ half a file');
+  assert.match(lastRecordedBar(home, 'MNQ', '3m').error, /unreadable/);
 });
