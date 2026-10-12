@@ -291,7 +291,9 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const align = (alignment && alignment[up ? 'long' : 'short']) || null;
   const conf = r.confluence || { with: [], against: [] };
   // A reversal strategy may fade the prevailing trend; when it does, the skills' rule is half size and the nearest target.
-  const prev = mtf.prevailing || null;
+  // The scan's trend-rule summary names it as text: '4h up' (mtf.ruleSummary).
+  const pm = /^(\S+) (up|down)$/.exec(String(mtf.prevailing || ''));
+  const prev = pm ? { label: pm[1], trend: pm[2] } : null;
   const fading = prev && (up ? prev.trend === 'down' : prev.trend === 'up');
   const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)`
     : prev ? `a reversal strategy, with the prevailing ${prev.label} ${prev.trend} trend` : 'a reversal strategy, no prevailing trend read';

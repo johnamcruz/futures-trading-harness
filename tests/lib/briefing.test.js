@@ -175,6 +175,15 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   // The runner's step writes this bar's briefing from the bars it hands the cycle.
   record({ symbol: 'NQ', bars: at(1300) }, [], null);
   assert.strictEqual(B.readBriefing(home, 'NQ').sections.m3.version, b.sections.m3.version);
+  // A config that can't be read: the news is unknown (the gate fails closed on it too), never "no blackout".
+  const broken = new Proxy({}, { get() { throw new Error('config unreadable'); } });
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', entryRef: 1, stopDistance: 10, mtf: { style: 'trend', longAllowed: true }, confluence: { with: [], against: [] }, exit: {} }];
+  const home2 = tmpDir();
+  briefingRecorder(home2, { timeframe: 3 }, () => new Date(b.closedAt), broken)({ symbol: 'NQ', bars: at(1300) }, scan, null);
+  const m3 = B.readBriefing(home2, 'NQ').sections.m3.data;
+  assert.strictEqual(m3.news.inBlackout, null);
+  assert.match(m3.news.error, /config unreadable/);
+  assert.strictEqual(m3.candidates[0].blocked, 'news unknown (the blackouts file can\'t be read)');
 });
 
 test('the day section built on the 15:57 ET bar ends on the 16:03 bar; one built on the 16:00 bar holds to tomorrow\'s', () => {
@@ -399,13 +408,18 @@ test('levels merge within the contract\'s own tick (contracts.js), in the neares
   assert.match(text, /levels ahead in its R: [^\n]*\(\d[\d.]* pts, R unknown\)/);
 });
 
-test('a reversal setup says whether it fades the prevailing trend (half size, nearest target) or goes with it', () => {
-  const r = { name: 'crt_1h', direction: 'short', status: 'active', entryRef: 100, stopDistance: 10, exit: {}, confluence: { with: [], against: [] } };
-  const fact = mtf => B.candidate({ ...r, mtf: { style: 'reversal', shortAllowed: true, ...mtf } }, 100, [], {}).facts[0];
-  assert.strictEqual(fact({ prevailing: { minutes: 240, label: '4h', trend: 'up' } }), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
-  assert.strictEqual(fact({ prevailing: { minutes: 60, label: '1h', trend: 'down' } }), 'a reversal strategy, with the prevailing 1h down trend');
-  assert.strictEqual(fact({ prevailing: null }), 'a reversal strategy, no prevailing trend read');
-  assert.strictEqual(B.candidate({ ...r, mtf: { style: 'trend', shortAllowed: true } }, 100, [], { vwapSide: 'at' }).facts[4], 'price at the VWAP');
+test('a reversal setup says whether it fades the prevailing trend (half size, nearest target) or goes with it, from the scan\'s own trend-rule summary', () => {
+  const { ruleSummary } = require('../../scripts/lib/trading/mtf');
+  const r = { name: 'crt_1h', status: 'active', entryRef: 100, stopDistance: 10, exit: {}, confluence: { with: [], against: [] } };
+  const fact = (direction, biases) => B.candidate({ ...r, direction, mtf: ruleSummary(biases, 'reversal') }, 100, [], {}).facts[0];
+  const up = { 240: 1, 60: 1, 15: -1 };
+  const down = { 240: -1, 60: -1, 15: 1 };
+  assert.strictEqual(fact('short', up), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
+  assert.strictEqual(fact('long', down), 'a reversal strategy fading the prevailing 4h down trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
+  assert.strictEqual(fact('long', up), 'a reversal strategy, with the prevailing 4h up trend');
+  assert.strictEqual(fact('short', { 240: 0, 60: -1, 15: 0 }), 'a reversal strategy, with the prevailing 1h down trend');
+  assert.strictEqual(fact('long', { 240: 0, 60: 0, 15: 0 }), 'a reversal strategy, no prevailing trend read');
+  assert.strictEqual(B.candidate({ ...r, direction: 'short', mtf: { style: 'trend', shortAllowed: true } }, 100, [], { vwapSide: 'at' }).facts[4], 'price at the VWAP');
 });
 
 test('news: a blackout entry without a valid start and end is unknown (the gate refuses entries), and blocks a candidate', () => {
