@@ -798,6 +798,13 @@ test('every scanned bar records its bar briefing after the scan; a failed briefi
     deps: { scanFor: () => scan, recordBriefing: (item, results) => recorded.push([item.symbol, item.bar.t, item.bars.length > 0, results === scan]) },
   });
   assert.ok(recorded.length >= 3 && recorded.every(([s, t, hasBars, sameScan]) => s === 'MNQ' && t && hasBars && sameScan), JSON.stringify(recorded));
+  // A failed scan: the briefing gets the scan's own error text.
+  const errs = [];
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => { throw new Error('rules engine down'); }, recordBriefing: (item, results, scanError) => errs.push([results, scanError]) },
+  });
+  assert.ok(errs.length >= 1 && errs.every(([r, e]) => r === null && e === 'rules engine down'), JSON.stringify(errs));
   const logs = [];
   const failed = await simulate({
     cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),

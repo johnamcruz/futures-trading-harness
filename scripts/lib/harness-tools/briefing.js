@@ -9,6 +9,7 @@
  */
 
 const { readBriefing, renderBriefing, current } = require('../trading/briefing');
+const { familyRoot } = require('../trading/contracts');
 const { harnessHome } = require('../paths');
 const { context } = require('./cli');
 
@@ -18,11 +19,24 @@ function barBriefing({ symbol = null, json = false } = {}, ctx) {
   const c = context(ctx);
   if (!symbol || !/^[A-Z0-9]{1,8}$/.test(symbol)) throw new Error(`--symbol: a contract root, e.g. MNQ (${USAGE})`);
   const b = readBriefing(harnessHome(c.env), symbol);
-  const fallback = 'Read the bars yourself (market_snapshot, mtf_read and strategies_scan on the bars file) and say so in your report\'s Data line.';
+  const fallback = 'Take the market facts from the bars yourself, with the tools you have (or, without them, the cycle prompt and the analysts\' reports), and say so in your report\'s Data line.';
   if (!b) return { text: `No bar briefing for ${symbol}: the autonomous runner builds it after each closed bar. ${fallback}\n` };
-  // An old briefing (an earlier bar's, or yesterday's) is never served as this bar's.
-  if (!current(b, c.now())) return { text: `The bar briefing for ${symbol} is old (its bar closed ${b.closedAt}; it held until ${b.sections.m3.validUntil}): no current briefing. ${fallback}\n` };
+  // An old briefing (an earlier bar's, or yesterday's) is never served as this bar's: in an autonomous cycle, the bar
+  // the cycle decides (FTH_CYCLE_BARS, from the runner) is the test, however long the cycle runs; else the clock.
+  const cycleBar = cycleBarOf(c.env, symbol);
+  if (cycleBar ? cycleBar !== b.asOf : !current(b, c.now())) return { text: `The bar briefing for ${symbol} is old (its bar closed ${b.closedAt}; it held until ${b.sections.m3.validUntil}): no current briefing. ${fallback}\n` };
   return { text: json ? `${JSON.stringify(b)}\n` : renderBriefing(b, { now: c.now() }) };
+}
+
+/** The bar this cycle decides for `symbol`'s index family, or null outside a cycle (or a cycle without it). */
+function cycleBarOf(env, symbol) {
+  try {
+    const bars = JSON.parse(env.FTH_CYCLE_BARS || '{}');
+    const key = Object.keys(bars).find(k => familyRoot(k) === familyRoot(symbol));
+    return key ? bars[key] : null;
+  } catch (_err) {
+    return null;
+  }
 }
 
 /** argv to { symbol, json }. */

@@ -505,6 +505,17 @@ function createRunner(deps) {
     }
   }
 
+  /** The item's bar briefing (built once per item and bar; a failure is logged, never stops the pass). */
+  function briefItem(item, results, scanError) {
+    if (item.briefed) return;
+    item.briefed = true;
+    try {
+      recordBriefing(item, results, scanError);
+    } catch (err) {
+      log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
+    }
+  }
+
   // The strategy scan for an item; a failure is named in the prompt (what fired is unknown), not left out.
   function scanItem(item) {
     try {
@@ -514,11 +525,7 @@ function createRunner(deps) {
       item.scanError = err.message;
       log(`${item.symbol}: strategy scan failed (${err.message})`, 'error');
     }
-    try {
-      recordBriefing(item, item.scan, item.scanError || null);
-    } catch (err) {
-      log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
-    }
+    briefItem(item, item.scan, item.scanError || null);
     return item.scan;
   }
 
@@ -892,6 +899,8 @@ function createRunner(deps) {
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
+          // A bar not scanned (manage only) still gets its briefing: the file is always this bar's.
+          briefItem(item, null, 'not scanned this bar (manage only)');
           if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
           else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }

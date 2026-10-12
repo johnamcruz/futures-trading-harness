@@ -54,7 +54,9 @@ the scan's candidates and confluence, the trend rule, the alignment per side,
 the levels) and the analysts' reports: don't fetch bars or run
 `strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold.
 Your own calls are the account reads phase 1 needs, `order_plan` (step 5),
-and `strategies_show` for a strategy's rules; each once.
+and `strategies_show` for a strategy's rules; each once. When the briefing
+answers that there is no current one, take the candidates, the trend rule
+and the alignment from the cycle prompt and the analysts' reports instead.
 
 Check, in order, and stop at the first failure:
 

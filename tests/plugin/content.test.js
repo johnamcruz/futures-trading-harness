@@ -214,5 +214,10 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ts, /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing, or for the daily frame/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it as often as you need/);
-  assert.match(read('skills/harness-tools/SKILL.md'), /\| `bar_briefing` \| `symbol`, `json`\? \|/);
+  const ht = read('skills/harness-tools/SKILL.md');
+  assert.match(ht, /\| `bar_briefing` \| `symbol`, `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides/);
+  assert.match(ht, /`m3`, every bar: [^|]*today so far \(open, opening range, IB, day type\), the overnight range so far, the developing session profile/);
+  assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile/);
+  assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
+  assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the cycle prompt and the analysts' reports instead/);
 });

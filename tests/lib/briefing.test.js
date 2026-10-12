@@ -110,7 +110,7 @@ test('render, write, read, and the bar_briefing tool', () => {
   const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt };
   assert.match(barBriefing({ symbol: 'NQ' }, { env }).text, /^Bar briefing NQ 3m/);
   assert.deepStrictEqual(JSON.parse(barBriefing({ symbol: 'NQ', json: true }, { env }).text).sections.m3.version, b.sections.m3.version);
-  assert.match(barBriefing({ symbol: 'ES' }, { env }).text, /^No bar briefing for ES: .*Read the bars yourself/);
+  assert.match(barBriefing({ symbol: 'ES' }, { env }).text, /^No bar briefing for ES: .*Take the market facts from the bars yourself/);
   assert.throws(() => barBriefing({ symbol: '../x' }, { env }), /--symbol/);
   fs.writeFileSync(B.briefingFile(home, 'ES'), '{not json');
   assert.strictEqual(B.readBriefing(home, 'ES'), null);
@@ -172,7 +172,7 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   assert.ok(B.current(b, new Date(b.closedAt)));
   assert.ok(!B.current(b, new Date(b.sections.m3.validUntil)));
   const old = barBriefing({ symbol: 'NQ' }, { env: { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2099-01-01T00:00:00Z' } }).text;
-  assert.match(old, /^The bar briefing for NQ is old \(its bar closed .*\): no current briefing\. Read the bars yourself/);
+  assert.match(old, /^The bar briefing for NQ is old \(its bar closed .*\): no current briefing\. Take the market facts from the bars yourself/);
   assert.doesNotMatch(old, /\[m3\]/);
   const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
   const record = briefingRecorder(home, { timeframe: 3 }, () => new Date(b.closedAt));
@@ -181,4 +181,34 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   // The runner's step writes this bar's briefing from the bars it hands the cycle.
   record({ symbol: 'NQ', bars: at(1300) }, [], null);
   assert.strictEqual(B.readBriefing(home, 'NQ').sections.m3.version, b.sections.m3.version);
+});
+
+test('the day section built on the 15:57 ET bar ends on the 16:03 bar; one built on the 16:00 bar holds to tomorrow\'s', () => {
+  // Find the fixture's bars opening 15:57 and 16:00 ET, and check a fresh build's day expiry through buildBriefing.
+  const et = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+  const i = BARS.findIndex((x, k) => k > 300 && et(x.t) === '15:57');
+  assert.ok(i > 0 && et(BARS[i + 1].t) === '16:00', 'the fixture has the 15:57 and 16:00 bars');
+  const at1557 = build(i + 1);
+  assert.strictEqual(Date.parse(at1557.sections.day.validUntil), Date.parse(BARS[i + 1].t) + 3 * 60000, 'until the 16:00 bar closes (16:03)');
+  const at1600 = build(i + 2);
+  assert.ok(Date.parse(at1600.sections.day.validUntil) - Date.parse(BARS[i + 1].t) > 20 * 3600000, 'the next day\'s roll');
+  assert.notDeepStrictEqual(at1600.sections.day.data.priorRth, at1557.sections.day.data.priorRth, 'the prior day rolled on the 16:00 bar');
+});
+
+test('in a cycle, the briefing is current exactly when it is for the bar the cycle decides (FTH_CYCLE_BARS), however long the cycle runs', () => {
+  const home = tmpDir();
+  const b = build(1300);
+  B.writeBriefing(home, b);
+  const late = '2099-01-01T00:00:00Z';
+  const env = bars => ({ FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: late, FTH_CYCLE_BARS: JSON.stringify(bars) });
+  // The cycle's own bar, an hour or a year later: still this cycle's briefing (MNQ and NQ are one family).
+  assert.match(barBriefing({ symbol: 'NQ' }, { env: env({ MNQ: b.asOf }) }).text, /^Bar briefing NQ 3m/);
+  // Another bar: old.
+  assert.match(barBriefing({ symbol: 'NQ' }, { env: env({ NQ: '2026-01-01T00:00:00.000Z' }) }).text, /is old/);
+  // Outside a cycle (or a cycle without this symbol), the clock decides.
+  assert.match(barBriefing({ symbol: 'NQ' }, { env: env({ ES: b.asOf }) }).text, /is old/);
+  const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
+  const ctx = { symbols: [{ symbol: 'MNQ', bar: { t: b.asOf } }, { symbol: 'MES', bar: { t: '2026-01-01T00:00:00.000Z' } }] };
+  assert.deepStrictEqual(JSON.parse(childEnv(validateConfig({}), '/r', { FTH_HOME: home }, ctx).FTH_CYCLE_BARS), { MNQ: b.asOf, MES: '2026-01-01T00:00:00.000Z' });
+  assert.strictEqual(childEnv(validateConfig({}), '/r', { FTH_HOME: home, FTH_CYCLE_BARS: '{"MNQ":"x"}' }).FTH_CYCLE_BARS, undefined, 'never a stale one');
 });
