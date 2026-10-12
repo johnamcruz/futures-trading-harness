@@ -1,20 +1,19 @@
 'use strict';
 
 /**
- * The runner's prop-challenge duties, for strategies that trade an account
- * (`account`) and maybe a policy (`policy`):
+ * The runner's prop-challenge duties, for the policy strategies (signal:
+ * policy) that trade an account (`account`):
  *
  *   snapshot   every bar: the account balance into combine/<account>.json
  *              (the gate refuses entries on a snapshot older than 10 min);
  *   endOfDay   after the end-of-day flatten: the day's closing balance;
- *   screen     at a setup: the policy's verdict, recorded for the gate; a
- *              skipped setup starts no cycle;
- *   position   in a trade past the ratchet: hold or close.
+ *   screen     at a setup: the sizing verdict (prop/verdict.js), recorded
+ *              for the gate; a skipped setup starts no cycle.
  *
- * A bundle that can't be loaded (missing, retrained on another observation,
- * not validated) makes every verdict a skip: the gate then refuses the entry.
- * Tick specs are the broker's (trading/broker-specs.js), as the gate sizes
- * with them: a contract without one recorded gets a skip verdict.
+ * An open trade is managed by the policy strategy's exit (its trail), as in
+ * the backtester. Tick specs are the broker's (trading/broker-specs.js), as
+ * the gate sizes with them: a contract without one recorded gets a skip
+ * verdict.
  */
 
 const { loadAccounts } = require('../trading/accounts');
@@ -22,15 +21,14 @@ const { contractRoot, readJournal, resolveJournalPath } = require('../trading/jo
 const { familyOf } = require('../trading/contracts');
 const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
-const { loadBundle, bundleMismatch, legMismatch } = require('./policy-bundle');
-const live = require('./live');
+const state = require('../trading/prop-state');
+const { decideSetup } = require('./verdict');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
 
 function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {}, journal = null }) {
   // The broker's journal (the harness's own order records): read only to know whether an order went through.
   const journalEntries = journal || (() => readJournal(resolveJournalPath({ ...env, FTH_HOME: home })));
-  const bundles = new Map();
   const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
   const warned = new Set();
   const warnOnce = (key, msg) => {
@@ -38,25 +36,6 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     warned.add(key);
     log(msg, 'error');
   };
-
-  /** The strategy's bundle, or { error }: unloadable, unvalidated, or trained for another strategy, account, or sizing. */
-  function bundleFor(strategy, symbolRoot) {
-    const name = strategy.policy.bundle;
-    if (!bundles.has(name)) {
-      try {
-        bundles.set(name, loadBundle(root, name, env));
-      } catch (err) {
-        bundles.set(name, { error: err.message });
-      }
-    }
-    const b = bundles.get(name);
-    if (b.error) return b;
-    const why = bundleMismatch(b.meta, strategy, symbolRoot);
-    if (why) return { error: `policy ${name} ${why}; retrain it for this strategy` };
-    // The runner's contract is the selected leg, the only one live sizes.
-    const leg = symbolRoot ? legMismatch(b.meta, symbolRoot) : null;
-    return leg ? { error: `policy ${name} ${leg}` } : b;
-  }
 
   /** The account profiles the valid policy strategies trade. */
   function accounts() {
@@ -67,9 +46,9 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
 
   /** The combine state for an account: the attempt and this balance (or the last snapshot). */
   function stateOf(account) {
-    const r = live.readAttempt(home, account.name);
+    const r = state.readAttempt(home, account.name);
     if (!r) return null;
-    return live.stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
+    return state.stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
   }
 
   async function balances(now, fn, { flat = false, closeOf = null, withFills = false } = {}) {
@@ -83,9 +62,9 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     if (flat && open) throw new Error(`${open} position(s) still open (${openIds.join(', ')}); the closing balance is read once flat`);
     const current = await client.accountBalance(accountId);
     // A past day's close (a catch-up): today's balance less what the fills since that day ended made.
-    const balance = closeOf ? live.closeBefore(current, await client.fillsSince(accountId, new Date(closeOf)), closeOf) : current;
+    const balance = closeOf ? state.closeBefore(current, await client.fillsSince(accountId, new Date(closeOf)), closeOf) : current;
     for (const a of list) {
-      if (!live.readAttempt(home, a.name)) {
+      if (!state.readAttempt(home, a.name)) {
         warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
         continue;
       }
@@ -96,18 +75,18 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       let fills;
       let fillsError = null;
       let unchanged = false;
-      const r = withFills && !open ? live.readAttempt(home, a.name) : null;
+      const r = withFills && !open ? state.readAttempt(home, a.name) : null;
       const prev = r && r.snapshot;
       if (r && r.anchor && r.anchor.day === tradingDayKey(now)) {
         // Unchanged: flat before and now, the same balance, a check that passed, and no order of ours since
         // (a round trip between two snapshots leaves both flat). A journal that can't be read counts as moved.
         let ordered;
         try {
-          ordered = prev ? live.orderSince(journalEntries(), prev.at) : true;
+          ordered = prev ? state.orderSince(journalEntries(), prev.at) : true;
         } catch (_err) {
           ordered = true;
         }
-        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && live.reconciled(prev.balanceCheck) && !ordered);
+        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && state.reconciled(prev.balanceCheck) && !ordered);
         if (!unchanged) {
           try {
             fills = await client.fillsSince(accountId, new Date(r.anchor.at));
@@ -128,7 +107,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     const fam = r => (familyOf(r) ? familyOf(r).micro : r);
     return strategies().filter(s => s.valid && s.signal === 'policy'
       && (s.status === 'active' || (paper && s.status !== 'disabled'))
-      && s.instruments.some(x => fam(x) === fam(root)) && live.readAttempt(home, s.account));
+      && s.instruments.some(x => fam(x) === fam(root)) && state.readAttempt(home, s.account));
   }
 
   return {
@@ -144,16 +123,16 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     summaries(now = new Date(), balance = NaN) {
       const out = [];
       for (const a of accounts()) {
-        const r = live.readAttempt(home, a.name);
+        const r = state.readAttempt(home, a.name);
         if (!r) continue;
-        const entryBlock = live.combineBlock(home, a.name, now);
+        const entryBlock = state.combineBlock(home, a.name, now);
         const fresh = Number.isFinite(balance);
         const snapshotAt = r.snapshot ? r.snapshot.at : null;
         if (!fresh && !snapshotAt) {
           out.push({ account: a.name, status: 'unknown', noBalance: true, snapshotAt, entryBlock });
           continue;
         }
-        const cs = live.stateFrom(a, r, fresh ? balance : r.snapshot.balance);
+        const cs = state.stateFrom(a, r, fresh ? balance : r.snapshot.balance);
         const budgets = strategies().filter(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled')
           .map(x => ({ strategy: x.name, budgetUsd: combine.budget(cs, x.sizing || {}) }));
         out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock });
@@ -161,7 +140,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       return out;
     },
     /** Every bar: the balance and open positions now. */
-    snapshot: now => balances(now, (a, b, t, open, openIds, check) => live.snapshot(home, a, b, t, { open, openIds, ...check }), { withFills: true }),
+    snapshot: now => balances(now, (a, b, t, open, openIds, check) => state.snapshot(home, a, b, t, { open, openIds, ...check }), { withFills: true }),
     /**
      * After the end-of-day flatten: the closing balance of trading day `day`
      * (YYYY-MM-DD). For a catch-up (a day that has ended), the balance then,
@@ -169,18 +148,18 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
      */
     endOfDay: (now, day) => balances(now, (a, b) => {
       // A day before the attempt started has nothing to record (a catch-up end of day for it is not an error).
-      const r = live.readAttempt(home, a.name);
+      const r = state.readAttempt(home, a.name);
       if (r && r.startDay && day < r.startDay) return;
-      live.recordEndOfDay(home, a, b, day);
-    }, { flat: true, closeOf: now.getTime() >= live.dayEndMs(day) ? live.dayEndMs(day) : null }),
+      state.recordEndOfDay(home, a, b, day);
+    }, { flat: true, closeOf: now.getTime() >= state.dayEndMs(day) ? state.dayEndMs(day) : null }),
 
     /**
      * Scan results with every policy strategy applied. A policy strategy owns
      * its strategies' setups: their own results stop being candidates, and
      * the first of them that fired (in the policy strategy's order, as the
-     * backtester picks) becomes the policy strategy's setup, screened by its
-     * trained policy (or taken as sized without one). The verdict (contract,
-     * size, stop) is recorded for the gate.
+     * backtester picks) becomes the policy strategy's setup, sized from the
+     * attempt's budget (or skipped). The verdict (contract, size, stop) is
+     * recorded for the gate.
      */
     /** The strategies an active policy owns on this contract now: Map(strategy -> policy); empty when none. */
     owners({ symbol, contractId }) {
@@ -207,17 +186,16 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const spec = specOf(root);
         // The budget may pick either contract of the family: both need the broker's specs.
         const unspecified = [root, ...(familyOf(root) ? [familyOf(root).micro, familyOf(root).mini] : [])].find(r => !specOf(r));
-        const bundle = s.policy ? bundleFor(s, root) : null;
         const cs = account && stateOf(account);
         let verdict;
-        if ((bundle && bundle.error) || !cs || unspecified) {
-          const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : whyNoSpec(specOf, unspecified));
+        if (!cs || unspecified) {
+          const reason = !cs ? `no ${s.account} attempt` : whyNoSpec(specOf, unspecified);
           verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
-          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now, specOf, selected: [root] });
+          verdict = decideSetup({ account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, now, specOf, selected: [root] });
         }
-        live.appendVerdict(home, verdict);
-        log(`${symbol}: ${s.name} ${pick.direction} setup from ${pick.name}: ${s.policy ? `policy ${s.policy.bundle}` : 'sizing'} says ${verdict.action}`
+        state.appendVerdict(home, verdict);
+        log(`${symbol}: ${s.name} ${pick.direction} setup from ${pick.name}: sizing says ${verdict.action}`
           + `${verdict.maxSize ? ` (max ${verdict.maxSize} ${verdict.contract}, stop ${verdict.stopTicks} ticks)` : ''}${verdict.reason ? ` (${verdict.reason})` : ''}`);
         out.push({
           name: s.name, status: s.status, signal: 'policy', candidate: verdict.action !== 'skip', direction: pick.direction, component: pick.name,
@@ -225,26 +203,6 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         });
       }
       return out;
-    },
-
-    /**
-     * hold / close for an open trade of a policy strategy past its ratchet;
-     * null when it has no usable policy. The trade's strategy and contract
-     * come from the verdict it was entered on.
-     */
-    position({ strategy, contractId, bars, pos }) {
-      if (!strategy || strategy.signal !== 'policy' || !strategy.policy) return null;
-      const root = contractRoot(contractId);
-      const bundle = bundleFor(strategy, root);
-      const account = accounts().find(a => a.name === strategy.account);
-      const cs = account && stateOf(account);
-      const spec = specOf(root);
-      const entered = live.readVerdicts(home).filter(v => v.strategy === strategy.name && v.contract === root && v.action !== 'skip').pop();
-      if (bundle.error || !cs || !spec || !entered) {
-        warnOnce(`pos:${strategy.name}`, `${strategy.name}: policy ${strategy.policy.bundle} can't decide in a trade (${bundle.error || (!entered ? 'no verdict for this trade' : 'no attempt or tick specs')}); the trail manages it alone`);
-        return null;
-      }
-      return live.decidePosition({ bundle, account, cs, strategy, rawBars: bars, spec, specOf, pos: { ...pos, contract: root, component: entered.component } });
     },
   };
 }

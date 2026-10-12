@@ -9,7 +9,8 @@ are done and the owner promotes them:
   [order_flow]`), and `strategies/prop_flow_1m` through them;
 - `strategies/value_area` (3m, `connectors: [order_flow]`): `ofi(3) >= 0.2` is
   one branch of an `any` confirmation, and the strategy is listed in
-  `prop_portfolio`, the policy the RL bundles train on.
+  `prop_portfolio`, the policy strategy the prop backtests and the
+  learned-rulebook design (to come) score.
 
 ## What the strategies need
 
@@ -102,11 +103,10 @@ can supply it, so replay equals live.
 4. **Offline conversion**: a Python script the user runs, outside the harness
    (in the original bot's repository or a separate tools repository), porting
    `build_tick_orderflow.py`: Parquet in, per-minute CSV out, into the user's
-   data directory. The same output serves the JS backtester and the RL env,
-   which read CSVs through `scripts/lib/backtest/data.js`: either a
-   bars-plus-flow CSV (`buy_volume`/`sell_volume` columns) or a join at load
-   time, so offline backtests and training see the same flow as the replay
-   broker. The harness never reads Parquet and needs no Python at runtime; no
+   data directory. The same output serves the JS backtester, which reads
+   CSVs through `scripts/lib/backtest/data.js`: either a bars-plus-flow CSV
+   (`buy_volume`/`sell_volume` columns) or a join at load time, so offline
+   backtests see the same flow as the replay broker. The harness never reads Parquet and needs no Python at runtime; no
    data is committed anywhere.
 5. **Harness**:
    - Thread `includeOrderFlow` through `adapter.closedBars` (which builds the
@@ -125,25 +125,22 @@ can supply it, so replay equals live.
      A strategy's other branches still apply: `value_area`'s expansion branch,
      which needs no flow, keeps working. The bar-shape estimate stays for
      offline research only.
-   - **Training equals live**: the same rule applies in the JS backtester and
-     the RL env, or `prop_portfolio`'s components would fire on the estimate
-     in training and not live. Bundles trained before the rule are retrained.
+   - **Backtests equal live**: the same rule applies in the JS backtester, or
+     `prop_portfolio`'s components would fire on the estimate in backtests
+     and not live.
    - The recorded-flow path (`flow.js`, `orderflow.js`, `<FTH_HOME>/flow/`)
      stays as a fallback source for brokers without order flow; its text in
      `docs/BROKER-MCP-INTERFACE.md` ("Not in the interface") and
      `strategies/README.md` ("live these run on the estimate") is updated.
    - The skills that describe order-flow strategies say so (model-neutral),
      synced to every harness.
-   - Later: order-flow features (`ofi` over 1/3/5 bars and a real-flow flag)
-     in the RL observation, which changes the observation version; trained
-     only on bars with real flow.
 
 ## Work plan (each its own PR, with the regression and review)
 
 1. Interface and harness: the `get_bars`/`get_server_config` additions, the
    conformance checks, threading `includeOrderFlow`, the flow marker in
-   `normalizeBars`, the "no real flow" rule in the evaluator, the backtester
-   and the RL env, skills and docs.
+   `normalizeBars`, the "no real flow" rule in the evaluator and the
+   backtester, skills and docs.
 2. backtester-mcp: serve the flow file (summed for longer bars), mark gaps
    and rolls, conformance.
 3. Offline conversion script (outside the harness), with a check that its
@@ -155,10 +152,8 @@ can supply it, so replay equals live.
      quote-rule flow for the same minutes (the side rule differs: exchange
      aggressor live, quote rule in replay);
    - rules-only backtests of each order-flow strategy on the flow history;
-   - reasoning-trader replays on months with flow (2021-05 to 2025-11);
-   - retrain any policy bundle whose components use order flow.
+   - reasoning-trader replays on months with flow (2021-05 to 2025-11).
 6. The owner decides whether to promote each order-flow strategy to `active`.
-7. RL: order-flow features in the observation (a new observation version).
 
 ## Risks
 
@@ -169,8 +164,8 @@ can supply it, so replay equals live.
 - **Gaps and warm-up**: no history live; every reconnect needs a warm-up of
   the longest flow lookback, and partial minutes must never count as real
   flow.
-- **Training versus live**: the "no real flow" rule changes which
-  `prop_portfolio` components fire; training must apply it too.
+- **Backtests versus live**: the "no real flow" rule changes which
+  `prop_portfolio` components fire; backtests must apply it too.
 - **Rolls**: a contract switch inside the flow data must never reach replay
   prices.
 - **Licensing**: the order-book data is licensed vendor data; it is never

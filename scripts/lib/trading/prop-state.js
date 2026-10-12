@@ -6,7 +6,7 @@
  *
  *   <FTH_HOME>/combine/<account>.json   the attempt: start, end-of-day
  *                                       balances, and the latest snapshot
- *   <FTH_HOME>/policy-verdicts.jsonl    one line per policy decision at a setup
+ *   <FTH_HOME>/policy-verdicts.jsonl    one line per policy strategy's verdict at a setup
  *
  * Light on purpose: the order-gate hook loads it on every order.
  */
@@ -24,6 +24,8 @@ const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older 
 const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
 const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
 const VERDICT_KEEP = 500;
+/** The verdict actions an entry may follow, with the share of the size budget each allows. Any other action refuses. */
+const ENTRY_FRACTIONS = Object.freeze({ full: 1, half: 0.5 });
 
 const combineFile = (home, account) => path.join(home, 'combine', `${account}.json`);
 const verdictsFile = home => path.join(home, 'policy-verdicts.jsonl');
@@ -265,7 +267,7 @@ function combineBlock(home, accountName, now = new Date()) {
   if (!s || !(age <= SNAPSHOT_MAX_AGE_MS) || age < -SNAPSHOT_FUTURE_TOLERANCE_MS) return `the ${accountName} account snapshot is missing or older than ${SNAPSHOT_MAX_AGE_MS / 60000} minutes, or dated in the future (the runner updates it each bar)`;
   if (s.open > 0) {
     const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
-    return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
+    return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester does): close it to trade the attempt`;
   }
   if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
     return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
@@ -347,7 +349,8 @@ function legsFor(account, root, specOf = specFor, selected = null) {
 /**
  * The contract and size the account's budget allows for a policy strategy's
  * entry with a `stopTicks` stop, from the latest snapshot (combine.contractPlan,
- * as the backtester and training size it), or { error }.
+ * as the backtester sizes it), or { error }. `fraction` scales the budget
+ * (a verdict's share: ENTRY_FRACTIONS).
  */
 function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, specOf = specFor, selected = null) {
   const r = readAttempt(home, account.name);
@@ -402,13 +405,14 @@ function verdictBarProblem(home, strategy, root, v) {
 
 /**
  * The prop-challenge checks for a new entry by a strategy that trades an
- * account (and maybe a policy): [{ check, message }]. Hard checks: they fail
- * closed on missing or stale state and can't be skipped.
+ * account: [{ check, message }]. Hard checks: they fail closed on missing or
+ * stale state and can't be skipped.
  *   combine: an attempt is running, the snapshot is fresh, the account allows
  *            entries, and the size is within the budget for the order's stop;
- *   policy:  a fresh verdict from the strategy's policy for this contract and
- *            side, recorded on the bar the setup is on now (the last bar of
- *            the signal record), said half or full, and the size is within it.
+ *   policy:  a fresh verdict for this policy strategy, contract and side,
+ *            recorded on the bar the setup is on now (the last bar of the
+ *            signal record), whose action allows an entry (ENTRY_FRACTIONS:
+ *            full, or half; anything else refuses), and the size is within it.
  */
 function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor, selected = null }) {
   const out = [];
@@ -419,9 +423,10 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     return out;
   }
   const ticks = input.stopLossBracket ? Number(input.stopLossBracket.ticks) : NaN;
-  // The verdict says full or half; the budget is checked at that size (a half can fall from minis to micros).
+  // The budget is checked at the verdict's share (a half can fall from minis to micros); an action
+  // that allows no entry is refused below, never sized as full.
   const verdictNow = strategy.signal === 'policy' ? latestVerdict(home, strategy.name, root) : null;
-  const fraction = verdictNow && verdictNow.action === 'half' ? 0.5 : 1;
+  const fraction = verdictNow && Object.hasOwn(ENTRY_FRACTIONS, verdictNow.action) ? ENTRY_FRACTIONS[verdictNow.action] : 1;
   // `journal`: every entry, unfiltered, so one with an unreadable time still counts as since the snapshot.
   const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
@@ -434,19 +439,18 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     }
   }
   // Every entry of a policy strategy follows a fresh verdict the runner
-  // recorded at its setup: the trained policy's, or (no bundle) the sizing's.
+  // recorded at its setup (prop/verdict.js).
   if (strategy.signal === 'policy') {
     const v = verdictNow;
     const side = String(input.side || '').toLowerCase();
     const dir = side === 'buy' ? 'long' : side === 'sell' ? 'short' : null;
-    const bundle = strategy.policy ? strategy.policy.bundle : null;
     let why = null;
     let barWhy; // the verdict must be for the bar the setup is on now
     if (!v) why = `no verdict for ${root} (the runner records one at each setup of ${(strategy.strategies || []).join(', ')})`;
-    else if ((v.policy || null) !== bundle) why = `the latest verdict came from ${v.policy || 'the sizing alone'}, not ${bundle || 'the sizing alone'}`;
     else if (!(Date.parse(v.expiresAt) > now.getTime())) why = `the latest verdict (${v.bar}) expired at ${v.expiresAt}`;
     else if ((barWhy = verdictBarProblem(home, strategy, root, v))) why = barWhy;
     else if (v.action === 'skip' || !(v.maxSize >= 1)) why = `the setup was skipped${v.reason ? ` (${v.reason})` : ''}`;
+    else if (!Object.hasOwn(ENTRY_FRACTIONS, v.action)) why = `the verdict's action ${JSON.stringify(v.action)} allows no entry (only ${Object.keys(ENTRY_FRACTIONS).join(' or ')})`;
     else if (dir !== v.direction) why = `the verdict is for a ${v.direction} entry, not ${side || 'this side'}`;
     else if (v.contract !== root) why = `the verdict trades ${v.contract}, not ${root}`;
     else if (!(size >= 1 && size <= v.maxSize)) why = `size ${input.size} is over the verdict's ${v.maxSize} ${v.contract} (${v.action})`;
@@ -495,5 +499,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
+  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_FRACTIONS,
 };

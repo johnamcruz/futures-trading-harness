@@ -903,7 +903,7 @@ test('order gate: at the profit target a prop entry is refused only once today\'
     prop.snapshot(env.FTH_HOME, account, 53100, new Date(Date.parse(TEST_NOW) - 60000));
     prop.appendVerdict(env.FTH_HOME, {
       strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-      policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+      bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
     });
     return gate(orderPayload(order), env);
   };
@@ -930,7 +930,7 @@ test('order gate: a live attempt past its sessions still trades (sessions bound 
   prop.snapshot(env.FTH_HOME, account, 50320, new Date(Date.parse(TEST_NOW) - 60000));
   prop.appendVerdict(env.FTH_HOME, {
     strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-    policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
   });
   const r = gate(orderPayload(order), env);
   assert.strictEqual(r.code, 0, r.stderr);
@@ -962,7 +962,7 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.match(r.stderr, /\[policy\] setup:propped: no verdict for MNQ/);
   prop.appendVerdict(env.FTH_HOME, {
     strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-    policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
   });
   r = gate(orderPayload(order), env);
   assert.strictEqual(r.code, 0, r.stderr);
@@ -986,6 +986,29 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.ok(fs.existsSync(dir));
 });
 
+test('order gate hook: a verdict whose action allows no entry (not full or half) is refused, even with the checks skipped', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], {
+    FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_ORDER_GATE_SKIP: 'combine,policy',
+  });
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  prop.startAttempt(env.FTH_HOME, account);
+  prop.snapshot(env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
+  const verdict = action => prop.appendVerdict(env.FTH_HOME, {
+    strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action, stopTicks: 40, maxSize: 19,
+    bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+  });
+  verdict('close');
+  let r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[policy\] setup:propped: the verdict's action "close" allows no entry \(only full or half\)/);
+  verdict('full');
+  r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+});
+
 test('order gate wiring: a policy strategy trades the selected leg (FTH_SYMBOLS), sized in it whatever its contracts mode; the other leg is refused', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');
@@ -997,7 +1020,7 @@ test('order gate wiring: a policy strategy trades the selected leg (FTH_SYMBOLS)
     prop.snapshot(home, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
     prop.appendVerdict(home, {
       strategy: 'propped', component: 'crossing', contractId: contract, contract, direction: 'long', action: 'full', stopTicks: 40, maxSize: size,
-      policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+      bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
     });
     const order = entryOrder({ contractId: contract, rationale: 'setup:propped long, stop 21480, target 21540', size });
     const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: contract, text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_SYMBOLS: symbols });
@@ -1029,7 +1052,7 @@ test('order gate wiring: a balance that doesn\'t reconcile with the broker\'s fi
   prop.snapshot(home, account, 50000, new Date(now - 60000), { fills });
   prop.appendVerdict(home, {
     strategy: 'propped', component: 'crossing', contractId: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-    policy: null, bar: HOOK_BAR, at: new Date(now - 60000).toISOString(), expiresAt: new Date(now + 120000).toISOString(),
+    bar: HOOK_BAR, at: new Date(now - 60000).toISOString(), expiresAt: new Date(now + 120000).toISOString(),
   });
   const order = entryOrder({ contractId: 'MNQ', rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
   const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_SYMBOLS: 'MNQ', FTH_ORDER_GATE_SKIP: 'combine,policy' });
@@ -1057,7 +1080,7 @@ test('order gate hook: a prop verdict is for its own bar - an older bar\'s verdi
   prop.snapshot(env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
   const verdict = bar => prop.appendVerdict(env.FTH_HOME, {
     strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-    policy: null, bar, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    bar, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
   });
   // The bar before the recorded one (14:27): unexpired, same side and stop, still refused.
   verdict('2026-10-07T14:24:00.000Z');
@@ -1090,7 +1113,7 @@ test('order gate hook: an entry on another market since the account snapshot hol
   prop.snapshot(base.env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 90000));
   prop.appendVerdict(base.env.FTH_HOME, {
     strategy: 'propped', component: 'crossing', contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
-    policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 30000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 30000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
   });
   assert.strictEqual(gate(orderPayload(order), base.env).code, 0);
   const other = setup(journal([{ ts: minutesAgo(1, new Date(TEST_NOW)), kind: 'order_placed', contractId: 'MES', text: 'setup:propped long', data: { result: { success: true } } }]),

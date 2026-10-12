@@ -2,8 +2,8 @@
 
 /**
  * A prop-firm challenge as a state machine over one attempt, from an account
- * profile (accounts/<name>/ACCOUNT.md). Pure: the env, the backtester, the
- * runner, and the gateway all drive the same functions.
+ * profile (accounts/<name>/ACCOUNT.md). Pure: the prop simulator, the
+ * backtester, the runner, and the gateway all drive the same functions.
  *
  *   start(account)                  a fresh attempt
  *   applyClose(s, net)              a closed trade's net P&L (after fees)

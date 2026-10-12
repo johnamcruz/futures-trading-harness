@@ -1,13 +1,14 @@
-# Reasoning trader: replay, labels, and a policy that learns from it
+# Reasoning trader: replay and labels
 
 Status: stage 1 (replay) is built: the replay driver (`scripts/replay.js`,
 `scripts/lib/replay/`), the replay clock (`scripts/lib/trading/harness-now.js`)
 and the simulated-broker module the replay broker's fills are ported from.
-Stage 2's first pieces are built: the labeler (`scripts/lib/replay/labels.js`,
-`node scripts/replay.js labels <run dir>`) and the label dataset
-(`scripts/lib/rl/label-dataset.js`, `node scripts/rl-dataset.js build`, read
-by `rl/fth_rl/dataset.py`); the rest of stage 2 (cloning, fine-tuning, the
-widened observation) is design only, built if stage 1 shows an edge.
+Stage 2 (labels) is built: the labeler (`scripts/lib/replay/labels.js`,
+`node scripts/replay.js labels <run dir>`). The student policy this design
+once planned on top of the labels (behaviour cloning, then PPO fine-tuning)
+is retired with the trained PPO policy; the learned-rulebook design (to
+come) replaces it, and reads the labels to measure how closely the reasoning
+trader follows its rules.
 
 ## The problem
 
@@ -23,13 +24,10 @@ Nothing measured or trained on that judgment:
 - The backtester (`scripts/lib/backtest/engine.js`) runs only rules
   strategies; it skips any `signal: manual` strategy ("manual strategies need
   the LLM").
-- The RL policy (`docs/RL-DESIGN.md`) learns from the rules' setups and the
-  simulated outcomes. Its observation (`scripts/lib/rl/observation.js`) is
-  built around a setup or a trade, and its actions are skip, half, or full at
-  a rules setup, then hold or close past the ratchet
-  (`scripts/lib/rl/challenge-env.js`). It never sees the reasoning model, so
-  it can't learn how it trades, and live the model is reduced to placing the
-  policy's verdict.
+- The prop backtests (`scripts/lib/prop/challenge.js`) run the rules'
+  setups through the combine. They never see the reasoning model, so they
+  can't say how it trades. (The trained PPO policy that once sized those
+  setups learned only from them too; it is retired.)
 
 ## The idea
 
@@ -45,15 +43,11 @@ Two stages, each useful on its own.
    model call: what is measured is what trades. The result answers the first
    question (does the reasoning trader have an edge?), and its records are
    the labels.
-2. **Student: a policy trained on those records.** A policy with an action
-   space that covers the teacher's decisions and an observation that carries
-   what the skills read, trained first to imitate the recorded decisions
-   (behaviour cloning), then fine-tuned with RL in the simulator on the
-   challenge (pass rate, zero blows). Live, it is fast, deterministic, and
-   validated by the same promotion gate.
-
-Stage 2 is built only if stage 1 shows an edge on the months after the
-teacher's cutoff (below): cloning a trader with none adds nothing.
+2. **Labels: every decision on the record.** Each decision the reasoning
+   model made, with the gate's answer, the outcome, and what each skipped
+   candidate would have done. They show whether its judgment adds edge over
+   the rules, and how closely it follows the skills and the rules it is
+   given (the learned-rulebook design's adherence measurement, to come).
 
 ## Stage 1: replay (built)
 
@@ -62,8 +56,8 @@ teacher's cutoff (below): cloning a trader with none adds nothing.
 - **The replay broker** (its own repo; backtester-mcp is the first): the
   broker MCP interface over local historical bars, with a clock file the
   driver moves forward and simulated fills (ported from the harness's
-  `scripts/lib/backtest/sim-broker.js`, so replay, backtests and RL training
-  share one fill model). It is a `brokers.json` entry with `"replay": true`;
+  `scripts/lib/backtest/sim-broker.js`, so replay and backtests share one
+  fill model). It is a `brokers.json` entry with `"replay": true`;
   its `get_server_config` reports `replay: true` and the replayed
   `serverTime`, and its `search_trades` adds round-trip metrics (R, MAE, MFE,
   bars held, exit reason).
@@ -180,10 +174,10 @@ of day as live. backtester-mcp's fill engine is ported from
 The model has read about the markets in its training data. With real dates
 and prices it may recall what happened next, and the records would look
 excellent on history and fail live. The defence is **time**: the reasoning
-model is judged (the go/no-go for stage 2) only on months after its
-knowledge cutoff. Windows before the cutoff (train, and select when it lies
-there) supply labels for cloning and its held-out check only, never a
-decision about the trader (`docs/QUANT-PLAN.md`).
+model is judged only on months after its knowledge cutoff. Windows before
+the cutoff (train, and select when it lies there) supply labels for skill
+and strategy iteration and its held-out check only, never a decision about
+the trader (`docs/QUANT-PLAN.md`).
 
 Anonymization (no dates, a price offset per day) would need the replay
 broker to serve shifted prices and times consistently to every tool; it is
@@ -202,18 +196,18 @@ it belongs in the replay broker, so the harness stays unchanged.
 
 ### Windows
 
-The RL pipeline's three windows, never overlapping: train, select, out of
-sample.
+The three split windows (`scripts/lib/prop/splits.js`), never overlapping:
+train, select, out of sample.
 
-- **Train** (may lie before the cutoff): the student's labels, and all
-  prompt, skill and config iteration.
-- **Select**: the clone's held-out check and choosing among students (by
-  their backtests, which see only bars). The go/no-go for stage 2 is on
-  months after the cutoff, which may lie outside the three windows
-  (`docs/QUANT-PLAN.md`).
-- **Out of sample** (after select): looked at once, after the student
-  exists, to validate it under the promotion gate in the backtester. The
-  reasoning model is not replayed there. Each look is logged.
+- **Train** (may lie before the cutoff): labels, and all prompt, skill and
+  config iteration.
+- **Select**: the held-out check of those changes, and choosing among
+  rulebook candidates (by their backtests, which see only bars). The
+  reasoning trader itself is judged on months after the cutoff, which may
+  lie outside the three windows (`docs/QUANT-PLAN.md`).
+- **Out of sample** (after select): the promotion gate's window, in the
+  backtester. The reasoning model is not replayed there. Each look is
+  logged.
 
 ### Nondeterminism
 
@@ -260,16 +254,16 @@ errors) and stops the run after `maxConsecutiveErrors`.
 cycles, failed cycles, the stand-aside rate (trade cycles reporting
 `no-trade`), trades (closed round trips, net of fees), win rate, mean R,
 expectancy, net, MAE and MFE in R when the broker reports them, and the
-gate's refusals by check. Next to the rules-only baseline and the current
-policy (from `scripts/backtest.js` on the same window): later.
+gate's refusals by check. Next to the rules-only baseline (from
+`scripts/backtest.js` on the same window): later.
 
 The combine verdict (`scripts/lib/replay/verdict.js`) scores each calendar
 month as a prop attempt, so a year replayed month by month reads as months
-passed and failed, as RL is trained to pass them. A real attempt inside a
+passed and failed, as a combine is judged. A real attempt inside a
 replay isn't used: while one runs, the gate lets only the policy strategy
 enter. Instead the report replays the run's fills through `combine.js`,
-the state machine the RL env and the backtester drive, so training and
-replay judge alike:
+the state machine the backtester drives, so backtests and replay judge
+alike:
 
 - **Fresh each month** (the default): every calendar month, by CME trading
   day (17:00 Chicago, `clock.js` `tradingDayKey`), starts at the account's
@@ -329,36 +323,7 @@ closed, and the gate's exposure and correlation checks read every position.
 Replay keeps that: one run holds every market on one timeline, and the store
 records the symbols of each cycle.
 
-## Stage 2: the student policy (design)
-
-### Observation
-
-Everything the live cycle's context carries (the runner's prompt context in
-the cycle files: bars, trend, day context, what fired with its record, the
-account and open trades, the last results), as numbers, scaled to the account
-and to the market's ATR as the current observation is (so one policy reads
-every market): the current RL observation (account, trade state, timeframes,
-confluence, VWAP, value area) widened with every strategy's signal as an
-input (not a gate), structure and liquidity levels as distances in ATR, the
-day context (opening type, IB, day type, ADR used), the session and time to
-the close, news windows, and the recent decisions. Where the student can't
-match the teacher, the observation is missing what the teacher used.
-
-### Actions
-
-Flat: `none` / `long` / `short` at the market, with a stop from a few ATR
-multiples and a size from the account's budget; in a trade: `hold` /
-`tighten` / `exit`. Masked as the current env masks (no entry outside the
-sessions, no size over the budget).
-
-The teacher's decisions are read from the records: the orders it sent (cycle
-log), what the gate let through, and the broker's fills. Each is mapped to
-the nearest student action (the stop to the nearest ATR multiple, the size
-to the budget's step). Decisions the student can't express (limit or stop
-entries, targets) are kept out of cloning and counted; the report gives the
-coverage.
-
-### Labels (built)
+## Stage 2: labels (built)
 
 `node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file] [--out dir]`
 (`scripts/lib/replay/labels.js`, `counterfactual.js`) writes
@@ -378,7 +343,7 @@ fills). One label per decision time and symbol:
   for it: counted, not a teacher decision), `housekeeping` (premarket, end
   of day), `kill-switch` (a trade time while the run's kill switch was on).
   Interrupted lines are labelled and flagged; torn lines counted. A failed
-  or timed-out cycle, or one with no cycle log line, is never cloned and
+  or timed-out cycle, or one with no cycle log line, is never cloneable and
   never a skip; so is a flat label with a resting order (`working order`:
   the cycle ran for it; the count is the account's, so while another
   symbol holds a position its brackets explain it and no flag is set), of
@@ -399,8 +364,8 @@ fills). One label per decision time and symbol:
   modify that widens the working stop the context showed is flagged, one
   against an unknown stop too); the
   setup tag; the stop in ticks, points, and the nearest of 0.5, 0.75, 1,
-  1.5, 2, 3 x ATR(20) on bars closed by t, the student's own ATR
-  (`rl/observation.js` atr20: Wilder over the whole series; null and
+  1.5, 2, 3 x ATR(20) on bars closed by t, the market features' ATR
+  (`trading/market-features.js` atr20: Wilder over the whole series; null and
   counted when there are too few, or when the stop is under 0.375 or over 4.5 ATR: out
   of range, never snapped to an end bucket), from the order alone (never its fill); the size as a
   step (0.25, 0.5, 0.75, 1) of the budget given with `--budget` (a prop
@@ -432,13 +397,13 @@ fills). One label per decision time and symbol:
   the client (a gated call with no gate record never reached the gateway),
   or the broker with its reason (an exit whose call timed out but whose
   closing fill, not a bracket's, shows it went through is allowed; a client
-  timeout with nothing to show is unknown and never cloned, and an entry so is
+  timeout with nothing to show is unknown and never cloneable, and an entry so is
   `outcome: unknown`, counted as `unknownOutcome`, never taken): the replay broker's journal, matched by rationale,
   contract and replayed time, or a call that came back an error with no
   journal record), not-logged (a call no gate record names: never taken,
-  never cloned), none; refused intents are kept and flagged, for the
-  cloning config to decide. Flat, a modify or a cancel of a working order
-  is a decision of its own: never a skip, never cloned.
+  never cloneable), none; refused intents are kept and flagged, for the
+  reader to decide. Flat, a modify or a cancel of a working order is a
+  decision of its own: never a skip, never cloneable.
 - `outcome`: the round trip from the broker's fills (P&L, net of every
   fill's fees, R from the initial stop, MAE and MFE in R when the broker
   sends them, win or loss).
@@ -459,10 +424,11 @@ fills). One label per decision time and symbol:
   else the first candidate with a stop distance. So a skilful skip (a loser
   avoided) can be told from a cautious one (a winner missed). What can't be
   simulated is marked and counted.
-- `clone`: whether the student can express it (limit or stop entries, a
-  target other than the strategy's own exit as order_plan places it,
-  several entries, adds, partial exits, unknown arguments, an unmapped stop
-  stay out), and why. `teacher.target` says whose target a bracket is.
+- `clone`: whether the mechanical action space (an entry side, a stop in
+  ATRs, a size step; hold, tighten, exit) can express it (limit or stop
+  entries, a target other than the strategy's own exit as order_plan places
+  it, several entries, adds, partial exits, unknown arguments, an unmapped
+  stop stay out), and why; the skip and hold counts read its reasons. `teacher.target` says whose target a bracket is.
 - provenance: harness, model, config hash, the strategies' hash (the files
   the counterfactuals read), prompt hash, the cycle file.
 
@@ -472,115 +438,6 @@ files give the same labels (idempotent). Limitation: the runner's bars file
 keeps the last `bars` bars, so a long run's earliest days may have no ATR
 or counterfactual bars in the run home: pass the replayed data with
 `--bars`, and read the counts.
-
-### Dataset (built)
-
-`node scripts/rl-dataset.js build <run dir | labels dir> ... --out <file.jsonl> [--run <run dir>] [--strategy prop_portfolio] [--mode student|env] [--include-refused] [--bars SYM=file]`
-(`scripts/lib/rl/label-dataset.js`) turns labelled runs into the rows the
-student trains on, written outside the repository and outside every run home
-it read (refused there: it holds what came after each decision): a JSONL
-file whose first line is a header, then one row per kept label, and
-`<file>.summary.json`. Several runs merge in time order; a label given twice
-counts once.
-
-**Kept:** a label the teacher decided (`flat` or `in-trade`) that the labeler
-marked cloneable (`clone.ok`), and not a refused intent unless
-`--include-refused` (then flagged in the row's targets). Everything else is
-excluded and counted by reason (not a decision, not cloneable with the
-labeler's reasons, refused, duplicate, and the ones below).
-
-**Observation:** the current one (`rl/observation.js`), built by the code live
-trading uses (`rl/live.js` `setupObservation`, which `decideSetup` asks the
-policy with, and `positionObservation`, `decidePosition`'s), for the policy
-strategy given (its strategies, params, sizing, contracts, account), at the
-label's decision time t, from what was known at t only:
-
-- the bars: the runner's window, the last `bars` (the run's runner config,
-  else `historyBars`, capped at what the runner's bars file holds: a broker
-  that returns fewer) closed at or before t, from `--bars` (the data the run
-  replayed) or the run home. Fewer than that is not live's observation:
-  excluded (`short bar history`). The last one must be the label's bar.
-- the setup: the live screen's pick on that bar, the first of the policy
-  strategy's strategies (in its order) that fired with a stop distance in the
-  scan logged by t, never the teacher's choice (that would put the action in
-  the input); its stop, confluence and full-size plan as live computes them.
-  No pick: the observation without a setup (side 0). The row's
-  `teacher.onPick` says whether the teacher traded that setup (an entry on
-  another strategy or side is observed on the pick's setup; a trainer may
-  drop or weight those rows). A scan a running policy screened (its
-  components rewritten "traded through", its own row added) is not the raw
-  scan live observes: excluded (`not read yet`), never a bar without a setup.
-- the specs: the run's broker specs (`contracts-<broker>.json`), else the
-  table; as live, a broker spec unlike the table is no spec, and the symbol
-  and both legs of its family need one: otherwise excluded.
-- the account: the policy strategy's account profile as an attempt started
-  on the run's first day and moved only by the run's own round trips closed
-  by t (net of fees, from the fills in the day files), each run day before
-  t's ended as live records it (`prop-state.js stateFrom`). An attempt that
-  is over, one that blocks entries (flat labels), or a setup no size fits
-  has no decision in the env: excluded. A replay that ran a real attempt is
-  not read yet (none does: a run starts none); its screened scans and its
-  policy's trades are excluded, not misread.
-- in a trade: the open trade the cycle's context showed (entry, initial
-  risk, setup, size, when it opened); peak and trough R and bars held from
-  the bars since it opened, as the runner counts them. No such trade, no
-  initial stop (a risk open-trades.js took from the working stop, which may
-  have been trailed), or a trade of the policy strategy itself (live observes
-  its component, which the context doesn't name): excluded.
-
-**Actions:** `--mode student` (default), the design's: flat 0 `none`, then
-`long` and `short` at each stop multiple (0.5, 0.75, 1, 1.5, 2, 3 x ATR(20),
-the label's `teacher.stop.multiple`) and size step (0.25, 0.5, 0.75, 1 of the
-labeler's `--budget`, `teacher.size.step`): id = 1 + side x 24 + multiple x 4 +
-step (side 0 long, 1 short), so 1 to 48; in a trade 49 `hold`, 50 `tighten`,
-51 `exit`; masks split flat from in-trade. An entry whose stop has no multiple,
-or whose size step is unknown (labelled without `--budget`), is excluded.
-`--mode env`, today's env (`challenge-env.js`): at the policy's setup 0
-`skip` (the teacher's `none`), 1 `half` or 2 `full` (an entry on the pick's
-strategy and side, by its size in micros against the policy's own half and
-full plans at that setup, as live sizes them: the nearer, a tie to half; the
-entry order's size unknown: excluded); in a trade past the ratchet 0
-`hold`, 1 `close` (the teacher's `exit`). An entry on another setup or side,
-a `tighten`, a trade before the ratchet, and a flat bar with no pick have no
-env action: excluded.
-
-**Targets**, never inputs: the gate's decision, the outcome (result, net, R,
-MAE, MFE), the primary counterfactual (result, R, net, strategy) and what it
-stands for, and a weight (1).
-
-**Observation version:** the header records `obsVersion`
-(`observation.js observationVersion`: sha256 of the fields, the policy
-strategy's volume-profile settings, and the source files of the modules that
-compute its values, `OBSERVATION_SOURCES`: the observation, the live builders,
-this dataset's reconstruction, the indicators, the trend rule, the volume
-profile, the clock, the account state and sizing; an edit to any one is a new
-version) and the env server's `info` reports the same. The loader
-(`rl/fth_rl/dataset.py load(path, obs_version, mode)`, both required) refuses
-a dataset built with another version or for another mode (and other fields,
-when the caller passes them), checks the header's masks against the mode's
-action space (52 student, 3 env; 0 and 1 entries), and every row's shape,
-action id and mask. Same files, same bytes (deterministic).
-
-1. **Behaviour cloning** on the train window's labels: the policy learns to
-   predict the teacher's mapped decision from the observation.
-2. **RL fine-tuning** in the challenge env (the existing reward: pass,
-   speed, blow, timeout, dense, win, loss), starting from the cloned policy
-   and held close to it (a penalty on drifting from the frozen cloned
-   policy, which shrinks over training): the teacher can't be asked about
-   the new states RL reaches, but its clone can.
-3. The existing pipeline (sweep, retrain, ship) and promotion gate: zero
-   blows in every out-of-sample month, a pass rate of at least 40%. Never
-   lowered.
-
-Today's action space (skip, half, full; hold, close) stays a mode of the new
-env, so today's policies still train and load.
-
-### Live
-
-The student decides each cycle as the reasoning model would; the reasoning
-model reviews, journals, and can stand aside for what the student can't see
-(a live headline). Every stand-aside is logged and counted in the student's
-live record.
 
 ## Where it fits (ECC)
 
@@ -594,17 +451,11 @@ live record.
   is. The replay broker is its own repo, reached through the broker
   interface.
 - The `replay` skill tells agents how to configure, run, resume and read a
-  replay (the user's to start); `policy-training` points to it.
+  replay (the user's to start).
 - Stage 2's labeler: `scripts/lib/replay/labels.js` and `counterfactual.js`
   (tests in `tests/lib/replay-labels.test.js`,
   `tests/lib/replay-counterfactual.test.js`, and the replay end-to-end
   test), through `replay.js labels`.
-- Stage 2's dataset: `scripts/lib/rl/label-dataset.js` (tests in
-  `tests/lib/label-dataset.test.js`) through `scripts/rl-dataset.js`, the
-  observation through `rl/live.js`; the loader `rl/fth_rl/dataset.py`
-  (`rl/tests/test_dataset.py`).
-- The rest of stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
-  `scripts/lib/rl/` (observation, env server), with tests in both.
 
 ## Plan
 
@@ -616,11 +467,11 @@ live record.
    teacher didn't take). Done.
 6. Leakage tests, then one month in the train window, the New York session,
    with the report.
-7. A replay of months after the cutoff. **Decision point**, on those months
-   only: build stage 2 if the reasoning trader beats the rules baseline and
-   the current policy there.
-8. Stage 2: the label dataset (done), then widened observation and env,
-   cloning, fine-tuning, the pipeline; then the one out-of-sample look.
+7. A replay of months after the cutoff: does the reasoning trader beat the
+   rules baseline there?
+8. The learned-rulebook design (to come) takes it from there: the rules the
+   reasoning trader is given are learned on history, and the labels measure
+   how closely it follows them.
 
 A run's prop attempt starts at the window's first moment, before the first
 decision, when its config names the account (`"prop": "topstep_100k"`;
@@ -631,10 +482,8 @@ agents record what they find), and anonymization in the replay broker.
 ## Open questions for the owner
 
 - The teacher model, its knowledge cutoff, and the budget per run.
-- Decided (`docs/QUANT-PLAN.md`): the windows follow the RL split, the
-  teacher is judged on the months after its cutoff, and the out-of-sample
-  test is the policy alone in the backtester.
+- Decided (`docs/QUANT-PLAN.md`): the windows follow the split
+  (`scripts/lib/prop/splits.js`), the teacher is judged on the months after
+  its cutoff, and the out-of-sample test runs in the backtester.
 - The sessions to replay (the New York session only, or the whole session).
 - Decided (`docs/QUANT-PLAN.md`): every label window is a prop attempt.
-- Whether the student, once validated, trades live on its own or only
-  advises the reasoning model.

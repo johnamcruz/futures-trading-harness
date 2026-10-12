@@ -74,7 +74,7 @@ scripts. None places, changes, or cancels an order.
 
 Only the user's commands stay scripts: starting, stopping, or recording a day
 of a prop attempt (`combine.js start | stop | record-day`), backtests,
-training, and replays. In a trading run (autonomous or interactive) ask the
+and replays. In a trading run (autonomous or interactive) ask the
 user to run those. The one exception is authoring: the `strategy-researcher`
 role, which the user starts interactively for a new strategy, may run a
 backtest itself (the `strategy-authoring` skill); no trading role does.

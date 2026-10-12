@@ -220,7 +220,7 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   recordBar(home, FIRED_BAR);
   const verdict = over => prop.appendVerdict(home, {
     at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
-    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', policy: null, action: 'full', contract: 'NQ', maxSize: 12, ...over,
+    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12, ...over,
   });
   verdict();
   const r = plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
@@ -238,15 +238,17 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'short' }, ctx), /verdict is for a long entry, not short/);
   verdict({ contract: 'MNQ', maxSize: 50 });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the size budget now allows 9 NQ at a 18-tick stop, not MNQ/);
-  verdict({ action: 'skip', maxSize: 0, contract: null, reason: 'the policy' });
-  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio skipped the setup \(the policy\)/);
+  verdict({ action: 'skip', maxSize: 0, contract: null, reason: 'the size budget is below one contract' });
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio skipped the setup \(the size budget is below one contract\)/);
   verdict({ expiresAt: new Date(NOW.getTime() - 1).toISOString() });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /expired at/);
   verdict({ component: 'orb' });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /orb is not a candidate on the last closed bar/);
-  // A verdict from another policy than the strategy's (here: a bundle, where it trades on the sizing alone).
-  verdict({ policy: 'other_bundle' });
-  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /^Error: prop_portfolio's latest verdict came from other_bundle, not the sizing alone; no order$/);
+  // Only full (or half) allows an entry: any other action refuses, as the gate does.
+  for (const action of ['close', 'hold', undefined]) {
+    verdict({ action });
+    assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /verdict action .* allows no entry \(only full or half\); no order/, String(action));
+  }
   // The verdict's stop was sized on its own bar: a verdict from the bar before (still unexpired), with bos
   // firing again on the last bar, is never paired with this bar's entry.
   verdict({ bar: new Date(Date.parse(FIRED_BAR) - 180000).toISOString() });
@@ -282,7 +284,7 @@ test('order_plan: a policy strategy is sized with the broker\'s tick values, and
   recordBar(home, FIRED_BAR);
   prop.appendVerdict(home, {
     at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
-    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', policy: null, action: 'full', contract: 'NQ', maxSize: 12,
+    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12,
   });
   const go = () => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
   recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ'] });

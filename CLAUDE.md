@@ -28,12 +28,13 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
   state and the gate's prop checks in `prop-state.js`.
 - Policy strategies (`signal: policy`, e.g. `strategies/prop_portfolio`) are the prop
   challenge as a strategy: they list rules strategies and carry `account`, `sizing`,
-  `contracts`, `exit`, and `policy: { bundle }`. Only they have those keys.
-- `rl/`: Python trainer (MaskablePPO, `rl/fth_rl`) on the JS backtester via
-  `scripts/rl-env-server.js`; Optuna sweep -> retrain -> ship from
-  `rl/configs/{sweep,retrain,ship}/<family>.json` (`fth_rl/pipeline.py`); bundles
-  export to `models/<name>.json`, run by `scripts/lib/rl/policy-net.js`. The promotion gate (0 blows every OOS month,
-  >= 40% pass) lives in `policy-bundle.js` and `rl/fth_rl/config.py`; never lower it.
+  `contracts`, and `exit`. Only they have those keys.
+- `scripts/lib/prop/`: the prop challenge's runtime and simulator: the runner's prop hooks
+  (`live-runner.js`), the sizing verdict (`verdict.js`, `full` or `skip`), combine attempts on
+  history (`challenge.js`), the split windows (`splits.js`), and the promotion gate (0 blows every
+  OOS month, >= 40% pass over >= 20 attempts and 2 months) in `promotion.js`, frozen code with a
+  test that its numbers only rise; never lower it. No trained policy runs: the learned rulebook
+  that replaces the retired PPO policy is still to come.
 - Brokers: no broker code in the harness. Every broker or prop firm runs its own MCP server (own repo)
   implementing one interface, `docs/BROKER-MCP-INTERFACE.md` (as data: `scripts/lib/broker/interface.js`).
   Which server is config (`mcp-configs/brokers.json`, `~/.futures-trading-harness/brokers.json`,
@@ -51,8 +52,7 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
   (opencode's project config: roles, permissions; `scripts/lib/opencode.js`),
   `.codex/agents/*.toml`, and `qwen-extension/` (manifest, `QWEN.md`, agents,
   commands, symlinks). Run `node scripts/sync-harness.js`.
-- `tests/`: `node:test` files named `*.test.js`; `rl/tests/` (Python `unittest`) runs
-  through `tests/lib/python-rl.test.js` when Python has numpy and gymnasium.
+- `tests/`: `node:test` files named `*.test.js`.
 
 ## Commands
 
@@ -96,8 +96,7 @@ request, every time, whatever the size of the change:
 1. **Regression.** `npm run verify` passes: the full test suite (unit,
    wiring, e2e, including `tests/e2e/mock-trading-e2e.test.js`), lint, the
    generated-files check, strategy validation, and the secrets check, as CI
-   runs them. A change under `rl/` or `scripts/lib/rl/` also runs the Python
-   suite for real: `FTH_PYTHON=<python with rl/requirements.txt> FTH_REQUIRE_PYTHON=1 npm test`.
+   runs them.
 2. **Adversarial review.** A reviewer other than the author of the change (a
    separate agent or subagent with no stake in it, or a person) reviews the
    whole diff against the base branch, trying to break it: inputs that make a
@@ -116,9 +115,8 @@ request, every time, whatever the size of the change:
    accounts are instructions agents act on: they get the full round. So do
    `CLAUDE.md`, `AGENTS.md`, `QWEN.md`, generated files, and every document
    that a skill, agent, command, rule, strategy, account, hook, or script
-   points to. Today those are `docs/BACKTESTING.md`,
-   `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement), and
-   `docs/RL-DESIGN.md`.
+   points to. Today those are `docs/BACKTESTING.md` and
+   `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
@@ -128,7 +126,6 @@ the review found and fixed (`.github/pull_request_template.md`).
 ## Rules for changes
 
 - CommonJS, Node 22+ (`.nvmrc`), no runtime dependencies (plugin installs don't run npm install).
-  Python (`rl/requirements.txt`) is for training only; nothing at runtime needs it.
 - Hooks and the gateway read only local state; no network. Hook scripts stay under 200 lines.
 - The order gate fails closed in both the hook (`FAIL_CLOSED_HOOKS` in
   `run-with-flags.js`) and the gateway, and can't be disabled when

@@ -64,10 +64,10 @@ const PINNED = {
   FTH_TEST_NOW: () => 'none', FTH_DRY_RUN: () => '0', FTH_ORDER_GATE_SKIP: () => 'none', FTH_PAPER: () => '0',
 };
 const STRIPPED = Object.keys(PINNED);
-// The gate's settings (trading/config.js and the calendar, strategies, accounts and models it reads): part of a run.
+// The gate's settings (trading/config.js and the calendar, strategies and accounts it reads): part of a run.
 const GATE_ENV = ['FTH_LOSS_COOLDOWN_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_MAX_CORRELATED_POSITIONS', 'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY',
   'FTH_MIN_CONFLUENCE', 'FTH_MTF_MAX_AGE_MIN', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_SIGNAL_MAX_AGE_MIN', 'FTH_ENTRY_HOURS', 'FTH_NO_ENTRY_WINDOWS',
-  'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_STRATEGIES_DIRS', 'FTH_ACCOUNTS_DIRS', 'FTH_MODELS_DIRS', 'FTH_DISABLED_HOOKS', 'FTH_HOOKS_ENABLED',
+  'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_STRATEGIES_DIRS', 'FTH_ACCOUNTS_DIRS', 'FTH_DISABLED_HOOKS', 'FTH_HOOKS_ENABLED',
   'FTH_HOOK_PROFILE', 'FTH_LANE_TIMEOUT_MS', 'FTH_UNKNOWN_ORDER_GRACE_MS'];
 // A live broker's variable in a replay process: set (so no .env file fills it) and useless.
 const DISABLED = 'disabled-by-fth-replay';
@@ -243,7 +243,7 @@ function treeDigest(root, dirs) {
 /**
  * What makes a run a run: the derived runner config, the window and decision
  * points, the harness command (harness and model), the gate's settings, the
- * replay broker's entry and settings, and the strategies, accounts, models,
+ * replay broker's entry and settings, and the strategies, accounts,
  * skills, agents and rules the cycles read. Nothing about where it was started from.
  */
 function configHash(run, base = process.env) {
@@ -260,7 +260,7 @@ function configHash(run, base = process.env) {
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     brokerEntry: { ...b, journalPath: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
-    harness: run.root ? treeDigest(run.root, ['strategies', 'accounts', 'models', 'skills', 'agents', 'rules']) : null,
+    harness: run.root ? treeDigest(run.root, ['strategies', 'accounts', 'skills', 'agents', 'rules']) : null,
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }

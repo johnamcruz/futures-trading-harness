@@ -147,10 +147,10 @@ test('options from strategy params, and the summary for a snapshot', () => {
   assert.strictEqual(describe(null, 1, 1), null);
 });
 
-test('settings flow from config: strategy params set the rules series, the RL observation, and grid rows give tick prices', () => {
+test('settings flow from config: strategy params set the rules series, the market features, and grid rows give tick prices', () => {
   const { seriesSource } = require('../../scripts/lib/trading/rules');
   const { PARAMS } = require('../../scripts/lib/trading/market-snapshot');
-  const { marketFeatures } = require('../../scripts/lib/rl/observation');
+  const { marketFeatures } = require('../../scripts/lib/trading/market-features');
   const onTick = x => !Number.isFinite(x) || Math.abs(x * 4 - Math.round(x * 4)) < 1e-9;
   const grid = seriesSource(NQ, { ...PARAMS, vpRowSize: 0.25 });
   assert.ok(grid('prior_poc').some(Number.isFinite) && grid('prior_poc').every(onTick), 'POC on the tick grid');
@@ -158,7 +158,7 @@ test('settings flow from config: strategy params set the rules series, the RL ob
   assert.ok(!seriesSource(NQ, { ...PARAMS })('prior_poc').every(onTick), '100 rows: levels between ticks');
   // vpRowSize 0 means rows, as the default.
   assert.deepStrictEqual(optionsFromParams({ vpRowSize: 0 }).rowSize, 0);
-  // The RL observation's profile follows the policy strategy's params.
+  // The market features' profile follows the strategy's params.
   assert.deepStrictEqual(marketFeatures(NQ, { vpRowSize: 0.25 }).profile.poc, grid('prior_poc'));
   // And the snapshot CLI takes the same settings as flags.
   const { spawnSync } = require('child_process');

@@ -92,7 +92,7 @@ Where it is enforced:
   against the prevailing 4h down trend ...`. The summary names the frames
   and the prevailing trend; every full result has `mtf` (frames,
   `prevailing`, `longAllowed`, `shortAllowed`).
-- The backtester and RL training use the same scan, so their trades obey it.
+- The backtester uses the same scan, so its trades obey it.
 - The order gate (`mtf-trend`, hard: nothing switches it off) refuses a trend
   strategy's entry against the trend recorded in
   `<FTH_HOME>/mtf/<ROOT>.json`, or with no record or one more than 15 minutes

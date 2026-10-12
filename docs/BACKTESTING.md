@@ -49,7 +49,7 @@ Bars come from files:
 - **CSV** and **JSON** (the broker's `get_bars` output).
 
 The Parquet and Excel readers trust the file: they are for your own data,
-through the CLIs (backtests, training). They bound what a file decompresses
+through the CLIs (backtests, replay labels). They bound what a file decompresses
 to (512 MB), refuse malformed page and encoding headers, and reject cells
 past column XFD, but a crafted file can still make them slow or large (the
 sheet's regular expressions, a wide row or a long dictionary fanning out,
@@ -218,11 +218,12 @@ minis (`contracts`). An attempt starts every `--every N` trading days (config
 `every`, default 1), runs for the account's `sessions`, and ends on pass,
 blow, or timeout. A stop that would reach the floor or the daily limit is
 sized down, and equity at the floor inside a bar is a blow, liquidated there.
-The policy strategy's own bundle adds its decisions; `--bundle <name>` (config
-`bundle`) tries another, and a bundle that hasn't passed the gate can be
-loaded here for research. The run writes
-`combine.json` and `combine.md`: pass, blow, and timeout rates, median days to
-pass, and the same by month, for the rules alone and with the policy.
+Every setup the budget can fund is taken at its full size, and every trade
+exits by the policy strategy's trail, as live. The run writes `combine.json`
+and `combine.md`: pass, blow, and timeout rates, win rate, median days to
+pass, and pass and blow rates by the month an attempt starts in. (The
+retired PPO policy's `--bundle` option is gone; a config naming `bundle` is
+refused.)
 
 ### Strategy correctness
 

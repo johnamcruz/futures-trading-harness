@@ -23,10 +23,10 @@
  *        same rule the backtester uses): tighten the protective stop, or
  *        close at market when the bar already went through the new stop.
  *      Entries (ids, strategy, planned stop) come from the MCP gateway.
- *   6. Prop challenges (rl/live-runner.js), for strategies with an account:
+ *   6. Prop challenges (prop/live-runner.js), for strategies with an account:
  *      the balance is snapshotted every bar and recorded at end of day; a
- *      policy screens each setup (a skip starts no cycle; the verdict is
- *      what the gate allows) and, past the ratchet, may close the trade.
+ *      policy strategy's sizing screens each setup (a skip starts no cycle;
+ *      the verdict is what the gate allows). Its trades exit by its trail.
  */
 
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
@@ -102,7 +102,7 @@ function createRunner(deps) {
     recentTrades = () => [],
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
-    prop = null, // prop-challenge hooks (rl/live-runner.js createPropHooks)
+    prop = null, // prop-challenge hooks (prop/live-runner.js createPropHooks)
     accountReadMs = ACCOUNT_READ_MS,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
@@ -401,19 +401,6 @@ function createRunner(deps) {
     if (maxBars && barsHeld >= maxBars) {
       await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
-    }
-    // Past the ratchet, a strategy's policy may bank the trade (as in training).
-    if (prop && t.plan.trailActivateR !== null && peakR >= t.plan.trailActivateR) {
-      let action = null;
-      try {
-        action = prop.position({ strategy: strategyNamed(t.setup), contractId: cid, bars: item.bars, pos: { sign, entry: t.entry, risk: t.risk, size: Number(p.size), peakR, troughR, barsHeld } });
-      } catch (err) {
-        log(`${item.symbol}: policy decision failed (${err.message}); the trail manages the trade`, 'error');
-      }
-      if (action === 'close') {
-        await closeOut(`policy: close past the ratchet at ${peakR.toFixed(2)}R`);
-        return;
-      }
     }
     save({ ...t, peakR, troughR, barsHeld, lastBarT });
     if (!stopOrder) {

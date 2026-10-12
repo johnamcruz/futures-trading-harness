@@ -277,14 +277,22 @@ test('the prop policy is active (live and replay), and the replay skill says a p
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const p = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
   assert.ok(p && p.valid && p.status === 'active');
-  assert.match(fs.readFileSync(path.join(ROOT, 'skills/prop-challenge-pacing/SKILL.md'), 'utf8'), /policy strategy must be `active` \(`prop_portfolio` is; until a bundle\s+passed `rl\/ship\.py`/);
-  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'skills/policy-training/SKILL.md'), 'utf8'), /keeps `status: paper` until/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'skills/policy-training/SKILL.md'), 'utf8'), /and keeps its status \(a `paper` policy stays paper until the user\s+activates it; an `active` one, like `prop_portfolio`, stays active\)/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'rl/fth_rl/pipeline.py'), 'utf8'), /\(keep its status: a paper policy stays paper until the user activates it\)/, 'the hint ship prints');
+  assert.match(fs.readFileSync(path.join(ROOT, 'skills/prop-challenge-pacing/SKILL.md'), 'utf8'), /policy strategy must be `active` \(`prop_portfolio` is; its sizing rules\s+decide each verdict\)/);
   const r = fs.readFileSync(path.join(ROOT, 'skills/replay/SKILL.md'), 'utf8');
-  assert.match(r, /The policy strategy must be `active` \(`prop_portfolio` is\)[^]*?so with a `paper` policy every entry is refused\.\s+Without a trained bundle the policy sizes each setup by its `sizing`\s+rules: full within the budget, or skip\./);
+  assert.match(r, /The policy strategy must be `active` \(`prop_portfolio` is\)[^]*?so with a `paper` policy every entry is refused\.\s+The policy strategy sizes each setup by its `sizing` rules: full within\s+the budget, or skip\./);
 });
 
+test('the trained PPO policy is retired: no instruction file points to its trainer, bundles, or skill', () => {
+  const walk = d => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })
+    .flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  const files = ['skills', 'agents', 'commands', 'rules', 'strategies', 'accounts'].flatMap(walk).filter(f => f.endsWith('.md'))
+    .concat(['CLAUDE.md', 'README.md', 'workspace/AGENTS.md']);
+  const retired = /policy: \{ bundle|policy bundle|rl\/ship\.py|rl\/configs|train-policy|policy-training|RL-DESIGN|rl-dataset|rl-env-server|scripts\/lib\/rl\/|models\/<|FTH_MODELS_DIRS|FTH_PYTHON/;
+  for (const f of files) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), 'utf8'), retired, f);
+  for (const gone of ['rl', 'models', 'skills/policy-training', 'commands/train-policy.md', 'docs/RL-DESIGN.md', 'scripts/lib/rl']) {
+    assert.ok(!fs.existsSync(path.join(ROOT, gone)), `${gone} is retired`);
+  }
+});
 
 test('the priority order is written once, in strategy-library, and every role that decides has it', () => {
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');

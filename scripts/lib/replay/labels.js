@@ -3,7 +3,8 @@
 /**
  * Labels from a replay run (the reasoning-trader design's stage 2,
  * "Actions"): every decision the reasoning model made at a decision time, per
- * symbol, mapped to the student's action space, with the gate's answer and the
+ * symbol, mapped to the mechanical action space (entry side, stop in ATRs, size
+ * as a share of the budget), with the gate's answer and the
  * trade's outcome. Model-neutral: it reads only what every replay writes.
  *
  * Read (all local, the run dir and its run home, <runDir>/../..):
@@ -25,9 +26,10 @@
  *               size: { contracts, riskUsd, budgetUsd, step (nearest of SIZE_STEPS), ratio }, orders }
  *   gate      { decision: allowed | refused | none | not-logged, checks } of the order behind the action
  *   outcome   the round trip the action opened (flat) or was in (in a trade), from the broker's fills
- *   clone     { ok, reasons }: what the student can't express (limit or stop entries, a target other
+ *   clone     { ok, reasons }: what the mechanical action space can't express (limit or stop entries, a target other
  *             than the strategy's own exit as order_plan places it (teacher.target.from), several
- *             entries, adds, partial exits, unknown arguments, an unmapped stop) stays out of cloning
+ *             entries, adds, partial exits, unknown arguments, an unmapped stop); the skip and hold
+ *             counts read its reasons (NOT_A_SKIP)
  *   counterfactuals / counterfactual   what each candidate's own trade would have done (counterfactual.js:
  *             the backtester's fills and exits walked forward on the bars) on a skipped label or a no-cycle
  *             bar, or the same fields from the real fills of a taken entry; `counterfactual` is the
@@ -73,7 +75,7 @@ const STOP_ATR_MULTIPLES = [0.5, 0.75, 1, 1.5, 2, 3];
 // A stop further than this from every multiple is out of range (unmapped), never snapped to the end bucket.
 const STOP_ATR_RANGE = [0.375, 4.5];
 const SIZE_STEPS = [0.25, 0.5, 0.75, 1];
-const ATR_PERIOD = 20; // the RL observation's ATR (rl/observation.js atr20)
+const ATR_PERIOD = 20; // the market features' ATR (trading/market-features.js atr20)
 const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
 const SETUP = /^\s*setup:([a-z0-9][a-z0-9_-]*)(?:\s+(long|short|buy|sell))?\b/i;
 const SIDE = { long: 'buy', buy: 'buy', short: 'sell', sell: 'sell' };
@@ -175,8 +177,8 @@ function loadBars(home, symbol, tf) {
 }
 
 /**
- * ATR(20) on the bars closed at or before t (ms), or null: Wilder's, over every such bar, as the student's
- * observation computes it (rl/observation.js marketFeatures atr20), so a label's multiple is the student's.
+ * ATR(20) on the bars closed at or before t (ms), or null: Wilder's, over every such bar, as the market
+ * features compute it (trading/market-features.js atr20), so a label's multiple is the backtester's.
  */
 function atrAt(bars, tfMs, t) {
   let hi = -1;
@@ -408,14 +410,14 @@ const failedCall = o => (!HOOK_BLOCK.test(o.callError || '') && CLIENT_TIMEOUT.t
 const callRefusal = o => ({ decision: 'refused', orderId: null, reason: o.callError || 'the call returned an error',
   ...(HOOK_BLOCK.test(o.callError || '') ? { by: 'hook' } : o.gate.decision === 'not-logged' ? { by: 'client' } : {}) });
 
-/** The teacher's action for one symbol from its orders, and what keeps it out of cloning. */
+/** The teacher's action for one symbol from its orders, and what the mechanical action space can't express. */
 function teacherAction(orders, inTrade) {
   const reasons = [];
   const entries = orders.filter(o => o.tool === 'place_order' && !o.riskReducing);
   const cancels = orders.filter(o => o.tool === 'cancel_order');
   if (cancels.length) reasons.push('order cancel');
   if (!inTrade) {
-    // Flat, a modify moves a working order (a resting entry): a decision the student can't express, never a skip.
+    // Flat, a modify moves a working order (a resting entry): a decision the mechanical action space can't express, never a skip.
     if (orders.some(o => o.tool === 'modify_order')) reasons.push('working-order change');
     // Flat, an exit or a protective order (the teacher saw a position the account read didn't): no skip.
     if (orders.some(o => o.tool === 'close_position' || o.tool === 'partial_close_position' || (o.tool === 'place_order' && o.riskReducing))) reasons.push('exit while flat');
@@ -755,7 +757,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
           if (screen && !screen.names) draft.act.reasons.push('policy screen failed');
         }
         if (unresolved) draft.act.reasons.push('unattributed order');
-        // A failed or timed-out cycle's silence is no decision: never a skip, never cloned.
+        // A failed or timed-out cycle's silence is no decision: never a skip, never cloneable.
         if (cyc.failed) draft.act.reasons.push(cyc.failed);
       }
       drafts.push(draft);
@@ -826,7 +828,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const stop = isEntry ? stopOf(o, ospec, d.refPrice, atr) : null;
       const size = isEntry ? sizeOf(o, ospec, stop, budgetFor(budgetUsd)) : null;
       // A target bracket is the strategy's own exit when it is what order_plan places for the setup
-      // (the env applies the strategy's exit); any other target is the teacher's, which the student can't express.
+      // (the backtester applies the strategy's exit); any other target is the teacher's, which the mechanical action space can't express.
       let target = null;
       if (isEntry && o.targetTicks) {
         const strat = byName.get(o.setup);
@@ -1009,6 +1011,6 @@ const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : 
 
 module.exports = {
   VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
-  // For the label dataset (rl/label-dataset.js): the same fills, bars, specs and paths the labels read.
+  // The same fills, bars, specs and paths the labels read.
   allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir,
 };

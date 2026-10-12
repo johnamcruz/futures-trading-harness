@@ -29,10 +29,10 @@
  * timeout. Several markets share the one account and trade one position at a
  * time across it (as the live gateway enforces): a setup on one market waits
  * while another's trade is open, so a stopped trade never reaches the floor or
- * the daily limit. With a `policy` (rl/policy-bundle.js) the policy decides, through the
- * same code the live runner uses, whether to take each setup and at what
- * size, and whether to close a trade that is past its ratchet. The
- * challenge env (rl/challenge-env.js) trains on exactly this loop.
+ * the daily limit. A policy strategy's run (`prop`) takes every setup the
+ * account's budget can size, in its contract mode, and exits every trade by
+ * the policy strategy's own exit block, as the live runner does. The prop
+ * challenge simulator (prop/challenge.js) runs attempts on exactly this loop.
  *
  * Fills are the simulated broker's (sim-broker.js, one per market): by default
  * (`fill: 'next-open'`) a market entry fills at the next bar's open plus
@@ -52,7 +52,6 @@ const { loadConfig } = require('../trading/config');
 const ind = require('../trading/indicators');
 const combine = require('../trading/combine');
 const { familyOf, specFor } = require('../trading/contracts');
-const { buildObservation, marketFeatures, confluence } = require('../rl/observation');
 
 const { normalizeBars } = ind;
 
@@ -85,9 +84,8 @@ const DEFAULTS = {
   window: 500,
   account: null, // an account profile: run as a prop challenge (combine.js)
   sizing: null, // combine sizing (combine.DEFAULT_SIZING keys)
-  policy: null, // { decide(kind, obs, info) } -> 'skip' | 'half' | 'full' at a setup, 'hold' | 'close' in a trade
-  prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (names, the observation's order), contracts (micro | mini | auto) }
-  prepared: null, // from prepare(): reuse the evaluator and features across runs
+  prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (its strategies' names), contracts (micro | mini | auto) }
+  prepared: null, // from prepare(): reuse the evaluator across runs
 };
 
 function parseAt(spec) {
@@ -105,7 +103,7 @@ const round2 = x => Math.round(x * 100) / 100;
  */
 /**
  * Per symbol: bars, the evaluator over the whole series, the strategies that
- * trade it, cached setups, and the market features the policy observes.
+ * trade it, and cached setups.
  * Reusable across runs (episodes) on the same data.
  */
 /** The setup behind an entry, for the trade record: stop, target, and detector state on the signal bar. */
@@ -154,9 +152,7 @@ function prepare(markets, strategies, opts = {}) {
       }
       return memo.get(i);
     };
-    // The policy's market features (rl/observation.js), the same function live uses.
-    const feats = marketFeatures(bars, o.prop && o.prop.strategy ? o.prop.strategy.params : {});
-    return { ...m, bars, ev, usable, setupAt, feats };
+    return { ...m, bars, ev, usable, setupAt };
   });
   return { books, skipped };
 }
@@ -190,9 +186,6 @@ function runEngine(markets, strategies, opts = {}) {
   // The prop challenge, when the run has an account.
   const account = o.account;
   let cs = account ? combine.start(account) : null;
-  const decisions = [];
-  let wins = 0; // closed trades after fees: won, lost (the policy is rewarded on both)
-  let losses = 0;
   // Account-wide state, like the live order gate (per trading day).
   let day = null;
   let entriesToday = 0;
@@ -218,8 +211,6 @@ function runEngine(markets, strategies, opts = {}) {
       ...(p.setup ? { setup: p.setup } : {}),
     };
     trades.push(t);
-    if (net > 0) wins += 1;
-    else if (net < 0) losses += 1;
     equity += net;
     curve.push({ t: t.exitTime, equity: round2(equity) });
     // The live gate counts losses from the broker's P&L (search_trades), before fees; the daily
@@ -236,12 +227,6 @@ function runEngine(markets, strategies, opts = {}) {
     const fee = account && account.fees_per_side && account.fees_per_side[root] !== undefined ? account.fees_per_side[root]
       : spec.feesPerSide ?? feeOf(book);
     return { root, tickValue: spec.tickValue, fee, max: (account && account.max_contracts && account.max_contracts[root]) || 0 };
-  };
-  const ask = (kind, book, i, closeAt, extra) => {
-    const obs = buildObservation({ cs, account, book, i, closeAt, components: o.prop ? o.prop.components : [], ...extra });
-    const action = o.policy.decide(kind, obs, { symbol: book.symbol, t: book.bars[i].t, balance: cs ? cs.balance : null, wins, losses, ...extra });
-    decisions.push({ kind, t: book.bars[i].t, symbol: book.symbol, action, balance: cs ? cs.balance : null });
-    return action;
   };
 
   const timeline = [];
@@ -325,10 +310,7 @@ function runEngine(markets, strategies, opts = {}) {
     // trade closed here (trail, max bars, end of day) leaves no entry this bar.
     const q = broker.position;
     if (q) {
-      const done = broker.manage(bar) || (afterEod ? broker.exit(bar.c, 'eod') : null)
-        // Past the ratchet, the policy may bank the trade (before it, only the stop and trail run).
-        || (o.policy && q.plan.trailActivateR !== null && q.peakR >= q.plan.trailActivateR
-          && ask('position', book, i, closeAt, { pos: q }) === 'close' ? broker.exit(bar.c, 'policy') : null);
+      const done = broker.manage(bar) || (afterEod ? broker.exit(bar.c, 'eod') : null);
       if (done) closeTrade(book, bar, done);
     }
     return { book, bar, i, closeAt, afterEod, managed: Boolean(q) };
@@ -379,17 +361,8 @@ function runEngine(markets, strategies, opts = {}) {
         dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
         guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10,
       });
-      let cp = sizeFor(1);
+      const cp = sizeFor(1);
       if (!cp) return;
-      if (o.policy) {
-        const mini = Boolean(fam && cp.root === fam.mini);
-        // Confluence: the policy strategy's other strategies on this bar, as the live scan sees them.
-        const others = book.usable.filter(s => s !== pick.s).map(s => ({ name: s.name, ...(r => ({ candidate: r.candidate, direction: r.direction }))(book.ev.at(s, i, { describe: false })) }));
-        const action = ask('setup', book, i, closeAt, { setup: { sign, stopTicks, size: cp.size, riskUsd: cp.size * cp.riskPerContract, mini, strategy: pick.s.name, confluence: confluence(others, pick.s.name, sign) } });
-        if (action === 'skip') return;
-        if (action === 'half') cp = sizeFor(0.5);
-        if (!cp) return;
-      }
       size = cp.size;
       leg = legs.micro.root === cp.root ? legs.micro : legs.mini;
     }
@@ -432,7 +405,7 @@ function runEngine(markets, strategies, opts = {}) {
       closeTrade(book, last, book.broker.exit(last.c, 'end'));
     }
   }
-  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, decisions, expired };
+  return { trades, equity: curve, skipped: Object.fromEntries(skipped), combine: cs, expired };
 }
 
 module.exports = { roundHalfEven, DEFAULTS, prepare, runEngine };

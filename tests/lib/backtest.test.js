@@ -299,7 +299,7 @@ test('backtests follow the exchange calendar: no trading on holidays, early clos
   assert.deepStrictEqual(early, [], 'early close: no entry after 13:00 ET');
 });
 
-test('prop challenge mode: a policy strategy\'s attempts from each start, rules only and with a policy, reported by month', () => {
+test('prop challenge mode: a policy strategy\'s attempts from each start, reported by month', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
   fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
@@ -320,29 +320,13 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, rules 
   assert.strictEqual(report.baseline.passed + report.baseline.blown + report.baseline.timeout + report.baseline.unfinished, report.baseline.attempts);
   assert.ok(fs.existsSync(path.join(runDir, 'combine.md')));
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, account: 'tiny' }, ROOT), /comes from a policy strategy/);
-  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: .*needs prop/);
-  assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /training needs a policy strategy|signal: rules/);
-  assert.throws(() => runBacktest({ ...base, bundle: 'missing' }, { root: ROOT, outRoot: dir, env }), /not found/);
-  // Every market of the run is checked against the bundle: one trained on MNQ alone decides nothing on MES.
-  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  const { observationFields } = require('../../scripts/lib/rl/observation');
-  const { BUNDLE_FORMAT, BUNDLE_VERSION } = require('../../scripts/lib/rl/policy-bundle');
-  const { ACTIONS } = require('../../scripts/lib/rl/challenge-env');
-  const { optionsFromParams } = require('../../scripts/lib/trading/volume-profile');
-  const ps = loadStrategies(ROOT, env).strategies.find(x => x.name === 'prop_bos');
-  const fields = observationFields(['bos']);
-  const dim = fields.length;
-  const models = path.join(dir, 'models');
-  fs.mkdirSync(models, { recursive: true });
-  fs.writeFileSync(path.join(models, 'mnq_only.json'), JSON.stringify({
-    format: BUNDLE_FORMAT, version: BUNDLE_VERSION, name: 'mnq_only', strategy: 'prop_bos', components: ['bos'], strategies: ['bos'], account: 'tiny', symbols: ['MNQ'], timeframe: 3,
-    sizing: ps.sizing, contracts: ps.contracts, exit: ps.exit, obsFields: fields, profile: optionsFromParams(ps.params || {}), actions: ACTIONS,
-    network: { obsDim: dim, actionN: 3, hidden: [], actor: { sizes: [dim, 3], layers: [{ W: new Array(3 * dim).fill(0), b: [0, 0, 10] }] }, normalizer: { mean: new Array(dim).fill(0), var: new Array(dim).fill(1), count: 1, clip: 5 } },
-    validated: false, engine: { gate: true, slippageTicks: 1, fill: 'next-open' },
-  }));
-  const benv = { ...env, FTH_MODELS_DIRS: models };
-  const two = { ...base, symbols: ['MNQ', 'MES'], data: { ...base.data, MES: base.data.MNQ }, bundle: 'mnq_only' };
-  assert.throws(() => runBacktest(two, { root: ROOT, outRoot: dir, env: benv }), /bundle mnq_only was trained on MNQ.*not MES/);
+  // Trained policy bundles are retired: a config naming one is refused, never run as if it weren't there.
+  assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: trained policy bundles are retired/);
+  assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /a prop run needs a policy strategy \(signal: policy\)/);
+  assert.throws(() => runBacktest({ ...base, prop: 'nope' }, { root: ROOT, outRoot: dir, env }), /prop: nope is not a strategy/);
+  assert.strictEqual(report.withPolicy, undefined);
+  assert.strictEqual(report.policy, undefined);
+  assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
 });
 
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {
@@ -525,4 +509,88 @@ test('bar-file errors never echo the file\'s content (a script run on a credenti
     assert.match(piped.stderr, /stdin: not valid JSON/);
     assert.ok(!leaks(piped.stderr + piped.stdout), piped.stderr);
   }
+});
+
+// Prop challenge runs of the engine: a seeded random walk on 3-minute bars, one rules strategy, a small account.
+function propRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/** 3-minute bars, a seeded random walk with drift bursts, from Sunday 2026-01-04 18:00 ET for `days` calendar days. */
+function propSeries(days, seed = 5) {
+  const r = propRng(seed);
+  const out = [];
+  let px = 20000;
+  const t0 = Date.parse('2026-01-04T23:00:00Z');
+  for (let k = 0; k < (days * 1440) / 3; k += 1) {
+    const drift = Math.sin(k / 90) * 0.6;
+    const o = px;
+    const c = Math.round((px + drift + (r() - 0.5) * 6) * 4) / 4;
+    out.push({ t: new Date(t0 + k * 180000).toISOString(), o, h: Math.max(o, c) + 1, l: Math.min(o, c) - 1, c, v: 100 });
+    px = c;
+  }
+  return out;
+}
+const propStrategy = (extra = {}) => {
+  const rules = { long: ['close crosses_above ema(20)'], short: ['close crosses_below ema(20)'] };
+  return {
+    name: 'trendy', valid: true, status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules,
+    compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:1', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, ...extra,
+  };
+};
+const propAccount = (extra = {}) => ({
+  name: 'mini', starting_balance: 50000, profit_target: 1500, max_loss: 1000, max_loss_mode: 'trailing_eod', daily_loss_limit: 0,
+  daily_loss_soft: 400, consistency_pct: 0, sessions: 4, max_contracts: { MNQ: 20 }, fees_per_side: { MNQ: 0.37 }, ...extra,
+});
+const propMarket = bars => ({ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 });
+const propEngine = { timeframe: 3, gate: false, fill: 'close', slippageTicks: 0, gateConfig: loadConfig({}), window: 160 };
+
+test('a run with an account is a prop challenge: sized from the cushion, ends on pass, blow, or timeout', () => {
+  const bars = propSeries(30);
+  const res = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') });
+  assert.ok(['passed', 'blown', 'timeout'].includes(res.combine.status), res.combine.status);
+  assert.ok(res.trades.length > 0);
+  // 0.2 x cushion 1000 = $200 budget per trade.
+  for (const t of res.trades.slice(0, 3)) assert.ok(t.size * (t.risk / 0.25) * 0.5 <= 200 * 1.5 + 1e-9, `size ${t.size} risk ${t.risk}`);
+  // Sizing to the whole cushion still leaves a planned stop short of the floor.
+  const whole = { ...propEngine, account: propAccount({ max_loss: 200, daily_loss_soft: 0, max_contracts: { MNQ: 1000 } }), sizing: { cushion_frac: 1, min_size_guard: 10 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const sized = runEngine([propMarket(bars)], [propStrategy()], whole);
+  assert.notStrictEqual(sized.combine.status, 'blown');
+  const first = sized.trades[0];
+  assert.ok(first.size * ((first.risk / 0.25) * 0.5 + 0.74) < 200, 'the first trade risks less than the whole $200 cushion');
+  // A stop that fills far past its price (slippage, a gap) blows inside the bar, liquidated at the floor.
+  const tiny = runEngine([propMarket(bars)], [propStrategy()], { ...whole, slippageTicks: 400 });
+  assert.strictEqual(tiny.combine.status, 'blown');
+  assert.strictEqual(tiny.trades[tiny.trades.length - 1].reason, 'blow');
+  assert.ok(tiny.combine.balance <= tiny.combine.floor + 1e-9);
+});
+
+test('micros and minis: a policy strategy run sizes in micros, trades minis by its contract mode, and settles each at its own tick value', () => {
+  const bars = propSeries(30);
+  const acct = propAccount({ max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } });
+  const wide = propStrategy({ exit: { trail_activate_r: 2, trail_giveback_r: 2 } });
+  const prop = contracts => ({ strategy: { exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }, components: ['trendy'], contracts });
+  const opts = { ...propEngine, account: acct, sizing: { cushion_frac: 1 }, start: Date.parse('2026-01-08T00:00:00Z') };
+  const micro = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('micro') });
+  const auto = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('auto') });
+  const mini = runEngine([propMarket(bars)], [wide], { ...opts, prop: prop('mini') });
+  assert.ok(micro.trades.length && micro.trades.every(t => t.contract === 'MNQ'));
+  assert.ok(mini.trades.length && mini.trades.every(t => t.contract === 'NQ'));
+  assert.ok(auto.trades.some(t => t.contract === 'NQ') || auto.trades.every(t => t.contract === 'MNQ'));
+  for (const t of mini.trades) {
+    // NQ: $5 a tick, $1.40 a side.
+    const ticks = Math.round(((t.direction === 'long' ? 1 : -1) * (t.exit - t.entry)) / 0.25);
+    assert.ok(Math.abs(t.pnl - ticks * 5 * t.size) < 1e-6 && Math.abs(t.fees - 2.8 * t.size) < 1e-6, JSON.stringify(t));
+  }
+  // The policy strategy's exit applies (give-back 0.5), not its strategy's (2): the same trades as the strategy
+  // with that exit traded alone in micros. Every setup the budget sizes is taken; nothing closes a trade early.
+  const alone = runEngine([propMarket(bars)], [propStrategy()], opts);
+  assert.deepStrictEqual(micro.trades, alone.trades);
+  assert.ok(micro.trades.every(t => ['stop', 'target', 'trail', 'eod', 'end', 'blow', 'daily_limit', 'max_bars'].includes(t.reason)), [...new Set(micro.trades.map(t => t.reason))].join());
 });

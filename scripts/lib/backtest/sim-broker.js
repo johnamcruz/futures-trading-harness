@@ -20,7 +20,7 @@
  *   - at the bar's close the trail (trail.js) moves the stop toward the
  *     market only (a bar already through the new stop closes at the bar's
  *     close), then the time stop (`plan.maxBars`, bars held) closes at the
- *     close; anything else (end of day, a policy) is `exit(price, reason)`;
+ *     close; anything else (end of day, the end of the data) is `exit(price, reason)`;
  *   - P&L: ticks x tick value x size, less fees per side on both sides.
  *
  * API (one broker per market, one position at a time):

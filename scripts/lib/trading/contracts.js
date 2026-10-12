@@ -2,7 +2,7 @@
 
 /**
  * Tick specs for common CME futures: the static table offline code uses
- * (backtests, RL training, the env server), where there is no broker. Live and
+ * (backtests, the prop simulator), where there is no broker. Live and
  * replay trading take tick specs from the broker (broker-specs.js); a broker
  * spec that differs from this table is reported, since training would then
  * not equal live. Silver per CME's contract specs: SI 5,000 oz and SIL (Micro

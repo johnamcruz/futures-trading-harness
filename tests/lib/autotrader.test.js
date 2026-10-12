@@ -375,7 +375,7 @@ test('CLI --once runs the harness in the workspace with FTH_ROOT, and --dry-run 
 test('CLI start: a harness tools server that does not offer the registry\'s tools refuses a run; a manual end of day only warns', { timeout: 120000 }, () => {
   // A copy of the harness whose tools server is a foreign MCP server (the fake broker).
   const root = tmpDir();
-  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'models', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
   fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
   fs.writeFileSync(path.join(root, 'scripts', 'harness-tools-mcp.js'), `require(${JSON.stringify(path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js'))});\n`);
   const dir = tmpDir();
@@ -545,11 +545,11 @@ test('a policy strategy\'s verdicts go into the cycle prompt as the only allowed
   const p = prompts(validateConfig({ account: '123' }), et(10, 0));
   const verdicts = [
     { strategy: 'prop_portfolio', component: 'supertrend', direction: 'long', action: 'full', contract: 'NQ', maxSize: 3, stopTicks: 40 },
-    { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the policy' },
+    { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the size budget is below one contract at this stop' },
   ];
   const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'MNQ' }, verdicts }]);
   assert.match(text, /prop_portfolio: long setup from supertrend, verdict full: enter only as setup:prop_portfolio, NQ buy, at most 3, stopLossBracket.ticks 40/);
-  assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the policy\); no entry/);
+  assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the size budget is below one contract at this stop\); no entry/);
 });
 
 test('the runner polls one contract per micro/mini index', () => {
@@ -710,7 +710,7 @@ test('the trade prompt says when the runner flattens, the cycles left when few, 
   // A failed policy screen: no verdict, no entry.
   const scan = [{ name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } }];
   // A failed screen is named once (in the unavailable line); the fired line only marks them as not entries.
-  const failedScreen = p.trade([{ symbol: 'MNQ', bar, scan, notEntries: ['orb'] }], { unavailable: ['MNQ policy screen (bundle missing): no verdict, so no entry for orb this bar'] });
+  const failedScreen = p.trade([{ symbol: 'MNQ', bar, scan, notEntries: ['orb'] }], { unavailable: ['MNQ policy screen (attempt file unreadable): no verdict, so no entry for orb this bar'] });
   assert.match(failedScreen, /orb long \(its policy has no verdict this bar: not an entry\)\./);
   assert.strictEqual(failedScreen.match(/no verdict, so no entry/g).length, 1, 'the reason, once');
   assert.doesNotMatch(failedScreen, /The policy screen failed this bar/);
