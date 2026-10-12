@@ -26,8 +26,9 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
    `blackouts_add` (it can't remove a window, so blackouts only ever
    restrict trading): `{"start": "<ISO>", "end": "<ISO>", "reason": "<event>"}`.
 4. Game plan (you, as head trader):
-   - Bias per timeframe from the multi-timeframe read
-     (`mtf_read` with `bars` and `daily`, see the
+   - Bias per timeframe from the multi-timeframe read (no bars file in
+     premarket: `bars_fetch` 3m with `record` and `daily` first, once; then
+     `mtf_read` with `bars` and `daily`, see the
      `multi-timeframe-analysis` skill): one line per timeframe, the alignment
      for longs and shorts, and where analysts disagree.
    - Key levels table (price, what, source).

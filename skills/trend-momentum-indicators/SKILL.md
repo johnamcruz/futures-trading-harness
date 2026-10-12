@@ -13,6 +13,13 @@ description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings f
 
 ## How It Works
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
+ATR, VWAP, participation, the skip-rule counters in `context`, swings and
+liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
+and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+doesn't hold.
+
 Get every value from market-snapshot. Never estimate.
 
 | Indicator | Settings | Read |

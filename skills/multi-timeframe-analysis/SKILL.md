@@ -43,8 +43,10 @@ them rather than retrying.
 In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
 skill) already holds this read for the bar: the 15m frame and the alignment
 per side (`m15`), the 1h and 4h frames (`h1`), and the trend rule (`m3`). Use
-it; run `mtf_read` only without a current briefing, or for the daily frame
-(`daily`), which the briefing doesn't hold.
+it; run `mtf_read` only without a current briefing. The alignment and the
+trend rule in a trade plan are the briefing's (intraday frames); a daily
+read, if you have one (premarket's), is context only, never a second
+alignment.
 
 ```text
 mtf_read {"bars": "<trigger bars>", "daily": "<the daily file bars_fetch returned>"}
@@ -114,7 +116,7 @@ From the highest timeframe down, for each side:
 |---|---|---|
 | `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target |
 | `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then enter. Do not enter while it is still moving against you |
-| `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)` (skip if that is 0), or the nearest opposing level as the target; skip in a quiet session |
+| `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)`; skip if that is 0 (at size 1, every `mixed` read is a skip). Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |
 
 A policy strategy's verdict is already sized by its policy: the read goes in

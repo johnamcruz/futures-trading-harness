@@ -32,7 +32,9 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 09:30–09:35 | Opening print, widest spreads | No entries (gate) |
 | 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Primary window for ORB |
 | 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
+| 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
+| 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
 | 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |

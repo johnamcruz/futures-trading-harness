@@ -15,6 +15,13 @@ description: Use session and RTH VWAP, the volume profile (POC, value area, high
 
 ## How It Works
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
+ATR, VWAP, participation, the skip-rule counters in `context`, swings and
+liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
+and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+doesn't hold.
+
 1. **VWAP** from market-snapshot: `vwapSession` (anchored 18:00 ET, Globex) and
    `vwapRth` (anchored 09:30 ET).
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in

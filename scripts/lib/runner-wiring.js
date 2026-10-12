@@ -89,10 +89,13 @@ function runnerScan(strategies, cfg, symbol, bars, now) {
  * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
  * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
  */
-function briefingRecorder(home, cfg, now) {
+function briefingRecorder(home, cfg, now, env = process.env) {
   return (item, results, scanError = null) => {
     try {
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, now: now() }));
+      // The news blackouts (premarket records them): the briefing says which is in force or next.
+      let blackouts = null;
+      try { blackouts = readBlackouts(loadConfig(env).blackoutsFile); } catch (_err) { blackouts = null; }
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       throw err;
@@ -142,7 +145,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
-    recordBriefing: briefingRecorder(home, cfg, now),
+    recordBriefing: briefingRecorder(home, cfg, now, env),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
     scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,

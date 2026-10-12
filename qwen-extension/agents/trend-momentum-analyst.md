@@ -30,8 +30,10 @@ bars (the snapshot, the multi-timeframe read and the scan), each part with
 its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
-current briefing, or for what it lacks (another timeframe, a strategy's rules with
-`strategies_show`). Where a step below names a snapshot or read field, take
+current briefing, or for what it lacks: another timeframe; a strategy's rules (`strategies_show`), or a
+snapshot number it doesn't carry (run `market_snapshot` once on the bars
+file the caller gave you, and add it to your Data line). Where a step below
+names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
 `Data: bar_briefing <the versions you used>`, or, without a current
 briefing, `Data: no current briefing; <the tools you called>`.
@@ -64,6 +66,7 @@ never paste a long `get_bars` reply into a file.
 ```text
 ## Trend/Momentum: <SYMBOL> @ <last bar time ET>
 Data: bar_briefing m3@<...>, m15@<...>, h1@<...>, day@<...> (the versions you used)
+Bias: long | short | neutral (confidence: low | medium | high)
 Regime (computed): 15m <primary>/<volatility>, 3m <primary>/<volatility>; quality notes
 15m: EMA20 <v> slope <+/->, ADX <v> (<slope>), SuperTrend <dir> @ <line>
 3m:  EMA9 <v> / EMA20 <v>, ADX <v> (<slope>), Keltner <pos>, ATR14 <v>

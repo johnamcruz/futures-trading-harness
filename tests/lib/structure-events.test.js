@@ -28,7 +28,7 @@ test('lastBreaks: a close through the last confirmed swing; same direction BOS, 
   assert.deepStrictEqual([previous.kind, previous.direction, previous.level], ['BOS', 'up', 14]);
   assert.deepStrictEqual([last.kind, last.direction, last.level, last.at], ['CHoCH', 'down', 9, bars[11].t]);
   // A swing is broken once: later closes above 14 add no new break.
-  assert.deepStrictEqual(lastBreaks(bars.slice(0, 8), 2), { last: { kind: 'BOS', direction: 'up', level: 14, swingAt: bars[2].t, at: bars[6].t }, previous: null });
+  assert.deepStrictEqual(lastBreaks(bars.slice(0, 8), 2), { last: { kind: 'BOS', direction: 'up', level: 14, swingAt: bars[2].t, at: bars[6].t, barsAgo: 1 }, previous: null });
   assert.deepStrictEqual(lastBreaks(mk([[10, 9, 9.5]]), 2), { last: null, previous: null });
 });
 
@@ -75,4 +75,18 @@ test('untestedSwings: a swing with an end (its candle\'s close) is tested only b
   assert.deepStrictEqual(untestedSwings([...bars, bar(66, 14, 13)], [swing]), [], 'traded back to after the hour');
   // Without an end, the hour's own later bars would have "tested" it: the end is what makes it right.
   assert.deepStrictEqual(untestedSwings(bars, [{ ...swing, end: undefined }]), []);
+});
+
+test('sweeps count only bars after the level existed (since)', () => {
+  // The bar wicks above 11 and closes back below before the level formed: no sweep.
+  const bars = mk([[10, 8, 9], [10.5, 8.5, 9.5], [12, 9, 10], [10, 9, 9.5]]);
+  assert.strictEqual(sweeps(bars, [{ name: 'swing', price: 11, side: 'high' }]).length, 1);
+  assert.deepStrictEqual(sweeps(bars, [{ name: 'swing', price: 11, side: 'high', since: bars[2].t }]), []);
+});
+
+test('swingLevels: the last confirmed swings with the first close through each', () => {
+  const { swingLevels } = require('../../scripts/lib/trading/structure-events');
+  const bars = mk([[10, 8, 9], [11, 9, 10], [14, 10, 13], [12, 10, 11], [12, 10, 11], [13, 11, 12], [16, 13, 15]]);
+  const hi = swingLevels(bars, 2, 3).find(x => x.type === 'high');
+  assert.deepStrictEqual([hi.price, hi.brokenAt], [14, bars[6].t]);
 });

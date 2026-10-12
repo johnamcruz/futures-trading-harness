@@ -17,7 +17,10 @@ const USAGE = 'usage: briefing.js --symbol MNQ [--json]';
 
 function barBriefing({ symbol = null, json = false } = {}, ctx) {
   const c = context(ctx);
-  if (!symbol || !/^[A-Z0-9]{1,8}$/.test(symbol)) throw new Error(`--symbol: a contract root, e.g. MNQ (${USAGE})`);
+  // A contract by month (MNQ:2027-03) reads its root's briefing.
+  const root = /^([A-Z0-9]{1,8})(:\d{4}-\d{2})?$/.exec(String(symbol || ''));
+  if (!root) throw new Error(`--symbol: a contract root, e.g. MNQ (${USAGE})`);
+  symbol = root[1];
   const b = readBriefing(harnessHome(c.env), symbol);
   const fallback = 'Take the market facts from the bars yourself, with the tools you have (or, without them, the cycle prompt and the analysts\' reports), and say so in your report\'s Data line.';
   if (!b) return { text: `No bar briefing for ${symbol}: the autonomous runner builds it after each closed bar. ${fallback}\n` };

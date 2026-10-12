@@ -27,8 +27,10 @@ bars (the snapshot, the multi-timeframe read and the scan), each part with
 its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
-current briefing, or for what it lacks (another timeframe, a strategy's rules with
-`strategies_show`). Where a step below names a snapshot or read field, take
+current briefing, or for what it lacks: another timeframe, or a
+snapshot number it doesn't carry (run `market_snapshot` once on the bars
+file the caller gave you, and add it to your Data line). Where a step below
+names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
 `Data: bar_briefing <the versions you used>`, or, without a current
 briefing, `Data: no current briefing; <the tools you called>`.
@@ -45,7 +47,7 @@ never paste a long `get_bars` reply into a file.
    `session-timing`, `market-snapshot`, and `harness-tools`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
-   Get `get_quote` for the live bid/ask/last.
+   Always, once: `get_quote` for the live bid/ask/last.
 3. VWAP (snapshot `vwap`): which applies (`rth` 09:30-16:00 ET, else
    `session`), the distance in ATR(14), and the crosses in the last 30 bars
    (`rthCrossesLast30`, or `sessionCrossesLast30` when `applies` is
@@ -59,9 +61,9 @@ never paste a long `get_bars` reply into a file.
    numbers), recent sweeps (the briefing's `m3` `sweeps`: a high traded above
    and closed back below within 1-3 bars, or a low the same below, in the
    last 10 bars, key levels first; computed, never by eye), and `openFvgs`.
-   The room to run: the briefing's `m3` `nearestLiquidity` (the nearest
-   level above and below price, in points and ATR) is what the `Implication`
-   line weighs.
+   The room to run: the briefing's `m3` `nearestLiquidity` (the three
+   nearest levels above and below price, in points and R) is what the
+   `Implication` line weighs.
 6. Volume profile (snapshot `volumeProfile`, computed; never estimate it by
    hand): the prior RTH day's POC, VAH and VAL (`priorRth`), where price is
    (`price`: above, inside, or below value), the developing session's
@@ -74,6 +76,7 @@ never paste a long `get_bars` reply into a file.
 ```text
 ## Volume/Liquidity: <SYMBOL> @ <time ET>, last <price> (bid <b> / ask <a>)
 Data: bar_briefing m3@<...>, m15@<...>, h1@<...>, day@<...> (the versions you used)
+Bias: long | short | neutral (confidence: low | medium | high)
 Day type so far: trend | rotation | undecided, with VWAP evidence
 Participation: <rel-vol numbers>, climax: yes/no
 Liquidity above: <price - type>, nearest first

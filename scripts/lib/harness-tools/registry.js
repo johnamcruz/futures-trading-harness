@@ -176,7 +176,7 @@ const TOOLS = [
   {
     name: 'bar_briefing', op: 'bar_briefing', script: 'briefing',
     description: 'The bar briefing the autonomous runner built after the last closed bar: the analysis by timeframe (m3: price, ET time and session window, regime, EMAs, ADX, VWAP side, participation, where price is against the value areas and IB, the scan\'s candidates, the trend rule; m15: the 15m read, alignment per side, today so far, the session profile; h1: the 1h and 4h reads; day: the prior RTH day, its profile, the overnight range). Each part has a version and holds until its timeframe\'s next close or a close through one of its levels: reuse it instead of recomputing; read the bars yourself only for what it lacks.',
-    inputSchema: object({ symbol: SYMBOL, json: JSON_FLAG }, ['symbol']),
+    inputSchema: object({ symbol: { type: 'string', pattern: '^[A-Z0-9]{1,8}(:\\d{4}-\\d{2})?$', description: 'A contract root (MNQ), or a contract by month (MNQ:2027-03): the root\'s briefing.' }, json: JSON_FLAG }, ['symbol']),
     args: i => ({ symbol: i.symbol, json: i.json === true }),
     narrow: 'call it without json',
   },

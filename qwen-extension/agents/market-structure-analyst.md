@@ -34,8 +34,10 @@ bars (the snapshot, the multi-timeframe read and the scan), each part with
 its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
-current briefing, or for what it lacks (another timeframe, a strategy's rules with
-`strategies_show`). Where a step below names a snapshot or read field, take
+current briefing, or for what it lacks: another timeframe; a strategy's rules (`strategies_show`), or a
+snapshot number it doesn't carry (run `market_snapshot` once on the bars
+file the caller gave you, and add it to your Data line). Where a step below
+names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
 `Data: bar_briefing <the versions you used>`, or, without a current
 briefing, `Data: no current briefing; <the tools you called>`.
@@ -56,9 +58,12 @@ never paste a long `get_bars` reply into a file.
    `market_snapshot` and `mtf_read` on the 3m file.
 3. Per timeframe: the last swing highs/lows (`liquidity.swingHighs` /
    `swingLows` in the snapshot) with prices and times, trend
-   classification, the latest BOS or CHoCH (the briefing's `structure` in
-   `m3`, `m15` and `h1`: computed from confirmed swings, never by eye), and
-   the dealing range with its 50%.
+   classification, the latest BOS or CHoCH with how many candles ago (the
+   briefing's `lastBreak` in `m3`, `m15` and `h1`: computed from confirmed
+   swings, never by eye), and the dealing range with its 50% (`m15` `frame`
+   and `h1` `range`). For 15m and 1h the swings that still hold and the one a
+   3m close last broke are the briefing's `m3` `htfLevels`; fetch 15m or 60m
+   bars only for older swings.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
    formed, equal highs/lows (`liquidity.equalHighs` / `equalLows`), open fair
    value gaps (`liquidity.openFvgs`), untested 1h swings (`m3`

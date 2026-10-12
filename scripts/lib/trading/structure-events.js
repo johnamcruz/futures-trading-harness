@@ -8,10 +8,13 @@
  *                                 confirmed k bars later; [{ type, price, t, i, confirmedAt }]
  *   lastBreaks(bars, k)          the latest close through a confirmed swing that hadn't been broken, labelled BOS
  *                                 when it continues the previous break's direction and CHoCH when it reverses it;
- *                                 { last, previous } each { kind, direction, level, swingAt, at } or null
+ *                                 { last, previous } each { kind, direction, level, swingAt, at, barsAgo } or null
+ *   swingLevels(bars, k, n)      the last n confirmed swing highs and lows, each with when a close first went through
+ *                                 it after its confirmation (`brokenAt`, null while it holds)
  *   sweeps(bars, levels, n)      in the last n bars, a high level traded above and closed back below within 1-3
- *                                 bars (a low level the same below): [{ name, price, side, key, at, back, bars,
- *                                 wick, close }], one per level, key levels first, then most recent first
+ *                                 bars (a low level the same below), by bars after the level existed (`since`):
+ *                                 [{ name, price, side, key, at, back, bars, wick, close }], one per level, key
+ *                                 levels first, then most recent first
  *   untestedSwings(bars, swings) the swings price hasn't traded back to since their candle closed (swing.end)
  */
 
@@ -49,12 +52,14 @@ function lastBreaks(bars, k = 2) {
       if (!swing || i <= swing.confirmedAt - 1) continue;
       if ((direction === 'up' && c > swing.price) || (direction === 'down' && c < swing.price)) {
         const prev = breaks[breaks.length - 1];
-        breaks.push({ kind: prev && prev.direction !== direction ? 'CHoCH' : 'BOS', direction, level: swing.price, swingAt: swing.t, at: bars[i].t });
+        breaks.push({ kind: prev && prev.direction !== direction ? 'CHoCH' : 'BOS', direction, level: swing.price, swingAt: swing.t, at: bars[i].t, i });
         if (direction === 'up') hi = null; else lo = null;
       }
     }
   }
-  return { last: breaks[breaks.length - 1] || null, previous: breaks[breaks.length - 2] || null };
+  // Each with its age: how many bars (candles) ago it happened (0 = the last one).
+  const out = b => (b ? { kind: b.kind, direction: b.direction, level: b.level, swingAt: b.swingAt, at: b.at, barsAgo: bars.length - 1 - b.i } : null);
+  return { last: out(breaks[breaks.length - 1]), previous: out(breaks[breaks.length - 2]) };
 }
 
 /**
@@ -67,8 +72,10 @@ function sweeps(bars, levels, n = 10) {
   const out = [];
   const from = Math.max(1, bars.length - n);
   const seen = new Set();
-  for (const { name, price, side, key = false } of levels) {
+  for (const { name, price, side, key = false, since = null } of levels) {
     if (!Number.isFinite(price) || !['high', 'low'].includes(side) || seen.has(`${side}:${price}`)) continue;
+    // A level is swept only by bars after it existed (a swing after its confirmation, a pool after its last touch).
+    const after = since ? Date.parse(since) : -Infinity;
     seen.add(`${side}:${price}`);
     const through = b => (side === 'high' ? b.h > price : b.l < price);
     const inside = b => (side === 'high' ? b.c < price : b.c > price);
@@ -76,7 +83,7 @@ function sweeps(bars, levels, n = 10) {
     for (let j = bars.length - 1; j >= from; j -= 1) {
       if (!inside(bars[j])) continue;
       // The first bar through the level, at most two bars before the close back inside, coming from inside.
-      const i = [j, j - 1, j - 2].reverse().find(x => x >= from && through(bars[x]) && atOrInside(bars[x - 1]) && bars.slice(x, j).every(b => !inside(b)));
+      const i = [j, j - 1, j - 2].reverse().find(x => x >= from && Date.parse(bars[x].t) > after && through(bars[x]) && atOrInside(bars[x - 1]) && bars.slice(x, j).every(b => !inside(b)));
       if (i === undefined) continue;
       const span = bars.slice(i, j + 1);
       const wick = side === 'high' ? Math.max(...span.map(b => b.h)) : Math.min(...span.map(b => b.l));
@@ -99,4 +106,14 @@ function untestedSwings(bars, swings) {
   }).map(({ type, price, t }) => ({ type, price, t }));
 }
 
-module.exports = { pivots, lastBreaks, sweeps, untestedSwings };
+/** The last n confirmed swing highs and lows, oldest first, each with the first close through it after confirmation. */
+function swingLevels(bars, k = 2, n = 3) {
+  const ps = pivots(bars, k);
+  const pick = type => ps.filter(x => x.type === type).slice(-n).map(x => {
+    const j = bars.findIndex((b, idx) => idx > x.confirmedAt - 1 && (type === 'high' ? b.c > x.price : b.c < x.price));
+    return { type, price: x.price, t: x.t, brokenAt: j >= 0 ? bars[j].t : null };
+  });
+  return [...pick('high'), ...pick('low')];
+}
+
+module.exports = { pivots, lastBreaks, sweeps, untestedSwings, swingLevels };

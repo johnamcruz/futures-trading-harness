@@ -54,25 +54,19 @@ test('a section is kept, same version, until its timeframe\'s next close; then r
   assert.ok(changes.m15 >= 4, `m15 refreshed ${changes.m15} times`);
 });
 
-test('invalidation: a close through a section\'s level, or a range spike, recomputes it before it expires', () => {
-  // A bar whose next bar is inside the same 15m and 1h candle, so nothing expires: only invalidation can refresh.
+test('sections change only on expiry: no early recompute, so a version holds until its timeframe\'s next close', () => {
+  // A bar whose next bar is inside the same 15m and 1h candle: nothing expires, and even a wild previous close or a
+  // range spike changes nothing (m15 and h1 read completed candles only; what moves with price is in m3).
   let n = 1300;
   while (Date.parse(build(n).sections.m15.validUntil) <= Date.parse(build(n + 1).closedAt) || Date.parse(build(n).sections.h1.validUntil) <= Date.parse(build(n + 1).closedAt)) n += 1;
   const prev = build(n);
-  assert.strictEqual(build(n + 1, prev).sections.m15.version, prev.sections.m15.version, 'control: kept');
-  const [name, price] = prev.sections.m15.levels[0];
-  // The previous close put on the other side of the level the section rests on.
-  const crossed = { ...prev, price: price + (BARS[n].c > price ? -1000 : 1000) };
-  const b = build(n + 1, crossed);
-  assert.strictEqual(b.sections.m15.reason, `a close through the ${name} ${price}`);
-  assert.notStrictEqual(b.sections.m15.version, prev.sections.m15.version);
-  // A spike: a bar whose range is over twice ATR(14) refreshes m15 and h1, not the day's levels.
   const bars = at(n + 1).map(x => ({ ...x }));
   const last = bars[bars.length - 1];
   last.h = last.c + 500; last.l = last.c - 500;
-  const spiked = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, prev });
-  for (const s of ['m15', 'h1']) assert.match(spiked.sections[s].reason, /^a bar range of \d/, s);
-  assert.strictEqual(spiked.sections.day.version, prev.sections.day.version, 'the day\'s levels stand');
+  const next = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, prev: { ...prev, price: prev.price + 1000 } });
+  for (const s of ['m15', 'h1', 'day']) assert.strictEqual(next.sections[s].version, prev.sections[s].version, s);
+  assert.notStrictEqual(next.sections.m3.version, prev.sections.m3.version);
+  assert.strictEqual(next.sections.m3.data.bar.rangeAtr > 2, true, 'the spike shows in m3');
 });
 
 test('another symbol, bar size, or an older briefing is never reused', () => {
@@ -84,14 +78,14 @@ test('another symbol, bar size, or an older briefing is never reused', () => {
 });
 
 test('m3 holds the per-bar facts: ET time and window, VWAP side, location against the cached levels, the scan\'s candidates', () => {
-  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', confluence: { with: ['bos'], against: [] } }, { name: 'bos', candidate: false }];
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', confluence: { with: ['bos'], against: [] }, entryRef: 1, stopDistance: 10, exit: { trailActivateR: 2 } }, { name: 'bos', candidate: false }];
   const b = build(1300, null, { scan });
   const d = b.sections.m3.data;
   assert.match(d.et, /^\d{2}:\d{2}$/);
   assert.ok(B.WINDOWS.some(w => w[2] === d.window));
   assert.ok(['above', 'below'].includes(d.vwap.side));
-  assert.ok(['above', 'below'].includes(d.priceVsEmaFast));
-  assert.deepStrictEqual(d.candidates, [{ name: 'orb', direction: 'long', status: 'active', confluence: { with: ['bos'], against: [] } }]);
+  assert.ok(['above', 'below', 'at'].includes(d.priceVsEma9));
+  assert.deepStrictEqual(d.candidates.map(c => [c.name, c.direction, c.status, c.confluence]), [['orb', 'long', 'active', { with: ['bos'], against: [] }]]);
   assert.match(d.trendRule, /^Trend rule:/);
   assert.ok('priorValue' in d.location && 'initialBalance' in d.location);
   // The cached sections hold levels, never where price is (that moves every bar).
@@ -215,23 +209,37 @@ test('in a cycle, the briefing is current exactly when it is for the bar the cyc
   assert.strictEqual(childEnv(validateConfig({}), '/r', { FTH_HOME: home, FTH_CYCLE_BARS: '{"MNQ":"x"}' }).FTH_CYCLE_BARS, undefined, 'never a stale one');
 });
 
-test('the briefing carries the structure events the analysts report: BOS or CHoCH per timeframe, sweeps, untested 1h swings', () => {
+test('the briefing carries the structure events the analysts report: the latest BOS or CHoCH per timeframe with its age, sweeps, swings against price', () => {
   const b = build(1300);
   for (const s of ['m3', 'm15', 'h1']) {
-    const st = b.sections[s].data.structure;
-    assert.ok(st && 'last' in st && 'previous' in st, s);
-    if (st.last) assert.ok(['BOS', 'CHoCH'].includes(st.last.kind) && ['up', 'down'].includes(st.last.direction), s);
+    const lb = b.sections[s].data.lastBreak;
+    assert.ok(lb && 'last' in lb && 'previous' in lb, s);
+    if (lb.last) assert.ok(['BOS', 'CHoCH'].includes(lb.last.kind) && Number.isInteger(lb.last.barsAgo) && lb.last.barsAgo >= 0, s);
   }
   const d = b.sections.m3.data;
-  assert.ok(Array.isArray(d.sweeps) && d.sweeps.length <= 5);
-  for (const x of d.sweeps) assert.ok(['high', 'low'].includes(x.side) && x.name && Number.isFinite(x.price));
+  for (const x of d.sweeps) assert.ok(['high', 'low'].includes(x.side) && x.name && Number.isFinite(x.price) && x.bars >= 1 && x.bars <= 3);
+  // The 15m and 1h swings against price: still holding ones on their true side, and at most one broken per timeframe.
+  for (const x of d.htfLevels) {
+    assert.strictEqual(x.side, d.price > x.price ? 'below' : d.price < x.price ? 'above' : 'at');
+    if (!x.brokenAt) assert.ok(x.type === 'high' ? x.price >= Math.min(d.price, x.price) : true);
+  }
+  for (const tf of ['15m', '1h']) assert.ok(d.htfLevels.filter(x => x.name.startsWith(tf) && x.brokenAt).length <= 1, tf);
   assert.ok(Array.isArray(d.untested1hSwings));
 });
 
-test('nearestLiquidity: the nearest level above and below price, in points and ATR (room to run, or a level in the way)', () => {
+test('distances are in R: 1R is a setup\'s own stop, else the reference stop (0.5 x ATR(20)); the three nearest levels each side; a candidate\'s level in its way', () => {
   const d = build(1300).sections.m3.data;
+  assert.strictEqual(d.oneR.points, d.referenceStop.distance);
   const { above, below } = d.nearestLiquidity;
-  if (above) assert.ok(above.price > d.price && Math.abs(above.points - (above.price - d.price)) < 0.011 && Math.abs(above.atr - above.points / d.atr14) < 0.02);
-  if (below) assert.ok(below.price < d.price && Math.abs(below.points - (d.price - below.price)) < 0.011);
-  assert.ok(above || below, 'the fixture has levels on at least one side');
+  assert.ok(above.length <= 3 && below.length <= 3 && above.length + below.length > 0);
+  for (const x of above) assert.ok(x.price > d.price && Math.abs(x.R - x.points / d.oneR.points) < 0.02);
+  for (const x of below) assert.ok(x.price < d.price && Math.abs(x.R - x.points / d.oneR.points) < 0.02);
+  for (let k = 1; k < above.length; k += 1) assert.ok(above[k].price >= above[k - 1].price, 'nearest first');
+  // An equal-highs pool price already traded through is never a level in the way.
+  for (const x of [...above, ...below]) if (x.name === 'equal highs') assert.ok(d.liquidity.equalHighs.some(p => p.price === x.price && !p.taken));
+  // A candidate's level in its way, in its own R.
+  const c = build(1300, null, { scan: [{ name: 'orb', candidate: true, direction: 'short', status: 'active', entryRef: d.price, stopDistance: 10, exit: { trailActivateR: 2 } }] }).sections.m3.data.candidates[0];
+  assert.strictEqual(c.stopPoints, 10);
+  if (c.inTheWay) assert.ok(c.inTheWay.price < d.price && Math.abs(c.inTheWay.R - c.inTheWay.points / 10) < 0.011);
+  assert.strictEqual(c.exit.trailActivateR, 2);
 });
