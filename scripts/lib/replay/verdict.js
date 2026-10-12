@@ -4,7 +4,7 @@
  * The combine verdict of a replay run: each calendar month's trading scored
  * against a prop account's challenge (accounts/<name>/ACCOUNT.md), as a fresh
  * attempt from the starting balance each month. The rules are combine.js's,
- * the same state machine the RL env, the backtester and the live gate drive
+ * the same state machine the backtester and the live gate drive
  * (start, applyClose, touches, dailyBreached, blow, endDay, profitNeeded), so
  * a replayed month is judged as training judges an attempt:
  *
@@ -400,7 +400,7 @@ function headLine(v) {
 
 const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
-  'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
+  'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as the backtester and the live gate.',
   'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime, on its own day) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting, an earlier day\'s point against its floor only (trades open together are not added up; a trade without MAE is seen only at its close). An MAE is judged after the fills at its instant, and also right after its own position\'s fill there (a partial exit or add at its price); other fills at one instant are read in the order the broker lists them.',
   'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',
 ];

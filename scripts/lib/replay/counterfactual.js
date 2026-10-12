@@ -4,7 +4,7 @@
  * Counterfactual outcomes for the labels (labels.js): what a strategy's own
  * trade would have done at a candidate the teacher didn't take (a skipped
  * setup, or one fired on a bar no cycle ran on), and the same fields from the
- * real fills of a trade it did take, so RL can tell a skilful skip (a loser
+ * real fills of a trade it did take, so a reader can tell a skilful skip (a loser
  * avoided) from an overly cautious one (a winner missed).
  *
  * The simulation is this module's own walk, not a backtest run: it places

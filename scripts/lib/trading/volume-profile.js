@@ -2,7 +2,7 @@
 
 /**
  * Volume profile from bars: how much volume traded at each price over a
- * window. Generic: any strategy, skill, the snapshot, and the RL observation
+ * window. Generic: any strategy, skill, the snapshot, and the market features
  * read it, over any window of closed bars.
  *
  * The method is the standard market-profile one (as in LuxAlgo's "Volume
