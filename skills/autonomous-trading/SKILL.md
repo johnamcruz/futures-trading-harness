@@ -66,9 +66,38 @@ description: Rules for running the trading harness unattended (headless, schedul
    as plain text in your final message: never as a tool call or a tool's
    arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
-   one plan, at most one entry. A tool that fails twice ends the cycle as
-   `error` (after confirming any open position has its stop). Never wait
-   within a cycle: bars and fills may not move until the next one. An order
+   one plan, at most one entry. **Read once per cycle.** For each symbol, each
+   role (you, each analyst, each call of a role; a role you play yourself
+   counts as that role) reads each of these at most once and reuses it:
+   `strategies_scan` (one with `name` is a separate read), `mtf_read` (one
+   call, with `daily` when you have the daily file), `get_account_snapshot`,
+   `get_quote`, `get_bars`. A full cycle still runs its analysts in parallel.
+   Don't repeat what the prompt or a role gave you (the trade-executor's
+   report is the after-order read of trade-session step 6), except:
+   - The prompt lacks `remainingBeforeLimit` (and, without a prop attempt,
+     today's P&L): a cycle that may enter reads `get_account_snapshot` once
+     (trade-session step 1). It gives only a count of working orders, the
+     trend rule (not the multi-timeframe read's alignment), and no scan
+     details: read `list_open_orders`, `mtf_read`, and `strategies_scan`
+     where a step names them. Anything under "Context unavailable", read
+     once yourself.
+   - Read the account and open orders once after each `place_order`,
+     `modify_order`, `cancel_order`, `close_position`, or
+     `partial_close_position`, including one that failed or timed out (its
+     order may be live), and before an order call unless you read them after
+     your last one (the Execution rule).
+   - The scan again only after you fetched new bars. A trade review's
+     `get_bars` over a trade's hold is one read per trade reviewed.
+   - A failed read may be retried once (broker-mcp skill, Failures and
+     limits). Never resend an order call blindly: after a failed or timed-out
+     one, read `list_open_orders` and `get_account_snapshot`, and send it
+     again only if they show it didn't go through and it is still needed (a
+     close or a `[protect]` stop always is). A gate refusal ends the entry
+     attempt unless you fixed what it named (rule 4).
+
+   A tool that fails twice ends the cycle as `error` (after confirming any
+   open position has its stop). Never wait within a cycle: bars and fills
+   may not move until the next one. An order
    that hasn't filled at its one check is journalled as working and the cycle
    ends (`executed` or `managed`, saying it is working); the next cycle checks
    the fill (broker-mcp skill, Order mechanics). An unfilled entry without a
