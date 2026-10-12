@@ -56,7 +56,8 @@ names them.
   stop to `trailGivebackR` behind the best price since entry, rounded to the
   tick, toward the market only; if the bar already traded through that new
   level, close at market instead; after `maxBars` bars in the trade, close at
-  market (time stop). The strategy bodies' "don't move the stop yourself"
+  market (time stop). Each stop move and close goes through the
+  trade-executor role, as all management does. The strategy bodies' "don't move the stop yourself"
   means: not while the runner trails it.
 - **Fresh data or no decision**: the last closed bar in the bars file must be
   no older than one bar of its timeframe (plus a minute) at the cycle's time,

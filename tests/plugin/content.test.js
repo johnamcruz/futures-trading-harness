@@ -214,6 +214,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   }
   assert.match(read('agents/risk-manager.md'), /Judge every setup, a policy verdict too, by the trade-session skill's\s+priority order/);
   assert.match(read('skills/prop-challenge-pacing/SKILL.md'), /\*\*A verdict is a ceiling, never an order\*\*/);
+  // Interactive management (no runner) closes through the trade-executor too (it holds the order tools in every harness config).
+  assert.match(read('skills/trade-session/SKILL.md'), /close at\s+market \(time stop\)\. Each stop move and close goes through the\s+trade-executor role, as all management does\./);
   // Step 6 has no exception: a conflict is no trade, a reversal too.
   assert.match(read('agents/risk-manager.md'), /`confluence\.against`\) → VETO \(the priority order, step 6\)\./);
   assert.match(read('skills/trade-session/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
