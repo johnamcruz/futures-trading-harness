@@ -169,8 +169,8 @@ refused) are the replay's plumbing and counted apart.
 
 ### Fills
 
-The replay broker's: market entries at the next one-minute bar's open plus
-slippage, stops at the stop less slippage (a gap fills at the open), targets
+The replay broker's: market entries at the replay moment (the open of the
+one-minute bar containing it, plus slippage; nothing from later bars), stops at the stop less slippage (a gap fills at the open), targets
 at the target, stop first when a bar reaches both; the runner flattens at end
 of day as live. backtester-mcp's fill engine is ported from
 `sim-broker.js`, and it has limit and stop entries.
@@ -179,10 +179,11 @@ of day as live. backtester-mcp's fill engine is ported from
 
 The model has read about the markets in its training data. With real dates
 and prices it may recall what happened next, and the records would look
-excellent on history and fail live. The defence is **time**: the selection
-and out-of-sample windows start after the model's knowledge cutoff. Only the
-train window lies inside it, and only training (not any decision about the
-trader) uses it.
+excellent on history and fail live. The defence is **time**: the reasoning
+model is judged (the go/no-go for stage 2) only on months after its
+knowledge cutoff. Windows before the cutoff (train, and select when it lies
+there) supply labels for cloning and its held-out check only, never a
+decision about the trader (`docs/QUANT-PLAN.md`).
 
 Anonymization (no dates, a price offset per day) would need the replay
 broker to serve shifted prices and times consistently to every tool; it is
@@ -192,7 +193,7 @@ it belongs in the replay broker, so the harness stays unchanged.
 **Leakage tests**, before relying on a train-window run:
 
 - **Cutoff gap:** the same config on the train window (before the cutoff) and
-  the select window (after). A large drop after the cutoff, beyond what the
+  months after the cutoff. A large drop after the cutoff, beyond what the
   market explains, means it recalls.
 - **Placebo:** the same decisions scored against another day's continuation
   spliced on. A trader that does better on the true continuation than the
@@ -206,13 +207,13 @@ sample.
 
 - **Train** (may lie before the cutoff): the student's labels, and all
   prompt, skill and config iteration.
-- **Select** (after the cutoff): the go/no-go for stage 2 (does the teacher
-  beat the rules baseline and the current policy?), and choosing among
-  students.
-- **Out of sample** (after the cutoff, after select): looked at once, after
-  the student exists, to validate it under the promotion gate. Replaying it
-  is allowed once per frozen config (skills, strategies, harness and model);
-  each look is logged.
+- **Select**: the clone's held-out check and choosing among students (by
+  their backtests, which see only bars). The go/no-go for stage 2 is on
+  months after the cutoff, which may lie outside the three windows
+  (`docs/QUANT-PLAN.md`).
+- **Out of sample** (after select): looked at once, after the student
+  exists, to validate it under the promotion gate in the backtester. The
+  reasoning model is not replayed there. Each look is logged.
 
 ### Nondeterminism
 
@@ -615,7 +616,7 @@ live record.
    teacher didn't take). Done.
 6. Leakage tests, then one month in the train window, the New York session,
    with the report.
-7. A replay of the select window. **Decision point**, on the select window
+7. A replay of months after the cutoff. **Decision point**, on those months
    only: build stage 2 if the reasoning trader beats the rules baseline and
    the current policy there.
 8. Stage 2: the label dataset (done), then widened observation and env,
