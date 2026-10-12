@@ -37,7 +37,14 @@ The harness tracks the attempt and enforces it:
   `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the
   policy strategy's name, the bars file and its `symbol`, the micro whose
   bars the runner scans, gives exactly these arguments, or refuses with the
-  gate's reason). A verdict permits one
+  gate's reason). A verdict is for its own bar: the gate takes it only while
+  that bar is still the last one recorded for the policy strategy's
+  timeframe (the runner records each bar it scans). Once a newer bar is recorded
+  without a verdict for its setup (for example the component fired again and
+  no new verdict came), the old one is refused (`[policy] ... the latest
+  verdict is for the 3m bar opened X; the setup on the bar opened Y has no
+  verdict yet`), as is a verdict that names no bar: stand aside until the
+  next setup's verdict. A verdict permits one
   entry: after a stop-out, wait for the next setup's verdict. Never argue with
   it or route around it. Past the ratchet the runner may close the trade on the policy's
   word.
@@ -58,7 +65,7 @@ The harness tracks the attempt and enforces it:
   stepped back: tell the user); a missed close (the user records it with
   `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
   daily limit; a size over the budget; any entry that doesn't match the
-  verdict; any position already open on the account, or any order working
+  verdict, or whose verdict is not for the last recorded bar; any position already open on the account, or any order working
   on it (a resting entry on another market could fill next to it); any entry once another
   went in since the latest account snapshot ("wait for the next bar's
   snapshot"; one whose journal time is unreadable counts as since it: tell

@@ -18,6 +18,7 @@ const { contractRoot, mayBeRoot, entryTime } = require('./journal');
 const { specFor, familyOf } = require('./contracts');
 const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
+const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
 const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
@@ -287,13 +288,36 @@ function latestVerdict(home, strategy, root) {
 }
 
 /**
+ * Why a verdict is not for the bar the setup is on now, or null. The verdict's
+ * stop ticks, size and side were worked out on its own bar: an entry is judged
+ * against it only while that bar is still the last one recorded for the
+ * strategy's timeframe (signal-state.js lastRecordedBar), never against the
+ * next bar's setup when the runner recorded no verdict for it. Fails closed:
+ * no record, an unreadable one, or a verdict with no bar refuses.
+ */
+function verdictBarProblem(home, strategy, root, v) {
+  const cur = lastRecordedBar(home, root, strategy.timeframe);
+  if (cur.error) return `${cur.error}; the verdict can't be tied to it`;
+  const tf = cur.timeframe;
+  if (!Number.isFinite(barMs(v.bar))) {
+    return `the latest verdict (${v.action}${v.reason ? `: ${v.reason}` : ''}, ${v.at}) names no bar, so it can't be tied to the setup on the ${tf} bar opened ${cur.bar}; wait for the next setup's verdict`;
+  }
+  if (sameBar(v.bar, cur.bar)) return null;
+  if (barMs(v.bar) < barMs(cur.bar)) {
+    return `the latest verdict is for the ${tf} bar opened ${v.bar}; the setup on the bar opened ${cur.bar} has no verdict yet (an older bar's stop and size are never used for it): wait for the next setup's verdict`;
+  }
+  return `the latest verdict is for the ${tf} bar opened ${v.bar}, after the last recorded ${tf} bar (opened ${cur.bar}): the signal record is behind the verdict (the runner records both every bar); wait for the next bar`;
+}
+
+/**
  * The prop-challenge checks for a new entry by a strategy that trades an
  * account (and maybe a policy): [{ check, message }]. Hard checks: they fail
  * closed on missing or stale state and can't be skipped.
  *   combine: an attempt is running, the snapshot is fresh, the account allows
  *            entries, and the size is within the budget for the order's stop;
  *   policy:  a fresh verdict from the strategy's policy for this contract and
- *            side said half or full, and the size is within it.
+ *            side, recorded on the bar the setup is on now (the last bar of
+ *            the signal record), said half or full, and the size is within it.
  */
 function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor }) {
   const out = [];
@@ -326,9 +350,11 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     const dir = side === 'buy' ? 'long' : side === 'sell' ? 'short' : null;
     const bundle = strategy.policy ? strategy.policy.bundle : null;
     let why = null;
+    let barWhy; // the verdict must be for the bar the setup is on now
     if (!v) why = `no verdict for ${root} (the runner records one at each setup of ${(strategy.strategies || []).join(', ')})`;
     else if ((v.policy || null) !== bundle) why = `the latest verdict came from ${v.policy || 'the sizing alone'}, not ${bundle || 'the sizing alone'}`;
     else if (!(Date.parse(v.expiresAt) > now.getTime())) why = `the latest verdict (${v.bar}) expired at ${v.expiresAt}`;
+    else if ((barWhy = verdictBarProblem(home, strategy, root, v))) why = barWhy;
     else if (v.action === 'skip' || !(v.maxSize >= 1)) why = `the setup was skipped${v.reason ? ` (${v.reason})` : ''}`;
     else if (dir !== v.direction) why = `the verdict is for a ${v.direction} entry, not ${side || 'this side'}`;
     else if (v.contract !== root) why = `the verdict trades ${v.contract}, not ${root}`;

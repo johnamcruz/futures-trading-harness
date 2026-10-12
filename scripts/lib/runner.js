@@ -494,7 +494,7 @@ function createRunner(deps) {
     try {
       recordSignals(item, results);
     } catch (err) {
-      log(`${item.symbol}: could not record the bar's signals (${err.message}); the gate refuses rules entries`, 'error');
+      log(`${item.symbol}: could not record the bar's signals (${err.message}); the gate refuses rules entries, and policy entries on this bar's verdicts`, 'error');
     }
     try {
       scanLog({ at: clock.now(), symbol: item.symbol, contractId: item.contractId, bar: item.bar, results, decision });
@@ -575,7 +575,10 @@ function createRunner(deps) {
       scanItem(item);
       if (prop && item.scan) policyFailed(item, `account check failed: ${err.message}`);
       log(`${item.symbol}: account check failed (${err.message}); running the cycle to manage anything open`, 'error');
-      return { run: true, reason: `account check failed (${err.message})` };
+      const decision = { run: true, reason: `account check failed (${err.message})` };
+      // The bar is still recorded: the gate ties a verdict to the last recorded bar, so an older bar's verdict can't pass for this one.
+      if (item.scan) logScan(item, item.scan, decision);
+      return decision;
     }
     if (manageOnly) {
       return net !== 0 || working > 0 ? { run: true, reason: 'manage only' } : { run: false, reason: 'cap reached and flat' };

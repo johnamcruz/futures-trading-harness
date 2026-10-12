@@ -3,7 +3,7 @@
 /**
  * The signal record the order gate reads: which rules strategies fired, and
  * on which side, on the last closed bar of an index family, at
- * <FTH_HOME>/signals/<MICRO ROOT>.json.
+ * <FTH_HOME>/signals/<MICRO ROOT>-<minutes>m.json (one per timeframe).
  *
  * The autonomous runner writes it after scanning every closed bar;
  * interactively, `node scripts/strategies.js scan <bars> --symbol MNQ
@@ -52,6 +52,22 @@ function writeSignals(home, record) {
   return file;
 }
 
+/**
+ * A bar time as an instant (ms), NaN when unreadable. Bar times are compared
+ * as instants, never as text: "...T13:57:00Z", "...T13:57:00.000Z" and
+ * "...T08:57:00-05:00" are one bar.
+ */
+const barMs = t => (typeof t === 'string' && t.trim() ? Date.parse(t) : NaN);
+
+/** Whether two bar times name the same bar (both readable). */
+const sameBar = (a, b) => Number.isFinite(barMs(a)) && barMs(a) === barMs(b);
+
+/** A strategy's timeframe (3m, 1h) as the record's file names it (minutes: 3m, 60m), or null. */
+function recordTimeframe(timeframe) {
+  const m = /^(\d+)(m|h)$/.exec(String(timeframe || ''));
+  return m && Number(m[1]) > 0 ? `${Number(m[1]) * (m[2] === 'h' ? 60 : 1)}m` : null;
+}
+
 function readSignals(home, root, timeframe) {
   try {
     return JSON.parse(fs.readFileSync(signalFile(home, root, timeframe), 'utf8'));
@@ -94,4 +110,20 @@ function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe =
   return `setup:${strategy} ${dir || ''} did not fire on the last closed ${fam} bar (closed ${rec.closedAt}; fired: ${fired}). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.`;
 }
 
-module.exports = { DEFAULT_MAX_AGE_MIN, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger };
+/**
+ * The last bar recorded for `root`'s index family on `timeframe` (its open
+ * time, as the scan recorded it): { bar, timeframe } or { error }. The runner
+ * records every bar it scans, so this is the bar a setup is on now; the gate
+ * ties a policy verdict to it (prop-state.js).
+ */
+function lastRecordedBar(home, root, timeframe) {
+  const fam = familyRoot(root);
+  const tf = recordTimeframe(timeframe);
+  if (!tf) return { error: `the strategy's timeframe (${timeframe}) names no signal record` };
+  const rec = readSignals(home, root, tf);
+  if (!rec) return { error: `no ${tf} signal record for ${fam}, so the bar the setup is on is unknown (the runner records one every bar)` };
+  if (rec.error || !Number.isFinite(barMs(rec.asOf))) return { error: `the ${tf} signal record for ${fam} is unreadable (${rec.error || 'no bar time'}), so the bar the setup is on is unknown` };
+  return { bar: rec.asOf, timeframe: tf };
+}
+
+module.exports = { DEFAULT_MAX_AGE_MIN, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
