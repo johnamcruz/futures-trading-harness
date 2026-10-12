@@ -23,7 +23,7 @@ filters:
 risk:
   stop: atr:1
   min_rr: 2
-source: rules strategy written for this harness (no backtest record yet); active for labelling replays, to be reviewed on its labelled trades
+source: rules strategy written for this harness (no backtest record yet); activated by the owner for the labelling replays (active means tradeable everywhere, live too), to be reviewed on its labelled trades
 ---
 
 # Strategy: VWAP Reclaim (`setup:vwap_reclaim`)

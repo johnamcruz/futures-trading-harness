@@ -31,7 +31,7 @@ const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal 
 // the rest are driven end to end. A fixture where these fire would drive them too.
 const NOT_ON_FIXTURE = {
   vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
-  value_area_breakout: 'no two closes beyond the prior value area on above-average volume on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
+  value_area_breakout: 'its two closes above the prior value area on volume all come outside 10:00-15:00 ET here, none below it (value-area-strategies.test.js fires it on constructed sessions)',
   value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
 };
 const ACTIVE = ACTIVE_ALL.filter(s => !NOT_ON_FIXTURE[s.name]);
