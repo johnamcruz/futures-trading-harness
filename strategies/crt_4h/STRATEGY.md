@@ -2,7 +2,7 @@
 name: crt_4h
 description: Candle Range Theory liquidity sweep on the 4-hour candle - the 06:00 or 10:00 ET candle raids the previous 4-hour high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous 4-hour range. One setup per candle. Reversal setup for MNQ, MES, MYM, M2K.
 version: 2
-status: paper
+status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["06:00-14:00@America/New_York"]

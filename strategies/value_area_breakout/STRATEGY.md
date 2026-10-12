@@ -2,7 +2,7 @@
 name: value_area_breakout
 description: Volume profile acceptance breakout on equity index micros - two 3-minute closes beyond the prior RTH day's value area on above-average volume, trading with the prevailing trend, trailed like the other trend setups. From the prior day's bar-based volume profile.
 version: 1
-status: paper
+status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]

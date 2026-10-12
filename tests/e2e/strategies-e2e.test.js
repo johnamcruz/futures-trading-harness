@@ -26,7 +26,15 @@ const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.c
 const STEP = 180000;
 const CONTRACT = 'MNQ:2026-06';
 const ALL = loadStrategies(ROOT, {}).strategies;
-const ACTIVE = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ'));
+const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ'));
+// Active strategies whose setup the 6-day NQ fixture never produces (checked below: they load, validate and scan);
+// the rest are driven end to end. A fixture where these fire would drive them too.
+const NOT_ON_FIXTURE = {
+  vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
+  value_area_breakout: 'its two closes above the prior value area on volume all come outside 10:00-15:00 ET here, none below it (value-area-strategies.test.js fires it on constructed sessions)',
+  value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
+};
+const ACTIVE = ACTIVE_ALL.filter(s => !NOT_ON_FIXTURE[s.name]);
 
 const node = (args, env, input) => spawnSync(process.execPath, args, { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env }, input });
 
@@ -40,8 +48,20 @@ function firstFire(s) {
   return -1;
 }
 
-test('the active strategies are the ones this test drives', () => {
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['bos', 'cisd_ote', 'ema_cross', 'keltner', 'orb', 'supertrend']);
+test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['bos', 'cisd_ote', 'crt_1h', 'crt_4h', 'ema_cross', 'keltner', 'orb', 'supertrend']);
+  assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
+  // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
+  const ev = createEvaluator(BARS);
+  for (const name of Object.keys(NOT_ON_FIXTURE)) {
+    const s = ACTIVE_ALL.find(x => x.name === name);
+    assert.ok(s && s.valid, name);
+    assert.strictEqual(firstFire(s), -1, `${name} fires on the fixture now: drive it end to end instead`);
+    for (let i = 300; i < BARS.length; i += 97) {
+      const r = ev.at(s, i, { describe: true });
+      assert.ok(r.candidate === false && !r.error && r.rules && r.rules.long.length > 0, `${name} at bar ${i}: ${JSON.stringify(r).slice(0, 200)}`);
+    }
+  }
 });
 
 for (const s of ACTIVE) {
@@ -113,14 +133,14 @@ test('every strategy with rules provides its context on every scanned bar; a pap
       assert.ok(['trend', 'reversal'].includes(r.mtf.style), s.name);
     }
   }
-  // vwap_reclaim (paper) at a bar where it fires, if it does: the gate refuses a live entry.
-  const paper = ALL.find(s => s.name === 'vwap_reclaim');
+  // A paper strategy (value_area: its order-flow branch waits for real flow): the gate refuses a live entry.
+  const paper = ALL.find(s => s.name === 'value_area');
   assert.strictEqual(paper.status, 'paper');
   const home = tmpDir();
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
   const env = { FTH_HOME: home, PROJECTX_JOURNAL_PATH: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
   const res = node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], env,
-    JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:vwap_reclaim long, stop 27400' } }));
+    JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:value_area long, stop 27400' } }));
   assert.strictEqual(res.status, 2);
   assert.match(res.stderr, /status "paper"/);
 });

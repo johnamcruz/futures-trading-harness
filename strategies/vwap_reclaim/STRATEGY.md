@@ -1,8 +1,8 @@
 ---
 name: vwap_reclaim
-description: Trend-day VWAP reclaim on equity index micros - a 3-minute close back through RTH VWAP in the direction of the 50 EMA with ADX confirming. Example of a strategy whose trigger is written as rules in Markdown, no code.
+description: Trend-day VWAP reclaim on equity index micros - a 3-minute close back through RTH VWAP in the direction of the 50 EMA with ADX confirming. Its trigger is written as rules in Markdown, no code.
 version: 1
-status: paper
+status: active
 instruments: [MNQ, MES]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
@@ -23,12 +23,12 @@ filters:
 risk:
   stop: atr:1
   min_rr: 2
-source: example rules strategy (no backtest yet); keep in paper until reviewed
+source: rules strategy written for this harness (no backtest record yet); activated by the owner for the labelling replays (active means tradeable everywhere, live too), to be reviewed on its labelled trades
 ---
 
 # Strategy: VWAP Reclaim (`setup:vwap_reclaim`)
 
-An example of a fully Markdown-defined mechanical strategy: the `rules` block
+A fully Markdown-defined mechanical strategy: the `rules` block
 above is the trigger, evaluated in code by `strategies.js scan` on every
 closed bar. No JavaScript was written for it.
 

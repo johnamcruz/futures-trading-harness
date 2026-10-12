@@ -171,14 +171,14 @@ strategies/
   supertrend/STRATEGY.md     SuperTrend flip
   bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
-  vwap_reclaim/STRATEGY.md   VWAP reclaim, paper
+  vwap_reclaim/STRATEGY.md   VWAP reclaim, active
   ofi/STRATEGY.md            1m order-flow imbalance, paper
   ofi_absorption/STRATEGY.md 1m absorption reversal, paper
-  crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, paper
-  crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, paper
+  crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, active
+  crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, active
   value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, paper
-  value_area_reentry/        volume profile 80% rule, paper
-  value_area_breakout/       acceptance beyond the value area, paper
+  value_area_reentry/        volume profile 80% rule, active
+  value_area_breakout/       acceptance beyond the value area, active
   _template/STRATEGY.md      copy this to add a strategy
 ```
 
