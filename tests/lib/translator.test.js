@@ -328,3 +328,19 @@ test('server limits: each get_server_config answer records the server\'s maxOrde
   assert.match(brokerOrderLimit(cacheFile).why, /not recorded yet/);
   assert.strictEqual(brokerOrderLimit(null).maxOrderSize, null, 'no broker configured');
 });
+
+test('one search answer listing several months keeps its front month\'s spec, even when the clock moves while it is recorded', async () => {
+  // A clock that ticks a millisecond on every read: the months of one answer must still share one read time.
+  let t = NOW.getTime();
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const tr = createTranslator({ call: fakeBroker().call, cacheFile, now: () => new Date(t++) });
+  await tr.toBroker('MNQ');
+  const mnq = JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs.MNQ;
+  assert.deepStrictEqual([mnq.id, mnq.name, mnq.active], ['b-101', 'MNQZ6', true], 'the active month (listed first), not the March one after it');
+  // Listed the other way round, the active month still wins.
+  const reversed = path.join(tmpDir(), 'contracts-fake.json');
+  const call = async (name, args) => (name === 'search_contracts'
+    ? { content: [{ type: 'text', text: JSON.stringify(CONTRACTS.filter(c => c.name.includes(args.searchText)).reverse()) }] } : fakeBroker().call(name, args));
+  await createTranslator({ call, cacheFile: reversed, now: () => new Date(t++) }).toBroker('MNQ');
+  assert.strictEqual(JSON.parse(fs.readFileSync(reversed, 'utf8')).specs.MNQ.id, 'b-101');
+});
