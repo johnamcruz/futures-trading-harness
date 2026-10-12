@@ -74,11 +74,13 @@ description: Rules for running the trading harness unattended (headless, schedul
    `get_quote`, `get_bars`. A full cycle still runs its analysts in parallel.
    Don't repeat what the prompt or a role gave you (the trade-executor's
    report is the after-order read of trade-session step 6), except:
-   - The prompt lacks today's P&L and `remainingBeforeLimit`: a cycle that
-     may enter reads `get_account_snapshot` once (trade-session step 1). It
-     gives only a count of working orders and no scan details: read
-     `list_open_orders` and `strategies_scan` where a step names them.
-     Anything under "Context unavailable", read once yourself.
+   - The prompt lacks `remainingBeforeLimit` (and, without a prop attempt,
+     today's P&L): a cycle that may enter reads `get_account_snapshot` once
+     (trade-session step 1). It gives only a count of working orders, the
+     trend rule (not the multi-timeframe read's alignment), and no scan
+     details: read `list_open_orders`, `mtf_read`, and `strategies_scan`
+     where a step names them. Anything under "Context unavailable", read
+     once yourself.
    - Read the account and open orders once after each `place_order`,
      `modify_order`, `cancel_order`, `close_position`, or
      `partial_close_position`, including one that failed or timed out (its
