@@ -143,12 +143,14 @@ function sessionPermission(roles, denied = []) {
     ...Object.fromEntries(DENIED.map(k => [k, 'deny'])),
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
     skill: 'allow', todowrite: 'allow', websearch: 'allow',
-    task: { '*': 'deny', ...Object.fromEntries(roles.filter(r => !denied.includes(r)).map(r => [r, 'allow'])) },
+    // Every role by name, allowed or denied: a run config that only left a role out would keep the project's
+    // `allow` for it when opencode merges the two (key by key).
+    task: { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, denied.includes(r) ? 'deny' : 'allow'])) },
     // Orders go through the gateway, which enforces the order gate on every call. An entry is the trade-executor's
     // alone (it holds place_order; the head trader delegates the approved plan to it); the head trader keeps the
-    // reads and the risk-reducing calls (close, partial close, cancel, a stop tightened).
-    [`${BROKER_SERVER}_*`]: 'allow',
-    [`${BROKER_SERVER}_place_order`]: 'deny',
+    // reads and the risk-reducing calls (close, partial close, cancel, a stop tightened). Each broker tool by name,
+    // no wildcard: a merged config naming one can't reorder a wildcard after it.
+    ...Object.fromEntries(Object.keys(require('./broker/interface').TOOLS).map(t => [`${BROKER_SERVER}_${t}`, t === 'place_order' ? 'deny' : 'allow'])),
     [`${HARNESS_SERVER}_*`]: 'allow',
   };
 }

@@ -267,7 +267,7 @@ test('probe: opencode runs as the runner runs it, with every order tool denied f
     assert.strictEqual(run.permission[`broker_${o}`], 'deny', o);
     for (const a of [...loadAgents(ROOT).map(x => x.name), 'fth-head-trader']) assert.strictEqual(run.agent[a].permission[`broker_${o}`], 'deny', `${a}: ${o}`);
   }
-  assert.strictEqual(run.permission.broker_get_bars, undefined, 'read tools stay as the workspace config has them');
+  assert.strictEqual(run.permission.broker_get_bars, 'allow', 'read tools stay allowed');
   assert.ok(hc.HARNESSES.includes('opencode'));
   // The runner's own runs: only the probe denies every order tool; there the head trader alone can't place an entry
   // (the trade-executor's), and keeps the risk-reducing calls.
@@ -276,7 +276,7 @@ test('probe: opencode runs as the runner runs it, with every order tool denied f
   assert.strictEqual(own.permission.broker_place_order, 'deny');
   assert.strictEqual(own.agent['fth-head-trader'].permission.broker_place_order, 'deny');
   assert.strictEqual(own.agent['trade-executor'].permission.broker_place_order, 'allow');
-  assert.strictEqual(own.permission.broker_close_position, undefined, 'risk-reducing calls stay as the workspace config has them');
+  assert.strictEqual(own.permission.broker_close_position, 'allow', 'risk-reducing calls stay allowed');
 });
 
 test('analyze: opencode JSON events (the real transcript): MCP tools by server, the role through task, the refused shell', () => {

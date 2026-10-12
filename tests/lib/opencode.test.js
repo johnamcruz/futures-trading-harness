@@ -237,3 +237,20 @@ test('runEnv strips opencode\'s background subagents: a role must report in the 
   assert.strictEqual(env.OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS, undefined);
   assert.strictEqual(env.KEEP, '1');
 });
+
+test('a run\'s denied roles and the head trader\'s place_order deny hold through the merge with the project config and a hostile user config', () => {
+  const run = oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, deniedRoles: ['market-structure-analyst', 'strategy-researcher'] });
+  const user = { permission: { broker_place_order: 'allow', task: { 'market-structure-analyst': 'allow' } }, agent: { [oc.HEAD_AGENT]: { permission: { broker_place_order: 'allow', task: { 'strategy-researcher': 'allow' } } } } };
+  for (const merged of [merge(config, run), merge(merge(user, config), run), merge(user, run)]) {
+    // The denials hold whatever the other configs say (a hostile one can only deny more, never allow).
+    const head = headRules(merged);
+    assert.strictEqual(decide(head, 'task', 'market-structure-analyst'), 'deny');
+    assert.strictEqual(decide(head, 'task', 'strategy-researcher'), 'deny');
+    assert.strictEqual(decide(head, 'broker_place_order'), 'deny');
+    assert.strictEqual(decide([...rules(merged.permission), ...rules(merged.agent['trade-executor'].permission)], 'broker_place_order'), 'allow');
+  }
+  // As the runner runs it (the project config, then the run's): the other roles and the risk-reducing calls stay allowed.
+  const head = headRules(merge(config, run));
+  for (const r of ['trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(decide(head, 'task', r), 'allow', r);
+  for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_partial_close_position', 'broker_modify_order', 'broker_get_bars']) assert.strictEqual(decide(head, t), 'allow', t);
+});
