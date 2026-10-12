@@ -20,8 +20,11 @@ function tmpDir() {
  * The broker's tick specs for `roots`, as the contract translator records them
  * (contracts-<broker>.json, `specs`), so the gate has them for entries. By
  * default every root of the static table, at its values (what the broker reports).
+ * And the server's order limits from get_server_config (`server`, the gate's
+ * size check): maxOrderSize 50 unless `server` says otherwise; server: false
+ * leaves them as they are (none in a new file).
  */
-function recordBrokerSpecs(home, { roots = null, broker = 'topstepx', specs = {} } = {}) {
+function recordBrokerSpecs(home, { roots = null, broker = 'topstepx', specs = {}, server } = {}) {
   const { CONTRACT_SPECS } = require('../scripts/lib/trading/contracts');
   const file = path.join(home, `contracts-${broker}.json`);
   let data = { ids: {}, front: {} };
@@ -36,6 +39,7 @@ function recordBrokerSpecs(home, { roots = null, broker = 'topstepx', specs = {}
     data.specs[r] = { tickSize: t.tickSize, tickValue: t.tickValue, name: `${r}Z6`, description: null, id: `CON.F.US.${r}.Z26`, readAt: '2026-10-07T13:00:00.000Z', ...(specs[r] || {}) };
   }
   for (const [r, sp] of Object.entries(specs)) if (!data.specs[r]) data.specs[r] = { name: `${r}Z6`, id: `CON.F.US.${r}.Z26`, readAt: '2026-10-07T13:00:00.000Z', ...sp };
+  if (server !== false && (server !== undefined || !data.server)) data.server = { maxOrderSize: 50, readAt: '2026-10-07T13:00:00.000Z', ...(server || {}) };
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data));
   return file;

@@ -294,3 +294,37 @@ test('tick specs: a spec that differs from the static table is said on stderr, o
   await newer.translateResult('search_contracts', [{ id: 'x-1', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]);
   assert.strictEqual(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).specs.MNQ.tickValue, 0.5);
 });
+
+test('server limits: each get_server_config answer records the server\'s maxOrderSize in the local file; the later read wins; a bad one records null', async () => {
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const { brokerOrderLimit } = require('../../scripts/lib/trading/broker-specs');
+  assert.strictEqual(brokerOrderLimit(cacheFile).maxOrderSize, null, 'nothing recorded yet');
+  assert.match(brokerOrderLimit(cacheFile).why, /not recorded yet: call get_server_config/);
+  const t = createTranslator({ call: async () => { throw new Error('no lookups'); }, cacheFile, now: () => NOW });
+  const answer = { tradingEnabled: true, maxOrderSize: 3, maxPositionSize: 5, serverTime: NOW.toISOString() };
+  assert.deepStrictEqual(await t.translateResult('get_server_config', answer), answer, 'the answer passes through unchanged');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(cacheFile, 'utf8')).server, { maxOrderSize: 3, readAt: NOW.toISOString() });
+  assert.deepStrictEqual(brokerOrderLimit(cacheFile), { maxOrderSize: 3, readAt: NOW.toISOString() });
+  // An older read in another process never replaces it; a newer one does.
+  const older = createTranslator({ call: async () => null, cacheFile, now: () => new Date(NOW.getTime() - 60000) });
+  await older.translateResult('get_server_config', { ...answer, maxOrderSize: 40 });
+  assert.strictEqual(brokerOrderLimit(cacheFile).maxOrderSize, 3);
+  // A malformed answer (a fraction, zero, a string, missing) is recorded as no limit: entries wait for a valid one.
+  for (const [i, bad] of [1.5, 0, '3', undefined, -2].entries()) {
+    const later = createTranslator({ call: async () => null, cacheFile, now: () => new Date(NOW.getTime() + (i + 1) * 60000) });
+    await later.translateResult('get_server_config', { ...answer, maxOrderSize: bad });
+    assert.strictEqual(brokerOrderLimit(cacheFile).maxOrderSize, null, JSON.stringify(bad));
+    assert.match(brokerOrderLimit(cacheFile).why, /no valid maxOrderSize/);
+  }
+  // The contract ids, front months and specs in the file are kept.
+  fs.writeFileSync(cacheFile, JSON.stringify({ ids: { 'b-1': { root: 'MNQ', month: '2026-12' } }, front: {}, specs: {} }));
+  await createTranslator({ call: async () => null, cacheFile, now: () => NOW }).translateResult('get_server_config', answer);
+  const file = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+  assert.deepStrictEqual([file.ids['b-1'].root, file.server.maxOrderSize], ['MNQ', 3]);
+  // A hand-edited, poisoned file is not believed by the reader either.
+  fs.writeFileSync(cacheFile, JSON.stringify({ ...file, server: { maxOrderSize: 2.5, readAt: NOW.toISOString() } }));
+  assert.strictEqual(brokerOrderLimit(cacheFile).maxOrderSize, null);
+  fs.writeFileSync(cacheFile, JSON.stringify({ ...file, server: [5] }));
+  assert.match(brokerOrderLimit(cacheFile).why, /not recorded yet/);
+  assert.strictEqual(brokerOrderLimit(null).maxOrderSize, null, 'no broker configured');
+});
