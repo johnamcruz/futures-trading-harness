@@ -31,11 +31,13 @@
  * launch still running or in the background ends it at its start; the one
  * placing this order excepted), so each entry has its own round of reports.
  * opencode prints a call when it ends, so two trade-executors launched at once
- * both see the same round. For the same contract the gate's
- * review-before-next-entry check refuses the second once the broker server has
- * journalled the first entry; a second contract in the same cycle is limited
- * only by the autonomous-trading skill's one-entry rule and max-entries. Phase 2 is a risk-manager call that
- * started after phase 1 (and, in a full cycle, every analyst) had returned.
+ * both see the same round. The gateway's account gate (account-gate.js)
+ * covers the second entry: on the same root, position-open (counting orders in
+ * flight) and working-orders refuse it, as does review-before-next-entry once
+ * the first is journalled; on another root, prop-one-position on a prop
+ * attempt and correlated-exposure for a same-direction equity index once the
+ * first position shows. Otherwise only the autonomous-trading skill's
+ * one-entry rule and max-entries limit it.
  *
  *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }
  *   rolesInTranscript(text)              Map role -> calls that count
