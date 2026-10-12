@@ -136,3 +136,27 @@ test('Claude: a subagent that only acknowledged a background launch has not repo
   const qans = id => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response: { output: 'started' } } }] } });
   assert.deepStrictEqual(calls([qcall('q', 'risk-manager', { run_in_background: true }), qans('q')].join('\n')), []);
 });
+
+test('Qwen Code: every trade-executor launch ends the round too, one at a time', () => {
+  const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
+  const answer = id => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response: { output: 'report' } } }] } });
+  const round = p => [...ANALYSTS.map((r, i) => call(`${p}a${i}`, r)), call(`${p}p1`, 'risk-manager'), ...ANALYSTS.map((_r, i) => answer(`${p}a${i}`)), answer(`${p}p1`), call(`${p}p2`, 'risk-manager'), answer(`${p}p2`)];
+  const m = lines => missingRoles(roleCalls(lines.join('\n')), 'full');
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor')]), [], 'the current launch, running');
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor'), call('e2', 'trade-executor')]), ['one trade-executor at a time (2 running)']);
+  assert.strictEqual(m([...round('x'), call('e1', 'trade-executor'), answer('e1'), call('e2', 'trade-executor')]).length, 5, 'a finished launch ended the round');
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor'), answer('e1'), ...round('y'), call('e2', 'trade-executor')]), []);
+});
+
+test('a report that merely mentions a background process is still a report; only an acknowledgment opening the result is not', () => {
+  const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type } }] } });
+  const result = (id, text) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }] }] } });
+  assert.strictEqual(roleCalls([call('a', 'volume-liquidity-analyst'), result('a', '## Volume/Liquidity: an iceberg bid appears to be running in the background at 21450.25')].join('\n')).calls.length, 1);
+  assert.strictEqual(roleCalls([call('a', 'volume-liquidity-analyst'), result('a', 'Async agent launched successfully.')].join('\n')).calls.length, 0);
+});
+
+test('the refusal says the refused call ended the round, so the cycle ends and the next entry runs every role again', () => {
+  const file = path.join(tmpDir(), 'cycle-transcript-2.jsonl');
+  fs.writeFileSync(file, FULL.slice(0, 2).join('\n'));
+  assert.match(checkRolesRan(file, 'full'), /This refused trade-executor call ends the round: report the block and end the cycle \(trade-session step 6\); the next entry needs every role again/);
+});

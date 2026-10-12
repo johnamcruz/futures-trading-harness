@@ -29,7 +29,10 @@
  *
  * Only calls that started after the last trade-executor launch ended count (a
  * launch still running or in the background ends it at its start; the one
- * placing this order excepted), so each entry has its own round of reports. Phase 2 is a risk-manager call that
+ * placing this order excepted), so each entry has its own round of reports.
+ * opencode prints a call when it ends, so two trade-executors launched at once
+ * both see the same round; the gate's review-before-next-entry check and the
+ * one-entry-a-cycle rule (autonomous-trading skill) cover that race. Phase 2 is a risk-manager call that
  * started after phase 1 (and, in a full cycle, every analyst) had returned.
  *
  *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }
@@ -48,8 +51,9 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const PHASE2 = 'risk-manager phase 2 (a second call, started after phase 1';
 const EXECUTOR = 'trade-executor';
 // Claude Code's answer when a subagent was launched in the background instead of run.
-const LAUNCHED = /\b(async agent launched|launched in the background|running in the background)\b/i;
-const resultText = c => (typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => (isObj(x) ? String(x.text || '') : String(x))).join(' ') : '');
+const LAUNCHED = /^\s*Async agent launched\b/i;
+// The result's first text (an acknowledgment opens it; a report that merely mentions the words doesn't).
+const resultText = c => (typeof c === 'string' ? c : Array.isArray(c) ? String((c.find(x => isObj(x) && typeof x.text === 'string') || {}).text || '') : '');
 
 const roleOf = v => (typeof v === 'string' && v.trim() ? v.trim().split(':').pop() : null);
 const isObj = v => Boolean(v) && typeof v === 'object';
@@ -133,7 +137,7 @@ function missingRoles({ calls = [], launches = [] }, cycle) {
   // launch, finished, errored, running or in the background, ends the round: its end, else its start.
   const pending = launches.filter(l => l.pending);
   if (pending.length > 1) return [`one trade-executor at a time (${pending.length} running)`];
-  const current = pending.length ? pending.reduce((a, b) => (b.start > a.start ? b : a)) : null;
+  const current = pending[0] || null;
   const lastExec = Math.max(-Infinity, ...launches.filter(l => l !== current).map(l => (l.end ?? l.start)));
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
@@ -174,7 +178,7 @@ function checkRolesRan(transcriptPath, cycle) {
   }
   const missing = missingRoles(roleCalls(texts.join('\n')), cycle);
   return missing.length
-    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. Run each as a subagent by its agent name, wait for its report, use it in the plan, then enter.`
+    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2, before its trade-executor call.`
     : null;
 }
 

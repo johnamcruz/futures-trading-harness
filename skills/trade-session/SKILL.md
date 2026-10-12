@@ -160,8 +160,10 @@ gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 returned as subagents this cycle, `risk-manager` twice (phase 1, then phase
 2 once phase 1 and the analysts have returned), each in the foreground (a
 background launch hasn't reported), and since the last `trade-executor` call:
-each entry has its own round of reports. The refusal names the roles still
-missing: run them, use their reports, then enter.
+each entry has its own round of reports. The refusal names the roles that
+were missing; the refused `trade-executor` call itself ends the round, so
+report the block and end the cycle (step 6): the next cycle runs every role
+again.
 
 | Role (agent file) | Returns |
 |---|---|
