@@ -27,6 +27,7 @@
   "everyNthBar": 1,
   "premarket": true,
   "endOfDay": true,
+  "prop": "topstep_100k",
   "brokerEnv": {
     "clockFile": "BACKTESTER_CLOCK_FILE",
     "stateDir": "BACKTESTER_STATE_DIR",

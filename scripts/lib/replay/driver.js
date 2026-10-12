@@ -45,6 +45,8 @@ const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
+const { readAttempt, startAttempt } = require('../trading/prop-state');
+const { accountNamed } = require('../trading/accounts');
 
 const EOD_RETRIES = 5;
 // Minutes from the 18:00 ET open to the 16:00 ET close.
@@ -230,6 +232,12 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     runId: run.runId, hash: configHash(run, baseEnv),
     info: { broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
+  // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of
+  // the window is inside it. Once only (a resumed run keeps the one it has).
+  if (run.prop && !readAttempt(paths.runHome, run.prop)) {
+    startAttempt(paths.runHome, accountNamed(root || run.root, run.prop, startEnv), run.start);
+    log(`started a ${run.prop} attempt at ${run.start.toISOString()}`);
+  }
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   const recorded = store.recordedTimes(paths.runDir);
   recoverPending(paths, manifest, log, recorded);

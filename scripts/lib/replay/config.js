@@ -18,6 +18,8 @@
  *   everyNthBar    1 (every closed bar) or more
  *   premarket      run premarket at premarketAt (default true)
  *   endOfDay       the agents' end-of-day review (default true); end of day always flattens
+ *   prop           a prop account profile (e.g. topstep_100k): a fresh run starts its attempt at `start`, before the
+ *                  first decision, so every trade of the window is inside it (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's)
  *
  * Isolation: the run home is a fresh harness home (FTH_HOME) of its own, never
@@ -121,6 +123,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const everyNth = r.everyNthBar === undefined ? 1 : r.everyNthBar;
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
   for (const k of ['premarket', 'endOfDay']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);
+  if (r.prop !== undefined && !(typeof r.prop === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(r.prop))) errors.push('prop: an account profile name, e.g. topstep_100k');
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -152,7 +155,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const cfg = validateConfig(derived);
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
-    brokerEnv, paths, derived, cfg, autotraderFile, root,
+    prop: r.prop || null, brokerEnv, paths, derived, cfg, autotraderFile, root,
   };
 }
 
@@ -240,7 +243,7 @@ function configHash(run, base = process.env) {
   const brokerSettings = Object.fromEntries((b.env || []).filter(k => !own.has(k)).sort().map(k => [k, env[k] ?? null]));
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
-    premarket: run.premarket, endOfDay: run.endOfDay, command: harnessCommand(run, base), gate,
+    premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     brokerEntry: { ...b, journalPath: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, ['strategies', 'accounts', 'models', 'skills', 'agents', 'rules']) : null,
