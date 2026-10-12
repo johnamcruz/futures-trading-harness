@@ -221,6 +221,9 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   // Exact names: a longer account name never stands in for this one.
   const two = { ...ACCT, attempts: [...active.attempts, { account: 'topstep_100k-b', status: 'active' }] };
   assert.strictEqual(record('Attempt: topstep_100k-b active', two).phase1, null);
+  assert.strictEqual(record('Attempt: old-topstep_100k active', active).phase1, null, 'a longer name ending in this one');
+  // The status is the word right after the name: an active elsewhere on the line doesn't confirm it.
+  assert.strictEqual(record('Attempt: topstep_100k blown, earlier active', active).phase1, null);
   assert.ok(record('Attempt: topstep_100k active\nAttempt: topstep_100k-b active', two).phase1);
   assert.strictEqual(RC.phase1Holds('Budget: per trade $900', ACCT), true, 'no active attempt: nothing to confirm');
   // With no active attempt the same words are true: cached as before.
