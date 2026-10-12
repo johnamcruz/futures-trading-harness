@@ -21,7 +21,8 @@ broker.
   gate checks refuse it).
 - Setting up a replay broker, starting a replay, resuming one, or reading its
   report.
-- Turning a run into labels for training a student policy (step 10).
+- Turning a run into labels for training a student policy (step 10), and
+  labelled runs into a training dataset (step 11).
 - Not inside an autonomous cycle: replays, like backtests and training, are
   the user's to start. An agent may explain and prepare the config.
 
@@ -133,6 +134,32 @@ broker.
    Code, opencode); a custom harness printing plain text shows it as a
    hold.
 
+11. **Dataset.** `node scripts/rl-dataset.js build <run dir> ... --out <file.jsonl>`
+   turns labelled runs into the rows a student policy trains on (several
+   runs merge in time order; a labels folder written with `--out` needs its
+   run: `--run <run dir>`). Write it outside the repository and outside
+   the run homes it reads (refused there). Each row is the observation live trading builds at the label's
+   decision time (the policy strategy's, `--strategy`, default
+   `prop_portfolio`: the last bars closed by then, the setup the live
+   screen picks on that bar, the account as an attempt of the strategy's
+   account started on the run's first day and moved by the run's own
+   closed trades, the open trade the cycle showed) and the teacher's
+   decision as an action: `--mode student` (default: flat `none` or
+   `long`/`short` at a stop multiple and size step, in a trade `hold`,
+   `tighten`, `exit`) or `--mode env` (today's env: `skip`, `half`, `full`
+   at the policy's setup, half or full by the teacher's size against the
+   policy's own plans; `hold`, `close` past the ratchet). A run whose
+   policy screened its scans (an attempt running in its home) is excluded,
+   not read yet. Outcomes and
+   counterfactuals are targets, never inputs. Only cloneable decisions
+   become rows (refused intents only with `--include-refused`); the rest is
+   counted by reason. Label with `--budget` first (an entry's size step
+   needs it), and pass the data the run replayed with `--bars` (a decision
+   with fewer bars closed by then than the runner reads is excluded). Read
+   the printed counts (rows, actions, excluded by reason). The dataset
+   records its observation version: a trainer on another observation
+   refuses it, so rebuild it after the observation changes.
+
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
 next run resumes. One driver runs a run at a time (a lock in its folder).
@@ -162,6 +189,7 @@ node scripts/replay.js run --config replay.json --max-cycles 50
 node scripts/replay.js run --config replay.json       # resumes after the last decision time done
 node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03
 node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
+node scripts/rl-dataset.js build ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --out ~/fth-datasets/mnq-ny-2024-03.jsonl --bars MNQ=~/data/MNQ-1m.parquet
 ```
 
 ```text

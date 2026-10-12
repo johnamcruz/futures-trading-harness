@@ -125,6 +125,18 @@ broker and reports month by month; its records are the labels a later student
 policy would learn from. The same window
 rules apply: don't choose a trader on the window you report it on.
 
+A student policy learns from those labels through a dataset:
+`node scripts/rl-dataset.js build <labelled run dir> ... --out <file.jsonl>`
+(the `replay` skill, step 11) writes, outside the repository, one row per
+cloneable teacher decision: the observation this harness builds live at that
+time (the same code as the env and the live runner) and the teacher's action
+(`--mode student`, the design's actions, or `--mode env`, today's), with
+outcomes as targets only, and prints the rows, the actions, and what it
+excluded by reason. The trainer reads it with `rl/fth_rl/dataset.py`, which
+refuses a dataset built with another observation version (rebuild it).
+Behaviour cloning on it is not built yet; build datasets only from the train
+window's runs.
+
 ## Examples
 
 ```text

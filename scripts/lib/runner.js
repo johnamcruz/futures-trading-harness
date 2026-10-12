@@ -988,4 +988,4 @@ function createRunner(deps) {
   return { step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); } };
 }
 
-module.exports = { createRunner, IDLE_MS, ACCOUNT_READ_MS };
+module.exports = { createRunner, IDLE_MS, ACCOUNT_READ_MS, FILL_GRACE_MS };

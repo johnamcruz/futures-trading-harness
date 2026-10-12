@@ -23,6 +23,9 @@
  * strategy's strategies fire with (and against) the setup on this bar.
  */
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { sessionMinute } = require('../trading/clock');
 const ind = require('../trading/indicators');
 const { ruleSeries } = require('../trading/mtf');
@@ -160,4 +163,29 @@ function confluence(results, setupName, sign) {
   return { with: others.filter(r => r.direction === want).length, against: others.filter(r => r.direction !== want).length };
 }
 
-module.exports = { OBS_FIELDS, OBS_DIM, RECENT_BARS, observationFields, buildObservation, marketFeatures, confluence };
+// The source files whose code computes an observation's values: this module, the market features' indicators,
+// trend rule and volume profile, the clock, the account state and sizing, the live builders, and the label
+// dataset's reconstruction. Any edit to one is another observation version.
+const OBSERVATION_SOURCES = ['rl/observation.js', 'rl/live.js', 'rl/label-dataset.js', 'trading/indicators.js', 'trading/mtf.js',
+  'trading/volume-profile.js', 'trading/clock.js', 'trading/combine.js', 'trading/prop-state.js', 'trading/contracts.js',
+  'backtest/engine.js', 'trading/evaluator.js', 'replay/labels.js', 'trading/open-trades.js', 'trading/broker-specs.js',
+  'broker/translator.js'];
+// The modules that compute the observation's values directly; their own dependencies (rules, regime, ...) are not
+// hashed: a full transitive closure would change the version on unrelated edits.
+
+/**
+ * The observation's version for a policy strategy: sha256 of its fields, the
+ * volume-profile settings its params give, and the source of the modules that
+ * compute it (OBSERVATION_SOURCES). Anything trained on observations (a label
+ * dataset) records it; one built with another version is refused at train
+ * time (rl/fth_rl/dataset.py).
+ */
+function observationVersion(components = [], params = {}) {
+  const lib = path.resolve(__dirname, '..');
+  return crypto.createHash('sha256').update(JSON.stringify({
+    fields: observationFields(components), profile: optionsFromParams(params || {}),
+    code: OBSERVATION_SOURCES.map(f => [f, fs.readFileSync(path.join(lib, f), 'utf8')]),
+  })).digest('hex');
+}
+
+module.exports = { OBS_FIELDS, OBS_DIM, RECENT_BARS, OBSERVATION_SOURCES, observationFields, observationVersion, buildObservation, marketFeatures, confluence };
