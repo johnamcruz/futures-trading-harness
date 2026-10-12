@@ -194,7 +194,8 @@ test('roles served from the report cache count as returned; phase 2 still runs, 
   assert.deepStrictEqual(missingRoles(roleCalls([oc(ANALYSTS[2], [10, 20]), oc('risk-manager', [21, 25])].join('\n')), 'full', cached), []);
   // A lean cycle with phase 1 cached: phase 2 alone.
   assert.deepStrictEqual(missingRoles(roleCalls(oc('risk-manager', [1, 2])), 'lean', ['risk-manager']), []);
-  // Each entry still has its own round: phase 2 after the last trade-executor call.
+  // Each entry has its own round: after a trade-executor launch the cache counts no more, every role runs again.
   const exec = oc('trade-executor', [50, 60]);
-  assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec].join('\n')), 'full', all), ['risk-manager phase 2 (started after the cached reports were given)']);
+  assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'full', all), [...ANALYSTS, `${P2} and the analysts returned)`]);
+  assert.deepStrictEqual(missingRoles(roleCalls([oc('risk-manager', [30, 40]), exec, oc('risk-manager', [70, 80])].join('\n')), 'lean', ['risk-manager']), [`${P2} returned)`]);
 });

@@ -872,6 +872,9 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
   assert.strictEqual(fs.readFileSync(seen, 'utf8'), '{"a":1}\n', 'mid-run: the first line only (stderr is not the transcript), the leftover gone');
   assert.ok(!fs.existsSync(live), 'removed once the run ended (the cycle log keeps the transcript)');
   assert.match(r.output, /\{"b":2\}/);
+  // The stdout alone (what the runner records reports from, as the gate reads it): no stderr in it.
+  assert.strictEqual(r.stdout, `{"a":1}\n{"b":2}\n`);
+  assert.match(r.output, /oops/);
   // Without a live file nothing is written.
   const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r2.ok, true);

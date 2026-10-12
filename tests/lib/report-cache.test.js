@@ -129,3 +129,29 @@ test('the runner\'s report cache (runner-wiring reportCacheFor): opencode and Cl
   const bad = reportCacheFor(ro, { harness: 'opencode', cycle: 'full' });
   assert.throws(() => bad.record({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), output, served: [] }));
 });
+
+test('review fixes: one-symbol cycles only for analysts; an account not read whole or a cycle with an entry gives no phase 1; a long report isn\'t cached', () => {
+  const { a, b } = pair();
+  const now = new Date(a.closedAt);
+  const output = [task(ANALYSTS[0], `${data(a)}\nBias: long`, [1, 2]), task('risk-manager', 'Phase 1', [1, 2])].join('\n');
+  // Two symbols in the cycle: one analyst call can't show which symbols it covered, so no analyst report is cached or served.
+  const MES = { ...a, symbol: 'MES' };
+  const two = [...sym(a), { symbol: 'MES', bar: a.asOf, contractId: 'MES:2026-06' }];
+  const c2 = RC.recordReports({ output, briefings: { MNQ: a, MES }, symbols: two, account: ACCT, day: DAY, now });
+  assert.deepStrictEqual(c2.analysts, {});
+  assert.deepStrictEqual(RC.serveReports({ cache: { ...c2, analysts: { [ANALYSTS[0]]: { text: 'x', versions: RC.reportVersions(data(b)) } } }, briefings: { MNQ: b, MES: { ...b, symbol: 'MES' } }, symbols: [...sym(b), { symbol: 'MES', bar: b.asOf, contractId: 'MES:2026-06' }], account: ACCT, day: DAY }).roles, ['risk-manager']);
+  // An account read without positions, orders or a balance is never "unchanged".
+  for (const acct of [{ ...ACCT, positions: null }, { ...ACCT, orders: null }, { ...ACCT, balance: NaN }, { ...ACCT, error: 'timeout' }]) assert.strictEqual(RC.accountKey(acct), null, JSON.stringify(acct));
+  // Two errored reads in a row: still never served.
+  const err = { id: 7, error: 'timeout' };
+  const ce = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: err, day: DAY, now });
+  assert.strictEqual(ce.phase1, null);
+  // A cycle that launched a trade-executor: no phase 1 from it (the account changed, or may have).
+  const withExec = `${output}\n${task('trade-executor', 'placed', [5, 6])}`;
+  assert.strictEqual(RC.recordReports({ output: withExec, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).phase1, null);
+  assert.strictEqual(RC.recordReports({ prev: RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }), output: withExec, served: ['risk-manager'], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now }).phase1, null, 'not even a served one');
+  // A report longer than the cache holds is not cached (never served cut).
+  const long = `${data(a)}\n${'x'.repeat(9000)}\nBias: long`;
+  assert.deepStrictEqual(RC.recordReports({ output: task(ANALYSTS[0], long, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).analysts, {});
+  assert.strictEqual(RC.recordReports({ output: task('risk-manager', 'y'.repeat(9000), [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now }).phase1, null);
+});

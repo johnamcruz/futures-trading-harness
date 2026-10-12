@@ -156,12 +156,14 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
   const missing = [];
-  // Analysts served from the report cache count as returned; the rest must run.
-  const needed = cycle === 'full' ? ANALYSTS.filter(r => !cached.includes(r)) : [];
+  // Roles served from the report cache count in the cycle's first round only: after a trade-executor launch (an
+  // entry, or an attempt at one) the account and the plan changed, so every role runs again.
+  const counted = lastExec === -Infinity ? cached : [];
+  const needed = cycle === 'full' ? ANALYSTS.filter(r => !counted.includes(r)) : [];
   for (const r of needed) if (!fresh.some(c => c.role === r)) missing.push(r);
   const rm = fresh.filter(c => c.role === 'risk-manager');
   const ranAfter = needed.filter(r => fresh.some(c => c.role === r)).map(firstEnd);
-  if (cached.includes('risk-manager')) {
+  if (counted.includes('risk-manager')) {
     // Phase 1 served from the cache: phase 2 is a risk-manager call started after every analyst that ran.
     if (!rm.some(c => c.start > Math.max(-Infinity, ...ranAfter))) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
     return missing;

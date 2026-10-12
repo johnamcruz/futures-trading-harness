@@ -47,8 +47,8 @@ function liveWriter(file) {
 
 /**
  * Run argv in its own process group (so a timeout kills the harness and
- * everything it started). Resolves { ok, timedOut, code, output } once the
- * harness process exits: a detached grandchild still holding its output
+ * everything it started). Resolves { ok, timedOut, code, output, stdout } once the
+ * harness process exits (`stdout`: the standard output alone): a detached grandchild still holding its output
  * pipes can't hold up the loop, and whatever it left in its process group is
  * stopped.
  * `onChild(child|null)` tracks the running child for signal handling.
@@ -61,6 +61,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
     const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     onChild(child);
     let output = '';
+    let stdout = ''; // the transcript alone (the gate's view: liveFile), without stderr
     let timedOut = false;
     const killGroup = sig => {
       try {
@@ -69,7 +70,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
         child.kill(sig);
       }
     };
-    child.stdout.on('data', c => { output += c; live(c); });
+    child.stdout.on('data', c => { output += c; stdout += c; live(c); });
     child.stderr.on('data', c => { output += c; });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -81,7 +82,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       clearTimeout(timer);
       onChild(null);
       live.done();
-      resolve({ ok: false, timedOut, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
+      resolve({ ok: false, timedOut, stdout, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
@@ -96,7 +97,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
         child.stderr.destroy();
         live.done();
         const exitCode = code === null ? (signal ? 1 : 0) : code;
-        resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output });
+        resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output, stdout });
       }, 200);
     });
   });

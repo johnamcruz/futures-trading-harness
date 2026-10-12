@@ -3,12 +3,14 @@
 /**
  * The analyst report cache: a role's report is reused, not run again, while what it was built on holds.
  *
- *   - An analyst's report (market structure, trend and momentum, volume and liquidity) holds while the bar
+ *   - An analyst's report (market structure, trend and momentum, volume and liquidity), in a one-symbol cycle (a
+ *     report covers the symbols its cycle gave it, which one call can't show), holds while the bar
  *     briefing's m15, h1 and day parts it names in its Data line are the current ones, for the same symbols and
  *     contracts: until the next 15m close (an h1 or day change comes at a 15m close too). Its 15m-and-up view is
  *     what is reused; the 3m facts (the trigger, the VWAP side, the candidates) come from each bar's briefing.
  *   - risk-manager phase 1 (the account's state, limits, budget) holds while the account is unchanged (balance,
- *     positions, working orders, prop attempts) on the same trading day.
+ *     positions, working orders, prop attempts) on the same trading day; never from a cycle that launched a
+ *     trade-executor, nor on an account that wasn't read whole.
  *   - risk-manager phase 2 reviews this bar's plan: never cached.
  *
  * The runner records the reports from each cycle's transcript (the roles can't write the harness home), serves
@@ -29,7 +31,7 @@ const { ANALYSTS, roleCalls } = require('./roles-ran');
 const PHASE1 = 'risk-manager';
 const CACHED_ROLES = [...ANALYSTS, PHASE1];
 const PARTS = ['m15', 'h1', 'day'];
-const MAX_TEXT = 8000; // a report is served whole up to this many characters
+const MAX_TEXT = 8000; // a longer report isn't cached (never served cut): the role runs again
 
 /** The briefing versions a report names in its Data line (`Data: bar_briefing m3@..., m15@..., h1@..., day@...`). */
 function reportVersions(text) {
@@ -68,7 +70,7 @@ function untilOf(briefings, symbols) {
 
 /** The account facts phase 1 rests on: any change (a fill, an order, a balance, an attempt) makes it stale. */
 function accountKey(a) {
-  if (!a || a.error) return null;
+  if (!a || a.error || !Number.isFinite(a.balance) || !Array.isArray(a.positions) || !Array.isArray(a.orders)) return null;
   return JSON.stringify({
     id: a.id ?? null,
     balance: a.balance ?? null,
@@ -86,7 +88,7 @@ function serveReports({ cache, briefings, symbols, account, day }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
   const reports = [];
-  const v = briefingVersions(briefings, symbols);
+  const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
   const until = untilOf(briefings, symbols);
   for (const role of ANALYSTS) {
     const r = (cache.analysts || {})[role];
@@ -106,21 +108,24 @@ function serveReports({ cache, briefings, symbols, account, day }) {
 function recordReports({ prev, output, served = [], briefings, symbols, account, day, now }) {
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
-  const v = briefingVersions(briefings, symbols);
-  const { calls } = roleCalls(output);
+  const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
+  const { calls, launches } = roleCalls(output);
+  const fits = t => typeof t === 'string' && t.length <= MAX_TEXT;
   for (const role of ANALYSTS) {
-    const mine = calls.filter(c => c.role === role && typeof c.text === 'string');
+    const mine = calls.filter(c => c.role === role);
     const last = mine.sort((a, b) => a.end - b.end)[mine.length - 1];
     const versions = last ? reportVersions(last.text) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
-    if (v && versions && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text.slice(0, MAX_TEXT), versions, at: now.toISOString() };
+    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString() };
     else if (served.includes(role) && keep && keep.analysts && keep.analysts[role]) cache.analysts[role] = keep.analysts[role];
   }
   const key = accountKey(account);
-  if (served.includes(PHASE1)) cache.phase1 = keep ? keep.phase1 : null;
+  // A cycle that launched a trade-executor changed (or may have changed) the account: no phase 1 from it.
+  if (launches.length) cache.phase1 = null;
+  else if (served.includes(PHASE1)) cache.phase1 = keep ? keep.phase1 : null;
   else {
-    const rm = calls.filter(c => c.role === PHASE1 && typeof c.text === 'string').sort((a, b) => a.start - b.start)[0];
-    if (rm && key) cache.phase1 = { text: rm.text.slice(0, MAX_TEXT), account: key, day, at: now.toISOString() };
+    const rm = calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
+    if (rm && key && fits(rm.text)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
   }
   return cache;
 }

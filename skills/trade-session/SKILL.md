@@ -170,13 +170,15 @@ contractId, and the current time.
 
 **Cached reports.** The autonomous runner keeps each role's last report and
 gives it again under "Cached reports" in the prompt while what it rests on
-holds: an analyst's report while the bar briefing parts it was built on are
-current (until the next 15m close), `risk-manager` phase 1 while the
-account is unchanged (no fill, order, balance or attempt change, same day).
+holds: in a one-symbol cycle, an analyst's report while the bar briefing
+parts it was built on are current (until the next 15m close); `risk-manager`
+phase 1 while the account is unchanged (no fill, order, balance or attempt
+change, same day, and no `trade-executor` call in the cycle that wrote it).
 Don't launch a role whose report the prompt gives: use that report for its
 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side,
 the candidates) from the bar briefing. Phase 2 reviews this bar's plan and
-is never cached.
+is never cached. Cached reports count for the cycle's first entry only: after a
+`trade-executor` call, the next entry needs every role again.
 
 Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and

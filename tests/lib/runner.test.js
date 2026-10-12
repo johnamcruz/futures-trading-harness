@@ -977,8 +977,15 @@ test('the report cache: valid reports go into the trade prompt and the gate\'s c
   const t = broken.cycles.filter(c => c.action === 'trade');
   assert.ok(t.length >= 1 && t.every(c => !/Cached reports/.test(c.prompt) && c.context.cachedRoles.length === 0));
   assert.ok(logs.some(l => /the report cache: every role runs this cycle.*bad cache/.test(l)), logs.join('\n'));
-  // Paper mode lists no roles to launch, so nothing is served.
+  // Paper mode lists no roles to launch, so nothing is served or recorded.
   const paper = [];
-  await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3, paper: true }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }), deps: { reportCache: { serve: q => paper.push(q), record: () => {} } } });
+  await simulate({ cfg: { symbols: ['MNQ'], timeframe: 3, paper: true }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }), deps: { reportCache: { serve: q => paper.push(q), record: q => paper.push(q) } } });
   assert.deepStrictEqual(paper, []);
+  // Manage-only cycles (the daily cap reached): neither served nor recorded (their risk-manager isn't phase 1).
+  const manage = [];
+  const m = await simulate({ cfg: { timeframe: 3, maxCyclesPerDay: 2, account: '1' }, from: et(10, 0), to: et(10, 30), market: fakeMarket({ minutes: 3 }), positions: { net: 1, working: 1 }, deps: { reportCache: { serve: q => { manage.push(['serve', q]); return { roles: [], reports: [] }; }, record: q => manage.push(['record', q]) } } });
+  const trades = m.cycles.filter(c => c.action === 'trade').length;
+  assert.ok(m.cycles.some(c => c.action === 'manage'), 'control: manage-only cycles ran');
+  assert.strictEqual(manage.filter(([k]) => k === 'serve').length, trades);
+  assert.strictEqual(manage.filter(([k]) => k === 'record').length, trades);
 });
