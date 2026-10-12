@@ -309,7 +309,7 @@ function ruleLine(r) {
   if (!r.ready) return `Trend rule: ${r.reason}; trend strategies can't enter yet, reversal strategies can.`;
   if (!r.prevailing) return 'Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.';
   const against = r.longAllowed ? 'short' : 'long';
-  return `Trend rule: prevailing trend ${r.prevailing}; trend strategies may not go ${against}, reversal strategies (mtf: reversal) may.`;
+  return `Trend rule: prevailing trend ${r.prevailing}; trend strategies may not go ${against}; reversal strategies (mtf: reversal) may go ${against} too.`;
 }
 
 /**

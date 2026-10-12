@@ -61,6 +61,8 @@ description: Rules for running the trading harness unattended (headless, schedul
    must be exactly:**
    `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`
    (one outcome word, then ` - ` and the reason, as in the examples below).
+   `blocked` only when the order gate, the gateway or the broker refused an
+   order this cycle; nothing fired, or you stood aside, is `no-trade`.
    The runner reads only that line, from your final message: a summary, a
    table, or "Decision: NO TRADE" in its place is logged as "none reported",
    even when the cycle did its work. Write it last, after every tool call,
