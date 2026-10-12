@@ -111,7 +111,8 @@ function appendLog(now, text) {
 }
 
 function runOnce(cfg, argv, timeoutMs) {
-  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env: childEnv(cfg, ROOT), timeoutMs, onChild: c => { activeChild = c; } });
+  const env = childEnv(cfg, ROOT);
+  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env, timeoutMs, liveFile: env.FTH_CYCLE_TRANSCRIPT, onChild: c => { activeChild = c; } });
 }
 
 let workspaceBaseline = null;

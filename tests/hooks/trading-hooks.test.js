@@ -1414,3 +1414,33 @@ test('order gate wiring: the gateway, behind the translator, refuses an entry un
     assert.strictEqual(textOf(x[7]), 'forwarded:tools/call:place_order', `${input.rationale}: ${textOf(x[7])}`);
   }
 });
+
+test('order gate: in an autonomous full cycle, an entry waits until the analysts and both risk-manager phases returned (Claude transcript)', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const role = (id, subagent_type) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'report' }] } })];
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, [...skills, ...role('r1', 'risk-manager')].join('\n'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[roles-ran\] A full cycle enters only after its roles report.*market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager phase 2/);
+  const all = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t));
+  fs.writeFileSync(transcript, [...skills, ...all].join('\n'));
+  // (An autonomous run reads the wall clock, so other checks may refuse this fixture's entry: only roles-ran is asserted.)
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.doesNotMatch(ok.stderr, /roles-ran/);
+  // The trade-executor places the order: its hook gets its own subagent transcript, read with the main session's.
+  const sub = path.join(dir, 'session', 'subagents', 'agent-exec.jsonl');
+  fs.mkdirSync(path.dirname(sub), { recursive: true });
+  fs.writeFileSync(sub, content({ type: 'tool_use', id: 'o1', name: 'mcp__broker__place_order', input: {} }));
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /roles-ran/);
+  fs.writeFileSync(transcript, skills.join('\n'));
+  assert.match(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /\[roles-ran\]/);
+  // An exit is never held for roles.
+  fs.writeFileSync(transcript, '');
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});

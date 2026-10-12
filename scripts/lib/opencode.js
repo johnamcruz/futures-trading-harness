@@ -225,7 +225,9 @@ function runConfig({ root, dataDir, stateDir, agents }) {
  * it. The runner's own config replaces any OPENCODE_CONFIG_CONTENT. OPENCODE_CONFIG (a file loaded
  * before the project's, where a provider may be) stays.
  */
-const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR'];
+const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR',
+  // Background subagents return before their report: a role must report in the foreground (roles-ran.js).
+  'OPENCODE_EXPERIMENTAL', 'OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS'];
 
 /**
  * The run's environment: no update check, no sharing, no Claude Code or external skills, no language

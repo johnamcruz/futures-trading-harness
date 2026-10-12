@@ -226,3 +226,10 @@ test('each role\'s prompt carries its declared skills in full, so a role never d
   assert.strictEqual(oc.agentPrompt({ body: 'Body.' }), 'Body.\n');
   assert.throws(() => agentSkills(ROOT, { file: 'x.md', skills: ['no-such-skill'] }), /skill "no-such-skill" has no skills\/no-such-skill\/SKILL\.md/);
 });
+
+test('runEnv strips opencode\'s background subagents: a role must report in the foreground (roles-ran.js)', () => {
+  const env = oc.runEnv({ OPENCODE_EXPERIMENTAL: 'true', OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS: 'true', KEEP: '1' }, { root: '/r', dataDir: '/d', stateDir: '/s', agents, dir: '/r/workspace' });
+  assert.strictEqual(env.OPENCODE_EXPERIMENTAL, undefined);
+  assert.strictEqual(env.OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS, undefined);
+  assert.strictEqual(env.KEEP, '1');
+});
