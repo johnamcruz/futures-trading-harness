@@ -149,10 +149,20 @@ function rolesInTranscript(text) {
  * a VETO, or no verdict line, is not an approval (fails closed).
  */
 const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
+/**
+ * A report's verdict (agents/risk-manager.md: `VERDICT: APPROVE ...` or `VERDICT: VETO ...`), read the way a model
+ * writes it (markdown around the word or the label, a dash for the colon, "APPROVED", "VETOED"): `VETO` when any
+ * verdict in it is a veto (a report that mentions both is not an approval), else `APPROVE` when one approves, else
+ * null (no verdict line).
+ */
+function verdictOf(text) {
+  const found = [...String(text || '').matchAll(/\bVERDICT\b[\s*_`:\-\u2013\u2014]*(APPROVE|VETO)\w*/gi)].map(m => m[1].toUpperCase());
+  return found.includes('VETO') ? 'VETO' : found.includes('APPROVE') ? 'APPROVE' : null;
+}
+
 function approved(phase2) {
   const last = phase2.slice().sort((a, b) => a.end - b.end)[phase2.length - 1];
-  const verdicts = String(last.text || '').match(/VERDICT:?\**\s*(APPROVE|VETO)\b/gi) || [];
-  return verdicts.length > 0 && /APPROVE/i.test(verdicts[verdicts.length - 1]);
+  return verdictOf(last.text) === 'APPROVE';
 }
 
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
@@ -220,4 +230,4 @@ function checkRolesRan(transcriptPath, cycle, cached = []) {
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan };
+module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, verdictOf };

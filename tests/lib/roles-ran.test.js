@@ -218,3 +218,16 @@ test('phase 2 must approve: a VETO, or a report with no verdict, refuses the ent
   assert.deepStrictEqual(miss([rm([1, 2], 'state'), rm([3, 4], 'VERDICT: VETO - x')], 'lean'), [NO]);
   assert.deepStrictEqual(miss([rm([1, 2], 'state'), rm([3, 4], 'VERDICT: APPROVE - size 1')], 'lean'), []);
 });
+
+test('verdictOf: read as a model writes it; any veto in the report is no approval', () => {
+  const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
+  for (const t of ['VERDICT: APPROVE - size 1', '**VERDICT**: APPROVE - size 1', 'VERDICT: **APPROVE**', 'VERDICT - APPROVE', 'VERDICT: APPROVED', 'VERDICT : APPROVE', 'verdict: approve', 'VERDICT — APPROVE']) assert.strictEqual(verdictOf(t), 'APPROVE', t);
+  for (const t of [
+    'If aligned: VERDICT: APPROVE. ... **VERDICT**: VETO - trend rule',
+    'VERDICT: VETO - mixed: re-plan at size 2 for a VERDICT: APPROVE',
+    'VERDICT: VETO - room\n(phase 1 earlier: VERDICT: APPROVE)',
+    'Previous: VERDICT: APPROVE\nFinal VERDICT: VETOED',
+    '**VERDICT**: VETO - room',
+  ]) assert.strictEqual(verdictOf(t), 'VETO', t);
+  for (const t of ['looks fine', 'APPROVE', 'risk state: 2 trades left', '', null]) assert.strictEqual(verdictOf(t), null, String(t));
+});
