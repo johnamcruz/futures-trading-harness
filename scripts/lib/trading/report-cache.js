@@ -131,7 +131,8 @@ function recordReports({ prev, output, served = [], briefings, symbols, account,
   else if (served.includes(PHASE1)) cache.phase1 = keep ? keep.phase1 : null;
   else {
     const rm = calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
-    if (rm && key && fits(rm.text)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
+    // A report with a verdict is a plan's review (phase 2), never the account's state: not cached as phase 1.
+    if (rm && key && fits(rm.text) && !/VERDICT:?\**\s*(APPROVE|VETO)\b/i.test(rm.text)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
   }
   return cache;
 }
