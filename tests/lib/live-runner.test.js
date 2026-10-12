@@ -347,7 +347,7 @@ test('the fills are read only when something moved: an unchanged, reconciled acc
   assert.strictEqual(calls, 4);
   assert.match(prop.combineBlock(home, account.name, t('13:54:30')), /doesn't reconcile/);
   // A broker that rejects with no Error still refuses entries.
-  client.fillsSince = async () => { throw 'gateway down'; }; // eslint-disable-line no-throw-literal
+  client.fillsSince = async () => { throw 'gateway down'; };
   await hooks.snapshot(t('13:57:00'));
   assert.match(prop.combineBlock(home, account.name, t('13:57:30')), /couldn't be checked .*gateway down/);
 });

@@ -101,7 +101,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       if (r && r.anchor && r.anchor.day === tradingDayKey(now)) {
         // Unchanged: flat before and now, the same balance, a check that passed, and no order of ours since
         // (a round trip between two snapshots leaves both flat). A journal that can't be read counts as moved.
-        let ordered = true;
+        let ordered;
         try {
           ordered = prev ? live.orderSince(journalEntries(), prev.at) : true;
         } catch (_err) {
