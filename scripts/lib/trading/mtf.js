@@ -225,6 +225,19 @@ function ruleSeries(bars, opts = {}) {
 
 const biasesAt = (series, i) => Object.fromEntries(RULE_FRAMES.map(m => [m, series[m][i]]));
 
+/**
+ * The summary's reason, naming the side it is about: a reason with no side, shown next to a strategy that
+ * fired the other way, reads as a refusal of that one ("against the prevailing 15m down trend" beside a
+ * short). Not ready: both sides wait, said once.
+ */
+function sideReason(long, short) {
+  if (!long.reason && !short.reason) return null;
+  if (!long.ready) return long.reason;
+  const [blocked, open] = long.reason ? ['long', 'short'] : ['short', 'long'];
+  const p = (long.reason ? long : short).prevailing;
+  return `${blocked}s are against the prevailing ${p.label} ${p.trend} trend: only a reversal strategy (mtf: reversal) may take them; ${open}s are with it`;
+}
+
 /** The trend-rule summary of a bias map, for a scan result or a record. */
 function ruleSummary(biases, style = 'trend') {
   const word = b => (Number.isFinite(b) ? (b > 0 ? 'up' : b < 0 ? 'down' : 'range') : 'unknown');
@@ -237,7 +250,7 @@ function ruleSummary(biases, style = 'trend') {
     ready: long.ready,
     longAllowed: long.allowed,
     shortAllowed: short.allowed,
-    ...(long.reason || short.reason ? { reason: long.reason || short.reason } : {}),
+    ...(sideReason(long, short) ? { reason: sideReason(long, short) } : {}),
   };
 }
 

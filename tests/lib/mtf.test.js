@@ -163,3 +163,17 @@ test('live and backtest read the same trend: the per-bar series over a long hist
   }
   assert.ok(checked > 40);
 });
+
+test('ruleSummary: the reason names the side it is about, so a strategy that fired the open side never reads it as its own refusal', () => {
+  const { ruleSummary } = require('../../scripts/lib/trading/mtf');
+  // The June 1, 2026 replay: 15m down, keltner fired short, and the summary said only "against the prevailing 15m down trend".
+  const down = ruleSummary({ 240: 0, 60: 0, 15: -1 });
+  assert.deepStrictEqual([down.longAllowed, down.shortAllowed], [false, true]);
+  assert.strictEqual(down.reason, 'longs are against the prevailing 15m down trend: only a reversal strategy (mtf: reversal) may take them; shorts are with it');
+  const up = ruleSummary({ 240: 1, 60: -1, 15: -1 });
+  assert.match(up.reason, /^shorts are against the prevailing 4h up trend: .*; longs are with it$/);
+  // Not ready: both sides wait, said once; no trend anywhere, or a reversal strategy: no reason.
+  assert.match(ruleSummary({ 240: NaN, 60: 0, 15: 0 }).reason, /^no 4h trend read yet/);
+  assert.strictEqual(ruleSummary({ 240: 0, 60: 0, 15: 0 }).reason, undefined);
+  assert.strictEqual(ruleSummary({ 240: -1, 60: 0, 15: 0 }, 'reversal').reason, undefined);
+});

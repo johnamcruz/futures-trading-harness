@@ -71,9 +71,13 @@ their entries there too), `confluence` (on a strategy
 that fired: the other strategies on its timeframe that fired the same side,
 `with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
 1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
-this strategy's style), `candidate`, and `stopDistance`. A trend strategy
-that fires against the prevailing trend is never a candidate (`filtersFailed`
-says `mtf: ...`); only `mtf: reversal` strategies may fade it. `signal: rules`
+this strategy's style; its `reason` names the side it blocks, e.g. "longs are
+against the prevailing 15m down trend …; shorts are with it"), `candidate`,
+and `stopDistance`. Read the flag for the side the strategy fired: a short
+with `shortAllowed: true` is with the trend, whatever the reason says about
+longs. A trend strategy that fires against the prevailing trend is never a
+candidate (`filtersFailed` says `mtf: ...`); only `mtf: reversal` strategies
+may fade it. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
 one did or didn't fire. Strategies with `signal: manual` are listed
 as candidates when in session; you evaluate their trigger from the body.
