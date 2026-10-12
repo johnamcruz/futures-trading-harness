@@ -109,9 +109,14 @@ function fillsOf(days) {
           maeMs: rt && Number.isFinite(Date.parse(rt.maeTime)) ? Date.parse(rt.maeTime) : null,
         };
         out.push(fill);
-        // The MAE's own moment, judged in time order (before a fill at the same time): the account as it was then.
-        if (fill.closing && fill.mae !== null && fill.maeMs !== null) {
-          out.push({ kind: 'mae', ms: fill.maeMs, order: -(order += 1), day: tradingDayKey(new Date(fill.maeMs)), contract: fill.contract, mae: fill.mae, fees: fill.fees, close: fill });
+        // The MAE's own moment, judged in time order, after the fills at the same time (backtester-mcp stamps
+        // a market fill at its bar's open, before the bar's range, and an MAE from that range with the same
+        // time): the account as it was then. Its round trip's entry
+        // ties it to the position it belongs to; without one (or with a time outside the round trip) it is
+        // judged at the close instead.
+        const entryMs = rt ? Date.parse(rt.entryTime) : NaN;
+        if (fill.closing && fill.mae !== null && fill.maeMs !== null && Number.isFinite(entryMs) && entryMs <= fill.maeMs && fill.maeMs <= fill.ms) {
+          out.push({ kind: 'mae', ms: fill.maeMs, order: 1e12 + (order += 1), day: tradingDayKey(new Date(fill.maeMs)), contract: fill.contract, entryMs, mae: fill.mae, fees: fill.fees, close: fill });
         }
       }
     }
@@ -167,12 +172,14 @@ const roomOf = (s, dayPnl) => (s.dailyLimit > 0 && !s.dayStopped ? s.dailyLimit 
 /**
  * A round trip's MAE at its time (`maeTime`): its open P&L then (the MAE counts from the open, partial
  * exits included, so less what the position had realized; less the closing fee still to pay) against the
- * account as it was then. Returns true when it hit the daily limit (the caller flattens what is open).
+ * account as it was then (after the fills at that same time). Returns true when it hit the daily limit
+ * (the caller flattens what is open).
  */
 function applyMae(m, ev, held) {
   const s = m.s;
   const open = ev.mae - held.r - ev.fees;
-  const out = judge(m, [{ balance: s.balance, floor: s.floor, room: roomOf(s, s.dayPnl), loss: -open, mae: true, day: ev.day }]);
+  const moments = [{ balance: s.balance, floor: s.floor, room: roomOf(s, s.dayPnl), loss: -open, mae: true, day: ev.day }];
+  const out = judge(m, moments);
   if (out !== 'daily') return false;
   return stopDay(m, ev.day, capped => `${ev.contract} was at $${round2(open)} (its MAE, at ${new Date(ev.ms).toISOString()}), counted as $${capped}`);
 }
@@ -252,7 +259,13 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
     if (!byDay.has(f.day)) byDay.set(f.day, []);
     byDay.get(f.day).push(f);
   }
-  const flatten = () => { for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit'); };
+  const flatten = () => {
+    for (const [c, q] of pos) {
+      if (q === 0) continue;
+      left.set(c, 'flattened at the daily loss limit');
+      opened.delete(c); // its position ends here; a later one on the contract starts afresh
+    }
+  };
   // A day known only from a fill's time, before the last day done, is done too.
   const lastDone = daysDone && daysDone.length ? [...daysDone].sort().pop() : null;
   const months = [];
@@ -283,8 +296,8 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
     for (const f of byDay.get(day) || []) {
       if (f.kind === 'mae') {
         const held = opened.get(f.contract);
-        // Judged only for a counted position that was open then (else at its close, at every state).
-        if (m.s.status !== 'active' || left.has(f.contract) || !held || f.ms < held.since) continue;
+        // Judged only for the counted position its round trip opened (else at its close, at every state).
+        if (m.s.status !== 'active' || left.has(f.contract) || !held || held.since !== f.entryMs) continue;
         f.close.maeDone = true;
         if (applyMae(m, f, held)) flatten();
         for (const o of opened.values()) state(o, f.ms, day);

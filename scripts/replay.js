@@ -69,7 +69,7 @@ function points(run) {
 }
 
 function report(argv) {
-  const dir = arg(argv, '--config') ? load(argv).paths.runDir : argv[1];
+  const dir = arg(argv, '--config') ? load(argv).paths.runDir : argv.slice(1).find((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--account');
   if (!dir || dir.startsWith('--')) throw new Error(USAGE);
   const { manifest, days } = readRun(path.resolve(dir));
   const summary = summarize(days);
