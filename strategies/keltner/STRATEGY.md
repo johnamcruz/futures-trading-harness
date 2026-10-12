@@ -5,6 +5,8 @@ version: 3
 status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
+regimes: [trend, transition]   # harness filter: never in a range (chop)
+regime_gate: true             # the order gate refuses an entry outside these regimes too
 signal: rules
 rules:
   long:
@@ -38,6 +40,7 @@ KC_ATR_P=20, KC_ADX_THRESH=20, stop 0.5 × ATR(20)).
 
 ### Context filter (harness judgment)
 
+- Regime (harness filter, not in the source): trend or transition only (`regimes: [trend, transition]`); in a range (chop) the scan never lists it and the order gate refuses its entry (`regime_gate: true`).
 - ADX(14) ≥ 20 (in the rules).
 - Keltner mid (EMA 20) sloping in the trade direction over 5 bars.
 - Better after a squeeze: the channel width over the prior 20 bars was below

@@ -6,6 +6,8 @@ status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: [ny]          # New York session only (09:30-16:00 ET): the range forms at the 09:30 open
+regimes: [trend, transition]   # harness filter: never in a range (chop)
+regime_gate: true             # the order gate refuses an entry outside these regimes too
 signal: rules
 rules:
   long:
@@ -47,6 +49,7 @@ no breakouts after 16:00 ET, stop 0.5 × ATR(20), fixed-RR fallback 2R).
 
 ### Context filter (harness judgment)
 
+- Regime (harness filter, not in the source): trend or transition only (`regimes: [trend, transition]`); in a range (chop) the scan never lists it and the order gate refuses its entry (`regime_gate: true`).
 - ADX(14) on 3-minute ≥ 18 (in the rules), ideally rising.
 - Range size between 0.5 and 2.0 × ATR(14) on 15-minute. Tiny ranges fake
   out; huge ranges leave no room to target.
