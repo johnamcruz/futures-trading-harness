@@ -27,11 +27,12 @@
  *   - Qwen Code's parts: {functionCall:{id, name:'task', args:{subagent_type}}}
  *     answered by {functionResponse:{id, response:{output}}} with no error
  *
- * Only calls that started after the last trade-executor call ended count, so
- * each entry has its own round of reports. Phase 2 is a risk-manager call that
+ * Only calls that started after the last trade-executor launch ended count (a
+ * launch still running or in the background ends it at its start; the one
+ * placing this order excepted), so each entry has its own round of reports. Phase 2 is a risk-manager call that
  * started after phase 1 (and, in a full cycle, every analyst) had returned.
  *
- *   roleCalls(text)                      [{ role, start, end }] of the calls that count
+ *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }
  *   rolesInTranscript(text)              Map role -> calls that count
  *   missingRoles(calls, cycle)           what a cycle still lacks, as text, [] when complete
  *   checkRolesRan(transcriptPath, cycle) the gate's message, or null
@@ -45,6 +46,10 @@ const CYCLES = ['full', 'lean'];
 const TASK_TOOLS = new Set(['task', 'Task', 'Agent']);
 const MAX_BYTES = 50 * 1024 * 1024;
 const PHASE2 = 'risk-manager phase 2 (a second call, started after phase 1';
+const EXECUTOR = 'trade-executor';
+// Claude Code's answer when a subagent was launched in the background instead of run.
+const LAUNCHED = /\b(async agent launched|launched in the background|running in the background)\b/i;
+const resultText = c => (typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => (isObj(x) ? String(x.text || '') : String(x))).join(' ') : '');
 
 const roleOf = v => (typeof v === 'string' && v.trim() ? v.trim().split(':').pop() : null);
 const isObj = v => Boolean(v) && typeof v === 'object';
@@ -53,6 +58,7 @@ const num = v => (Number.isFinite(v) ? v : null);
 /** The subagent calls that returned in the foreground without an error, with their start and end, in order. */
 function roleCalls(text) {
   const calls = [];
+  const launches = []; // trade-executor launches: { start, end (null while running or in the background), background, pending }
   const claude = new Map(); // tool_use id -> { role, start }
   const qwen = new Map(); // functionCall id -> { role, start }
   const lines = String(text || '').split('\n');
@@ -68,49 +74,67 @@ function roleCalls(text) {
       const st = part.state;
       const input = isObj(st.input) ? st.input : {};
       const meta = isObj(st.metadata) ? st.metadata : {};
-      const running = /<task\b[^>]*\bstate="(?!completed")/.test(String(st.output || ''));
-      if (st.status === 'completed' && input.background !== true && meta.background !== true && !running) {
-        const t = isObj(st.time) ? st.time : {};
-        calls.push({ role: roleOf(input.subagent_type), start: num(t.start) ?? i, end: num(t.end) ?? i });
+      const role = roleOf(input.subagent_type);
+      const t = isObj(st.time) ? st.time : {};
+      const background = input.background === true || meta.background === true || /<task\b[^>]*\bstate="(?!completed")/.test(String(st.output || ''));
+      if (role === EXECUTOR) {
+        // Every launch ends the round, whatever its state; without times it ends every round so far (fails closed).
+        launches.push({ start: num(t.start) ?? Infinity, end: background ? null : (num(t.end) ?? Infinity), background });
+      } else if (st.status === 'completed' && !background) {
+        calls.push({ role, start: num(t.start) ?? i, end: num(t.end) ?? i });
       }
     }
     const msg = isObj(ev.message) ? ev.message : {};
     for (const c of Array.isArray(msg.content) ? msg.content : []) {
       if (!isObj(c)) continue;
-      if (c.type === 'tool_use' && TASK_TOOLS.has(c.name) && typeof c.id === 'string' && isObj(c.input) && c.input.run_in_background !== true) {
-        claude.set(c.id, { role: roleOf(c.input.subagent_type), start: i });
+      if (c.type === 'tool_use' && TASK_TOOLS.has(c.name) && typeof c.id === 'string' && isObj(c.input)) {
+        claude.set(c.id, { role: roleOf(c.input.subagent_type), start: i, background: c.input.run_in_background === true });
       }
       if (c.type === 'tool_result' && claude.has(c.tool_use_id)) {
-        if (c.is_error !== true) calls.push({ ...claude.get(c.tool_use_id), end: i });
+        const call = claude.get(c.tool_use_id);
+        // A launch acknowledgment (a subagent run in the background, by request or by default) is not a report.
+        const ack = call.background || LAUNCHED.test(resultText(c.content));
+        if (call.role === EXECUTOR) launches.push({ start: call.start, end: ack ? null : i, background: ack });
+        else if (c.is_error !== true && !ack) calls.push({ role: call.role, start: call.start, end: i });
         claude.delete(c.tool_use_id);
       }
     }
     for (const p of Array.isArray(msg.parts) ? msg.parts : []) {
       const fc = isObj(p) ? p.functionCall : null;
       const fr = isObj(p) ? p.functionResponse : null;
-      if (msg.role === 'model' && isObj(fc) && TASK_TOOLS.has(fc.name) && typeof fc.id === 'string' && isObj(fc.args) && fc.args.run_in_background !== true) {
-        qwen.set(fc.id, { role: roleOf(fc.args.subagent_type), start: i });
+      if (msg.role === 'model' && isObj(fc) && TASK_TOOLS.has(fc.name) && typeof fc.id === 'string' && isObj(fc.args)) {
+        qwen.set(fc.id, { role: roleOf(fc.args.subagent_type), start: i, background: fc.args.run_in_background === true });
       }
       if (msg.role === 'user' && isObj(fr) && qwen.has(fr.id)) {
+        const call = qwen.get(fr.id);
         const r = fr.response;
-        if (isObj(r) && !Object.prototype.hasOwnProperty.call(r, 'error')) calls.push({ ...qwen.get(fr.id), end: i });
+        if (call.role === EXECUTOR) launches.push({ start: call.start, end: call.background ? null : i, background: call.background });
+        else if (!call.background && isObj(r) && !Object.prototype.hasOwnProperty.call(r, 'error')) calls.push({ role: call.role, start: call.start, end: i });
         qwen.delete(fr.id);
       }
     }
   }
-  return calls.filter(c => c.role);
+  for (const m of [claude, qwen]) {
+    for (const c of m.values()) if (c.role === EXECUTOR) launches.push({ start: c.start, end: null, background: c.background, pending: !c.background });
+  }
+  return { calls: calls.filter(c => c.role), launches };
 }
 
 function rolesInTranscript(text) {
   const counts = new Map();
-  for (const c of roleCalls(text)) counts.set(c.role, (counts.get(c.role) || 0) + 1);
+  for (const c of roleCalls(text).calls) counts.set(c.role, (counts.get(c.role) || 0) + 1);
   return counts;
 }
 
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
-function missingRoles(calls, cycle) {
+function missingRoles({ calls = [], launches = [] }, cycle) {
   if (!CYCLES.includes(cycle)) return [];
-  const lastExec = Math.max(-Infinity, ...calls.filter(c => c.role === 'trade-executor').map(c => c.end));
+  // The trade-executor launch placing this order may still be running (Claude, Qwen: no result yet); any other
+  // launch, finished, errored, running or in the background, ends the round: its end, else its start.
+  const pending = launches.filter(l => l.pending);
+  if (pending.length > 1) return [`one trade-executor at a time (${pending.length} running)`];
+  const current = pending.length ? pending.reduce((a, b) => (b.start > a.start ? b : a)) : null;
+  const lastExec = Math.max(-Infinity, ...launches.filter(l => l !== current).map(l => (l.end ?? l.start)));
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
   const missing = [];

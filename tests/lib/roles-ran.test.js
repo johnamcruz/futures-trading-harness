@@ -17,37 +17,38 @@ const oc = (subagent_type, [start, end] = [null, null], { status = 'completed', 
 // A full cycle as the skill runs it: the analysts and phase 1 at once (10-20), phase 2 after (30-40).
 const FULL = [...ANALYSTS.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])];
 const miss = (lines, cycle) => missingRoles(roleCalls(lines.join('\n')), cycle);
+const calls = text => roleCalls(text).calls;
 const P2 = 'risk-manager phase 2 (a second call, started after phase 1';
 
 test('opencode: completed foreground task calls count by role; errored, running or background ones do not', () => {
   assert.deepStrictEqual(Object.fromEntries(rolesInTranscript(FULL.join('\n'))),
     { 'market-structure-analyst': 1, 'trend-momentum-analyst': 1, 'volume-liquidity-analyst': 1, 'risk-manager': 2 });
-  assert.deepStrictEqual(roleCalls([oc('risk-manager', [1, 2], { status: 'error' }), oc('risk-manager', [1, 2], { status: 'running' })].join('\n')), []);
+  assert.deepStrictEqual(calls([oc('risk-manager', [1, 2], { status: 'error' }), oc('risk-manager', [1, 2], { status: 'running' })].join('\n')), []);
   // A background launch returns at once, before any report.
-  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { input: { background: true } })), []);
-  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { metadata: { background: true } })), []);
-  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { output: '<task id="s" state="running">started</task>' })), []);
+  assert.deepStrictEqual(calls(oc('risk-manager', [1, 2], { input: { background: true } })), []);
+  assert.deepStrictEqual(calls(oc('risk-manager', [1, 2], { metadata: { background: true } })), []);
+  assert.deepStrictEqual(calls(oc('risk-manager', [1, 2], { output: '<task id="s" state="running">started</task>' })), []);
   // Another tool's event, or a skill load, is not a role; a role named inside another call's text never counts.
   const other = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'broker_journal_add', state: { status: 'completed', input: { text: oc('risk-manager') } } } });
   const skill = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'skill', state: { status: 'completed', input: { name: 'market-structure' } } } });
-  assert.deepStrictEqual(roleCalls([other, skill].join('\n')), []);
+  assert.deepStrictEqual(calls([other, skill].join('\n')), []);
 });
 
 test('Claude: a Task/Agent call counts once its tool_result returned without an error, in the foreground', () => {
   const call = (id, subagent_type, extra = {}, name = 'Task') => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input: { subagent_type, prompt: 'p', ...extra } }] } });
   const result = (id, is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'report' }] } });
-  assert.deepStrictEqual(roleCalls([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', {}, 'Agent'), result('b')].join('\n')),
+  assert.deepStrictEqual(calls([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', {}, 'Agent'), result('b')].join('\n')),
     [{ role: 'risk-manager', start: 0, end: 1 }, { role: 'trend-momentum-analyst', start: 2, end: 3 }]);
-  assert.deepStrictEqual(roleCalls([call('a', 'risk-manager'), result('a', true)].join('\n')), [], 'an errored call');
-  assert.deepStrictEqual(roleCalls(call('a', 'risk-manager')), [], 'no result yet');
-  assert.deepStrictEqual(roleCalls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
+  assert.deepStrictEqual(calls([call('a', 'risk-manager'), result('a', true)].join('\n')), [], 'an errored call');
+  assert.deepStrictEqual(calls(call('a', 'risk-manager')), [], 'no result yet');
+  assert.deepStrictEqual(calls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
 });
 
 test('Qwen Code parts: a task call counts once answered with no error', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response } }] } });
-  assert.deepStrictEqual(roleCalls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1 }]);
-  assert.deepStrictEqual(roleCalls([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })].join('\n')), []);
+  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1 }]);
+  assert.deepStrictEqual(calls([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })].join('\n')), []);
 });
 
 test('missingRoles: the analysts, then phase 2 after phase 1 and the analysts returned; a lean cycle phase 1 then 2', () => {
@@ -102,4 +103,36 @@ test('checkRolesRan: a Claude subagent\'s transcript (the trade-executor\'s hook
   assert.strictEqual(checkRolesRan(sub, 'full'), null);
   fs.writeFileSync(main, lines.slice(0, -2).join('\n'));
   assert.match(checkRolesRan(sub, 'full'), /risk-manager phase 2/);
+});
+
+test('every trade-executor launch ends the round: running in parallel, errored, in the background, or without times', () => {
+  // Claude: the call placing this order has no result yet (the current one); a second one running at once is refused.
+  const call = (id, subagent_type, extra = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p', ...extra } }] } });
+  const result = (id, content = 'report', is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content }] } });
+  const round = (p) => [...ANALYSTS.map((r, i) => call(`${p}a${i}`, r)), call(`${p}p1`, 'risk-manager'), ...ANALYSTS.map((_r, i) => result(`${p}a${i}`)), result(`${p}p1`), call(`${p}p2`, 'risk-manager'), result(`${p}p2`)];
+  const m = lines => missingRoles(roleCalls(lines.join('\n')), 'full');
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor')]), [], 'the current launch, running');
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor'), call('e2', 'trade-executor')]), ['one trade-executor at a time (2 running)']);
+  // An earlier launch that errored, or was launched in the background, still ends the round.
+  assert.ok(m([...round('x'), call('e1', 'trade-executor'), result('e1', 'boom', true), call('e2', 'trade-executor')]).length > 1);
+  assert.ok(m([...round('x'), call('e1', 'trade-executor', { run_in_background: true }), result('e1', 'Async agent launched successfully.'), call('e2', 'trade-executor')]).length > 1);
+  assert.ok(m([...round('x'), call('e1', 'trade-executor'), result('e1', 'Async agent launched successfully.'), call('e2', 'trade-executor')]).length > 1, 'a background launch by default');
+  // A fresh round after it lets the next entry through.
+  assert.deepStrictEqual(m([...round('x'), call('e1', 'trade-executor'), result('e1'), ...round('y'), call('e2', 'trade-executor')]), []);
+  // opencode: a background or errored launch ends the round at its start; one without times ends every round.
+  assert.ok(miss([...FULL, oc('trade-executor', [45, 46], { input: { background: true } })], 'full').length > 1);
+  assert.ok(miss([...FULL, oc('trade-executor', [45, 60], { status: 'error' })], 'full').length > 1);
+  assert.ok(miss([...FULL, oc('trade-executor')], 'full').length > 1);
+  // A role that started before the last launch ended doesn't count, even if it returned after.
+  assert.ok(miss([oc('trade-executor', [40, 60]), ...ANALYSTS.map(r => oc(r, [50, 70])), oc('risk-manager', [61, 65]), oc('risk-manager', [75, 80])], 'full').length > 0);
+});
+
+test('Claude: a subagent that only acknowledged a background launch has not reported; Qwen: a background call does not count', () => {
+  const call = (id, subagent_type, extra = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type, ...extra } }] } });
+  const result = (id, content) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  assert.deepStrictEqual(calls([call('a', 'risk-manager'), result('a', [{ type: 'text', text: 'Async agent launched successfully. agentId: x' }])].join('\n')), []);
+  assert.strictEqual(calls([call('a', 'risk-manager'), result('a', [{ type: 'text', text: '## Risk state ...' }])].join('\n')).length, 1);
+  const qcall = (id, subagent_type, extra = {}) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type, ...extra } } }] } });
+  const qans = id => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response: { output: 'started' } } }] } });
+  assert.deepStrictEqual(calls([qcall('q', 'risk-manager', { run_in_background: true }), qans('q')].join('\n')), []);
 });
