@@ -3,9 +3,11 @@
 Status: stage 1 (replay) is built: the replay driver (`scripts/replay.js`,
 `scripts/lib/replay/`), the replay clock (`scripts/lib/trading/harness-now.js`)
 and the simulated-broker module the replay broker's fills are ported from.
-Stage 2's first piece, the labeler (`scripts/lib/replay/labels.js`,
-`node scripts/replay.js labels <run dir>`), is built; the rest of stage 2
-is design only, built if stage 1 shows an edge.
+Stage 2's first pieces are built: the labeler (`scripts/lib/replay/labels.js`,
+`node scripts/replay.js labels <run dir>`) and the label dataset
+(`scripts/lib/rl/label-dataset.js`, `node scripts/rl-dataset.js build`, read
+by `rl/fth_rl/dataset.py`); the rest of stage 2 (cloning, fine-tuning, the
+widened observation) is design only, built if stage 1 shows an edge.
 
 ## The problem
 
@@ -428,7 +430,93 @@ keeps the last `bars` bars, so a long run's earliest days may have no ATR
 or counterfactual bars in the run home: pass the replayed data with
 `--bars`, and read the counts.
 
-### Training
+### Dataset (built)
+
+`node scripts/rl-dataset.js build <run dir | labels dir> ... --out <file.jsonl> [--run <run dir>] [--strategy prop_portfolio] [--mode student|env] [--include-refused] [--bars SYM=file]`
+(`scripts/lib/rl/label-dataset.js`) turns labelled runs into the rows the
+student trains on, written outside the repository and outside every run home
+it read (refused there: it holds what came after each decision): a JSONL
+file whose first line is a header, then one row per kept label, and
+`<file>.summary.json`. Several runs merge in time order; a label given twice
+counts once.
+
+**Kept:** a label the teacher decided (`flat` or `in-trade`) that the labeler
+marked cloneable (`clone.ok`), and not a refused intent unless
+`--include-refused` (then flagged in the row's targets). Everything else is
+excluded and counted by reason (not a decision, not cloneable with the
+labeler's reasons, refused, duplicate, and the ones below).
+
+**Observation:** the current one (`rl/observation.js`), built by the code live
+trading uses (`rl/live.js` `setupObservation`, which `decideSetup` asks the
+policy with, and `positionObservation`, `decidePosition`'s), for the policy
+strategy given (its strategies, params, sizing, contracts, account), at the
+label's decision time t, from what was known at t only:
+
+- the bars: the runner's window, the last `bars` (the run's runner config,
+  else `historyBars`, capped at what the runner's bars file holds: a broker
+  that returns fewer) closed at or before t, from `--bars` (the data the run
+  replayed) or the run home. Fewer than that is not live's observation:
+  excluded (`short bar history`). The last one must be the label's bar.
+- the setup: the live screen's pick on that bar, the first of the policy
+  strategy's strategies (in its order) that fired with a stop distance in the
+  scan logged by t, never the teacher's choice (that would put the action in
+  the input); its stop, confluence and full-size plan as live computes them.
+  No pick: the observation without a setup (side 0). The row's
+  `teacher.onPick` says whether the teacher traded that setup (an entry on
+  another strategy or side is observed on the pick's setup; a trainer may
+  drop or weight those rows). A scan a running policy screened (its
+  components rewritten "traded through", its own row added) is not the raw
+  scan live observes: excluded (`not read yet`), never a bar without a setup.
+- the specs: the run's broker specs (`contracts-<broker>.json`), else the
+  table; as live, a broker spec unlike the table is no spec, and the symbol
+  and both legs of its family need one: otherwise excluded.
+- the account: the policy strategy's account profile as an attempt started
+  on the run's first day and moved only by the run's own round trips closed
+  by t (net of fees, from the fills in the day files), each run day before
+  t's ended as live records it (`prop-state.js stateFrom`). An attempt that
+  is over, one that blocks entries (flat labels), or a setup no size fits
+  has no decision in the env: excluded. A replay that ran a real attempt is
+  not read yet (none does: a run starts none); its screened scans and its
+  policy's trades are excluded, not misread.
+- in a trade: the open trade the cycle's context showed (entry, initial
+  risk, setup, size, when it opened); peak and trough R and bars held from
+  the bars since it opened, as the runner counts them. No such trade, no
+  initial stop (a risk open-trades.js took from the working stop, which may
+  have been trailed), or a trade of the policy strategy itself (live observes
+  its component, which the context doesn't name): excluded.
+
+**Actions:** `--mode student` (default), the design's: flat 0 `none`, then
+`long` and `short` at each stop multiple (0.5, 0.75, 1, 1.5, 2, 3 x ATR(20),
+the label's `teacher.stop.multiple`) and size step (0.25, 0.5, 0.75, 1 of the
+labeler's `--budget`, `teacher.size.step`): id = 1 + side x 24 + multiple x 4 +
+step (side 0 long, 1 short), so 1 to 48; in a trade 49 `hold`, 50 `tighten`,
+51 `exit`; masks split flat from in-trade. An entry whose stop has no multiple,
+or whose size step is unknown (labelled without `--budget`), is excluded.
+`--mode env`, today's env (`challenge-env.js`): at the policy's setup 0
+`skip` (the teacher's `none`), 1 `half` or 2 `full` (an entry on the pick's
+strategy and side, by its size in micros against the policy's own half and
+full plans at that setup, as live sizes them: the nearer, a tie to half; the
+entry order's size unknown: excluded); in a trade past the ratchet 0
+`hold`, 1 `close` (the teacher's `exit`). An entry on another setup or side,
+a `tighten`, a trade before the ratchet, and a flat bar with no pick have no
+env action: excluded.
+
+**Targets**, never inputs: the gate's decision, the outcome (result, net, R,
+MAE, MFE), the primary counterfactual (result, R, net, strategy) and what it
+stands for, and a weight (1).
+
+**Observation version:** the header records `obsVersion`
+(`observation.js observationVersion`: sha256 of the fields, the policy
+strategy's volume-profile settings, and the source files of the modules that
+compute its values, `OBSERVATION_SOURCES`: the observation, the live builders,
+this dataset's reconstruction, the indicators, the trend rule, the volume
+profile, the clock, the account state and sizing; an edit to any one is a new
+version) and the env server's `info` reports the same. The loader
+(`rl/fth_rl/dataset.py load(path, obs_version, mode)`, both required) refuses
+a dataset built with another version or for another mode (and other fields,
+when the caller passes them), checks the header's masks against the mode's
+action space (52 student, 3 env; 0 and 1 entries), and every row's shape,
+action id and mask. Same files, same bytes (deterministic).
 
 1. **Behaviour cloning** on the train window's labels: the policy learns to
    predict the teacher's mapped decision from the observation.
@@ -468,6 +556,10 @@ live record.
   (tests in `tests/lib/replay-labels.test.js`,
   `tests/lib/replay-counterfactual.test.js`, and the replay end-to-end
   test), through `replay.js labels`.
+- Stage 2's dataset: `scripts/lib/rl/label-dataset.js` (tests in
+  `tests/lib/label-dataset.test.js`) through `scripts/rl-dataset.js`, the
+  observation through `rl/live.js`; the loader `rl/fth_rl/dataset.py`
+  (`rl/tests/test_dataset.py`).
 - The rest of stage 2 lives in `rl/fth_rl` (cloning, the widened env) and
   `scripts/lib/rl/` (observation, env server), with tests in both.
 
@@ -484,8 +576,8 @@ live record.
 7. A replay of the select window. **Decision point**, on the select window
    only: build stage 2 if the reasoning trader beats the rules baseline and
    the current policy there.
-8. Stage 2: widened observation and env, cloning, fine-tuning, the pipeline;
-   then the one out-of-sample look.
+8. Stage 2: the label dataset (done), then widened observation and env,
+   cloning, fine-tuning, the pipeline; then the one out-of-sample look.
 
 Not built yet: a prop attempt started per run (today a run's prop strategies
 see no attempt, so the gate refuses their entries; plain accounts trade), the
