@@ -240,8 +240,13 @@ test('scan and recent signals: a mini\'s bars are scanned by the rules strategie
   // The policy strategies list their legs; the rules ones come in through the family.
   assert.deepStrictEqual(strip(mini), strip(micro));
   assert.deepStrictEqual(scan(strategies, b, { symbol: 'GC', now: at }), [], 'no bundled strategy lists gold');
-  assert.deepStrictEqual(recentSignals(strategies, b, { symbol: 'NQ', count: 30 }), recentSignals(strategies, b, { symbol: 'MNQ', count: 30 }));
-  assert.ok(recentSignals(strategies, b, { symbol: 'GC', count: 3 }).every(x => x.fired.length === 0));
+  // Recent signals on bars where bos and ema_cross fired long (the parity bar, tests/e2e/mock-trading-e2e.test.js).
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const parity = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).filter(x => Date.parse(x.t) <= Date.parse('2026-04-28T04:09:00.000Z'));
+  const recentMicro = recentSignals(strategies, parity, { symbol: 'MNQ', count: 3 });
+  assert.ok(recentMicro.at(-1).fired.includes('bos long'), JSON.stringify(recentMicro));
+  assert.deepStrictEqual(recentSignals(strategies, parity, { symbol: 'NQ', count: 3 }), recentMicro);
+  assert.ok(recentSignals(strategies, parity, { symbol: 'GC', count: 3 }).every(x => x.fired.length === 0));
 });
 
 test('timeframes, empty sessions, and zero ATR stops are rejected', () => {
