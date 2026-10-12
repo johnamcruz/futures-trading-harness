@@ -59,8 +59,8 @@ description: Size futures trades from the stop distance, tick value, and the rem
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (its components' caps don't apply). Everything else (stop first, protective
    stop always working) still applies.
-7. **Half size** (a `mixed` multi-timeframe read): `floor(size / 2)`; if
-   that is 0, skip the trade. Never round a half up.
+7. **Half size** wherever the priority order (strategy-library) halves a
+   trade, computed as it says there. Never round a half up.
 8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
    verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
    for the strategy and side you chose and shows it: the stop in points and

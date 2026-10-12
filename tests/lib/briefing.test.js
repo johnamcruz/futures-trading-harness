@@ -414,8 +414,8 @@ test('a reversal setup says whether it fades the prevailing trend (half size, ne
   const fact = (direction, biases) => B.candidate({ ...r, direction, mtf: ruleSummary(biases, 'reversal') }, 100, [], {}).facts[0];
   const up = { 240: 1, 60: 1, 15: -1 };
   const down = { 240: -1, 60: -1, 15: 1 };
-  assert.strictEqual(fact('short', up), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
-  assert.strictEqual(fact('long', down), 'a reversal strategy fading the prevailing 4h down trend: the trend rule allows it, at half size and the nearest target (multi-timeframe-analysis, the counter row)');
+  assert.strictEqual(fact('short', up), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
+  assert.strictEqual(fact('long', down), 'a reversal strategy fading the prevailing 4h down trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
   assert.strictEqual(fact('long', up), 'a reversal strategy, with the prevailing 4h up trend');
   assert.strictEqual(fact('short', { 240: 0, 60: -1, 15: 0 }), 'a reversal strategy, with the prevailing 1h down trend');
   assert.strictEqual(fact('long', { 240: 0, 60: 0, 15: 0 }), 'a reversal strategy, no prevailing trend read');

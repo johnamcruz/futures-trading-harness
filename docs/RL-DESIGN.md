@@ -52,7 +52,7 @@ how big to be, and when a winner has run far enough.
 | `scripts/lib/rl/observation.js` | Observation | The one observation builder, used by training and live alike |
 | `scripts/lib/rl/policy-net.js`, `policy-bundle.js` | Inference and bundles | Runs the exported network; refuses a bundle built on another observation, or one that fails the gate |
 | `models/<name>.json` | Policy bundle | Weights, normalization, and everything it was trained and validated with |
-| `skills/prop-challenge-pacing`, `/combine-status` | Live workflow | Account state, the size budget, the verdict as a ceiling (the trade-session priority order may skip or halve it), protecting a pass |
+| `skills/prop-challenge-pacing`, `/combine-status` | Live workflow | Account state, the size budget, the verdict as a ceiling (the priority order (the strategy-library skill) may skip or halve it), protecting a pass |
 | `skills/policy-training`, `/train-policy` | Training workflow | The agents run training and report; the user promotes |
 | Order gate, gateway, runner, backtester | Enforcement | The same account rules and policy everywhere |
 

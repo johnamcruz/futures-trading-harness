@@ -116,13 +116,10 @@ prompt states the recorded rule; interactively, `bars_fetch` with `record`
 (or `mtf_read` with `record` and `symbol`) records it (the gate refuses
 trend entries unless the recorded bar closed less than 15 minutes ago: fetch
 fresh bars, re-recording an old file doesn't help). Never
-argue a trend strategy into a counter-trend trade. For the candidate's side: `aligned` → the strategy's normal size;
-`pullback` → no entry until the trigger timeframe turns back; `mixed` → half
-size, `floor(size / 2)`, and skip if that is 0 (with the size-1 micro rule of
-position-sizing, every mixed read is a skip); `counter` → skip (a trend strategy can't take it), unless it is a
-reversal strategy judged as the `multi-timeframe-analysis` skill says. Put the verdict in the plan entry.
-A policy verdict (below) is a ceiling: the priority order (step 3) halves or
-skips it like any setup.
+argue a trend strategy into a counter-trend trade. The read for the candidate's side
+sets its size by the priority order (strategy-library, step 4). Put the read in the plan entry.
+A policy verdict (below) is a ceiling: the priority order halves or skips it
+like any setup.
 
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
 gate refuses a rules strategy's entry unless that strategy fired, on that
@@ -230,30 +227,10 @@ again, except those its prompt gives under "Cached reports".
   budget), and let its own exit work (don't bank before its trail or
   target). The priority order below decides: a policy strategy's verdict
   too.
-- **The priority order: the rule for every setup** (a rules strategy's
-  candidate or a policy verdict). A verdict is a ceiling on size, never an
-  order. Contradicting facts mean no trade; confluence means trade. Go down
-  the list; a higher step wins, and each step can only lower the size, never
-  raise it: the size is the smaller of the verdict's (or position-sizing's)
-  and what the steps allow.
-  1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
-     or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
-     refusal.
-  2. **The trend rule**: a trend strategy against the prevailing trend → no
-     trade (the scan and the gate refuse it anyway). A reversal strategy may
-     fade it only at a higher-timeframe level, at half size.
-  3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
-     before the room it needs (`needR`) → no trade.
-  4. **The multi-timeframe read for its side**: `aligned` → full;
-     `pullback` with the trigger turned back with the bias → full;
-     `mixed` → half (`floor(size / 2)`; 0 → no trade, so at size 1 every
-     mixed read is a skip); `counter` on a non-reversal setup → no trade.
-  5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
-     → any skip rule hit: no trade.
-  6. **Confluence**: another strategy firing the other side → no trade;
-     confluence with it supports the full size; none changes nothing alone.
-  7. **Secondary context** (the VWAP side, the lunch lull, participation):
-     cuts to half, never vetoes alone.
+- **The priority order** (the `strategy-library` skill, "The priority order"):
+  the rule for every setup, a policy verdict too. Apply its steps in order;
+  the size is the smaller of the verdict's (or position-sizing's) and what
+  they allow.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value
