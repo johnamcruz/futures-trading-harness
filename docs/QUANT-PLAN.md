@@ -80,12 +80,15 @@ then decides skip, half or full.
 
 ### Windows
 
-Thirty trading days each (one combine attempt), on the RL pipeline's split
+Thirty weekdays each (one combine attempt: thirty trading days less any
+exchange holiday in them), on the RL pipeline's split
 (`rl/configs/sweep/prop_portfolio_topstep_100k_v1.json`). The starts are
 stratified and seeded (drawn once and recorded): each split's range is cut
 into equal buckets, and one random weekday start is drawn per bucket, each
-window inside its own bucket (a start is drawn no later than 30 trading
-days before its bucket ends), so windows never overlap.
+window inside its own bucket (a start is drawn no later than 30 weekdays
+before its bucket ends), so windows never overlap. A window with a holiday
+has fewer than 30 sessions, so its attempt may end still active, one or two
+sessions short of the attempt's length; it is read as it stands.
 
 | Split | Range | Reasoning-model windows | Used for |
 | --- | --- | --- | --- |
@@ -175,8 +178,11 @@ thousands of labels (one per decision time and symbol).
    the edge and sample size, the reasoning model's filter lift, exit quality,
    loss clustering, and the combine Monte Carlo's P(pass) and P(blow) by risk
    per trade, from the labels.
-4. **Improve**: fix or drop setups with no edge, tighten skill rules where the
-   filter loses, set sizing from the Monte Carlo; each change its own pull
+4. **Improve**: fix or drop setups with no edge (the rules-only signal edge
+   on train), tighten skill rules where the decision review (step 2) finds
+   reasoning or process errors against the recorded facts (the filter lift
+   counts only once confirmed after the cutoff), set sizing from the Monte
+   Carlo; each change its own pull
    request with the regression and review; then re-label train and select.
 5. **Clone, then RL**: behaviour cloning on the train labels (checked on
    select), then RL fine-tuning on the combine Monte Carlo.
