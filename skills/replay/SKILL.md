@@ -72,6 +72,26 @@ broker.
    R, and the gate's refusals by check (`replay-clock` refusals are the
    replay's plumbing, counted apart). It also writes `report.md` in the run's
    folder.
+   **The combine verdict**: each calendar month (by CME trading day, 17:00
+   Chicago) scored as a fresh prop attempt from the account's starting
+   balance (fresh each month is the default; one month never carries into
+   the next), by the same `combine.js` rules RL training and the backtester
+   use: PASS (and the day it passed: profit at the target at a day's end,
+   with the best day at most `consistency_pct` of the profit), FAIL (the
+   rule and the day: equity at the max-loss floor, which trails the
+   end-of-day high for `trailing_eod`), or NOT YET (profit vs target, what
+   consistency still needs, days traded); plus the max loss used vs the
+   limit, the daily P&L path, and a year summary (months passed, failed,
+   not yet). The firm's daily loss limit flattens the account there and
+   stops the day, not the attempt (whichever of the daily limit and the
+   floor is nearer is reached first); what was still open then, positions
+   opened after it that day, and positions carried in from the month before
+   are left out. Money is every fill's P&L less its fees.
+   Intraday equity is approximated from each round trip's MAE, at its
+   `maeTime` when the broker sends one (said in the output). Account: `--account <name>`, else the runner config's `account`
+   when it names an account profile, else the policy strategies'
+   account, else `topstep_100k`; the output says which and why. Report the verdict
+   as replayed, never as a guarantee of a live result.
 
 8. **Stops.** The run stops, saying why, after `maxConsecutiveErrors` failed
    cycles in a row, when a step can't run, and while the run's kill switch
@@ -187,7 +207,7 @@ cp mcp-configs/replay.example.json replay.json        # set runId, workDir, brok
 node scripts/replay.js points --config replay.json    # decision times per day (holidays skipped)
 node scripts/replay.js run --config replay.json --max-cycles 50
 node scripts/replay.js run --config replay.json       # resumes after the last decision time done
-node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03
+node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03   # --account topstep_50k: score another account
 node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
 node scripts/rl-dataset.js build ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --out ~/fth-datasets/mnq-ny-2024-03.jsonl --bars MNQ=~/data/MNQ-1m.parquet
 ```
@@ -195,4 +215,9 @@ node scripts/rl-dataset.js build ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024
 ```text
 month    times  cycles  failed  stand-aside  trades  win rate  mean R (n)  expectancy  net      MAE R  MFE R  refusals by check
 2024-03  2520   2541    0       91.3%        38      44.7%     0.21 (38)   $9.42       $357.96  -0.48  1.12   plan-required 6, mtf-trend 3
+
+Combine verdict: topstep_100k (the policy strategies' account (prop_flow_1m, prop_portfolio)); each month a fresh attempt from $100000.00: ...
+2024-03  NOT YET: profit $357.96 of $6000.00 ($5642.04 to go), 14 of 21 day(s) traded
+         max loss used $612.50 of $3000.00 (closest to the floor on 2024-03-12); intraday from MAE on 38 of 38 closing fill(s)
+Summary: 0 passed, 0 failed, 1 not yet, of 1 month(s).
 ```
