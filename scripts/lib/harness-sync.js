@@ -41,7 +41,18 @@ function readSorted(dir, suffix) {
 function loadAgents(root) {
   return readSorted(path.join(root, 'agents'), '.md').map(f => {
     const { data, body } = parseFrontmatter(fs.readFileSync(path.join(root, 'agents', f), 'utf8'));
-    return { file: f, ...data, tools: String(data.tools || '').split(',').map(t => t.trim()).filter(Boolean), body: body.trim() };
+    // `role-skills`: the skills the role's body says to load (a key no harness interprets; opencode's roles embed them).
+    const skills = Array.isArray(data['role-skills']) ? data['role-skills'].map(String) : [];
+    return { file: f, ...data, tools: String(data.tools || '').split(',').map(t => t.trim()).filter(Boolean), skills, body: body.trim() };
+  });
+}
+
+/** An agent's declared skills (frontmatter `role-skills`) as { name, body }, from skills/<name>/SKILL.md; a missing one throws. */
+function agentSkills(root, agent) {
+  return agent.skills.map(name => {
+    const file = path.join(root, 'skills', name, 'SKILL.md');
+    if (!fs.existsSync(file)) throw new Error(`agents/${agent.file}: skill "${name}" has no skills/${name}/SKILL.md`);
+    return { name, body: parseFrontmatter(fs.readFileSync(file, 'utf8')).body.trim() };
   });
 }
 
@@ -186,7 +197,8 @@ function qwenExtensionJson(root) {
 
 /** workspace/opencode.json: the opencode adapter (scripts/lib/opencode.js). */
 function opencodeJson(root) {
-  return `${JSON.stringify(opencode.workspaceConfig(loadAgents(root)), null, 2)}\n`;
+  const agents = loadAgents(root).map(a => ({ ...a, skillDocs: agentSkills(root, a) }));
+  return `${JSON.stringify(opencode.workspaceConfig(agents), null, 2)}\n`;
 }
 
 /** Shared directories the Qwen extension links to instead of copying. */
@@ -282,6 +294,7 @@ function syncHarness(root, { check = false } = {}) {
 module.exports = {
   QWEN_TOOLS,
   loadAgents,
+  agentSkills,
   codexAgentToml,
   codexRoleName,
   codexAgentsTable,
