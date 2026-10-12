@@ -431,7 +431,7 @@ const STREAMED_TRANSCRIPT = new Set(['claude', 'opencode']);
 const ROLES_CHECKED = new Set([...STREAMED_TRANSCRIPT, 'qwen']);
 
 /** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
-function childEnv(cfg, root, base = process.env) {
+function childEnv(cfg, root, base = process.env, context = null) {
   // The gate learns the exchange calendar from the runner's config.
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
   // The selected contracts (its symbols, one per index): the gate, order_plan and the scan trade only these legs.
@@ -444,6 +444,11 @@ function childEnv(cfg, root, base = process.env) {
   // A file of this run's own (a concurrent --once run never shares it), removed when the run ends (harness-run.js).
   if (STREAMED_TRANSCRIPT.has(cfg.harness)) env.FTH_CYCLE_TRANSCRIPT = path.join(harnessHome(base), 'logs', `cycle-transcript-${process.pid}-${crypto.randomBytes(6).toString('hex')}.jsonl`);
   else delete env.FTH_CYCLE_TRANSCRIPT;
+  // The bar each symbol's cycle decides ({"MNQ": "<bar open time>"}): the bar briefing for that bar is this cycle's,
+  // however long the cycle runs (harness-tools/briefing.js).
+  const bars = ((context && context.symbols) || []).filter(x => x && x.symbol && x.bar && x.bar.t).map(x => [x.symbol, x.bar.t]);
+  if (bars.length) env.FTH_CYCLE_BARS = JSON.stringify(Object.fromEntries(bars));
+  else delete env.FTH_CYCLE_BARS;
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.

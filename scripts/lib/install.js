@@ -59,7 +59,7 @@ function harnessToolsArgs(root) {
  * and the exchange calendar the runner sets.
  */
 function harnessToolsEnv(broker) {
-  return [...new Set([...forwardedEnv(broker), 'FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES'])];
+  return [...new Set([...forwardedEnv(broker), 'FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_CYCLE_BARS'])];
 }
 
 /**

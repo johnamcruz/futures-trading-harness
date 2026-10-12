@@ -89,6 +89,8 @@ function createRunner(deps) {
     tradeHistory = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
     recordSignals = () => {},
+    // The bar briefing (trading/briefing.js): the analysis by timeframe, reused until each part expires.
+    recordBriefing = () => {},
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -503,6 +505,17 @@ function createRunner(deps) {
     }
   }
 
+  /** The item's bar briefing (built once per item and bar; a failure is logged, never stops the pass). */
+  function briefItem(item, results, scanError) {
+    if (item.briefed) return;
+    item.briefed = true;
+    try {
+      recordBriefing(item, results, scanError);
+    } catch (err) {
+      log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
+    }
+  }
+
   // The strategy scan for an item; a failure is named in the prompt (what fired is unknown), not left out.
   function scanItem(item) {
     try {
@@ -512,6 +525,7 @@ function createRunner(deps) {
       item.scanError = err.message;
       log(`${item.symbol}: strategy scan failed (${err.message})`, 'error');
     }
+    briefItem(item, item.scan, item.scanError || null);
     return item.scan;
   }
 
@@ -885,6 +899,8 @@ function createRunner(deps) {
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
+          // A bar not scanned (manage only, or no cycle) still gets its briefing: the file is always this bar's.
+          briefItem(item, null, 'not scanned this bar');
           if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
           else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }

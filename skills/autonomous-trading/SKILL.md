@@ -66,7 +66,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    as plain text in your final message: never as a tool call or a tool's
    arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
-   one plan, at most one entry. **Read once per cycle.** For each symbol, each
+   one plan, at most one entry. The bar briefing (`bar_briefing`) is the
+   runner's file for this bar: read it once per role and reuse it (it doesn't
+   change during the cycle), and take its numbers instead of recomputing them. **Read once per cycle.** For each symbol, each
    role (you, each analyst, each call of a role; a role you play yourself
    counts as that role) reads each of these at most once and reuses it:
    `strategies_scan` (one with `name` is a separate read), `mtf_read` (one
@@ -77,9 +79,10 @@ description: Rules for running the trading harness unattended (headless, schedul
    - The prompt lacks `remainingBeforeLimit` (and, without a prop attempt,
      today's P&L): a cycle that may enter reads `get_account_snapshot` once
      (trade-session step 1). It gives only a count of working orders, the
-     trend rule (not the multi-timeframe read's alignment), and no scan
-     details: read `list_open_orders`, `mtf_read`, and `strategies_scan`
-     where a step names them. Anything under "Context unavailable", read
+     trend rule, and no scan details: read `list_open_orders` once; take the
+     alignment and the scan's candidates from the bar briefing (`m15`
+     `alignment`, `m3` `candidates`), and run `mtf_read` or `strategies_scan`
+     only when it says there is no current briefing. Anything under "Context unavailable", read
      once yourself.
    - Read the account and open orders once after each `place_order`,
      `modify_order`, `cancel_order`, `close_position`, or

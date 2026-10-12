@@ -15,6 +15,13 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 ## How It Works
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
+ATR, VWAP, participation, the skip-rule counters in `context`, swings and
+liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
+and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+doesn't hold.
+
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
    file (the prompt names it). Otherwise the harness tool `bars_fetch`
    (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)

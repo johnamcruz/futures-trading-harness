@@ -70,6 +70,8 @@ function codexAgentToml(agent) {
     `You are the ${agent.name} role of the futures trading harness. ${agent.description}`,
     mcp.length ? `broker MCP tools you may use: ${mcp.join(', ')}. Do not call any other broker tool.` : 'Do not call any broker MCP tool.',
     tools.length ? `${HARNESS_SERVER} MCP tools you may use: ${tools.join(', ')}. Do not call any other ${HARNESS_SERVER} tool.` : `Do not call any ${HARNESS_SERVER} MCP tool.`,
+    // A role without Read: Codex's read-only sandbox still lets a shell read files, so say it.
+    ...(agent.tools.includes('Read') ? [] : [`Do not read files (no shell reads either), except your skills (${(agent.skills || []).map(s => `skills/${s}/SKILL.md`).join(', ') || 'none'} under the harness root): take bars and market data only through the tools above.`]),
     '',
     agent.body,
   ].join('\n');

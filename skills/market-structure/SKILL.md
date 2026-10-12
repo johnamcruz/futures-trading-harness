@@ -13,6 +13,15 @@ description: Read futures market structure - swing highs/lows, trend vs range, b
 
 ## How It Works
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
+ATR, VWAP, participation, the skip-rule counters in `context`, swings and
+liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
+and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+doesn't hold.
+The latest BOS or CHoCH (`lastBreak`) is computed there from confirmed swings:
+never call it by eye.
+
 1. **Find swings.** Use confirmed fractal swings from market-snapshot
    (`structure.lastSwingHigh/Low`, k=2: a pivot with 2 strictly lower highs or
    higher lows on each side, confirmed 2 bars later). Mark the last 3–4 of each.

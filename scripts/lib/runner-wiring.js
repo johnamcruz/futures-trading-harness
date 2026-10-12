@@ -29,6 +29,7 @@ const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { writeMtfRecord } = require('./trading/mtf-state');
+const { buildBriefing, readBriefing, writeBriefing, removeBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -84,6 +85,24 @@ function runnerScan(strategies, cfg, symbol, bars, now) {
   return scan(sameTf, { bars }, { symbol, now, selected: cfg.symbols });
 }
 
+/**
+ * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
+ * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
+ */
+function briefingRecorder(home, cfg, now, env = process.env) {
+  return (item, results, scanError = null) => {
+    try {
+      // The news blackouts (premarket records them): the briefing says which is in force or next.
+      let blackouts = null;
+      try { blackouts = readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { blackouts = { items: [], error: err.message }; }
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, now: now() }));
+    } catch (err) {
+      removeBriefing(home, item.symbol);
+      throw err;
+    }
+  };
+}
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
@@ -125,6 +144,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
+    // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
+    recordBriefing: briefingRecorder(home, cfg, now, env),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
     scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,
@@ -137,4 +158,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, briefingRecorder, runnerScan, replayUnattested, closedBarsOnly };

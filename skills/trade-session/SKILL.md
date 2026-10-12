@@ -81,7 +81,7 @@ names them.
 - **Flat, with an earlier entry today that has no review** (it closed or was
   cancelled between cycles): run trade-review (`trade-reviewer` role) first.
   The order gate refuses the next entry until every entry is reviewed.
-- Daily stop or loss-streak cooldown in the briefing or journal → report and end.
+- Daily stop or loss-streak cooldown in risk-manager phase 1, the prompt, or the journal → report and end.
   The gate also refuses entries after `FTH_MAX_ENTRIES_PER_DAY` (default 6)
   entries in a day; at the cap, manage and end.
 - **A tool fails** (timeout, 429, 5xx, an empty reply): retry a read once
@@ -100,9 +100,14 @@ names them.
 
 ### 2. Parallel read
 
-**Every cycle, first:** the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `multi-timeframe-analysis`
-skill). **The trend rule is enforced:** a trend strategy never enters
+**Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
+the `harness-tools` skill): this bar's analysis by timeframe, computed once by
+the runner (the multi-timeframe read with the alignment per side, the trend
+rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
+participation and liquidity, the session window), each part with its version
+and how long it holds. Read it once per role and reuse it: no role re-runs
+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without a current briefing (interactively, or when the tool says none or old), the multi-timeframe read on the bars file
+(`mtf_read` with the bars file, the `multi-timeframe-analysis` skill). **The trend rule is enforced:** a trend strategy never enters
 against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
 only a strategy with `mtf: reversal` may fade it. The scan already drops
 such candidates and the order gate refuses them. In autonomous runs the
@@ -126,20 +131,29 @@ same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
-order: step 1, the multi-timeframe read, `market_snapshot` and
-`strategies_scan` on the bars file, and the blackouts
-(`blackouts_list`). No candidate → note and end. A
-candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
-with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
+order: step 1, the bar briefing (without one: the multi-timeframe read,
+`market_snapshot` and `strategies_scan` on the bars file), and the blackouts
+(`blackouts_list`). No candidate → note and end (`candidates: null`, the
+scan failed or the bar wasn't scanned, counts as none). A candidate →
+`risk-manager` phase 1 and 2, then execute. Steps 3-7 apply, with "the
+analysts" read as the bar briefing (without one, your own snapshot, scan and
+multi-timeframe read); the two-of-three-analysts rule in step 3 doesn't
+apply: the briefing's alignment for the side and the trend rule decide.
 In an autonomous run the order gate refuses an entry (`[roles-ran]`) until
 `risk-manager` has returned twice this cycle (phase 1 and phase 2).
 
 **Full cycle** (default):
 
 If the prompt names a bars file (the autonomous runner writes the bars that
-just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass its path to every analyst:
-they run `market_snapshot` and `strategies_scan` on it instead of fetching
-that timeframe again. Other timeframes they fetch with `bars_fetch`.
+just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass the
+symbol and that path to every analyst: they start from the bar briefing and
+use the file only for what it lacks (other timeframes with `bars_fetch`).
+Each report opens with a `Data:` line: the briefing versions it used, or,
+without a current briefing, the tools it called. A report with no `Data:`
+line, or naming another bar's `m3` version while this bar's briefing is
+current, didn't read this bar: run that analyst again once; if it still
+doesn't, stand aside. An old briefing (the tool says so) counts as none:
+the roles read the bars themselves.
 
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name
@@ -153,8 +167,9 @@ contractId, and the current time.
 
 Every role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
-session timing, sizing and pacing), and the prompt's facts (the trend rule,
-which strategies fired) are not their reports. In an autonomous run the order
+session timing, sizing and pacing), and neither the prompt's facts (the
+trend rule, which strategies fired) nor the bar briefing are their reports:
+the briefing is their input, not their analysis. In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
 returned as subagents this cycle, `risk-manager` twice (phase 1, then phase
@@ -175,10 +190,24 @@ again.
 
 ### 3. Head-trader synthesis (you)
 
+- **Read each setup's facts first** (the briefing's summary, and `facts`,
+  `inTheWay`, `needR` and `blocked` in `m3` `candidates`: what the trend rule
+  says for its side, the multi-timeframe read for its side, the first level
+  in its way in its own R against the room it needs, confluence, the VWAP
+  side, the window). They are context, not a verdict: judge the setup by its
+  strategy's STRATEGY.md (`strategies_show`: its context filter and skip
+  rules) and the rules below (the trend rule, the multi-timeframe table,
+  its min R:R). A setup the trend rule allows, `aligned` for its side, with
+  room past what it needs and confluence with it is the opportunity this
+  harness looks for, when the rest of this step agrees and it isn't
+  `blocked`: the strategy's normal size (position-sizing and the prop
+  budget), and let its own exit work (don't bank before its trail or
+  target). A policy strategy's verdict is placed as given; the facts never
+  change it.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
-- Start from the computed regime (`regime` in market-snapshot, the same value
-  `strategies_scan` reports): trend-up, trend-down, range, or transition,
+- Start from the computed regime (the briefing's `m3` `regime`, the same value
+  market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition,
   plus volatility. Don't override it with a narrative; if the analysts disagree
   with it, say why in the plan.
 - **A prop attempt with a policy strategy is running** (the prompt lists
@@ -254,8 +283,12 @@ P&L, and for a prop attempt the cushion and size budget), skip rules checked,
 analyst agreement, and what each role reported that the plan rests on: the
 structure bias and the level the entry and stop sit against
 (market-structure); the VWAP side, the value area or POC, the nearest
-liquidity in the trade's way, and the session window (volume-liquidity,
-session-timing); the regime and momentum (trend-momentum); the
+liquidity in the trade's way (the candidate's `inTheWay` in the briefing's
+`m3` `candidates`: the first level in its direction in points and R, where
+1R is its own stop; with `order_plan`'s stop, check there is room to the
+target or the trail's activation, and a level closer than 1R is a skip under
+the skip rules that name it), and the session window (the briefing's `m3`
+`window`; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
 multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
 and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the

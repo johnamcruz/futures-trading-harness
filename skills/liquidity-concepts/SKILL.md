@@ -12,6 +12,15 @@ description: Identify futures liquidity - prior day/overnight highs and lows, eq
 
 ## How It Works
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
+ATR, VWAP, participation, the skip-rule counters in `context`, swings and
+liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
+and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+doesn't hold.
+The sweeps (`m3` `sweeps`) are computed there, by the definition below:
+never call one by eye.
+
 1. **Map resting liquidity** (stops cluster just beyond obvious levels):
    - Prior RTH high/low/close and overnight high/low (market-snapshot `levels`).
    - Equal highs/lows: 2+ swing points within ~2 ticks of each other.
