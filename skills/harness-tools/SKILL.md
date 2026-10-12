@@ -40,6 +40,7 @@ scripts. None places, changes, or cancels an order.
 | `combine_status` | `account`?, `json`? | each started prop attempt and the policy verdicts | `combine.js status [--account <name>] [--json]` |
 | `lessons` | `top`?, `json`? | the instincts the journal's reviews add up to | `lessons.js [--top 10] [--json]` |
 | `reconcile` | `day` (YYYY-MM-DD), `timeframe`?, `json`? | the day's signals against what was traded | `reconcile.js --day <day> [--timeframe 3] [--json]` |
+| `bar_briefing` | `symbol`, `json`? | the bar briefing the autonomous runner built after the last closed bar: the analysis by timeframe (`m3`: price, ET time and session window, regime, EMAs, ADX, Keltner, VWAP side, participation, swings and liquidity, where price is against the value areas and IB, the scan's candidates, the trend rule; `m15`: the 15m read, alignment per side, today so far, the session profile; `h1`: the 1h and 4h reads; `day`: the prior RTH day, its profile, the overnight range), each part with its version and how long it holds (its timeframe's next close, or a close through one of its levels). Reuse it; don't recompute what it holds | `briefing.js --symbol MNQ [--json]` |
 
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`

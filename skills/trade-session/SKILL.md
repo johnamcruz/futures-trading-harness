@@ -100,9 +100,15 @@ names them.
 
 ### 2. Parallel read
 
-**Every cycle, first:** the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `multi-timeframe-analysis`
-skill). **The trend rule is enforced:** a trend strategy never enters
+**Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
+the `harness-tools` skill): this bar's analysis by timeframe, computed once by
+the runner (the multi-timeframe read with the alignment per side, the trend
+rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
+participation and liquidity, the session window), each part with its version
+and how long it holds. Read it once and reuse it: no role re-runs
+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without
+a briefing (interactively), the multi-timeframe read on the bars file
+(`mtf_read` with the bars file, the `multi-timeframe-analysis` skill). **The trend rule is enforced:** a trend strategy never enters
 against the prevailing trend (the highest of 4h, 1h, 15m with a trend);
 only a strategy with `mtf: reversal` may fade it. The scan already drops
 such candidates and the order gate refuses them. In autonomous runs the
@@ -126,8 +132,8 @@ same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
-order: step 1, the multi-timeframe read, `market_snapshot` and
-`strategies_scan` on the bars file, and the blackouts
+order: step 1, the bar briefing (without one: the multi-timeframe read,
+`market_snapshot` and `strategies_scan` on the bars file), and the blackouts
 (`blackouts_list`). No candidate → note and end. A
 candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
 with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
@@ -137,9 +143,12 @@ In an autonomous run the order gate refuses an entry (`[roles-ran]`) until
 **Full cycle** (default):
 
 If the prompt names a bars file (the autonomous runner writes the bars that
-just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass its path to every analyst:
-they run `market_snapshot` and `strategies_scan` on it instead of fetching
-that timeframe again. Other timeframes they fetch with `bars_fetch`.
+just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass the
+symbol and that path to every analyst: they start from the bar briefing and
+use the file only for what it lacks (other timeframes with `bars_fetch`).
+Each report opens with a `Data:` line naming the briefing versions it used:
+a report without one, or for another bar's `m3` version, didn't read this
+bar. Run that analyst again once; if it still doesn't, stand aside.
 
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name

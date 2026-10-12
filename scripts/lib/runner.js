@@ -89,6 +89,8 @@ function createRunner(deps) {
     tradeHistory = () => null,
     // The signal record the order gate reads (trading/signal-state.js): what fired on the bar.
     recordSignals = () => {},
+    // The bar briefing (trading/briefing.js): the analysis by timeframe, reused until each part expires.
+    recordBriefing = () => {},
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -511,6 +513,11 @@ function createRunner(deps) {
       item.scan = null;
       item.scanError = err.message;
       log(`${item.symbol}: strategy scan failed (${err.message})`, 'error');
+    }
+    try {
+      recordBriefing(item, item.scan);
+    } catch (err) {
+      log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
     }
     return item.scan;
   }

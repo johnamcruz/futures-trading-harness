@@ -19,6 +19,7 @@ tools:
   - mcp__broker__get_contract
   - mcp__broker__get_performance
   - mcp__broker__journal_read
+  - mcp__harness__bar_briefing
 approvalMode: default
 background: false
 ---
@@ -67,6 +68,13 @@ Stand-down conditions: <any that apply now>
 ```
 
 ## Phase 2: Plan verdict (when given a plan)
+
+The market facts come from the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`:
+the scan's candidates and confluence, the trend rule, the alignment per side,
+the levels) and the analysts' reports: don't fetch bars or run
+`strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold.
+Your own calls are the account reads phase 1 needs, `order_plan` (step 5),
+and `strategies_show` for a strategy's rules; each once.
 
 Check, in order, and stop at the first failure:
 

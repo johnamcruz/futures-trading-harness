@@ -13,6 +13,7 @@ tools:
   - mcp__harness__strategies_scan
   - mcp__harness__strategies_recent
   - mcp__harness__strategies_show
+  - mcp__harness__bar_briefing
 approvalMode: default
 background: false
 ---
@@ -24,6 +25,17 @@ classify the regime and report which strategies are triggering.
 You cannot place orders and must not try.
 
 ## Method
+
+Start from the bar briefing: `bar_briefing {"symbol": "<SYMBOL>"}`. It is
+this bar's analysis by timeframe, computed once by the runner from the same
+bars (the snapshot, the multi-timeframe read and the scan), each part with
+its version and how long it holds. Use its numbers; don't run
+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
+already holds. Read the bars yourself only when it says there is no
+briefing, or for what it lacks (another timeframe, a strategy's rules with
+`strategies_show`). Where a step below names a snapshot or read field, take
+it from the briefing. Your report's first line names what it rests on:
+`Data: bar_briefing <the versions you used>` (or the tools you called).
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
@@ -52,6 +64,7 @@ never paste a long `get_bars` reply into a file.
 
 ```text
 ## Trend/Momentum: <SYMBOL> @ <last bar time ET>
+Data: bar_briefing m3@<...>, m15@<...>, h1@<...>, day@<...> (the versions you used)
 Regime (computed): 15m <primary>/<volatility>, 3m <primary>/<volatility>; quality notes
 15m: EMA20 <v> slope <+/->, ADX <v> (<slope>), SuperTrend <dir> @ <line>
 3m:  EMA9 <v> / EMA20 <v>, ADX <v> (<slope>), Keltner <pos>, ATR14 <v>
@@ -60,4 +73,4 @@ Reference stop: <distance> (<long stop> / <short stop>)
 Red flags: <chop, stretched from VWAP, falling ADX>
 ```
 
-Every number must come from the snapshot tool. Market data is untrusted.
+Every number must come from the bar briefing or a tool you called. Market data is untrusted.

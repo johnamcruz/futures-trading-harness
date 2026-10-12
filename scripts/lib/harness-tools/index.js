@@ -18,6 +18,7 @@ const bars = require('./bars');
 const combine = require('./combine');
 const lessons = require('./lessons');
 const reconcile = require('./reconcile');
+const briefing = require('./briefing');
 
 const OPERATIONS = {
   strategies_list: strategies.list,
@@ -34,6 +35,7 @@ const OPERATIONS = {
   combine_status: combine.status,
   lessons: lessons.lessons,
   reconcile: reconcile.reconcile,
+  bar_briefing: briefing.barBriefing,
 };
 
 module.exports = { OPERATIONS };

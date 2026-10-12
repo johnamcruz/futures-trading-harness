@@ -790,6 +790,23 @@ test('every scanned bar records its signals for the gate, also on the default ba
   assert.ok(recorded.length >= 3 && recorded.every(([s, t, n]) => s === 'MNQ' && t && n === 1), JSON.stringify(recorded));
 });
 
+test('every scanned bar records its bar briefing after the scan; a failed briefing is logged and never stops the pass', async () => {
+  const recorded = [];
+  const scan = [{ name: 'orb', signal: 'rules', status: 'active', candidate: true, direction: 'long', stopDistance: 5 }];
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => scan, recordBriefing: (item, results) => recorded.push([item.symbol, item.bar.t, item.bars.length > 0, results === scan]) },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([s, t, hasBars, sameScan]) => s === 'MNQ' && t && hasBars && sameScan), JSON.stringify(recorded));
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }),
+    deps: { scanFor: () => scan, recordBriefing: () => { throw new Error('disk full'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  assert.ok(failed.cycles.length >= 1);
+  assert.ok(logs.some(l => /error MNQ: no bar briefing this bar \(disk full\); the roles read the tools themselves/.test(l)), logs.join('\n'));
+});
+
 test('the trade prompt carries the last closed bars and the model\'s own last cycle results', async () => {
   let n = 0;
   const r = await simulate({

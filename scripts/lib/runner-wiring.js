@@ -29,6 +29,7 @@ const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { writeMtfRecord } = require('./trading/mtf-state');
+const { buildBriefing, readBriefing, writeBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -125,6 +126,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
+    // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
+    recordBriefing: (item, results) => writeBriefing(home, buildBriefing({ symbol: item.symbol, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results || [], now: now() })),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
     scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,

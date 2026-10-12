@@ -196,3 +196,21 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
   ]) assert.match(ts, re);
   assert.match(read('skills/broker-mcp/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
 });
+
+test('the roles start from the bar briefing, reuse it, and say which versions they used', () => {
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  for (const a of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
+    const t = read(`agents/${a}.md`);
+    assert.match(t, /^tools: .*mcp__harness__bar_briefing/m, a);
+    assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
+    assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
+  }
+  const rm = read('agents/risk-manager.md');
+  assert.match(rm, /^tools: .*mcp__harness__bar_briefing/m);
+  assert.match(rm, /The market facts come from the bar briefing[^]*?don't fetch bars or run\s+`strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold/);
+  const ts = read('skills/trade-session/SKILL.md');
+  assert.match(ts, /\*\*Every cycle, first:\*\* the bar briefing \(`bar_briefing \{"symbol": "<SYMBOL>"\}`/);
+  assert.match(ts, /Read it once and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
+  assert.match(ts, /Each report opens with a `Data:` line naming the briefing versions it used:\s+a report without one, or for another bar's `m3` version, didn't read this\s+bar\. Run that analyst again once; if it still doesn't, stand aside\./);
+  assert.match(read('skills/harness-tools/SKILL.md'), /\| `bar_briefing` \| `symbol`, `json`\? \|/);
+});
