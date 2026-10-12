@@ -97,22 +97,6 @@ test('a hostile user config (everything allowed, its own default agent, rules fo
   }
 });
 
-test('a run without subagents (a lean cycle): no role can be delegated to, over the project file, a hostile user config, or alone; nothing else changes', () => {
-  const user = { permission: { '*': 'allow', task: 'allow' }, agent: { [oc.HEAD_AGENT]: { permission: { task: { '*': 'allow', 'risk-manager': 'allow' } } } } };
-  const lean = oc.runConfig({ root: '/r', dataDir: '/r/bars', stateDir: '/s', agents, delegate: false });
-  const full = oc.runConfig({ root: '/r', dataDir: '/r/bars', stateDir: '/s', agents });
-  for (const merged of [merge(config, lean), merge(merge(user, config), lean), merge(user, lean), lean]) {
-    const head = headRules(merged);
-    for (const r of [...roles, 'general', 'evil']) assert.strictEqual(decide(head, 'task', r), 'deny', r);
-    for (const t of [...ORDER_TOOLS, 'broker_get_bars', 'harness_strategies_scan', 'skill']) assert.strictEqual(decide(head, t), 'allow', t);
-  }
-  for (const merged of [merge(config, full), full]) for (const r of roles) assert.strictEqual(decide(headRules(merged), 'task', r), 'allow', r);
-  // Only the session's and the head trader's task rules differ.
-  const strip = c => JSON.parse(JSON.stringify(c, (k, v) => (k === 'task' ? undefined : v)));
-  assert.deepStrictEqual(strip(lean), strip(full));
-  assert.deepStrictEqual(oc.sessionPermission(roles), oc.sessionPermission(roles, { delegate: true }));
-});
-
 test('badExtraArgs: only a model variant and logging; approvals, another directory, agent, server or session are refused', () => {
   assert.deepStrictEqual(oc.badExtraArgs(['--variant', 'high', '--thinking', '--log-level=DEBUG', '--print-logs']), []);
   for (const a of [['--auto'], ['--yolo'], ['--dangerously-skip-permissions'], ['--attach', 'http://x'], ['--dir', '/x'], ['--agent', 'build'], ['-c'], ['--session', 's'], ['--share'], ['--port', '1'], ['--thinking=false'], ['--variant'], ['--variant', '--auto']]) {

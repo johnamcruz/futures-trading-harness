@@ -106,14 +106,4 @@ function opencodeCall(part) {
 const OPENCODE_STOPPED = /^\s*(Model tried to call unavailable tool|The user has specified a rule which prevents you from using this specific tool call|The user rejected permission to use this specific tool call)/;
 const opencodeStopped = part => Boolean(part && part.state && part.state.status === 'error' && OPENCODE_STOPPED.test(resultText(part.state.error)));
 
-/** The harnesses' subagent tools: Claude's Agent (Task before), Qwen Code's agent, opencode's task, Codex's spawn_agent. */
-const SUBAGENT_CALLS = new Set(['Agent', 'Task', 'agent', 'task', 'spawn_agent']);
-/** The role a subagent call names (its input), '' when none. */
-const subagentRole = input => {
-  const i = parsed(input);
-  return i && typeof i === 'object' ? String(i.subagent_type || i.agent_type || i.agent_name || i.agent || i.role || '') : '';
-};
-/** A Codex item that spawns a subagent (not its own messages, agent_message). */
-const codexSubagentItem = v => Boolean(v) && typeof v.type === 'string' && v.type !== 'agent_message' && (/agent/i.test(v.type) || v.tool === 'spawn_agent') && Boolean(subagentRole(v) || subagentRole(v.arguments));
-
-module.exports = { SUBAGENT_CALLS, subagentRole, codexSubagentItem, documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };
+module.exports = { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };

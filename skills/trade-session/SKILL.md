@@ -125,47 +125,12 @@ bars file, `symbol`, and `record: true`). A different setup tag on the
 same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
-fits inside one bar): **no subagents.** You play every role yourself, in
-order, and never call the subagent (agent, task) tool: the runner doesn't
-offer it in a lean cycle, and each role run as a subagent would take longer
-than the bar. No news fetch. The roles' checklists still apply in full;
-only who runs them changes (their agent files, `agents/<role>.md` under the
-harness root, are the source):
-
-1. Step 1, as above, yourself: account state, open positions, working
-   orders. Managing a position or cancelling a leftover follows the
-   `trade-executor`'s Management and Blocks sections. An earlier entry today
-   with no review: review it yourself first (the `trade-review` skill).
-2. The multi-timeframe read, `market_snapshot` and `strategies_scan` on the
-   bars file, and the blackouts (`blackouts_list`). No candidate → journal a
-   note and end.
-3. A candidate: the `risk-manager`'s phase 1 yourself, with the skills its
-   agent file loads (`position-sizing`, `prop-challenge-pacing`,
-   `trading-agent-security`, `strategy-library`, `broker-mcp`,
-   `harness-tools`): `get_server_config`, `list_accounts` (`canTrade`,
-   `mcpTradingAllowed`), `get_account_snapshot` (`remainingBeforeLimit`),
-   today's reviews and lessons (`journal_read`: loss streak, restricted
-   setups), `combine_status` when a policy strategy is in play. Then steps 3-4 (synthesis and plan, with "the analysts" read
-   as your own snapshot, scan, and multi-timeframe read; `order_plan` for
-   the numbers).
-4. The `risk-manager`'s phase 2 yourself, before any order: every check 0-8
-   of its Phase 2 in order (trigger fired, trend rule and alignment,
-   account tradable and no unprotected position, server limits, prices on
-   the tick and on the right sides, risk recomputed with `order_plan`
-   within the phase 1 budget, the strategy `active` with its `min_rr` and
-   `max_risk_usd`, no lesson, blackout, or cooldown against it, red flags
-   answered). Stop at the first failure: that is a VETO. Write the verdict
-   line (`VERDICT: APPROVE - size <n>, risk $<x>, <reason>` or
-   `VERDICT: VETO - <failed check>: <fix>`) in the plan entry. VETO → note
-   and end. In plan-only mode, report the plan and verdict and end. Never
-   place an entry without an APPROVE you wrote after these checks; the
-   order gate checks some of them again, not all.
-5. On APPROVE, acting as the `trade-executor` yourself, with the
-   `broker-mcp` skill loaded (its order mechanics: confirm every cancel,
-   never wait or poll for a fill): its Entry steps (the account state
-   matches the plan, `get_contract`, `order_plan`'s `place_order` arguments
-   with the stop bracket, one status check, the stop working), then step 6
-   from "After placing", and step 7.
+fits inside one bar): no parallel analysts and no news fetch. Yourself, in
+order: step 1, the multi-timeframe read, `market_snapshot` and
+`strategies_scan` on the bars file, and the blackouts
+(`blackouts_list`). No candidate → note and end. A
+candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
+with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
 
 **Full cycle** (default):
 
