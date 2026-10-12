@@ -52,8 +52,8 @@ Two stages, each useful on its own.
    challenge (pass rate, zero blows). Live, it is fast, deterministic, and
    validated by the same promotion gate.
 
-Stage 2 is built only if stage 1 shows an edge on the selection window
-(below): cloning a trader with none adds nothing.
+Stage 2 is built only if stage 1 shows an edge on the months after the
+teacher's cutoff (below): cloning a trader with none adds nothing.
 
 ## Stage 1: replay (built)
 
@@ -218,8 +218,8 @@ sample.
 ### Nondeterminism
 
 A replay is one draw of a stochastic trader. The run's manifest records the
-harness command and model; results on the select window are repeated on a
-sample of days (separate run ids) to report their spread.
+harness command and model; results on the months after the cutoff are
+repeated on a sample of days (separate run ids) to report their spread.
 
 ### Store
 
@@ -622,17 +622,18 @@ live record.
 8. Stage 2: the label dataset (done), then widened observation and env,
    cloning, fine-tuning, the pipeline; then the one out-of-sample look.
 
-Not built yet: a prop attempt started per run (today a run's prop strategies
-see no attempt, so the gate refuses their entries; plain accounts trade), the
-blackouts rebuilt from the historical calendar for each day (the premarket
+A prop attempt is started per run by hand (`combine.js start` in the run
+home after its first step; `skills/replay/SKILL.md`, The prop policy). Not
+built yet: the blackouts rebuilt from the historical calendar for each day (the premarket
 agents record what they find), and anonymization in the replay broker.
 
 ## Open questions for the owner
 
 - The teacher model, its knowledge cutoff, and the budget per run.
-- The data years for the windows: the select and out-of-sample windows must
-  start after the teacher's cutoff, so they may need recent data.
+- Decided (`docs/QUANT-PLAN.md`): the windows follow the RL split, the
+  teacher is judged on the months after its cutoff, and the out-of-sample
+  test is the policy alone in the backtester.
 - The sessions to replay (the New York session only, or the whole session).
-- Plain account or a prop attempt as the replay's account.
+- Decided (`docs/QUANT-PLAN.md`): every label window is a prop attempt.
 - Whether the student, once validated, trades live on its own or only
   advises the reasoning model.

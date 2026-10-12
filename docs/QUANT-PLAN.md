@@ -42,7 +42,7 @@ cushion, the trade, and the market (`docs/RL-DESIGN.md`, Observation).
 | Signals | rules strategies | Does each setup have an edge after fees: expectancy in R, win rate, the R distribution, by regime, session and trend alignment? |
 | Filter | the reasoning model with the skills | Does its judgment add edge? Taken setups against every signal, using the counterfactuals on skipped labels. |
 | Sizing | the position-sizing skill, then the policy | Which risk per trade maximizes P(pass) with P(blow) at zero? |
-| Exits | each strategy's `exit` | Do exits keep the move: the best and worst R in a trade against the R banked? |
+| Exits | `prop_portfolio`'s `exit` (hold the stop to +2R, then trail 0.5R) and the policy's hold or close | Do exits keep the move: the best and worst R in a trade against the R banked? |
 | Portfolio | `strategies/prop_portfolio` order | Do losses cluster on the same days across strategies? Combines die from clustered losses, not the average. |
 
 ### Why sizing is the crux
@@ -73,9 +73,10 @@ attempt is read with `combine.js status`.
 
 While an attempt runs, only the policy strategy may enter, so the policy
 must be `active`: `prop_portfolio` is, for live and replay alike. Until a
-trained bundle is shipped, it sizes each setup by its `sizing` rules (the
-full size its budget allows, or a skip), which is what the labels record;
-the policy trained on the labels then decides skip, half or full.
+trained bundle is shipped, its `sizing` rules set the size the reasoning
+model may take (the full size its budget allows, or a skip); the labels
+record the reasoning model's take or skip, and the policy trained on them
+then decides skip, half or full.
 
 ### Windows
 
@@ -83,7 +84,8 @@ Thirty trading days each (one combine attempt), on the RL pipeline's split
 (`rl/configs/sweep/prop_portfolio_topstep_100k_v1.json`). The starts are
 stratified and seeded (drawn once and recorded): each split's range is cut
 into equal buckets, and one random weekday start is drawn per bucket, each
-window inside its own bucket, so windows never overlap.
+window inside its own bucket (a start is drawn no later than 30 trading
+days before its bucket ends), so windows never overlap.
 
 | Split | Range | Reasoning-model windows | Used for |
 | --- | --- | --- | --- |
@@ -107,8 +109,8 @@ cutoff-gap test (train against those months) and the placebo test in
 clone (train) and check its imitation (select) only. Policies are chosen on
 select and judged out of sample in the backtester, where they see only bars.
 This replaces that design's requirement that select and out of sample start
-after the cutoff; its Leakage, Windows and Plan sections are amended to
-match.
+after the cutoff; its Leakage, Windows, Plan, Nondeterminism and Open
+questions sections, and its stage-2 condition, are amended to match.
 
 ### Throughput
 
@@ -135,8 +137,12 @@ thousands of labels (one per decision time and symbol).
 
 - **Samples**: about 30 trades per setup before trusting its expectancy;
   more per regime. Report the count beside every number.
-- **Tuning**: skills and strategies are tuned on train and select only. A
-  change must improve select, not just train.
+- **Tuning**: skills and strategies are tuned on train only. Select is a
+  check against overfitting, never proof of the reasoning model's edge (its
+  windows lie before the cutoff); that is judged on the months after the
+  cutoff. Metrics from the rules alone (a strategy's signal edge) carry no
+  recall risk on any window; the reasoning model's filter lift does, and
+  is trusted only after the cutoff.
 - **Multiple testing**: every tweak tried is a chance to fit noise; log each
   one and its result.
 - **Re-label after a change**: the reasoning model's decisions depend on the
@@ -182,10 +188,11 @@ thousands of labels (one per decision time and symbol).
 - **Strategies**: the active rules strategies (`orb`, `ema_cross`,
   `keltner`, `supertrend`, `bos`, `cisd_ote`, `vwap_reclaim`, `crt_1h`,
   `crt_4h`, `value_area_reentry`, `value_area_breakout`), activated for the
-  labels on the owner's call; the order-flow ones stay `paper`. The
-  trend-following ones (`ema_cross`, `supertrend`, `keltner`, `bos`, `orb`,
-  `value_area_breakout`, and `vwap_reclaim` in a trend only) are
-  regime-gated: never in a range.
+  labels on the owner's call; the order-flow ones (and `value_area`, which
+  needs order flow) stay `paper`. The trend-following ones (`ema_cross`,
+  `supertrend`, `keltner`, `bos`, `orb`, `value_area_breakout`, and
+  `vwap_reclaim` in a trend only) are regime-gated: never in a range (the
+  regime-gate pull request, merged before this plan).
 - **Context**: the bar briefing (facts by timeframe, computed once per bar)
   and the report cache; the setup's facts in its own R, no code grades.
 - **Next, after the first train windows**: setup quality per strategy
@@ -198,7 +205,8 @@ thousands of labels (one per decision time and symbol).
 ## Not in this plan
 
 - Order flow: after this plan (`docs/ORDER-FLOW.md`); the order-flow
-  strategies stay `paper`. The label windows lie inside the months that have
-  order-flow data, so their flow features can be added later.
+  strategies stay `paper`. The train and select windows, on NQ/MNQ, lie
+  inside the months that have order-flow data, so their flow features can be
+  added later (not the judge month, nor the other indexes).
 - New strategies: after the scorecard shows where the current ones fall
   short.
