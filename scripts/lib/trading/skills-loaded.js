@@ -16,6 +16,9 @@
  *     'user' {functionResponse:{id, name, response:{output}}} with no error
  *     answers it, since a skill that wasn't found or wasn't permitted was
  *     never read.
+ *   - opencode `run --format json` events (the runner's cycle transcript,
+ *     FTH_CYCLE_TRANSCRIPT): {type:'tool_use', part:{tool:'skill',
+ *     state:{status:'completed', input:{name}}}}; an errored load doesn't count.
  *
  * A harness that passes no transcript (Codex) carries the skills in the
  * workspace instructions (AGENTS.md); for it the check doesn't apply.
@@ -64,10 +67,14 @@ function skillsInTranscript(text) {
   const out = new Set();
   const calls = new Map(); // parts format: unanswered functionCall id -> skill name
   for (const line of String(text || '').split('\n')) {
-    if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function')) continue;
+    if (!line.includes('Skill') && !line.includes('command-name') && !line.includes('"function') && !line.includes('"skill"')) continue;
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
     if (!ev || typeof ev !== 'object') continue;
+    // opencode: one event per finished tool call.
+    const part = ev.part && typeof ev.part === 'object' ? ev.part : null;
+    if (ev.type === 'tool_use' && part && part.tool === 'skill' && part.state && part.state.status === 'completed'
+      && part.state.input && typeof part.state.input.name === 'string') out.add(skillName(part.state.input.name));
     const msg = ev.message && typeof ev.message === 'object' ? ev.message : {};
     const content = msg.content;
     if (Array.isArray(content)) {

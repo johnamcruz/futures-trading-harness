@@ -26,6 +26,7 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
+const { checkRolesRan } = require('./roles-ran');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 
@@ -303,7 +304,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
 
   add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).
-  add('skills-loaded', checkSkillsLoaded(transcriptPath));
+  const transcript = transcriptPath || config.cycleTranscript;
+  add('skills-loaded', checkSkillsLoaded(transcript));
+  // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
+  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle) : null);
   add('plan-required', checkPlan(input, dayEntries, now, config));
   // Hard rule, outside the skippable checks: entries only during market hours.
   const closed = marketClosed(now, config);

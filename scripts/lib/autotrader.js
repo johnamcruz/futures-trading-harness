@@ -351,6 +351,13 @@ function historyText(history) {
   return ` Your last ${list.length} cycle(s), oldest first: ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason; say what changed.`;
 }
 
+// The roles a cycle runs before an entry (trade-session skill), which the order gate checks (roles-ran.js): each
+// carries its skills (structure and liquidity, trend and momentum, VWAP and volume profile, sizing and pacing).
+const ROSTER = {
+  full: ' Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2; the gate refuses an entry until all have reported.',
+  lean: ' Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported.',
+};
+
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 const RESULT_LINE = ' End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
 
@@ -405,7 +412,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${RESULT_LINE}`;
+      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} Load the skills trade-session, multi-timeframe-analysis, and strategy-library before deciding (the order gate refuses an entry without them), then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : ROSTER[cfg.cycle] || ''}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -415,6 +422,9 @@ function prompts(cfg, now, root = '') {
   };
 }
 
+// Harnesses whose headless output streams the session as it happens (Claude stream-json, opencode JSON events).
+const STREAMED_TRANSCRIPT = new Set(['claude', 'opencode']);
+
 /** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env) {
   // The gate learns the exchange calendar from the runner's config.
@@ -423,6 +433,11 @@ function childEnv(cfg, root, base = process.env) {
   env.FTH_SYMBOLS = cfg.symbols.join(',');
   // The harness tools read bars files from the runner's bar directory (harness-tools/paths.js).
   env.FTH_BARS_DIR = resolveDataDir(cfg, os.homedir(), base);
+  // The cycle's kind and, for a harness that streams its transcript, where the runner writes it as it
+  // streams: the gateway reads which skills loaded and which roles ran from it (roles-ran.js).
+  env.FTH_CYCLE = cfg.cycle;
+  if (STREAMED_TRANSCRIPT.has(cfg.harness)) env.FTH_CYCLE_TRANSCRIPT = path.join(harnessHome(base), 'logs', 'cycle-transcript.jsonl');
+  else delete env.FTH_CYCLE_TRANSCRIPT;
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.

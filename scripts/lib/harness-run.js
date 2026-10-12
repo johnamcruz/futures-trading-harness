@@ -27,6 +27,15 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(tmp, file);
 }
 
+/** An appender for the live transcript: the file emptied now, each chunk added; a write that fails is skipped (the gate then sees less, never more). */
+function liveWriter(file) {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, '', { mode: 0o600 });
+  } catch (_err) { /* the gate refuses entries it can't verify */ }
+  return chunk => { try { fs.appendFileSync(file, chunk); } catch (_err) { /* as above */ } };
+}
+
 /**
  * Run argv in its own process group (so a timeout kills the harness and
  * everything it started). Resolves { ok, timedOut, code, output } once the
@@ -35,9 +44,11 @@ function writeJsonAtomic(file, value) {
  * stopped.
  * `onChild(child|null)` tracks the running child for signal handling.
  */
-function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
+function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = null }) {
   return new Promise(resolve => {
     const [cmd, ...args] = argv;
+    // The transcript so far, for the gate to read while the run goes on: emptied first, then each output chunk appended.
+    const live = liveFile ? liveWriter(liveFile) : () => {};
     const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     onChild(child);
     let output = '';
@@ -49,7 +60,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {} }) {
         child.kill(sig);
       }
     };
-    child.stdout.on('data', c => { output += c; });
+    child.stdout.on('data', c => { output += c; live(c); });
     child.stderr.on('data', c => { output += c; });
     const timer = setTimeout(() => {
       timedOut = true;

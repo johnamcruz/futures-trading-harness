@@ -131,6 +131,8 @@ order: step 1, the multi-timeframe read, `market_snapshot` and
 (`blackouts_list`). No candidate → note and end. A
 candidate → `risk-manager` phase 1 and 2, then execute. Steps 3-7 apply,
 with "the analysts" read as your own snapshot, scan, and multi-timeframe read.
+In an autonomous run the order gate refuses an entry (`[roles-ran]`) until
+`risk-manager` has returned twice this cycle (phase 1 and phase 2).
 
 **Full cycle** (default):
 
@@ -147,6 +149,16 @@ for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents, play each role yourself in turn. Pass symbol, contractId, and the
 current time.
+
+Every role runs every full cycle: each carries skills the decision needs
+(market structure and liquidity, trend and momentum, VWAP, volume profile and
+session timing, sizing and pacing), and the prompt's facts (the trend rule,
+which strategies fired) are not their reports. In an autonomous run the order
+gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
+returned as subagents this cycle, `risk-manager` twice (phase 1 and phase 2).
+The refusal names the roles still missing: run them, use their reports,
+then enter.
 
 | Role (agent file) | Returns |
 |---|---|
@@ -234,7 +246,14 @@ current time.
 thesis, trigger (what happened, price, time), entry, stop, exit, size
 (position-sizing, or the policy verdict), $ risk, the account it was sized from (balance, today's
 P&L, and for a prop attempt the cushion and size budget), skip rules checked,
-analyst agreement. Add the
+analyst agreement, and what each role reported that the plan rests on: the
+structure bias and the level the entry and stop sit against
+(market-structure); the VWAP side, the value area or POC, the nearest
+liquidity in the trade's way, and the session window (volume-liquidity,
+session-timing); the regime and momentum (trend-momentum); the
+multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
+and the size it implies; and risk-manager phase 1's budget and pace. A plan
+that can't name them isn't ready. Add the
 tag `paper` in plan-only mode.
 
 The exit follows the strategy's `exit` (shown in the scan):

@@ -99,3 +99,14 @@ test('checkSkillsLoaded reads a parts-format chat file: loaded passes, a failed 
   fs.writeFileSync(chat, [call('a', 'trade-session'), loaded('a'), call('b', 'multi-timeframe-analysis'), loaded('b'), call('c', 'strategy-library'), failed('c')].join('\n'));
   assert.match(checkSkillsLoaded(chat), /not loaded in this session: strategy-library\. Load each with the skill tool/);
 });
+
+test('opencode JSON events (the runner\'s cycle transcript): completed skill loads count, errored ones do not', () => {
+  const ev = (name, status = 'completed') => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'skill', state: { status, input: { name }, output: `<skill_content name="${name}">` } } });
+  assert.deepStrictEqual(names(REQUIRED_FOR_ENTRY.map(s => ev(s)).join('\n')), ALL);
+  assert.deepStrictEqual(names([ev('trade-session'), ev('strategy-library', 'error')].join('\n')), ['trade-session']);
+  const file = path.join(tmpDir(), 'cycle-transcript.jsonl');
+  fs.writeFileSync(file, ev('trade-session'));
+  assert.match(checkSkillsLoaded(file), /not loaded in this session: multi-timeframe-analysis, strategy-library/);
+  fs.writeFileSync(file, REQUIRED_FOR_ENTRY.map(s => ev(s)).join('\n'));
+  assert.strictEqual(checkSkillsLoaded(file), null);
+});

@@ -21,6 +21,7 @@ const DEFAULT_NO_ENTRY_WINDOWS = [
 
 const GATE_CHECKS = [
   'paper-mode',
+  'roles-ran',
   'journal-window',
   'kill-switch',
   'setup-tag',
@@ -87,6 +88,11 @@ function loadConfig(env = process.env) {
     // Set by the autonomous runner for the harness it launches. In autonomous
     // runs nothing may switch gate checks off from inside the session.
     autonomous: env.FTH_AUTONOMOUS === '1',
+    // The autonomous cycle's kind (FTH_CYCLE, set by the runner): which roles must report before an entry (roles-ran.js).
+    cycle: ['full', 'lean'].includes(env.FTH_CYCLE) ? env.FTH_CYCLE : null,
+    // The cycle's transcript as the harness streams it (FTH_CYCLE_TRANSCRIPT, set by the runner): the gateway's
+    // view of which skills loaded and which roles ran (a hook passes its own transcript_path instead).
+    cycleTranscript: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null,
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
     // Unset in an autonomous run, the selection is lost: an error, every entry refused.

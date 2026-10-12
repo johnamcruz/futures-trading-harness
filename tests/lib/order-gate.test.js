@@ -1102,3 +1102,57 @@ test('max-risk: a policy strategy\'s entry is checked against its own cap, not i
   assert.deepStrictEqual(v.map(x => x.check), ['max-risk']);
   assert.match(v[0].message, /^risk \$380\.00 \(size 19 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:orb's risk\.max_risk_usd \$300\.00: reduce the size to 15 or less/);
 });
+
+// --- Roles: an autonomous cycle's entry waits for its roles' reports (roles-ran.js). ---
+const fs = require('fs');
+const path = require('path');
+const ocEvent = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'ok' } } });
+const ocSkills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(name => ocEvent('skill', { name }));
+const ocRoles = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].map(subagent_type => ocEvent('task', { subagent_type }));
+
+test('roles-ran: an autonomous full cycle enters only after the analysts and both risk-manager phases returned; exits are never held', () => {
+  const file = path.join(require('../helpers').tmpDir(), 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const auto = { ...config, autonomous: true, cycle: 'full', cycleTranscript: file };
+  const run = (input, cfg = auto) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg });
+  fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(3)].join('\n'));
+  const r = run(entryOrder());
+  assert.deepStrictEqual(checks(r), ['roles-ran']);
+  assert.match(r.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst\./);
+  fs.writeFileSync(file, [...ocSkills, ...ocRoles].join('\n'));
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // The opencode transcript is read for the skills too: a session that loaded none is refused for them.
+  fs.writeFileSync(file, ocRoles.join('\n'));
+  assert.deepStrictEqual(checks(run(entryOrder())), ['skills-loaded']);
+  // Exits and protective stops never wait for roles.
+  fs.writeFileSync(file, '');
+  assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
+  // A lean cycle needs risk-manager twice; an interactive session (not autonomous) needs no roles.
+  fs.writeFileSync(file, [...ocSkills, ocRoles[3]].join('\n'));
+  assert.match(run(entryOrder(), { ...auto, cycle: 'lean' }).violations[0].message, /risk-manager \(2 calls: phase 1 and phase 2; 1 returned\)/);
+  assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, autonomous: false })), []);
+  // A hook's own transcript_path wins over the runner's file.
+  const hookFile = `${file}.hook`;
+  fs.writeFileSync(hookFile, [...ocSkills, ...ocRoles].join('\n'));
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: auto, transcriptPath: hookFile }).violations, []);
+  // The runner named a transcript that isn't there: refused (fails closed).
+  assert.match(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` }).violations.find(v => v.check === 'roles-ran').message, /can't be read/);
+});
+
+test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript from the runner\'s environment', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const live = replaySetup({ replay: false });
+  const file = path.join(require('../helpers').tmpDir(), 'cycle-transcript.jsonl');
+  const env = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
+  assert.deepStrictEqual(loadConfig(env).cycle, 'full');
+  assert.strictEqual(loadConfig({ FTH_CYCLE: 'fast' }).cycle, null);
+  fs.writeFileSync(file, ocSkills.join('\n'));
+  // Autonomous: refused until the roles ran (the gateway passes no transcript of its own).
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ' };
+  assert.ok(checkOrder(ANYTIME, { env: auto, pluginRoot: live.root }).violations.some(v => v.check === 'roles-ran'));
+  fs.writeFileSync(file, [...ocSkills, ...ocRoles].join('\n'));
+  assert.ok(!checkOrder(ANYTIME, { env: auto, pluginRoot: live.root }).violations.some(v => v.check === 'roles-ran'));
+  // Not autonomous: no roles check, whatever the environment says.
+  fs.writeFileSync(file, '');
+  assert.ok(!checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.some(v => v.check === 'roles-ran'));
+});

@@ -113,6 +113,30 @@ test('a previous day that never finished end of day is flattened first', () => {
   assert.strictEqual(decide(cfg, { ...thursday, cycles: 0, premarketDone: false, eodAttempted: true }, sat).action, 'eod');
 });
 
+test('child env names the cycle and, for a harness that streams its transcript, the live transcript file the gate reads', () => {
+  const home = { FTH_HOME: '/srv/fth' };
+  for (const harness of ['opencode', 'claude']) {
+    const env = childEnv(validateConfig({ harness }), '/r', home);
+    assert.strictEqual(env.FTH_CYCLE, 'full', harness);
+    assert.strictEqual(env.FTH_CYCLE_TRANSCRIPT, '/srv/fth/logs/cycle-transcript.jsonl', harness);
+  }
+  assert.strictEqual(childEnv(validateConfig({ cycle: 'lean' }), '/r', home).FTH_CYCLE, 'lean');
+  // Qwen Code's JSON output comes at the end, not as it happens: no live file (its hook passes its own transcript), and a stale one is dropped.
+  const qwen = childEnv(validateConfig({ harness: 'qwen' }), '/r', { ...home, FTH_CYCLE_TRANSCRIPT: '/old' });
+  assert.strictEqual(qwen.FTH_CYCLE_TRANSCRIPT, undefined);
+});
+
+test('a trade prompt names the roles its cycle runs before an entry, as the gate checks them', () => {
+  const now = new Date('2026-10-07T14:30:00Z');
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
+  const full = prompts(validateConfig({}), now).trade(items);
+  assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2; the gate refuses an entry until all have reported\./);
+  assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1 and 2; the gate refuses an entry until both have reported\./);
+  // No entries possible: no roster.
+  assert.doesNotMatch(prompts(validateConfig({}), now).trade(items, { manageOnly: true }), /Full cycle:/);
+  assert.doesNotMatch(prompts(validateConfig({ paper: true }), now).trade(items), /Full cycle:/);
+});
+
 test('child env locks the gate and paper mode disables trading', () => {
   const live = childEnv(validateConfig({}), '/r', { PATH: '/bin' });
   assert.deepStrictEqual([live.FTH_ROOT, live.FTH_AUTONOMOUS, live.FTH_PAPER], ['/r', '1', undefined]);
@@ -569,7 +593,8 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
     trades: Array.from({ length: 10 }, (_, k) => (k % 2 ? 'orb long win +1.8R in trend-up' : 'ema_cross short loss -1.02R in range [mistake:chased]')),
   });
   // 4700: 4500 plus the required last-line instruction (RESULT_LINE, ~220 characters, with its plain-text rule).
-  assert.ok(p.length < 4700, `the prompt grew to ${p.length} characters`);
+  // 4900: the full cycle's roster (the roles the gate requires) is decision context too.
+  assert.ok(p.length < 4900, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
@@ -797,4 +822,24 @@ test('the workspace guard fingerprints opencode\'s config and any .opencode fold
   assert.notStrictEqual(linked['.opencode/'], plugin['.opencode/']);
   fs.rmSync(path.join(dir, '.opencode'), { recursive: true });
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), []);
+});
+
+test('runHarness writes the live transcript as the run streams it: emptied first, stdout only, readable before the run ends', async () => {
+  const { runHarness } = require('../../scripts/lib/harness-run');
+  const fs = require('fs');
+  const path = require('path');
+  const dir = require('../helpers').tmpDir();
+  const live = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(live), { recursive: true });
+  fs.writeFileSync(live, 'stale line from the last cycle\n');
+  const seen = path.join(dir, 'seen.txt');
+  // The child prints a line, then (still running) copies the live file as a gate would read it, then ends.
+  const script = `echo '{"a":1}'; sleep 0.5; cat ${JSON.stringify(live)} > ${JSON.stringify(seen)}; echo oops >&2; echo '{"b":2}'`;
+  const r = await runHarness(['bash', '-c', script], { cwd: dir, env: process.env, timeoutMs: 10000, liveFile: live });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(fs.readFileSync(seen, 'utf8'), '{"a":1}\n', 'mid-run: the first line only, the stale line gone');
+  assert.strictEqual(fs.readFileSync(live, 'utf8'), '{"a":1}\n{"b":2}\n', 'stderr is not the transcript');
+  // Without a live file nothing is written.
+  const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
+  assert.strictEqual(r2.ok, true);
 });
