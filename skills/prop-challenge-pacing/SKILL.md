@@ -39,7 +39,7 @@ The harness tracks the attempt and enforces it:
   bars the runner scans, gives exactly these arguments, or refuses with the
   gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
-  timeframe (the runner records every bar). Once a newer bar is recorded
+  timeframe (the runner records each bar it scans). Once a newer bar is recorded
   without a verdict for its setup (for example the component fired again and
   no new verdict came), the old one is refused (`[policy] ... the latest
   verdict is for the 3m bar opened X; the setup on the bar opened Y has no

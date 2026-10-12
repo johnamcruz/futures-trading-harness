@@ -3,7 +3,7 @@
 /**
  * The signal record the order gate reads: which rules strategies fired, and
  * on which side, on the last closed bar of an index family, at
- * <FTH_HOME>/signals/<MICRO ROOT>.json.
+ * <FTH_HOME>/signals/<MICRO ROOT>-<minutes>m.json (one per timeframe).
  *
  * The autonomous runner writes it after scanning every closed bar;
  * interactively, `node scripts/strategies.js scan <bars> --symbol MNQ
