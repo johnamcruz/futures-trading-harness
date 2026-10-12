@@ -119,8 +119,9 @@ test('a flat row: the observation live builds at the policy setup, equal to the 
   // As live: setupObservation on the runner's window with the attempt's state.
   const cs = expectedCs();
   const window = closedBy(barList, T_FLAT).slice(-WINDOW);
-  const s = live.setupObservation({ account: ACCOUNT, cs, strategy: STRATEGY, component: 'orb', symbol: 'MNQ', rawBars: window, spec: specFor('MNQ'), scan: SCAN_RESULTS[1], results: SCAN_RESULTS });
+  const s = live.setupObservation({ account: ACCOUNT, cs, strategy: STRATEGY, component: 'orb', symbol: 'MNQ', rawBars: window, spec: specFor('MNQ'), scan: SCAN_RESULTS[1], results: SCAN_RESULTS, selected: ['MNQ'] });
   assert.deepStrictEqual(row.obs, s.obs);
+  assert.strictEqual(s.cp.root, 'MNQ', 'the run\'s contract (the selected leg), as live sizes it');
   // As the engine: market features over the whole series (bars after t included), read at the bar's index.
   const i = window.length - 1;
   const book = { bars: barList, tickSize: 0.25, tickValue: 0.5, feats: marketFeatures(barList, STRATEGY.params) };

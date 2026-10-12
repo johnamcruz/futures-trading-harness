@@ -162,12 +162,18 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
     if (action) assert.strictEqual(v.contract, 'MNQ');
     assert.ok(Date.parse(v.expiresAt) > now.getTime());
   }
-  // contracts auto: 21 micros is 2 minis (NQ: $200 + $2.80 fees = $202.80 each).
-  const auto = setup({ policy: null, contracts: 'auto' });
-  await auto.hooks.snapshot(now);
-  auto.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-  const va = prop.latestVerdict(auto.home, 'prop_x', 'NQ');
-  assert.deepStrictEqual([va.contract, va.maxSize, va.policy, va.action], ['NQ', 2, null, 'full'], 'no bundle: the setup as sized');
+  // The runner's contract is the selected leg: MNQ stays 21 micros under contracts auto (never switched to
+  // 2 NQ), and NQ selected sizes in minis (NQ: $200 + $2.80 fees = $202.80 each: 2).
+  for (const [leg, want] of [['MNQ', ['MNQ', 21, null, 'full']], ['NQ', ['NQ', 2, null, 'full']]]) {
+    for (const contracts of ['auto', 'micro', 'mini']) {
+      const auto = setup({ policy: null, contracts });
+      recordBrokerSpecs(auto.home, { roots: ['MNQ', 'NQ'] });
+      await auto.hooks.snapshot(now);
+      auto.hooks.screen(scan, { symbol: leg, contractId: leg, bars: bars(), now });
+      const va = prop.latestVerdict(auto.home, 'prop_x', leg);
+      assert.deepStrictEqual([va.contract, va.maxSize, va.policy, va.action], want, `${leg} selected, contracts ${contracts}: the selected leg`);
+    }
+  }
   // The tick specs are the broker's: none recorded for the contract (or the family's other one) is a skip saying so.
   for (const roots of [[], ['MNQ']]) {
     const bare = setup({ policy: null, contracts: 'auto', specs: false });
@@ -193,6 +199,16 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
     await other.hooks.snapshot(now);
     other.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
     assert.match(prop.latestVerdict(other.home, 'prop_x', 'MNQ').reason, why);
+  }
+  // Live sizes the selected leg only: a bundle trained on one leg decides only on that leg (minis here: NQ, not MNQ).
+  for (const [leg, why] of [['MNQ', /policy b was trained on minis only \(contracts: mini\), and the selected contract MNQ is the micro: select the NQ, or retrain/], ['NQ', null]]) {
+    const m = setup({ policy: 'b', contracts: 'mini', models: { b: { ...bundle(2), contracts: 'mini' } } });
+    recordBrokerSpecs(m.home, { roots: ['MNQ', 'NQ'] });
+    await m.hooks.snapshot(now);
+    m.hooks.screen(scan, { symbol: leg, contractId: leg, bars: bars(), now });
+    const vm = prop.latestVerdict(m.home, 'prop_x', leg);
+    if (why) assert.match(vm.reason, why, leg);
+    else assert.deepStrictEqual([vm.contract, vm.policy, vm.action], ['NQ', 'always_2', 'full'], leg);
   }
   const broken = setup({ policy: 'missing' });
   await broken.hooks.snapshot(now);

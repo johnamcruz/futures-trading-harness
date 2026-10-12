@@ -38,7 +38,10 @@ train other `sizing.*` or `contracts` (the shipped `prop_portfolio` family
 anchors `"contracts": "mini"` while the document stays `contracts: auto`, so
 it can still trade micros); the shipped bundle then trades only once the
 document says the same (ship prints the lines; the harness refuses a bundle
-whose contract mode, sizing, or timeframe differs from the document's).
+whose contract mode, sizing, or timeframe differs from the document's). Live
+sizes only the selected contract, so a bundle trained on one leg (`mini` or
+`micro`) decides only with that leg selected (a mini bundle runs with NQ
+selected; with MNQ selected the runner refuses it and says so).
 
 **Several markets, one account.** A config's `symbols` (e.g.
 `["MNQ", "MES", "MYM", "M2K"]`, each keyed in `data`; `symbol` still names

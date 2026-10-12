@@ -320,7 +320,7 @@ function runRows(input, opts) {
       pick = strategy.strategies.map(n => byName.get(n)).find(r => r && r.candidate && r.direction && r.stopDistance > 0) || null;
       if (combine.entryBlock(cs)) { exclude(label, 'the attempt blocks entries'); continue; }
       if (pick) {
-        const s = live.setupObservation({ account, cs, strategy, component: pick.name, symbol: rootOf(label.symbol), rawBars, spec, scan: pick, results, specOf });
+        const s = live.setupObservation({ account, cs, strategy, component: pick.name, symbol: rootOf(label.symbol), rawBars, spec, scan: pick, results, specOf, selected: [rootOf(label.symbol)] });
         if (!s.cp) { exclude(label, 'no size fits the setup'); continue; }
         obs = s.obs;
         const halfPlan = s.plan(0.5);

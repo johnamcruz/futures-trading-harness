@@ -293,11 +293,17 @@ test('observation: market context is causal and identical live and in training (
 });
 
 test('a bundle is bound to the volume profile settings its observation was trained with', () => {
-  const { bundleMismatch } = require('../../scripts/lib/rl/policy-bundle');
+  const { bundleMismatch, legMismatch } = require('../../scripts/lib/rl/policy-bundle');
   const { optionsFromParams } = require('../../scripts/lib/trading/volume-profile');
   const strategy = { name: 'p', strategies: ['a'], account: 'acct', timeframe: '3m', sizing: null, contracts: 'micro', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } };
   const meta = { strategy: 'p', components: ['a'], account: 'acct', timeframe: 3, sizing: null, contracts: 'micro', exit: strategy.exit, profile: optionsFromParams({}) };
   assert.strictEqual(bundleMismatch(meta, strategy), null);
+  // Live: a bundle trained on one leg decides only on that leg of the selected contract's family.
+  for (const [contracts, root, ok] of [['auto', 'MNQ', true], ['auto', 'NQ', true], ['micro', 'MNQ', true], ['micro', 'NQ', false], ['mini', 'NQ', true], ['mini', 'mnq', false], [undefined, 'NQ', true], ['mini', 'GC', true]]) {
+    const why = legMismatch({ ...meta, contracts }, root);
+    assert.strictEqual(why === null, ok, `${contracts} on ${root}: ${why}`);
+  }
+  assert.strictEqual(legMismatch({ contracts: 'micro' }, 'ES'), 'was trained on micros only (contracts: micro), and the selected contract ES is the mini: select the MES, or retrain');
   assert.match(bundleMismatch(meta, { ...strategy, params: { vpRowSize: 0.25 } }), /volume profile/);
   assert.match(bundleMismatch({ ...meta, profile: undefined }, strategy), /volume profile null/, 'a bundle from before the profile existed');
   assert.strictEqual(bundleMismatch({ ...meta, profile: optionsFromParams({ vpRowSize: 0.25 }) }, { ...strategy, params: { vpRowSize: 0.25 } }), null);

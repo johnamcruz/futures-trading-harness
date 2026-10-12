@@ -20,7 +20,9 @@ in a simulated challenge across all of them, decides:
 
 The size is worked out in micros from the account's cushion, then traded as
 micros or minis (`contracts: auto` trades minis once the size reaches one mini,
-10 micros; rounding is always down). Without a bundle the policy strategy takes
+10 micros; rounding is always down). Live trades the selected contract (the
+runner's symbols): its leg alone is sized, and a bundle trained on one leg
+decides only with that leg selected. Without a bundle the policy strategy takes
 every setup as sized: the rules-only baseline the policy must beat.
 
 The policy learns from the rules' setups, not from the reasoning model's
@@ -220,7 +222,7 @@ Rules:
 - At each setup of a policy strategy's strategies, while flat, the runner
   records a verdict: the strategy that fired, the side, `skip` / `half` /
   `full` (the trained policy's, or `full` without a bundle), the contract
-  (micro or mini), the largest size, the stop in ticks, and when it expires.
+  (the selected one), the largest size, the stop in ticks, and when it expires.
   The rules strategies don't start cycles of their own while an attempt runs;
   a skipped setup starts none. In a trade past the ratchet the runner asks
   the policy every bar and closes on `close`. Positions in either contract of

@@ -1,6 +1,6 @@
 ---
 name: prop_portfolio
-description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - a trained policy picks which setups to take on the Nasdaq, S&P, Dow, and Russell, at what size in micros or minis, and when to bank a trade, to pass the Topstep 100K combine without blowing it.
+description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - a trained policy picks which setups to take on the Nasdaq, S&P, Dow, and Russell, at what size in the selected contract, and when to bank a trade, to pass the Topstep 100K combine without blowing it.
 version: 1
 status: active                # the owner's call: live and replay; until a bundle is shipped the sizing rules decide (How It Works, 4)
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the micro or the mini (contracts)
@@ -13,7 +13,7 @@ sizing:                       # risk from the headroom above the floor
   cap_usd: 1000               # ... and at most $1,000
   drawdown_halve_usd: 1500    # half that while the balance is $1,500 or more below its peak
   min_size_guard: 1.5         # one micro may risk up to 1.5x the budget; a mini never more than the budget
-contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros)
+contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
 exit:
   trail_activate_r: 2         # hold the setup's own stop until +2R ...
   trail_giveback_r: 0.5       # ... then trail 0.5R behind the best price; past +2R the policy may bank it
@@ -36,8 +36,8 @@ Without a `policy` bundle it takes every setup at the account's size budget
 
 - A `topstep_100k` attempt is running (`node scripts/combine.js status`).
 - The runner reports a `prop_portfolio` setup with a verdict: the strategy
-  that fired, the side, the contract (the index's micro or mini: MNQ or NQ,
-  MES or ES, MYM or YM, M2K or RTY), the largest size, and the stop in ticks.
+  that fired, the side, the contract (the selected one, the runner's symbols:
+  MNQ or NQ, MES or ES, MYM or YM, M2K or RTY), the largest size, and the stop in ticks.
 
 ## How It Works
 
@@ -60,9 +60,11 @@ Without a `policy` bundle it takes every setup at the account's size budget
    never a full stop's reach to the floor or the daily limit. Risking a share
    of the headroom shrinks the size as the cushion shrinks, so a losing run
    decays toward a timeout instead of reaching the floor. It is worked out in
-   micros and traded as minis once it reaches one mini (`contracts: auto`),
-   always rounding down. A bundle trained on minis only (`contracts: mini` in
-   its training config) trades only once this document says the same.
+   micros and traded in the selected contract (MNQ selected: micros; NQ
+   selected: minis), always rounding down; with none selected, as minis once
+   it reaches one mini (`contracts: auto`). A bundle trained on minis only
+   (`contracts: mini` in its training config) trades only once this document
+   says the same, and only with the mini selected.
 4. The policy (once shipped) sees the account (cushion, progress, drawdown,
    day P&L, sessions left), the setup (which strategy, side, risk, micro or
    mini), and the market (session clock, ATR ratio, ADX), and answers skip,

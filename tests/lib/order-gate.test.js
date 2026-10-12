@@ -542,6 +542,34 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
   assert.match(run('auto', entryOrder({ contractId: NQ, size: 2 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /2 NQ is not within/);
 });
 
+test('combine: a selected leg is the only one a policy strategy trades and is sized in, whatever its contract mode', () => {
+  // As above: $400 budget, a 40-tick stop. MNQ selected: 19 MNQ under auto (never 1 NQ); NQ selected: 1 NQ under micro.
+  const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const run = (contracts, symbols, input, verdict) => {
+    const home = trendHome();
+    prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, { bar: BAR, strategy: 'orb', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, policy: null, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString(), ...verdict });
+    const selection = loadConfig({ FTH_SYMBOLS: symbols }).selection;
+    return evaluateOrder({ input, entries: [plan(5, { contractId: input.contractId })], now: NOW, config: { ...config, home, selection }, strategies: [propStrategy({ contracts })], accounts: [acct] }).violations;
+  };
+  for (const contracts of ['auto', 'mini', 'micro']) {
+    assert.deepStrictEqual(run(contracts, 'MNQ', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }), [], `MNQ selected, ${contracts}`);
+    const nq = run(contracts, 'MNQ', entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 });
+    assert.ok(nq.some(v => v.check === 'strategy' && /trades MNQ \(the selected contract\), not NQ/.test(v.message)), `MNQ selected, ${contracts}: NQ refused`);
+    assert.ok(nq.some(v => v.check === 'combine' && /1 NQ is not within .*\(19 MNQ/.test(v.message)), `MNQ selected, ${contracts}: the budget is in MNQ`);
+    assert.deepStrictEqual(run(contracts, 'NQ', entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 }), [], `NQ selected, ${contracts}`);
+    assert.match(run(contracts, 'NQ', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }).map(v => v.message).join(), /19 MNQ is not within .*\(1 NQ at \$202.80/, `NQ selected, ${contracts}`);
+  }
+  // The strategy check skipped: the budget alone still refuses the other leg (hard, unskippable).
+  const home = trendHome();
+  prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
+  prop.appendVerdict(home, { bar: BAR, strategy: 'orb', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, policy: null, contract: 'NQ', maxSize: 1, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+  const skipped = evaluateOrder({ input: entryOrder({ contractId: 'NQ', size: 1 }), entries: [plan(5, { contractId: 'NQ' })], now: NOW, config: { ...config, home, selection: loadConfig({ FTH_SYMBOLS: 'MNQ' }).selection, skipChecks: new Set(['strategy']) }, strategies: [propStrategy({ contracts: 'auto' })], accounts: [acct] });
+  assert.ok(skipped.violations.some(v => v.check === 'combine' && /1 NQ is not within .*\(19 MNQ/.test(v.message)));
+});
+
 test('combine: an untagged entry is refused while an attempt runs, even with the setup-tag check skipped', () => {
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));

@@ -986,6 +986,36 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.ok(fs.existsSync(dir));
 });
 
+test('order gate wiring: a policy strategy trades the selected leg (FTH_SYMBOLS), sized in it whatever its contracts mode; the other leg is refused', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  // propped: contracts micro, listing MNQ and NQ. $400 budget at a 40-tick stop: 19 MNQ, or 1 NQ ($200 + fees).
+  const run = (symbols, contract, size) => {
+    const home = tmpDir();
+    prop.startAttempt(home, account);
+    prop.snapshot(home, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
+    prop.appendVerdict(home, {
+      strategy: 'propped', component: 'crossing', contractId: contract, contract, direction: 'long', action: 'full', stopTicks: 40, maxSize: size,
+      policy: null, bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    const order = entryOrder({ contractId: contract, rationale: 'setup:propped long, stop 21480, target 21540', size });
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: contract, text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_SYMBOLS: symbols });
+    return gate(orderPayload(order), env);
+  };
+  let r = run('MNQ', 'MNQ', 19);
+  assert.strictEqual(r.code, 0, r.stderr);
+  r = run('NQ', 'NQ', 1);
+  assert.strictEqual(r.code, 0, `NQ selected: sized in NQ though propped says contracts: micro. ${r.stderr}`);
+  r = run('MNQ', 'NQ', 1);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[strategy\] setup:propped trades MNQ \(the selected contract\), not NQ\./);
+  assert.match(r.stderr, /\[combine\] topstep_50k: 1 NQ is not within .*\(19 MNQ/);
+  r = run('NQ', 'MNQ', 19);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[strategy\] setup:propped trades NQ \(the selected contract\), not MNQ\./);
+});
+
 test('order gate hook: a prop verdict is for its own bar - an older bar\'s verdict is refused, even with the checks skipped; exits pass', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');

@@ -129,7 +129,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
 - Exception: while a prop attempt runs a policy strategy (`signal: policy`),
-  its verdict sets the contract (micro or mini) and size, sized from the
+  its verdict sets the size in the selected contract, sized from the
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
   order gate enforces the verdict instead. Never exceed the verdict.
 - Minimum planned reward-to-risk is 1.5R unless the strategy says otherwise

@@ -355,6 +355,9 @@ function loadStrategies(pluginRoot, env = process.env) {
 function rootRefusal(s, root, selected = null) {
   const r = String(root || '').toUpperCase();
   const list = (s && Array.isArray(s.instruments)) ? s.instruments : [];
+  // A policy strategy picks either leg of a family it lists, unless one is selected: then that one.
+  const leg = s && s.signal === 'policy' && familyOf(r) ? selectedLeg(r, selected) : null;
+  if (leg && leg !== r) return `trades ${leg} (the selected contract), not ${r}`;
   const fam = s && s.signal === 'rules' ? familyOf(r) : null;
   if (fam && (list.includes(fam.micro) || list.includes(fam.mini))) {
     const pick = selectedLeg(r, selected);

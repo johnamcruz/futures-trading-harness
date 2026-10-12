@@ -84,7 +84,7 @@ function rulesPlan(c, s, { results, root, want, home, specOf }) {
   };
 }
 
-function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf }) {
+function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, selected }) {
   const v = prop.latestVerdict(home, s.name, root);
   const bundle = s.policy ? s.policy.bundle : null;
   if (!v) throw new Error(`${s.name} has no verdict for ${root}: the runner records one at each setup of ${(s.strategies || []).join(', ')}; no order`);
@@ -101,7 +101,7 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf }) {
   if (!account || !account.valid) throw new Error(`${s.name} trades account "${s.account}", which is ${account ? 'invalid' : 'not found'}`);
   const block = prop.combineBlock(home, account.name, now);
   if (block) throw new Error(`${account.name}: ${block}`);
-  const b = prop.budgetPlan(home, account, s, v.contract, v.stopTicks, v.action === 'half' ? 0.5 : 1, specOf);
+  const b = prop.budgetPlan(home, account, s, v.contract, v.stopTicks, v.action === 'half' ? 0.5 : 1, specOf, selected);
   if (b.error) throw new Error(`${account.name}: ${b.error}`);
   if (b.root !== v.contract || !(b.size >= 1)) throw new Error(`${account.name}: the size budget now allows ${b.root ? `${b.size} ${b.root}` : 'nothing'} at a ${v.stopTicks}-tick stop, not ${v.contract}; no order`);
   const size = Math.min(v.maxSize, b.size);
@@ -156,14 +156,14 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const bars = readBarsArg(file);
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now, selected });
-  const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env) };
+  const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env), selected };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });
   if (s.signal === 'policy') {
     // The gate's own prop checks on these exact arguments (an entry since the snapshot, the verdict
     // already used, the budget): a plan it would refuse is refused here, with its reason.
     const journal = readJournal(resolveJournalPath(c.env));
-    const found = prop.propViolations(inputs.home, { strategy: s, account: p.account, input: args, now, entries: entriesSince(journal, tradingDayStart(now)), journal, specOf: inputs.specOf });
+    const found = prop.propViolations(inputs.home, { strategy: s, account: p.account, input: args, now, entries: entriesSince(journal, tradingDayStart(now)), journal, specOf: inputs.specOf, selected });
     if (found.length) throw new Error(`the order gate would refuse this entry: ${found.map(v => `[${v.check}] ${v.message}`).join(' ')}`);
   }
   const account = Number.isInteger(accountId) ? '' : ' (add "accountId": the account\'s id)';

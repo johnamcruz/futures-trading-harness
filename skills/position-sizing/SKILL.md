@@ -52,7 +52,7 @@ description: Size futures trades from the stop distance, tick value, and the rem
    placed: the `[protect]` stop you place after the fill goes where the
    rationale said, never farther.
 6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
-   policy strategy, the verdict's contract (micro or mini), size, and stop
+   policy strategy, the verdict's contract (the selected one), size, and stop
    ticks were sized from the attempt's budget (`combine_status`); place at
    most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
    checks the verdict, not these caps; it still refuses a size over the

@@ -186,4 +186,17 @@ function loadBundle(pluginRoot, name, env = process.env, { requireValidated = tr
   };
 }
 
-module.exports = { BUNDLE_FORMAT, BUNDLE_VERSION, PROMOTION_GATE, modelDirs, bundlePath, gateFailures, bundleMismatch, trainedSymbols, checkBundle, loadBundle };
+/**
+ * Why a bundle can't decide live on the selected contract `root`, or null: live sizes only the selected leg
+ * (prop-state.js legsFor), so a bundle trained on one leg only (contracts micro or mini) decides only on that
+ * leg; one trained on both (auto) decides on either.
+ */
+function legMismatch(meta, root) {
+  const fam = familyOf(root);
+  const trained = meta.contracts || 'auto';
+  if (!fam || trained === 'auto') return null;
+  const leg = String(root).toUpperCase() === fam.mini ? 'mini' : 'micro';
+  return trained === leg ? null : `was trained on ${trained}s only (contracts: ${trained}), and the selected contract ${root} is the ${leg}: select the ${trained === 'mini' ? fam.mini : fam.micro}, or retrain`;
+}
+
+module.exports = { BUNDLE_FORMAT, BUNDLE_VERSION, PROMOTION_GATE, modelDirs, bundlePath, gateFailures, bundleMismatch, legMismatch, trainedSymbols, checkBundle, loadBundle };
