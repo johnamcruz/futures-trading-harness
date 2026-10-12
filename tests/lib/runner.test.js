@@ -15,7 +15,7 @@ const et = (h, m, s = 0) => DAY + ((h + 4) * 60 + m) * 60000 + s * 1000;
  * Fake market: bars aligned to the timeframe, published `publishMs` after the
  * close; optional outages (no bars) and a contract roll at `rollAt`.
  */
-function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null }) {
+function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null, accountState = null }) {
   let requests = 0;
   // Standard contract names (the contract translator's): the root, or root:YYYY-MM for another month.
   const contractAt = (t, symbol) => (rollAt && t >= rollAt ? `${symbol}:2027-03` : symbol);
@@ -35,6 +35,7 @@ function fakeMarket({ minutes, publishMs = 1000, outage = null, rollAt = null })
           return { t: new Date(t).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 };
         });
       },
+      ...(accountState ? { async accountState() { return accountState; }, async accountBalance() { return 100000; } } : {}),
       async netPosition() { return positions.net; },
       async workingOrders() { return positions.working; },
     }),
@@ -1008,4 +1009,17 @@ test('the trade prompt names today\'s unreviewed entries, from the journal and t
   // This fake broker reads no account state: the positions are unknown (null), never an empty, flat account.
   assert.strictEqual(calls[0].positions, null);
   assert.ok(Array.isArray(calls[0].orders));
+});
+
+test('the Unreviewed line gets the account\'s positions and working orders as the runner read them', async () => {
+  const calls = [];
+  const order = { id: 9, contractId: 'MNQ', type: 1, side: 1, size: 1, limitPrice: 21400 };
+  await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7),
+    market: fakeMarket({ minutes: 3, accountState: { positions: [], orders: [order] } }), positions: { net: 0, working: 1 },
+    deps: { journalEntries: () => [], unreviewed: (symbols, entries, positions, at, orders) => { calls.push({ positions, orders }); return null; } },
+  });
+  assert.ok(calls.length >= 1);
+  assert.deepStrictEqual(calls[0].positions, []);
+  assert.deepStrictEqual(calls[0].orders.map(o => o.id), [9], 'the working order reaches it (an entry not filled yet is not "closed")');
 });

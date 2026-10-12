@@ -249,6 +249,14 @@ test('a run\'s denied roles and the head trader\'s place_order deny hold through
     assert.strictEqual(decide(head, 'broker_place_order'), 'deny');
     assert.strictEqual(decide([...rules(merged.permission), ...rules(merged.agent['trade-executor'].permission)], 'broker_place_order'), 'allow');
   }
+  // Accepted, pinned: a user config that names the head trader's own broker tools (the harness's agent) leaves them
+  // denied after the merge (opencode appends the run's '*' after the user's keys), the risk-reducing ones too; the
+  // trade-executor keeps them by its own permissions, and the runner flattens and trails without the model.
+  const named = { agent: { [oc.HEAD_AGENT]: { permission: { broker_close_position: 'allow', broker_cancel_order: 'allow', broker_place_order: 'allow' } } } };
+  const hm = merge(merge(named, config), run);
+  assert.strictEqual(decide(headRules(hm), 'broker_place_order'), 'deny');
+  const exec = [...rules(hm.permission), ...rules(hm.agent['trade-executor'].permission)];
+  for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_place_order']) assert.strictEqual(decide(exec, t), 'allow', `trade-executor: ${t}`);
   // As the runner runs it (the project config, then the run's): the other roles and the risk-reducing calls stay allowed.
   const head = headRules(merge(config, run));
   for (const r of ['trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(decide(head, 'task', r), 'allow', r);
