@@ -576,6 +576,11 @@ test('verdict: an MAE at a partial exit\'s price, other fills at that instant, t
   // A partial at the MAE's time whose round trip's entry matches no position: not judged there; every state is.
   const oddPartial = fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MES', 0, 1, null], [2, 'MES', 1, 1, -2000], [3, 'MES', 0, 1, null], [4, 'MES', 1, 1, 2000], [6, 'MNQ', 1, 1, 0], [9, 'MNQ', 1, 1, 0, -1500, 6, '2026-03-02T15:01:00.000Z']]);
   assert.strictEqual(evaluate({ '2026-03-02': oddPartial }, { ...ACCOUNT, daily_loss_limit: 0 }).months[0].verdict, 'FAIL');
+  // A partial that itself passes the daily limit (2 of 4 NQ at -$2100, capped at -$2000) with the MAE (-$4200) at that
+  // fill: the account is flattened there, not judged again against the floor alone.
+  const nq = fillsOn('2026-03-02', [[0, 'NQ', 0, 4, null], [5, 'NQ', 1, 2, -2100], [9, 'NQ', 1, 2, -1000, -4200, 5]]);
+  const q = evaluate({ '2026-03-02': nq }, ACCOUNT).months[0];
+  assert.deepStrictEqual([q.verdict, q.days.map(x => x.pnl), q.excluded.map(x => x.why)], ['NOT YET', [-2000], ['flattened at the daily loss limit']]);
   // A close with no MAE exactly at the limit says so without an MAE.
   const flat = evaluate({ '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [5, 'MNQ', 1, 1, -2000]]) }, wide).months[0];
   assert.match(flat.events[0].text, /flattened there \(MNQ closed at \$-2000, counted as \$-2000\)/);

@@ -294,7 +294,7 @@ replay judge alike:
   its own balance, floor and room to the daily limit, the worst counting; an
   earlier day's point is judged against its floor only (trades open together are not added up; without MAE only the
   close is seen; an MAE is judged after the fills at its instant and also right
-  after its own position's fill there; fills at one instant are otherwise read in
+  after its own position's fill there (a partial exit or add); fills at one instant are otherwise read in
   the broker's order); at the daily limit the breaching close counts as the limit and
   what was still open is left out, as are positions opened after it that
   day and positions carried in from the month before.

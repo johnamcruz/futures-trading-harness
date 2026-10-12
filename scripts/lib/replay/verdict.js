@@ -334,10 +334,10 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
       const hit = applyFill(m, f, held);
       if (next === 0) opened.delete(f.contract);
       else if (prev === 0 || Math.sign(prev) !== Math.sign(next)) opened.set(f.contract, { since: f.ms, r: 0, states: [] }); // a new position (from flat, or reversed)
-      else if (held && f.closing) held.r += m.s.balance - before + f.fees; // a partial exit, before its fees
+      else if (held && f.closing && !hit) held.r += m.s.balance - before + f.fees; // a partial exit, before its fees
       for (const o of opened.values()) state(o, f.ms, day);
       const ev = held && next !== 0 && Math.sign(prev) === Math.sign(next) ? maeAt.get(`${f.contract}|${f.ms}`) : null;
-      if (ev && m.s.status === 'active' && !left.has(f.contract) && held.since === ev.entryMs) {
+      if (ev && !hit && m.s.status === 'active' && !left.has(f.contract) && held.since === ev.entryMs) { // not once flattened
         ev.close.maeDone = true;
         if (applyMae(m, ev, held)) flatten();
       }
@@ -401,7 +401,7 @@ function headLine(v) {
 const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
-  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime, on its own day) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting, an earlier day\'s point against its floor only (trades open together are not added up; a trade without MAE is seen only at its close). An MAE is judged after the fills at its instant, and also right after its own position\'s fill there (a partial exit at its price); other fills at one instant are read in the order the broker lists them.',
+  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime, on its own day) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting, an earlier day\'s point against its floor only (trades open together are not added up; a trade without MAE is seen only at its close). An MAE is judged after the fills at its instant, and also right after its own position\'s fill there (a partial exit or add at its price); other fills at one instant are read in the order the broker lists them.',
   'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',
 ];
 
