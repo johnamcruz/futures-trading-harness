@@ -3,7 +3,7 @@ name: prop_portfolio
 description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - a trained policy picks which setups to take on the Nasdaq, S&P, Dow, and Russell, at what size in the selected contract, and when to bank a trade, to pass the Topstep 100K combine without blowing it.
 version: 1
 status: active                # the owner's call: live and replay; until a bundle is shipped the sizing rules decide (How It Works, 4)
-instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the micro or the mini (contracts)
+instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
 timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works); a bundle trades only the timeframe it was trained on
 signal: policy                # a trained policy trades the setups of the strategies below
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first that fires on a bar is the setup
