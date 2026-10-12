@@ -141,7 +141,7 @@ test('order docs check a new order once and never wait or poll for a fill; the c
       /Gone and flat: journal\s+a review tagged `result:nofill`/, /Filled before\s+the cancel \(in whole or part\): it is a live, executed trade/,
       /cancel was refused, errored, or lost\): cancel\s+once more[^]*?journal a note naming it as an entry\s+without a stop bracket and end the cycle as `error`[^]*?next cycle\s+cancels it first \(interactively, tell the user/,
       /any quantity that filled is\s+protected first/,
-      /with its order id and that its stop bracket is attached[^]*?the next cycle\s+tells by this note/,
+      /with its order id and that its stop bracket is attached[^]*?the next cycle\s+tells by the entry's `order_placed` record, whose `data\.request` carries\s+`stopLossBracket`/,
       /`\[protect\]` stop when the order's one status\s+check shows the\s+fill/],
     'skills/trade-session/SKILL.md': [/`list_open_orders` once/, /Not filled yet[^]*?journal a note that the entry is working/, /in an autonomous cycle, end the cycle; interactively, until\s+the next check/, /Never wait or poll for the fill/,
       /Without a stop bracket, the trade-executor cancels the entry[^]*?confirms the cancel/, /journal a review tagged `result:nofill`/,
@@ -149,8 +149,8 @@ test('order docs check a new order once and never wait or poll for a fill; the c
       /Any quantity that filled is protected first in every case/,
       // The next cycle tells a bracketed working entry by the note; no note means cancel; a partial fill's unbracketed rest is cancelled.
       /journal a note that the entry is working \(its order\s+id, and that its stop bracket is attached\)/,
-      /tell by the journal\s+note step 6 writes[^]*?An entry without one, or with no such note[^]*?is cancelled first/,
-      /an entry order still working beside it without a stop bracket \(the rest of a partial fill\) is cancelled first/,
+      /tell by the entry's\s+own `order_placed` journal record \(`journal_read \{kind:"order_placed"\}`[^]*?`data\.result\.orderId`[^]*?`stopLossBracket`[^]*?An entry without one, or with no such record,\s+is cancelled first/,
+      /an entry order still working beside it without a stop bracket \(the rest of a partial fill; tell by its `order_placed` record, as for a flat account below\) is cancelled first/,
       // The next cycle cancels an unbracketed working entry instead of keeping it as its own pending entry.
       /Keep only\s+a pending entry from your own plan that carries its stop bracket\./],
     'agents/trade-executor.md': [/Check the entry's status once/, /Working, with its stop bracket[^]*?report `EXECUTED` with the entry working, its order id, and that its\s+stop bracket is attached/, /Never wait or poll for a fill/,
@@ -161,7 +161,8 @@ test('order docs check a new order once and never wait or poll for a fill; the c
       /Any quantity that filled is protected\s+first, whatever the rest shows/],
     'skills/autonomous-trading/SKILL.md': [/Never wait\s+within a cycle/, /journalled as working and the cycle\s+ends/, /as plain text in your final message: never as a tool call/,
       /unfilled entry without a\s+stop bracket is cancelled, not left working[^]*?cancel confirmed: cancelled, journal a `result:nofill` review and\s+end as `no-trade`[^]*?`executed`[^]*?`error` \(journal it as an entry without a stop bracket\)[^]*?Any quantity that filled is protected first/],
-    'skills/end-of-day/SKILL.md': [/a position still\s+open after its close is closed again/, /Don't wait\s+for a close to fill/, /unless its earlier close still shows\s+as a working order in `list_open_orders`/, /runner keeps\s+closing until it reads flat \(interactively, close again and tell the user/],
+    'skills/end-of-day/SKILL.md': [/a position still\s+open after its close is closed again/, /Don't wait\s+for a close to fill/, /unless its earlier close still shows\s+as a working order in `list_open_orders`: a market order on the opposite\s+side, sized to the position \(a stop or limit is not one/,
+      /cancels every working order once that\s+contract reads flat/, /runner keeps\s+closing until it reads flat \(interactively, close again and tell the user/],
     'rules/trading/risk-management.md': [/as soon as the\s+fill shows \(the order's one status check, or the next cycle's read\)/, /still unfilled at its one\s+status check is cancelled, not waited on/],
   };
   for (const [rel, wants] of Object.entries(docs)) {

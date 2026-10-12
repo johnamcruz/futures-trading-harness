@@ -68,7 +68,8 @@ guide resource once per session if it has one.
   bar, and live fills can lag) with its stop bracket attached: journal that
   it is working, with its order id and that its stop bracket is attached (an
   order list may not show the bracket until the entry fills; the next cycle
-  tells by this note), and end the cycle (the bracket protects it once it
+  tells by the entry's `order_placed` record, whose `data.request` carries
+  `stopLossBracket`, and this note), and end the cycle (the bracket protects it once it
   fills).
   Still working without a stop bracket (brackets rejected): don't leave it,
   since it would fill with no stop. `cancel_order` it (cancelling an entry

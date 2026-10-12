@@ -17,14 +17,17 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
 2. Open positions: flatten every one by `eodAt` (by 16:00 ET; 12:50 ET on
    an early-close day), in every mode, without asking: no position is held
    into the daily break. The trade-executor role uses `close_position` and
-   journals `[exit] end of day`, then cancels every working order. In an
+   journals `[exit] end of day`, then cancels every working order once that
+   contract reads flat (before that, a working order may be the close itself
+   or the position's stop; pending entries can go at once). In an
    interactive session you may ask the user only about cancelling a pending
    entry earlier than that.
 3. Confirm with `list_open_positions` and `list_open_orders` that nothing is
    left. A close the broker accepted isn't a flat account: a position still
    open after its close is closed again, unless its earlier close still shows
-   as a working order in `list_open_orders` (it hasn't filled yet; a second
-   close could cross it). The autonomous runner keeps closing,
+   as a working order in `list_open_orders`: a market order on the opposite
+   side, sized to the position (a stop or limit is not one; a second close
+   could cross a pending one). The autonomous runner keeps closing,
    and its end of day is done only once the account reads flat. Don't wait
    for a close to fill (no repeated bar or quote reads): if it still reads
    open after the second close (a replayed broker fills at the next bar),
