@@ -343,4 +343,10 @@ test('one search answer listing several months keeps its front month\'s spec, ev
     ? { content: [{ type: 'text', text: JSON.stringify(CONTRACTS.filter(c => c.name.includes(args.searchText)).reverse()) }] } : fakeBroker().call(name, args));
   await createTranslator({ call, cacheFile: reversed, now: () => new Date(t++) }).toBroker('MNQ');
   assert.strictEqual(JSON.parse(fs.readFileSync(reversed, 'utf8')).specs.MNQ.id, 'b-101');
+  // The agent's own search answer, passed up through the translator after today's front month is known: the same.
+  const own = path.join(tmpDir(), 'contracts-fake.json');
+  const tr2 = createTranslator({ call: fakeBroker().call, cacheFile: own, now: () => new Date(t++) });
+  await tr2.toBroker('MNQ');
+  await tr2.translateResult('search_contracts', CONTRACTS.filter(c => c.name.includes('MNQ')));
+  assert.strictEqual(JSON.parse(fs.readFileSync(own, 'utf8')).specs.MNQ.id, 'b-101');
 });

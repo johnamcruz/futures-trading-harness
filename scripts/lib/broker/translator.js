@@ -308,8 +308,9 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
       // Contract lists carry each contract's ticker: learn them all at once, no lookup per id.
       const items = (Array.isArray(data) ? data : [data]).filter(c => c && typeof c.id === 'string' && c.name !== undefined);
       let learned = false;
+      const at = now().toISOString(); // one read time for the whole answer: its front month's spec is kept
       for (const c of items) {
-        if (remember(c)) learned = true;
+        if (remember(c, at)) learned = true;
         else notTicker.add(c.id);
       }
       if (learned) save();
