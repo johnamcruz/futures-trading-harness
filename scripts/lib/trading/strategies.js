@@ -349,12 +349,16 @@ function loadStrategies(pluginRoot, env = process.env) {
  * (listing MNQ covers a selected NQ), and never the other one (selecting MNQ,
  * an NQ entry is refused, and the other way round), so it never alternates
  * between the two. With no leg of the family selected, it trades exactly the
- * roots it lists, and nothing of a family it lists both legs of (fails closed). Manual and policy strategies always trade exactly the roots
- * they list (a policy strategy's sizing picks its leg).
+ * roots it lists, and nothing of a family it lists both legs of (fails closed). Manual strategies always trade exactly the roots they list. A
+ * policy strategy trades within its list: the selected leg when one of the family is
+ * selected (its verdict is sized in that leg), else either leg it lists (its `contracts` picks).
  */
 function rootRefusal(s, root, selected = null) {
   const r = String(root || '').toUpperCase();
   const list = (s && Array.isArray(s.instruments)) ? s.instruments : [];
+  // A policy strategy picks either leg of a family it lists, unless one is selected: then that one.
+  const leg = s && s.signal === 'policy' && familyOf(r) ? selectedLeg(r, selected) : null;
+  if (leg && leg !== r) return `trades ${leg} (the selected contract), not ${r}`;
   const fam = s && s.signal === 'rules' ? familyOf(r) : null;
   if (fam && (list.includes(fam.micro) || list.includes(fam.mini))) {
     const pick = selectedLeg(r, selected);

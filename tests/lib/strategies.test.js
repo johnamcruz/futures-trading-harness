@@ -232,10 +232,17 @@ test('tradesRoot: a rules strategy trades the selected leg of a micro/mini famil
   assert.strictEqual(tradesRoot(rules(['GC']), 'SI', ['SI']), false);
   assert.strictEqual(tradesRoot(rules(['CL']), 'CL', ['CL']), true);
   assert.strictEqual(tradesRoot(rules(['CL']), 'MCL', ['MCL']), false);
-  // Manual and policy strategies: exactly what they list, whatever is selected.
+  // Manual strategies: exactly what they list, whatever is selected.
   assert.strictEqual(tradesRoot({ signal: 'manual', instruments: ['MNQ'] }, 'NQ', ['NQ']), false);
+  // Policy strategies: within what they list, the selected leg only; none selected, either leg listed.
+  const policy = { signal: 'policy', instruments: ['MNQ', 'NQ', 'MES', 'ES'] };
   assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ'] }, 'NQ', ['NQ']), false);
-  assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ', 'NQ'] }, 'NQ', ['MNQ']), true, 'a policy strategy\'s leg is its sizing\'s (unchanged here)');
+  assert.strictEqual(rootRefusal(policy, 'NQ', ['MNQ']), 'trades MNQ (the selected contract), not NQ');
+  assert.strictEqual(rootRefusal(policy, 'MNQ', ['NQ', 'MES']), 'trades NQ (the selected contract), not MNQ');
+  assert.strictEqual(tradesRoot(policy, 'MNQ', ['MNQ']), true);
+  assert.strictEqual(tradesRoot(policy, 'NQ', ['NQ']), true);
+  assert.strictEqual(tradesRoot(policy, 'ES', ['MNQ']), true, 'no leg of its family selected: its list');
+  for (const r of ['MNQ', 'NQ']) assert.strictEqual(tradesRoot(policy, r, null), true, `none selected: ${r}, its sizing's leg`);
   assert.strictEqual(tradesRoot({ signal: 'rules' }, 'MNQ', ['MNQ']), false, 'no instruments: nothing');
 });
 

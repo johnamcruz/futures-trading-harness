@@ -28,14 +28,14 @@ function liveBook(rawBars, spec, params = {}) {
  * policy with it, and the label dataset (rl/label-dataset.js) builds the
  * student's rows with it, so training reads what live reads.
  */
-function setupObservation({ account, cs, strategy, component, symbol, rawBars, spec, scan, results = [], specOf = specFor }) {
+function setupObservation({ account, cs, strategy, component, symbol, rawBars, spec, scan, results = [], specOf = specFor, selected = null }) {
   const book = liveBook(rawBars, spec, strategy.params);
   const i = book.bars.length - 1;
   const tf = timeframeMs(strategy.timeframe) || 60000;
   const closeAt = new Date(Date.parse(book.bars[i].t) + tf);
   const stopTicks = Math.max(1, roundHalfEven(scan.stopDistance / spec.tickSize)); // as the engine
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
-  const { legs, ratio, mode } = state.legsFor(account, symbol, specOf);
+  const { legs, ratio, mode } = state.legsFor(account, symbol, specOf, selected);
   const plan = fraction => combine.contractPlan({
     dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
   });
@@ -59,8 +59,8 @@ function setupObservation({ account, cs, strategy, component, symbol, rawBars, s
  * or null to take every setup as sized. The order gate checks the verdict.
  * specOf: root -> tick spec, the broker's live (as the gate sizes); the static table by default.
  */
-function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date(), specOf = specFor }) {
-  const { book, i, tf, closeAt, stopTicks, plan, cp: full, obs, sizing: z } = setupObservation({ account, cs, strategy, component, symbol, rawBars, spec, scan, results, specOf });
+function decideSetup({ bundle, account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, results = [], now = new Date(), specOf = specFor, selected = null }) {
+  const { book, i, tf, closeAt, stopTicks, plan, cp: full, obs, sizing: z } = setupObservation({ account, cs, strategy, component, symbol, rawBars, spec, scan, results, specOf, selected });
   const base = {
     at: now.toISOString(), expiresAt: new Date(closeAt.getTime() + tf).toISOString(), strategy: strategy.name, component, symbol, contractId,
     bar: book.bars[i].t, direction: scan.direction, stopTicks, account: account.name, combine: combine.summary(cs), policy: bundle ? bundle.meta.name : null,

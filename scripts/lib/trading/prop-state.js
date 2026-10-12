@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const combine = require('./combine');
 const { contractRoot, mayBeRoot, entryTime } = require('./journal');
-const { specFor, familyOf } = require('./contracts');
+const { specFor, familyOf, selectedLeg } = require('./contracts');
 const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
@@ -244,13 +244,19 @@ function legOf(account, root, specOf = specFor) {
   return spec ? { root, tickValue: spec.tickValue, fee: feeOf(account, root), max: (account.max_contracts && account.max_contracts[root]) || 0 } : null;
 }
 
-/** The micro and mini legs of a root's family (or the root alone), and the mini:micro ratio (from the specs' tick values). */
-function legsFor(account, root, specOf = specFor) {
+/**
+ * The micro and mini legs of a root's family (or the root alone), and the mini:micro ratio (from the specs' tick values).
+ * `selected` (the selected contracts: the runner's symbols, or FTH_SYMBOLS): a selected leg of the family is the
+ * only one sized (mode micro or mini), as every strategy trades the selected contract; none selected, the
+ * strategy's `contracts` decides.
+ */
+function legsFor(account, root, specOf = specFor, selected = null) {
   const fam = familyOf(root);
   if (!fam) return { legs: { micro: legOf(account, root, specOf), mini: null }, ratio: 10, mode: 'micro' };
   const legs = { micro: legOf(account, fam.micro, specOf), mini: legOf(account, fam.mini, specOf) };
   const ratio = legs.micro && legs.mini ? Math.round(legs.mini.tickValue / legs.micro.tickValue) : fam.ratio;
-  return { legs, ratio: ratio >= 1 ? ratio : fam.ratio };
+  const pick = selectedLeg(root, selected);
+  return { legs, ratio: ratio >= 1 ? ratio : fam.ratio, ...(pick ? { mode: pick === fam.micro ? 'micro' : 'mini' } : {}) };
 }
 
 /**
@@ -258,7 +264,7 @@ function legsFor(account, root, specOf = specFor) {
  * entry with a `stopTicks` stop, from the latest snapshot (combine.contractPlan,
  * as the backtester and training size it), or { error }.
  */
-function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, specOf = specFor) {
+function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, specOf = specFor, selected = null) {
   const r = readAttempt(home, account.name);
   const state = r && r.snapshot && r.snapshot.state;
   if (!state) return { error: `no ${account.name} snapshot to size from` };
@@ -272,7 +278,7 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   }
   if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return { error: 'a combine entry needs stopLossBracket.ticks (the gate sizes the trade from its stop)' };
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
-  const { legs, ratio, mode } = legsFor(account, root, specOf);
+  const { legs, ratio, mode } = legsFor(account, root, specOf, selected);
   const plan = combine.contractPlan({
     dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
   });
@@ -319,7 +325,7 @@ function verdictBarProblem(home, strategy, root, v) {
  *            side, recorded on the bar the setup is on now (the last bar of
  *            the signal record), said half or full, and the size is within it.
  */
-function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor }) {
+function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor, selected = null }) {
   const out = [];
   const root = contractRoot(input.contractId);
   const size = Number(input.size);
@@ -335,7 +341,7 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
   const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
   else {
-    const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf);
+    const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf, selected);
     if (b.error) out.push({ check: 'combine', message: `${account.name}: ${b.error}.` });
     else if (b.root !== root || !(size >= 1 && size <= b.size)) {
       const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : 'nothing';

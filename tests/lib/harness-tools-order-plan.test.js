@@ -229,6 +229,12 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.match(r.args.rationale, /^setup:prop_portfolio long at market from 27427\.50 .*stop 27423\.00 \(18 ticks\), 9 NQ risks \$810\.00$/);
   assert.match(r.text, /size 9: the verdict's full size 12, cut to the size budget now \(9\), for bos's setup; the stop is the verdict's 18 ticks$/m);
   assert.doesNotMatch(r.text, /status paper/, "prop_portfolio is active: a live entry, no plan-only note");
+  // MNQ selected (FTH_SYMBOLS): the budget is in MNQ only, so an NQ verdict is refused and an MNQ one is planned in MNQ.
+  const mnq = { ...ctx, env: { ...ctx.env, FTH_SYMBOLS: 'MNQ' } };
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, mnq), /the size budget now allows \d+ MNQ at a 18-tick stop, not NQ/);
+  verdict({ contract: 'MNQ', maxSize: 50 });
+  assert.deepStrictEqual([plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, mnq).args.contractId, plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, mnq).args.size], ['MNQ', 50]);
+  verdict();
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'short' }, ctx), /verdict is for a long entry, not short/);
   verdict({ contract: 'MNQ', maxSize: 50 });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the size budget now allows 9 NQ at a 18-tick stop, not MNQ/);

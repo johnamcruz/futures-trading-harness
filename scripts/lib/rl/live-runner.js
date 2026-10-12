@@ -22,7 +22,7 @@ const { contractRoot } = require('../trading/journal');
 const { familyOf } = require('../trading/contracts');
 const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
-const { loadBundle, bundleMismatch } = require('./policy-bundle');
+const { loadBundle, bundleMismatch, legMismatch } = require('./policy-bundle');
 const live = require('./live');
 const combine = require('../trading/combine');
 
@@ -49,7 +49,10 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     const b = bundles.get(name);
     if (b.error) return b;
     const why = bundleMismatch(b.meta, strategy, symbolRoot);
-    return why ? { error: `policy ${name} ${why}; retrain it for this strategy` } : b;
+    if (why) return { error: `policy ${name} ${why}; retrain it for this strategy` };
+    // The runner's contract is the selected leg, the only one live sizes.
+    const leg = symbolRoot ? legMismatch(b.meta, symbolRoot) : null;
+    return leg ? { error: `policy ${name} ${leg}` } : b;
   }
 
   /** The account profiles the valid policy strategies trade. */
@@ -180,7 +183,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
           const reason = (bundle && bundle.error) || (!cs ? `no ${s.account} attempt` : whyNoSpec(specOf, unspecified));
           verdict = { at: now.toISOString(), strategy: s.name, component: pick.name, symbol, contractId, direction: pick.direction, action: 'skip', maxSize: 0, contract: null, reason, expiresAt: now.toISOString() };
         } else {
-          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now, specOf });
+          verdict = live.decideSetup({ bundle, account, cs, strategy: s, component: pick.name, symbol: root, contractId, rawBars: bars, spec, scan: pick, results: [...byName.values()], now, specOf, selected: [root] });
         }
         live.appendVerdict(home, verdict);
         log(`${symbol}: ${s.name} ${pick.direction} setup from ${pick.name}: ${s.policy ? `policy ${s.policy.bundle}` : 'sizing'} says ${verdict.action}`

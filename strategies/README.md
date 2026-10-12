@@ -17,7 +17,8 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
   legs trades neither until one is selected). Everything else is checked on the
   contract ordered: its broker tick specs, and its size and
   `risk.max_risk_usd` in its own dollars (a mini's tick is worth 10 micros', 5
-  for silver). Manual and policy strategies match their list exactly. Exits
+  for silver). Manual strategies match their list exactly; a policy strategy
+  trades within its list, the selected leg when one is selected. Exits
   and protective stops on either leg are never refused.
 - **The Markdown body** is read by the agents: context filter, trigger, entry,
   stop, targets, and skip rules.
@@ -91,7 +92,7 @@ price (`exit:` block).
 
 The prop challenge is a strategy too: a **policy strategy** (`signal: policy`)
 trades the setups of the rules strategies it lists on a prop account, and a
-trained policy decides which to take, at what size (in micros or minis), and
+trained policy decides which to take, at what size (in the selected contract), and
 when to bank a trade.
 
 - `prop_portfolio`: every 3-minute strategy (ema_cross, supertrend,

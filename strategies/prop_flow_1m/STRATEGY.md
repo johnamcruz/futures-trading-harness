@@ -1,6 +1,6 @@
 ---
 name: prop_flow_1m
-description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - a trained policy decides which flow setups to take, at what size in micros or minis, and when to bank a trade, on the Topstep 100K combine.
+description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - a trained policy decides which flow setups to take, at what size in the selected contract, and when to bank a trade, on the Topstep 100K combine.
 version: 1
 status: paper                 # paper until a validated bundle is shipped and the user activates it
 instruments: [MNQ, NQ]
@@ -38,7 +38,7 @@ trades one timeframe, so the flow strategies get their own policy strategy.
 ## How It Works
 
 As `prop_portfolio`: the first flow strategy with a setup on the closed
-1-minute bar is the setup, sized from the cushion in micros or minis, and the
+1-minute bar is the setup, sized from the cushion in the selected contract, and the
 trained policy (once shipped) takes it, halves it, or skips it, and may bank a
 trade past +2R. A verdict is a ceiling: take it with `setup:prop_flow_1m`, exactly as given
 and at most its size, when the priority order (the strategy-library skill) says so.
@@ -47,6 +47,7 @@ and at most its size, when the priority order (the strategy-library skill) says 
 
 ```text
 prop_flow_1m short setup from ofi_absorption: sizing says full (max 1 NQ, stop 30 ticks)
-A $200 budget: 30 ticks on MNQ = $15 + $0.74 fees = $15.74 a micro, so 12 micros,
-traded as 1 NQ (contracts: auto): 30 ticks on NQ = $150 + $2.80 fees = $152.80.
+NQ selected. A $200 budget: 30 ticks on MNQ = $15 + $0.74 fees = $15.74 a micro, so
+12 micros, traded as 1 NQ: 30 ticks on NQ = $150 + $2.80 fees = $152.80.
+With MNQ selected, the same setup is 12 MNQ.
 ```

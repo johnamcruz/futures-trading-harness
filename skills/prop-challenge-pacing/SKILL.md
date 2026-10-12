@@ -18,7 +18,8 @@ A policy strategy (`signal: policy`, e.g. `prop_portfolio`) is the prop
 challenge as a strategy: it trades the setups of the rules strategies it
 lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
 `topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
-sized from the cushion in micros or minis (`contracts: micro | mini | auto`),
+sized from the cushion in the selected contract (`contracts: micro | mini |
+auto` only when none is selected),
 with a trained policy (`policy: { bundle }`) deciding which setups to take.
 The harness tracks the attempt and enforces it:
 
@@ -31,7 +32,7 @@ The harness tracks the attempt and enforces it:
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
 - At each setup the runner records a verdict: the strategy that fired, the
-  side, `skip` / `half` / `full`, the contract (MNQ or NQ, MES or ES, ...), the largest
+  side, `skip` / `half` / `full`, the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
   size, and the stop in ticks. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so (it may
   skip it or halve it), and then exactly as given: rationale
@@ -124,8 +125,9 @@ prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick st
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
 prop_portfolio's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
 drawdown from the peak). A 40-tick stop risks $20 + $0.74 fees = $20.74 a
-micro: 47 micros ($975 / $20.74), traded as 4 NQ (contracts: auto; NQ: $200 +
+micro: 47 micros ($975 / $20.74), traded as 4 NQ with NQ selected (NQ: $200 +
 $2.80 fees = $202.80 each, $811.20 in all). A `half` verdict: 23 micros, 2 NQ.
+With MNQ selected the verdict is 47 MNQ ($974.78), a `half` 23 MNQ.
 ```
 
 ```text
