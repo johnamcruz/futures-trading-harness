@@ -64,8 +64,8 @@ guide resource once per session if it has one.
   read its status once (`list_open_orders` and `list_open_positions`, or
   `get_account_snapshot`). Filled: carry on (its stop, its journal entry).
   Still working (a limit or stop entry not reached, or a market order the
-  broker hasn't filled yet; a replayed broker fills market orders at the next
-  bar, and live fills can lag) with its stop bracket attached: journal that
+  broker hasn't filled yet; a replay broker may fill it only at the next bar,
+  and live fills can lag) with its stop bracket attached: journal that
   it is working, with its order id and that its stop bracket is attached (an
   order list may not show the bracket until the entry fills; the next cycle
   tells by the entry's `order_placed` record, whose `data.request` carries

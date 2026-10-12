@@ -30,7 +30,7 @@ description: End-of-day routine - flatten before the 16:00 ET close (the harness
    could cross a pending one). The autonomous runner keeps closing,
    and its end of day is done only once the account reads flat. Don't wait
    for a close to fill (no repeated bar or quote reads): if it still reads
-   open after the second close (a replayed broker fills at the next bar),
+   open after the second close (a replay broker may fill it only at the next bar),
    report it in the journal note and the cycle result, and the runner keeps
    closing until it reads flat (interactively, close again and tell the user
    it is still open).

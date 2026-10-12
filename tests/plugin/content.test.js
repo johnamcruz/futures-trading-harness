@@ -131,7 +131,7 @@ test('every harness manifest agrees on name and version, and its paths exist', (
   for (const d of ['agents', 'commands', 'skills', 'hooks']) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', d)), `qwen-extension/${d}`);
 });
 
-// A cycle that waits for a fill burns its context (a replayed broker fills a market order at the next bar, and live
+// A cycle that waits for a fill burns its context (a replay broker may fill a market order only at the next bar, and live
 // fills can lag): every doc that places or verifies an order checks it once, and an unfilled one ends the cycle.
 test('order docs check a new order once and never wait or poll for a fill; the cycle result is plain text', () => {
   const docs = {
