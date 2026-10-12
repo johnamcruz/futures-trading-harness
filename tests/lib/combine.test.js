@@ -263,3 +263,15 @@ test('snapshot: unchanged carries a check that passed on the same balance, anyth
   prop.snapshot(home, acct, 96000, at('13:45:02'), { fills: [] });
   assert.match(prop.combineBlock(home, acct.name, at('13:45:30')), /^the attempt is over.*stand aside/);
 });
+
+test('orderSince: any order of ours that went through at or after the time (exits and stops too); an unreadable time counts', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const ok = (ts, text = 'setup:x long') => ({ ts, kind: 'order_placed', text, data: { result: { success: true } } });
+  assert.strictEqual(prop.orderSince([ok('2026-06-01T14:00:00Z')], '2026-06-01T13:57:02Z'), true);
+  assert.strictEqual(prop.orderSince([ok('2026-06-01T14:00:00Z', '[exit] flatten')], '2026-06-01T13:57:02Z'), true, 'exits count');
+  assert.strictEqual(prop.orderSince([ok('2026-06-01T13:50:00Z')], '2026-06-01T13:57:02Z'), false, 'before the snapshot');
+  assert.strictEqual(prop.orderSince([{ ...ok('2026-06-01T14:00:00Z'), data: { result: { success: false } } }], '2026-06-01T13:57:02Z'), false, 'refused');
+  assert.strictEqual(prop.orderSince([{ kind: 'plan', ts: '2026-06-01T14:00:00Z' }], '2026-06-01T13:57:02Z'), false);
+  assert.strictEqual(prop.orderSince([ok('not a time')], '2026-06-01T13:57:02Z'), true, 'unreadable time');
+  assert.strictEqual(prop.orderSince([], 'never'), true, 'no snapshot time');
+});

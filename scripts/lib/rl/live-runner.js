@@ -18,7 +18,7 @@
  */
 
 const { loadAccounts } = require('../trading/accounts');
-const { contractRoot } = require('../trading/journal');
+const { contractRoot, readJournal, resolveJournalPath } = require('../trading/journal');
 const { familyOf } = require('../trading/contracts');
 const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
@@ -27,7 +27,9 @@ const live = require('./live');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
 
-function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {} }) {
+function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {}, journal = null }) {
+  // The broker's journal (the harness's own order records): read only to know whether an order went through.
+  const journalEntries = journal || (() => readJournal(resolveJournalPath({ ...env, FTH_HOME: home })));
   const bundles = new Map();
   const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
   const warned = new Set();
@@ -97,7 +99,15 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       const r = withFills && !open ? live.readAttempt(home, a.name) : null;
       const prev = r && r.snapshot;
       if (r && r.anchor && r.anchor.day === tradingDayKey(now)) {
-        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && live.reconciled(prev.balanceCheck));
+        // Unchanged: flat before and now, the same balance, a check that passed, and no order of ours since
+        // (a round trip between two snapshots leaves both flat). A journal that can't be read counts as moved.
+        let ordered = true;
+        try {
+          ordered = prev ? live.orderSince(journalEntries(), prev.at) : true;
+        } catch (_err) {
+          ordered = true;
+        }
+        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && live.reconciled(prev.balanceCheck) && !ordered);
         if (!unchanged) {
           try {
             fills = await client.fillsSince(accountId, new Date(r.anchor.at));

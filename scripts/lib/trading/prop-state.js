@@ -301,6 +301,19 @@ function entrySinceSnapshot(home, accountName, entries = []) {
       : 'a prop attempt trades one position at a time: wait for the next bar\'s snapshot');
 }
 
+/**
+ * Did the harness send an order (any: entry, exit or stop) that went through at or after `sinceIso`? From the
+ * journal's `order_placed` records. A record with an unreadable time counts (fails closed). A round trip
+ * between two flat snapshots can leave the balance unchanged when the broker hasn't booked it: this is what
+ * tells the runner to read the fills anyway.
+ */
+function orderSince(entries, sinceIso) {
+  const at = Date.parse(sinceIso);
+  if (!Number.isFinite(at)) return true;
+  return (entries || []).some(e => e && e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
+    && !(entryTime(e) < at));
+}
+
 const feeOf = (account, root) => (account.fees_per_side && account.fees_per_side[root]) ?? (specFor(root) || {}).feesPerSide ?? 0.37;
 
 /*
@@ -479,7 +492,7 @@ function readVerdicts(home) {
 }
 
 module.exports = {
-  dayEndMs, closeBefore, balanceCheck, reconciled, BALANCE_TOLERANCE,
+  dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
 };
