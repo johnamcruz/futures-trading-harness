@@ -226,7 +226,7 @@ function checkRolesRan(transcriptPath, cycle, cached = []) {
   }
   const missing = missingRoles(roleCalls(texts.join('\n')), cycle, cached);
   return missing.length
-    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again (a role whose report the cycle prompt gave from the cache counts), then risk-manager phase 2, before its trade-executor call.`
+    ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
     : null;
 }
 

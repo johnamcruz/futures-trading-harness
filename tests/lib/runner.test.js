@@ -990,3 +990,22 @@ test('the report cache: valid reports go into the trade prompt and the gate\'s c
   assert.strictEqual(manage.filter(([k]) => k === 'serve').length, trades);
   assert.strictEqual(manage.filter(([k]) => k === 'record').length, trades);
 });
+
+test('the trade prompt names today\'s unreviewed entries, from the journal and the account the runner read', async () => {
+  const calls = [];
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7), market: fakeMarket({ minutes: 3 }), positions: { net: 0, working: 0 },
+    deps: {
+      journalEntries: () => [{ ts: new Date(et(9, 45)).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:keltner short', data: { result: { success: true } } }],
+      unreviewed: (symbols, entries, positions, at, orders) => { calls.push({ symbols, entries: entries.length, positions, orders }); return 'Unreviewed: MNQ: 1 closed entry today with no review.'; },
+    },
+  });
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 1);
+  assert.match(trade[0].prompt, /Unreviewed: MNQ: 1 closed entry today with no review\./);
+  assert.deepStrictEqual(calls[0].symbols, ['MNQ']);
+  assert.strictEqual(calls[0].entries, 1, 'the journal the prompt read');
+  // This fake broker reads no account state: the positions are unknown (null), never an empty, flat account.
+  assert.strictEqual(calls[0].positions, null);
+  assert.ok(Array.isArray(calls[0].orders));
+});

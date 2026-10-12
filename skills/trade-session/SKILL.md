@@ -185,7 +185,9 @@ such as `strategy-researcher`): use that report for its
 15m-and-up view, and take this bar's 3m facts (the trigger, the VWAP side,
 the candidates) from the bar briefing. Phase 2 reviews this bar's plan and
 is never cached. Cached reports count for the cycle's first entry only: after a
-`trade-executor` call, the next entry needs every role again.
+`trade-executor` call, the next entry needs every role again, and where the
+harness refuses a cached role's launch (opencode) that is the next cycle: a
+`trade-executor` call ends this cycle's entries.
 
 Every other role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and

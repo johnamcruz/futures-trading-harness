@@ -81,7 +81,7 @@ function createRunner(deps) {
     journalEntries = () => [],
     // Today's premarket plan for a symbol (trading/session-context.js): (symbol, entries, now) -> one line.
     premarketPlan = () => null,
-    // Today's closed entries with no review (trading/session-context.js unreviewedLine): (symbols, entries, positions, at) -> line or null.
+    // Today's closed entries with no review (trading/session-context.js unreviewedLine): (symbols, entries, positions, at, orders) -> line or null.
     unreviewed = () => null,
     // The news blackouts (trading/session-context.js): (now) -> one line.
     news = () => null,
@@ -968,7 +968,7 @@ function createRunner(deps) {
             bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
           }));
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
-          const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(items.map(x => x.symbol), journal, (acct && acct.positions) || [], cycleNow), null) : null;
+          const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(items.map(x => x.symbol), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;

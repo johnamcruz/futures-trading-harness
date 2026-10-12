@@ -62,13 +62,17 @@ function newsLine(blackouts, now) {
 }
 
 /**
- * The symbols with today's entries still unreviewed once their position is closed, as one prompt line (null: none).
+ * The symbols with today's entries still unreviewed once nothing is left working on them (no position, no working
+ * order), as one prompt line (null: none, or the positions unknown).
  * Counted as the gate counts them (order-gate successfulEntries against liveReviews, per contract root).
  */
-function unreviewedLine(symbols, entries, positions, now) {
+function unreviewedLine(symbols, entries, positions, now, orders = []) {
   const { successfulEntries, liveReviews } = require('./order-gate');
+  // Positions unknown (the account read failed): an open trade can't be told from a closed one, so say nothing.
+  if (!Array.isArray(positions)) return null;
   const day = entriesSince(entries || [], tradingDayStart(now));
-  const open = new Set((positions || []).filter(p => p && p.size).map(p => contractRoot(p.contractId)));
+  // Still being managed: an open position, or a working order (an entry not filled yet, or its stop) on the root.
+  const open = new Set([...positions.filter(p => p && p.size), ...(orders || []).filter(o => o && o.contractId)].map(p => contractRoot(p.contractId)));
   const out = [];
   for (const sym of symbols) {
     const root = contractRoot(sym);

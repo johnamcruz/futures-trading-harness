@@ -69,5 +69,9 @@ test('unreviewedLine: today\'s closed entries with no review, as the gate counts
   assert.strictEqual(unreviewedLine(['MNQ'], [entry('2026-05-29T14:00:30Z')], [], now), null, 'an earlier trading day');
   assert.strictEqual(unreviewedLine(['MNQ'], [entry('2026-06-01T14:00:30Z', 'MNQ:2026-06', '[exit] flatten')], [], now), null, 'an exit is not an entry');
   assert.match(unreviewedLine(['MNQ', 'MES'], [e, entry('2026-06-01T14:10:00Z', 'MES:2026-06'), entry('2026-06-01T14:30:00Z', 'MES:2026-06')], [], now), /MNQ: 1 closed entry today with no review; MES: 2 closed entries today with no review\./);
-  assert.strictEqual(unreviewedLine(['MNQ'], null, null, now), null);
+  assert.strictEqual(unreviewedLine(['MNQ'], null, [], now), null);
+  // A working order on the root (an entry not filled yet, or a stop): still being managed, not reviewable.
+  assert.strictEqual(unreviewedLine(['MNQ'], [e], [], now, [{ id: 9, contractId: 'MNQ:2026-06', type: 1 }]), null);
+  // Positions unknown (the account read failed): nothing said, never "closed".
+  assert.strictEqual(unreviewedLine(['MNQ'], [e], null, now), null);
 });
