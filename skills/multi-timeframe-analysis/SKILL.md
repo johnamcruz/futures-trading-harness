@@ -40,6 +40,12 @@ them rather than retrying.
 
 ### 2. Run the read
 
+In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+skill) already holds this read for the bar: the 15m frame and the alignment
+per side (`m15`), the 1h and 4h frames (`h1`), and the trend rule (`m3`). Use
+it; run `mtf_read` only without a current briefing, or for the daily frame
+(`daily`), which the briefing doesn't hold.
+
 ```text
 mtf_read {"bars": "<trigger bars>", "daily": "<the daily file bars_fetch returned>"}
 mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}    every number

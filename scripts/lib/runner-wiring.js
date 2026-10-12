@@ -29,7 +29,7 @@ const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { writeMtfRecord } = require('./trading/mtf-state');
-const { buildBriefing, readBriefing, writeBriefing } = require('./trading/briefing');
+const { buildBriefing, readBriefing, writeBriefing, removeBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -85,6 +85,21 @@ function runnerScan(strategies, cfg, symbol, bars, now) {
   return scan(sameTf, { bars }, { symbol, now, selected: cfg.symbols });
 }
 
+/**
+ * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
+ * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
+ */
+function briefingRecorder(home, cfg, now) {
+  return (item, results, scanError = null) => {
+    try {
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, now: now() }));
+    } catch (err) {
+      removeBriefing(home, item.symbol);
+      throw err;
+    }
+  };
+}
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
@@ -127,7 +142,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
-    recordBriefing: (item, results) => writeBriefing(home, buildBriefing({ symbol: item.symbol, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results || [], now: now() })),
+    recordBriefing: briefingRecorder(home, cfg, now),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
     scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,
@@ -140,4 +155,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, briefingRecorder, runnerScan, replayUnattested, closedBarsOnly };

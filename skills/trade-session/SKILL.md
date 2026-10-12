@@ -146,9 +146,12 @@ If the prompt names a bars file (the autonomous runner writes the bars that
 just closed, e.g. `<FTH_HOME>/bars/MNQ-3m.json`, by absolute path), pass the
 symbol and that path to every analyst: they start from the bar briefing and
 use the file only for what it lacks (other timeframes with `bars_fetch`).
-Each report opens with a `Data:` line naming the briefing versions it used:
-a report without one, or for another bar's `m3` version, didn't read this
-bar. Run that analyst again once; if it still doesn't, stand aside.
+Each report opens with a `Data:` line: the briefing versions it used, or,
+without a current briefing, the tools it called. A report with no `Data:`
+line, or naming another bar's `m3` version while this bar's briefing is
+current, didn't read this bar: run that analyst again once; if it still
+doesn't, stand aside. An old briefing (the tool says so) counts as none:
+the roles read the bars themselves.
 
 Run these roles at the same time with your harness's subagents, and wait for
 every result before step 3. Always delegate to a harness role by its agent name

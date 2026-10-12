@@ -66,7 +66,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    as plain text in your final message: never as a tool call or a tool's
    arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
-   one plan, at most one entry. **Read once per cycle.** For each symbol, each
+   one plan, at most one entry. The bar briefing (`bar_briefing`) is the
+   runner's file for this bar: read it as often as you need, and take its
+   numbers instead of recomputing them. **Read once per cycle.** For each symbol, each
    role (you, each analyst, each call of a role; a role you play yourself
    counts as that role) reads each of these at most once and reuses it:
    `strategies_scan` (one with `name` is a separate read), `mtf_read` (one

@@ -211,6 +211,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   const ts = read('skills/trade-session/SKILL.md');
   assert.match(ts, /\*\*Every cycle, first:\*\* the bar briefing \(`bar_briefing \{"symbol": "<SYMBOL>"\}`/);
   assert.match(ts, /Read it once and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
-  assert.match(ts, /Each report opens with a `Data:` line naming the briefing versions it used:\s+a report without one, or for another bar's `m3` version, didn't read this\s+bar\. Run that analyst again once; if it still doesn't, stand aside\./);
+  assert.match(ts, /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
+  assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing, or for the daily frame/);
+  assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it as often as you need/);
   assert.match(read('skills/harness-tools/SKILL.md'), /\| `bar_briefing` \| `symbol`, `json`\? \|/);
 });

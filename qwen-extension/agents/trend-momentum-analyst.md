@@ -32,10 +32,11 @@ bars (the snapshot, the multi-timeframe read and the scan), each part with
 its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
-briefing, or for what it lacks (another timeframe, a strategy's rules with
+current briefing, or for what it lacks (another timeframe, a strategy's rules with
 `strategies_show`). Where a step below names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
-`Data: bar_briefing <the versions you used>` (or the tools you called).
+`Data: bar_briefing <the versions you used>`, or, without a current
+briefing, `Data: no current briefing; <the tools you called>`.
 
 If the caller gives you a bars file for a timeframe (the autonomous runner
 writes the bars that just closed), use it for that timeframe. Fetch any other
@@ -47,7 +48,7 @@ never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trend-momentum-indicators`, `market-snapshot`,
    `strategy-library`, and `harness-tools`.
-2. Bars: the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
+2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
    `market_snapshot` on each, and `mtf_read` on the 3m file (its
    `Trend rule:` line is enforced by the scan and the gate).
 3. Regime: report the computed `regime` from the snapshot (primary,

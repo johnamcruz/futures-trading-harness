@@ -515,7 +515,7 @@ function createRunner(deps) {
       log(`${item.symbol}: strategy scan failed (${err.message})`, 'error');
     }
     try {
-      recordBriefing(item, item.scan);
+      recordBriefing(item, item.scan, item.scanError || null);
     } catch (err) {
       log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');
     }

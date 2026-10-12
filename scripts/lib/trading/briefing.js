@@ -9,29 +9,35 @@
  *
  * Each section holds what changes on its own clock, and is kept until then:
  *
- *   m3     the trigger bar: price, ET time and session window, regime, EMAs,
- *          ADX, Keltner, VWAP side, participation, 3m swings and liquidity
- *          (equal highs and lows, open fair value gaps), where price is against
- *          the value areas, IB and prior RTH range, the scan's candidates,
- *          the trend rule                                until the next base-bar close
- *   m15    the 15m read (trend, structure, swings, ADX), the alignment per
- *          side, today so far (open, gap, opening type, IB, day type), the
- *          session's volume profile                      until the next 15m close
+ *   m3     the trigger bar and everything that moves with it: price, ET time
+ *          and session window, regime, EMAs, ADX, Keltner, VWAP side (RTH
+ *          VWAP in RTH, else the session's), participation, 3m swings and
+ *          liquidity, today so far (open, gap, opening type, opening range,
+ *          IB, day type), the overnight range so far, the developing session
+ *          profile, where price is against the value areas, IB and prior RTH
+ *          range, the scan's candidates, the trend rule  until the next base-bar close
+ *   m15    the 15m read (trend, structure, swings), the alignment per side,
+ *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
+ *          SuperTrend, Keltner, ATR), all from completed 15m candles
+ *                                                         until the next 15m close
  *   h1     the 1h and 4h reads                            until the next 1h close
- *   day    the prior RTH day and its volume profile, the overnight range
- *                                                         until the next trading day
+ *   day    the prior RTH day and its volume profile      until the first bar after the 16:00 ET RTH close
+ *
+ * A value lives in the section whose clock it changes on: anything that
+ * moves bar by bar (a running high, a developing profile) is in m3.
  *
  * A section is recomputed before it expires when what it rests on breaks
  * (invalidation): a close through one of its key levels (m15: the 15m swing
- * high and low, the prior RTH high, low, VAH and VAL, the IB; h1: the 1h swing
- * high and low), or a bar whose range is over twice ATR(14) (m15 and h1).
+ * high and low, the prior RTH high, low, VAH and VAL; h1: the 1h swing high
+ * and low), or a bar whose range is over twice ATR(14) (m15 and h1).
  * Candles align to the 18:00 ET session open, as the multi-timeframe read does.
  *
  * Each section carries a version that changes only when it is recomputed, so
  * whatever was built on it (an analyst's report) stays valid while the
  * versions it used are unchanged.
  *
- *   buildBriefing({ symbol, bars, minutes, prev, scan, now })   the briefing (prev: the last one, reused where valid)
+ *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, now })   the briefing (prev: the last one, reused where valid)
+ *   current(b, now)                                              whether it is this bar's (its m3 still holds at now)
  *   renderBriefing(b, { now })                                   one text block per section, with validity
  *   briefingFile(home, root) / writeBriefing / readBriefing      <FTH_HOME>/briefing/<MICRO ROOT>.json
  *   nextClose(at, minutes)                                       when the candle containing `at` closes
@@ -41,7 +47,7 @@
 const fs = require('fs');
 const path = require('path');
 const { snapshot } = require('./market-snapshot');
-const { mtfRead } = require('./mtf');
+const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay } = require('./clock');
 const { familyRoot } = require('./contracts');
@@ -70,13 +76,24 @@ function sessionWindow(at) {
   return { name, until: new Date(at.getTime() + (end - m) * 60000 - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds())) };
 }
 
+/**
+ * When the prior RTH day next changes: the first bar that opens at or after 16:00 ET completes today's RTH day, so a
+ * section computed on the bar opening at `barOpen` holds until that bar closes (the next 16:00 ET after the bar's
+ * open, strictly, plus one bar).
+ */
+function nextRthRoll(barOpen, minutes) {
+  const m = minutesOfDay(barOpen, ET);
+  const ahead = (960 - m + 1440) % 1440 || 1440;
+  return new Date(barOpen.getTime() + (ahead + minutes) * 60000 - (barOpen.getUTCSeconds() * 1000 + barOpen.getUTCMilliseconds()));
+}
+
 const etClock = at => new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at);
 const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 const brief = f => (f ? { trend: f.trend, bias: f.bias, structure: f.votes && f.votes.structure, close: f.close, emaFast: f.emaFast, emaSlow: f.emaSlow, adx: f.adx, atr: f.atr, swingHigh: f.levels && f.levels.swingHigh, swingLow: f.levels && f.levels.swingLow, prevHigh: f.levels && f.levels.prevHigh, prevLow: f.levels && f.levels.prevLow } : null);
 
 /** Each section's data, levels it rests on, and expiry, from this bar's snapshot and read. */
-function computeSections({ snap, read, scan, minutes, closedAt }) {
+function computeSections({ snap, snap15, read, scan, scanError, minutes, closedAt }) {
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -86,6 +103,9 @@ function computeSections({ snap, read, scan, minutes, closedAt }) {
   const f15 = frameOf(read, 15);
   const f60 = frameOf(read, 60);
   const prior = vp.priorRth || {};
+  // The VWAP that applies: the RTH VWAP from 09:30 to 16:00 ET, else the session's (18:00 ET), as the strategy filters use.
+  const vwapRef = (snap.vwap || {}).applies === 'rth' ? lv.vwapRth : lv.vwapSession;
+  const t15 = (snap15 && snap15.trend) || {};
   return {
     m3: {
       validUntil: new Date(closedAt.getTime() + minutes * 60000),
@@ -94,20 +114,25 @@ function computeSections({ snap, read, scan, minutes, closedAt }) {
         price, bar: snap.last.t, et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(),
         regime: snap.regime && { primary: snap.regime.primary, volatility: snap.regime.volatility },
         trend: { emaFast: round2(t.emaFast), emaSlow: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend && t.supertrend.direction, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },
-        priceVsEmaFast: price > t.emaFast ? 'above' : 'below',
+        priceVsEmaFast: side(price, t.emaFast),
         atr14: round2((snap.volatility || {}).atr14),
-        vwap: { session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: price > lv.vwapSession ? 'above' : 'below', distanceAtr: (snap.vwap || {}).distanceAtr },
+        vwap: { applies: (snap.vwap || {}).applies || null, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr },
         participation: snap.participation && { relVolLast3VsPrior20: snap.participation.relVolLast3VsPrior20, relVolVsSameTimePriorDay: snap.participation.relVolVsSameTimePriorDay },
         swings3m: snap.structure,
         // Liquidity on the trigger bars: the recent swing points, equal highs and lows, open fair value gaps.
         liquidity: snap.liquidity ? { swingHighs: snap.liquidity.swingHighs, swingLows: snap.liquidity.swingLows, equalHighs: snap.liquidity.equalHighs, equalLows: snap.liquidity.equalLows, openFvgs: snap.liquidity.openFvgs } : null,
-        referenceStop: snap.referenceStop && { distance: round2(snap.referenceStop.distance) },
-        // Where price is against the levels the cached sections hold (it moves every bar, so it lives here).
+        // Today so far and the developing levels: they move bar by bar, so they live here, never in a cached section.
+        today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, ibHigh: day.ibHigh, ibLow: day.ibLow, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
+        overnight: lv.overnight || null,
+        sessionProfile: vp.session ? { poc: round2(vp.session.poc), vah: round2(vp.session.vah), val: round2(vp.session.val) } : null,
+        // Where price is against the levels: it moves every bar.
         location: {
           priorValue: where(price, prior.val, prior.vah), sessionValue: vp.session ? where(price, vp.session.val, vp.session.vah) : null,
           initialBalance: where(price, day.ibLow, day.ibHigh), priorRthRange: lv.priorRth ? where(price, lv.priorRth.low, lv.priorRth.high) : null,
         },
-        candidates: (scan || []).filter(r => r.candidate && r.direction).map(r => ({ name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null })),
+        // null: the scan failed this bar, so what fired is unknown (not "nothing fired").
+        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => ({ name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null })) : null,
+        ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
       },
     },
@@ -116,13 +141,19 @@ function computeSections({ snap, read, scan, minutes, closedAt }) {
       levels: [
         ['15m swing high', f15 && f15.levels.swingHigh], ['15m swing low', f15 && f15.levels.swingLow],
         ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low],
-        ['prior VAH', prior.vah], ['prior VAL', prior.val], ['IB high', day.ibHigh], ['IB low', day.ibLow],
+        ['prior VAH', prior.vah], ['prior VAL', prior.val],
       ].filter(([, p]) => Number.isFinite(p)),
       data: {
         frame: brief(f15),
         alignment: read.alignment,
-        today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, ibHigh: day.ibHigh, ibLow: day.ibLow, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null, openingRange: lv.openingRange || null },
-        sessionProfile: vp.session ? { poc: round2(vp.session.poc), vah: round2(vp.session.vah), val: round2(vp.session.val) } : null,
+        // The 15m candles' own indicators (completed candles only).
+        indicators: snap15 ? {
+          regime: snap15.regime && { primary: snap15.regime.primary, volatility: snap15.regime.volatility },
+          emaFast: round2(t15.emaFast), emaSlow: round2(t15.emaSlow), adx: t15.adx, adxSlope: t15.adxSlope,
+          supertrend: t15.supertrend ? { direction: t15.supertrend.direction, line: round2(t15.supertrend.line) } : null,
+          keltner: t15.keltner ? { upper: round2(t15.keltner.upper), mid: round2(t15.keltner.mid), lower: round2(t15.keltner.lower) } : null,
+          atr14: round2((snap15.volatility || {}).atr14),
+        } : null,
       },
     },
     h1: {
@@ -131,10 +162,11 @@ function computeSections({ snap, read, scan, minutes, closedAt }) {
       data: { h1: brief(f60), h4: brief(frameOf(read, 240)) },
     },
     day: {
-      validUntil: new Date(tradingDayStart(closedAt).getTime() + 1440 * 60000),
+      // The prior RTH day changes at the RTH close (16:00 ET).
+      validUntil: nextRthRoll(new Date(closedAt.getTime() - minutes * 60000), minutes),
       levels: [],
       data: {
-        priorRth: lv.priorRth || null, overnight: lv.overnight || null,
+        priorRth: lv.priorRth || null,
         priorProfile: prior.poc ? { poc: round2(prior.poc), vah: round2(prior.vah), val: round2(prior.val), hvn: prior.hvn, lvn: prior.lvn } : null,
       },
     },
@@ -153,14 +185,17 @@ function invalidation(sec, name, { prevClose, close, rangeAtr }) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired, not invalidated), else recomputed with a new version.
  */
-function buildBriefing({ symbol, bars: raw, minutes, prev = null, scan = [], now = new Date() }) {
+function buildBriefing({ symbol, bars: raw, minutes, prev = null, scan = [], scanError = null, now = new Date() }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
   const closedAt = new Date(Date.parse(last.t) + minutes * 60000);
   const snap = snapshot({ bars });
   const read = mtfRead(bars);
-  const fresh = computeSections({ snap, read, scan, minutes, closedAt });
+  // The 15m candles' own snapshot, from completed candles only (the one forming isn't in it).
+  const c15 = candles(bars, 15).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
+  const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
+  const fresh = computeSections({ snap, snap15, read, scan, scanError, minutes, closedAt });
   const atr = (snap.volatility || {}).atr14;
   const ctx = { prevClose: prev && prev.price, close: last.c, rangeAtr: atr > 0 ? (last.h - last.l) / atr : 0 };
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && Date.parse(prev.closedAt) < closedAt.getTime();
@@ -175,10 +210,29 @@ function buildBriefing({ symbol, bars: raw, minutes, prev = null, scan = [], now
   return { symbol, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
 }
 
+/** Price against a level: above or below (null without one). */
+function side(p, level) {
+  return Number.isFinite(level) && Number.isFinite(p) ? (p > level ? 'above' : p < level ? 'below' : 'at') : null;
+}
+
 /** Price against a low-high band: below, inside, or above (null without the band). */
 function where(p, lo, hi) {
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
   return p < lo ? 'below' : p > hi ? 'above' : 'inside';
+}
+
+/** The 15m candles' snapshot, or null when it can't be computed (too few candles for an indicator). */
+function snapshot15(c15) {
+  try {
+    return snapshot({ bars: c15 });
+  } catch (_err) {
+    return null;
+  }
+}
+
+/** Whether the briefing is this bar's: its m3 (the trigger bar) still holds at `now`. */
+function current(b, now = new Date()) {
+  return Boolean(b && b.sections && b.sections.m3 && Date.parse(b.sections.m3.validUntil) > now.getTime());
 }
 
 const fmt = v => (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -208,6 +262,11 @@ function writeBriefing(home, b) {
   return file;
 }
 
+/** Remove the briefing (a bar whose briefing failed: an older one must not be read as this bar's). */
+function removeBriefing(home, root) {
+  try { fs.unlinkSync(briefingFile(home, root)); } catch (_err) { /* none */ }
+}
+
 function readBriefing(home, root) {
   try {
     return JSON.parse(fs.readFileSync(briefingFile(home, root), 'utf8'));
@@ -216,4 +275,4 @@ function readBriefing(home, root) {
   }
 }
 
-module.exports = { SECTIONS, WINDOWS, nextClose, sessionWindow, buildBriefing, renderBriefing, briefingFile, writeBriefing, readBriefing };
+module.exports = { SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, buildBriefing, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing };

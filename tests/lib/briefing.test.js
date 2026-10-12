@@ -110,8 +110,75 @@ test('render, write, read, and the bar_briefing tool', () => {
   const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt };
   assert.match(barBriefing({ symbol: 'NQ' }, { env }).text, /^Bar briefing NQ 3m/);
   assert.deepStrictEqual(JSON.parse(barBriefing({ symbol: 'NQ', json: true }, { env }).text).sections.m3.version, b.sections.m3.version);
-  assert.match(barBriefing({ symbol: 'ES' }, { env }).text, /No bar briefing for ES yet/);
+  assert.match(barBriefing({ symbol: 'ES' }, { env }).text, /^No bar briefing for ES: .*Read the bars yourself/);
   assert.throws(() => barBriefing({ symbol: '../x' }, { env }), /--symbol/);
   fs.writeFileSync(B.briefingFile(home, 'ES'), '{not json');
   assert.strictEqual(B.readBriefing(home, 'ES'), null);
+});
+
+test('every expiry is right: on every bar, a reused section equals a fresh computation of it (nothing in it changed while it held)', () => {
+  let prev = null;
+  const stale = {};
+  let kept = 0;
+  for (let n = 100; n <= BARS.length; n += 1) {
+    const b = build(n, prev);
+    const f = build(n);
+    for (const s of B.SECTIONS) {
+      if (!prev || b.sections[s].version !== prev.sections[s].version) continue;
+      kept += 1;
+      for (const [k, v] of Object.entries(b.sections[s].data)) if (JSON.stringify(v) !== JSON.stringify(f.sections[s].data[k])) stale[`${s}.${k}`] = (stale[`${s}.${k}`] || 0) + 1;
+    }
+    prev = b;
+  }
+  assert.ok(kept > 3000, `${kept} sections reused`);
+  assert.deepStrictEqual(stale, {}, 'a value held past the point it changed: it belongs in a section with a shorter clock');
+});
+
+test('expiry instants: m3 one bar, m15 and h1 their candle\'s close, day the first bar after the 16:00 ET RTH close', () => {
+  const b = build(1300);
+  const closed = Date.parse(b.closedAt);
+  assert.strictEqual(Date.parse(b.sections.m3.validUntil), closed + 180000);
+  assert.strictEqual(b.sections.m15.validUntil, B.nextClose(new Date(closed), 15).toISOString());
+  assert.strictEqual(b.sections.h1.validUntil, B.nextClose(new Date(closed), 60).toISOString());
+  // The bar opening 15:57 ET closes 16:00: the prior RTH day rolls on the next bar (16:00-16:03), so it holds until 16:03.
+  const open = new Date('2026-06-01T19:57:00Z'); // 15:57 EDT
+  assert.strictEqual(B.nextRthRoll(open, 3).toISOString(), '2026-06-01T20:03:00.000Z');
+  assert.strictEqual(B.nextRthRoll(new Date('2026-06-01T20:00:00Z'), 3).toISOString(), '2026-06-02T20:03:00.000Z', 'the 16:00 bar itself: tomorrow\'s');
+  assert.strictEqual(B.nextRthRoll(new Date('2026-06-01T14:00:00Z'), 3).toISOString(), '2026-06-01T20:03:00.000Z');
+});
+
+test('m3: the VWAP side against the VWAP that applies (RTH in RTH), never "above" for a missing VWAP; a failed scan is unknown, not "nothing fired"', () => {
+  for (let n = 1200; n < 1300; n += 7) {
+    const d = build(n).sections.m3.data;
+    const ref = d.vwap.applies === 'rth' ? d.vwap.rth : d.vwap.session;
+    if (ref === null) assert.strictEqual(d.vwap.side, null);
+    else assert.strictEqual(d.vwap.side, d.price > ref ? 'above' : d.price < ref ? 'below' : 'at', `bar ${n}`);
+    // The side agrees with the sign of the distance in ATR (both from the same VWAP).
+    if (d.vwap.distanceAtr > 0) assert.strictEqual(d.vwap.side, 'above');
+    if (d.vwap.distanceAtr < 0) assert.strictEqual(d.vwap.side, 'below');
+    const pv = d.location.priorValue;
+    if (pv) assert.ok(['below', 'inside', 'above'].includes(pv));
+  }
+  const failed = build(1300, null, { scan: null, scanError: 'rules engine down' }).sections.m3.data;
+  assert.strictEqual(failed.candidates, null);
+  assert.strictEqual(failed.scanError, 'rules engine down');
+  assert.deepStrictEqual(build(1300, null, { scan: [] }).sections.m3.data.candidates, []);
+});
+
+test('an old briefing is never served as this bar\'s; a failed build removes the file', () => {
+  const home = tmpDir();
+  const b = build(1300);
+  B.writeBriefing(home, b);
+  assert.ok(B.current(b, new Date(b.closedAt)));
+  assert.ok(!B.current(b, new Date(b.sections.m3.validUntil)));
+  const old = barBriefing({ symbol: 'NQ' }, { env: { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: '2099-01-01T00:00:00Z' } }).text;
+  assert.match(old, /^The bar briefing for NQ is old \(its bar closed .*\): no current briefing\. Read the bars yourself/);
+  assert.doesNotMatch(old, /\[m3\]/);
+  const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
+  const record = briefingRecorder(home, { timeframe: 3 }, () => new Date(b.closedAt));
+  assert.throws(() => record({ symbol: 'NQ', bars: [] }, []), /need closed bars/);
+  assert.strictEqual(B.readBriefing(home, 'NQ'), null, 'the earlier bar\'s briefing is gone');
+  // The runner's step writes this bar's briefing from the bars it hands the cycle.
+  record({ symbol: 'NQ', bars: at(1300) }, [], null);
+  assert.strictEqual(B.readBriefing(home, 'NQ').sections.m3.version, b.sections.m3.version);
 });
