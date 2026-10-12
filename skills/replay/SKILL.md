@@ -115,6 +115,13 @@ broker.
    replay the policy, start an attempt in the run home at the replayed time
    after the first step created the home (`run --max-cycles 1`), then resume:
    `FTH_HOME=<workDir>/<runId> FTH_BROKERS_FILE=<workDir>/<runId>/brokers.json FTH_BROKER=<replay broker> FTH_REPLAY_NOW=<start, UTC> node scripts/combine.js start --account topstep_100k`.
+   The policy strategy must be `active` (`prop_portfolio` is): while an
+   attempt runs, the order gate takes entries only from a policy strategy
+   that trades it, and a policy owns its strategies' setups only when
+   `active` (a `paper` one is plan only; in a paper-mode run it owns them,
+   but nothing is placed), so with a `paper` policy every entry is refused.
+   Without a trained bundle the policy sizes each setup by its `sizing`
+   rules: full within the budget, or skip.
 
 10. **Labels.** `node scripts/replay.js labels <run dir>` turns a run into
    the labels a student policy learns from (any harness, any model): one

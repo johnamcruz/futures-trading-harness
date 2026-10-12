@@ -256,3 +256,11 @@ test('the session hours read unambiguously (a 9B model read "18:00 ET to 16:00 E
     assert.doesNotMatch(read(f), /18:00 ET to 16:00 ET|18:00-16:00 ET session/, f);
   }
 });
+
+test('the prop policy is active (live and replay), and the replay skill says a paper policy with an attempt refuses every entry', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const p = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  assert.ok(p && p.valid && p.status === 'active');
+  const r = fs.readFileSync(path.join(ROOT, 'skills/replay/SKILL.md'), 'utf8');
+  assert.match(r, /The policy strategy must be `active` \(`prop_portfolio` is\)[^]*?so with a `paper` policy every entry is refused\.\s+Without a trained bundle the policy sizes each setup by its `sizing`\s+rules: full within the budget, or skip\./);
+});
