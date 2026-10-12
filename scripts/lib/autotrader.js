@@ -126,6 +126,24 @@ function delegates(cfg, action = 'trade') {
   return !(cfg.cycle === 'lean' && (action === 'trade' || action === 'manage'));
 }
 
+/**
+ * Codex extra arguments that could turn subagents back on over the runner's -c features.multi_agent=false
+ * (a lean cycle): a profile (its own [profiles.<name>.features]), --enable, or a -c / --config that sets
+ * a feature, the agents table, or the profile. Returns the offending arguments, [] when none.
+ */
+function codexLeanBadArgs(args) {
+  const bad = [];
+  const risky = v => /features|multi_agent|agents|profile/i.test(String(v));
+  for (let i = 0; i < args.length; i += 1) {
+    const [flag, inline] = String(args[i]).split(/=(.*)/s);
+    const value = inline !== undefined ? inline : args[i + 1];
+    if (['--profile', '-p', '--enable'].includes(flag)) bad.push(String(args[i]));
+    else if (['-c', '--config'].includes(flag) && risky(value)) bad.push(inline !== undefined ? String(args[i]) : `${flag} ${value}`);
+    else if (/^-c./.test(flag) && risky(String(args[i]).slice(2))) bad.push(String(args[i]));
+  }
+  return bad;
+}
+
 const ORDER_TOOL_NAMES = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
 
 /**
@@ -265,6 +283,10 @@ function validateConfig(raw) {
     // --attach runs on a server the runner didn't configure, --dir or --agent run elsewhere or as another agent.
     const unsafe = opencode.badExtraArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
     if (unsafe.length) errors.push(`extraArgs: not ${unsafe.join(', ')} for opencode (only ${Object.keys(opencode.EXTRA_ARGS).join(', ')}: an unattended run gets only what the workspace config and the runner allow)`);
+  }
+  if (cfg.harness === 'codex' && cfg.cycle === 'lean') {
+    const bad = codexLeanBadArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
+    if (bad.length) errors.push(`extraArgs: not ${bad.join(', ')} for codex with cycle "lean": a profile, a feature switch, or a features/agents setting could turn its subagents back on (the runner sets features.multi_agent=false). Put the model in "model" and leave these out, or use cycle "full"`);
   }
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
@@ -693,6 +715,7 @@ module.exports = {
   claudeDenied,
   delegates,
   SUBAGENT_TOOLS,
+  codexLeanBadArgs,
   claudeOrderToolConflicts,
   resolveDataDir,
   NEWS_DOMAINS,

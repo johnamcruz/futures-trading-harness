@@ -190,12 +190,19 @@ test('the lean cycle plays every role itself, with the risk manager\'s phase 1 a
     /the runner doesn't\s+offer it in a lean cycle/, /roles' checklists still apply in full/, /`agents\/<role>\.md`/,
     /`trade-executor`'s Management and Blocks sections/, /review it yourself first \(the `trade-review` skill\)/,
     /No candidate → journal a\s+note and end/,
-    /`risk-manager`'s phase 1 yourself[^]*?`get_server_config`[^]*?`remainingBeforeLimit`[^]*?`journal_read`[^]*?`combine_status`/,
+    /`risk-manager`'s phase 1 yourself[^]*?`get_server_config`, `list_accounts` \(`canTrade`,\s+`mcpTradingAllowed`\), `get_account_snapshot` \(`remainingBeforeLimit`\)[^]*?`journal_read`[^]*?`combine_status`/,
+    /In plan-only mode, report the plan and verdict and end\./,
+    /acting as the `trade-executor` yourself, with the\s+`broker-mcp` skill loaded \(its order mechanics: confirm every cancel,\s+never wait or poll for a fill\)/, /then step 6\s+from "After placing", and step 7/,
     /`risk-manager`'s phase 2 yourself, before any order: every check 0-8\s+of its Phase 2 in order/,
     /Stop at the first failure: that is a VETO\. Write the verdict\s+line \(`VERDICT: APPROVE - size <n>, risk \$<x>, <reason>` or\s+`VERDICT: VETO - <failed check>: <fix>`\) in the plan entry/,
-    /Never place an entry without an APPROVE you wrote after these\s+checks/, /execute as the `trade-executor` does \(its Entry steps/]) assert.match(lean, want, String(want));
+    /Never\s+place an entry without an APPROVE you wrote after these checks/, /its Entry steps \(the account state\s+matches the plan/]) assert.match(lean, want, String(want));
   // What the lean cycle points to is there: the risk manager's Phase 2 checks 0-8, the executor's sections.
   const rm = read('agents/risk-manager.md');
+  // Phase 1 loads the risk manager's own skills, every one its agent file lists.
+  const rmSkills = [...rm.match(/Load the skills ([^.]*)\./)[1].matchAll(/`([a-z-]+)`/g)].map(m => m[1]);
+  assert.ok(rmSkills.length >= 6);
+  const phase1 = lean.slice(lean.indexOf("phase 1 yourself"), lean.indexOf('`get_server_config`'));
+  for (const sk of rmSkills) assert.ok(phase1.includes(`\`${sk}\``), `lean phase 1 loads ${sk}`);
   const phase2 = rm.slice(rm.indexOf('## Phase 2'));
   for (let i = 0; i <= 8; i += 1) assert.match(phase2, new RegExp(`^${i}\\. `, 'm'), `risk-manager Phase 2 check ${i}`);
   assert.match(phase2, /VERDICT: APPROVE - size <n>, risk \$<x>/);

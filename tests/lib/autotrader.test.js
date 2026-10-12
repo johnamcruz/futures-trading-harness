@@ -836,6 +836,15 @@ test('a lean cycle\'s trade and manage runs offer no subagent tool on any harnes
   const fullRun = runOf(full('opencode'), 'trade');
   assert.strictEqual(leanRun.agent['fth-head-trader'].permission['broker_*'], 'allow');
   for (const r of roles) assert.deepStrictEqual(leanRun.agent[r], fullRun.agent[r], r);
+  // Codex in a lean cycle: no extra argument that could turn subagents back on (a profile, --enable, a features/agents/profile setting).
+  const { codexLeanBadArgs } = require('../../scripts/lib/autotrader');
+  for (const extra of [['--profile', 'x'], ['--profile=x'], ['-p', 'x'], ['--enable', 'multi_agent'], ['--enable=multi_agent'], ['-c', 'features.multi_agent=true'], ['-c', 'profile="x"'], ['--config=agents.max_threads=4'], ['-cfeatures.multi_agent=true']]) {
+    assert.ok(codexLeanBadArgs(extra).length, extra.join(' '));
+    assert.throws(() => validateConfig({ harness: 'codex', cycle: 'lean', extraArgs: extra }), /extraArgs: not .* for codex with cycle "lean"/, extra.join(' '));
+    assert.ok(validateConfig({ harness: 'codex', extraArgs: extra }), `full: ${extra.join(' ')}`);
+  }
+  assert.deepStrictEqual(codexLeanBadArgs(['-c', 'model_reasoning_effort="high"', '--oss']), []);
+  assert.ok(validateConfig({ harness: 'codex', cycle: 'lean', extraArgs: ['-c', 'model_reasoning_effort="high"'] }));
   // A custom harness can't be restricted: the prompt says it.
   assert.deepStrictEqual(buildCommand(validateConfig({ harness: 'custom', cycle: 'lean', command: ['a', '{prompt}'] }), 'P', '/fth', {}, { action: 'trade' }), ['a', 'P']);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), et(10, 1), '/r').trade('MNQ'), /in lean cycle: no subagents; play each role yourself \(see the trade-session skill\)/);

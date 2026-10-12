@@ -139,12 +139,13 @@ harness root, are the source):
 2. The multi-timeframe read, `market_snapshot` and `strategies_scan` on the
    bars file, and the blackouts (`blackouts_list`). No candidate → journal a
    note and end.
-3. A candidate: the `risk-manager`'s phase 1 yourself (load
-   `position-sizing`, and `prop-challenge-pacing` when a prop attempt runs):
-   `get_server_config`, the account's `canTrade`, `get_account_snapshot`
-   (`remainingBeforeLimit`), today's reviews and lessons (`journal_read`:
-   loss streak, restricted setups), `combine_status` when a policy strategy
-   is in play. Then steps 3-4 (synthesis and plan, with "the analysts" read
+3. A candidate: the `risk-manager`'s phase 1 yourself, with the skills its
+   agent file loads (`position-sizing`, `prop-challenge-pacing`,
+   `trading-agent-security`, `strategy-library`, `broker-mcp`,
+   `harness-tools`): `get_server_config`, `list_accounts` (`canTrade`,
+   `mcpTradingAllowed`), `get_account_snapshot` (`remainingBeforeLimit`),
+   today's reviews and lessons (`journal_read`: loss streak, restricted
+   setups), `combine_status` when a policy strategy is in play. Then steps 3-4 (synthesis and plan, with "the analysts" read
    as your own snapshot, scan, and multi-timeframe read; `order_plan` for
    the numbers).
 4. The `risk-manager`'s phase 2 yourself, before any order: every check 0-8
@@ -156,12 +157,15 @@ harness root, are the source):
    answered). Stop at the first failure: that is a VETO. Write the verdict
    line (`VERDICT: APPROVE - size <n>, risk $<x>, <reason>` or
    `VERDICT: VETO - <failed check>: <fix>`) in the plan entry. VETO → note
-   and end. Never place an entry without an APPROVE you wrote after these
-   checks; the order gate checks some of them again, not all.
-5. On APPROVE, execute as the `trade-executor` does (its Entry steps: the
-   account state matches the plan, `get_contract`, `order_plan`'s
-   `place_order` arguments with the stop bracket, one status check, the
-   stop working), then steps 6-7.
+   and end. In plan-only mode, report the plan and verdict and end. Never
+   place an entry without an APPROVE you wrote after these checks; the
+   order gate checks some of them again, not all.
+5. On APPROVE, acting as the `trade-executor` yourself, with the
+   `broker-mcp` skill loaded (its order mechanics: confirm every cancel,
+   never wait or poll for a fill): its Entry steps (the account state
+   matches the plan, `get_contract`, `order_plan`'s `place_order` arguments
+   with the stop bracket, one status check, the stop working), then step 6
+   from "After placing", and step 7.
 
 **Full cycle** (default):
 

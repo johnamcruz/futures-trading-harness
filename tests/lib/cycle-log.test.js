@@ -190,3 +190,24 @@ test('toolCalls: Codex items with no event type count; an opencode call that err
   const oc = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_close_position', state: { status: 'error', input: {}, error: 'PositionNotFound: no open position' } } });
   assert.deepStrictEqual(toolCalls(oc).map(c => [c.name, c.failed, c.error]), [['mcp__broker__close_position', true, 'PositionNotFound: no open position']]);
 });
+
+test('summary.delegated: every subagent call by its role on each harness, a refused one marked; none when the run delegated nothing', () => {
+  const res = (id, isError) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: 'x' }] } });
+  const claude = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'a', name: 'Agent', input: { subagent_type: 'risk-manager', prompt: 'p' } }] } }), res('a', false),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b', name: 'Task', input: { subagent_type: 'trend-momentum-analyst' } }] } }), res('b', true),
+  ].join('\n');
+  assert.deepStrictEqual(summarize(claude).delegated, ['risk-manager', 'trend-momentum-analyst (refused)']);
+  // Qwen Code's agent tool, in its JSON array.
+  assert.deepStrictEqual(summarize(JSON.stringify([{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'q', name: 'agent', input: { subagent_type: 'market-structure-analyst' } }] } }])).delegated, ['market-structure-analyst']);
+  // opencode's task tool: completed, and refused by a permission rule.
+  const oc = (status, extra) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { sessionID: 's', type: 'tool', tool: 'task', callID: status, state: { status, input: { subagent_type: 'risk-manager', prompt: 'p' }, ...extra } } });
+  assert.deepStrictEqual(summarize([oc('completed', { output: 'ok' }), oc('error', { error: 'The user has specified a rule which prevents you from using this specific tool call.' })].join('\n')).delegated, ['risk-manager', 'risk-manager (refused)']);
+  // Codex: a spawn_agent item (its agent_message is not one).
+  const codex = [
+    JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'collab_agent_call', tool: 'spawn_agent', agent_type: 'risk_manager', status: 'completed' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: 'i2', type: 'agent_message', text: 'CYCLE RESULT: no-trade - x' } }),
+  ].join('\n');
+  assert.deepStrictEqual(summarize(codex).delegated, ['risk_manager']);
+  assert.deepStrictEqual(summarize(claudeStream(['trade-session'])).delegated, []);
+});
