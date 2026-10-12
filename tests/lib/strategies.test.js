@@ -249,6 +249,11 @@ test('selection: FTH_SYMBOLS is one contract per index; anything else is an erro
   assert.match(parseSelection('MNQ;rm -rf').error, /not a comma-separated list/);
   assert.throws(() => selectedSymbols({ FTH_SYMBOLS: 'ES,MES' }), /two contracts of one index/);
   assert.strictEqual(selectedSymbols({}), null);
+  // An autonomous run's runner always sets it: unset there, the selection is lost (an error, never "its list").
+  assert.throws(() => selectedSymbols({ FTH_AUTONOMOUS: '1' }), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.deepStrictEqual(selectedSymbols({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'NQ' }), ['NQ']);
+  assert.match(parseSelection('', { required: true }).error, /not set/);
+  assert.deepStrictEqual(parseSelection('MNQLONGROOT'), { symbols: ['MNQLONGROOT'] }, 'any root the runner accepts');
 });
 
 test('order check: a rules strategy trades the selected leg only; an unreadable selection refuses every entry', () => {

@@ -9,7 +9,7 @@
 const path = require('path');
 const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
-const { parseSelection } = require('./contracts');
+const { selectionOf } = require('./contracts');
 
 // Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
 // Strategies narrow their own hours with `sessions` (e.g. [ny]).
@@ -89,7 +89,8 @@ function loadConfig(env = process.env) {
     autonomous: env.FTH_AUTONOMOUS === '1',
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
-    selection: parseSelection(env.FTH_SYMBOLS),
+    // Unset in an autonomous run, the selection is lost: an error, every entry refused.
+    selection: selectionOf(env),
     // Paper mode: every new entry is refused (plans, reviews, and exits still work).
     paper: env.FTH_PAPER === '1',
     skipChecks: env.FTH_AUTONOMOUS === '1' ? new Set() : listEnv(env, 'FTH_ORDER_GATE_SKIP'),

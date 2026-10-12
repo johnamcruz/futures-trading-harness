@@ -148,6 +148,9 @@ test('report: R stats as the original bot reports them, plus dollars and drawdow
 test('config: data, symbols and limits are validated', () => {
   assert.throws(() => validateBacktestConfig({ symbols: ['MNQ'] }, ROOT), /data:/);
   assert.throws(() => validateBacktestConfig({ symbols: ['XYZ'], data: { XYZ: 'a.csv' } }, ROOT), /tickSize and tickValue/);
+  // One contract per index, as the runner selects: MNQ or NQ, never both.
+  assert.throws(() => validateBacktestConfig({ symbols: ['MNQ', 'NQ'], data: { MNQ: 'a.csv', NQ: 'a.csv' } }, ROOT), /symbols: one contract per index \(MNQ or NQ, not both\)/);
+  assert.strictEqual(validateBacktestConfig({ symbols: ['NQ', 'MES'], data: { NQ: 'a.csv', MES: 'a.csv' } }, ROOT).markets.length, 2);
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, start: '2025-02-01', end: '2025-01-01' }, ROOT), /end must be after start/);
   const ok = validateBacktestConfig({ data: { MNQ: 'a.csv' } }, ROOT);
   assert.deepStrictEqual([ok.markets[0].tickSize, ok.markets[0].tickValue], [0.25, 0.5]);

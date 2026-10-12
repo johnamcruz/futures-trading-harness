@@ -45,7 +45,7 @@ const { harnessHome } = require('../paths');
 const { writeJsonAtomic } = require('../harness-run');
 const { loadConfig } = require('../trading/config');
 const { parseWindows } = require('../trading/clock');
-const { CONTRACT_SPECS } = require('../trading/contracts');
+const { CONTRACT_SPECS, parseSelection } = require('../trading/contracts');
 const { accountNamed } = require('../trading/accounts');
 const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
 const { marketHoursErrors } = require('../autotrader');
@@ -101,6 +101,8 @@ function validateBacktestConfig(raw, baseDir) {
   const errors = [];
   if (!Number.isInteger(cfg.timeframe) || cfg.timeframe < 1 || cfg.timeframe > 60) errors.push('timeframe: minutes per bar, 1 to 60');
   if (!Array.isArray(cfg.symbols) || !cfg.symbols.length || !cfg.symbols.every(s => /^[A-Z0-9]+$/.test(s))) errors.push('symbols: e.g. ["MNQ"]');
+  // One contract per index, as the runner selects (micro or mini): each symbol is a selected contract.
+  else if (parseSelection(cfg.symbols.join(',')).error) errors.push('symbols: one contract per index (MNQ or NQ, not both), as the runner trades');
   if (!cfg.data || typeof cfg.data !== 'object') errors.push('data: { "<SYMBOL>": "<file>" } (Parquet, Excel, CSV, or JSON bars)');
   if (cfg.strategies !== null && !(Array.isArray(cfg.strategies) && cfg.strategies.every(s => typeof s === 'string'))) errors.push('strategies: a list of strategy names');
   for (const k of ['size', 'maxContracts']) if (!(Number.isInteger(cfg[k]) && cfg[k] > 0)) errors.push(`${k}: a positive whole number`);

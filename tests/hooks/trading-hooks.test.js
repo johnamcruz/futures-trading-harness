@@ -193,6 +193,13 @@ test('order gate wiring: a rules strategy trades only the selected leg (FTH_SYMB
   assert.strictEqual(run('MNQ', CROSS).code, 0);
   assert.match(run('NQ', CROSS).stderr, /\[strategy\] setup:crossing does not trade NQ \(instruments: MNQ\); .*FTH_SYMBOLS=NQ\)/);
   assert.match(run('MNQ', CROSS, { symbols: 'MNQ,NQ' }).stderr, /\[strategy\] FTH_SYMBOLS selects two contracts of one index \(MNQ, NQ\)/);
+  // An autonomous run without FTH_SYMBOLS has lost its selection: refused, never "its list".
+  const lostRun = (symbols) => {
+    const { env } = setup(planFor('MNQ'), { FTH_HOME: homeFor(), FTH_STRATEGIES_DIRS: extra, FTH_AUTONOMOUS: '1', ...(symbols ? { FTH_SYMBOLS: symbols } : {}) });
+    return gate(orderPayload({ ...ORDER, rationale: CROSS }), env);
+  };
+  assert.match(lostRun().stderr, /\[strategy\] FTH_SYMBOLS is not set in this autonomous run/);
+  assert.doesNotMatch(lostRun('MNQ').stderr, /\[strategy\]/);
   // A contract outside every family it lists: refused, selected or not.
   for (const c of ['ES', 'MES', 'GC', 'CL']) {
     const r = run(c, CROSS, { symbols: c });

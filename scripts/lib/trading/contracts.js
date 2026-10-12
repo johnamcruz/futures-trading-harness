@@ -55,20 +55,26 @@ const familyRoot = root => (familyOf(root) ? familyOf(root).micro : String(root 
  * The contracts the user selected to trade: FTH_SYMBOLS, comma-separated roots
  * (the autonomous runner sets it from its config's symbols for the harness it
  * launches). One leg per micro/mini family: selecting MNQ means MNQ, never NQ.
- * Returns { symbols } (null when unset: unknown) or { error }.
+ * Returns { symbols } (null when unset: unknown) or { error }. `required` (an
+ * autonomous run, whose runner always sets it): unset is an error, not unknown.
  */
-function parseSelection(value) {
-  if (value === undefined || value === null || String(value).trim() === '') return { symbols: null };
+function parseSelection(value, { required = false } = {}) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return required ? { error: 'FTH_SYMBOLS is not set in this autonomous run (the runner sets it from its symbols), so the selected contracts are unknown' } : { symbols: null };
+  }
   const list = String(value).split(',').map(x => x.trim().toUpperCase());
-  if (!list.every(x => /^[A-Z0-9]{1,8}$/.test(x))) return { error: `FTH_SYMBOLS is not a comma-separated list of contract roots (got ${JSON.stringify(String(value))})` };
+  if (!list.every(x => /^[A-Z0-9]+$/.test(x))) return { error: `FTH_SYMBOLS is not a comma-separated list of contract roots (got ${JSON.stringify(String(value))})` };
   const fams = list.map(familyRoot);
   if (new Set(fams).size !== fams.length) return { error: `FTH_SYMBOLS selects two contracts of one index (${list.join(', ')}): select one per index, e.g. MNQ or NQ` };
   return { symbols: list };
 }
 
-/** The selected symbols from the environment (null: none selected); an invalid FTH_SYMBOLS throws. */
+/** The selection in `env`: FTH_SYMBOLS, required in an autonomous run (FTH_AUTONOMOUS=1). */
+const selectionOf = (env = process.env) => parseSelection(env.FTH_SYMBOLS, { required: env.FTH_AUTONOMOUS === '1' });
+
+/** The selected symbols from the environment (null: none selected); an invalid or missing-but-required FTH_SYMBOLS throws. */
 function selectedSymbols(env = process.env) {
-  const sel = parseSelection(env.FTH_SYMBOLS);
+  const sel = selectionOf(env);
   if (sel.error) throw new Error(sel.error);
   return sel.symbols;
 }
@@ -80,4 +86,4 @@ function selectedLeg(root, symbols) {
   return symbols.find(x => x === f.micro || x === f.mini) || null;
 }
 
-module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot, parseSelection, selectedSymbols, selectedLeg };
+module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot, parseSelection, selectionOf, selectedSymbols, selectedLeg };

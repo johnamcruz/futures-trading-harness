@@ -127,6 +127,11 @@ test('strategies_scan and strategies_recent follow the selected leg (FTH_SYMBOLS
   assert.strictEqual(recentBos('MNQ', withSel('NQ')), false);
   assert.throws(() => strategiesOps.scan({ file, symbol: 'MNQ' }, withSel('MNQ,NQ')), /FTH_SYMBOLS selects two contracts of one index/);
   assert.throws(() => strategiesOps.recent({ file, symbol: 'MNQ' }, withSel('MNQ,NQ')), /FTH_SYMBOLS selects two contracts of one index/);
+  // An autonomous run without it has lost its selection: the scan, recent and order_plan refuse.
+  const lost = { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } };
+  assert.throws(() => strategiesOps.scan({ file, symbol: 'MNQ' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.throws(() => strategiesOps.recent({ file, symbol: 'MNQ' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, lost), /FTH_SYMBOLS is not set in this autonomous run/);
 });
 
 test('order_plan: the caller chooses; it refuses, with the reason, rather than pick', () => {

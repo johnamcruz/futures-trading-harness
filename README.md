@@ -619,7 +619,7 @@ node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-0
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:45-16:00@America/New_York` | No new entries (the New York opening print, and into the close) |
 | `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
-| `FTH_SYMBOLS` | (unset; the runner sets it to its `symbols`) | The selected contracts, one per index (e.g. `NQ,MES`). A rules strategy trades only the selected leg of a micro/mini family it lists (listing MNQ covers a selected NQ; selecting NQ refuses MNQ). Unset: each strategy trades exactly its `instruments`, and a rules strategy listing both legs of a family trades neither. Invalid (two legs of one index): every entry is refused |
+| `FTH_SYMBOLS` | (unset; the runner sets it to its `symbols`) | The selected contracts, one per index (e.g. `NQ,MES`). A rules strategy trades only the selected leg of a micro/mini family it lists (listing MNQ covers a selected NQ; selecting NQ refuses MNQ). Unset: each strategy trades exactly its `instruments`, and a rules strategy listing both legs of a family trades neither. Invalid (two legs of one index), or unset in an autonomous run (`FTH_AUTONOMOUS=1`): every entry is refused |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
 | `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |

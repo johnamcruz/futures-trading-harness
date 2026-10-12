@@ -200,7 +200,7 @@ test('callTool: in an autonomous run record is ignored, not an error: the result
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(__dirname, '..', 'fixtures', 'broker-mcp-server.js')] } } }));
   const bars = path.join(home, 'bars', 'NQ-3m.csv');
   const base = { ...process.env, FTH_HOME: home, FTH_ENV_FILE: path.join(home, 'none.env'), FTH_REPLAY_NOW: '' };
-  const auto = { ...base, FTH_AUTONOMOUS: '1' };
+  const auto = { ...base, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' };
   const manual = { ...base, FTH_AUTONOMOUS: '' };
   const cases = [
     ['strategies_scan', { bars, symbol: 'MNQ' }, 'strategies', 'every bar', path.join(home, 'signals', 'MNQ-3m.json')],
@@ -293,7 +293,7 @@ test('callTool: refusals name the tool\'s arguments, never the script\'s flags',
   fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
   fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'), path.join(home, 'bars', 'NQ-3m.csv'));
   const bars = path.join(home, 'bars', 'NQ-3m.csv');
-  const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1' };
+  const auto = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' };
   const cases = [
     ['strategies_scan', { bars, symbol: 'MNQ', record: true }, auto, /^\[strategies\] note: record ignored - the autonomous runner records every bar itself$/m],
     ['mtf_read', { bars, symbol: 'MNQ', record: true }, auto, /^\[mtf\] note: record ignored - the autonomous runner records the read itself$/m],

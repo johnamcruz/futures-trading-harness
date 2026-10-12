@@ -32,6 +32,8 @@ const FTH_ENV = [
   'FTH_HOME', 'FTH_REPLAY_NOW',
   // The exchange calendar the runner configures (closedDates, earlyCloseDates): the gate's session checks read it.
   'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES',
+  // The contracts the runner's symbols select (one per index): the gate and order_plan trade only those legs.
+  'FTH_SYMBOLS',
 ];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];

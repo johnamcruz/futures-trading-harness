@@ -84,7 +84,7 @@ test('strategies.js scan --record writes the signal record; strict flags; ignore
   assert.match(run(['--record']).stderr, /--record needs --symbol/);
   // Autonomous: the scan prints, record is ignored with a note (exit 0), and no record is written.
   const autoHome = tmpDir();
-  const auto = run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1', FTH_HOME: autoHome });
+  const auto = run(['--symbol', 'MNQ', '--record'], { FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_HOME: autoHome });
   assert.strictEqual(auto.status, 0, auto.stderr);
   assert.match(auto.stdout, /^\[/);
   assert.strictEqual(auto.stderr, '[strategies] note: --record ignored - the autonomous runner records every bar itself\n');

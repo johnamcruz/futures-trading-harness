@@ -200,8 +200,11 @@ test('strategy check: a rules strategy trades the selected leg (FTH_SYMBOLS) of 
   assert.match(runBoth(entryOrder({ contractId: 'MNQ' }), config).violations.find(v => v.check === 'strategy').message, /^setup:orb lists both MNQ and NQ, and neither is selected/);
   assert.deepStrictEqual(runBoth(entryOrder({ contractId: 'MNQ' }), mnq).violations, []);
   assert.deepStrictEqual(runBoth(entryOrder({ contractId: 'NQ', stopLossBracket: { ticks: 20, type: 'stop' } }), mnq).violations, [{ check: 'strategy', message: 'setup:orb trades MNQ (the selected contract), not NQ.' }]);
-  // An unreadable selection refuses every entry.
+  // An unreadable selection refuses every entry; so does a lost one (unset in an autonomous run).
   assert.match(run(entryOrder({ contractId: 'MNQ' }), withSel('MNQ,NQ')).violations.find(v => v.check === 'strategy').message, /FTH_SYMBOLS selects two contracts of one index/);
+  const lost = { ...loadConfig({ FTH_AUTONOMOUS: '1' }), home: config.home, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+  assert.match(run(entryOrder({ contractId: 'MNQ' }), lost).violations.find(v => v.check === 'strategy').message, /^FTH_SYMBOLS is not set in this autonomous run .*No entries until it is fixed\.$/);
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ' }), { ...lost, selection: loadConfig({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }).selection }).violations, []);
   // max_risk_usd in NQ's dollars: 40 ticks x $5 = $200, over $100 (one MNQ at 40 ticks would be $20).
   const over = run(entryOrder({ contractId: 'NQ' }), nq);
   assert.deepStrictEqual(checks(over), ['max-risk']);
