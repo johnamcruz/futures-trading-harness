@@ -206,7 +206,14 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
     assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
     assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
   }
-  assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this step agrees and it isn't\s+`blocked`[^]*?A policy strategy's\s+verdict is placed as given; the facts never\s+change it\./);
+  assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's facts first\*\*[^]*?They are context, not a verdict: judge the setup by its\s+strategy's STRATEGY\.md[^]*?the opportunity this\s+harness looks for, when the rest of this step agrees and it isn't\s+`blocked`[^]*?The priority order below decides: a policy strategy's verdict\s+too\./);
+  const ts2 = read('skills/trade-session/SKILL.md');
+  assert.match(ts2, /\*\*The priority order: the rule for every setup\*\*[^]*?A verdict is a ceiling on size, never an\s+order\. Contradicting facts mean no trade; confluence means trade\.[^]*?1\. \*\*Hard stops → no trade\*\*[^]*?2\. \*\*The trend rule\*\*[^]*?3\. \*\*Room\*\*[^]*?4\. \*\*The multi-timeframe read for its side\*\*[^]*?`mixed` → half[^]*?5\. \*\*The strategy's own context filter and skip rules\*\*[^]*?6\. \*\*Confluence\*\*[^]*?7\. \*\*Secondary context\*\*[^]*?cuts to half, never vetoes alone\./);
+  for (const f of ['skills/trade-session/SKILL.md', 'skills/prop-challenge-pacing/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'agents/risk-manager.md', 'strategies/prop_portfolio/STRATEGY.md']) {
+    assert.doesNotMatch(read(f), /Place exactly the verdict|the facts never\s+change it|doesn't halve the verdict|is already sized: don't halve it|Never argue with\s+it/, f);
+  }
+  assert.match(read('agents/risk-manager.md'), /Judge every setup, a policy verdict too, by the trade-session skill's\s+priority order/);
+  assert.match(read('skills/prop-challenge-pacing/SKILL.md'), /\*\*A verdict is a ceiling, never an order\*\*/);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
   for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');

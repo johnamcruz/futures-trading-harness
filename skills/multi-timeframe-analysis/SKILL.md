@@ -119,8 +119,8 @@ From the highest timeframe down, for each side:
 | `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)`; skip if that is 0 (at size 1, every `mixed` read is a skip). Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |
 
-A policy strategy's verdict is already sized by its policy: the read goes in
-the plan, but it doesn't halve the verdict.
+A policy strategy's verdict is a ceiling: the read halves or skips it like
+any setup (the trade-session skill's priority order).
 
 The `bias` (long, short, or neutral) weights the higher timeframes more
 (score out of ±max): use it for the game plan's headline.
