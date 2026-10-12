@@ -15,7 +15,8 @@
  *          liquidity, today so far (open, gap, opening type, opening range,
  *          IB, day type), the overnight range so far, the developing session
  *          profile, the latest BOS or CHoCH, sweeps of the key levels in the
- *          last 10 bars, the 1h swings not traded back to, where price is against the value areas, IB and prior RTH
+ *          last 10 bars, the 1h swings not traded back to, the nearest
+ *          liquidity above and below in points and ATR (room to run), where price is against the value areas, IB and prior RTH
  *          range, the scan's candidates, the trend rule  until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
@@ -108,6 +109,11 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
   // The VWAP that applies: the RTH VWAP from 09:30 to 16:00 ET, else the session's (18:00 ET), as the strategy filters use.
   const vwapRef = (snap.vwap || {}).applies === 'rth' ? lv.vwapRth : lv.vwapSession;
   const t15 = (snap15 && snap15.trend) || {};
+  const atr3 = (snap.volatility || {}).atr14;
+  // A 1h swing counts as tested only by bars after its hour closed (the bars inside it made it).
+  const swings1h = pivots(c60);
+  const untested1h = untestedSwings(bars, [...swings1h.filter(x => x.type === 'high').slice(-4), ...swings1h.filter(x => x.type === 'low').slice(-4)]
+    .map(x => ({ ...x, end: new Date(Date.parse(x.t) + 3600000).toISOString() })));
   return {
     m3: {
       validUntil: new Date(closedAt.getTime() + minutes * 60000),
@@ -127,13 +133,23 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
         // prior RTH and overnight highs and lows, equal highs and lows, the last 3m swings) in the last 10 bars, and the 1h swings not traded back to (that changes on any bar, so it lives here).
         structure: lastBreaks(bars),
         sweeps: sweeps(bars, [
-          ['prior RTH high', (lv.priorRth || {}).high, 'high'], ['prior RTH low', (lv.priorRth || {}).low, 'low'],
-          ['overnight high', (lv.overnight || {}).high, 'high'], ['overnight low', (lv.overnight || {}).low, 'low'],
+          ['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true],
+          ['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true],
           ['last 3m swing high', (snap.structure || {}).lastSwingHigh, 'high'], ['last 3m swing low', (snap.structure || {}).lastSwingLow, 'low'],
           ...((snap.liquidity || {}).equalHighs || []).map(x => ['equal highs', Math.max(...x.prices), 'high']),
           ...((snap.liquidity || {}).equalLows || []).map(x => ['equal lows', Math.min(...x.prices), 'low']),
-        ].map(([name, price, side]) => ({ name, price, side })), 10).slice(0, 5),
-        untested1hSwings: untestedSwings(bars, [...pivots(c60).filter(x => x.type === 'high').slice(-4), ...pivots(c60).filter(x => x.type === 'low').slice(-4)]),
+        ].map(([name, price, side, key = false]) => ({ name, price, side, key })), 10),
+        untested1hSwings: untested1h,
+        // The room to run: the nearest liquidity above and below price, in points and ATR(14) (a target, or what's in
+        // a trade's way: the skip rules' "liquidity within 1R").
+        nearestLiquidity: nearest(price, atr3, [
+          ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low],
+          ['overnight high', (lv.overnight || {}).high], ['overnight low', (lv.overnight || {}).low],
+          ['prior VAH', prior.vah], ['prior VAL', prior.val], ['prior POC', prior.poc],
+          ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
+          ...((snap.liquidity || {}).equalHighs || []).map(x => ['equal highs', Math.max(...x.prices)]),
+          ...((snap.liquidity || {}).equalLows || []).map(x => ['equal lows', Math.min(...x.prices)]),
+        ]),
         // Today so far and the developing levels: they move bar by bar, so they live here, never in a cached section.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, ibHigh: day.ibHigh, ibLow: day.ibLow, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
@@ -224,6 +240,14 @@ function buildBriefing({ symbol, bars: raw, minutes, prev = null, scan = [], sca
     sections[name] = { version: `${name}@${closedAt.toISOString()}`, computedAt: closedAt.toISOString(), validUntil: s.validUntil.toISOString(), reason: why, levels: s.levels, data: s.data };
   }
   return { symbol, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
+}
+
+/** The nearest named level above and below price, with the distance in points and in ATR (null when none). */
+function nearest(price, atr, levels) {
+  const pick = above => levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
+    .sort(([, a], [, b]) => (above ? a - b : b - a))[0];
+  const one = x => (x ? { name: x[0], price: x[1], points: round2(Math.abs(x[1] - price)), atr: atr > 0 ? round2(Math.abs(x[1] - price) / atr) : null } : null);
+  return { above: one(pick(true)), below: one(pick(false)) };
 }
 
 /** Price against a level: above or below (null without one). */

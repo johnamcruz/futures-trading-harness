@@ -227,3 +227,11 @@ test('the briefing carries the structure events the analysts report: BOS or CHoC
   for (const x of d.sweeps) assert.ok(['high', 'low'].includes(x.side) && x.name && Number.isFinite(x.price));
   assert.ok(Array.isArray(d.untested1hSwings));
 });
+
+test('nearestLiquidity: the nearest level above and below price, in points and ATR (room to run, or a level in the way)', () => {
+  const d = build(1300).sections.m3.data;
+  const { above, below } = d.nearestLiquidity;
+  if (above) assert.ok(above.price > d.price && Math.abs(above.points - (above.price - d.price)) < 0.011 && Math.abs(above.atr - above.points / d.atr14) < 0.02);
+  if (below) assert.ok(below.price < d.price && Math.abs(below.points - (d.price - below.price)) < 0.011);
+  assert.ok(above || below, 'the fixture has levels on at least one side');
+});

@@ -9,10 +9,10 @@
  *   lastBreaks(bars, k)          the latest close through a confirmed swing that hadn't been broken, labelled BOS
  *                                 when it continues the previous break's direction and CHoCH when it reverses it;
  *                                 { last, previous } each { kind, direction, level, swingAt, at } or null
- *   sweeps(bars, levels, n)      in the last n bars, a high level (side 'high') wicked above and closed back below,
- *                                 or a low level wicked below and closed back above:
- *                                 [{ name, price, side, at, wick, close }], most recent first, one per level
- *   untestedSwings(bars, swings) the swings price hasn't traded back to since they formed (by the bars after them)
+ *   sweeps(bars, levels, n)      in the last n bars, a high level traded above and closed back below within 1-3
+ *                                 bars (a low level the same below): [{ name, price, side, key, at, back, bars,
+ *                                 wick, close }], one per level, key levels first, then most recent first
+ *   untestedSwings(bars, swings) the swings price hasn't traded back to since their candle closed (swing.end)
  */
 
 /** Confirmed fractal swings, oldest first. */
@@ -57,28 +57,46 @@ function lastBreaks(bars, k = 2) {
   return { last: breaks[breaks.length - 1] || null, previous: breaks[breaks.length - 2] || null };
 }
 
-/** Sweeps of named levels in the last n bars: a wick through and a close back inside, most recent first. */
+/**
+ * Sweeps of named levels in the last n bars (the liquidity-concepts skill: trade through the level and close back
+ * inside within 1-3 bars). A high level: a bar trading above it, from a close at or below it, and a close back below
+ * within that bar or the next two; a low level the same below. One per level (the most recent), key levels first
+ * (`key: true`), then most recent first.
+ */
 function sweeps(bars, levels, n = 10) {
   const out = [];
-  const from = Math.max(0, bars.length - n);
+  const from = Math.max(1, bars.length - n);
   const seen = new Set();
-  for (const { name, price, side } of levels) {
+  for (const { name, price, side, key = false } of levels) {
     if (!Number.isFinite(price) || !['high', 'low'].includes(side) || seen.has(`${side}:${price}`)) continue;
     seen.add(`${side}:${price}`);
-    for (let i = bars.length - 1; i >= from; i -= 1) {
-      const b = bars[i];
-      if (side === 'high' && b.h > price && b.c < price) { out.push({ name, price, side, at: b.t, wick: b.h, close: b.c }); break; }
-      if (side === 'low' && b.l < price && b.c > price) { out.push({ name, price, side, at: b.t, wick: b.l, close: b.c }); break; }
+    const through = b => (side === 'high' ? b.h > price : b.l < price);
+    const inside = b => (side === 'high' ? b.c < price : b.c > price);
+    const atOrInside = b => (side === 'high' ? b.c <= price : b.c >= price);
+    for (let j = bars.length - 1; j >= from; j -= 1) {
+      if (!inside(bars[j])) continue;
+      // The first bar through the level, at most two bars before the close back inside, coming from inside.
+      const i = [j, j - 1, j - 2].reverse().find(x => x >= from && through(bars[x]) && atOrInside(bars[x - 1]) && bars.slice(x, j).every(b => !inside(b)));
+      if (i === undefined) continue;
+      const span = bars.slice(i, j + 1);
+      const wick = side === 'high' ? Math.max(...span.map(b => b.h)) : Math.min(...span.map(b => b.l));
+      out.push({ name, price, side, key, at: bars[i].t, back: bars[j].t, bars: j - i + 1, wick, close: bars[j].c });
+      break;
     }
   }
-  return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  return out.sort((a, b) => (b.key - a.key) || Date.parse(b.back) - Date.parse(a.back));
 }
 
-/** The swings (from pivots) price hasn't traded back to since: a high not reached again, a low not reached again. */
+/**
+ * The swings price hasn't traded back to since they formed: a high not reached again, a low not reached again, by
+ * the bars from the swing's `end` (the close of the candle that made it, e.g. its 1h candle; default its own time,
+ * exclusive) on.
+ */
 function untestedSwings(bars, swings) {
-  const after = t => bars.filter(b => Date.parse(b.t) > Date.parse(t));
-  return swings.filter(s => !after(s.t).some(b => (s.type === 'high' ? b.h >= s.price : b.l <= s.price)))
-    .map(({ type, price, t }) => ({ type, price, t }));
+  return swings.filter(s => {
+    const end = s.end ? Date.parse(s.end) : Date.parse(s.t) + 1;
+    return !bars.some(b => Date.parse(b.t) >= end && (s.type === 'high' ? b.h >= s.price : b.l <= s.price));
+  }).map(({ type, price, t }) => ({ type, price, t }));
 }
 
 module.exports = { pivots, lastBreaks, sweeps, untestedSwings };

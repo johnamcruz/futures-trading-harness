@@ -191,7 +191,7 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
     /the refused `trade-executor` call itself ends the round, so\s+report the block and end the cycle \(step 6\)/,
     /in an autonomous\s+run there is no stand-in: without the roles' reports, no entry/,
     /until\s+`risk-manager` has returned twice this cycle \(phase 1 and phase 2\)/,
-    /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way, and the session window/,
+    /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way \(the briefing's `m3` `nearestLiquidity`, in\s+points and ATR: is there room to the target, or a level within 1R\?\), and the\s+session window/,
     /multi-timeframe alignment for the side \(aligned, pullback, mixed, counter\)\s+and the size it implies/, /A plan\s+that can't name them isn't ready/,
   ]) assert.match(ts, re);
   assert.match(read('skills/broker-mcp/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
@@ -223,7 +223,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/market-structure-analyst.md'), /the latest BOS or CHoCH \(the briefing's `structure` in\s+`m3`, `m15` and `h1`: computed from confirmed swings, never by eye\)/);
   assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
   // Codex can't take Read away (its sandbox reads files): a role without Read is told not to read files.
-  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\): take bars and market data only through the tools above\./);
+  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/market-structure\/SKILL\.md, [^)]*skills\/harness-tools\/SKILL\.md under the harness root\): take bars and market data only through the tools above\./);
+  assert.match(read('.codex/agents/trade-executor.toml'), /except your skills \(skills\/broker-mcp\/SKILL\.md under the harness root\)/, 'the executor can still load broker-mcp');
   assert.doesNotMatch(read('.codex/agents/risk-manager.toml'), /Do not read files/, 'a role that has Read may');
   // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.
   for (const a of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {

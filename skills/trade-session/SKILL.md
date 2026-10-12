@@ -266,8 +266,9 @@ P&L, and for a prop attempt the cushion and size budget), skip rules checked,
 analyst agreement, and what each role reported that the plan rests on: the
 structure bias and the level the entry and stop sit against
 (market-structure); the VWAP side, the value area or POC, the nearest
-liquidity in the trade's way, and the session window (volume-liquidity,
-session-timing); the regime and momentum (trend-momentum); the
+liquidity in the trade's way (the briefing's `m3` `nearestLiquidity`, in
+points and ATR: is there room to the target, or a level within 1R?), and the
+session window (volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
 multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
 and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the
