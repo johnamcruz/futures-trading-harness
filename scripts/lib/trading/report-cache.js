@@ -55,7 +55,8 @@ const NO_ATTEMPT = new RegExp([
 
 // A report's Attempt line: "Attempt: ...", "**Attempts:** ...", "Prop attempt: ...", "| Attempt | ... |".
 const ATTEMPT_LINE = /^[\s*_>|-]*(?:prop\s+|combine\s+)?attempts?\b/i;
-const LINE_DENIAL = /\b(?:not|n't|never)\s+(?:currently\s+|yet\s+|been\s+)*(?:running|started|active)\b|\bnone\b|\binactive\b|\bwas\s+active\b/i;
+// "none" denies only as the line's status ("Attempt: none") or "none running", not "entry block: none".
+const LINE_DENIAL = /\b(?:not|n't|never)\s+(?:currently\s+|yet\s+|been\s+)*(?:running|started|active)\b|^[\s*_>|-]*(?:prop\s+|combine\s+)?attempts?\b[\s*_:|]*none\b|\bnone\s+(?:running|started|active)\b|\binactive\b|\bwas\s+active\b/i;
 const activeAttempts = account => (account && Array.isArray(account.attempts) ? account.attempts.filter(x => x && x.status === 'active') : []);
 const escapeRe = t => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

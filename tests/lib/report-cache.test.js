@@ -210,7 +210,8 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   assert.strictEqual(record('Attempt: topstep_50k active', active).phase1, null, 'another account');
   assert.strictEqual(record('Attempt: topstep_100k blown', active).phase1, null, 'not as listed');
   assert.ok(record('**Attempt:** topstep_100k active, cushion $3,000', active).phase1, 'markdown bold');
-  for (const t of ['Attempts: topstep_100k active', 'Prop attempt: topstep_100k active', '| Attempt | topstep_100k | active |', 'Attempt: topstep_100k (active), no entry block']) {
+  for (const t of ['Attempts: topstep_100k active', 'Prop attempt: topstep_100k active', '| Attempt | topstep_100k | active |', 'Attempt: topstep_100k (active), no entry block',
+    'Attempt: topstep_100k active, cushion $3,000, budget $900, entry block: none', 'Attempt: topstep_100k active, cushion $3,000 | none listed']) {
     assert.ok(record(t, active).phase1, t);
   }
   // An Attempt line that names the account but says it isn't running doesn't confirm it.
