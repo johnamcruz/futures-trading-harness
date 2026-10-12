@@ -102,7 +102,8 @@ facts mean no trade; confluence means trade. Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
 Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
-at size 1 every halving is a skip).
+at size 1 every halving is a skip). Halvings don't compound: however many
+steps halve, the size is halved once.
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate

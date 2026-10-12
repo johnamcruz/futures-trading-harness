@@ -180,7 +180,7 @@ Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal 
 
 -> Longs are a pullback: wait for a 3m shift up (ema_cross or bos long), target the 1h swing high.
    Shorts are counter: a 3m keltner short is refused (scan and gate); only a
-   crt_1h raid of the 1h high could short, at half size.
+   crt_1h raid of the 1h high could short (the priority order, step 2, sizes it).
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)

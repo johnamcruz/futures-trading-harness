@@ -112,8 +112,7 @@ its facts; the order decides.
    or one whose stop it can't measure: a market entry needs
    `stopLossBracket.ticks`; for a policy strategy only its own cap applies,
    not its components'). Size within position-sizing, or
-   within the verdict for a policy strategy; the priority order's size
-   (halved once at most, never twice).
+   within the verdict for a policy strategy; the priority order's size.
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
 8. The analysts' red flags are addressed in the plan.
