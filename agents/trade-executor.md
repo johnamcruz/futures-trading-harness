@@ -40,13 +40,35 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
    target) in ticks when the account supports brackets. Rationale:
    `setup:<name> <side> <trigger>, stop <price>[, target <price>], risk $<x>`.
-4. If brackets are rejected, place the entry without them; as soon as
-   `list_open_positions` shows the fill, place the stop with rationale
+4. If brackets are rejected, place the entry without them; if the one status
+   check (step 5) shows the fill, place the stop with rationale
    `[protect] stop for <setup> <side> filled at <price>` and the target with
    `[protect] target for ...`.
-5. Verify with `list_open_orders` that the protective stop is working. If it
-   can't be placed, `close_position` immediately with an `[exit]` rationale and
-   report.
+5. Check the entry's status once after placing it (`list_open_orders` and
+   `list_open_positions`). Never wait or poll for a fill (repeated bars,
+   quote, or order reads); see the broker-mcp skill.
+   - **Filled**: verify with `list_open_orders` that the protective stop is
+     working. If it can't be placed, `close_position` immediately with an
+     `[exit]` rationale and report.
+   - **Working, with its stop bracket** (a resting limit or stop, or a market
+     order the broker hasn't filled; the bracket's stop works once it fills):
+     report `EXECUTED` with the entry working, its order id, and that its
+     stop bracket is attached. The caller journals that and
+     ends the cycle (interactively, waits for the next check); the next
+     cycle verifies the fill and the stop.
+   - **Working, without a stop bracket** (step 4): it would fill with no
+     stop, so `cancel_order` it, then read `list_open_orders` and
+     `list_open_positions` once. Any quantity that filled is protected
+     first, whatever the rest shows: its `[protect]` stop (or
+     `close_position`). Gone and flat: report `ABORTED` (entry cancelled: no
+     stop bracket); the caller journals a `result:nofill` review for it,
+     since the gate counts a placed entry until it is reviewed. Filled (in
+     whole or part) before the cancel: place its `[protect]` stop (or
+     `close_position`) and report `EXECUTED`, protected. Still working:
+     `cancel_order` once more; if it is still working after that, report
+     `ABORTED` with the entry still working and no stop bracket (the cycle
+     result is `error`), so the next cycle cancels it first (interactively,
+     the caller tells the user).
 
 ## Management (only as the plan says)
 
@@ -80,6 +102,7 @@ the user to unset `FTH_REPLAY_NOW` or select a real replay broker.
 ```text
 EXECUTED | BLOCKED | ABORTED
 Orders: <id - type - side - size - price - status>
-Position: <net size @ avg price>, protective stop <price> working: yes | no
+Position: <net size @ avg price, or: entry working, not filled>
+Protective stop: <price> working: yes | no | attached to the working entry's bracket
 Notes: <slippage, partial fills, anything off-plan>
 ```

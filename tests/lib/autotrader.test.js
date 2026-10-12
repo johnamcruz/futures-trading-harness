@@ -274,6 +274,8 @@ test('every cycle prompt ends with the exact result line the runner reads', () =
   for (const text of [p.trade([{ symbol: 'MNQ' }]), p.premarket('MNQ'), p.eod()]) {
     assert.ok(text.includes(line), text.slice(-300));
     assert.ok(text.endsWith(`${line}.`), 'it is the prompt\'s last sentence');
+    // A result sent as a tool call is never read: the prompt says it is plain text.
+    assert.ok(text.includes(`End with the cycle result as plain text in your final message, never as a tool call. ${line}`), text.slice(-300));
     // The prompt echoed into a run's output is never read as its result.
     assert.strictEqual(cycleResult(`prompt=${text}\n`), null);
   }
@@ -562,8 +564,8 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
     lessons: Array.from({ length: 6 }, (_, k) => `(0.${9 - k}) a lesson of about a hundred characters, as the instincts digest writes them, number ${k}`),
     trades: Array.from({ length: 10 }, (_, k) => (k % 2 ? 'orb long win +1.8R in trend-up' : 'ema_cross short loss -1.02R in range [mistake:chased]')),
   });
-  // 4600: 4500 plus the required last-line instruction (RESULT_LINE, ~130 characters).
-  assert.ok(p.length < 4600, `the prompt grew to ${p.length} characters`);
+  // 4700: 4500 plus the required last-line instruction (RESULT_LINE, ~220 characters, with its plain-text rule).
+  assert.ok(p.length < 4700, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
   for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);

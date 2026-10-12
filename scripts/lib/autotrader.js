@@ -352,7 +352,7 @@ function historyText(history) {
 }
 
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
-const RESULT_LINE = ' Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
+const RESULT_LINE = ' End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
 
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';

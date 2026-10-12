@@ -44,7 +44,7 @@ names them.
   enter, and the harness tool `combine_status` for an attempt. Every
   decision below (take, skip, size, manage, stand down) is made with these
   numbers.
-- **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`), apply
+- **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order on the position's side (one that would add to it) still working without a stop bracket (the rest of a partial fill; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop. The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only. If the strategy's
@@ -67,8 +67,17 @@ names them.
   `session-timing`) before planning.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
-  a pending entry from your own plan. New entries wait until no order is
-  working in the contract. The runner also cancels leftovers before each bar.
+  a pending entry from your own plan that carries its stop bracket. An order
+  list may not show a bracket before the entry fills, so tell by the entry's
+  own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind
+  only, no `contractId` filter: the
+  one whose `data.result.orderId` is the order; its `data.request` has
+  `stopLossBracket` when the bracket went with it); step 6's note on a
+  working entry adds context. An entry without one, or with no such record,
+  is cancelled first, the cancel
+  confirmed (step 6), and a `result:nofill` review journalled: cancelling an
+  entry only reduces risk. New entries wait until no order is working in the
+  contract. The runner also cancels leftovers before each bar.
 - **Flat, with an earlier entry today that has no review** (it closed or was
   cancelled between cycles): run trade-review (`trade-reviewer` role) first.
   The order gate refuses the next entry until every entry is reviewed.
@@ -290,12 +299,29 @@ On `APPROVE`, hand the plan and verdict line to `trade-executor`. If the order
 gate, the MCP gateway, or the server blocks it, report the block and end.
 Never retry around a block.
 
-After the fill: read `get_account_snapshot` and `list_open_orders`. Check the
-filled size (a partial fill is a smaller position: its stop covers what
-filled; cancel the rest of the entry if the plan doesn't still want it), the
-fill price, and that the protective stop is working at the planned level. A
-position without a working stop is fixed before anything else (the
-trade-executor places it, or closes the position).
+After placing: read `get_account_snapshot` and `list_open_orders` once.
+Filled: check the filled size (a partial fill is a smaller position: its stop
+covers what filled; cancel the rest of the entry if the plan doesn't still
+want it), the fill price, and that the protective stop is working at the
+planned level. A position without a working stop is fixed before anything
+else (the trade-executor places it, or closes the position), and so is an
+entry working without a stop bracket (it is cancelled). Not filled yet (a
+resting limit or stop, or a market order the broker hasn't filled): with its
+stop bracket attached, journal a note that the entry is working (its order
+id, and that its stop bracket is attached), report it,
+and stop there (in an autonomous cycle, end the cycle; interactively, until
+the next check); the next cycle or check verifies the fill and the stop
+first. Without a stop bracket, the trade-executor cancels the entry (it would
+fill with no stop) and confirms the cancel (broker-mcp skill, Order
+mechanics). Cancelled: journal a review tagged `result:nofill` and the
+`setup:<name>` (the gate counts a placed entry until it is reviewed), and
+plan again next cycle (cycle result `no-trade`, entry cancelled: no stop
+bracket). Filled before the cancel and now protected: report it as executed.
+Any quantity that filled is protected first in every case. Still working
+after a second cancel: journal a note naming it as an entry without a stop
+bracket and report `error` (interactively, tell the user it is still working
+with no stop); the next cycle cancels it first. Never wait or poll for the fill (broker-mcp skill, Order
+mechanics).
 
 ### 7. Report
 
