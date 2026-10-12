@@ -21,6 +21,7 @@ const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
+const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
 const SNAPSHOT_FUTURE_TOLERANCE_MS = 60000; // ... and on one more than a minute in the future (clock skew)
 const VERDICT_KEEP = 500;
 
@@ -96,12 +97,45 @@ function stateFrom(account, record, balance) {
 }
 
 /**
+ * The balance the broker should show: the day's anchor (the balance at the
+ * attempt's first snapshot that trading day) plus every fill's realized P&L
+ * less its fees since then (`fills`: the broker's search_trades, at or after
+ * the anchor's time; voided ones don't count). Throws on a fill it can't read.
+ * Returns { expected, balance, diff, since }.
+ */
+function balanceCheck(anchor, balance, fills) {
+  if (!anchor || !Number.isFinite(anchor.balance) || !Number.isFinite(Date.parse(anchor.at))) throw new Error('no anchor balance');
+  if (!Number.isFinite(balance)) throw new Error('no balance');
+  if (!Array.isArray(fills)) throw new Error('the fills are not a list');
+  const since = Date.parse(anchor.at);
+  let net = 0;
+  for (const f of fills) {
+    const ts = Date.parse(f && f.creationTimestamp);
+    if (!Number.isFinite(ts)) throw new Error(`a fill without a time (${JSON.stringify(f)})`);
+    if (ts < since || f.voided) continue;
+    const pnl = f.profitAndLoss === null || f.profitAndLoss === undefined ? 0 : Number(f.profitAndLoss);
+    const fees = costOf(f);
+    if (!Number.isFinite(pnl) || !Number.isFinite(fees)) throw new Error(`a fill with no readable P&L or fees (${JSON.stringify(f)})`);
+    net += pnl - fees;
+  }
+  const expected = Math.round((anchor.balance + net) * 100) / 100;
+  return { expected, balance, diff: Math.round((balance - expected) * 100) / 100, since: anchor.at };
+}
+
+/**
  * Save the latest balance and open-position count (the gate reads them),
  * returning the state. A snapshot on a new trading day whose previous
  * snapshot's day has no recorded close marks that close as missed: the
  * trailing floor can't be known until it is recorded, so entries stop.
+ *
+ * The balance is checked against the broker's fills (`fills`, or the error
+ * reading them in `fillsError`): the day's first snapshot anchors it, and
+ * every later flat snapshot must equal the anchor plus the fills' net since
+ * then (balanceCheck). A mismatch, or fills that couldn't be read, is kept
+ * on the snapshot and refuses entries (combineBlock) until a snapshot
+ * reconciles; with a position open the realized balance isn't checked.
  */
-function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [] } = {}) {
+function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [], fills, fillsError = null } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
   const day = tradingDayKey(now);
@@ -113,9 +147,23 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
   missed.sort();
   const missedClose = missed[0] || null;
   const cs = stateFrom(account, record, balance);
+  // The day's anchor: the first snapshot of the trading day, from the broker's own balance.
+  const fresh = !record.anchor || record.anchor.day !== day;
+  const anchor = fresh ? { at: now.toISOString(), day, balance } : record.anchor;
+  let check = null;
+  if (!fresh && open === 0) {
+    if (fillsError) check = { error: String(fillsError) };
+    else if (fills !== undefined) {
+      try {
+        check = balanceCheck(anchor, balance, fills);
+      } catch (err) {
+        check = { error: err.message };
+      }
+    }
+  }
   writeJson(combineFile(home, account.name), {
-    ...record, missedClose, missedCloses: missed, peak: cs.peak,
-    snapshot: { at: now.toISOString(), day, balance, open, openIds, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
+    ...record, missedClose, missedCloses: missed, peak: cs.peak, anchor,
+    snapshot: { at: now.toISOString(), day, balance, open, openIds, balanceCheck: check, summary: combine.summary(cs), block: combine.entryBlock(cs), state: cs },
   });
   return cs;
 }
@@ -124,6 +172,12 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
 function dayEndMs(day) {
   // 23:59 UTC on that date is after 18:00 ET (19:59 EDT / 18:59 EST): inside the next trading day.
   return tradingDayStart(new Date(`${day}T23:59:00Z`)).getTime();
+}
+
+/** A fill's costs: its fees, and its commissions where the broker reports them apart (TopstepX can). */
+function costOf(f) {
+  const n = v => (v === null || v === undefined ? 0 : Number(v));
+  return n(f.fees) + n(f.commissions);
 }
 
 /**
@@ -142,7 +196,7 @@ function closeBefore(balanceNow, fills, endMs) {
     if (!Number.isFinite(ts)) throw new Error(`a fill without a time (${JSON.stringify(f)})`);
     if (ts < endMs || f.voided) continue;
     const pnl = f.profitAndLoss === null || f.profitAndLoss === undefined ? 0 : Number(f.profitAndLoss);
-    const fees = f.fees === null || f.fees === undefined ? 0 : Number(f.fees);
+    const fees = costOf(f);
     if (!Number.isFinite(pnl) || !Number.isFinite(fees)) throw new Error(`a fill with no readable P&L or fees (${JSON.stringify(f)})`);
     later += pnl - fees;
   }
@@ -200,6 +254,11 @@ function combineBlock(home, accountName, now = new Date()) {
   if (s.open > 0) {
     const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
     return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
+  }
+  const bc = s.balanceCheck;
+  if (bc && bc.error) return `the account balance couldn't be checked against the broker's fills (${bc.error}); entries wait for a snapshot that can (exits still go)`;
+  if (bc && Math.abs(bc.diff) > BALANCE_TOLERANCE) {
+    return `the account balance doesn't reconcile: the broker reports $${bc.balance}, but the day's opening balance plus every fill since ${bc.since} (P&L less fees) gives $${bc.expected} (off by $${bc.diff}); entries wait until a snapshot reconciles (exits still go)`;
   }
   if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
     return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
@@ -408,7 +467,7 @@ function readVerdicts(home) {
 }
 
 module.exports = {
-  dayEndMs, closeBefore,
+  dayEndMs, closeBefore, balanceCheck, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
 };

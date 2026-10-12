@@ -1016,6 +1016,35 @@ test('order gate wiring: a policy strategy trades the selected leg (FTH_SYMBOLS)
   assert.match(r.stderr, /\[strategy\] setup:propped trades NQ \(the selected contract\), not MNQ\./);
 });
 
+test('order gate wiring: a balance that doesn\'t reconcile with the broker\'s fills refuses prop entries, even with the checks skipped; exits pass', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  const home = tmpDir();
+  prop.startAttempt(home, account);
+  const now = Date.parse(TEST_NOW);
+  prop.snapshot(home, account, 50000, new Date(now - 120000), { fills: [] });
+  // The broker's balance says $50,000, but a -$40.50 loss (fees $0.74) was filled since the anchor.
+  const fills = [{ creationTimestamp: new Date(now - 90000).toISOString(), profitAndLoss: -40.5, fees: 0.74 }];
+  prop.snapshot(home, account, 50000, new Date(now - 60000), { fills });
+  prop.appendVerdict(home, {
+    strategy: 'propped', component: 'crossing', contractId: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19,
+    policy: null, bar: HOOK_BAR, at: new Date(now - 60000).toISOString(), expiresAt: new Date(now + 120000).toISOString(),
+  });
+  const order = entryOrder({ contractId: 'MNQ', rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_SYMBOLS: 'MNQ', FTH_ORDER_GATE_SKIP: 'combine,policy' });
+  let r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[combine\] topstep_50k: the account balance doesn't reconcile: the broker reports \$50000, .* gives \$49958\.76/);
+  // Exits and protective orders are never held back by it.
+  r = gate(orderPayload({ ...order, side: 1, rationale: '[exit] close the long' }), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+  // Once the broker books it, entries go.
+  prop.snapshot(home, account, 49958.76, new Date(now - 30000), { fills });
+  r = gate(orderPayload(order), env);
+  assert.strictEqual(r.code, 0, r.stderr);
+});
+
 test('order gate hook: a prop verdict is for its own bar - an older bar\'s verdict is refused, even with the checks skipped; exits pass', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');

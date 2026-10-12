@@ -290,3 +290,25 @@ test('owners: the strategies an active policy with a running attempt owns on the
   const off = setup({ policy: null, start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
 });
+
+test('each bar the snapshot checks the broker\'s balance against its fills since the day\'s anchor; a broker that can\'t list them refuses entries', async () => {
+  const { hooks, home, account, client } = setup();
+  const t = s => new Date(`2026-10-07T${s}Z`);
+  await hooks.snapshot(t('13:30:00'));
+  assert.strictEqual(client.fillsFrom, undefined, 'the first snapshot of the day anchors: no fills to read yet');
+  // The broker shows $50,250 but its fills since the anchor made -$41.24: entries stop.
+  client.fills = [{ creationTimestamp: '2026-10-07T14:00:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T14:02:00Z', profitAndLoss: -40.5, fees: 0.37 }];
+  await hooks.snapshot(t('14:03:00'));
+  assert.strictEqual(client.fillsFrom, '2026-10-07T13:30:00.000Z', 'the fills since the anchor');
+  assert.match(prop.combineBlock(home, account.name, t('14:03:30')), /doesn't reconcile: the broker reports \$50250, .* gives \$50208\.76/);
+  // A position open: not checked (and not read).
+  client.fillsFrom = undefined;
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('14:06:00'));
+  assert.strictEqual(client.fillsFrom, undefined);
+  client.open = [];
+  // search_trades fails: entries wait, the runner goes on.
+  client.fillsSince = async () => { throw new Error('search_trades: 503'); };
+  await hooks.snapshot(t('14:09:00'));
+  assert.match(prop.combineBlock(home, account.name, t('14:09:30')), /couldn't be checked against the broker's fills \(search_trades: 503\)/);
+});

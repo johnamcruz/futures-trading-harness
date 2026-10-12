@@ -25,6 +25,7 @@ const { isOpen } = require('../trading/positions');
 const { loadBundle, bundleMismatch, legMismatch } = require('./policy-bundle');
 const live = require('./live');
 const combine = require('../trading/combine');
+const { tradingDayKey } = require('../trading/clock');
 
 function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {} }) {
   const bundles = new Map();
@@ -69,7 +70,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     return live.stateFrom(account, r, r.snapshot ? r.snapshot.balance : NaN);
   }
 
-  async function balances(now, fn, { flat = false, closeOf = null } = {}) {
+  async function balances(now, fn, { flat = false, closeOf = null, withFills = false } = {}) {
     const list = accounts();
     if (!list.length || !accountId) return;
     if (list.length > 1) warnOnce('many', `strategies trade ${list.length} account profiles (${list.map(a => a.name).join(', ')}) on one live account; each sees the same balance`);
@@ -86,7 +87,19 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         warnOnce(`start:${a.name}`, `${a.name}: no attempt is started, so the gate refuses its strategies' entries (node scripts/combine.js start --account ${a.name})`);
         continue;
       }
-      fn(a, balance, now, open, openIds);
+      // The fills since the day's anchor, to check the balance against (prop-state balanceCheck): only when flat,
+      // on a day already anchored. A broker that can't list them refuses entries, never skips the check.
+      let fills;
+      let fillsError = null;
+      const anchor = withFills && !open ? live.readAttempt(home, a.name).anchor : null;
+      if (anchor && anchor.day === tradingDayKey(now)) {
+        try {
+          fills = await client.fillsSince(accountId, new Date(anchor.at));
+        } catch (err) {
+          fillsError = err.message;
+        }
+      }
+      fn(a, balance, now, open, openIds, { fills, fillsError });
     }
   }
 
@@ -130,7 +143,7 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       return out;
     },
     /** Every bar: the balance and open positions now. */
-    snapshot: now => balances(now, (a, b, t, open, openIds) => live.snapshot(home, a, b, t, { open, openIds })),
+    snapshot: now => balances(now, (a, b, t, open, openIds, check) => live.snapshot(home, a, b, t, { open, openIds, ...check }), { withFills: true }),
     /**
      * After the end-of-day flatten: the closing balance of trading day `day`
      * (YYYY-MM-DD). For a catch-up (a day that has ended), the balance then,

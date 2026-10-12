@@ -183,3 +183,61 @@ test('closeBefore: a past day\'s close is today\'s balance less what later fills
   assert.throws(() => prop.closeBefore(NaN, [], end), /no balance/);
   assert.throws(() => prop.closeBefore(100000, null, end), /not a list/);
 });
+
+test('balanceCheck: the day\'s anchor plus every fill since (P&L less fees and commissions); voided and earlier fills don\'t count', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const anchor = { at: '2026-06-01T13:30:02.000Z', day: '2026-06-01', balance: 100000 };
+  // Run B's trade: short 1 MNQ at 30,599.75, stopped at 30,620: 20.25 points x $2 = -$40.50, $0.37 a side.
+  const fills = [
+    { creationTimestamp: '2026-06-01T13:00:00Z', profitAndLoss: -500, fees: 1 }, // before the anchor: in its balance
+    { creationTimestamp: '2026-06-01T14:00:02Z', profitAndLoss: null, fees: 0.37 },
+    { creationTimestamp: '2026-06-01T14:02:00Z', profitAndLoss: -40.5, fees: 0.37 },
+    { creationTimestamp: '2026-06-01T14:05:00Z', profitAndLoss: 99, fees: 1, voided: true },
+  ];
+  assert.deepStrictEqual(prop.balanceCheck(anchor, 99958.76, fills), { expected: 99958.76, balance: 99958.76, diff: 0, since: anchor.at });
+  assert.strictEqual(prop.balanceCheck(anchor, 100000, fills).diff, 41.24, 'the broker never booked the loss');
+  // A fill at the anchor's own time came after the anchor was read (the cycle runs after the bar's snapshot).
+  assert.strictEqual(prop.balanceCheck(anchor, 99999.63, [{ creationTimestamp: anchor.at, profitAndLoss: null, fees: 0.37 }]).diff, 0);
+  // Commissions reported apart from fees are a cost too (TopstepX can report them so).
+  assert.strictEqual(prop.balanceCheck(anchor, 99958.26, [{ creationTimestamp: '2026-06-01T14:02:00Z', profitAndLoss: -40.5, fees: 0.74, commissions: 0.5 }]).diff, 0);
+  assert.strictEqual(prop.closeBefore(99958.26, [{ creationTimestamp: '2026-06-01T23:00:00Z', profitAndLoss: -40.5, fees: 0.74, commissions: 0.5 }], prop.dayEndMs('2026-06-01')), 100000);
+  assert.throws(() => prop.balanceCheck(anchor, 1, [{ profitAndLoss: 1 }]), /without a time/);
+  assert.throws(() => prop.balanceCheck(anchor, 1, [{ creationTimestamp: '2026-06-01T14:00:00Z', fees: 'x' }]), /no readable/);
+  assert.throws(() => prop.balanceCheck(null, 1, []), /no anchor/);
+  assert.throws(() => prop.balanceCheck(anchor, NaN, []), /no balance/);
+  assert.throws(() => prop.balanceCheck(anchor, 1, null), /not a list/);
+});
+
+test('snapshot: the day\'s first snapshot anchors the balance; a flat snapshot that doesn\'t reconcile refuses entries until one does; a new day re-anchors', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const home = tmpDir();
+  const acct = accountNamed(ROOT, 'topstep_100k', {});
+  prop.startAttempt(home, acct, new Date('2026-06-01T12:00:00Z'));
+  const at = t => new Date(`2026-06-01T${t}Z`);
+  const loss = [{ creationTimestamp: '2026-06-01T14:00:02Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-06-01T14:02:00Z', profitAndLoss: -40.5, fees: 0.37 }];
+  // The first snapshot of the day anchors it, whatever the fills say.
+  prop.snapshot(home, acct, 100000, at('13:30:02'), { fills: loss });
+  assert.deepStrictEqual(prop.readAttempt(home, acct.name).anchor, { at: '2026-06-01T13:30:02.000Z', day: '2026-06-01', balance: 100000 });
+  assert.strictEqual(prop.readAttempt(home, acct.name).snapshot.balanceCheck, null);
+  // With a position open the realized balance isn't checked (the position block refuses entries anyway).
+  prop.snapshot(home, acct, 99999.63, at('14:01:02'), { open: 1, openIds: ['MNQ'], fills: loss.slice(0, 1) });
+  assert.strictEqual(prop.readAttempt(home, acct.name).snapshot.balanceCheck, null);
+  // Flat and booked as the fills say: entries allowed.
+  prop.snapshot(home, acct, 99958.76, at('14:03:02'), { fills: loss });
+  assert.strictEqual(prop.readAttempt(home, acct.name).snapshot.balanceCheck.diff, 0);
+  assert.strictEqual(prop.combineBlock(home, acct.name, at('14:03:30')), null);
+  // The broker's balance and its fills disagree: no entry until they agree again.
+  prop.snapshot(home, acct, 100000, at('14:06:02'), { fills: loss });
+  assert.match(prop.combineBlock(home, acct.name, at('14:06:30')), /balance doesn't reconcile: the broker reports \$100000, but .* gives \$99958\.76 \(off by \$41\.24\); entries wait .*exits still go/);
+  prop.snapshot(home, acct, 99958.76, at('14:09:02'), { fills: loss });
+  assert.strictEqual(prop.combineBlock(home, acct.name, at('14:09:30')), null, 'a broker that caught up clears it');
+  // Fills that couldn't be read refuse entries too (never skip the check).
+  prop.snapshot(home, acct, 99958.76, at('14:12:02'), { fillsError: 'search_trades timed out' });
+  assert.match(prop.combineBlock(home, acct.name, at('14:12:30')), /couldn't be checked against the broker's fills \(search_trades timed out\)/);
+  prop.snapshot(home, acct, 99958.76, at('14:15:02'), { fills: [{ creationTimestamp: '2026-06-01T14:15:00Z', profitAndLoss: 'x' }] });
+  assert.match(prop.combineBlock(home, acct.name, at('14:15:30')), /couldn't be checked .*no readable P&L/);
+  // A new trading day re-anchors from the broker's balance.
+  prop.recordEndOfDay(home, acct, 99958.76, '2026-06-01');
+  prop.snapshot(home, acct, 100000, new Date('2026-06-02T13:30:02Z'), { fills: loss });
+  assert.deepStrictEqual([prop.readAttempt(home, acct.name).anchor.day, prop.readAttempt(home, acct.name).snapshot.balanceCheck], ['2026-06-02', null]);
+});

@@ -769,3 +769,20 @@ test('driver: a run with prop starts that attempt at the window\'s first moment,
   // An unknown profile is refused with the config, before any run state exists.
   assert.throws(() => userWorld({ prop: 'topstep_7k' }), /prop: unknown account "topstep_7k"/);
 });
+
+test('replay env: a combine replay\'s broker stops the day at the account\'s own daily loss limit; without prop the server keeps its own', () => {
+  for (const [prop, want] of [['topstep_100k', '2000'], ['topstep_50k', '1000'], ['topstep_150k', '3000']]) {
+    const w = userWorld({ prop, brokerEnv: { maxDailyLoss: 'SIM_MAX_DAILY_LOSS' } });
+    seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+    assert.strictEqual(replayEnv(w.env, w.run, { at: iso('2026-10-07T13:33:02Z') }).SIM_MAX_DAILY_LOSS, want, prop);
+  }
+  const plain = userWorld({ brokerEnv: { maxDailyLoss: 'SIM_MAX_DAILY_LOSS' } });
+  seedRunHome(plain.run, { root: ROOT, userEnv: plain.env });
+  assert.strictEqual(replayEnv(plain.env, plain.run, { at: iso('2026-10-07T13:33:02Z') }).SIM_MAX_DAILY_LOSS, undefined);
+  // The default names the backtester's own variable; null leaves it to the server.
+  const def = userWorld({ prop: 'topstep_100k' });
+  assert.strictEqual(def.run.brokerEnv.maxDailyLoss, 'BACKTESTER_MAX_DAILY_LOSS');
+  const off = userWorld({ prop: 'topstep_100k', brokerEnv: { maxDailyLoss: null } });
+  seedRunHome(off.run, { root: ROOT, userEnv: off.env });
+  assert.ok(!Object.values(replayEnv(off.env, off.run, { at: iso('2026-10-07T13:33:02Z') })).includes('2000'));
+});
