@@ -5,7 +5,6 @@
 ## Regression (required)
 
 - [ ] `npm run verify` passes (test incl. e2e, lint, sync check, strategies, secrets)
-- [ ] Python suite run for real (`FTH_REQUIRE_PYTHON=1`) if `rl/` or `scripts/lib/rl/` changed
 
 <!-- Paste the counts, e.g. "npm test: 609 pass, 0 fail". -->
 
