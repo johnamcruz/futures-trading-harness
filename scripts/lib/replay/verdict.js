@@ -32,12 +32,15 @@
  * What the replay doesn't record, approximated (said in the output):
  *   - intraday equity: a round trip's MAE (maeDollars: its worst P&L from
  *     the open, partial exits included, as backtester-mcp reports it) less the
- *     closing fill's fees, added to the account as it was then, less what the
- *     position had realized: the state at its maeTime, or without one every
- *     state while it was held (after each fill, and each day's start), each
- *     on its own balance, floor and room to the daily limit, the worst
- *     counting. A state on an earlier day is judged against its floor only.
- *     Without MAE, only the close is seen. Open trades on other contracts at
+ *     closing fill's fees, less what the position had realized by then, set
+ *     against the account as it was: at its maeTime, in time order on its own
+ *     trading day (so it can stop that day, or undo a pass that came after
+ *     it); without one, at every state while it was held (after each fill and
+ *     at each day's start), each on its own balance, floor and room to the
+ *     daily limit, the worst counting, a state on an earlier day judged
+ *     against its floor only (a stop that day can be missed, and a pass with
+ *     the position still open stands, said in the output). Without MAE, only
+ *     the close is seen. Open trades on other contracts at
  *     the same moment are not added together.
  *   - at the daily limit the breaching close counts as the limit and the rest
  *     of every position open then is left out (the firm flattens the account);
@@ -94,7 +97,7 @@ function fillsOf(days) {
         const size = Math.abs(Number(f.size));
         const side = f.side === 0 || f.side === 1 || f.side === '0' || f.side === '1' ? Number(f.side) : null;
         const rt = f.roundTrip && typeof f.roundTrip === 'object' ? f.roundTrip : null;
-        out.push({
+        const fill = {
           ms: Number.isFinite(ms) ? ms : (Number.isFinite(Date.parse(rec.t)) ? Date.parse(rec.t) : 0), order: order += 1,
           day: Number.isFinite(ms) ? tradingDayKey(new Date(ms)) : (rec.day || day),
           contract: String(f.contractId || '?'),
@@ -104,7 +107,12 @@ function fillsOf(days) {
           fees,
           mae: rt && num(rt.maeDollars) !== null && !Number.isNaN(num(rt.maeDollars)) ? Math.min(0, num(rt.maeDollars)) : null,
           maeMs: rt && Number.isFinite(Date.parse(rt.maeTime)) ? Date.parse(rt.maeTime) : null,
-        });
+        };
+        out.push(fill);
+        // The MAE's own moment, judged in time order (before a fill at the same time): the account as it was then.
+        if (fill.closing && fill.mae !== null && fill.maeMs !== null) {
+          out.push({ kind: 'mae', ms: fill.maeMs, order: -(order += 1), day: tradingDayKey(new Date(fill.maeMs)), contract: fill.contract, mae: fill.mae, fees: fill.fees, close: fill });
+        }
       }
     }
   }
@@ -120,6 +128,53 @@ function blankMonth(key, account) {
 
 function lowWater(m, cushion, day) {
   if (cushion < m.worstCushion) { m.worstCushion = cushion; m.worstDay = day; }
+}
+
+/** Where a moment's loss goes first: the daily limit, the floor (the nearer one acts), or neither. */
+function level(x) {
+  const cushion = x.balance - x.floor;
+  if (x.room < cushion) return x.loss >= x.room ? 'daily' : null;
+  return x.loss >= cushion ? 'floor' : null;
+}
+
+/**
+ * Judge moments: the floor fails the month; else the daily limit stops the day.
+ * Returns 'floor', 'daily' or null (and keeps the low-water mark).
+ */
+function judge(m, moments) {
+  for (const x of moments) lowWater(m, x.balance - x.floor - (level(x) === 'daily' ? x.room : x.loss), x.day);
+  const blown = moments.find(x => level(x) === 'floor');
+  if (blown) {
+    m.s = combine.blow(m.s);
+    m.fail = { rule: 'max-loss', day: blown.day, how: `equity ${blown.mae ? 'reached' : 'closed at'} $${round2(blown.balance - blown.loss)}${blown.mae ? ' (from the trade\'s MAE)' : ''}, floor $${blown.floor}` };
+    return 'floor';
+  }
+  return moments.some(x => level(x) === 'daily') ? 'daily' : null;
+}
+
+/** The firm flattens at the daily limit (as the backtester's guard does): the day's loss is the limit. */
+function stopDay(m, day, text) {
+  const s = m.s;
+  const capped = round2(-s.dailyLimit - s.dayPnl);
+  m.s = { ...combine.applyClose(s, capped), dayStopped: true };
+  lowWater(m, m.s.balance - m.s.floor, day);
+  m.events.push({ day, text: `daily loss limit ($${s.dailyLimit}) hit: flattened there (${text(capped)}); no trading until the next session` });
+  return true;
+}
+
+const roomOf = (s, dayPnl) => (s.dailyLimit > 0 && !s.dayStopped ? s.dailyLimit + dayPnl : Infinity);
+
+/**
+ * A round trip's MAE at its time (`maeTime`): its open P&L then (the MAE counts from the open, partial
+ * exits included, so less what the position had realized; less the closing fee still to pay) against the
+ * account as it was then. Returns true when it hit the daily limit (the caller flattens what is open).
+ */
+function applyMae(m, ev, held) {
+  const s = m.s;
+  const open = ev.mae - held.r - ev.fees;
+  const out = judge(m, [{ balance: s.balance, floor: s.floor, room: roomOf(s, s.dayPnl), loss: -open, mae: true, day: ev.day }]);
+  if (out !== 'daily') return false;
+  return stopDay(m, ev.day, capped => `${ev.contract} was at $${round2(open)} (its MAE, at ${new Date(ev.ms).toISOString()}), counted as $${capped}`);
 }
 
 /**
@@ -142,48 +197,28 @@ function applyFill(m, f, held = null) {
   }
   m.closes += 1;
   if (f.mae !== null) m.intradayChecked += 1;
-  // The trade's MAE (from its open, partial exits included, less the closing fee still to pay) is judged
-  // at the account state in effect when it happened (`maeTime`), or, without it, at every state since
-  // the position opened, each on its own balance, floor and room to the daily limit, the worst
+  // The close itself; and the trade's MAE, when its time wasn't judged already (applyMae): at every
+  // account state since the position opened, each on its own balance, floor and room to the daily
+  // limit (less what the position had realized, since the MAE counts from the open), the worst
   // counting. Open P&L falls continuously, so the nearer level is reached first and acts there (as
   // the backtester's guard does bar by bar). A state on an earlier day is judged against its floor
-  // only: that day's limit is past this day's reach.
-  const mae = f.mae !== null ? f.mae - f.fees : null;
-  const room = (dayPnl, day) => (s.dailyLimit > 0 && !s.dayStopped && day === f.day ? s.dailyLimit + dayPnl : Infinity);
-  const moments = [{ balance: s.balance, floor: s.floor, room: room(s.dayPnl, f.day), loss: -f.net, mae: false, day: f.day }];
-  if (mae !== null) {
+  // only: that day's limit is past this day's reach (a stop that day may be missed).
+  const moments = [{ balance: s.balance, floor: s.floor, room: roomOf(s, s.dayPnl), loss: -f.net, mae: false, day: f.day }];
+  if (f.mae !== null && !f.maeDone) {
     const states = held && held.states.length ? held.states : [{ ms: f.ms, day: f.day, balance: s.balance, floor: s.floor, dayPnl: s.dayPnl }];
-    const at = f.maeMs !== null ? states.filter(x => x.ms <= f.maeMs).pop() : null;
-    for (const x of at ? [at] : states) moments.push({ balance: x.balance, floor: x.floor, room: room(x.dayPnl, x.day), loss: -mae, mae: true, day: x.day });
+    for (const x of states) moments.push({ balance: x.balance, floor: x.floor, room: x.day === f.day ? roomOf(s, x.dayPnl) : Infinity, loss: -(f.mae - f.fees), mae: true, day: x.day });
   }
-  const level = x => {
-    const cushion = x.balance - x.floor;
-    if (x.room < cushion) return x.loss >= x.room ? 'daily' : null;
-    return x.loss >= cushion ? 'floor' : null;
-  };
-  for (const x of moments) lowWater(m, x.balance - x.floor - (level(x) === 'daily' ? x.room : x.loss), x.day);
-  const blown = moments.find(x => level(x) === 'floor');
-  if (blown) {
-    m.s = combine.blow(s);
-    m.fail = { rule: 'max-loss', day: blown.day, how: `equity ${blown.mae ? 'reached' : 'closed at'} $${round2(blown.balance - blown.loss)}${blown.mae ? ' (from the trade\'s MAE)' : ''}, floor $${blown.floor}` };
-    return false;
+  const out = judge(m, moments);
+  if (out === 'floor') return false;
+  if (out === 'daily') {
+    const worst = -Math.max(...moments.filter(x => level(x) === 'daily').map(x => x.loss));
+    return stopDay(m, f.day, capped => `trade ${f.net < capped ? `closed at $${round2(f.net)}` : `went to $${round2(worst)} before closing at $${round2(f.net)}`}, counted as $${capped}`);
   }
-  const daily = moments.filter(x => level(x) === 'daily');
-  if (daily.length) return dailyStop(m, f, -Math.max(...daily.map(x => x.loss)));
   m.s = combine.applyClose(s, f.net);
   lowWater(m, m.s.balance - m.s.floor, f.day);
   return false;
 }
 
-/** The firm flattens at the daily limit (as the backtester's guard does): the day's loss is the limit. */
-function dailyStop(m, f, worst) {
-  const s = m.s;
-  const capped = round2(-s.dailyLimit - s.dayPnl);
-  m.s = { ...combine.applyClose(s, capped), dayStopped: true };
-  lowWater(m, m.s.balance - m.s.floor, f.day);
-  m.events.push({ day: f.day, text: `daily loss limit ($${s.dailyLimit}) hit: flattened there (trade ${f.net < capped ? `closed at $${round2(f.net)}` : `went to $${round2(worst)} before closing at $${round2(f.net)}`}, counted as $${capped}); no trading until the next session` });
-  return true;
-}
 
 function endDay(m, day) {
   if (m.s.status !== 'active') return;
@@ -207,13 +242,17 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
   const pos = new Map(); // contract -> signed size, across the whole run
   const left = new Map(); // contract -> why its position is left out, until it is flat
   const unknown = new Map(); // contract -> the day an unreadable fill left its position unknown
-  // contract -> its counted position since it opened: realized net so far (all, today's) and the account
-  // states since then (after each fill, and at each day's start), less that realized net, where its MAE
-  // (counted from the open) may have happened.
+  // contract -> its counted position since it opened: when, its realized P&L so far (before fees: the MAE
+  // counts it from the open) and the account states since then (after each fill, and at each day's
+  // start), less that P&L, where its MAE may have happened.
   const opened = new Map();
-  const state = (o, ms, day) => o.states.push({ ms, day, balance: m.s.balance - o.r, floor: m.s.floor, dayPnl: m.s.dayPnl - o.rToday });
+  const state = (o, ms, day) => o.states.push({ ms, day, balance: m.s.balance - o.r, floor: m.s.floor, dayPnl: m.s.dayPnl - o.r });
   const byDay = new Map();
-  for (const f of fills) byDay.set(f.day, [...(byDay.get(f.day) || []), f]);
+  for (const f of fills) {
+    if (!byDay.has(f.day)) byDay.set(f.day, []);
+    byDay.get(f.day).push(f);
+  }
+  const flatten = () => { for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit'); };
   // A day known only from a fill's time, before the last day done, is done too.
   const lastDone = daysDone && daysDone.length ? [...daysDone].sort().pop() : null;
   const months = [];
@@ -221,7 +260,12 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
   for (const day of allDays) {
     const key = day.slice(0, 7);
     if (!m || m.key !== key) {
-      if (m) months.push(m);
+      if (m) {
+        // A counted position still open at the month's end: its close falls in no month's attempt.
+        const still = [...pos].filter(([c, q]) => q !== 0 && !left.has(c) && !unknown.has(c)).map(([c]) => c);
+        if (still.length && m.s.status === 'active') m.notes.push(`${still.join(', ')} still open at the end of the month: its close counts in no month (the next one leaves it out as carried in)`);
+        months.push(m);
+      }
       m = blankMonth(key, account);
       // A position whose size an unreadable fill made unknown: assumed flat for the new month (said so).
       for (const [c, d] of unknown) {
@@ -235,8 +279,17 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
       for (const [c, q] of pos) if (q !== 0) left.set(c, 'carried in from the month before');
     }
     const dayStartMs = tradingDayStart(new Date(`${day}T12:00:00Z`)).getTime();
-    for (const o of opened.values()) { o.rToday = 0; state(o, dayStartMs, day); }
+    for (const o of opened.values()) state(o, dayStartMs, day);
     for (const f of byDay.get(day) || []) {
+      if (f.kind === 'mae') {
+        const held = opened.get(f.contract);
+        // Judged only for a counted position that was open then (else at its close, at every state).
+        if (m.s.status !== 'active' || left.has(f.contract) || !held || f.ms < held.since) continue;
+        f.close.maeDone = true;
+        if (applyMae(m, f, held)) flatten();
+        for (const o of opened.values()) state(o, f.ms, day);
+        continue;
+      }
       // A fill whose side, size or money can't be read: position tracking and the balance would both be guesses.
       if (f.delta === null || !Number.isFinite(f.net)) {
         m.unreadable += 1;
@@ -257,15 +310,20 @@ function evaluate(days, account, { daysDone = null, why = null } = {}) {
       const before = m.s.balance;
       const hit = applyFill(m, f, held);
       if (next === 0) opened.delete(f.contract);
-      else if (prev === 0 || Math.sign(prev) !== Math.sign(next)) opened.set(f.contract, { r: 0, rToday: 0, states: [] }); // a new position (from flat, or reversed)
-      else if (held && f.closing) { held.r += m.s.balance - before; held.rToday += m.s.balance - before; } // a partial exit
+      else if (prev === 0 || Math.sign(prev) !== Math.sign(next)) opened.set(f.contract, { since: f.ms, r: 0, states: [] }); // a new position (from flat, or reversed)
+      else if (held && f.closing) held.r += m.s.balance - before + f.fees; // a partial exit, before its fees
       for (const o of opened.values()) state(o, f.ms, day);
       // At the daily limit the firm flattens the whole account: what is still open is left out from here.
-      if (hit) for (const [c, q] of pos) if (q !== 0) left.set(c, 'flattened at the daily loss limit');
+      if (hit) flatten();
       // A close (or a fee) that took the balance to the floor: combine.applyClose marks it blown.
       if (m.s.status === 'blown' && !m.fail) m.fail = { rule: 'max-loss', day, how: `the balance closed at $${m.s.balance}, floor $${m.s.floor}` };
     }
-    if (!done || done.has(day) || (lastDone && day < lastDone)) endDay(m, day);
+    if (!done || done.has(day) || (lastDone && day < lastDone)) {
+      endDay(m, day);
+      // A pass with positions still open: a loss they took before it is judged only from their MAE's time.
+      const open = [...opened.keys()].filter(c => (pos.get(c) || 0) !== 0 && !left.has(c));
+      if (m.passDay === day && open.length) m.notes.push(`passed on ${day} with ${open.join(', ')} still open: a loss before the pass is judged only when the broker gives its MAE's time`);
+    }
     else m.openDay = { day, pnl: m.s.dayPnl };
   }
   if (m) months.push(m);
@@ -315,7 +373,7 @@ function headLine(v) {
 const NOTES = [
   'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as RL training and the backtester.',
-  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting; an earlier day\'s point is judged against its floor only (trades open together are not added up; a trade without MAE is seen only at its close).',
+  'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime, on its own day) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting, an earlier day\'s point against its floor only (trades open together are not added up; a trade without MAE is seen only at its close).',
   'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',
 ];
 

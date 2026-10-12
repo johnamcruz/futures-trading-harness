@@ -360,8 +360,8 @@ test('verdict: the MAE is judged at every state while the position was held (ano
   const d = { '2026-03-02': fillsOn('2026-03-02', [...rows, [5, 'MNQ', 1, 1, -50, -1500]]) };
   const md = evaluate(d, noDaily).months[0];
   assert.deepStrictEqual([md.verdict, md.fail.how], ['FAIL', 'equity reached $96500 (from the trade\'s MAE), floor $97000']);
-  // Its time says it was after MES won back (minute 4): equity $98500, no fail.
-  const timed = { '2026-03-02': fillsOn('2026-03-02', [...rows, [5, 'MNQ', 1, 1, -50, -1500, 4]]) };
+  // Its time says it was after MES won back (minute 4.5): equity $98500, no fail.
+  const timed = { '2026-03-02': fillsOn('2026-03-02', [...rows, [5, 'MNQ', 1, 1, -50, -1500, 4.5]]) };
   assert.strictEqual(evaluate(timed, noDaily).months[0].verdict, 'NOT YET');
   // The same with the daily limit: MES -$1500 and back, MNQ's MAE -$600: the day may have reached -$2100.
   const e = { '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [2, 'MES', 1, 1, -1500], [3, 'MES', 0, 1, null], [4, 'MES', 1, 1, 1500], [5, 'MNQ', 1, 1, -50, -600]]) };
@@ -400,6 +400,56 @@ test('verdict: an earlier day\'s state is judged against its floor only; the lev
     '2026-03-03': fillsOn('2026-03-03', [[0, 'MNQ', 0, 1, null], [1, 'MNQ', 1, 1, 50, -2000]]),
   };
   assert.strictEqual(evaluate(tie, ACCOUNT).months[0].verdict, 'FAIL');
+});
+
+test('verdict: an MAE at its time, on its own day: partials banked on earlier days, a day stopped before the close day, a pass undone', () => {
+  const wide = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 10000 }; // the floor out of the way
+  // 03-02: long 2, 1 closed at +$1500; 03-03: the other at -$50 after an MAE of -$1000 (from the open): it was at -$2500 on 03-03.
+  const banked = (first, mae, maeAt) => ({
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MNQ', 1, 1, first]]),
+    '2026-03-03': fillsOn('2026-03-03', [[60, 'MNQ', 1, 1, -50, mae, maeAt]]),
+  });
+  for (const at of [30, undefined]) {
+    const a = evaluate(banked(1500, -1000, at), wide).months[0];
+    assert.deepStrictEqual(a.days.map(d => d.pnl), [1500, -2000], `stopped on 03-03 (maeTime ${at})`);
+    // Banked -$1500 the day before; an MAE of -$2000 means only -$500 on 03-03: no stop.
+    const b = evaluate(banked(-1500, -2000, at), wide).months[0];
+    assert.deepStrictEqual([b.days.map(d => d.pnl), b.events.length], [[-1500, -50], 0], `no stop (maeTime ${at})`);
+  }
+  // Opened 03-02, at -$2500 at 15:30 that day, closed 03-03 at +$3000: 03-02 is stopped at -$2000, the close left out.
+  const early = {
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null]]),
+    '2026-03-03': fillsOn('2026-03-03', [[0, 'MNQ', 1, 1, 3000, -2500]]),
+  };
+  early['2026-03-03'][0].trades[0].roundTrip.maeTime = '2026-03-02T15:30:00.000Z';
+  const e = evaluate(early, ACCOUNT).months[0];
+  assert.deepStrictEqual([e.days.map(d => d.pnl), e.events[0].day, e.excluded.length], [[-2000, 0], '2026-03-02', 1]);
+  // MES +$3400 on 03-02; 03-03: MNQ opens, MES opens and closes +$3400 (a pass at the day's end) - but MNQ was at
+  // -$2100 at 15:05, before the MES win: the day stops at -$2000 there and there is no pass.
+  const pass = {
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MES', 0, 1, null], [1, 'MES', 1, 1, 3400]]),
+    '2026-03-03': fillsOn('2026-03-03', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [10, 'MES', 1, 1, 3400]]),
+    '2026-03-04': fillsOn('2026-03-04', [[0, 'MNQ', 1, 1, 100, -2100]]),
+  };
+  pass['2026-03-04'][0].trades[0].roundTrip.maeTime = '2026-03-03T15:05:00.000Z';
+  const p = evaluate(pass, ACCOUNT).months[0];
+  assert.deepStrictEqual([p.verdict, p.days.map(d => d.pnl)], ['NOT YET', [3400, -2000, 0]]);
+  // Without its time, the pass stands, and says a position was open.
+  delete pass['2026-03-04'][0].trades[0].roundTrip.maeTime;
+  const q = evaluate(pass, ACCOUNT).months[0];
+  assert.deepStrictEqual([q.verdict, q.passDay], ['PASS', '2026-03-03']);
+  assert.match(q.notes[0], /passed on 2026-03-03 with MNQ still open/);
+  // A position open at the month's end says so.
+  const end = { '2026-03-31': fillsOn('2026-03-31', [[0, 'MNQ', 0, 1, null]]), '2026-04-01': fillsOn('2026-04-01', [[0, 'MNQ', 1, 1, 100]]) };
+  assert.match(evaluate(end, ACCOUNT).months[0].notes[0], /MNQ still open at the end of the month/);
+});
+
+test('verdict: fees paid on partial exits count against the MAE (it is before fees)', () => {
+  // Long 2; 1 closed flat paying a $100 fee ($99900); the other closed flat after an MAE of -$2950: $96950 < $97000.
+  const days = fillsOn('2026-03-02', [[0, 'MNQ', 0, 2, null], [1, 'MNQ', 1, 1, 0], [2, 'MNQ', 1, 1, 0, -2950]]);
+  days[0].trades[1].fees = 100;
+  const m = evaluate({ '2026-03-02': days }, { ...ACCOUNT, daily_loss_limit: 0 }).months[0];
+  assert.deepStrictEqual([m.verdict, m.fail.how], ['FAIL', 'equity reached $96950 (from the trade\'s MAE), floor $97000']);
 });
 
 test('verdict account: --account, else a runner config naming an account, else the prop strategies\' account, else the default', () => {
