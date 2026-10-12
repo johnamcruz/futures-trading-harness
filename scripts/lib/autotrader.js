@@ -446,6 +446,20 @@ const STREAMED_TRANSCRIPT = new Set(['claude', 'opencode']);
 // Harnesses whose order gate sees the cycle's roles: the streamed transcript, or Qwen Code's hook (its chat file).
 const ROLES_CHECKED = new Set([...STREAMED_TRANSCRIPT, 'qwen']);
 
+// Roles outside the trading desk: a trade or manage cycle never launches them (the trade-session skill's roles only).
+const OFF_DESK = ['strategy-researcher'];
+
+/**
+ * The roles a cycle may not launch, which the harness enforces where it can (opencode: per-run permissions): the
+ * analysts whose report the runner served from its cache (their report is in the prompt; risk-manager stays, for
+ * phase 2), and in a trade or manage cycle the roles outside the trading desk.
+ */
+function deniedRoles(context) {
+  const c = context || {};
+  const cached = (c.cachedRoles || []).filter(r => typeof r === 'string' && r !== 'risk-manager');
+  return [...cached, ...(['trade', 'manage'].includes(c.action) ? OFF_DESK : [])];
+}
+
 /** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env, context = null) {
   // The gate learns the exchange calendar from the runner's config.
@@ -477,7 +491,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir) });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context) });
   }
   return env;
 }
@@ -714,6 +728,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   runnerArgv,
+  deniedRoles,
   cycleOutcome,
   accountText,
   historyText,

@@ -995,7 +995,7 @@ function createRunner(deps) {
             cyclesLeft,
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
             manageOnly, recovered: recover, unavailable,
-            cachedRoles: served ? served.roles : [],
+            action: again.action, cachedRoles: served ? served.roles : [],
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));

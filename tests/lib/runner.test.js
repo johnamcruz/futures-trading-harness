@@ -960,6 +960,7 @@ test('the report cache: valid reports go into the trade prompt and the gate\'s c
   // The first cycle: nothing cached, every role runs; later ones carry the report and name the role to the gate.
   assert.doesNotMatch(trade[0].prompt, /Cached reports/);
   assert.deepStrictEqual(trade[0].context.cachedRoles, []);
+  assert.ok(trade.every(c => c.context.action === 'trade'), 'a trade cycle names itself (the roles it may not launch follow from it)');
   assert.match(trade[1].prompt, /don't launch trend-momentum-analyst this cycle[^]*--- trend-momentum-analyst report/);
   assert.deepStrictEqual(trade[1].context.cachedRoles, [report.role]);
   // Served for this cycle's bar and contract, with the account the prompt was given; recorded after it, with the roles served.

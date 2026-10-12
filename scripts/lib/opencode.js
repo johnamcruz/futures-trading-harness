@@ -44,7 +44,7 @@
  *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs)
  *   agentConfig(agent)           a role as an opencode agent entry
  *   workspaceConfig(agents)      workspace/opencode.json's object
- *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT)
+ *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch
  *   runEnv(base, { ... })        the run's environment for opencode
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
@@ -136,14 +136,14 @@ function agentConfig(agent) {
   };
 }
 
-/** The main session's permissions (claudeTools' equivalent), with the roles it may delegate to. */
-function sessionPermission(roles) {
+/** The main session's permissions (claudeTools' equivalent), with the roles it may delegate to (none of `denied`). */
+function sessionPermission(roles, denied = []) {
   return {
     '*': 'deny',
     ...Object.fromEntries(DENIED.map(k => [k, 'deny'])),
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
     skill: 'allow', todowrite: 'allow', websearch: 'allow',
-    task: { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, 'allow'])) },
+    task: { '*': 'deny', ...Object.fromEntries(roles.filter(r => !denied.includes(r)).map(r => [r, 'allow'])) },
     // Orders go through the gateway, which enforces the order gate on every call.
     [`${BROKER_SERVER}_*`]: 'allow',
     [`${HARNESS_SERVER}_*`]: 'allow',
@@ -205,15 +205,15 @@ function externalDirs({ root, dataDir, stateDir }) {
  * run whose directory has no opencode.json, or another one, is still locked down: merged last, they
  * replace the project's in place), and reading the runner's directories for all of them.
  */
-function runConfig({ root, dataDir, stateDir, agents }) {
+function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [] }) {
   const external = externalDirs({ root, dataDir, stateDir });
   const roles = agents.map(a => a.name);
   return {
     default_agent: HEAD_AGENT,
-    permission: { ...sessionPermission(roles), external_directory: external },
+    permission: { ...sessionPermission(roles, deniedRoles), external_directory: external },
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
-      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles), external_directory: { ...external } } },
+      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, deniedRoles), external_directory: { ...external } } },
       ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...agentPermission(a.tools), external_directory: { ...external } } }])),
     },
   };
@@ -235,7 +235,7 @@ const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'O
  * directory from PWD before its working directory, and a PWD inherited from the runner would load
  * another project's config.
  */
-function runEnv(base, { root, dataDir, stateDir, agents, dir }) {
+function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [] }) {
   const env = { ...base };
   for (const k of UNSAFE_ENV) delete env[k];
   return {
@@ -247,7 +247,7 @@ function runEnv(base, { root, dataDir, stateDir, agents, dir }) {
     OPENCODE_DISABLE_CLAUDE_CODE: '1',
     OPENCODE_DISABLE_EXTERNAL_SKILLS: '1',
     OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents })),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents, deniedRoles })),
   };
 }
 

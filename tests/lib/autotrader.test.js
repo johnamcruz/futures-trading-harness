@@ -900,3 +900,24 @@ test('cycleOutcome: what a cycle hands the runner - the transcript is the standa
   assert.strictEqual(cycleOutcome(res, { intact: false, action: 'eod' }).ok, true);
   assert.strictEqual(cycleOutcome({ ...res, ok: false }, { intact: true, action: 'eod' }).ok, false);
 });
+
+test('deniedRoles: the analysts served from the cache, and in a trade or manage cycle the roles outside the desk; opencode enforces them per run', () => {
+  const { deniedRoles } = require('../../scripts/lib/autotrader');
+  const cached = ['market-structure-analyst', 'trend-momentum-analyst', 'risk-manager'];
+  assert.deepStrictEqual(deniedRoles({ action: 'trade', cachedRoles: cached }), ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher'], 'risk-manager stays: phase 2 always runs');
+  assert.deepStrictEqual(deniedRoles({ action: 'manage', cachedRoles: [] }), ['strategy-researcher']);
+  assert.deepStrictEqual(deniedRoles({ action: 'premarket' }), []);
+  assert.deepStrictEqual(deniedRoles(null), []);
+  // The per-run opencode config: the session and the head trader may not launch them; the others stay allowed.
+  const ctx = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z' } }], cachedRoles: cached };
+  const env = childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, ctx);
+  const conf = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  for (const task of [conf.permission.task, conf.agent['fth-head-trader'].permission.task]) {
+    assert.strictEqual(task['*'], 'deny');
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.ok(task[r] !== 'allow', r);
+    for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(task[r], 'allow', r);
+  }
+  // A premarket run may launch every role.
+  const pre = JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, { action: 'premarket' }).OPENCODE_CONFIG_CONTENT);
+  for (const r of ['market-structure-analyst', 'strategy-researcher']) assert.strictEqual(pre.permission.task[r], 'allow', r);
+});
