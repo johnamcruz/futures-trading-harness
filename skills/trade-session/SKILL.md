@@ -238,8 +238,8 @@ again, except those its prompt gives under "Cached reports".
   plus volatility. Don't override it with a narrative; if the analysts disagree
   with it, say why in the plan.
 - **A prop attempt with a policy strategy is running** (the prompt lists
-  verdicts, or `combine_status` names a policy strategy): the policy's
-  verdict is the only trade there can be. Plan it (`setup:<policy
+  verdicts, or `combine_status` names a policy strategy): the policy
+  strategy's verdict is the only trade there can be. Plan it (`setup:<policy
   strategy>`, its contract and side, its stop ticks, at most its size) per the
   `prop-challenge-pacing` skill only when the priority order says take, at
   the size it allows; no trade when there is none, it says skip, or the

@@ -1,6 +1,6 @@
 ---
 name: prop-challenge-pacing
-description: Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md; the harness tool combine_status, and the user's combine.js to start or stop one) and trained policies. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
+description: Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md; the harness tool combine_status, and the user's combine.js to start or stop one) and the policy strategies that trade them. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
 ---
 
 # Prop Challenge Pacing
@@ -19,9 +19,9 @@ challenge as a strategy: it trades the setups of the rules strategies it
 lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
 `topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
-auto` only when none is selected),
-with a trained policy (`policy: { bundle }`) deciding which setups to take.
-The harness tracks the attempt and enforces it:
+auto` only when none is selected): each setup gets the largest size its
+`sizing` allows, or is skipped. The harness tracks the attempt and enforces
+it:
 
 - In autonomous runs the cycle prompt carries each running attempt's state
   (balance, floor, cushion, profit, the day, sessions left, the size budget,
@@ -32,7 +32,7 @@ The harness tracks the attempt and enforces it:
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
 - At each setup the runner records a verdict: the strategy that fired, the
-  side, `skip` / `half` / `full`, the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
+  side, `full` or `skip`, the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
   size, and the stop in ticks. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so (it may
   skip it or halve it), and then exactly as given: rationale
@@ -49,13 +49,12 @@ The harness tracks the attempt and enforces it:
   verdict yet`), as is a verdict that names no bar: stand aside until the
   next setup's verdict. A verdict permits one
   entry: after a stop-out, wait for the next setup's verdict. Never exceed it
-  or route around it. Past the ratchet the runner may close the trade on the policy's
-  word.
+  or route around it. Once in, the policy strategy's own exit (its trail)
+  manages the trade; nothing closes it early past the ratchet.
 - **Before the first live entry** (the user's steps, not an agent's): the
-  policy strategy must be `active` (`prop_portfolio` is; until a bundle
-  passed `rl/ship.py` and is named with `policy: { bundle }`, its sizing
-  rules decide each verdict), and the user starts the attempt with
-  `combine.js start`. A policy still at `paper` (e.g. `prop_flow_1m`)
+  policy strategy must be `active` (`prop_portfolio` is; its sizing rules
+  decide each verdict), and the user starts the attempt with
+  `combine.js start`. A policy strategy still at `paper` (e.g. `prop_flow_1m`)
   stays so until the user activates it, and every verdict entry is refused
   (`[strategy] ... status "paper"`): report it and stand aside.
 - **A verdict for the mini** (`NQ` while the bars are MNQ's): use the
@@ -126,8 +125,9 @@ Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
 prop_portfolio's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
 drawdown from the peak). A 40-tick stop risks $20 + $0.74 fees = $20.74 a
 micro: 47 micros ($975 / $20.74), traded as 4 NQ with NQ selected (NQ: $200 +
-$2.80 fees = $202.80 each, $811.20 in all). A `half` verdict: 23 micros, 2 NQ.
-With MNQ selected the verdict is 47 MNQ ($974.78), a `half` 23 MNQ.
+$2.80 fees = $202.80 each, $811.20 in all). Halved by the priority order:
+23 micros, 2 NQ. With MNQ selected the verdict is 47 MNQ ($974.78), halved
+23 MNQ.
 ```
 
 ```text

@@ -19,7 +19,7 @@ max_contracts:
   ES: 5
   YM: 5
   RTY: 5
-sessions: 30                  # attempt length for training and evaluation (not a firm rule)
+sessions: 30                  # attempt length for backtests and evaluation (not a firm rule)
 fees_per_side:
   MNQ: 0.37
   MES: 0.37
@@ -33,12 +33,12 @@ fees_per_side:
 
 # Account: Topstep $50K Trading Combine (`topstep_50k`)
 
-The challenge a policy strategy with `account: topstep_50k` trades and trains for.
+The challenge a policy strategy with `account: topstep_50k` trades.
 
 ## When to Use
 
 - A policy strategy (`signal: policy`) names this account (`account: topstep_50k`) to size by its
-  cushion and to be trained for it.
+  cushion.
 - Before a session: the `prop-challenge-pacing` skill reads the attempt
   (`node scripts/combine.js status`) to set the day's budget.
 

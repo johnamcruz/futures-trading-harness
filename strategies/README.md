@@ -88,29 +88,29 @@ docs/BACKTESTING.md). Each port exits with a trailing stop: hold the
 initial stop (0.5 × ATR(20)) until +2R, then trail 0.5R behind the best
 price (`exit:` block).
 
-## Prop challenges and policies
+## Prop challenges
 
 The prop challenge is a strategy too: a **policy strategy** (`signal: policy`)
-trades the setups of the rules strategies it lists on a prop account, and a
-trained policy decides which to take, at what size (in the selected contract), and
-when to bank a trade.
+trades the setups of the rules strategies it lists on a prop account: each
+setup at the largest size the attempt's budget allows (in the selected
+contract), or skipped, and every trade exits by its trail.
 
 - `prop_portfolio`: every 3-minute strategy (ema_cross, supertrend,
   keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area,
   value_area_reentry, value_area_breakout) on NQ, ES, YM, and RTY (micros or
   minis), one `topstep_100k` attempt and one position at a time across them.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
-  A policy trades one timeframe.
+  A policy strategy trades one timeframe.
 
 While an active policy strategy has an attempt running, its rules strategies
 trade only through it; otherwise they trade as before. Each rules strategy's
 own rules, sessions, filters, and regimes still decide its setups, the same
-in training and live. Its `status` doesn't (a `paper` one can trade through
+in backtests and live. Its `status` doesn't (a `paper` one can trade through
 an active policy strategy; a `disabled` one can't be listed): the policy
-strategy's status is what goes from paper to active. Train and
-ship its policy with the `policy-training` skill; a bundle decides only for
-the policy strategy, account, index, timeframe, sizing, and contract mode it
-was trained with. See docs/RL-DESIGN.md.
+strategy's status is what goes from paper to active. The trained (PPO)
+policy that once decided its setups is retired; the learned-rulebook design
+(to come) replaces it with numbers and rules the skills teach and the gate
+enforces.
 
 ## Commands
 

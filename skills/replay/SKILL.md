@@ -21,9 +21,9 @@ broker.
   gate checks refuse it).
 - Setting up a replay broker, starting a replay, resuming one, or reading its
   report.
-- Turning a run into labels for training a student policy (step 10), and
-  labelled runs into a training dataset (step 11).
-- Not inside an autonomous cycle: replays, like backtests and training, are
+- Turning a run into labels: each decision, the gate's answer, the outcome
+  and the counterfactuals (step 10).
+- Not inside an autonomous cycle: replays, like backtests, are
   the user's to start. An agent may explain and prepare the config.
 
 ## How It Works
@@ -75,8 +75,8 @@ broker.
    **The combine verdict**: each calendar month (by CME trading day, 17:00
    Chicago) scored as a fresh prop attempt from the account's starting
    balance (fresh each month is the default; one month never carries into
-   the next), by the same `combine.js` rules RL training and the backtester
-   use: PASS (and the day it passed: profit at the target at a day's end,
+   the next), by the same `combine.js` rules the backtester
+   uses: PASS (and the day it passed: profit at the target at a day's end,
    with the best day at most `consistency_pct` of the profit), FAIL (the
    rule and the day: equity at the max-loss floor, which trails the
    end-of-day high for `trailing_eod`), or NOT YET (profit vs target, what
@@ -124,11 +124,12 @@ broker.
    that trades it, and a policy owns its strategies' setups only when
    `active` (a `paper` one is plan only; in a paper-mode run it owns them,
    but nothing is placed), so with a `paper` policy every entry is refused.
-   Without a trained bundle the policy sizes each setup by its `sizing`
-   rules: full within the budget, or skip.
+   The policy strategy sizes each setup by its `sizing` rules: full within
+   the budget, or skip.
 
 10. **Labels.** `node scripts/replay.js labels <run dir>` turns a run into
-   the labels a student policy learns from (any harness, any model): one
+   labels, a record of how the reasoning trader decided (any harness, any
+   model), the input for measuring how closely it follows its rules: one
    per decision time and symbol in `<run dir>/labels.jsonl`, with
    `labels-summary.json`, never in the repository. Each holds the bar's
    candidates; the teacher's action (`none`, `long`, `short` flat; `hold`,
@@ -154,42 +155,17 @@ broker.
    what the teacher could trade (a paper strategy is left out unless the
    run is in paper mode, where no flat decision is a skip); a flat cycle
    with a resting order or a manage-only cycle is no skip, and the
-   strategies a failed policy screen names are no candidates. Decisions the student can't express (limit or
-   stop entries, a target other than the strategy's own exit as
-   `order_plan` places it, adds, partial exits) are counted, not cloned.
+   strategies a failed policy screen names are no candidates. Decisions the
+   mechanical action space can't express (limit or stop entries, a target
+   other than the strategy's own exit as `order_plan` places it, adds,
+   partial exits) are counted as uncloneable, by reason.
    Read the printed counts (taken, unknownOutcome (an entry whose call
    timed out with no broker record or fill: never counted as taken), skipped, refused, wins, losses,
    skipped-would-have-won and -lost, uncloneable, unmapped, unsimulated)
-   before training on a run. An exit by `close_position` shows only when
+   before drawing conclusions from a run. An exit by `close_position` shows only when
    the harness's transcript names tool calls (Claude Code, Codex, Qwen
    Code, opencode); a custom harness printing plain text shows it as a
    hold.
-
-11. **Dataset.** `node scripts/rl-dataset.js build <run dir> ... --out <file.jsonl>`
-   turns labelled runs into the rows a student policy trains on (several
-   runs merge in time order; a labels folder written with `--out` needs its
-   run: `--run <run dir>`). Write it outside the repository and outside
-   the run homes it reads (refused there). Each row is the observation live trading builds at the label's
-   decision time (the policy strategy's, `--strategy`, default
-   `prop_portfolio`: the last bars closed by then, the setup the live
-   screen picks on that bar, the account as an attempt of the strategy's
-   account started on the run's first day and moved by the run's own
-   closed trades, the open trade the cycle showed) and the teacher's
-   decision as an action: `--mode student` (default: flat `none` or
-   `long`/`short` at a stop multiple and size step, in a trade `hold`,
-   `tighten`, `exit`) or `--mode env` (today's env: `skip`, `half`, `full`
-   at the policy's setup, half or full by the teacher's size against the
-   policy's own plans; `hold`, `close` past the ratchet). A run whose
-   policy screened its scans (an attempt running in its home) is excluded,
-   not read yet. Outcomes and
-   counterfactuals are targets, never inputs. Only cloneable decisions
-   become rows (refused intents only with `--include-refused`); the rest is
-   counted by reason. Label with `--budget` first (an entry's size step
-   needs it), and pass the data the run replayed with `--bars` (a decision
-   with fewer bars closed by then than the runner reads is excluded). Read
-   the printed counts (rows, actions, excluded by reason). The dataset
-   records its observation version: a trainer on another observation
-   refuses it, so rebuild it after the observation changes.
 
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
@@ -220,7 +196,6 @@ node scripts/replay.js run --config replay.json --max-cycles 50
 node scripts/replay.js run --config replay.json       # resumes after the last decision time done
 node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03   # --account topstep_50k: score another account
 node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
-node scripts/rl-dataset.js build ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --out ~/fth-datasets/mnq-ny-2024-03.jsonl --bars MNQ=~/data/MNQ-1m.parquet
 ```
 
 ```text

@@ -124,8 +124,8 @@ description: Rules for running the trading harness unattended (headless, schedul
    multi-timeframe read, blackouts, the prop status, lessons, and reconcile
    are tools on the `harness` MCP server (the `harness-tools` skill): call
    them; don't run the harness's scripts from a shell. Starting, stopping, or
-   recording a prop attempt, backtests, replays (`replay.js`), and training
-   are the user's.
+   recording a prop attempt, backtests, and replays (`replay.js`) are the
+   user's.
 
 ## Examples
 

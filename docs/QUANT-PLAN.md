@@ -1,9 +1,13 @@
-# Quant plan: from the reasoning trader to a policy that passes combines
+# Quant plan: measuring the reasoning trader on combines
 
 Status: the plan of record for the label runs and what follows them. The
 pieces it builds on are described in `docs/REASONING-TRADER-DESIGN.md`
-(replay, labels, dataset) and `docs/RL-DESIGN.md` (the env, training, the
-promotion gate). Order flow comes after this plan (`docs/ORDER-FLOW.md`).
+(replay, labels). The trained PPO policy this plan once led to (behaviour
+cloning, then RL) is retired; the learned-rulebook design (to come)
+replaces it: a small set of numbers and context rules, searched on history,
+that the gate enforces and the skills teach. This plan is the LLM
+measurement that design points to. Order flow comes after this plan
+(`docs/ORDER-FLOW.md`).
 
 ## The objective
 
@@ -16,24 +20,23 @@ not the attempt.
 
 The system is judged by:
 
-- **P(blow)**: zero, in every out-of-sample month (the promotion gate).
+- **P(blow)**: zero, in every out-of-sample month (the promotion gate,
+  `scripts/lib/prop/promotion.js`).
 - **P(pass)** per attempt: at least 40% (the gate's floor; it may be raised,
   never lowered).
 - **Days to pass**.
 
-## The combine Monte Carlo is the training
+## The combine Monte Carlo is the score
 
-The RL env is the combine Monte Carlo: each episode is one combine attempt
-from a random start day, run through the backtester (the same evaluator,
-fills, trailing exits, fees and session as live) until it passes, blows, or
-times out. The reward pays a pass (more for a faster one) and punishes a blow
-harder than any pass earns. Training runs many attempts; selection and
-the out-of-sample check count passes and blows month by month.
+The backtester's prop runs are the combine Monte Carlo
+(`scripts/lib/prop/challenge.js`): each attempt starts on a trading day and
+runs through the backtester (the same evaluator, fills, trailing exits, fees
+and session as live) until it passes, blows, or times out. Passes and blows
+are counted month by month.
 
-The policy decides what the combine needs decided: at each setup skip, half
-or full size; in a trade past the ratchet, hold or close. It sees the account
-(cushion, progress, day P&L, sessions left), the setup's risk against the
-cushion, the trade, and the market (`docs/RL-DESIGN.md`, Observation).
+What the combine needs decided is the size at each setup (today the
+policy strategy's sizing verdict: full or skip; the priority order may halve
+it); the trail exits every trade.
 
 ## The pipeline, and what to measure at each stage
 
@@ -41,8 +44,8 @@ cushion, the trade, and the market (`docs/RL-DESIGN.md`, Observation).
 | --- | --- | --- |
 | Signals | rules strategies | Does each setup have an edge after fees: expectancy in R, win rate, the R distribution, by regime, session and trend alignment? |
 | Filter | the reasoning model with the skills | Does its judgment add edge? Taken setups against every signal, using the counterfactuals on skipped labels. |
-| Sizing | the position-sizing skill, then the policy | Which risk per trade maximizes P(pass) with P(blow) at zero? |
-| Exits | `prop_portfolio`'s `exit` (hold the stop to +2R, then trail 0.5R) and the policy's hold or close | Do exits keep the move: the best and worst R in a trade against the R banked? |
+| Sizing | the position-sizing skill and the policy strategy's `sizing` | Which risk per trade maximizes P(pass) with P(blow) at zero? |
+| Exits | `prop_portfolio`'s `exit` (hold the stop to +2R, then trail 0.5R) | Do exits keep the move: the best and worst R in a trade against the R banked? |
 | Portfolio | `strategies/prop_portfolio` order | Do losses cluster on the same days across strategies? Combines die from clustered losses, not the average. |
 
 ### Why sizing is the crux
@@ -52,14 +55,15 @@ is 75R and the target 150R. Two trades a day at +0.2R expectancy make about
 0.4R a day, 12R ($480) in 30 sessions: no pass. The size that reaches
 +$6,000 before -$3,000 most often depends on the measured edge, how often it
 fires, and how losses cluster. Expect "more size on the best setups only",
-which is the policy's skip / half / full decision.
+which is the sizing verdict's job (full or skip today; a size multiplier in
+the learned-rulebook design).
 
-## Labels: the policy's head start
+## Labels: how the reasoning trader decides
 
 The reasoning model trades replayed windows through the live harness (every
 skill, strategy and role; the full multi-agent cycle). Its decisions become
-labels (taken, skipped with counterfactuals, refused); behaviour cloning
-copies them, then RL on the combine Monte Carlo improves on them.
+labels (taken, skipped with counterfactuals, refused): the record of how
+closely it follows the skills and whether its judgment adds edge.
 
 ### Every window is a combine attempt
 
@@ -72,17 +76,16 @@ The replay report's combine verdict is per calendar month; the window's own
 attempt is read with `combine.js status`.
 
 While an attempt runs, only the policy strategy may enter, so the policy
-must be `active`: `prop_portfolio` is, for live and replay alike. Until a
-trained bundle is shipped, its `sizing` rules set the size the reasoning
-model may take (the full size its budget allows, or a skip); the labels
-record the reasoning model's take or skip, and the policy trained on them
-then decides skip, half or full.
+must be `active`: `prop_portfolio` is, for live and replay alike. Its
+`sizing` rules set the size the reasoning model may take (the full size its
+budget allows, or a skip); the labels record the reasoning model's take or
+skip.
 
 ### Windows
 
 Thirty weekdays each (one combine attempt: thirty trading days less any
-exchange holiday in them), on the RL pipeline's split
-(`rl/configs/sweep/prop_portfolio_topstep_100k_v1.json`). The starts are
+exchange holiday in them), on the split windows
+(`scripts/lib/prop/splits.js`). The starts are
 stratified and seeded (drawn once and recorded): each split's range is cut
 into equal buckets, and one random weekday start is drawn per bucket, each
 window inside its own bucket (a start is drawn no later than 30 weekdays
@@ -94,25 +97,27 @@ read as it stands, by sessions done.
 
 | Split | Range | Reasoning-model windows | Used for |
 | --- | --- | --- | --- |
-| Train | 2021-01 to 2023-07 | 8 (from 2021-06: the bars start 2021-04-25) | cloning labels; all skill and strategy iteration |
-| Select | 2023-07 to 2024-07 | 3 | the clone's held-out check; choosing among policies |
-| Out of sample | 2024-07 to 2025-07 | none | the policy alone in the backtester, once, under the gate |
+| Train | 2021-01 to 2023-07 | 8 (from 2021-06: the bars start 2021-04-25) | labels; all skill and strategy iteration |
+| Select | 2023-07 to 2024-07 | 3 | the held-out check of skill changes; choosing among rulebook candidates |
+| Out of sample | 2024-07 to 2025-07 | none | the rulebook in the backtester, under the gate |
 
-The out-of-sample test needs no reasoning model: the policy sees only bars,
-so it cannot remember the market, and the test stays unseen until the end.
+The out-of-sample test needs no reasoning model: the backtester runs the
+rules on bars alone, so it cannot remember the market, and the test stays
+unseen until the end.
 
 ### Leakage
 
 The reasoning model may remember what markets did before its knowledge
 cutoff, which can make its labels look better than its judgment. The train
 and select windows here lie before the cutoff, so neither judges the
-reasoning model: its own quality (the go/no-go for cloning: does it beat the
-rules baseline and the current policy?) is judged on months after the cutoff
+reasoning model: its own quality (does it beat the rules baseline?) is
+judged on months after the cutoff
 (recent months, e.g. 2026-06, where the bar data covers them), with the
 cutoff-gap test (train against those months) and the placebo test in
-`docs/REASONING-TRADER-DESIGN.md`. Labels from before the cutoff train the
-clone (train) and check its imitation (select) only. Policies are chosen on
-select and judged out of sample in the backtester, where they see only bars.
+`docs/REASONING-TRADER-DESIGN.md`. Labels from before the cutoff serve skill
+and strategy iteration (train) and its held-out check (select) only.
+Rulebook candidates are chosen on select and judged out of sample in the
+backtester, where they see only bars.
 This replaces that design's requirement that select and out of sample start
 after the cutoff; its Leakage, Windows, Plan, Nondeterminism and Open
 questions sections, and its stage-2 condition, are amended to match.
@@ -152,8 +157,8 @@ thousands of labels (one per decision time and symbol).
   one and its result.
 - **Re-label after a change**: the reasoning model's decisions depend on the
   skills, so after a skill or strategy change the affected windows are
-  replayed, and the policy trains on labels from the current skills
-  (training equals live).
+  replayed, and every measurement uses labels from the current skills
+  (replay equals live).
 - **Costs**: fees are in the backtester. Market entries fill at the replay
   moment (the open of the minute containing it, plus slippage; no later
   data), as live; live slippage is still measured before any live use.
@@ -186,10 +191,10 @@ thousands of labels (one per decision time and symbol).
    counts only once confirmed after the cutoff), set sizing from the Monte
    Carlo; each change its own pull
    request with the regression and review; then re-label train and select.
-5. **Clone, then RL**: behaviour cloning on the train labels (checked on
-   select), then RL fine-tuning on the combine Monte Carlo.
+5. **Learn the rulebook** (the learned-rulebook design, to come): its
+   numbers searched on train by the combine Monte Carlo, chosen on select.
 6. **Test once**: the out-of-sample months in the backtester under the gate:
-   zero blows every month and at least 40% passes, or it doesn't ship.
+   zero blows every month and at least 40% passes, or it isn't promoted.
 
 ## What the label runs trade with
 

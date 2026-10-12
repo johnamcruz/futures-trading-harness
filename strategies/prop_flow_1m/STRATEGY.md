@@ -1,8 +1,8 @@
 ---
 name: prop_flow_1m
-description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - a trained policy decides which flow setups to take, at what size in the selected contract, and when to bank a trade, on the Topstep 100K combine.
+description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - it sizes each flow setup from the attempt's budget in the selected contract (or skips it), and trails every trade, on the Topstep 100K combine.
 version: 1
-status: paper                 # paper until a validated bundle is shipped and the user activates it
+status: paper                 # paper until the user activates it
 instruments: [MNQ, NQ]
 timeframe: 1m
 signal: policy
@@ -18,29 +18,29 @@ exit:
 risk:
   stop: strategy
   min_rr: 2
-source: docs/RL-DESIGN.md; needs 1-minute bars with recorded buy/sell volume (scripts/orderflow.js export) to train
+source: harness design (prop_portfolio's counterpart); backtests need 1-minute bars with recorded buy/sell volume (scripts/orderflow.js export)
 ---
 
 # Strategy: Prop Flow 1m (`setup:prop_flow_1m`)
 
-The order-flow counterpart of `prop_portfolio`: the same account, sizing,
-and policy, over the 1-minute `ofi` and `ofi_absorption` setups. A policy
-trades one timeframe, so the flow strategies get their own policy strategy.
+The order-flow counterpart of `prop_portfolio`: the same account and
+sizing, over the 1-minute `ofi` and `ofi_absorption` setups. A policy
+strategy trades one timeframe, so the flow strategies get their own.
 
 ## When to Use
 
 - A `topstep_100k` attempt is running on 1-minute bars (`ofi` and
   `ofi_absorption` declare the order-flow connector).
-- Training needs 1-minute bars with real buy/sell volume (recorded flow
+- Backtests need 1-minute bars with real buy/sell volume (recorded flow
   files, exported with `scripts/orderflow.js export`); bars without it fall
   back to an estimate.
 
 ## How It Works
 
 As `prop_portfolio`: the first flow strategy with a setup on the closed
-1-minute bar is the setup, sized from the cushion in the selected contract, and the
-trained policy (once shipped) takes it, halves it, or skips it, and may bank a
-trade past +2R. A verdict is a ceiling: take it with `setup:prop_flow_1m`, exactly as given
+1-minute bar is the setup, sized from the cushion in the selected contract
+(full, or a skip when the budget can't fund it), and the trail exits the
+trade. A verdict is a ceiling: take it with `setup:prop_flow_1m`, exactly as given
 and at most its size, when the priority order (the strategy-library skill) says so.
 
 ## Examples

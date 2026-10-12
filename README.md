@@ -27,8 +27,8 @@ generates each harness's own format from it:
 | Slot | What it is | Here |
 |---|---|---|
 | `agents/` | Roles: a name, a description, the tools it may use | analysts, risk manager, executor (the only role with order tools), reviewer |
-| `skills/<name>/SKILL.md` | Workflows and know-how: When to Use, How It Works, Examples | trade-session, premarket, end-of-day, prop-challenge-pacing, policy-training, ... |
-| `commands/` | Thin shims that start a skill | `/trade-session`, `/combine-status`, `/train-policy`, ... |
+| `skills/<name>/SKILL.md` | Workflows and know-how: When to Use, How It Works, Examples | trade-session, premarket, end-of-day, prop-challenge-pacing, replay, ... |
+| `commands/` | Thin shims that start a skill | `/trade-session`, `/combine-status`, `/mtf`, ... |
 | `rules/` | Always-on rules | risk, the order rationale, market hours |
 | `hooks/` | Code that runs on harness events | the order gate (PreToolUse), briefings, review reminders |
 | Domain documents | The harness's own documents in the same style | `strategies/<name>/STRATEGY.md`, `accounts/<name>/ACCOUNT.md` |
@@ -37,9 +37,9 @@ Code reads each document's frontmatter; agents read its body. Adapters for
 Codex, Qwen Code, opencode, and the shared workspace are generated
 (`node scripts/sync-harness.js`) and never edited by hand. Logic lives in
 `scripts/lib/` (pure, tested), CLIs and hooks stay thin, and anything that
-must hold (the gate, the account rules, a policy's promotion gate) is
-enforced in code, not left to the prompt. The RL fits the same way: the prop
-challenge is a strategy document (`signal: policy`), its account is an
+must hold (the gate, the account rules, the promotion gate) is
+enforced in code, not left to the prompt. The prop challenge fits the same
+way: it is a strategy document (`signal: policy`), its account is an
 account document, and its workflows are skills.
 
 > [!WARNING]
@@ -252,9 +252,7 @@ strategies are ported from an earlier Python trading bot.
 | `skills/` | 20 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
 | `strategies/` | Strategy documents and the template |
 | `accounts/` | Prop account profiles (`ACCOUNT.md`): Topstep 50K, 100K, 150K combines |
-| `models/` | Promoted policy bundles (trained prop-challenge policies) |
-| `rl/` | Python trainer for prop-challenge policies: MaskablePPO on the harness's own backtester, Optuna sweep → retrain → ship with JSON config families |
-| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/train-policy`, `/mtf` |
+| `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/mtf` |
 | `rules/trading/` | Always-on rules |
 | `hooks/hooks.json` | Order gate, session briefing, review reminder (Claude Code and Codex plugins, Qwen extension) |
 | `scripts/` | Hook runtime, MCP gateway, broker adapter and conformance check, autonomous runner, strategy/snapshot/blackout CLIs, installer, harness sync |
@@ -402,17 +400,8 @@ loaded), and `cycles/<day>/<time>-<action>.json` the whole cycle: the prompt
 the summary. `gate-log.jsonl` has every order the gate refused and why;
 `alerts-<day>.jsonl` every alert.
 
-Training logs go next to each run's outputs, in `logs/`: `<stage>.log`
-(every line, timestamped: per seed, steps, steps/s, ETA, pass / blow /
-timeout, win rate, trades and profit per attempt, episode reward, and PPO's
-entropy, KL, clip fraction, explained variance, and losses),
-`<stage>.jsonl` (every attempt, progress line, evaluation, and sweep trial
-with its params, score, and state: complete, infeasible and why, pruned at
-which checkpoint, or failed with its traceback), and a run manifest
-(`run.json`: config, git commit, library versions, start, end, status).
-Each sweep trial also writes `trial_NNN/train.log` and `summary.json`. Each run
-follows the `autonomous-trading` skill: one bounded cycle, positions first, no
-questions, stand aside when unsure. Runs are locked down per harness: Claude
+Each run follows the `autonomous-trading` skill: one bounded cycle, positions
+first, no questions, stand aside when unsure. Runs are locked down per harness: Claude
 Code gets an explicit tool allowlist (broker tools, reading, and the
 harness scripts by absolute path), Qwen Code runs in default approval mode
 with the allowlist in `workspace/.qwen/settings.json`, opencode runs
@@ -530,27 +519,21 @@ rules strategy in sample and reports only its out-of-sample trades. See
 
 ### Passing prop challenges
 
-A trained policy learns to pass prop-firm combines with a **high pass rate
-and a high win rate**, never blowing the account. It plays thousands of
-simulated combines from random start days on the harness's own backtester,
-rewarded for passing (more for passing sooner) and for winning trades,
-penalized far more for a blow, and lightly for losing trades and for running
-out of time.
-
-The prop challenge is a strategy: a **policy strategy** (`signal: policy`)
-trades the setups of every rules strategy it lists on a prop account, and a
-trained policy learns which to take, at what size, and when to bank a trade
+The goal is to pass prop-firm combines consistently, never blowing the
+account. The prop challenge is a strategy: a **policy strategy**
+(`signal: policy`) trades the setups of every rules strategy it lists on a
+prop account, each at the largest size the attempt's budget allows (or
+skipped), and its trail exits every trade
 (`strategies/prop_portfolio/STRATEGY.md`):
 
 ```yaml
 signal: policy
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account, one position at a time
-timeframe: 3m                # the one bar-size setting; a bundle trades only the timeframe it was trained on
+timeframe: 3m                # the one bar-size setting: every listed strategy trades it
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
 contracts: auto              # micro | mini | auto: sized in micros, traded as minis once the size reaches one (10 MNQ = 1 NQ)
-policy: { bundle: prop_portfolio_topstep_100k }   # models/<bundle>.json, once one passes the gate
 ```
 
 - `node scripts/combine.js start --account topstep_100k` starts an attempt;
@@ -558,35 +541,24 @@ policy: { bundle: prop_portfolio_topstep_100k }   # models/<bundle>.json, once o
   runner snapshots the balance every bar and records each day's close; the
   order gate refuses that strategy's entries without a started attempt, a
   fresh snapshot, or room under the daily limits and the size budget.
-- The policy sees which strategy fired, the account, the setup's risk (micro
-  or mini), and the market; it decides at each setup (skip, half, or full
-  size) and, past the ratchet, whether to bank the trade. It never picks the
-  side. It is trained
-  in Python (`pip install -r rl/requirements.txt`) with MaskablePPO on the
-  harness's own backtester, so training, backtests, and live trading run the
-  same rules. One policy trains on several markets at once (`symbols` in the
-  config: NQ, ES, YM, and RTY, the shipped family as minis) against one
-  account, one position at a time across them, as a real combine. Each config
-  family is JSON:
+- At each setup the runner records the verdict (`full` with the contract,
+  size, and stop ticks, or `skip` with the reason); the order gate holds the
+  entry to it, and the agents' priority order may still skip or halve it.
+  The verdict never picks the side.
+- `node scripts/backtest.js --config <file> --prop prop_portfolio`
+  runs combine attempts from every start day: pass, blow, and timeout rates,
+  by month.
+- A configuration is promoted only when, out of sample, it has zero blows in
+  every month and a pass rate of at least 40% over 20+ attempts and 2+ months
+  (`scripts/lib/prop/promotion.js`, frozen code; the split windows are in
+  `scripts/lib/prop/splits.js`).
 
-  ```bash
-  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_topstep_100k_v1.json --dry-run
-  python rl/sweep.py   --config rl/configs/sweep/prop_portfolio_topstep_100k_v1.json     # Optuna over the search space
-  python rl/retrain.py --config rl/configs/retrain/prop_portfolio_topstep_100k_v1.json   # best trial, more seeds
-  python rl/ship.py    --config rl/configs/ship/prop_portfolio_topstep_100k_v1.json      # out of sample, gate, promote
-  ```
-
-- The sweep ranks recipes by pass rate plus win rate (any blow is
-  infeasible). A policy is promoted only when every retrained seed is
-  blow-free on the selection window and, out of sample, it has zero blows in
-  every month and a pass rate of at least 40% over 20+ attempts (and a win
-  rate floor, if `min_win_rate` is set); live trading refuses any other.
-- `node scripts/backtest.js --config <file> --prop prop_portfolio [--bundle <name>]`
-  runs combine attempts from every start day: pass, blow, and timeout rates.
-
-See [docs/RL-DESIGN.md](docs/RL-DESIGN.md). The policy learns from the rules' setups; the
-design for replaying the reasoning trader over history and training a policy on
-its decisions is [docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md) (not built).
+The trained PPO policy that once decided each setup is retired. The
+learned-rulebook design (to come) replaces it: a small set of numbers and
+context rules, searched on history and scored by combine attempts, that the
+gate enforces and the skills teach. The design for replaying the reasoning
+trader over history and measuring its decisions is
+[docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md).
 
 ### Order flow
 
@@ -610,7 +582,7 @@ node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-0
 |---|---|---|
 | `FTH_KILL_SWITCH_FILE` | `~/.futures-trading-harness/STOP` | If it exists, no new entries |
 | `FTH_STRATEGIES_DIRS` | (none) | Extra strategy folders |
-| `FTH_ACCOUNTS_DIRS` / `FTH_MODELS_DIRS` | (none) | Extra account-profile and policy-bundle folders |
+| `FTH_ACCOUNTS_DIRS` | (none) | Extra account-profile folders |
 | `FTH_PLAN_MAX_AGE_MIN` | 120 | Plan freshness |
 | `FTH_MAX_CONSECUTIVE_LOSSES` / `FTH_LOSS_COOLDOWN_MIN` | 2 / 30 | Loss-streak cooldown |
 | `FTH_MAX_DAILY_LOSSES` | 3 | Losing trades per trading day |
@@ -638,7 +610,7 @@ only checks that they really reduce the position.
 
 ```bash
 npm install
-npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content, e2e (+ rl/tests when Python has numpy)
+npm test                         # node:test: gate, gateway, strategies, runner, installer, sync, content, e2e
 npm run lint                     # eslint + markdownlint
 node scripts/sync-harness.js     # regenerate Codex/Qwen/opencode/workspace files after editing agents, commands, rules, skills
 ```

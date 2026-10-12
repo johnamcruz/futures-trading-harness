@@ -1,11 +1,11 @@
 ---
 name: prop_portfolio
-description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - a trained policy picks which setups to take on the Nasdaq, S&P, Dow, and Russell, at what size in the selected contract, and when to bank a trade, to pass the Topstep 100K combine without blowing it.
+description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - it sizes each setup on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade, to pass the Topstep 100K combine without blowing it.
 version: 1
-status: active                # the owner's call: live and replay; until a bundle is shipped the sizing rules decide (How It Works, 4)
+status: active                # the owner's call: live and replay; the sizing rules decide each verdict (How It Works, 4)
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
-timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works); a bundle trades only the timeframe it was trained on
-signal: policy                # a trained policy trades the setups of the strategies below
+timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works)
+signal: policy                # trades the setups of the strategies below on the account
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first that fires on a bar is the setup
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing:                       # risk from the headroom above the floor
@@ -16,21 +16,19 @@ sizing:                       # risk from the headroom above the floor
 contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
 exit:
   trail_activate_r: 2         # hold the setup's own stop until +2R ...
-  trail_giveback_r: 0.5       # ... then trail 0.5R behind the best price; past +2R the policy may bank it
+  trail_giveback_r: 0.5       # ... then trail 0.5R behind the best price
 risk:
   stop: strategy              # each setup keeps its own strategy's stop
   min_rr: 2
-# policy: { bundle: prop_portfolio_topstep_100k }   # set by rl/ship.py's output once a bundle passes the gate
-source: docs/RL-DESIGN.md; trained by rl/ (sweep -> retrain -> ship, rl/configs/*/prop_portfolio_topstep_100k_v1.json)
+source: harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers
 ---
 
 # Strategy: Prop Portfolio (`setup:prop_portfolio`)
 
 A prop-challenge strategy. It trades the setups of the twelve 3-minute rules
 strategies on four index futures (Nasdaq, S&P, Dow, Russell) against one
-Topstep 100K combine, and a trained policy decides what to do with each one.
-Without a `policy` bundle it takes every setup at the account's size budget
-(the rules-only baseline the policy is measured against).
+Topstep 100K combine. It takes every setup at the account's size budget, or
+skips one the budget can't fund, and its trail exits every trade.
 
 ## When to Use
 
@@ -49,11 +47,11 @@ Without a `policy` bundle it takes every setup at the account's size budget
    own while the attempt runs. `timeframe` is the one setting for the bar
    size; every listed strategy must trade that timeframe (the strategies are
    ported with periods and stops in their own bars, so they are not re-run
-   on other bars), and a bundle trades only the timeframe it was trained on.
+   on other bars).
 2. One account, one position at a time: all four indexes share the
    attempt's cushion, so while a trade is open (or an entry is in flight) on
-   one index, setups on the others wait (the gate refuses them, and training
-   and backtests do the same). Each trade is then sized from the whole
+   one index, setups on the others wait (the gate refuses them, and
+   backtests do the same). Each trade is then sized from the whole
    cushion, and a stopped trade never reaches the floor or the daily limit.
 3. The size budget is 30% of the cushion above the trailing floor, at most
    $1,000, halved while the balance is $1,500 or more below its peak, and
@@ -62,16 +60,11 @@ Without a `policy` bundle it takes every setup at the account's size budget
    decays toward a timeout instead of reaching the floor. It is worked out in
    micros and traded in the selected contract (MNQ selected: micros; NQ
    selected: minis), always rounding down; with none selected, as minis once
-   it reaches one mini (`contracts: auto`). A bundle trained on minis only
-   (`contracts: mini` in its training config) trades only once this document
-   says the same, and only with the mini selected.
-4. The policy (once shipped) sees the account (cushion, progress, drawdown,
-   day P&L, sessions left), the setup (which strategy, side, risk, micro or
-   mini), and the market (session clock, ATR ratio, ADX), and answers skip,
-   half, or full. Past +2R it answers hold or close on every bar. Until a
-   bundle is shipped (no `policy:` line), every setup gets the full size its
-   budget allows (step 3), or a skip when the budget can't fund one contract
-   at its stop or the attempt blocks entries; the trail manages the trade.
+   it reaches one mini (`contracts: auto`).
+4. The verdict: every setup gets the full size its budget allows (step 3),
+   or a skip when the budget can't fund one contract at its stop or the
+   attempt blocks entries. The trail (`exit`) manages every trade; nothing
+   closes it early past +2R.
 5. A verdict is a ceiling: take it only when the priority order (the strategy-library skill) says so (it may skip it or halve it), and then exactly as given: `setup:prop_portfolio`, the verdict's
    contract and side, at most its size, with `stopLossBracket.ticks` equal to
    its stop ticks. The order gate refuses anything else, any entry while a
@@ -91,8 +84,8 @@ Cushion $3,250: budget 0.3 x $3,250 = $975.
 Cushion $1,000, $2,000 below the peak: budget 0.3 x $1,000 / 2 = $150.
   YM, a 40-tick stop: 7 MYM ($145.18), under one mini, so micros.
 
-prop_portfolio long setup on ES from supertrend: policy says full (max 4 ES, stop 16 ticks)
+prop_portfolio long setup on ES from supertrend: sizing says full (max 4 ES, stop 16 ticks)
 -> place_order ES buy 4, stopLossBracket.ticks 16,
-   rationale "setup:prop_portfolio supertrend long, stop 16 ticks, policy full"
+   rationale "setup:prop_portfolio supertrend long, stop 16 ticks, verdict full"
 NQ setup on the next bar while the ES trade is open: the gate refuses it (one position at a time).
 ```
