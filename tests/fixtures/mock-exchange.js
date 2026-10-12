@@ -167,7 +167,8 @@ function bars(s, a) {
   // gate reads the same market the scan did (e.g. its regime check).
   const real = (s.bars || {})[a.contractId];
   if (Array.isArray(real)) {
-    const closed = real.filter(b => Date.parse(b.t) >= start && Date.parse(b.t) + step <= end);
+    // As a broker does: with no startTime, the last `limit` closed bars by count (across breaks), else from startTime.
+    const closed = real.filter(b => Date.parse(b.t) + step <= end && (!a.startTime || Date.parse(b.t) >= start));
     return { contractId: a.contractId, barSize: `${a.unitNumber || 1} ${a.unit || 'minute'}`, count: Math.min(closed.length, a.limit || 100), bars: closed.slice(-(a.limit || 100)) };
   }
   const out = [];
