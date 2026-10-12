@@ -56,3 +56,18 @@ test('overnight line: outside RTH, the session so far against the prior day; not
   assert.strictEqual(describeOvernight(nq.slice(0, 20)), null, 'no whole prior RTH day in the data');
   assert.strictEqual(describeOvernight([]), null);
 });
+
+test('unreviewedLine: today\'s closed entries with no review, as the gate counts them; none once reviewed, while open, or from yesterday', () => {
+  const { unreviewedLine } = require('../../scripts/lib/trading/session-context');
+  const now = new Date('2026-06-01T15:00:00Z'); // 11:00 ET
+  const entry = (ts, contractId = 'MNQ:2026-06', text = 'setup:keltner short') => ({ ts, kind: 'order_placed', contractId, text, data: { result: { success: true } } });
+  const review = (ts, contractId = 'MNQ:2026-06') => ({ ts, kind: 'review', contractId, tags: ['result:loss', 'setup:keltner'], text: 'stopped' });
+  const e = entry('2026-06-01T14:00:30Z');
+  assert.strictEqual(unreviewedLine(['MNQ'], [e], [], now), 'Unreviewed: MNQ: 1 closed entry today with no review. Run trade-review (the trade-reviewer role) first: the gate refuses a new entry on that symbol until each is reviewed.');
+  assert.strictEqual(unreviewedLine(['MNQ'], [e, review('2026-06-01T14:20:00Z')], [], now), null, 'reviewed');
+  assert.strictEqual(unreviewedLine(['MNQ'], [e], [{ contractId: 'MNQ:2026-06', size: 1 }], now), null, 'still open: managed, not reviewed yet');
+  assert.strictEqual(unreviewedLine(['MNQ'], [entry('2026-05-29T14:00:30Z')], [], now), null, 'an earlier trading day');
+  assert.strictEqual(unreviewedLine(['MNQ'], [entry('2026-06-01T14:00:30Z', 'MNQ:2026-06', '[exit] flatten')], [], now), null, 'an exit is not an entry');
+  assert.match(unreviewedLine(['MNQ', 'MES'], [e, entry('2026-06-01T14:10:00Z', 'MES:2026-06'), entry('2026-06-01T14:30:00Z', 'MES:2026-06')], [], now), /MNQ: 1 closed entry today with no review; MES: 2 closed entries today with no review\./);
+  assert.strictEqual(unreviewedLine(['MNQ'], null, null, now), null);
+});
