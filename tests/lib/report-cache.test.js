@@ -190,10 +190,27 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   const now = new Date(a.closedAt);
   const record = (text, account) => RC.recordReports({ output: task('risk-manager', text, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account, day: DAY, now });
   assert.strictEqual(record(wrong, active).phase1, null, 'not cached: the next cycle runs phase 1 again');
-  for (const t of ['However, no prop attempt is running', 'no active attempt', 'the attempt is not running', 'Wait for a prop attempt to be started']) {
-    assert.strictEqual(record(t, active).phase1, null, t);
+  // Denials a 9B writes, alone or after a correct Attempt line: never cached.
+  const line = 'Attempt: topstep_100k active, cushion $3,000, budget $900';
+  for (const t of ['However, no prop attempt is running', 'no active attempt', 'the attempt is not running', 'Wait for a prop attempt to be started',
+    'No prop attempt is running, so the standard position-sizing limits apply', 'no attempt running; daily limit $1,000 applies', 'Attempt: none listed',
+    'Attempt: none', 'the attempt has not been started', "The attempt isn't running", 'attempt not started', 'Prop attempt: not started',
+    "there isn't an active attempt", 'There is no running attempt']) {
     assert.strictEqual(RC.deniesActiveAttempt(t, active), true, t);
+    assert.strictEqual(record(`${line}\n${t}`, active).phase1, null, t);
   }
+  // Correct reports that mention an attempt's absent blocks are not denials (they would only cost a re-read).
+  for (const t of ['topstep_100k attempt (active): no attempt-level block', 'Entries: allowed (no attempt block)', 'No attempt DLL breach', 'no attempts blown',
+    'No attempt was blown', 'no attempt rule breached', 'No attempt restrictions', 'There is no attempt-level block']) {
+    assert.strictEqual(RC.deniesActiveAttempt(t, active), false, t);
+    assert.ok(record(`${line}\n${t}`, active).phase1, t);
+  }
+  // Phrasing can't be enumerated: a report that doesn't confirm the active attempt on its Attempt line is read again.
+  assert.strictEqual(record('## Risk state\nBudget: per trade $900', active).phase1, null, 'no Attempt line');
+  assert.strictEqual(record('Attempt: topstep_50k active', active).phase1, null, 'another account');
+  assert.strictEqual(record('Attempt: topstep_100k blown', active).phase1, null, 'not as listed');
+  assert.ok(record('**Attempt:** topstep_100k active, cushion $3,000', active).phase1, 'markdown bold');
+  assert.strictEqual(RC.phase1Holds('Budget: per trade $900', ACCT), true, 'no active attempt: nothing to confirm');
   // With no active attempt the same words are true: cached as before.
   assert.strictEqual(record('no attempt is running', ACCT).phase1.text, 'no attempt is running');
   // A report that states the attempt as listed is cached and served on the next bar.
