@@ -695,7 +695,12 @@ test('CLI: the runner never takes the test suite\'s FTH_TEST_NOW, keeps its stat
   const run = (extra, args = ['--dry-run']) => spawnSync(process.execPath, [cli, '--config', config, ...args], { encoding: 'utf8', env: { ...env, ...extra }, timeout: 20000 });
   // Wednesday 08:00 ET is premarket on the replayed clock; the test clock at that time is ignored (a live runner).
   assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: premarket/);
-  assert.doesNotMatch(run({ NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T12:00:00Z' }).stdout, /premarket/);
+  // Ignored whatever the real time: two test clocks with different next actions (Wednesday 08:00 ET premarket,
+  // Saturday with the market closed) give the same answer, the live clock's.
+  const actionAt = t => (/next action now: (\S+)/.exec(run({ NODE_ENV: 'test', FTH_TEST_NOW: t }).stdout) || [])[1];
+  const atPremarket = actionAt('2026-10-07T12:00:00Z');
+  assert.ok(atPremarket, 'the runner says its next action');
+  assert.strictEqual(actionAt('2026-10-10T15:00:00Z'), atPremarket);
   // An unreadable state file: manage-only for the rest of the replayed day (not a new day's premarket).
   fs.writeFileSync(path.join(dir, 'autotrader-state.json'), '{ broken');
   assert.match(run({ FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }).stdout, /next action now: manage/);
