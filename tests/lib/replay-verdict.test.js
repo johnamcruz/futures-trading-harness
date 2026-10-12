@@ -79,8 +79,8 @@ test('verdict: the daily loss limit flattens at the limit and stops the day (not
   assert.strictEqual(v.verdict, 'NOT YET', 'the daily limit is not a fail in combine.js');
   assert.deepStrictEqual(v.days.map(d => d.pnl), [-2000, -2000, net(200)]);
   assert.strictEqual(v.events.length, 2);
-  assert.match(v.events[0].text, /daily loss limit \(\$2000\) hit: flattened there \(trade closed at \$-2500\.37/);
-  assert.match(v.events[1].text, /went to \$-2100\.37 before closing at \$299\.63, counted as \$-1999\.63/);
+  assert.match(v.events[0].text, /daily loss limit \(\$2000\) hit: flattened there \(MNQ closed at \$-2500\.37/);
+  assert.match(v.events[1].text, /MNQ's MAE from its open was \$-2100\.37, before it closed at \$299\.63, counted as \$-1999\.63/);
   assert.deepStrictEqual(v.excluded.map(x => [x.day, x.why]), [['2026-03-02', 'opened after the daily loss limit was hit'], ['2026-03-02', 'opened after the daily loss limit was hit']]);
 });
 
@@ -467,7 +467,7 @@ test('verdict: an MAE event belongs to its round trip, and comes after the fills
   const other = { '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [5, 'MES', 1, 1, -1500], [9, 'MNQ', 1, 1, -50, -1000, 5]]) };
   const o = evaluate(other, wide).months[0];
   assert.deepStrictEqual([o.days.map(d => d.pnl), o.events.length], [[-2000], 1]);
-  assert.match(o.events[0].text, /MNQ was at \$-1000 \(its MAE, at 2026-03-02T15:05:00\.000Z\), counted as \$-500/);
+  assert.match(o.events[0].text, /MNQ's MAE from its open was \$-1000 at 2026-03-02T15:05:00\.000Z, counted as \$-500/);
   // Another contract wins $1500 at the MAE's bar: the win came first, so the room was $3500 and -$2100 doesn't stop.
   const win = { '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [5, 'MES', 1, 1, 1500], [9, 'MNQ', 1, 1, -50, -2100, 5]]) };
   assert.deepStrictEqual(evaluate(win, wide).months[0].days.map(d => d.pnl), [1450]);
@@ -530,6 +530,25 @@ test('verdict: a round trip opened and closed at one instant is judged at its cl
     const rows = [[5, 'MNQ', 0, 1, null], [5, 'MNQ', 1, next.length ? 1 : 2, -1500, -1500, 5, T5], ...next, [9, 'MNQ', next.length ? 1 : 0, 1, 100]];
     const m = evaluate({ '2026-03-02': fillsOn('2026-03-02', rows) }, wide).months[0];
     assert.deepStrictEqual([m.days.map(d => d.pnl), m.events.length], [[-1400], 0], next.length ? 're-entry' : 'reversal');
+  }
+});
+
+test('verdict: an MAE timed at its own close is judged at that moment, not at every state since the open', () => {
+  // MNQ held; MES wins $1500 at 15:05; MNQ closes at -$50 at 15:09 with its MAE (-$2100) at 15:09: the day was +$1500
+  // then, so -$2100 reaches -$600, no stop - as with the MAE at 15:08.
+  const day = maeAt => ({ '2026-03-02': fillsOn('2026-03-02', [[0, 'MNQ', 0, 1, null], [1, 'MES', 0, 1, null], [5, 'MES', 1, 1, 1500], [9, 'MNQ', 1, 1, -50, -2100, maeAt]]) });
+  const wide = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 10000 };
+  for (const at of [9, 8]) assert.deepStrictEqual(evaluate(day(at), wide).months[0].days.map(d => d.pnl), [1450], `MAE at minute ${at}`);
+  // Static $2000 max loss: MES -$1500 then MNQ opens (03-02); MES +$1500 then MNQ stopped at its worst, -$1000 (03-03):
+  // at its close equity was $99500 - $1000, above the $98000 floor (the 03-02 state is not when it happened).
+  const held = maeAt => ({
+    '2026-03-02': fillsOn('2026-03-02', [[0, 'MES', 0, 1, null], [1, 'MES', 1, 1, -1500], [2, 'MNQ', 0, 1, null]]),
+    '2026-03-03': fillsOn('2026-03-03', [[0, 'MES', 0, 1, null], [1, 'MES', 1, 1, 1500], [9, 'MNQ', 1, 1, -1000, -1000, maeAt, '2026-03-02T15:02:00.000Z']]),
+  });
+  const tight = { ...ACCOUNT, max_loss_mode: 'static', max_loss: 2000, daily_loss_limit: 0 };
+  for (const at of [9, 8]) {
+    const m = evaluate(held(at), tight).months[0];
+    assert.deepStrictEqual([m.verdict, m.days.map(d => d.pnl)], ['NOT YET', [-1500, 500]], `MAE at minute ${at}`);
   }
 });
 

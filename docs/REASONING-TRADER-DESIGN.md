@@ -293,7 +293,7 @@ replay judge alike:
   the position was held (after each fill and at each day's start), each on
   its own balance, floor and room to the daily limit, the worst counting; an
   earlier day's point is judged against its floor only (trades open together are not added up; without MAE only the
-  close is seen); at the daily limit the breaching close counts as the limit and
+  close is seen; fills at one instant are read in the broker's order); at the daily limit the breaching close counts as the limit and
   what was still open is left out, as are positions opened after it that
   day and positions carried in from the month before.
 - **Output** per month: PASS and the day, FAIL with the rule and day, or
