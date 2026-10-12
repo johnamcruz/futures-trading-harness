@@ -72,7 +72,8 @@ function toolCalls(output) {
       // 'mcp_tool_call', ... } }. One call per item id, its latest form (a call still in flight when the turn
       // ended, only started, still counts); an item with no id counts once it completed.
       const item = /^item\.(started|updated|completed)$/.test(String(ev.type)) || ev.type === undefined ? ev.item : null;
-      const spawn = codexSubagentItem(item);
+      // A subagent spawned: by its role, or any spawn_agent item (Codex may report one without a role).
+      const spawn = codexSubagentItem(item) || Boolean(item && item.tool === 'spawn_agent' && item.type !== 'agent_message');
       if (!item || (!spawn && !['command_execution', 'mcp_tool_call'].includes(item.type))) continue;
       if ((item.id === undefined || item.id === null) && !(ev.type === 'item.completed' || ev.type === undefined)) continue;
       let call;
@@ -80,7 +81,7 @@ function toolCalls(output) {
       else if (spawn) {
         // A subagent spawned (spawn_agent): failed when its status or error says so.
         const failed = Boolean(item.error) || item.status === 'failed';
-        call = { name: 'spawn_agent', input: subagentRole(item) ? item : parsed(item.arguments) || {}, ...(failed ? { failed: true, error: String(item.error ? item.error.message || JSON.stringify(item.error) : 'failed').slice(0, 300) } : {}) };
+        call = { name: 'spawn_agent', input: subagentRole(item) ? item : subagentRole(item.arguments) ? parsed(item.arguments) : {}, ...(failed ? { failed: true, error: String(item.error ? item.error.message || JSON.stringify(item.error) : 'failed').slice(0, 300) } : {}) };
       } else {
         // An error: a failed status, an error, or a result the tool marked as one (isError).
         const failed = item.status === 'failed' || Boolean(item.error) || Boolean(item.result && typeof item.result === 'object' && (item.result.isError || item.result.is_error));

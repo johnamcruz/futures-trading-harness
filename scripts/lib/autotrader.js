@@ -133,7 +133,8 @@ function delegates(cfg, action = 'trade') {
  */
 function codexLeanBadArgs(args) {
   const bad = [];
-  const risky = v => /features|multi_agent|agents|profile/i.test(String(v));
+  // The setting's key only (before the first =): a value such as a file name may say "agents".
+  const risky = v => /^(features|agents|profiles?)(\.|$)|multi_agent/i.test(String(v).split('=')[0].replace(/["'\s]/g, ''));
   for (let i = 0; i < args.length; i += 1) {
     const [flag, inline] = String(args[i]).split(/=(.*)/s);
     const value = inline !== undefined ? inline : args[i + 1];

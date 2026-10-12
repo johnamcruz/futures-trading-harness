@@ -844,6 +844,9 @@ test('a lean cycle\'s trade and manage runs offer no subagent tool on any harnes
     assert.ok(validateConfig({ harness: 'codex', extraArgs: extra }), `full: ${extra.join(' ')}`);
   }
   assert.deepStrictEqual(codexLeanBadArgs(['-c', 'model_reasoning_effort="high"', '--oss']), []);
+  // Only the setting's key counts: a value that says "agents" or "profile" is fine; a quoted key is still caught.
+  assert.deepStrictEqual(codexLeanBadArgs(['-c', 'project_doc_fallback_filenames=["AGENTS.md"]', '-c', 'model="gpt-agents"', '--config=notify=["profile"]']), []);
+  assert.ok(codexLeanBadArgs(['-c', '"features".multi_agent=true']).length && codexLeanBadArgs(['-c', 'features={multi_agent=true}']).length);
   assert.ok(validateConfig({ harness: 'codex', cycle: 'lean', extraArgs: ['-c', 'model_reasoning_effort="high"'] }));
   // A custom harness can't be restricted: the prompt says it.
   assert.deepStrictEqual(buildCommand(validateConfig({ harness: 'custom', cycle: 'lean', command: ['a', '{prompt}'] }), 'P', '/fth', {}, { action: 'trade' }), ['a', 'P']);

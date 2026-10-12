@@ -209,5 +209,8 @@ test('summary.delegated: every subagent call by its role on each harness, a refu
     JSON.stringify({ type: 'item.completed', item: { id: 'i2', type: 'agent_message', text: 'CYCLE RESULT: no-trade - x' } }),
   ].join('\n');
   assert.deepStrictEqual(summarize(codex).delegated, ['risk_manager']);
+  // A spawn Codex reports without a role still counts, by the tool's name.
+  const roleless = JSON.stringify({ type: 'item.completed', item: { id: 'i3', type: 'collab_tool_call', tool: 'spawn_agent', sender_thread_id: 't0', receiver_thread_ids: ['t1'], prompt: 'p', status: 'completed' } });
+  assert.deepStrictEqual(summarize(roleless).delegated, ['spawn_agent']);
   assert.deepStrictEqual(summarize(claudeStream(['trade-session'])).delegated, []);
 });
