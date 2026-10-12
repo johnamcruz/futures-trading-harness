@@ -180,3 +180,28 @@ test('order docs check a new order once and never wait or poll for a fill; the c
   assert.match(read('qwen-extension/agents/trade-executor.md'), /Never wait or poll for a fill/);
   assert.match(read('workspace/AGENTS.md'), /still unfilled at its one\s+status check is cancelled, not waited on/);
 });
+
+// A lean cycle runs no subagents (the runner withholds the tool, autotrader.js delegates): the trader plays
+// every role itself, the risk manager's checks before any entry included; full cycles still delegate.
+test('the lean cycle plays every role itself, with the risk manager\'s phase 1 and 2 before any entry; full cycles delegate', () => {
+  const ts = read('skills/trade-session/SKILL.md');
+  const lean = ts.slice(ts.indexOf('**Lean cycle**'), ts.indexOf('**Full cycle**'));
+  for (const want of [/\*\*no subagents\.\*\* You play every role yourself, in\s+order, and never call the subagent \(agent, task\) tool/,
+    /the runner doesn't\s+offer it in a lean cycle/, /roles' checklists still apply in full/, /`agents\/<role>\.md`/,
+    /`trade-executor`'s Management and Blocks sections/, /review it yourself first \(the `trade-review` skill\)/,
+    /No candidate → journal a\s+note and end/,
+    /`risk-manager`'s phase 1 yourself[^]*?`get_server_config`[^]*?`remainingBeforeLimit`[^]*?`journal_read`[^]*?`combine_status`/,
+    /`risk-manager`'s phase 2 yourself, before any order: every check 0-8\s+of its Phase 2 in order/,
+    /Stop at the first failure: that is a VETO\. Write the verdict\s+line \(`VERDICT: APPROVE - size <n>, risk \$<x>, <reason>` or\s+`VERDICT: VETO - <failed check>: <fix>`\) in the plan entry/,
+    /Never place an entry without an APPROVE you wrote after these\s+checks/, /execute as the `trade-executor` does \(its Entry steps/]) assert.match(lean, want, String(want));
+  // What the lean cycle points to is there: the risk manager's Phase 2 checks 0-8, the executor's sections.
+  const rm = read('agents/risk-manager.md');
+  const phase2 = rm.slice(rm.indexOf('## Phase 2'));
+  for (let i = 0; i <= 8; i += 1) assert.match(phase2, new RegExp(`^${i}\\. `, 'm'), `risk-manager Phase 2 check ${i}`);
+  assert.match(phase2, /VERDICT: APPROVE - size <n>, risk \$<x>/);
+  const te = read('agents/trade-executor.md');
+  for (const h of ['## Entry', '## Management', '## Blocks']) assert.ok(te.includes(h), h);
+  // Full cycles keep delegating to the harness roles by name.
+  assert.match(ts, /Run these roles at the same time with your harness's subagents/);
+  assert.match(read('skills/autonomous-trading/SKILL.md'), /lean cycle \(the prompt says "lean cycle"\) has no subagents[^]*?risk manager's checks before\s+any entry included/);
+});

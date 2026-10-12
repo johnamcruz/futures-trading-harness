@@ -110,8 +110,8 @@ function appendLog(now, text) {
   }
 }
 
-function runOnce(cfg, argv, timeoutMs) {
-  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env: childEnv(cfg, ROOT), timeoutMs, onChild: c => { activeChild = c; } });
+function runOnce(cfg, argv, timeoutMs, action) {
+  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env: childEnv(cfg, ROOT, process.env, { action }), timeoutMs, onChild: c => { activeChild = c; } });
 }
 
 let workspaceBaseline = null;
@@ -148,7 +148,7 @@ function guardWorkspace(cfg, killSwitchFile, when) {
 
 async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null } = {}) {
   const now = new Date();
-  const argv = buildCommand(cfg, prompt, ROOT);
+  const argv = buildCommand(cfg, prompt, ROOT, process.env, { action }); // a lean cycle's trade and manage runs: no subagents
   if (opts.dryRun) {
     process.stdout.write(`${JSON.stringify(argv)}\n`);
     return { ok: true, timedOut: false };
@@ -156,7 +156,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const killSwitchFile = loadConfig(process.env).killSwitchFile;
   if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
   process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
-  const res = await runOnce(cfg, argv, timeoutMs);
+  const res = await runOnce(cfg, argv, timeoutMs, action);
   const result = runResult(res);
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime() });

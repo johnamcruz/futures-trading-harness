@@ -63,8 +63,9 @@ function probeConfig(harness, config = {}) {
   const { model: _m, extraArgs: _a, command: _c, ...shared } = config || {};
   // A config without a harness runs the runner's default one.
   const own = config && (config.harness || DEFAULTS.harness) === harness ? config : shared;
-  // Paper: the broker server itself refuses every order, whatever the probe's run does.
-  return validateConfig({ ...own, harness, paper: true });
+  // Paper: the broker server itself refuses every order, whatever the probe's run does. A full cycle:
+  // the probe delegates to a role, which a lean cycle's trade runs may not (autotrader.js delegates).
+  return validateConfig({ ...own, harness, paper: true, cycle: 'full' });
 }
 
 /** argv, working directory and environment of the probe, exactly as the runner would start a cycle. */

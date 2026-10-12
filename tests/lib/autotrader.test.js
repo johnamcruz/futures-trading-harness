@@ -794,3 +794,78 @@ test('the workspace guard fingerprints opencode\'s config and any .opencode fold
   fs.rmSync(path.join(dir, '.opencode'), { recursive: true });
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), []);
 });
+
+test('a lean cycle\'s trade and manage runs offer no subagent tool on any harness; full cycles, premarket, and end of day keep it', () => {
+  const { delegates, SUBAGENT_TOOLS } = require('../../scripts/lib/autotrader');
+  const extraArgs = h => (h === 'opencode' ? ['--variant', 'high'] : ['--x']);
+  const lean = h => validateConfig({ harness: h, cycle: 'lean', extraArgs: extraArgs(h) });
+  const full = h => validateConfig({ harness: h, extraArgs: extraArgs(h) });
+  assert.deepStrictEqual(['trade', 'manage', 'premarket', 'eod', undefined].map(a => delegates(validateConfig({ cycle: 'lean' }), a)), [false, false, true, true, false]);
+  assert.ok(['trade', 'manage', 'premarket', 'eod'].every(a => delegates(validateConfig({}), a)));
+  const list = (argv, flag) => argv[argv.indexOf(flag) + 1].split(',');
+  // Claude: Agent out of the allowlist and denied (deny beats an allow in the user's settings).
+  for (const [c, action, ok] of [[lean('claude'), 'trade', false], [lean('claude'), 'manage', false], [lean('claude'), undefined, false], [lean('claude'), 'premarket', true], [lean('claude'), 'eod', true], [full('claude'), 'trade', true]]) {
+    const argv = buildCommand(c, 'P', '/fth', {}, { action });
+    assert.strictEqual(list(argv, '--allowedTools').includes('Agent'), ok, `claude ${c.cycle} ${action}`);
+    assert.strictEqual(SUBAGENT_TOOLS.every(t => list(argv, '--disallowedTools').includes(t)), !ok, `claude ${c.cycle} ${action} denied`);
+    assert.strictEqual(SUBAGENT_TOOLS.some(t => list(argv, '--disallowedTools').includes(t)), !ok, `claude ${c.cycle} ${action} not denied`);
+    assert.ok(list(argv, '--allowedTools').includes('mcp__broker'), 'the broker tools stay with the session (through the gate)');
+  }
+  // Codex: its multi-agent tools off, after the extra arguments (a later -c wins), the prompt still last.
+  assert.deepStrictEqual(buildCommand(lean('codex'), 'P', '/fth', {}, { action: 'trade' }).slice(-4), ['--x', '-c', 'features.multi_agent=false', 'P']);
+  for (const [c, action] of [[full('codex'), 'trade'], [lean('codex'), 'premarket'], [lean('codex'), 'eod']]) {
+    assert.ok(!buildCommand(c, 'P', '/fth', {}, { action }).some(a => /multi_agent/.test(a)), `codex ${c.cycle} ${action}`);
+  }
+  // Qwen Code: the agent tool excluded (a deny rule), last, after the extra arguments.
+  assert.deepStrictEqual(buildCommand(lean('qwen'), 'P', '/fth', {}, { action: 'manage' }).slice(-4), ['--x', '--exclude-tools', 'Agent', 'Task']);
+  for (const [c, action] of [[full('qwen'), 'trade'], [lean('qwen'), 'premarket'], [lean('qwen'), 'eod']]) {
+    assert.ok(!buildCommand(c, 'P', '/fth', {}, { action }).includes('--exclude-tools'), `qwen ${c.cycle} ${action}`);
+  }
+  // opencode: the per-run config denies every role to the session and the head trader (merged over the project's allows).
+  const runOf = (c, action) => JSON.parse(childEnv(c, '/r', { FTH_HOME: '/srv/fth' }, { action }).OPENCODE_CONFIG_CONTENT);
+  const task = (c, action) => { const run = runOf(c, action); return [run.permission.task, run.agent['fth-head-trader'].permission.task]; };
+  const roles = require('../../scripts/lib/harness-sync').loadAgents(ROOT).map(a => a.name);
+  const none = { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, 'deny'])) };
+  const all = { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, 'allow'])) };
+  for (const action of ['trade', 'manage', undefined]) for (const t of task(lean('opencode'), action)) assert.deepStrictEqual(t, none, `opencode lean ${action}`);
+  for (const [c, action] of [[full('opencode'), 'trade'], [lean('opencode'), 'premarket'], [lean('opencode'), 'eod']]) {
+    for (const t of task(c, action)) assert.deepStrictEqual(t, all, `opencode ${c.cycle} ${action}`);
+  }
+  // The broker tools stay the session's; the roles' own permissions are the same in both.
+  const leanRun = runOf(lean('opencode'), 'trade');
+  const fullRun = runOf(full('opencode'), 'trade');
+  assert.strictEqual(leanRun.agent['fth-head-trader'].permission['broker_*'], 'allow');
+  for (const r of roles) assert.deepStrictEqual(leanRun.agent[r], fullRun.agent[r], r);
+  // A custom harness can't be restricted: the prompt says it.
+  assert.deepStrictEqual(buildCommand(validateConfig({ harness: 'custom', cycle: 'lean', command: ['a', '{prompt}'] }), 'P', '/fth', {}, { action: 'trade' }), ['a', 'P']);
+  assert.match(prompts(validateConfig({ cycle: 'lean' }), et(10, 1), '/r').trade('MNQ'), /in lean cycle: no subagents; play each role yourself \(see the trade-session skill\)/);
+  assert.doesNotMatch(prompts(validateConfig({}), et(10, 1), '/r').trade('MNQ'), /lean|no subagents/);
+});
+
+test('CLI: the runner starts a lean cycle\'s trade run without subagents and its premarket and end of day with them', () => {
+  const dir = tmpDir();
+  const config = path.join(dir, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({ harness: 'claude', cycle: 'lean' }));
+  const env = { ...process.env, HOME: dir, FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  delete env.FTH_HOME;
+  const cli = path.join(ROOT, 'scripts', 'autotrader.js');
+  const allowed = once => {
+    const run = spawnSync(process.execPath, [cli, '--config', config, '--once', once, '--dry-run'], { encoding: 'utf8', env });
+    assert.strictEqual(run.status, 0, run.stderr);
+    const argv = JSON.parse(run.stdout.split('\n').find(l => l.startsWith('[')));
+    return argv[argv.indexOf('--allowedTools') + 1].split(',').includes('Agent');
+  };
+  assert.deepStrictEqual(['trade', 'premarket', 'eod'].map(allowed), [false, true, true]);
+  // opencode's is in the run's environment: a stand-in opencode reports the head trader's task permission.
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'opencode'), `#!${process.execPath}\nconst t = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT).agent['fth-head-trader'].permission.task;\nprocess.stdout.write('task=' + (Object.values(t).includes('allow') ? 'roles' : 'none') + '\\nCYCLE RESULT: no-trade - fake\\n');\n`, { mode: 0o755 });
+  fs.writeFileSync(config, JSON.stringify({ harness: 'opencode', cycle: 'lean' }));
+  const ocEnv = { ...env, PATH: `${bin}${path.delimiter}${env.PATH}` };
+  const task = once => {
+    const run = spawnSync(process.execPath, [cli, '--config', config, '--once', once, '--symbol', 'MNQ'], { encoding: 'utf8', env: ocEnv });
+    assert.strictEqual(run.status, 0, run.stderr + run.stdout);
+    return /task=(\w+)/.exec(fs.readFileSync(path.join(dir, '.futures-trading-harness', 'logs', fs.readdirSync(path.join(dir, '.futures-trading-harness', 'logs')).find(f => f.startsWith('autotrader-'))), 'utf8').split('=====').pop())[1];
+  };
+  assert.deepStrictEqual(['trade', 'premarket'].map(task), ['none', 'roles']);
+});
