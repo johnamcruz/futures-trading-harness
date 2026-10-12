@@ -250,7 +250,10 @@ function configHash(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
   const b = activeBroker(env);
-  const own = new Set(Object.values(run.brokerEnv).concat(b.journalEnv));
+  // The variables the driver sets are the run's own; maxDailyLoss is only when it sets it (a combine replay):
+  // otherwise the user's value is a broker setting of the run, so a change makes it another run.
+  const setsLimit = run.propDailyLoss !== null && run.propDailyLoss !== undefined;
+  const own = new Set(Object.entries(run.brokerEnv).filter(([k]) => k !== 'maxDailyLoss' || setsLimit).map(([, v]) => v).concat(b.journalEnv));
   const brokerSettings = Object.fromEntries((b.env || []).filter(k => !own.has(k)).sort().map(k => [k, env[k] ?? null]));
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,

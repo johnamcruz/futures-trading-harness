@@ -231,7 +231,10 @@ records that day's close from the fills since it ended.
 
 Result: list of fills `{ id, contractId, creationTimestamp, price,
 profitAndLoss (null on the opening half of a round turn), fees (number | null),
-side, size, voided, orderId, sideName, halfTurn }`.
+side, size, voided, orderId, sideName, halfTurn }`. A server whose broker
+reports commissions apart from fees adds `commissions` (number | null): a cost
+on top of `fees`, never a part of them. The harness checks the prop attempt's
+balance against the fills' P&L less both.
 
 #### `get_performance`
 

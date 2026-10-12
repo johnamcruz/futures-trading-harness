@@ -786,3 +786,18 @@ test('replay env: a combine replay\'s broker stops the day at the account\'s own
   seedRunHome(off.run, { root: ROOT, userEnv: off.env });
   assert.ok(!Object.values(replayEnv(off.env, off.run, { at: iso('2026-10-07T13:33:02Z') })).includes('2000'));
 });
+
+test('config hash: a run\'s daily loss setting is part of it unless the replay sets it from the account', () => {
+  const { configHash } = require('../../scripts/lib/replay/config');
+  // The sim broker declares SIM_DATA as its setting; here it is also the variable the driver's maxDailyLoss names.
+  const world = over => {
+    const w = userWorld({ ...over, brokerEnv: { maxDailyLoss: 'SIM_DATA' } });
+    seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+    return value => configHash(w.run, { ...w.env, SIM_DATA: value });
+  };
+  const plain = world({});
+  assert.strictEqual(plain('500'), plain('500'));
+  assert.notStrictEqual(plain('500'), plain('0'), 'no prop: the user\'s setting is the run\'s');
+  const combine = world({ prop: 'topstep_100k' });
+  assert.strictEqual(combine('500'), combine('0'), 'prop: the account sets it');
+});

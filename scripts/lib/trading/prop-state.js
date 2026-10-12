@@ -122,6 +122,9 @@ function balanceCheck(anchor, balance, fills) {
   return { expected, balance, diff: Math.round((balance - expected) * 100) / 100, since: anchor.at };
 }
 
+/** A balance check that passed (not missing, not an error, within the tolerance). */
+const reconciled = c => Boolean(c && !c.error && Number.isFinite(c.diff) && Math.abs(c.diff) <= BALANCE_TOLERANCE);
+
 /**
  * Save the latest balance and open-position count (the gate reads them),
  * returning the state. A snapshot on a new trading day whose previous
@@ -133,9 +136,13 @@ function balanceCheck(anchor, balance, fills) {
  * every later flat snapshot must equal the anchor plus the fills' net since
  * then (balanceCheck). A mismatch, or fills that couldn't be read, is kept
  * on the snapshot and refuses entries (combineBlock) until a snapshot
- * reconciles; with a position open the realized balance isn't checked.
+ * reconciles; with a position open the realized balance isn't checked, nor
+ * anchored (a fill landing while the anchor is read would count twice).
+ * `unchanged` (the runner saw nothing move since a snapshot that
+ * reconciled: same balance, still flat) carries that check forward without
+ * asking the broker for its fills again.
  */
-function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [], fills, fillsError = null } = {}) {
+function snapshot(home, account, balance, now = new Date(), { open = 0, openIds = [], fills, fillsError = null, unchanged = false } = {}) {
   const record = readAttempt(home, account.name);
   if (!record) return null;
   const day = tradingDayKey(now);
@@ -147,12 +154,17 @@ function snapshot(home, account, balance, now = new Date(), { open = 0, openIds 
   missed.sort();
   const missedClose = missed[0] || null;
   const cs = stateFrom(account, record, balance);
-  // The day's anchor: the first snapshot of the trading day, from the broker's own balance.
+  // The day's anchor: the first flat snapshot of the trading day, from the broker's own balance.
   const fresh = !record.anchor || record.anchor.day !== day;
-  const anchor = fresh ? { at: now.toISOString(), day, balance } : record.anchor;
+  const anchor = fresh && open === 0 ? { at: now.toISOString(), day, balance } : record.anchor || null;
+  const prevCheck = record.snapshot && record.snapshot.day === day ? record.snapshot.balanceCheck : null;
   let check = null;
   if (!fresh && open === 0) {
     if (fillsError) check = { error: String(fillsError) };
+    else if (unchanged) {
+      // Carried forward only from a check that passed on this same balance; anything else is unchecked (fails closed).
+      check = reconciled(prevCheck) && record.snapshot.balance === balance ? prevCheck : { error: 'nothing checked to carry forward' };
+    }
     else if (fills !== undefined) {
       try {
         check = balanceCheck(anchor, balance, fills);
@@ -255,13 +267,13 @@ function combineBlock(home, accountName, now = new Date()) {
     const ids = Array.isArray(s.openIds) && s.openIds.length ? ` (${s.openIds.join(', ')})` : '';
     return `a position is open on the account${ids}; a prop attempt trades one position at a time (as the backtester and the policy do): close it to trade the attempt`;
   }
+  if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
+    return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
+  }
   const bc = s.balanceCheck;
   if (bc && bc.error) return `the account balance couldn't be checked against the broker's fills (${bc.error}); entries wait for a snapshot that can (exits still go)`;
   if (bc && Math.abs(bc.diff) > BALANCE_TOLERANCE) {
-    return `the account balance doesn't reconcile: the broker reports $${bc.balance}, but the day's opening balance plus every fill since ${bc.since} (P&L less fees) gives $${bc.expected} (off by $${bc.diff}); entries wait until a snapshot reconciles (exits still go)`;
-  }
-  if (s.block && /^the attempt is over|^the challenge is passed/.test(s.block)) {
-    return `${s.block}; stand aside: ending it and starting a new one (node scripts/combine.js stop --account ${accountName}) is the user's decision, never an agent's`;
+    return `the account balance doesn't reconcile: the broker reports $${bc.balance}, but the day's opening balance plus every fill since ${bc.since} (P&L less fees) gives $${bc.expected} (off by $${bc.diff}); entries wait until a snapshot reconciles, or the next trading day's first flat snapshot starts from the broker's balance again (exits still go)`;
   }
   return s.block || null;
 }
@@ -467,7 +479,7 @@ function readVerdicts(home) {
 }
 
 module.exports = {
-  dayEndMs, closeBefore, balanceCheck, BALANCE_TOLERANCE,
+  dayEndMs, closeBefore, balanceCheck, reconciled, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
   legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts,
 };

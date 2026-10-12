@@ -61,7 +61,7 @@ const TOOLS = {
   search_orders: { role: 'read', input: { accountId: field('number', true), startTimestamp: field('string', true), endTimestamp: field('string') }, result: { '[]': field('array', true), ...order } },
   search_trades: {
     role: 'read', input: { accountId: field('number', true), startTimestamp: field('string', false, 'default: the trading day start'), endTimestamp: field('string') },
-    result: listOf({ id: field('number', true), contractId: field('string', true), creationTimestamp: field('string', true), price: field('number', true), profitAndLoss: field('number|null', true, 'null on an opening fill'), fees: field('number|null', true), side: field('number', true), size: field('number', true), voided: field('boolean', true), orderId: field('number', true) }),
+    result: listOf({ id: field('number', true), contractId: field('string', true), creationTimestamp: field('string', true), price: field('number', true), profitAndLoss: field('number|null', true, 'null on an opening fill'), fees: field('number|null', true), commissions: field('number|null', false, 'a cost on top of fees, where the broker reports one apart'), side: field('number', true), size: field('number', true), voided: field('boolean', true), orderId: field('number', true) }),
   },
   get_performance: {
     role: 'read', input: { accountId: field('number', true), startTimestamp: field('string', false, 'default: the trading day start'), endTimestamp: field('string') },

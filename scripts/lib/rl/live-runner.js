@@ -88,18 +88,26 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         continue;
       }
       // The fills since the day's anchor, to check the balance against (prop-state balanceCheck): only when flat,
-      // on a day already anchored. A broker that can't list them refuses entries, never skips the check.
+      // on a day already anchored, and only when something moved (the balance, a position closed) or the last
+      // check didn't pass; otherwise that check carries forward with no broker call. A broker that can't list
+      // them refuses entries, never skips the check.
       let fills;
       let fillsError = null;
-      const anchor = withFills && !open ? live.readAttempt(home, a.name).anchor : null;
-      if (anchor && anchor.day === tradingDayKey(now)) {
-        try {
-          fills = await client.fillsSince(accountId, new Date(anchor.at));
-        } catch (err) {
-          fillsError = err.message;
+      let unchanged = false;
+      const r = withFills && !open ? live.readAttempt(home, a.name) : null;
+      const prev = r && r.snapshot;
+      if (r && r.anchor && r.anchor.day === tradingDayKey(now)) {
+        unchanged = Boolean(prev && prev.day === r.anchor.day && prev.open === 0 && prev.balance === balance && live.reconciled(prev.balanceCheck));
+        if (!unchanged) {
+          try {
+            fills = await client.fillsSince(accountId, new Date(r.anchor.at));
+          } catch (err) {
+            fillsError = (err && err.message) || String(err) || 'the fills could not be read';
+          }
+          if (fills === undefined && !fillsError) fillsError = 'the broker returned no fills list';
         }
       }
-      fn(a, balance, now, open, openIds, { fills, fillsError });
+      fn(a, balance, now, open, openIds, { fills, fillsError, unchanged });
     }
   }
 

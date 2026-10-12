@@ -312,3 +312,41 @@ test('each bar the snapshot checks the broker\'s balance against its fills since
   await hooks.snapshot(t('14:09:00'));
   assert.match(prop.combineBlock(home, account.name, t('14:09:30')), /couldn't be checked against the broker's fills \(search_trades: 503\)/);
 });
+
+test('the fills are read only when something moved: an unchanged, reconciled account costs no broker call; a position open never anchors', async () => {
+  const { hooks, home, account, client } = setup();
+  const t = s => new Date(`2026-10-07T${s}Z`);
+  let calls = 0;
+  const list = client.fillsSince.bind(client);
+  client.fillsSince = async (id, start) => { calls += 1; return list(id, start); };
+  // A position open at the day's first snapshot: no anchor yet (a fill during the read would count twice).
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('13:30:00'));
+  assert.strictEqual(prop.readAttempt(home, account.name).anchor, null);
+  client.open = [];
+  await hooks.snapshot(t('13:33:00'));
+  assert.strictEqual(prop.readAttempt(home, account.name).anchor.at, '2026-10-07T13:33:00.000Z', 'the first flat snapshot anchors');
+  assert.strictEqual(calls, 0);
+  // The first check after the anchor reads the fills once; then nothing moved: no call, the check carries forward.
+  await hooks.snapshot(t('13:36:00'));
+  await hooks.snapshot(t('13:39:00'));
+  await hooks.snapshot(t('13:42:00'));
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(prop.combineBlock(home, account.name, t('13:42:30')), null);
+  // A position opened and closed: read again when flat.
+  client.open = [{ contractId: CONTRACT, size: 1, type: 1 }];
+  await hooks.snapshot(t('13:45:00'));
+  client.open = [];
+  await hooks.snapshot(t('13:48:00'));
+  assert.strictEqual(calls, 2);
+  // The balance moved with no fill to explain it: read, mismatch, and read again every bar until it reconciles.
+  client.accountBalance = async () => 50200;
+  await hooks.snapshot(t('13:51:00'));
+  await hooks.snapshot(t('13:54:00'));
+  assert.strictEqual(calls, 4);
+  assert.match(prop.combineBlock(home, account.name, t('13:54:30')), /doesn't reconcile/);
+  // A broker that rejects with no Error still refuses entries.
+  client.fillsSince = async () => { throw 'gateway down'; }; // eslint-disable-line no-throw-literal
+  await hooks.snapshot(t('13:57:00'));
+  assert.match(prop.combineBlock(home, account.name, t('13:57:30')), /couldn't be checked .*gateway down/);
+});

@@ -241,3 +241,25 @@ test('snapshot: the day\'s first snapshot anchors the balance; a flat snapshot t
   prop.snapshot(home, acct, 100000, new Date('2026-06-02T13:30:02Z'), { fills: loss });
   assert.deepStrictEqual([prop.readAttempt(home, acct.name).anchor.day, prop.readAttempt(home, acct.name).snapshot.balanceCheck], ['2026-06-02', null]);
 });
+
+test('snapshot: unchanged carries a check that passed on the same balance, anything else is unchecked; an attempt over says so first', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const home = tmpDir();
+  const acct = accountNamed(ROOT, 'topstep_100k', {});
+  prop.startAttempt(home, acct, new Date('2026-06-01T12:00:00Z'));
+  const at = t => new Date(`2026-06-01T${t}Z`);
+  prop.snapshot(home, acct, 100000, at('13:30:02'));
+  // Nothing checked yet: unchanged can't carry anything.
+  prop.snapshot(home, acct, 100000, at('13:33:02'), { unchanged: true });
+  assert.match(prop.combineBlock(home, acct.name, at('13:33:30')), /couldn't be checked .*nothing checked to carry forward/);
+  prop.snapshot(home, acct, 100000, at('13:36:02'), { fills: [] });
+  prop.snapshot(home, acct, 100000, at('13:39:02'), { unchanged: true });
+  assert.strictEqual(prop.combineBlock(home, acct.name, at('13:39:30')), null);
+  assert.strictEqual(prop.reconciled(prop.readAttempt(home, acct.name).snapshot.balanceCheck), true);
+  // Another balance can't carry a check made on the old one.
+  prop.snapshot(home, acct, 99000, at('13:42:02'), { unchanged: true });
+  assert.match(prop.combineBlock(home, acct.name, at('13:42:30')), /nothing checked to carry forward/);
+  // An attempt that is over is the first thing the agent hears (stand aside), whatever the balance check says.
+  prop.snapshot(home, acct, 96000, at('13:45:02'), { fills: [] });
+  assert.match(prop.combineBlock(home, acct.name, at('13:45:30')), /^the attempt is over.*stand aside/);
+});
