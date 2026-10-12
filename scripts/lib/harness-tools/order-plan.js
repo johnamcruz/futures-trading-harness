@@ -32,7 +32,8 @@
  */
 
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan } = require('../trading/strategies');
+const { loadStrategies, scan, rootRefusal } = require('../trading/strategies');
+const { selectedSymbols } = require('../trading/contracts');
 const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
@@ -147,11 +148,14 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const s = strategies.find(x => x.name === name);
   if (!s) throw new Error(`unknown strategy "${name}" (known: ${strategies.map(x => x.name).join(', ')})`);
   if (!s.valid) throw new Error(`strategies/${name}/STRATEGY.md is invalid (${s.errors[0]})`);
-  if (!s.instruments.includes(root)) throw new Error(`${name} does not trade ${root} (instruments: ${s.instruments.join(', ')})`);
+  // The leg the user selected (FTH_SYMBOLS), as the gate checks it.
+  const selected = selectedSymbols(c.env);
+  const notTraded = rootRefusal(s, root, selected);
+  if (notTraded) throw new Error(`${name} ${notTraded}`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
   const bars = readBarsArg(file);
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
-  const results = scan(strategies, bars, { symbol: root, now });
+  const results = scan(strategies, bars, { symbol: root, now, selected });
   const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env) };
   const p = s.signal === 'policy' ? policyPlan(c, s, inputs) : rulesPlan(c, s, inputs);
   const { plan: out, args, line } = buildPlan({ ...p, accountId });

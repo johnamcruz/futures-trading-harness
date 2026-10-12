@@ -34,6 +34,7 @@ const { context, say, ignoredRecord, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 const { scanSummary, recentLines } = require('./compact');
 const { liveSpecs } = require('../trading/broker-specs');
+const { selectedSymbols } = require('../trading/contracts');
 const { plan } = require('./order-plan');
 
 const USAGE = 'usage: strategies.js list [--json] | show <name> | validate | scan <bars file> --symbol <ROOT> [--now ISO] [--record] | recent <bars file> --symbol <ROOT> [--bars 5] | plan <bars file> --symbol <ROOT> --strategy <name> --side long|short [--account-id <id>]';
@@ -90,7 +91,7 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   const clock = c.now();
   const now = at ? new Date(at) : clock;
   if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`); // cli-only: the tool takes no time
-  const results = scanStrategies(strategies, bars, { symbol, now });
+  const results = scanStrategies(strategies, bars, { symbol, now, selected: selectedSymbols(c.env) });
   const text = scanText(results, bars, { view, name, symbol, specOf: liveSpecs(c.env) }); // the broker's tick specs
   if (!record) return { text };
   const ignored = ignoredRecord(c, 'strategies', 'the autonomous runner records every bar itself');
@@ -118,7 +119,7 @@ function recent({ file, symbol, count: raw, format = 'json' } = {}, ctx) {
   if (!file) throw new Error('recent needs a bars file');
   const count = raw === undefined ? 5 : Number(raw);
   if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error(say(c, '--bars: 1 to 50', 'count: 1 to 50'));
-  const rows = recentSignals(strategies, readBarsArg(file), { symbol, count });
+  const rows = recentSignals(strategies, readBarsArg(file), { symbol, count, selected: selectedSymbols(c.env) });
   return { text: format === 'lines' ? recentLines(rows, { symbol: symbol ? String(symbol).toUpperCase() : '' }) : `${JSON.stringify(rows, null, 2)}\n` };
 }
 

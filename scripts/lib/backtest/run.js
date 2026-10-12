@@ -35,7 +35,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies } = require('../trading/strategies');
+const { loadStrategies, tradesRoot } = require('../trading/strategies');
 const { loadBars, barMinutes, aggregate, auditBars } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
@@ -271,15 +271,15 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   });
   log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
   for (const m of markets) {
-    const flowUsers = strategies.filter(s => (s.connectors || []).includes('order_flow') && s.instruments.includes(m.symbol));
+    const flowUsers = strategies.filter(s => (s.connectors || []).includes('order_flow') && tradesRoot(s, m.symbol, [m.symbol]));
     if (flowUsers.length && m.audit && m.audit.flowCoverage > 0 && m.audit.flowCoverage < 0.9) {
       log(`warning: ${flowUsers.map(s => s.name).join(', ')} use order flow, but only ${Math.round(m.audit.flowCoverage * 100)}% of ${m.symbol}'s bars have real buy/sell volume; the rest use the bar-shape estimate, so results mix two kinds of data (live always has real flow)`);
     }
     if (flowUsers.length && !m.bars.some(b => Number.isFinite(b.bv))) {
       log(`warning: ${flowUsers.map(s => s.name).join(', ')} declare the order_flow connector but ${m.file} has no buy/sell volume columns; ofi/delta fall back to the bar-shape estimate (record flow and export it: scripts/orderflow.js)`);
     }
-    if (!strategies.some(s => s.instruments.includes(m.symbol))) {
-      log(`warning: no selected strategy lists ${m.symbol} in its instruments, so it can't trade (micros: MNQ, MES, MYM, M2K; use the micro symbol with full-size data)`);
+    if (!strategies.some(s => tradesRoot(s, m.symbol, [m.symbol]))) {
+      log(`warning: no selected strategy lists ${m.symbol} (or the micro or mini of its family) in its instruments, so it can't trade`);
     }
   }
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
@@ -287,7 +287,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
   const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, policy: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
-    if (!strategies.some(s => s.instruments.includes(m.symbol))) skipped[m.symbol] = 'no selected strategy trades this symbol';
+    if (!strategies.some(s => tradesRoot(s, m.symbol, [m.symbol]))) skipped[m.symbol] = 'no selected strategy trades this symbol';
   }
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
   const first = markets.map(m => m.bars[0].t).sort()[0];

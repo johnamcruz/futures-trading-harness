@@ -45,8 +45,9 @@ whose contract mode, sizing, or timeframe differs from the document's).
 one) trains one policy on all of them at once against one prop account, as a
 real combine runs: one timeline of every market's bars, one balance, one
 trailing floor, one daily limit. Each root must be one the policy strategy
-trades (by its micro/mini family), once per index, and listed by its
-strategies (key the data by the micro: minis share its prices). The account
+trades (by its micro/mini family), once per index, and traded by its
+strategies (by family too: key the data by the leg the live runner selects
+in its `symbols`, the micro or the mini, which share prices). The account
 trades one position at a time across all markets, in training, backtests,
 and live (the gate refuses an entry while any position is open or an entry
 went in since the last account snapshot), so every trade is sized from the

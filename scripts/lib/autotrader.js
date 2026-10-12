@@ -419,6 +419,8 @@ function prompts(cfg, now, root = '') {
 function childEnv(cfg, root, base = process.env) {
   // The gate learns the exchange calendar from the runner's config.
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
+  // The selected contracts (its symbols, one per index): the gate, order_plan and the scan trade only these legs.
+  env.FTH_SYMBOLS = cfg.symbols.join(',');
   // The harness tools read bars files from the runner's bar directory (harness-tools/paths.js).
   env.FTH_BARS_DIR = resolveDataDir(cfg, os.homedir(), base);
   if (cfg.paper) {

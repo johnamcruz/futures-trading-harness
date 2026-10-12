@@ -51,4 +51,33 @@ function familyOf(root) {
 /** One key per micro/mini family (its micro root), else the root itself: MNQ and NQ -> MNQ. */
 const familyRoot = root => (familyOf(root) ? familyOf(root).micro : String(root || '').toUpperCase());
 
-module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot };
+/**
+ * The contracts the user selected to trade: FTH_SYMBOLS, comma-separated roots
+ * (the autonomous runner sets it from its config's symbols for the harness it
+ * launches). One leg per micro/mini family: selecting MNQ means MNQ, never NQ.
+ * Returns { symbols } (null when unset: unknown) or { error }.
+ */
+function parseSelection(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return { symbols: null };
+  const list = String(value).split(',').map(x => x.trim().toUpperCase());
+  if (!list.every(x => /^[A-Z0-9]{1,8}$/.test(x))) return { error: `FTH_SYMBOLS is not a comma-separated list of contract roots (got ${JSON.stringify(String(value))})` };
+  const fams = list.map(familyRoot);
+  if (new Set(fams).size !== fams.length) return { error: `FTH_SYMBOLS selects two contracts of one index (${list.join(', ')}): select one per index, e.g. MNQ or NQ` };
+  return { symbols: list };
+}
+
+/** The selected symbols from the environment (null: none selected); an invalid FTH_SYMBOLS throws. */
+function selectedSymbols(env = process.env) {
+  const sel = parseSelection(env.FTH_SYMBOLS);
+  if (sel.error) throw new Error(sel.error);
+  return sel.symbols;
+}
+
+/** The leg of `root`'s micro/mini family among `symbols` (NQ for MNQ when NQ is selected), else null. */
+function selectedLeg(root, symbols) {
+  const f = familyOf(root);
+  if (!f || !Array.isArray(symbols)) return null;
+  return symbols.find(x => x === f.micro || x === f.mini) || null;
+}
+
+module.exports = { CONTRACT_SPECS, FAMILIES, specFor, familyOf, familyRoot, parseSelection, selectedSymbols, selectedLeg };

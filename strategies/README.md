@@ -6,6 +6,19 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
   scans bars for candidates, and the order gate checks every live entry against
   it: the `setup:<name>` tag must name a valid strategy with `status: active`,
   the contract must be in `instruments`, and the time must be inside `sessions`.
+  A rules strategy trades one leg of a micro/mini family (`MNQ` or `NQ`,
+  `MES` or `ES`, `MYM` or `YM`, `M2K` or `RTY`, `MGC` or `GC`, `SIL` or `SI`):
+  the selected one, the contract in the runner's `symbols` (`FTH_SYMBOLS` for
+  an interactive session). Listing either leg covers the selected leg, so one
+  leg per family is enough (listing MNQ, it trades a selected NQ), and the
+  other leg is refused ("setup:bos trades MNQ (the selected contract), not
+  NQ"): it never alternates between the two. With no leg of the family
+  selected, it trades exactly what it lists (a rules strategy listing both
+  legs trades neither until one is selected). Everything else is checked on the
+  contract ordered: its broker tick specs, and its size and
+  `risk.max_risk_usd` in its own dollars (a mini's tick is worth 10 micros', 5
+  for silver). Manual and policy strategies match their list exactly. Exits
+  and protective stops on either leg are never refused.
 - **The Markdown body** is read by the agents: context filter, trigger, entry,
   stop, targets, and skip rules.
 

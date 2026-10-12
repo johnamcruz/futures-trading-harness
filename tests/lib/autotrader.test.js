@@ -119,6 +119,10 @@ test('child env locks the gate and paper mode disables trading', () => {
   // The harness tools read the runner's bar directory: its dataDir, else <FTH_HOME>/bars; never a stale FTH_BARS_DIR.
   assert.strictEqual(childEnv(validateConfig({}), '/r', { FTH_HOME: '/srv/fth', FTH_BARS_DIR: '/elsewhere' }).FTH_BARS_DIR, '/srv/fth/bars');
   assert.strictEqual(childEnv(validateConfig({ dataDir: '/data/bars' }), '/r', {}).FTH_BARS_DIR, '/data/bars');
+  // The runner's symbols are the selected contracts for the gate, order_plan and the scan, never a stale FTH_SYMBOLS.
+  assert.strictEqual(live.FTH_SYMBOLS, 'MNQ');
+  assert.strictEqual(childEnv(validateConfig({ symbols: ['NQ', 'MES'] }), '/r', { FTH_SYMBOLS: 'MNQ' }).FTH_SYMBOLS, 'NQ,MES');
+  assert.strictEqual(childEnv(validateConfig({ symbols: ['NQ'], harness: 'opencode' }), '/r', { FTH_SYMBOLS: 'MNQ' }).FTH_SYMBOLS, 'NQ');
   const paper = childEnv(validateConfig({ paper: true }), '/r', {});
   assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
   // The broker server's own off switch comes from the broker config (paperEnv), whatever the broker.

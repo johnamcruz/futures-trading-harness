@@ -74,6 +74,16 @@ function closedBarsOnly(client, now) {
   };
 }
 
+/**
+ * The runner's scan of one symbol's closed bar: the strategies on its timeframe (only they can be
+ * judged from these bars), with the runner's symbols as the selected contracts (a rules strategy
+ * trades the selected leg of its family; strategies.js rootRefusal).
+ */
+function runnerScan(strategies, cfg, symbol, bars, now) {
+  const sameTf = strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
+  return scan(sameTf, { bars }, { symbol, now, selected: cfg.symbols });
+}
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
@@ -116,11 +126,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
-    scanFor: (symbol, bars) => {
-      // Only strategies that trade this bar's timeframe can be judged from these bars.
-      const sameTf = strategies().filter(s => s.timeframe === `${cfg.timeframe}m`);
-      return scan(sameTf, { bars }, { symbol, now: now() });
-    },
+    scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
     log,
     // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
     scanLog: rec => appendJsonl(path.join(home, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
@@ -131,4 +137,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, runnerScan, replayUnattested, closedBarsOnly };

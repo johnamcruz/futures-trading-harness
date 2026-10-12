@@ -176,6 +176,59 @@ test('strategy check: known, active, instrument, and session', () => {
   assert.match(r.violations[0].message, /status "paper"/);
 });
 
+test('strategy check: a rules strategy trades the selected leg (FTH_SYMBOLS) of a family it lists, never the other; every other check still runs on that contract', () => {
+  // A rules strategy tagged setup:orb (fired long in trendHome's MNQ record), listing MNQ only, capped at $100.
+  const micro = { name: 'orb', valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ'], sessions: [], timeframe: '3m', mtf: 'trend',
+    compiledRules: { long: [{}], short: [{}] }, risk: { stop: 'atr:1', min_rr: 2, max_risk_usd: 100 } };
+  const withSel = (value, extra = {}) => ({ ...config, ...extra, selection: loadConfig({ FTH_SYMBOLS: value }).selection });
+  const run = (input, c) => evaluateOrder({ input, entries: [plan(10, { contractId: input.contractId })], now: NOW, config: c, strategies: [micro] });
+  const nq = withSel('NQ');
+  const mnq = withSel('MNQ');
+  const at20 = { stopLossBracket: { ticks: 20, type: 'stop' } };
+  // NQ selected: NQ passes (the family's trigger and trend records count); 20 ticks x $5 = $100, at the cap. MNQ is refused.
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'NQ', ...at20 }), nq).violations, []);
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ', size: 5 }), nq).violations, [{ check: 'strategy', message: 'setup:orb trades NQ (the selected contract), not MNQ.' }]);
+  // MNQ selected: MNQ passes, NQ is refused.
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ', size: 5 }), mnq).violations, []);
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'NQ', ...at20 }), mnq).violations, [{ check: 'strategy', message: 'setup:orb trades MNQ (the selected contract), not NQ.' }]);
+  // Unknown selection: its list only (MNQ), NQ refused with how to select it (fails closed).
+  assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ', size: 5 }), config).violations, []);
+  assert.match(run(entryOrder({ contractId: 'NQ', ...at20 }), config).violations.find(v => v.check === 'strategy').message, /^setup:orb does not trade NQ \(instruments: MNQ\); .*FTH_SYMBOLS=NQ\)\.$/);
+  // Unknown selection and both legs listed: neither leg, until one is selected.
+  const both = { ...micro, instruments: ['MNQ', 'NQ'] };
+  const runBoth = (input, c) => evaluateOrder({ input, entries: [plan(10, { contractId: input.contractId })], now: NOW, config: c, strategies: [both] });
+  assert.match(runBoth(entryOrder({ contractId: 'MNQ' }), config).violations.find(v => v.check === 'strategy').message, /^setup:orb lists both MNQ and NQ, and neither is selected/);
+  assert.deepStrictEqual(runBoth(entryOrder({ contractId: 'MNQ' }), mnq).violations, []);
+  assert.deepStrictEqual(runBoth(entryOrder({ contractId: 'NQ', stopLossBracket: { ticks: 20, type: 'stop' } }), mnq).violations, [{ check: 'strategy', message: 'setup:orb trades MNQ (the selected contract), not NQ.' }]);
+  // An unreadable selection refuses every entry.
+  assert.match(run(entryOrder({ contractId: 'MNQ' }), withSel('MNQ,NQ')).violations.find(v => v.check === 'strategy').message, /FTH_SYMBOLS selects two contracts of one index/);
+  // max_risk_usd in NQ's dollars: 40 ticks x $5 = $200, over $100 (one MNQ at 40 ticks would be $20).
+  const over = run(entryOrder({ contractId: 'NQ' }), nq);
+  assert.deepStrictEqual(checks(over), ['max-risk']);
+  assert.match(over.violations[0].message, /^risk \$200\.00 \(size 1 x 40-tick stop x \$5\.00 a tick on NQ\)/);
+  // NQ's own broker specs: MNQ's recorded doesn't do.
+  const home = trendHome(undefined, { specs: false });
+  recordBrokerSpecs(home, { roots: ['MNQ'] });
+  const nospec = run(entryOrder({ contractId: 'NQ', ...at20 }), withSel('NQ', { home }));
+  assert.ok(checks(nospec).includes('contract-specs'), JSON.stringify(nospec.violations));
+  assert.match(nospec.violations.find(v => v.check === 'contract-specs').message, /NQ/);
+  // A contract outside every family it lists: refused, selected or not.
+  for (const c of ['ES', 'MES', 'RTY', 'GC', 'CL']) {
+    const r = run(entryOrder({ contractId: c, stopLossBracket: { ticks: 4, type: 'stop' } }), withSel(c));
+    assert.match(r.violations.find(v => v.check === 'strategy').message, new RegExp(`^setup:orb does not trade ${c} \\(instruments: MNQ\\)`), c);
+  }
+  // Exits and protective stops on either leg are never refused, whatever is selected.
+  for (const c of ['MNQ', 'NQ']) {
+    for (const sel of [nq, mnq, config, withSel('MNQ,NQ')]) {
+      for (const input of [entryOrder({ contractId: c, side: 'sell', size: 3, rationale: '[exit] flatten' }), entryOrder({ contractId: c, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long' })]) {
+        const r = run(input, sel);
+        assert.strictEqual(r.intent, 'risk-reducing');
+        assert.deepStrictEqual(r.violations, [], `${c} ${input.rationale}`);
+      }
+    }
+  }
+});
+
 test('kill switch blocks entries but not exits', () => {
   const fs = require('fs');
   const path = require('path');

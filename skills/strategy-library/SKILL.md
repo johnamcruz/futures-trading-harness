@@ -96,7 +96,15 @@ as candidates when in session; you evaluate their trigger from the body.
 
 Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. `paper` strategies can only be paper-traded. A rules strategy
+`sessions`. A rules strategy trades one leg of a micro/mini family it lists:
+the selected contract (the runner's `symbols`, or `FTH_SYMBOLS`). Listing MNQ,
+it trades NQ when NQ is selected, and then never MNQ ("setup:bos trades NQ
+(the selected contract), not MNQ"): trade the selected contract, don't switch
+legs. With no leg selected it trades exactly what it lists (listing both legs
+of a family, neither until one is selected). Every other check
+uses the contract ordered: its broker tick specs, and its size and
+`risk.max_risk_usd` in its own dollars (one NQ at a 40-tick stop risks
+$200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded. A rules strategy
 enters only on its own trigger (`trigger-fired`): the signal record must show
 it fired on that side on a bar that closed less than 10 minutes ago (the
 runner records every bar; interactively `strategies_scan` with `record: true`,
