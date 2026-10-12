@@ -269,9 +269,14 @@ test('probe: opencode runs as the runner runs it, with every order tool denied f
   }
   assert.strictEqual(run.permission.broker_get_bars, undefined, 'read tools stay as the workspace config has them');
   assert.ok(hc.HARNESSES.includes('opencode'));
-  // The runner's own runs are untouched.
+  // The runner's own runs: only the probe denies every order tool; there the head trader alone can't place an entry
+  // (the trade-executor's), and keeps the risk-reducing calls.
   const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
-  assert.strictEqual(JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), ROOT, env).OPENCODE_CONFIG_CONTENT).permission.broker_place_order, undefined);
+  const own = JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), ROOT, env).OPENCODE_CONFIG_CONTENT);
+  assert.strictEqual(own.permission.broker_place_order, 'deny');
+  assert.strictEqual(own.agent['fth-head-trader'].permission.broker_place_order, 'deny');
+  assert.strictEqual(own.agent['trade-executor'].permission.broker_place_order, 'allow');
+  assert.strictEqual(own.permission.broker_close_position, undefined, 'risk-reducing calls stay as the workspace config has them');
 });
 
 test('analyze: opencode JSON events (the real transcript): MCP tools by server, the role through task, the refused shell', () => {
