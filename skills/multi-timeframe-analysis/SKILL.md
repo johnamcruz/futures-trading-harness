@@ -114,7 +114,7 @@ From the highest timeframe down, for each side:
 
 | Label | Means | What to do |
 |---|---|---|
-| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target; with room to its trail activation and confluence it is a grade A setup (the briefing's `grade`): the opportunity |
+| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target; with room to its trail activation and confluence it is the opportunity (the briefing's candidate `facts` show both) |
 | `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then enter. Do not enter while it is still moving against you |
 | `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)`; skip if that is 0 (at size 1, every `mixed` read is a skip). Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |

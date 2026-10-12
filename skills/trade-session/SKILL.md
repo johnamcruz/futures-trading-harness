@@ -190,22 +190,18 @@ again.
 
 ### 3. Head-trader synthesis (you)
 
-- **Read each setup's grade first** (the briefing's summary, and `grade` and
-  `why` in `m3` `candidates`, computed from the trend rule, the alignment for
-  its side, the room in R to its trail activation or target, confluence, the
-  VWAP side, and the window):
-  - **A** (the trend allows it, `aligned`, room past what it needs,
-    confluence with it, VWAP on its side, not the lunch lull): the
-    opportunity. Take it at the strategy's normal size (position-sizing and
-    the prop budget), let the trail work (don't bank before it), and prefer it
-    over any other setup this bar.
-  - **B** (allowed and not mixed, but a level between 1R and the room it
-    needs, or no confluence, VWAP against it, or lunch): only with a target
-    before that level that still meets the strategy's min R:R; otherwise skip.
-  - **C** (against the trend rule, `mixed`, `pullback` or `counter`, a level
-    within 1R, confluence against, or a no-entry window): skip.
-  The analysts' reports can lower a grade (a reason the facts don't show),
-  never raise it.
+- **Read each setup's facts first** (the briefing's summary, and `facts`,
+  `inTheWay`, `needR` and `blocked` in `m3` `candidates`: what the trend rule
+  says for its side, the multi-timeframe read for its side, the first level
+  in its way in its own R against the room it needs, confluence, the VWAP
+  side, the window). They are context, not a verdict: judge the setup by its
+  strategy's STRATEGY.md (`strategies_show`: its context filter and skip
+  rules) and the rules below (the trend rule, the multi-timeframe table,
+  its min R:R). A setup the trend rule allows, `aligned` for its side, with
+  room past what it needs and confluence with it is the opportunity this
+  harness looks for: take it at the strategy's normal size and let its own
+  exit work (don't bank before its trail or target). A policy strategy's
+  verdict is placed as given; the facts never change it.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value

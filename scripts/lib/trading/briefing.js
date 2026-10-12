@@ -51,7 +51,7 @@ const { snapshot } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay } = require('./clock');
-const { familyRoot } = require('./contracts');
+const { familyRoot, specFor } = require('./contracts');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -99,16 +99,16 @@ const brief = f => (f ? {
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: round2((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
-/** A higher timeframe's break with its time as the candle's close (when the break was known), not its open. */
+/** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
 const atClose = (lb, mins) => {
-  const shift = x => (x ? { ...x, at: new Date(Date.parse(x.at) + mins * 60000).toISOString(), swingAt: new Date(Date.parse(x.swingAt) + mins * 60000).toISOString() } : null);
+  const shift = x => (x ? { ...x, knownAt: new Date(Date.parse(x.at) + mins * 60000).toISOString() } : null);
   return { last: shift(lb.last), previous: shift(lb.previous) };
 };
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, tick }) {
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -164,7 +164,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     ['day high', rth ? day.high : null], ['day low', rth ? day.low : null], ['IB high', day.ibHigh], ['IB low', day.ibLow],
     ['opening range high', (lv.openingRange || {}).high], ['opening range low', (lv.openingRange || {}).low],
     ['session high', ((snap.context || {}).session || {}).high], ['session low', ((snap.context || {}).session || {}).low],
-    [`VWAP (${applies || 'session'})`, vwapRef],
+    [`VWAP (${applies || 'session'})`, round2(vwapRef)],
     ['prior RTH high', (lv.priorRth || {}).high], ['prior RTH low', (lv.priorRth || {}).low], ['prior RTH close', (lv.priorRth || {}).close],
     ['overnight high', (lv.overnight || {}).high], ['overnight low', (lv.overnight || {}).low],
     ['prior VAH', prior.vah], ['prior VAL', prior.val], ['prior POC', prior.poc],
@@ -175,7 +175,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     ...[...eqHighs, ...eqLows].filter(x => !x.taken).map(x => [x.name, x.price]),
     ...round100.map(x => ['round number', x]),
   ];
-  const room = nearest(price, oneR, levels);
+  const room = nearest(price, oneR, levels, tick);
   const news = newsState(blackouts, closedAt);
   const noEntry = /\(no entries\)|closed/.test(win.name);
   const bar = snap.last;
@@ -230,7 +230,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
-        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, newsBlocked: Boolean(news.inBlackout), lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: side(price, vwapRef) })) : null,
+        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, news, lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: side(price, vwapRef), tick })) : null,
         ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
       },
@@ -267,21 +267,17 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
 }
 
 /**
- * A scan candidate with its 1R (its stop), its exit, the first level in its way in points and R, and its grade:
- *
- *   A  the trend rule allows its side, the multi-timeframe read is `aligned` for it, nothing in its way before its
- *      trail activation (or target, else its min R:R, else 2R), confluence with it and none against, price on its
- *      side of the VWAP that applies, and not the lunch lull: take it, let the trail work, prefer it over the rest
- *   B  allowed and not mixed, pullback or counter, but a level between 1R and its trail activation: only with a
- *      target before that level that still meets its min R:R
- *   C  against the trend rule, a mixed, pullback or counter read, a level within 1R, confluence against, or a
- *      no-entry window: skip
+ * A scan candidate with its 1R (its stop), its exit, its target, the levels ahead of it in points and its own R (the
+ * first is the one in its way), the room it needs, and its context as facts: what the trend rule says for its side,
+ * the multi-timeframe read for its side, confluence, the VWAP side, the window and the news. Context for the roles,
+ * never a verdict: the strategy's STRATEGY.md and the skills (the trend rule, the multi-timeframe table, the
+ * strategy's skip rules and min R:R, a policy verdict placed as given) decide. `blocked`: the gate refuses an entry now.
  */
-function candidate(r, price, levels, { noEntry = false, newsBlocked = false, lunch = false, alignment = {}, vwapSide = null } = {}) {
+function candidate(r, price, levels, { noEntry = false, news = null, lunch = false, alignment = {}, vwapSide = null, tick = 0.25 } = {}) {
   const R = r.stopDistance;
   const up = r.direction === 'long';
   // Its own three nearest levels in its direction, in its own R (its stop): the first is the one in its way.
-  const ahead = merge(levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a))).slice(0, 3)
+  const ahead = merge(levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a)), tick).slice(0, 3)
     .map(([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
   const exit = r.exit || {};
   const inTheWay = R > 0 ? ahead[0] || null : null;
@@ -291,33 +287,29 @@ function candidate(r, price, levels, { noEntry = false, newsBlocked = false, lun
   // The room it needs: to its trail activation, else its target, else its min R:R, else 2R.
   const needR = exit.trailActivateR ?? (target && target.R) ?? r.minRR ?? 2;
   const mtf = r.mtf || {};
-  const allowed = mtf.style === 'reversal' || (up ? mtf.longAllowed : mtf.shortAllowed) !== false;
-  const align = alignment ? alignment[up ? 'long' : 'short'] : null;
-  const against = ((r.confluence || {}).against || []).length;
-  const withIt = ((r.confluence || {}).with || []).length;
-  const vwapWith = vwapSide === (up ? 'above' : 'below');
-  const roomR = inTheWay ? inTheWay.R : null;
-  const c = [];
-  if (!allowed) c.push('against the trend rule');
-  if (['mixed', 'pullback', 'counter'].includes(align)) c.push(`multi-timeframe read ${align}`);
-  if (roomR !== null && roomR < 1) c.push(`${inTheWay.name} within 1R (${roomR}R)`);
-  if (against) c.push('confluence against');
-  if (noEntry) c.push('no-entry window');
-  if (newsBlocked) c.push('news blackout');
-  const a = [];
-  if (align !== 'aligned') a.push(`multi-timeframe read ${align || 'unknown'}, not aligned`);
-  if (roomR !== null && roomR < needR) a.push(`${inTheWay.name} at ${roomR}R, before the ${needR}R it needs`);
-  if (!withIt) a.push('no confluence');
-  if (!vwapWith) a.push(`price ${vwapSide || 'not'} the VWAP for a ${r.direction}`);
-  if (lunch) a.push('lunch lull');
-  const grade = c.length ? 'C' : a.length ? 'B' : 'A';
+  const allowed = up ? mtf.longAllowed : mtf.shortAllowed;
+  const align = (alignment && alignment[up ? 'long' : 'short']) || null;
+  const conf = r.confluence || { with: [], against: [] };
+  const facts = [
+    mtf.style === 'reversal' ? 'a reversal strategy: the trend rule doesn\'t bind it (the multi-timeframe table\'s reversal row does)'
+      : allowed === false ? `against the trend rule for a ${r.direction}` : allowed === true ? `the trend rule allows a ${r.direction}` : 'the trend rule unknown',
+    `multi-timeframe read for a ${r.direction}: ${align || 'unknown'}`,
+    inTheWay ? `first level in its way: ${inTheWay.name} at ${inTheWay.R}R; it needs ${needR}R (${inTheWay.R >= needR ? 'room past it' : 'the level comes first'})`
+      : R > 0 ? `no level in its way found; it needs ${needR}R` : 'its stop is unknown, so no R',
+    `confluence: ${(conf.with || []).length ? `with ${conf.with.join(', ')}` : 'none with it'}${(conf.against || []).length ? `; against ${conf.against.join(', ')}` : ''}`,
+    vwapSide ? `price ${vwapSide} the VWAP (${(up ? vwapSide === 'above' : vwapSide === 'below') ? 'its side' : 'the other side'})` : 'the VWAP unknown',
+    ...(lunch ? ['lunch lull'] : []),
+  ];
+  const newsBlock = !news || news.inBlackout === false ? null : news.inBlackout === true ? 'news blackout' : 'news unknown (the blackouts file can\'t be read)';
+  const blocked = noEntry ? 'no-entry window' : newsBlock;
   return {
     name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null,
     entryRef: r.entryRef, stopPoints: round2(R), minRR: r.minRR ?? null,
     exit: { trailActivateR: exit.trailActivateR ?? null, trailGivebackR: exit.trailGivebackR ?? null, targetR: exit.targetR ?? null, maxBars: exit.maxBars ?? null },
     target, inTheWay, ahead, needR,
-    grade, why: grade === 'C' ? c : grade === 'B' ? a : ['trend allows it, aligned, room to its trail or target, confluence, VWAP with it'],
-    ...(noEntry || newsBlocked ? { blocked: noEntry ? 'no-entry window' : 'news blackout' } : {}),
+    trendRule: mtf.style === 'reversal' ? 'reversal' : allowed === false ? 'against' : allowed === true ? 'allows' : null,
+    alignment: align, vwapSide, facts,
+    ...(blocked ? { blocked } : {}),
   };
 }
 
@@ -358,7 +350,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const c15 = done(15);
   const c60 = done(60);
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts });
+  // Levels within a tick are one level: the contract's tick (contracts.js), 0.25 for a root it doesn't list.
+  const tick = (specFor(String(symbol || '').split(':')[0]) || {}).tickSize || 0.25;
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, tick });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -382,9 +376,9 @@ function merge(sorted, tick = 0.25) {
 }
 
 /** The three nearest named levels above and below price, each in points and R (`oneR`: 1R in points). */
-function nearest(price, oneR, levels) {
+function nearest(price, oneR, levels, tick = 0.25) {
   const pick = above => merge(levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
-    .sort(([, a], [, b]) => (above ? a - b : b - a))).slice(0, 3);
+    .sort(([, a], [, b]) => (above ? a - b : b - a)), tick).slice(0, 3);
   const one = ([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
   return { above: pick(true).map(one), below: pick(false).map(one) };
 }
@@ -428,8 +422,7 @@ function etTimes(v, barDay) {
 }
 const fmt = v => (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
 
-const GRADE = { A: 'take it, let it run', B: 'only with a target before the level', C: 'skip' };
-const lvl = x => `${x.name} ${x.price} (${x.points} pts, ${x.R}R)`;
+const lvl = x => `${x.name} ${x.price} (${x.points} pts, ${x.R === null ? 'R unknown' : `${x.R}R`})`;
 
 /** The decision in plain words, first: what a role needs at a glance (the sections below hold the detail). */
 function summaryLines(b, et) {
@@ -455,7 +448,7 @@ function summaryLines(b, et) {
   else {
     out.push('- Setups:');
     for (const c of m3.candidates) {
-      out.push(`  - ${c.name} ${c.direction}: grade ${c.grade} (${GRADE[c.grade]}): ${c.why.join('; ')}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.`);
+      out.push(`  - ${c.name} ${c.direction}: ${c.facts.join('; ')}${c.blocked ? ` (blocked now: ${c.blocked})` : ''}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.`);
     }
   }
   return out;

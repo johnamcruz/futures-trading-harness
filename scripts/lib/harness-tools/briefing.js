@@ -30,8 +30,10 @@ function barBriefing({ symbol = null, json = false } = {}, ctx) {
   const cycleBar = cycleBarOf(c.env, symbol);
   if (cycleBar ? cycleBar !== b.asOf : !current(b, c.now())) return { text: `The bar briefing for ${symbol} is old (its bar closed ${b.closedAt}; it held until ${b.sections.m3.validUntil}): no current briefing. ${fallback}\n` };
   // This cycle's bar: rendered as of that bar, so no part reads as expired while the cycle decides it.
-  // A month asked for that isn't the briefing's contract: say whose levels these are (months differ by carry).
-  const note = root[2] && b.contractId && b.contractId !== requested ? `Note: you asked for ${requested}; this briefing is for ${b.contractId} (the runner's contract): its levels are that contract's.\n` : '';
+  // A month asked for that isn't the briefing's contract's month: say whose levels these are (months differ by carry;
+  // a micro and its mini in the same month share prices).
+  const month = id => (/:(\d{4}-\d{2})$/.exec(String(id || '')) || [])[1] || null;
+  const note = root[2] && b.contractId && month(b.contractId) !== root[2].slice(1) ? `Note: you asked for ${requested}; this briefing is for ${b.contractId} (the runner's contract): its levels are that contract's.\n` : '';
   return { text: json ? `${JSON.stringify(b)}\n` : `${note}${renderBriefing(b, { now: cycleBar ? new Date(b.closedAt) : c.now() })}` };
 }
 

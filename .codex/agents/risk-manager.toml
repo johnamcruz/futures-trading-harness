@@ -60,10 +60,9 @@ answers that there is no current one, take the candidates, the trend rule
 and the alignment from the plan the caller gives you and the analysts'
 reports instead; don't fetch bars for them.
 
-Check, in order, and stop at the first failure. First the setup's grade
-(the briefing's `m3` `candidates`): **C** → VETO with its `why`; **B** →
-APPROVE only with a target before the level in its way that still meets the
-strategy's min R:R; **A** → check on.
+Check, in order, and stop at the first failure. The briefing's `m3`
+`candidates` give each setup's facts (`facts`, `inTheWay`, `needR`,
+`blocked`): context for the checks below, never a check of their own.
 
 0. The trigger fired: the scan lists the strategy as a candidate in this
    direction on the last closed bar (or, for a manual strategy, the plan
