@@ -60,7 +60,7 @@ const familyRoot = root => (familyOf(root) ? familyOf(root).micro : String(root 
  */
 function parseSelection(value, { required = false } = {}) {
   if (value === undefined || value === null || String(value).trim() === '') {
-    return required ? { error: 'FTH_SYMBOLS is not set in this autonomous run (the runner sets it from its symbols), so the selected contracts are unknown' } : { symbols: null };
+    return required ? { error: 'FTH_SYMBOLS is not set in this autonomous run, so the selected contracts are unknown. The runner sets it from its symbols; the likely cause is a harness config installed before it was forwarded, which the user fixes by re-running node scripts/install.js --target <harness> (e.g. codex)' } : { symbols: null };
   }
   const list = String(value).split(',').map(x => x.trim().toUpperCase());
   if (!list.every(x => /^[A-Z0-9]+$/.test(x))) return { error: `FTH_SYMBOLS is not a comma-separated list of contract roots (got ${JSON.stringify(String(value))})` };

@@ -203,7 +203,7 @@ test('strategy check: a rules strategy trades the selected leg (FTH_SYMBOLS) of 
   // An unreadable selection refuses every entry; so does a lost one (unset in an autonomous run).
   assert.match(run(entryOrder({ contractId: 'MNQ' }), withSel('MNQ,NQ')).violations.find(v => v.check === 'strategy').message, /FTH_SYMBOLS selects two contracts of one index/);
   const lost = { ...loadConfig({ FTH_AUTONOMOUS: '1' }), home: config.home, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
-  assert.match(run(entryOrder({ contractId: 'MNQ' }), lost).violations.find(v => v.check === 'strategy').message, /^FTH_SYMBOLS is not set in this autonomous run .*No entries until it is fixed\.$/);
+  assert.match(run(entryOrder({ contractId: 'MNQ' }), lost).violations.find(v => v.check === 'strategy').message, /^FTH_SYMBOLS is not set in this autonomous run, .*--target <harness> \(e\.g\. codex\)\. No entries until it is fixed\.$/);
   assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ' }), { ...lost, selection: loadConfig({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }).selection }).violations, []);
   // max_risk_usd in NQ's dollars: 40 ticks x $5 = $200, over $100 (one MNQ at 40 ticks would be $20).
   const over = run(entryOrder({ contractId: 'NQ' }), nq);

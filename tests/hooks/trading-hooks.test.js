@@ -198,7 +198,7 @@ test('order gate wiring: a rules strategy trades only the selected leg (FTH_SYMB
     const { env } = setup(planFor('MNQ'), { FTH_HOME: homeFor(), FTH_STRATEGIES_DIRS: extra, FTH_AUTONOMOUS: '1', ...(symbols ? { FTH_SYMBOLS: symbols } : {}) });
     return gate(orderPayload({ ...ORDER, rationale: CROSS }), env);
   };
-  assert.match(lostRun().stderr, /\[strategy\] FTH_SYMBOLS is not set in this autonomous run/);
+  assert.match(lostRun().stderr, /\[strategy\] FTH_SYMBOLS is not set in this autonomous run, .*re-running node scripts\/install\.js --target <harness>/);
   assert.doesNotMatch(lostRun('MNQ').stderr, /\[strategy\]/);
   // A contract outside every family it lists: refused, selected or not.
   for (const c of ['ES', 'MES', 'GC', 'CL']) {

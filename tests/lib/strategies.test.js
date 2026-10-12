@@ -250,7 +250,7 @@ test('selection: FTH_SYMBOLS is one contract per index; anything else is an erro
   assert.throws(() => selectedSymbols({ FTH_SYMBOLS: 'ES,MES' }), /two contracts of one index/);
   assert.strictEqual(selectedSymbols({}), null);
   // An autonomous run's runner always sets it: unset there, the selection is lost (an error, never "its list").
-  assert.throws(() => selectedSymbols({ FTH_AUTONOMOUS: '1' }), /FTH_SYMBOLS is not set in this autonomous run/);
+  assert.throws(() => selectedSymbols({ FTH_AUTONOMOUS: '1' }), /FTH_SYMBOLS is not set in this autonomous run, .*a harness config installed before it was forwarded, which the user fixes by re-running node scripts\/install\.js --target <harness> \(e\.g\. codex\)$/);
   assert.deepStrictEqual(selectedSymbols({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'NQ' }), ['NQ']);
   assert.match(parseSelection('', { required: true }).error, /not set/);
   assert.deepStrictEqual(parseSelection('MNQLONGROOT'), { symbols: ['MNQLONGROOT'] }, 'any root the runner accepts');
