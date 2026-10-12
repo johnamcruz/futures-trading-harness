@@ -147,7 +147,7 @@ function inWindow(now, window) {
 const MARKET_TZ = 'America/New_York';
 const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
-const MARKET_HOURS_LABEL = '18:00-16:00 ET, Sunday evening to Friday afternoon (the CME Globex session; closed 16:00-18:00 ET)';
+const MARKET_HOURS_LABEL = 'the CME Globex session: from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends';
 
 /**
  * Named sessions inside the trading day, in New York time:

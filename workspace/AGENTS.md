@@ -40,9 +40,11 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 
 ## Execution
 
-- **Hard rule: trade only in the CME Globex session, 18:00 ET to 16:00 ET
-  (Sunday evening to Friday afternoon; closed 16:00-18:00 ET and weekends),
-  and never carry a position past the 16:00 ET close.** Every position is
+- **Hard rule: trade only in the CME Globex session, which opens at 18:00 ET
+  and runs overnight until 16:00 ET the next day (Sunday evening to Friday
+  afternoon). The market is open all of that time, the regular session
+  09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on
+  weekends. Never carry a position past the 16:00 ET close.** Every position is
   flat by end of day (`eodAt`, no later than 16:00 ET). The order gate
   refuses entries outside the session whatever the configuration says, and
   the runner closes any position it finds outside it. Exits are always
@@ -99,7 +101,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   high-water mark (end-of-day or intraday: see the account profile). Know the cushion
   (balance − floor) before every session; size so one bad day can't breach it.
 - **Flat by 16:00 ET:** firms auto-flatten open positions near the close (often
-  15:10 CT, 16:10 ET); the harness is stricter. Its session is 18:00 ET to 16:00 ET, no new
+  15:10 CT, 16:10 ET); the harness is stricter. Its session runs from 18:00 ET until 16:00 ET the next day, no new
   entries from 15:45 ET, and end of day (15:50 ET) closes positions and
   cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
   the weekend.
