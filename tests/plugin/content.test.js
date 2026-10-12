@@ -186,7 +186,9 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
   const ts = read('skills/trade-session/SKILL.md');
   for (const re of [
     /Every role runs every full cycle: each carries skills the decision needs/,
-    /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle, `risk-manager` twice \(phase 1 and phase 2\)/,
+    /gate refuses an entry \(`\[roles-ran\]`\) until `market-structure-analyst`,\s+`trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have\s+returned as subagents this cycle, `risk-manager` twice \(phase 1, then phase\s+2 once phase 1 and the analysts have returned\), each in the foreground/,
+    /since the last `trade-executor` call:\s+each entry has its own round of reports/,
+    /in an autonomous\s+run there is no stand-in: without the roles' reports, no entry/,
     /until\s+`risk-manager` has returned twice this cycle \(phase 1 and phase 2\)/,
     /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way, and the session window/,
     /multi-timeframe alignment for the side \(aligned, pullback, mixed, counter\)\s+and the size it implies/, /A plan\s+that can't name them isn't ready/,

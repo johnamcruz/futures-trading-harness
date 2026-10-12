@@ -6,72 +6,100 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { rolesInTranscript, missingRoles, checkRolesRan, ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
+const { roleCalls, rolesInTranscript, missingRoles, checkRolesRan, ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
 const { tmpDir } = require('../helpers');
 
-// opencode `run --format json`: one tool_use event per finished call.
-const oc = (subagent_type, status = 'completed') => JSON.stringify({
+// opencode `run --format json`: one tool_use event per finished call, with its start and end times.
+const oc = (subagent_type, [start, end] = [null, null], { status = 'completed', input = {}, output = '<task id="s" state="completed"><task_result>report</task_result></task>', metadata } = {}) => JSON.stringify({
   type: 'tool_use', timestamp: 1, sessionID: 'ses_main',
-  part: { type: 'tool', tool: 'task', state: { status, input: { description: 'x', prompt: 'y', subagent_type }, output: '<task_result>report</task_result>' } },
+  part: { type: 'tool', tool: 'task', state: { status, input: { description: 'x', prompt: 'y', subagent_type, ...input }, output, ...(metadata ? { metadata } : {}), ...(start !== null ? { time: { start, end } } : {}) } },
 });
-const FULL = [...ANALYSTS, 'risk-manager', 'risk-manager'];
-const counts = lines => Object.fromEntries(rolesInTranscript(lines.join('\n')));
+// A full cycle as the skill runs it: the analysts and phase 1 at once (10-20), phase 2 after (30-40).
+const FULL = [...ANALYSTS.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])];
+const miss = (lines, cycle) => missingRoles(roleCalls(lines.join('\n')), cycle);
+const P2 = 'risk-manager phase 2 (a second call, started after phase 1';
 
-test('opencode: completed task calls count by role; errored or running ones do not', () => {
-  assert.deepStrictEqual(counts(FULL.map(r => oc(r))), {
-    'market-structure-analyst': 1, 'trend-momentum-analyst': 1, 'volume-liquidity-analyst': 1, 'risk-manager': 2,
-  });
-  assert.deepStrictEqual(counts([oc('market-structure-analyst', 'error'), oc('risk-manager', 'running')]), {});
-  // Another tool's event, or a skill load, is not a role.
+test('opencode: completed foreground task calls count by role; errored, running or background ones do not', () => {
+  assert.deepStrictEqual(Object.fromEntries(rolesInTranscript(FULL.join('\n'))),
+    { 'market-structure-analyst': 1, 'trend-momentum-analyst': 1, 'volume-liquidity-analyst': 1, 'risk-manager': 2 });
+  assert.deepStrictEqual(roleCalls([oc('risk-manager', [1, 2], { status: 'error' }), oc('risk-manager', [1, 2], { status: 'running' })].join('\n')), []);
+  // A background launch returns at once, before any report.
+  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { input: { background: true } })), []);
+  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { metadata: { background: true } })), []);
+  assert.deepStrictEqual(roleCalls(oc('risk-manager', [1, 2], { output: '<task id="s" state="running">started</task>' })), []);
+  // Another tool's event, or a skill load, is not a role; a role named inside another call's text never counts.
+  const other = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'broker_journal_add', state: { status: 'completed', input: { text: oc('risk-manager') } } } });
   const skill = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'skill', state: { status: 'completed', input: { name: 'market-structure' } } } });
-  assert.deepStrictEqual(counts([skill]), {});
+  assert.deepStrictEqual(roleCalls([other, skill].join('\n')), []);
 });
 
-test('Claude: a Task/Agent call counts once its tool_result returned without an error', () => {
-  const call = (id, subagent_type, name = 'Task') => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input: { subagent_type, prompt: 'p' } }] } });
+test('Claude: a Task/Agent call counts once its tool_result returned without an error, in the foreground', () => {
+  const call = (id, subagent_type, extra = {}, name = 'Task') => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input: { subagent_type, prompt: 'p', ...extra } }] } });
   const result = (id, is_error = false) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'report' }] } });
-  assert.deepStrictEqual(counts([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', 'Agent'), result('b')]),
-    { 'risk-manager': 1, 'trend-momentum-analyst': 1 });
-  assert.deepStrictEqual(counts([call('a', 'risk-manager'), result('a', true)]), {}, 'an errored subagent call');
-  assert.deepStrictEqual(counts([call('a', 'risk-manager')]), {}, 'a call with no result yet');
+  assert.deepStrictEqual(roleCalls([call('a', 'futures-trading-harness:risk-manager'), result('a'), call('b', 'trend-momentum-analyst', {}, 'Agent'), result('b')].join('\n')),
+    [{ role: 'risk-manager', start: 0, end: 1 }, { role: 'trend-momentum-analyst', start: 2, end: 3 }]);
+  assert.deepStrictEqual(roleCalls([call('a', 'risk-manager'), result('a', true)].join('\n')), [], 'an errored call');
+  assert.deepStrictEqual(roleCalls(call('a', 'risk-manager')), [], 'no result yet');
+  assert.deepStrictEqual(roleCalls([call('a', 'risk-manager', { run_in_background: true }), result('a')].join('\n')), [], 'a background launch');
 });
 
 test('Qwen Code parts: a task call counts once answered with no error', () => {
   const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { role: 'model', parts: [{ functionCall: { id, name: 'task', args: { subagent_type } } }] } });
   const answer = (id, response) => JSON.stringify({ type: 'tool_result', message: { role: 'user', parts: [{ functionResponse: { id, name: 'task', response } }] } });
-  assert.deepStrictEqual(counts([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })]), { 'volume-liquidity-analyst': 1 });
-  assert.deepStrictEqual(counts([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })]), {});
+  assert.deepStrictEqual(roleCalls([call('x', 'volume-liquidity-analyst'), answer('x', { output: 'report' })].join('\n')), [{ role: 'volume-liquidity-analyst', start: 0, end: 1 }]);
+  assert.deepStrictEqual(roleCalls([call('x', 'volume-liquidity-analyst'), answer('x', { error: 'not found' })].join('\n')), []);
 });
 
-test('missingRoles: a full cycle needs the three analysts and risk-manager twice; a lean one risk-manager twice', () => {
-  const m = (roles, cycle) => missingRoles(rolesInTranscript(roles.map(r => oc(r)).join('\n')), cycle);
-  assert.deepStrictEqual(m(FULL, 'full'), []);
-  assert.deepStrictEqual(m(['risk-manager', 'risk-manager'], 'full'), ANALYSTS);
-  assert.deepStrictEqual(m([...ANALYSTS, 'risk-manager'], 'full'), ['risk-manager (2 calls: phase 1 and phase 2; 1 returned)']);
-  assert.deepStrictEqual(m(['risk-manager', 'risk-manager'], 'lean'), []);
-  assert.deepStrictEqual(m(['risk-manager'], 'lean'), ['risk-manager (2 calls: phase 1 and phase 2; 1 returned)']);
-  assert.deepStrictEqual(m([], null), [], 'no cycle named: nothing required');
+test('missingRoles: the analysts, then phase 2 after phase 1 and the analysts returned; a lean cycle phase 1 then 2', () => {
+  assert.deepStrictEqual(miss(FULL, 'full'), []);
+  assert.deepStrictEqual(miss(FULL.slice(3), 'full'), ANALYSTS);
+  assert.deepStrictEqual(miss([], 'full'), [...ANALYSTS, 'risk-manager phase 1', `${P2} and the analysts returned)`]);
+  // Two risk-manager calls at once are phase 1 twice: phase 2 is missing.
+  assert.deepStrictEqual(miss([...ANALYSTS.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [11, 19])], 'full'), [`${P2} and the analysts returned)`]);
+  // Phase 2 started before an analyst returned: not a review of a plan built from the reports.
+  assert.deepStrictEqual(miss([...ANALYSTS.map(r => oc(r, [10, 35])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])], 'full'), [`${P2} and the analysts returned)`]);
+  assert.deepStrictEqual(miss([oc('risk-manager', [1, 2]), oc('risk-manager', [3, 4])], 'lean'), []);
+  assert.deepStrictEqual(miss([oc('risk-manager', [1, 4]), oc('risk-manager', [2, 5])], 'lean'), [`${P2} returned)`]);
+  assert.deepStrictEqual(miss([oc('risk-manager', [1, 2])], 'lean'), [`${P2} returned)`]);
+  assert.deepStrictEqual(miss([], null), [], 'no cycle named: nothing required');
 });
 
-test('checkRolesRan: names the missing roles, passes a complete cycle, fails closed on an unreadable transcript', () => {
-  const file = path.join(tmpDir(), 'logs', 'cycle-transcript.jsonl');
+test('missingRoles: each entry needs its own round - roles before the last trade-executor call don\'t count', () => {
+  const exec = oc('trade-executor', [45, 60]);
+  assert.deepStrictEqual(miss([...FULL, exec], 'full'), [...ANALYSTS, 'risk-manager phase 1', `${P2} and the analysts returned)`]);
+  const again = [...ANALYSTS.map(r => oc(r, [70, 80])), oc('risk-manager', [70, 75]), oc('risk-manager', [85, 90])];
+  assert.deepStrictEqual(miss([...FULL, exec, ...again], 'full'), []);
+  // Line order stands in for times (Claude, Qwen, or an event without times): the same rule.
+  const noTimes = [...ANALYSTS.map(r => oc(r)), oc('risk-manager'), oc('risk-manager')];
+  assert.deepStrictEqual(miss(noTimes, 'full'), []);
+  assert.deepStrictEqual(miss([...noTimes, oc('trade-executor')], 'full').length, 5);
+});
+
+test('checkRolesRan: names what is missing, passes a complete cycle, fails closed on an unreadable transcript', () => {
+  const file = path.join(tmpDir(), 'logs', 'cycle-transcript-1.jsonl');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, ['risk-manager'].map(r => oc(r)).join('\n'));
-  const msg = checkRolesRan(file, 'full');
-  assert.match(msg, /A full cycle enters only after its roles report .*not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager \(2 calls/);
-  fs.writeFileSync(file, FULL.map(r => oc(r)).join('\n'));
+  fs.writeFileSync(file, oc('risk-manager', [1, 2]));
+  assert.match(checkRolesRan(file, 'full'), /A full cycle enters only after its roles report, in the foreground, since the last trade-executor call .*not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager phase 2/);
+  fs.writeFileSync(file, FULL.join('\n'));
   assert.strictEqual(checkRolesRan(file, 'full'), null);
-  // The runner empties the file at each cycle's start: an empty transcript has no roles.
   fs.writeFileSync(file, '');
-  assert.match(checkRolesRan(file, 'lean'), /risk-manager \(2 calls/);
-  // A transcript the runner named but that can't be read: refused, never passed.
+  assert.match(checkRolesRan(file, 'lean'), /risk-manager phase 1, risk-manager phase 2/);
   assert.match(checkRolesRan(path.join(path.dirname(file), 'missing.jsonl'), 'full'), /can't be read \(ENOENT\)/);
-  // No transcript or no cycle (an interactive session): the check doesn't apply.
   assert.strictEqual(checkRolesRan(null, 'full'), null);
   assert.strictEqual(checkRolesRan(file, null), null);
 });
 
-test('a role named only inside another call\'s text never counts (each line is one event)', () => {
-  const text = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'broker_journal_add', state: { status: 'completed', input: { text: '{"type":"tool_use","part":{"tool":"task","state":{"status":"completed","input":{"subagent_type":"risk-manager"}}}}' } } } });
-  assert.deepStrictEqual(counts([text]), {});
+test('checkRolesRan: a Claude subagent\'s transcript (the trade-executor\'s hook) is read with its main session\'s, where the roles ran', () => {
+  const dir = tmpDir();
+  const main = path.join(dir, 'sess-1.jsonl');
+  const sub = path.join(dir, 'sess-1', 'subagents', 'agent-x.jsonl');
+  fs.mkdirSync(path.dirname(sub), { recursive: true });
+  const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Task', input: { subagent_type } }] } });
+  const result = id => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'r' }] } });
+  const lines = [...ANALYSTS.flatMap((r, i) => [call(`a${i}`, r)]), call('p1', 'risk-manager'), ...ANALYSTS.map((_r, i) => result(`a${i}`)), result('p1'), call('p2', 'risk-manager'), result('p2')];
+  fs.writeFileSync(main, lines.join('\n'));
+  fs.writeFileSync(sub, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'o', name: 'mcp__broker__place_order', input: {} }] } }));
+  assert.strictEqual(checkRolesRan(sub, 'full'), null);
+  fs.writeFileSync(main, lines.slice(0, -2).join('\n'));
+  assert.match(checkRolesRan(sub, 'full'), /risk-manager phase 2/);
 });

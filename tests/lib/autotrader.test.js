@@ -118,8 +118,10 @@ test('child env names the cycle and, for a harness that streams its transcript, 
   for (const harness of ['opencode', 'claude']) {
     const env = childEnv(validateConfig({ harness }), '/r', home);
     assert.strictEqual(env.FTH_CYCLE, 'full', harness);
-    assert.strictEqual(env.FTH_CYCLE_TRANSCRIPT, '/srv/fth/logs/cycle-transcript.jsonl', harness);
+    assert.match(env.FTH_CYCLE_TRANSCRIPT, /^\/srv\/fth\/logs\/cycle-transcript-\d+-[0-9a-f]{12}\.jsonl$/, harness);
   }
+  // A file per run: two runs (a loop cycle and a concurrent --once) never share one.
+  assert.notStrictEqual(childEnv(validateConfig({ harness: 'opencode' }), '/r', home).FTH_CYCLE_TRANSCRIPT, childEnv(validateConfig({ harness: 'opencode' }), '/r', home).FTH_CYCLE_TRANSCRIPT);
   assert.strictEqual(childEnv(validateConfig({ cycle: 'lean' }), '/r', home).FTH_CYCLE, 'lean');
   // Qwen Code's JSON output comes at the end, not as it happens: no live file (its hook passes its own transcript), and a stale one is dropped.
   const qwen = childEnv(validateConfig({ harness: 'qwen' }), '/r', { ...home, FTH_CYCLE_TRANSCRIPT: '/old' });
@@ -135,6 +137,11 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   // No entries possible: no roster.
   assert.doesNotMatch(prompts(validateConfig({}), now).trade(items, { manageOnly: true }), /Full cycle:/);
   assert.doesNotMatch(prompts(validateConfig({ paper: true }), now).trade(items), /Full cycle:/);
+  // A harness whose gate can't see the roles (Codex, custom) is told the roster, not a refusal it won't get.
+  const codex = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
+  assert.match(codex, /Full cycle: market-structure-analyst[^]*then risk-manager phase 2\./);
+  assert.doesNotMatch(codex, /the gate refuses an entry until all have reported/);
+  assert.match(prompts(validateConfig({ harness: 'qwen' }), now).trade(items), /the gate refuses an entry until all have reported/);
 });
 
 test('child env locks the gate and paper mode disables trading', () => {
@@ -824,21 +831,22 @@ test('the workspace guard fingerprints opencode\'s config and any .opencode fold
   assert.deepStrictEqual(changedFiles(before, workspaceFingerprint(dir)), []);
 });
 
-test('runHarness writes the live transcript as the run streams it: emptied first, stdout only, readable before the run ends', async () => {
+test('runHarness writes the live transcript as the run streams it: a fresh file, stdout only, readable before the run ends, removed after', async () => {
   const { runHarness } = require('../../scripts/lib/harness-run');
   const fs = require('fs');
   const path = require('path');
   const dir = require('../helpers').tmpDir();
   const live = path.join(dir, 'logs', 'cycle-transcript.jsonl');
   fs.mkdirSync(path.dirname(live), { recursive: true });
-  fs.writeFileSync(live, 'stale line from the last cycle\n');
+  fs.writeFileSync(live, 'stale line left at this path\n');
   const seen = path.join(dir, 'seen.txt');
   // The child prints a line, then (still running) copies the live file as a gate would read it, then ends.
   const script = `echo '{"a":1}'; sleep 0.5; cat ${JSON.stringify(live)} > ${JSON.stringify(seen)}; echo oops >&2; echo '{"b":2}'`;
   const r = await runHarness(['bash', '-c', script], { cwd: dir, env: process.env, timeoutMs: 10000, liveFile: live });
   assert.strictEqual(r.ok, true);
-  assert.strictEqual(fs.readFileSync(seen, 'utf8'), '{"a":1}\n', 'mid-run: the first line only, the stale line gone');
-  assert.strictEqual(fs.readFileSync(live, 'utf8'), '{"a":1}\n{"b":2}\n', 'stderr is not the transcript');
+  assert.strictEqual(fs.readFileSync(seen, 'utf8'), '{"a":1}\n', 'mid-run: the first line only (stderr is not the transcript), the leftover gone');
+  assert.ok(!fs.existsSync(live), 'removed once the run ended (the cycle log keeps the transcript)');
+  assert.match(r.output, /\{"b":2\}/);
   // Without a live file nothing is written.
   const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r2.ok, true);

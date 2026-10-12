@@ -1129,7 +1129,7 @@ test('roles-ran: an autonomous full cycle enters only after the analysts and bot
   assert.deepStrictEqual(run(entryOrder({ rationale: '[exit] flatten' })).violations, []);
   // A lean cycle needs risk-manager twice; an interactive session (not autonomous) needs no roles.
   fs.writeFileSync(file, [...ocSkills, ocRoles[3]].join('\n'));
-  assert.match(run(entryOrder(), { ...auto, cycle: 'lean' }).violations[0].message, /risk-manager \(2 calls: phase 1 and phase 2; 1 returned\)/);
+  assert.match(run(entryOrder(), { ...auto, cycle: 'lean' }).violations[0].message, /not returned yet: risk-manager phase 2 \(a second call, started after phase 1 returned\)/);
   assert.deepStrictEqual(checks(run(entryOrder(), { ...auto, autonomous: false })), []);
   // A hook's own transcript_path wins over the runner's file.
   const hookFile = `${file}.hook`;

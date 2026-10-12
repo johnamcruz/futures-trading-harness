@@ -147,8 +147,9 @@ every result before step 3. Always delegate to a harness role by its agent name
 agent: autonomous runs may allow only the harness roles. Launch each so you wait
 for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
-subagents, play each role yourself in turn. Pass symbol, contractId, and the
-current time.
+subagents (interactively), play each role yourself in turn; in an autonomous
+run there is no stand-in: without the roles' reports, no entry. Pass symbol,
+contractId, and the current time.
 
 Every role runs every full cycle: each carries skills the decision needs
 (market structure and liquidity, trend and momentum, VWAP, volume profile and
@@ -156,9 +157,11 @@ session timing, sizing and pacing), and the prompt's facts (the trend rule,
 which strategies fired) are not their reports. In an autonomous run the order
 gate refuses an entry (`[roles-ran]`) until `market-structure-analyst`,
 `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` have
-returned as subagents this cycle, `risk-manager` twice (phase 1 and phase 2).
-The refusal names the roles still missing: run them, use their reports,
-then enter.
+returned as subagents this cycle, `risk-manager` twice (phase 1, then phase
+2 once phase 1 and the analysts have returned), each in the foreground (a
+background launch hasn't reported), and since the last `trade-executor` call:
+each entry has its own round of reports. The refusal names the roles still
+missing: run them, use their reports, then enter.
 
 | Role (agent file) | Returns |
 |---|---|

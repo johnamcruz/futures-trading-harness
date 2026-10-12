@@ -27,13 +27,22 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(tmp, file);
 }
 
-/** An appender for the live transcript: the file emptied now, each chunk added; a write that fails is skipped (the gate then sees less, never more). */
+/**
+ * An appender for the live transcript, a file of this run's own: created new (a leftover at its path removed first), each
+ * chunk added; a write that fails is skipped, so the gate sees less, never more (a file it can't read refuses entries).
+ * `done()` removes it once the run has ended (the cycle log keeps the whole transcript).
+ */
 function liveWriter(file) {
+  let ok = false;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(file, '', { mode: 0o600 });
-  } catch (_err) { /* the gate refuses entries it can't verify */ }
-  return chunk => { try { fs.appendFileSync(file, chunk); } catch (_err) { /* as above */ } };
+    try { fs.unlinkSync(file); } catch (err) { if (err.code !== 'ENOENT') throw err; } // a leftover is never read as this run's
+    fs.writeFileSync(file, '', { mode: 0o600, flag: 'wx' });
+    ok = true;
+  } catch (_err) { /* can't be replaced or made: nothing is written, and the gate fails closed (an unreadable or empty file) */ }
+  const append = chunk => { if (ok) try { fs.appendFileSync(file, chunk); } catch (_err) { /* as above */ } };
+  append.done = () => { if (ok) try { fs.unlinkSync(file); } catch (_err) { /* gone already */ } };
+  return append;
 }
 
 /**
@@ -48,7 +57,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
   return new Promise(resolve => {
     const [cmd, ...args] = argv;
     // The transcript so far, for the gate to read while the run goes on: emptied first, then each output chunk appended.
-    const live = liveFile ? liveWriter(liveFile) : () => {};
+    const live = liveFile ? liveWriter(liveFile) : Object.assign(() => {}, { done: () => {} });
     const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     onChild(child);
     let output = '';
@@ -71,6 +80,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
     child.on('error', err => {
       clearTimeout(timer);
       onChild(null);
+      live.done();
       resolve({ ok: false, timedOut, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
     });
     child.on('exit', (code, signal) => {
@@ -84,6 +94,7 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       setTimeout(() => {
         child.stdout.destroy();
         child.stderr.destroy();
+        live.done();
         const exitCode = code === null ? (signal ? 1 : 0) : code;
         resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output });
       }, 200);

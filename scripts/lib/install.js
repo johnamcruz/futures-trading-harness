@@ -34,8 +34,6 @@ const FTH_ENV = [
   'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES',
   // The contracts the runner's symbols select (one per index): the gate and order_plan trade only those legs.
   'FTH_SYMBOLS',
-  // The runner's cycle kind and live transcript: which skills loaded and which roles ran (roles-ran.js).
-  'FTH_CYCLE', 'FTH_CYCLE_TRANSCRIPT',
 ];
 // The read-only (or append-only) scripts the skills tell an autonomous run to use.
 const HARNESS_SCRIPTS = ['strategies.js', 'market-snapshot.js', 'mtf.js', 'blackouts.js', 'bars.js', 'reconcile.js', 'lessons.js'];
