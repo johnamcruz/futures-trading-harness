@@ -40,7 +40,7 @@ test('protocol: notifications get no reply; ping, tools/list; unknown methods, b
   assert.deepStrictEqual(await send({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'blackouts_add', arguments: {} } }), [], 'a tools/call notification is not run');
   assert.deepStrictEqual(await send({ jsonrpc: '2.0', id: 2, method: 'ping' }), [{ jsonrpc: '2.0', id: 2, result: {} }]);
   const [list] = await send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
-  assert.strictEqual(list.result.tools.length, 14);
+  assert.strictEqual(list.result.tools.length, 15);
   const code = async msg => (await send(msg))[0].error.code;
   assert.strictEqual(await code({ jsonrpc: '2.0', id: 4, method: 'resources/list' }), -32601);
   assert.strictEqual(await code([{ jsonrpc: '2.0', id: 5, method: 'ping' }]), -32600);
