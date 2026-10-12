@@ -540,7 +540,7 @@ timeframe: 3m                # the one bar-size setting: every listed strategy t
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
-contracts: auto              # micro | mini | auto, only with no contract selected: the verdict is sized in the selected one (the runner's symbols)
+contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode
 ```
 
 - `node scripts/combine.js start --account topstep_100k` starts an attempt;
@@ -549,11 +549,12 @@ contracts: auto              # micro | mini | auto, only with no contract select
   order gate refuses that strategy's entries without a started attempt, a
   fresh snapshot, or room under the daily limits and the size budget.
 - The balance is checked against the broker's own fills: each day's first
-  flat snapshot anchors it, and when something has moved (the balance, a
-  position, an order of ours) the broker's balance must equal that anchor
-  plus every fill since (P&L less fees and commissions). A mismatch, or fills
-  that can't be read, refuses entries until it reconciles; exits always go.
-  Nothing moved, no broker call.
+  flat snapshot anchors it, and the broker's balance, read while flat, must
+  equal that anchor plus every fill since (P&L less fees and commissions). A
+  mismatch, or fills that can't be read, refuses entries until it
+  reconciles; exits always go. The fills are asked for only when something
+  moved (the balance, a position, an order of ours) or the last check didn't
+  pass; otherwise the last good check carries forward.
 - At each setup the runner records the verdict (`full` with the contract,
   size, and stop ticks, or `skip` with the reason); the order gate holds the
   entry to it, and the agents' priority order (the `strategy-library` skill)
