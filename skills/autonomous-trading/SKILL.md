@@ -66,7 +66,17 @@ description: Rules for running the trading harness unattended (headless, schedul
    as plain text in your final message: never as a tool call or a tool's
    arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most
-   one plan, at most one entry. A tool that fails twice ends the cycle as
+   one plan, at most one entry. **Read once per cycle:** call
+   `strategies_scan`, `mtf_read`, `get_account_snapshot`, `get_quote`, and
+   `get_bars` at most once each (a `strategies_scan` with `name`, for one
+   candidate's full result, is a separate read), and reuse the result: the
+   prompt already carries the scan's candidates, the account, and the last
+   10 bars. Read one again only after something changed it: the account and
+   open orders once after you place, modify, or cancel an order; the scan
+   only after you fetched new bars. A refused or failed call may be retried
+   once after you fix what it named. This counts per role: a full cycle
+   still runs its analysts, each making its own reads once, and you don't
+   repeat what they returned. A tool that fails twice ends the cycle as
    `error` (after confirming any open position has its stop). Never wait
    within a cycle: bars and fills may not move until the next one. An order
    that hasn't filled at its one check is journalled as working and the cycle
