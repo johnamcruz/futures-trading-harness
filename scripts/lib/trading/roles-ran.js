@@ -31,8 +31,10 @@
  * launch still running or in the background ends it at its start; the one
  * placing this order excepted), so each entry has its own round of reports.
  * opencode prints a call when it ends, so two trade-executors launched at once
- * both see the same round; the gate's review-before-next-entry check and the
- * one-entry-a-cycle rule (autonomous-trading skill) cover that race. Phase 2 is a risk-manager call that
+ * both see the same round. For the same contract the gate's
+ * review-before-next-entry check refuses the second once the broker server has
+ * journalled the first entry; a second contract in the same cycle is limited
+ * only by the autonomous-trading skill's one-entry rule and max-entries. Phase 2 is a risk-manager call that
  * started after phase 1 (and, in a full cycle, every analyst) had returned.
  *
  *   roleCalls(text)                      { calls: [{ role, start, end }] that count, launches: trade-executor launches }

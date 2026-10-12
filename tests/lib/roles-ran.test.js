@@ -160,3 +160,14 @@ test('the refusal says the refused call ended the round, so the cycle ends and t
   fs.writeFileSync(file, FULL.slice(0, 2).join('\n'));
   assert.match(checkRolesRan(file, 'full'), /This refused trade-executor call ends the round: report the block and end the cycle \(trade-session step 6\); the next entry needs every role again/);
 });
+
+test('Claude: a launch acknowledgment as plain string content is not a report, and an executor launched so ends the round', () => {
+  const call = (id, subagent_type) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type } }] } });
+  const result = (id, content) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const ack = 'Async agent launched successfully.\nagentId: x';
+  assert.strictEqual(roleCalls([call('a', 'risk-manager'), result('a', ack)].join('\n')).calls.length, 0);
+  const round = [...ANALYSTS.map(r => oc(r, [10, 20])), oc('risk-manager', [10, 18]), oc('risk-manager', [30, 40])];
+  const { launches } = roleCalls([call('e', 'trade-executor'), result('e', ack)].join('\n'));
+  assert.deepStrictEqual(launches, [{ start: 0, end: null, background: true }]);
+  assert.ok(missingRoles({ calls: roleCalls(round.join('\n')).calls, launches: [{ start: 50, end: null, background: true }] }, 'full').length > 0);
+});
