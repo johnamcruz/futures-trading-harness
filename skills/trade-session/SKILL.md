@@ -190,6 +190,22 @@ again.
 
 ### 3. Head-trader synthesis (you)
 
+- **Read each setup's grade first** (the briefing's summary, and `grade` and
+  `why` in `m3` `candidates`, computed from the trend rule, the alignment for
+  its side, the room in R to its trail activation or target, confluence, the
+  VWAP side, and the window):
+  - **A** (the trend allows it, `aligned`, room past what it needs,
+    confluence with it, VWAP on its side, not the lunch lull): the
+    opportunity. Take it at the strategy's normal size (position-sizing and
+    the prop budget), let the trail work (don't bank before it), and prefer it
+    over any other setup this bar.
+  - **B** (allowed and not mixed, but a level between 1R and the room it
+    needs, or no confluence, VWAP against it, or lunch): only with a target
+    before that level that still meets the strategy's min R:R; otherwise skip.
+  - **C** (against the trend rule, `mixed`, `pullback` or `counter`, a level
+    within 1R, confluence against, or a no-entry window): skip.
+  The analysts' reports can lower a grade (a reason the facts don't show),
+  never raise it.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value

@@ -99,19 +99,24 @@ const brief = f => (f ? {
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: round2((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
+/** A higher timeframe's break with its time as the candle's close (when the break was known), not its open. */
+const atClose = (lb, mins) => {
+  const shift = x => (x ? { ...x, at: new Date(Date.parse(x.at) + mins * 60000).toISOString(), swingAt: new Date(Date.parse(x.swingAt) + mins * 60000).toISOString() } : null);
+  return { last: shift(lb.last), previous: shift(lb.previous) };
+};
 const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, minutes, closedAt, blackouts }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts }) {
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
   const day = snap.day || {};
   const price = snap.last.c;
   const win = sessionWindow(closedAt);
-  const f15 = frameOf(read, 15);
-  const f60 = frameOf(read, 60);
+  const f15 = frameOf(read15, 15);
+  const f60 = frameOf(readH1, 60);
   const prior = vp.priorRth || {};
   const sess = vp.session || {};
   const liq = snap.liquidity || {};
@@ -143,8 +148,12 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
   // Equal highs (lows) still untaken: no bar since their last touch traded above (below) them.
   const pool = (list, type) => (list || []).map(x => {
     const level = type === 'high' ? Math.max(...x.prices) : Math.min(...x.prices);
-    const since = after(x.at.reduce((a, b) => (Date.parse(a) > Date.parse(b) ? a : b)));
-    const taken = bars.some(b => Date.parse(b.t) > Date.parse(since) && (type === 'high' ? b.h > level : b.l < level));
+    const times = x.at.map(Date.parse).sort((a, b) => a - b);
+    const since = after(new Date(times[times.length - 1]).toISOString());
+    const beyond = b => (type === 'high' ? b.h > level : b.l < level);
+    // Taken: traded beyond after the last touch, or between the touches (outside the touches' own swing bars).
+    const between = b => { const t = Date.parse(b.t); return t > times[0] + EQUAL_K * step && t < times[times.length - 1] - EQUAL_K * step; };
+    const taken = bars.some(b => (Date.parse(b.t) > Date.parse(since) || between(b)) && beyond(b));
     return { name: type === 'high' ? 'equal highs' : 'equal lows', price: level, since, taken };
   });
   const eqHighs = pool(liq.equalHighs, 'high');
@@ -167,6 +176,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
     ...round100.map(x => ['round number', x]),
   ];
   const room = nearest(price, oneR, levels);
+  const news = newsState(blackouts, closedAt);
   const noEntry = /\(no entries\)|closed/.test(win.name);
   const bar = snap.last;
   const atr14 = (snap.volatility || {}).atr14;
@@ -178,7 +188,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
         et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(),
         // R: every distance below is in points and R; 1R here is the reference stop (a setup's own stop is its 1R).
         oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: '0.5 x ATR(20), the reference stop' } : null,
-        news: newsState(blackouts, closedAt),
+        news,
         regime: snap.regime ? { primary: snap.regime.primary, volatility: snap.regime.volatility, tags: snap.regime.tags, metrics: snap.regime.metrics } : null,
         trend: { ema9: round2(t.emaFast), ema20: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend ? { direction: t.supertrend.direction, line: round2(t.supertrend.line) } : null, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },
         priceVsEma9: side(price, t.emaFast),
@@ -220,7 +230,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
-        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, noEntry)) : null,
+        candidates: scan ? scan.filter(r => r.candidate && r.direction).map(r => candidate(r, price, levels, { noEntry, newsBlocked: Boolean(news.inBlackout), lunch: /lunch/.test(win.name), alignment: read15.alignment, vwapSide: side(price, vwapRef) })) : null,
         ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
       },
@@ -229,8 +239,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
       validUntil: nextClose(closedAt, 15),
       data: {
         frame: brief(f15),
-        alignment: read.alignment,
-        lastBreak: lastBreaks(c15),
+        alignment: read15.alignment,
+        lastBreak: atClose(lastBreaks(c15), 15),
         // The 15m candles' own indicators (completed candles only): EMA9 and EMA20, as on the trigger bars.
         indicators: snap15 ? {
           regime: snap15.regime && { primary: snap15.regime.primary, volatility: snap15.regime.volatility },
@@ -243,7 +253,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
     },
     h1: {
       validUntil: nextClose(closedAt, 60),
-      data: { h1: brief(f60), h4: brief(frameOf(read, 240)), lastBreak: lastBreaks(c60) },
+      data: { h1: brief(f60), h4: brief(frameOf(readH1, 240)), lastBreak: atClose(lastBreaks(c60), 60) },
     },
     day: {
       // The prior RTH day changes at the RTH close (16:00 ET).
@@ -256,23 +266,65 @@ function computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, 
   };
 }
 
-/** A scan candidate with its 1R (its stop), its exit, and the first level in its way, in points and R. */
-function candidate(r, price, levels, noEntry) {
+/**
+ * A scan candidate with its 1R (its stop), its exit, the first level in its way in points and R, and its grade:
+ *
+ *   A  the trend rule allows its side, the multi-timeframe read is `aligned` for it, nothing in its way before its
+ *      trail activation (or target, else its min R:R, else 2R), confluence with it and none against, price on its
+ *      side of the VWAP that applies, and not the lunch lull: take it, let the trail work, prefer it over the rest
+ *   B  allowed and not mixed, pullback or counter, but a level between 1R and its trail activation: only with a
+ *      target before that level that still meets its min R:R
+ *   C  against the trend rule, a mixed, pullback or counter read, a level within 1R, confluence against, or a
+ *      no-entry window: skip
+ */
+function candidate(r, price, levels, { noEntry = false, newsBlocked = false, lunch = false, alignment = {}, vwapSide = null } = {}) {
   const R = r.stopDistance;
   const up = r.direction === 'long';
-  const ahead = levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a))[0];
+  // Its own three nearest levels in its direction, in its own R (its stop): the first is the one in its way.
+  const ahead = merge(levels.filter(([, p]) => Number.isFinite(p) && (up ? p > price : p < price)).sort(([, a], [, b]) => (up ? a - b : b - a))).slice(0, 3)
+    .map(([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: R > 0 ? round2(Math.abs(p - price) / R) : null }));
   const exit = r.exit || {};
+  const inTheWay = R > 0 ? ahead[0] || null : null;
+  // Its target: a level target's distance (the scan's targetDistance), else targetR x its stop.
+  const targetPoints = Number.isFinite(r.targetDistance) ? r.targetDistance : Number.isFinite(exit.targetR) && R > 0 ? exit.targetR * R : null;
+  const target = targetPoints !== null ? { level: exit.target || null, points: round2(targetPoints), R: R > 0 ? round2(targetPoints / R) : null } : null;
+  // The room it needs: to its trail activation, else its target, else its min R:R, else 2R.
+  const needR = exit.trailActivateR ?? (target && target.R) ?? r.minRR ?? 2;
+  const mtf = r.mtf || {};
+  const allowed = mtf.style === 'reversal' || (up ? mtf.longAllowed : mtf.shortAllowed) !== false;
+  const align = alignment ? alignment[up ? 'long' : 'short'] : null;
+  const against = ((r.confluence || {}).against || []).length;
+  const withIt = ((r.confluence || {}).with || []).length;
+  const vwapWith = vwapSide === (up ? 'above' : 'below');
+  const roomR = inTheWay ? inTheWay.R : null;
+  const c = [];
+  if (!allowed) c.push('against the trend rule');
+  if (['mixed', 'pullback', 'counter'].includes(align)) c.push(`multi-timeframe read ${align}`);
+  if (roomR !== null && roomR < 1) c.push(`${inTheWay.name} within 1R (${roomR}R)`);
+  if (against) c.push('confluence against');
+  if (noEntry) c.push('no-entry window');
+  if (newsBlocked) c.push('news blackout');
+  const a = [];
+  if (align !== 'aligned') a.push(`multi-timeframe read ${align || 'unknown'}, not aligned`);
+  if (roomR !== null && roomR < needR) a.push(`${inTheWay.name} at ${roomR}R, before the ${needR}R it needs`);
+  if (!withIt) a.push('no confluence');
+  if (!vwapWith) a.push(`price ${vwapSide || 'not'} the VWAP for a ${r.direction}`);
+  if (lunch) a.push('lunch lull');
+  const grade = c.length ? 'C' : a.length ? 'B' : 'A';
   return {
     name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null,
     entryRef: r.entryRef, stopPoints: round2(R), minRR: r.minRR ?? null,
     exit: { trailActivateR: exit.trailActivateR ?? null, trailGivebackR: exit.trailGivebackR ?? null, targetR: exit.targetR ?? null, maxBars: exit.maxBars ?? null },
-    inTheWay: ahead && R > 0 ? { name: ahead[0], price: ahead[1], points: round2(Math.abs(ahead[1] - price)), R: round2(Math.abs(ahead[1] - price) / R) } : null,
-    ...(noEntry ? { blocked: 'no-entry window' } : {}),
+    target, inTheWay, ahead, needR,
+    grade, why: grade === 'C' ? c : grade === 'B' ? a : ['trend allows it, aligned, room to its trail or target, confluence, VWAP with it'],
+    ...(noEntry || newsBlocked ? { blocked: noEntry ? 'no-entry window' : 'news blackout' } : {}),
   };
 }
 
 /** The news blackouts at `at`: the one in force (with its end), else the next one today (with the minutes to it). */
 function newsState(blackouts, at) {
+  // An unreadable blackouts file: unknown (the gate refuses entries then), never "no blackout".
+  if (blackouts && blackouts.error) return { inBlackout: null, error: `the blackouts file can't be read (${blackouts.error}): the order gate refuses entries` };
   const items = ((blackouts && blackouts.items) || []).filter(x => Date.parse(x.end) > at.getTime()).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   const now = items.find(x => Date.parse(x.start) <= at.getTime());
   if (now) return { inBlackout: true, reason: now.reason || null, until: now.end };
@@ -291,12 +343,22 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const closedAt = new Date(Date.parse(last.t) + minutes * 60000);
   const snap = snapshot({ bars });
   const read = mtfRead(bars);
+  // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
+  // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
+  // read of this bar, as the gate's).
+  const asOfClose = m => {
+    const boundary = nextClose(new Date(closedAt.getTime() - m * 60000), m).getTime();
+    const upTo = bars.filter(b => Date.parse(b.t) + minutes * 60000 <= boundary);
+    return upTo.length >= 3 ? mtfRead(upTo) : read;
+  };
+  const read15 = asOfClose(15);
+  const readH1 = asOfClose(60);
   // The 15m and 1h candles, completed only (the one forming isn't in them).
   const done = m => candles(bars, m).filter(c => c.complete).map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
   const c15 = done(15);
   const c60 = done(60);
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, scan, scanError, minutes, closedAt, blackouts });
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -309,10 +371,20 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
 }
 
+/** Levels within a tick of each other, as one with the names joined (sorted nearest first; the first price kept). */
+function merge(sorted, tick = 0.25) {
+  const out = [];
+  for (const [name, p] of sorted) {
+    const same = out.find(([, q]) => Math.abs(q - p) <= tick + 1e-9);
+    if (same) { if (!same[0].split(' / ').includes(name)) same[0] = `${same[0]} / ${name}`; } else out.push([name, p]);
+  }
+  return out;
+}
+
 /** The three nearest named levels above and below price, each in points and R (`oneR`: 1R in points). */
 function nearest(price, oneR, levels) {
-  const pick = above => levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
-    .sort(([, a], [, b]) => (above ? a - b : b - a)).slice(0, 3);
+  const pick = above => merge(levels.filter(([, p]) => Number.isFinite(p) && (above ? p > price : p < price))
+    .sort(([, a], [, b]) => (above ? a - b : b - a))).slice(0, 3);
   const one = ([name, p]) => ({ name, price: p, points: round2(Math.abs(p - price)), R: oneR > 0 ? round2(Math.abs(p - price) / oneR) : null });
   return { above: pick(true).map(one), below: pick(false).map(one) };
 }
@@ -356,11 +428,45 @@ function etTimes(v, barDay) {
 }
 const fmt = v => (v && typeof v === 'object' ? JSON.stringify(v) : String(v));
 
-/** The briefing as text: one block per section, with when it was computed, why, and until when it holds. */
+const GRADE = { A: 'take it, let it run', B: 'only with a target before the level', C: 'skip' };
+const lvl = x => `${x.name} ${x.price} (${x.points} pts, ${x.R}R)`;
+
+/** The decision in plain words, first: what a role needs at a glance (the sections below hold the detail). */
+function summaryLines(b, et) {
+  const m3 = (b.sections.m3 || {}).data || {};
+  const m15 = (b.sections.m15 || {}).data || {};
+  const al = m15.alignment || {};
+  const rule = String(m3.trendRule || '').replace(/^Trend rule: /, '');
+  const vw = m3.vwap || {};
+  const news = m3.news || {};
+  const room = m3.nearestLiquidity || { above: [], below: [] };
+  const out = [
+    `Summary (${b.symbol} ${b.minutes}m, ${m3.et} ET, ${m3.window} until ${et(m3.windowUntil)}):`,
+    `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
+    `- Trend rule: ${rule}`,
+    `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`,
+    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away, ${vw.crossesLast30 ?? '?'} crosses in 30 bars.`,
+    `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
+    `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
+    `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,
+  ];
+  if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
+  else if (!m3.candidates || !m3.candidates.length) out.push('- Setups: none fired on this bar.');
+  else {
+    out.push('- Setups:');
+    for (const c of m3.candidates) {
+      out.push(`  - ${c.name} ${c.direction}: grade ${c.grade} (${GRADE[c.grade]}): ${c.why.join('; ')}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.`);
+    }
+  }
+  return out;
+}
+
+/** The briefing as text: the summary, then one block per section, with when it was computed and until when it holds. */
 function renderBriefing(b, { now = new Date() } = {}) {
   const day = etDate(new Date(b.closedAt));
   const et = v => etTimes(v, day);
   const lines = [`Bar briefing ${b.symbol} ${b.minutes}m, bar ${et(b.asOf)} ET closed ${et(b.closedAt)} ET (${day}), price ${b.price}; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):`];
+  lines.push(...summaryLines(b, et), '', 'Detail by timeframe:');
   for (const name of SECTIONS) {
     const s = b.sections[name];
     if (!s) continue;
@@ -395,4 +501,4 @@ function readBriefing(home, root) {
   }
 }
 
-module.exports = { SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, buildBriefing, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing };
+module.exports = { SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing };

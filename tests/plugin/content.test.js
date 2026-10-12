@@ -205,6 +205,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
     assert.match(t, /Start from the bar briefing: `bar_briefing \{"symbol": "<SYMBOL>"\}`[^]*?don't run\s+`market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it\s+already holds/, a);
     assert.match(t, /```text\n## [^\n]*\nData: bar_briefing m3@<\.\.\.>, m15@<\.\.\.>, h1@<\.\.\.>, day@<\.\.\.> \(the versions you used\)/, a);
   }
+  assert.match(read('skills/trade-session/SKILL.md'), /\*\*Read each setup's grade first\*\*[^]*?\*\*A\*\*[^]*?the\s+opportunity\. Take it at the strategy's normal size[^]*?let the trail work \(don't bank before it\), and prefer it\s+over any other setup this bar[^]*?\*\*C\*\*[^]*?skip\.\s+The analysts' reports can lower a grade[^]*?never raise it/);
+  assert.match(read('agents/risk-manager.md'), /First the setup's grade\s+\(the briefing's `m3` `candidates`\): \*\*C\*\* → VETO with its `why`; \*\*B\*\* →\s+APPROVE only with a target before the level in its way/);
   const rm = read('agents/risk-manager.md');
   assert.match(rm, /A reversal strategy fading it: at most half size\s+\(`floor\(size \/ 2\)`; VETO if 0\)/);
   assert.match(rm, /halves it \(the halving of check 1, applied once, never twice\)/);
@@ -220,8 +222,8 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing\. The alignment and the\s+trend rule in a trade plan are the briefing's \(intraday frames\); a daily\s+read, if you have one \(premarket's\), is context only, never a second\s+alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
   const ht = read('skills/harness-tools/SKILL.md');
-  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
-  assert.match(ht, /`candidates` \(each with its stop, exit, and the first level in its way in R; `null`: the scan failed or the bar wasn't scanned/);
+  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, each setup with its grade A, B or C and why\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
+  assert.match(ht, /`candidates` \(each with its stop, exit, the first level in its way in R, the room it needs, and its `grade` with `why`; `null`: the scan failed or the bar wasn't scanned/);
   assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile\. Each part has a version and changes only on expiry/);
   assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
   assert.match(read('agents/risk-manager.md'), /When the briefing\s+answers that there is no current one, take the candidates, the trend rule\s+and the alignment from the plan the caller gives you and the analysts'\s+reports instead; don't fetch bars for them\./);

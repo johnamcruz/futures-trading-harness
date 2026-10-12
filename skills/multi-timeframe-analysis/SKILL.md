@@ -114,7 +114,7 @@ From the highest timeframe down, for each side:
 
 | Label | Means | What to do |
 |---|---|---|
-| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target |
+| `aligned` | no timeframe against it, most with it | Trade the strategy's setup at its normal size (position-sizing) and its full target; with room to its trail activation and confluence it is a grade A setup (the briefing's `grade`): the opportunity |
 | `pullback` | every timeframe above the lowest is with it; the lowest is against it | The setup timeframe is pulling back. Wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then enter. Do not enter while it is still moving against you |
 | `mixed` | timeframes disagree without a clear pullback | Half size, `floor(size / 2)`; skip if that is 0 (at size 1, every `mixed` read is a skip). Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Skip, unless the strategy is a reversal at a higher-timeframe level (CRT raids, absorption) and the plan says why; then half size (`floor(size / 2)`, skip if 0) and the nearest target |
@@ -189,5 +189,5 @@ mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the par
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
 Trend rule: prevailing trend 4h up; trend strategies may not go short, reversal strategies (mtf: reversal) may.
 
--> Longs: mixed (half size or nearest target). Shorts: against the 4-hour trend, refused for trend strategies.
+-> Longs: mixed (half size and the nearest target; at size 1, a skip). Shorts: against the 4-hour trend, refused for trend strategies.
 ```

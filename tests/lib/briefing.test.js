@@ -221,7 +221,6 @@ test('the briefing carries the structure events the analysts report: the latest 
   // The 15m and 1h swings against price: still holding ones on their true side, and at most one broken per timeframe.
   for (const x of d.htfLevels) {
     assert.strictEqual(x.side, d.price > x.price ? 'below' : d.price < x.price ? 'above' : 'at');
-    if (!x.brokenAt) assert.ok(x.type === 'high' ? x.price >= Math.min(d.price, x.price) : true);
   }
   for (const tf of ['15m', '1h']) assert.ok(d.htfLevels.filter(x => x.name.startsWith(tf) && x.brokenAt).length <= 1, tf);
   assert.ok(Array.isArray(d.untested1hSwings));
@@ -242,4 +241,113 @@ test('distances are in R: 1R is a setup\'s own stop, else the reference stop (0.
   assert.strictEqual(c.stopPoints, 10);
   if (c.inTheWay) assert.ok(c.inTheWay.price < d.price && Math.abs(c.inTheWay.R - c.inTheWay.points / 10) < 0.011);
   assert.strictEqual(c.exit.trailActivateR, 2);
+});
+
+test('a setup\'s grade: A when the trend allows it, aligned, room past what it needs, confluence, VWAP on its side; B and C say why', () => {
+  const levels = [['round number', 27300], ['day low', 27250], ['day high', 27400]];
+  const base = { name: 'bos', direction: 'short', status: 'active', entryRef: 27325, stopDistance: 10, minRR: 1.5, exit: { trailActivateR: 2 }, mtf: { style: 'trend', shortAllowed: true, longAllowed: false }, confluence: { with: ['orb'], against: [] } };
+  const g = (r, ctx = {}) => B.candidate({ ...base, ...r }, 27325, levels, { alignment: { short: 'aligned', long: 'counter' }, vwapSide: 'below', ...ctx });
+  // Room: 27300 is 25 pts = 2.5R away, past the 2R trail activation: A.
+  const a = g({});
+  assert.deepStrictEqual([a.grade, a.inTheWay.name, a.inTheWay.R, a.needR], ['A', 'round number', 2.5, 2]);
+  // A level at 1.5R (stop 16.67): B, saying so.
+  const b = g({ stopDistance: 16.67 });
+  assert.strictEqual(b.grade, 'B');
+  assert.match(b.why.join('; '), /round number at 1\.5R, before the 2R it needs/);
+  // Each A condition missing makes it B; each C condition makes it C.
+  assert.strictEqual(g({ confluence: { with: [], against: [] } }).grade, 'B');
+  assert.strictEqual(g({}, { vwapSide: 'above' }).grade, 'B');
+  assert.strictEqual(g({}, { lunch: true }).grade, 'B');
+  assert.deepStrictEqual(g({}, { alignment: { short: 'mixed' } }).why, ['multi-timeframe read mixed']);
+  assert.strictEqual(g({ mtf: { style: 'trend', shortAllowed: false } }).grade, 'C');
+  assert.strictEqual(g({ stopDistance: 30 }).grade, 'C', 'a level within 1R');
+  assert.strictEqual(g({ confluence: { with: ['orb'], against: ['ema_cross'] } }).grade, 'C');
+  assert.strictEqual(g({}, { noEntry: true }).grade, 'C');
+  // A reversal strategy may fade the trend rule; nothing in the way means room enough.
+  assert.strictEqual(g({ mtf: { style: 'reversal', shortAllowed: false } }).grade, 'A');
+  assert.strictEqual(B.candidate({ ...base }, 27325, [], { alignment: { short: 'aligned' }, vwapSide: 'below' }).inTheWay, null);
+});
+
+test('the rendered briefing opens with a plain-language summary: price and 1R, trend rule, alignment, VWAP, news, room each side, each setup with its grade', () => {
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', confluence: { with: [], against: [] }, entryRef: 1, stopDistance: 10, minRR: 2, exit: { trailActivateR: 2 }, mtf: { style: 'trend', longAllowed: true } }];
+  const b = build(1300, null, { scan, blackouts: { items: [{ start: '2099-01-01T14:00:00Z', end: '2099-01-01T15:00:00Z', reason: 'CPI' }] } });
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  const summary = text.split('Detail by timeframe:')[0];
+  for (const re of [/^Summary \(NQ 3m, \d{2}:\d{2} ET, .+ until \d{2}:\d{2}\):$/m, /^- Price [\d.]+\. 1R = [\d.]+ pts \(0\.5 x ATR\(20\), the reference stop\)/m, /^- Trend rule: /m,
+    /^- Alignment: long \w+, short \w+\. Regime: /m, /^- VWAP \(\w+\): price (above|below|at), [\d.]+ ATR away/m, /^- News: next CPI at /m, /^- Room above \(R = the reference stop\): /m, /^- Room below \(R = the reference stop\): /m,
+    /^ {2}- orb long: grade [ABC] \((take it, let it run|only with a target before the level|skip)\): .+ Stop 10 pts \(its own 1R\); needs 2R of room; levels ahead in its R: /m]) assert.match(summary, re);
+  assert.match(B.renderBriefing(build(1300, null, { scan: null }), { now: new Date(b.closedAt) }), /^- Setups: unknown \(the scan failed this bar\): no rules entry this bar\.$/m);
+});
+
+test('every expiry holds past 240 hours of bars too: a reused m15 or h1 equals a fresh one (the read is taken at each section\'s own close)', () => {
+  // The fixture three times, a week apart (over 240 hours: the read's window slides), walked with the runner's 5000-bar window.
+  const week = 7 * 86400000;
+  const long = [0, 1, 2].flatMap(k => BARS.map(x => ({ ...x, t: new Date(Date.parse(x.t) + k * week).toISOString() })));
+  let prev = null;
+  const stale = {};
+  for (let n = long.length - 160; n <= long.length; n += 1) {
+    const bars = long.slice(Math.max(0, n - 5000), n);
+    const b = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, prev });
+    const f = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3 });
+    for (const s of ['m15', 'h1', 'day']) {
+      if (!prev || b.sections[s].version !== prev.sections[s].version) continue;
+      for (const [k, v] of Object.entries(b.sections[s].data)) if (JSON.stringify(v) !== JSON.stringify(f.sections[s].data[k])) stale[`${s}.${k}`] = (stale[`${s}.${k}`] || 0) + 1;
+    }
+    prev = b;
+  }
+  assert.deepStrictEqual(stale, {});
+});
+
+test('reuse is per contract: a roll to the next month recomputes every section', () => {
+  const prev = { ...build(1300), contractId: 'NQ:2026-06' };
+  const b = B.buildBriefing({ symbol: 'NQ', contractId: 'NQ:2026-09', bars: at(1301), minutes: 3, prev });
+  for (const name of B.SECTIONS) assert.strictEqual(b.sections[name].reason, 'new', name);
+  const same = B.buildBriefing({ symbol: 'NQ', contractId: 'NQ:2026-06', bars: at(1301), minutes: 3, prev });
+  assert.strictEqual(same.sections.day.version, prev.sections.day.version);
+});
+
+test('session windows: Asia runs 18:00 to 03:00 ET across midnight', () => {
+  for (const t of ['2026-06-01T22:03:00Z', '2026-06-02T03:30:00Z', '2026-06-02T06:59:00Z']) {
+    const w = B.sessionWindow(new Date(t));
+    assert.deepStrictEqual([w.name, w.until.toISOString()], ['asia', '2026-06-02T07:00:00.000Z'], t);
+  }
+  assert.strictEqual(B.sessionWindow(new Date('2026-06-02T07:00:00Z')).name, 'london');
+});
+
+test('news: the blackout in force or the next one; an unreadable file is unknown, never "no blackout"; a candidate in a blackout or no-entry window is blocked and C', () => {
+  const t = Date.parse(build(1300).closedAt);
+  const iso = m => new Date(t + m * 60000).toISOString();
+  const news = items => build(1300, null, { blackouts: items }).sections.m3.data.news;
+  assert.deepStrictEqual(news({ items: [{ start: iso(-5), end: iso(10), reason: 'CPI' }] }), { inBlackout: true, reason: 'CPI', until: iso(10) });
+  assert.deepStrictEqual(news({ items: [{ start: iso(30), end: iso(40), reason: 'FOMC' }] }), { inBlackout: false, next: { reason: 'FOMC', start: iso(30), inMinutes: 30 } });
+  assert.deepStrictEqual(news({ items: [] }), { inBlackout: false, next: null });
+  assert.match(news({ items: [], error: 'EACCES' }).error, /can't be read \(EACCES\): the order gate refuses entries/);
+  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', entryRef: 1, stopDistance: 10, mtf: { style: 'trend', longAllowed: true }, confluence: { with: ['bos'], against: [] }, exit: { trailActivateR: 2 } }];
+  const c = build(1300, null, { scan, blackouts: { items: [{ start: iso(-5), end: iso(10), reason: 'CPI' }] } }).sections.m3.data.candidates[0];
+  assert.deepStrictEqual([c.blocked, c.grade], ['news blackout', 'C']);
+  assert.ok(c.why.includes('news blackout'));
+  const lv = [['round number', 2000]];
+  assert.strictEqual(B.candidate({ ...scan[0] }, 1000, lv, { noEntry: true, alignment: { long: 'aligned' }, vwapSide: 'above' }).blocked, 'no-entry window');
+});
+
+test('overnight levels are swept only in RTH (the range is final at 09:30 ET); nearest levels are ordered and merged within a tick', () => {
+  // Every briefing outside RTH: no overnight sweep.
+  for (let n = 300; n < BARS.length; n += 23) {
+    const d = build(n).sections.m3.data;
+    if (d.vwap.applies !== 'rth') assert.ok(!d.sweeps.some(x => /^overnight/.test(x.name)), `bar ${n}`);
+    const { above, below } = d.nearestLiquidity;
+    for (let k = 1; k < below.length; k += 1) assert.ok(below[k].price <= below[k - 1].price - 0.25, `below ordered and distinct, bar ${n}`);
+    for (let k = 1; k < above.length; k += 1) assert.ok(above[k].price >= above[k - 1].price + 0.25, `above ordered and distinct, bar ${n}`);
+  }
+});
+
+test('a candidate keeps its target (a level target\'s distance, or targetR x its stop) and its own levels ahead in its own R', () => {
+  const base = { name: 'crt_1h', direction: 'short', status: 'active', entryRef: 27325, stopDistance: 62.08, minRR: 2, targetDistance: 129.75, exit: { target: 'range_low', maxBars: 40 }, mtf: { style: 'reversal' }, confluence: { with: [], against: [] } };
+  const c = B.candidate(base, 27325, [['opening range high', 27356.75], ['round number', 27300], ['day low', 27250]], { alignment: { short: 'mixed' }, vwapSide: 'below' });
+  assert.deepStrictEqual(c.target, { level: 'range_low', points: 129.75, R: 2.09 });
+  assert.strictEqual(c.needR, 2.09, 'it needs room to its target');
+  assert.deepStrictEqual(c.ahead.map(x => [x.name, x.R]), [['round number', 0.4], ['day low', 1.21]]);
+  assert.deepStrictEqual(c.inTheWay, c.ahead[0]);
+  const t = B.candidate({ ...base, targetDistance: undefined, exit: { targetR: 3 } }, 27325, [], {});
+  assert.deepStrictEqual(t.target, { level: null, points: 186.24, R: 3 });
 });

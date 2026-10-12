@@ -55,11 +55,13 @@ never paste a long `get_bars` reply into a file.
    volatility, metrics) on each timeframe, then add what the indicators say
    about its quality (ADX slope, EMA 9/20/50 alignment, SuperTrend stability,
    Keltner position). Flag disagreement between timeframes.
-4. Strategies: `strategies_scan` on the 3m file (`{"bars": "<3m file>",
-   "symbol": "<SYMBOL>"}`). For every result with a direction,
-   `strategies_show` the strategy and check its context filter and skip rules
-   against your numbers. A signal that fails a rule is reported as "skipped:
-   <rule>".
+4. Strategies: the briefing's `m3` `candidates` (each with its grade, its
+   stop, and the levels ahead in its own R); only without a current
+   briefing, `strategies_scan` on the 3m file (`{"bars": "<3m file>",
+   "symbol": "<SYMBOL>"}`). For every candidate, `strategies_show` the
+   strategy and check its context filter and skip rules against the
+   briefing's numbers (`m3` `context`, `participation`, `vwap`, `bar`). A
+   signal that fails a rule is reported as "skipped: <rule>".
 
 ## Output (keep it under 250 words)
 
