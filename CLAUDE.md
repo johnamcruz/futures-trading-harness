@@ -14,10 +14,11 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 
 ## Layout
 
-- `agents/` (canonical roles, Claude format: `name`, `description`, `tools`, `skills`, `model`).
-  Only `trade-executor` may hold order-writing MCP tools; a test enforces it. `skills` lists the
-  skills the role's body says to load (a test keeps them equal); opencode's generated roles carry
-  them in full in their prompt.
+- `agents/` (canonical roles, Claude format: `name`, `description`, `tools`, `model`, plus
+  `role-skills`). Only `trade-executor` may hold order-writing MCP tools; a test enforces it.
+  `role-skills` lists the skills the role's body says to load (a test keeps them equal); no
+  harness interprets the key: opencode's generated roles carry those skills in full in their
+  prompt, and the other adapters load them as the body says.
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
   `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
   `commands/` are thin shims that say "Use the `<skill>` skill".

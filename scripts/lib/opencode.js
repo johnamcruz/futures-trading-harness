@@ -104,16 +104,20 @@ function agentPermission(tools) {
   return permission;
 }
 
+/** The body's "Load the skill(s) `a`, ... and `b`." sentence (the one `role-skills` repeats). */
+const LOAD_SENTENCE = /Load the\s+skills?\s+(`[a-z-]+`(?:,?\s+(?:and\s+)?`[a-z-]+`)*)(\s+first)?\./;
+
 /**
- * A role's prompt: its body, then its skills in full (frontmatter `skills`, skillDocs), so the role has them
- * every call without spending a turn per skill load or relying on the model to load them; they are part of the
- * role's fixed prompt prefix, which a local model server caches across calls.
+ * A role's prompt: its body, with its "Load the skills" sentence saying they are below, then its skills in full
+ * (frontmatter `role-skills`, skillDocs), so the role has them every call without spending a turn per skill load
+ * or relying on the model to load them; they are part of the role's fixed prompt prefix, which a local model
+ * server caches across calls.
  */
 function agentPrompt(agent) {
   const docs = agent.skillDocs || [];
   if (!docs.length) return `${agent.body}\n`;
   return [
-    agent.body,
+    agent.body.replace(LOAD_SENTENCE, (_m, list) => `Your skills ${list} are below, already loaded (Your skills, at the end).`),
     '',
     '## Your skills (already loaded)',
     '',

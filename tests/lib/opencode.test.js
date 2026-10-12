@@ -46,6 +46,8 @@ test('the generated config: the harness\'s two MCP servers from FTH_ROOT, its sk
   const parsed = JSON.parse(expectedFiles(ROOT)['workspace/opencode.json']);
   for (const a of Object.values(parsed.agent)) if (a.prompt) a.prompt = a.prompt.split('\n## Your skills (already loaded)')[0];
   const text = JSON.stringify(parsed);
+  // The whole file, embedded skills included, never names this machine's checkout.
+  assert.ok(!expectedFiles(ROOT)['workspace/opencode.json'].includes(ROOT));
   assert.doesNotMatch(text.replace(oc.SCHEMA, ''), /https?:\/\/|\/Users\/|\/home\/|127\.0\.0\.1|localhost/);
   assert.ok(!text.includes(ROOT));
   for (const a of [...oc.BUILTIN_AGENTS, 'build']) assert.deepStrictEqual(config.agent[a], { disable: true }, `${a} disabled`);
@@ -113,7 +115,9 @@ test('roles: everything denied, then their own tools; only trade-executor holds 
     const entry = config.agent[a.name];
     assert.strictEqual(entry.mode, 'subagent');
     assert.strictEqual(entry.description, a.description);
-    assert.ok(entry.prompt.includes(a.body.slice(0, 200)), `${a.name}: its instructions are the prompt`);
+    // Its instructions are the prompt: its body (the skills sentence pointing below) and its skills.
+    assert.strictEqual(entry.prompt, oc.agentPrompt({ ...a, skillDocs: require('../../scripts/lib/harness-sync').agentSkills(ROOT, a) }), `${a.name}: its instructions are the prompt`);
+    assert.ok(entry.prompt.includes(a.body.slice(-200)), `${a.name}: its body in full`);
     assert.deepStrictEqual(Object.entries(entry.permission)[0], ['*', 'deny'], `${a.name}: denied first`);
     // A role's rules come after the session's: they decide alone.
     const role = [...rules(config.permission), ...rules(entry.permission)];
@@ -201,13 +205,16 @@ test('each role\'s prompt carries its declared skills in full, so a role never d
   const { agentSkills } = require('../../scripts/lib/harness-sync');
   const generated = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
   for (const a of agents) {
-    assert.ok(a.skills.length > 0, `agents/${a.file} declares its skills (frontmatter skills)`);
+    assert.ok(a.skills.length > 0, `agents/${a.file} declares its skills (frontmatter role-skills)`);
     // The declared list is the one its body tells other harnesses to load: they can't drift apart.
     const said = /Load the\s+skills?\s+([^.]*)\./.exec(a.body.replace(/\s+/g, ' '));
     assert.ok(said, `agents/${a.file} says which skills to load`);
     assert.deepStrictEqual([...said[1].matchAll(/`([a-z-]+)`/g)].map(m => m[1]).sort(), [...a.skills].sort(), `agents/${a.file}`);
     const prompt = generated.agent[a.name].prompt;
-    assert.ok(prompt.startsWith(a.body), `${a.name}: the role's own text first`);
+    // The role's own text first, its "Load the skills" sentence saying they are below: nothing tells it to load them again.
+    assert.ok(prompt.startsWith(a.body.slice(0, 40)), `${a.name}: the role's own text first`);
+    assert.doesNotMatch(prompt, /Load the\s+skills?\b/, `${a.name}`);
+    assert.match(prompt, /Your skills `[a-z-]+`[^.]* are below, already loaded/, `${a.name}`);
     assert.match(prompt, /## Your skills \(already loaded\)[^]*don't load them again with the skill tool/);
     for (const d of agentSkills(ROOT, a)) {
       assert.ok(prompt.includes(`<skill name="${d.name}">\n${d.body}\n</skill>`), `${a.name}: ${d.name} in full`);

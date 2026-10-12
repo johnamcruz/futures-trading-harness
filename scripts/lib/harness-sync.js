@@ -41,12 +41,13 @@ function readSorted(dir, suffix) {
 function loadAgents(root) {
   return readSorted(path.join(root, 'agents'), '.md').map(f => {
     const { data, body } = parseFrontmatter(fs.readFileSync(path.join(root, 'agents', f), 'utf8'));
-    const skills = Array.isArray(data.skills) ? data.skills.map(String) : [];
+    // `role-skills`: the skills the role's body says to load (a key no harness interprets; opencode's roles embed them).
+    const skills = Array.isArray(data['role-skills']) ? data['role-skills'].map(String) : [];
     return { file: f, ...data, tools: String(data.tools || '').split(',').map(t => t.trim()).filter(Boolean), skills, body: body.trim() };
   });
 }
 
-/** An agent's declared skills (frontmatter `skills`) as { name, body }, from skills/<name>/SKILL.md; a missing one throws. */
+/** An agent's declared skills (frontmatter `role-skills`) as { name, body }, from skills/<name>/SKILL.md; a missing one throws. */
 function agentSkills(root, agent) {
   return agent.skills.map(name => {
     const file = path.join(root, 'skills', name, 'SKILL.md');

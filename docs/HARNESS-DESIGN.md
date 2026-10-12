@@ -67,7 +67,11 @@ read-only calls.
 and names no provider or model: those stay in the user's own opencode config.
 It registers `broker` (the gateway) and `harness` as local MCP servers started
 from `{env:FTH_ROOT}` (unset, they don't start), which inherit opencode's
-environment. Permissions follow opencode's rule (the last matching rule wins;
+environment. Each role's prompt is its agent body followed by the skills its
+`role-skills` frontmatter lists, in full (`agentPrompt`): the role has them
+every call without a skill-load turn, as part of its fixed prompt prefix that
+a local model server caches, and its "Load the skills" sentence says they are
+below. Permissions follow opencode's rule (the last matching rule wins;
 headless, anything not allowed is refused): the session denies everything,
 then allows the broker and harness tools (orders through the gateway), skills,
 the harness's roles by name (`task`), reading (never a `.env`), and web
