@@ -41,6 +41,7 @@
  * its project from PWD, not the process's working directory.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
+ *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs)
  *   agentConfig(agent)           a role as an opencode agent entry
  *   workspaceConfig(agents)      workspace/opencode.json's object
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT)
@@ -103,11 +104,30 @@ function agentPermission(tools) {
   return permission;
 }
 
+/**
+ * A role's prompt: its body, then its skills in full (frontmatter `skills`, skillDocs), so the role has them
+ * every call without spending a turn per skill load or relying on the model to load them; they are part of the
+ * role's fixed prompt prefix, which a local model server caches across calls.
+ */
+function agentPrompt(agent) {
+  const docs = agent.skillDocs || [];
+  if (!docs.length) return `${agent.body}\n`;
+  return [
+    agent.body,
+    '',
+    '## Your skills (already loaded)',
+    '',
+    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. Read them here; don't load them again with the skill tool.`,
+    '',
+    ...docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']),
+  ].join('\n');
+}
+
 function agentConfig(agent) {
   return {
     description: agent.description,
     mode: 'subagent',
-    prompt: `${agent.body}\n`,
+    prompt: agentPrompt(agent),
     permission: agentPermission(agent.tools),
   };
 }
@@ -256,4 +276,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
+module.exports = { SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };

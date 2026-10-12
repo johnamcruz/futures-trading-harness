@@ -42,7 +42,10 @@ test('the generated config: the harness\'s two MCP servers from FTH_ROOT, its sk
   assert.strictEqual(config.autoupdate, false);
   assert.strictEqual(config.share, 'disabled');
   // Nothing machine-specific: no absolute path, no URL but the schema's.
-  const text = expectedFiles(ROOT)['workspace/opencode.json'];
+  // (The roles' embedded skills are the canonical skills, shipped as they are: their example paths are placeholders.)
+  const parsed = JSON.parse(expectedFiles(ROOT)['workspace/opencode.json']);
+  for (const a of Object.values(parsed.agent)) if (a.prompt) a.prompt = a.prompt.split('\n## Your skills (already loaded)')[0];
+  const text = JSON.stringify(parsed);
   assert.doesNotMatch(text.replace(oc.SCHEMA, ''), /https?:\/\/|\/Users\/|\/home\/|127\.0\.0\.1|localhost/);
   assert.ok(!text.includes(ROOT));
   for (const a of [...oc.BUILTIN_AGENTS, 'build']) assert.deepStrictEqual(config.agent[a], { disable: true }, `${a} disabled`);
@@ -192,4 +195,27 @@ test('denyTools: the tools denied for the session, the head trader and every rol
 
 test('the committed workspace/opencode.json is the generated one', () => {
   assert.strictEqual(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'), expectedFiles(ROOT)['workspace/opencode.json']);
+});
+
+test('each role\'s prompt carries its declared skills in full, so a role never decides without them', () => {
+  const { agentSkills } = require('../../scripts/lib/harness-sync');
+  const generated = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
+  for (const a of agents) {
+    assert.ok(a.skills.length > 0, `agents/${a.file} declares its skills (frontmatter skills)`);
+    // The declared list is the one its body tells other harnesses to load: they can't drift apart.
+    const said = /Load the\s+skills?\s+([^.]*)\./.exec(a.body.replace(/\s+/g, ' '));
+    assert.ok(said, `agents/${a.file} says which skills to load`);
+    assert.deepStrictEqual([...said[1].matchAll(/`([a-z-]+)`/g)].map(m => m[1]).sort(), [...a.skills].sort(), `agents/${a.file}`);
+    const prompt = generated.agent[a.name].prompt;
+    assert.ok(prompt.startsWith(a.body), `${a.name}: the role's own text first`);
+    assert.match(prompt, /## Your skills \(already loaded\)[^]*don't load them again with the skill tool/);
+    for (const d of agentSkills(ROOT, a)) {
+      assert.ok(prompt.includes(`<skill name="${d.name}">\n${d.body}\n</skill>`), `${a.name}: ${d.name} in full`);
+    }
+  }
+  // The head trader's prompt is opencode's own plus workspace/AGENTS.md: it loads its skills with the tool (the gate checks).
+  assert.strictEqual(generated.agent[oc.HEAD_AGENT].prompt, undefined);
+  // A role without skills keeps its body alone; an unknown skill is an error, never a silent gap.
+  assert.strictEqual(oc.agentPrompt({ body: 'Body.' }), 'Body.\n');
+  assert.throws(() => agentSkills(ROOT, { file: 'x.md', skills: ['no-such-skill'] }), /skill "no-such-skill" has no skills\/no-such-skill\/SKILL\.md/);
 });
