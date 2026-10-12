@@ -29,6 +29,8 @@ test('env-config: the account, strategies and gate come from the policy strategy
   for (const k of ['account', 'strategies', 'gate']) assert.throws(() => build({ ...base, [k]: 'x' }), new RegExp(`${k}: comes from`));
   assert.throws(() => build({ ...base, strategy: 'orb' }), /needs a policy strategy/);
   assert.throws(() => build({ ...base, symbol: 'CL' }), /trades .*, not CL/);
+  // Keyed by the mini (NQ): its rules strategies list the micro and scan it, as the live runner's scan does.
+  assert.deepStrictEqual(build({ ...base, symbol: 'NQ', data: { NQ: 'bars.csv' } }).meta.symbols, ['NQ']);
 });
 
 test('env-config: the engine\'s live fills are what rl/fth_rl/pipeline.py FILLS_VERSION names (change both together)', () => {

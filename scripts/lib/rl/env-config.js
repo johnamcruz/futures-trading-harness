@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { validateBacktestConfig, barsAt } = require('../backtest/run');
 const { DEFAULTS: ENGINE_DEFAULTS } = require('../backtest/engine');
-const { loadStrategies } = require('../trading/strategies');
+const { loadStrategies, tradesRoot } = require('../trading/strategies');
 const { accountNamed } = require('../trading/accounts');
 const { loadConfig } = require('../trading/config');
 const { familyOf } = require('../trading/contracts');
@@ -84,9 +84,9 @@ function envFromConfig(cfg, { root, baseDir, env = process.env, log = () => {}, 
   }
   const { strategy, components } = policyStrategy(root, cfg.strategy, env);
   const symbols = symbolsOf(cfg, strategy);
-  // The engine scans a market with the strategies that list its root: the data is keyed by what they list (the micro).
+  // The engine scans a market with the rules strategies that trade its root (either leg of a family they list), as live does.
   for (const sym of symbols) {
-    if (!components.some(c => c.instruments.includes(sym))) throw new Error(`symbols: none of ${strategy.name}'s strategies scans ${sym}; key the data by the root they list (the micro, e.g. MNQ for NQ)`);
+    if (!components.some(c => tradesRoot(c, sym))) throw new Error(`symbols: none of ${strategy.name}'s strategies scans ${sym} (their instruments list neither it nor the other leg of its family)`);
   }
   const contracts = cfg.contracts ?? strategy.contracts ?? 'auto';
   if (!CONTRACT_MODES.includes(contracts)) throw new Error(`contracts: ${CONTRACT_MODES.join(' | ')}`);

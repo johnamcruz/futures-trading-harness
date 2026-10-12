@@ -31,7 +31,7 @@
  */
 
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan } = require('../trading/strategies');
+const { loadStrategies, scan, tradesRoot } = require('../trading/strategies');
 const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
@@ -146,7 +146,7 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const s = strategies.find(x => x.name === name);
   if (!s) throw new Error(`unknown strategy "${name}" (known: ${strategies.map(x => x.name).join(', ')})`);
   if (!s.valid) throw new Error(`strategies/${name}/STRATEGY.md is invalid (${s.errors[0]})`);
-  if (!s.instruments.includes(root)) throw new Error(`${name} does not trade ${root} (instruments: ${s.instruments.join(', ')})`);
+  if (!tradesRoot(s, root)) throw new Error(`${name} does not trade ${root} (instruments: ${s.instruments.join(', ')}${s.signal === 'rules' ? ', with the micro or mini of each' : ''})`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
   const bars = readBarsArg(file);
   const lastBar = checkBars(bars, s.timeframe, now, c.env);

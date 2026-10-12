@@ -78,6 +78,28 @@ test('order_plan: units follow the instrument (MES $1.25 a tick on the same dist
   assert.strictEqual(r.plan.riskUsd, 22.5);
 });
 
+test('order_plan: a rules strategy listing the micro plans its mini (NQ for MNQ) in the mini\'s own dollars and specs', () => {
+  const { file, home, ctx } = setup();
+  // bos lists MNQ: NQ is the same index on the same prices, so the same 18-tick stop, at NQ's $5.00 a tick.
+  const r = plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long', accountId: 7 }, ctx);
+  assert.match(r.text, /^bos long: 1 NQ at market \(entry ref 27427\.50\) \| stop 27423\.00, .*18 ticks \(\$90\.00\/NQ contract\)/);
+  assert.strictEqual(r.args.contractId, 'NQ');
+  assert.strictEqual(r.plan.riskUsd, 90);
+  assert.match(r.args.rationale, /^setup:bos long .*1 NQ risks \$90\.00$/);
+  // The mini's own broker specs: MNQ's recorded doesn't do for NQ.
+  const bare = tmpDir();
+  recordBrokerSpecs(bare, { roots: ['MNQ'] });
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, { ...ctx, env: { FTH_HOME: bare } }), /no tick specs from the broker for NQ yet: .*; no order/);
+  // risk.max_risk_usd in the mini's dollars: $9 fits one MNQ, never one NQ ($90).
+  const root = path.join(home, 'plugin');
+  fs.mkdirSync(path.join(root, 'strategies', 'bos'), { recursive: true });
+  const doc = fs.readFileSync(path.join(ROOT, 'strategies', 'bos', 'STRATEGY.md'), 'utf8').replace('  min_rr: 1.5\n', '  min_rr: 1.5\n  max_risk_usd: 9\n');
+  fs.writeFileSync(path.join(root, 'strategies', 'bos', 'STRATEGY.md'), doc);
+  const capped = { ...ctx, root };
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'bos', side: 'long' }, capped).plan.size, 1);
+  assert.throws(() => plan({ file, symbol: 'NQ', strategy: 'bos', side: 'long' }, capped), /one NQ at a 18-tick stop risks \$90\.00, over bos's risk\.max_risk_usd \$9: no size fits/);
+});
+
 test('order_plan: the caller chooses; it refuses, with the reason, rather than pick', () => {
   const { file, ctx } = setup();
   const refuse = (args, why) => assert.throws(() => plan({ file, symbol: 'MNQ', ...args }, ctx), why);
@@ -87,7 +109,9 @@ test('order_plan: the caller chooses; it refuses, with the reason, rather than p
   refuse({ strategy: 'orb', side: 'long' }, /orb is not a candidate on the last closed bar \(no rule set fired .*\); no order/);
   refuse({ strategy: 'nope', side: 'long' }, /unknown strategy "nope"/);
   refuse({ strategy: 'bos', side: 'long', accountId: 1.5 }, /accountId: the broker account's id/);
-  assert.throws(() => plan({ file, symbol: 'ES', strategy: 'bos', side: 'long' }, ctx), /bos does not trade ES/);
+  // A contract outside every family bos lists (MNQ, MES, MYM, M2K): refused, its family named too.
+  assert.throws(() => plan({ file, symbol: 'GC', strategy: 'bos', side: 'long' }, ctx), /bos does not trade GC \(instruments: MNQ, MES, MYM, M2K, with the micro or mini of each\)/);
+  assert.throws(() => plan({ file, symbol: 'CL', strategy: 'bos', side: 'long' }, ctx), /bos does not trade CL/);
   assert.throws(() => plan({ file, symbol: 'mnq\n', strategy: 'bos', side: 'long' }, ctx), /symbol: a contract root/);
   assert.throws(() => plan({ symbol: 'MNQ', strategy: 'bos', side: 'long' }, ctx), /needs a bars file/);
   // A manual strategy's trigger and stop are the model's, from STRATEGY.md: nothing to calculate.

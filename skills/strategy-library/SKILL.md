@@ -95,8 +95,12 @@ as candidates when in session; you evaluate their trigger from the body.
 ### What the code enforces (order gate and MCP gateway)
 
 Live entries are blocked unless `setup:<name>` names a valid strategy with
-`status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. `paper` strategies can only be paper-traded. A rules strategy
+`status: active`, the contract root is in `instruments` (for a rules strategy,
+either leg of a micro/mini family listed there: listing MNQ, it also trades NQ;
+listing MES, ES; and so on), and the time is inside
+`sessions`. On the other leg every other check uses that contract: its broker
+tick specs, and its size and `risk.max_risk_usd` in its own dollars (one NQ at
+a 40-tick stop risks $200.00; one MNQ, $20.00). `paper` strategies can only be paper-traded. A rules strategy
 enters only on its own trigger (`trigger-fired`): the signal record must show
 it fired on that side on a bar that closed less than 10 minutes ago (the
 runner records every bar; interactively `strategies_scan` with `record: true`,

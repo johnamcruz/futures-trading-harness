@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { compileRules } = require('../../scripts/lib/trading/rules');
-const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, tradesRoot, recentSignals } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { run } = require('../../scripts/strategies');
 const { tmpDir } = require('../helpers');
@@ -194,6 +194,54 @@ test('a rules strategy with no short rules cannot be used to sell into an entry'
   const now = new Date(Date.UTC(2026, 9, 7, 15, 0));
   assert.match(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'sell'), /no short rules/);
   assert.strictEqual(checkStrategyForOrder([s], 'longonly', 'MNQ', now, 'buy'), null);
+});
+
+test('tradesRoot: a rules strategy trades both legs of a micro/mini family it lists; nothing outside; manual and policy match exactly', () => {
+  const rules = list => ({ signal: 'rules', instruments: list });
+  for (const r of ['MNQ', 'NQ', 'nq', 'MES', 'ES']) assert.strictEqual(tradesRoot(rules(['MNQ', 'MES']), r), true, r);
+  for (const r of ['MYM', 'YM', 'GC', 'MGC', 'CL', 'MCL', '', null, undefined, 'MNQX', 'CON.F.US.ENQ.Z25']) assert.strictEqual(tradesRoot(rules(['MNQ', 'MES']), r), false, String(r));
+  // Listing the mini: the micro too. Silver's pair (SIL/SI) is a family as well.
+  assert.strictEqual(tradesRoot(rules(['NQ']), 'MNQ'), true);
+  assert.strictEqual(tradesRoot(rules(['SIL']), 'SI'), true);
+  assert.strictEqual(tradesRoot(rules(['GC']), 'MGC'), true);
+  assert.strictEqual(tradesRoot(rules(['GC']), 'SI'), false);
+  // A root in no family matches only itself.
+  assert.strictEqual(tradesRoot(rules(['CL']), 'CL'), true);
+  assert.strictEqual(tradesRoot(rules(['CL']), 'MCL'), false);
+  // Manual and policy strategies: exactly what they list.
+  assert.strictEqual(tradesRoot({ signal: 'manual', instruments: ['MNQ'] }, 'NQ'), false);
+  assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ'] }, 'NQ'), false);
+  assert.strictEqual(tradesRoot({ signal: 'policy', instruments: ['MNQ', 'NQ'] }, 'NQ'), true);
+  assert.strictEqual(tradesRoot({ signal: 'rules' }, 'MNQ'), false, 'no instruments: nothing');
+});
+
+test('order check: a rules strategy listing the micro takes its mini; a contract outside every listed family is refused', () => {
+  const s = { name: 'micro', valid: true, status: 'active', signal: 'rules', instruments: ['MNQ', 'MES'], sessions: [], compiledRules: { long: [{}], short: [{}] } };
+  const now = new Date(Date.UTC(2026, 9, 7, 15, 0));
+  for (const r of ['MNQ', 'NQ', 'MES', 'ES']) assert.strictEqual(checkStrategyForOrder([s], 'micro', r, now, 'buy'), null, r);
+  for (const r of ['RTY', 'M2K', 'GC', 'CL']) {
+    assert.strictEqual(checkStrategyForOrder([s], 'micro', r, now, 'buy'), `setup:micro does not trade ${r} (instruments: MNQ, MES, with the micro or mini of each).`, r);
+  }
+  // The other checks still apply on the mini: status, sides.
+  assert.match(checkStrategyForOrder([{ ...s, status: 'paper' }], 'micro', 'NQ', now, 'buy'), /status "paper"/);
+  assert.match(checkStrategyForOrder([{ ...s, compiledRules: { long: [{}], short: [] } }], 'micro', 'NQ', now, 'sell'), /no short rules/);
+  // A manual strategy still matches exactly.
+  assert.match(checkStrategyForOrder([{ ...s, signal: 'manual', compiledRules: null }], 'micro', 'NQ', now, 'buy'), /^setup:micro does not trade NQ \(instruments: MNQ, MES\)\.$/);
+});
+
+test('scan and recent signals: a mini\'s bars are scanned by the rules strategies listing its micro, with the micro\'s results', () => {
+  const b = Array.from({ length: 120 }, (_, i) => ({ t: new Date(Date.UTC(2026, 9, 7, 13, i * 3)).toISOString(), o: 100 + Math.sin(i / 4) * 3, h: 102 + Math.sin(i / 4) * 3, l: 98 + Math.sin(i / 4) * 3, c: 100 + Math.sin((i + 1) / 4) * 3, v: 10 }));
+  const { strategies } = loadStrategies(ROOT, {});
+  const at = new Date(Date.parse(b.at(-1).t) + 180000);
+  const strip = rs => rs.map(r => JSON.stringify(r));
+  const micro = scan(strategies, b, { symbol: 'MNQ', now: at });
+  const mini = scan(strategies, b, { symbol: 'NQ', now: at });
+  assert.ok(micro.some(r => r.name === 'bos'), 'bos lists MNQ');
+  // The policy strategies list their legs; the rules ones come in through the family.
+  assert.deepStrictEqual(strip(mini), strip(micro));
+  assert.deepStrictEqual(scan(strategies, b, { symbol: 'GC', now: at }), [], 'no bundled strategy lists gold');
+  assert.deepStrictEqual(recentSignals(strategies, b, { symbol: 'NQ', count: 30 }), recentSignals(strategies, b, { symbol: 'MNQ', count: 30 }));
+  assert.ok(recentSignals(strategies, b, { symbol: 'GC', count: 3 }).every(x => x.fired.length === 0));
 });
 
 test('timeframes, empty sessions, and zero ATR stops are rejected', () => {

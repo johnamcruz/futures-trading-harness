@@ -161,7 +161,8 @@ test('env-config: each market once, traded by the strategy, scanned by its strat
   assert.throws(() => build({ symbols: ['MNQ', 'MNQ'], data }), /MNQ and MNQ are the same market/);
   assert.throws(() => build({ symbols: ['MNQ', 'NQ'], data }), /MNQ and NQ are the same market/);
   assert.throws(() => build({ symbols: ['MNQ', 'CL'], data }), /trades .*, not CL/);
-  assert.throws(() => build({ symbols: ['NQ'], data }), /none of prop_portfolio's strategies scans NQ; key the data by the root they list/);
+  // Keyed by the mini: its strategies list the micro and scan the mini by family, as the live scan does.
+  assert.deepStrictEqual(build({ symbols: ['NQ'], data }).meta.symbols, ['NQ']);
   assert.throws(() => build({ symbols: ['MNQ', 'MES'], data: { MNQ: 'bars.csv' } }), /data\.MES/);
 });
 

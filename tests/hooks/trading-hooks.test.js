@@ -161,6 +161,47 @@ test('order gate: a rules strategy entry needs its own trigger in the signal rec
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate wiring: a rules strategy listing the micro trades its mini (NQ for MNQ), checked in the mini\'s own specs and dollars', () => {
+  const at = m => minutesAgo(m, new Date(TEST_NOW));
+  const planFor = contractId => [{ ts: at(5), kind: 'plan', contractId, text: 'plan' }];
+  // A rules strategy listing MNQ only, capped at $100 a trade.
+  const extra = path.join(tmpDir(), 'strategies');
+  fs.mkdirSync(path.join(extra, 'minicap'), { recursive: true });
+  fs.writeFileSync(path.join(extra, 'minicap', 'STRATEGY.md'), [
+    '---', 'name: minicap', 'description: Test rules strategy listing MNQ only, an EMA cross with a 100 dollar per-trade risk cap.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - ema(9) crosses_above ema(20)',
+    'risk:', '  stop: atr:0.5', '  min_rr: 2', '  max_risk_usd: 100', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  const homeFor = (opts = {}) => trendHome(tmpDir(), { closedAt: '2026-10-07T14:27:00.000Z', fired: [{ name: 'crossing', direction: 'long' }, { name: 'minicap', direction: 'long' }], ...opts });
+  const run = (contractId, rationale, { size = 1, ticks = 40, home = homeFor(), env: more = {} } = {}) => {
+    const { env } = setup(planFor(contractId), { FTH_HOME: home, FTH_STRATEGIES_DIRS: extra, ...more });
+    return gate(orderPayload({ ...ORDER, contractId, size, stopLossBracket: { ticks, type: 'stop' }, rationale }), env);
+  };
+  // crossing lists MNQ: an NQ entry passes every check, on the family's (MNQ's) trigger and trend records.
+  const nq = run('NQ', 'setup:crossing long, stop 21480, target 21540');
+  assert.strictEqual(nq.code, 0, nq.stderr);
+  // A contract outside every family it lists: refused.
+  for (const c of ['ES', 'MES', 'GC', 'CL']) {
+    const r = run(c, 'setup:crossing long, stop 21480, target 21540');
+    assert.strictEqual(r.code, 2, c);
+    assert.match(r.stderr, new RegExp(`\\[strategy\\] setup:crossing does not trade ${c} \\(instruments: MNQ, with the micro or mini of each\\)`));
+  }
+  // The manual anytime (MNQ only) still matches exactly: no NQ.
+  assert.match(run('NQ', 'setup:anytime long, stop 21480, target 21540').stderr, /\[strategy\] setup:anytime does not trade NQ \(instruments: MNQ\)/);
+  // max_risk_usd in NQ's dollars: 40 ticks x $5 = $200 over $100 (one MNQ at 40 ticks is $20, and passes).
+  assert.strictEqual(run('MNQ', 'setup:minicap long, stop 21480, target 21540', { size: 5 }).code, 0);
+  const big = run('NQ', 'setup:minicap long, stop 21480, target 21540');
+  assert.strictEqual(big.code, 2);
+  assert.match(big.stderr, /\[max-risk\] risk \$200\.00 \(size 1 x 40-tick stop x \$5\.00 a tick on NQ\) over setup:minicap's risk\.max_risk_usd \$100\.00/);
+  assert.strictEqual(run('NQ', 'setup:minicap long, stop 21480, target 21540', { ticks: 20 }).code, 0, '20 ticks x $5 = $100: at the cap');
+  // NQ's own broker specs: MNQ's recorded doesn't do.
+  const microOnly = homeFor({ specs: false });
+  recordBrokerSpecs(microOnly, { roots: ['MNQ'] });
+  const nospec = run('NQ', 'setup:crossing long, stop 21480, target 21540', { home: microOnly });
+  assert.strictEqual(nospec.code, 2);
+  assert.match(nospec.stderr, /\[contract-specs\] .*NQ/);
+});
+
 test('order gate: with a Claude transcript, an entry needs the trading skills loaded in the session', () => {
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });

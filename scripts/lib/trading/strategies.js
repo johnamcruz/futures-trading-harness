@@ -21,6 +21,7 @@ const { normalizeBars } = require('./indicators');
 const { compileRules, compileExpression } = require('./rules');
 const { TAGS: REGIME_TAGS } = require('./regime');
 const { createEvaluator, inSessions, exitPlan } = require('./evaluator');
+const { familyOf } = require('./contracts');
 
 const STATUSES = ['active', 'paper', 'disabled'];
 // `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
@@ -331,11 +332,28 @@ function loadStrategies(pluginRoot, env = process.env) {
     const { familyRoot } = require('./contracts');
     for (const r of s.instruments) {
       const ok = s.strategies.some(n => byName.get(n) && (byName.get(n).instruments || []).some(x => familyRoot(x) === familyRoot(r)));
-      if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro in their instruments)`);
+      if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro or mini in their instruments)`);
     }
     if (errs.length) Object.assign(s, { valid: false, errors: errs });
   }
   return { strategies: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)), problems };
+}
+
+/**
+ * Does strategy `s` trade contract root `root`? A root its instruments list
+ * does. A rules strategy also trades the other leg of a micro/mini family it
+ * lists (contracts.js FAMILIES): listing MNQ, it trades NQ too, on the same
+ * prices; the order's own contract still sets its tick value, size, and risk.
+ * Manual and policy strategies match their list exactly (a policy strategy
+ * lists each leg it may size into).
+ */
+function tradesRoot(s, root) {
+  const r = String(root || '').toUpperCase();
+  const list = (s && Array.isArray(s.instruments)) ? s.instruments : [];
+  if (!r) return false;
+  if (list.includes(r)) return true;
+  const fam = s.signal === 'rules' ? familyOf(r) : null;
+  return Boolean(fam) && (list.includes(fam.micro) || list.includes(fam.mini));
 }
 
 /**
@@ -352,7 +370,7 @@ function scan(strategies, bars, { symbol, now = null } = {}) {
   const results = [];
   for (const s of strategies) {
     if (!s.valid || s.status === 'disabled') continue;
-    if (root && !s.instruments.includes(root)) continue;
+    if (root && !tradesRoot(s, root)) continue;
     if (s.signal === 'policy') {
       results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` });
       continue;
@@ -377,7 +395,7 @@ function recentSignals(strategies, bars, { symbol, count = 5 } = {}) {
   const root = String(symbol || '').toUpperCase();
   const norm = normalizeBars(bars);
   const ev = createEvaluator(norm);
-  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || s.instruments.includes(root)));
+  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && (!root || tradesRoot(s, root)));
   const out = [];
   for (let i = Math.max(0, norm.length - count); i < norm.length; i += 1) {
     const fired = [];
@@ -416,7 +434,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null)
   if (!s) return `setup:${name} is not a known strategy. Add strategies/${name}/STRATEGY.md or use an existing setup tag.`;
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
-  if (!s.instruments.includes(contractRoot)) return `setup:${name} does not trade ${contractRoot} (instruments: ${s.instruments.join(', ')}).`;
+  if (!tradesRoot(s, contractRoot)) return `setup:${name} does not trade ${contractRoot} (instruments: ${s.instruments.join(', ')}${s.signal === 'rules' ? ', with the micro or mini of each' : ''}).`;
   if (!inSessions(s, now)) return `setup:${name} is outside its sessions (${s.sessions.join(', ')}).`;
   const sideName = String(side === null || side === undefined ? '' : side).toLowerCase();
   if (s.compiledRules && (sideName === 'buy' || sideName === 'sell')) {
@@ -438,4 +456,5 @@ module.exports = {
   loadStrategies,
   scan,
   checkStrategyForOrder,
+  tradesRoot,
  recentSignals };

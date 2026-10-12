@@ -45,7 +45,7 @@
  */
 
 const { createEvaluator, timeframeMs } = require('../trading/evaluator');
-const { exitPlan } = require('../trading/strategies');
+const { exitPlan, tradesRoot } = require('../trading/strategies');
 const { createSimBroker, onTick } = require('./sim-broker');
 const { parseWindows, inWindow, tradingDayStart, tradingDayKey, inMarketHours, sessionMinute, sessionMinuteOf, EARLY_CLOSE_MIN } = require('../trading/clock');
 const { loadConfig } = require('../trading/config');
@@ -125,7 +125,7 @@ function prepare(markets, strategies, opts = {}) {
     const bars = normalizeBars(m.bars).map((b, i) => ({ ...b, ms: Date.parse(b.t), i }));
     const usable = strategies.filter(s => {
       if (!s.valid || s.status === 'disabled') return false;
-      if (!s.instruments.includes(m.symbol)) return false;
+      if (!tradesRoot(s, m.symbol)) return false;
       if (s.signal === 'manual') { skipped.set(s.name, 'manual strategies need the LLM'); return false; }
       if (!/^atr:/.test(typeof s.risk.stop === 'string' ? s.risk.stop : '') && !s.compiledStop) { skipped.set(s.name, `stop "${s.risk.stop}" has no mechanical distance`); return false; }
       return true;

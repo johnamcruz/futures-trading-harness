@@ -6,6 +6,13 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
   scans bars for candidates, and the order gate checks every live entry against
   it: the `setup:<name>` tag must name a valid strategy with `status: active`,
   the contract must be in `instruments`, and the time must be inside `sessions`.
+  A rules strategy's `instruments` match by micro/mini family: listing either
+  leg (`MNQ` or `NQ`, `MES` or `ES`, `MYM` or `YM`, `M2K` or `RTY`, `MGC` or
+  `GC`, `SIL` or `SI`) trades both, on the same prices, so one leg per family
+  is enough. Everything else is checked on the contract actually ordered: its
+  broker tick specs, and its size and `risk.max_risk_usd` in its own dollars (a
+  mini's tick is worth 10 micros', 5 for silver). Manual and policy strategies
+  match their list exactly.
 - **The Markdown body** is read by the agents: context filter, trigger, entry,
   stop, targets, and skip rules.
 
