@@ -654,5 +654,5 @@ def _run_ship(sh, dry_run, models_dir):
     dest = promote(sh["out"], sh["bundle"], models_dir or sh["models"])
     log(f"promoted to {dest}")
     log(f"to trade it, set strategies/{bundle['strategy']}/STRATEGY.md to what it was trained with: policy: {{ bundle: {sh['bundle']} }}, "
-        f"sizing: {json.dumps(bundle['sizing'] or {})}, contracts: {bundle['contracts']} (keep status: paper until the user activates it)")
+        f"sizing: {json.dumps(bundle['sizing'] or {})}, contracts: {bundle['contracts']} (keep its status: a paper policy stays paper until the user activates it)")
     return bundle, dest

@@ -49,11 +49,12 @@ The harness tracks the attempt and enforces it:
   it or route around it. Past the ratchet the runner may close the trade on the policy's
   word.
 - **Before the first live entry** (the user's steps, not an agent's): the
-  policy strategy ships with `status: paper`, so the user sets
-  `status: active` in its STRATEGY.md (and `policy: { bundle }` once a
-  bundle passed `rl/ship.py`), and starts the attempt with `combine.js
-  start`. Until then every verdict entry is refused (`[strategy] ... status
-  "paper"`): report it and stand aside.
+  policy strategy must be `active` (`prop_portfolio` is; until a bundle
+  passed `rl/ship.py` and is named with `policy: { bundle }`, its sizing
+  rules decide each verdict), and the user starts the attempt with
+  `combine.js start`. A policy still at `paper` (e.g. `prop_flow_1m`)
+  stays so until the user activates it, and every verdict entry is refused
+  (`[strategy] ... status "paper"`): report it and stand aside.
 - **A verdict for the mini** (`NQ` while the bars are MNQ's): use the
   contract name `NQ` as the contractId (the harness translates it to the
   broker's id), and write the plan **and** the order with it; a plan for

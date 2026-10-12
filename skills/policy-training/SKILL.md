@@ -100,7 +100,8 @@ another env"): start a new family.
    raise it, never lower it). One that fails is never promoted.
 7. **Trade it**: the policy strategy names the bundle (`policy: { bundle }`)
    with the sizing and contract mode it was trained with (ship prints them)
-   and keeps `status: paper` until the user activates it.
+   and keeps its status (a `paper` policy stays paper until the user
+   activates it; an `active` one, like `prop_portfolio`, stays active).
 8. **Research**: `node scripts/backtest.js --config <file> --prop <policy strategy> [--bundle <name>]`
    evaluates any bundle, validated or not, over attempts in a backtest.
 
