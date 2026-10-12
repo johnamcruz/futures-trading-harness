@@ -19,6 +19,9 @@
  * source of tick specs for live and replay trading (trading/broker-specs.js
  * reads it); a reply without sane numbers records nothing, and a spec that
  * differs from the static table (backtests, training) is reported on stderr.
+ * Each get_server_config answer records the server's order limits there too
+ * (`server`: { maxOrderSize, readAt }; maxOrderSize null when the answer has no
+ * whole number of 1 or more), which the order gate's size check reads.
  *
  * createTranslator({ call, cacheFile, now })
  *   .toBroker(name)               standard name -> broker id (throws when not found)
@@ -79,11 +82,22 @@ const plainObject = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : 
 function readCache(file) {
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    // A file from before specs were recorded has none: every root then has no spec.
-    return { ids: plainObject(data.ids), front: plainObject(data.front), specs: plainObject(data.specs) };
+    // A file from before specs (or the server's limits) were recorded has none: every root then has no spec.
+    const server = data.server && typeof data.server === 'object' && !Array.isArray(data.server) ? data.server : null;
+    return { ids: plainObject(data.ids), front: plainObject(data.front), specs: plainObject(data.specs), server };
   } catch (_err) {
-    return { ids: {}, front: {}, specs: {} };
+    return { ids: {}, front: {}, specs: {}, server: null };
   }
+}
+
+/**
+ * The server's own order limits from a get_server_config answer, as recorded: { maxOrderSize, readAt }.
+ * A maxOrderSize that is not a whole number of 1 or more is recorded as null (the gate then refuses
+ * entries until a valid answer), never left at an older, larger value.
+ */
+function serverLimits(data, readAt) {
+  const n = data && typeof data === 'object' ? data.maxOrderSize : undefined;
+  return { maxOrderSize: typeof n === 'number' && Number.isInteger(n) && n >= 1 ? n : null, readAt };
 }
 
 /**
@@ -102,6 +116,8 @@ function mergeCache(into, from) {
   for (const [root, sp] of Object.entries(from.specs || {})) {
     if (read(sp) && (!read(into.specs[root]) || sp.readAt >= into.specs[root].readAt)) into.specs[root] = sp;
   }
+  // The server's limits: the answer read later wins.
+  if (read(from.server) && (!read(into.server) || from.server.readAt >= into.server.readAt)) into.server = from.server;
   return into;
 }
 
@@ -280,6 +296,11 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
       }
       return out;
     };
+    if (tool === 'get_server_config') {
+      // The server's order limits, for the gate's size check (local state for hooks and the gateway).
+      cache.server = serverLimits(data, now().toISOString());
+      save();
+    }
     const contractList = CONTRACT_TOOLS.has(tool);
     if (contractList) {
       // Contract lists carry each contract's ticker: learn them all at once, no lookup per id.
@@ -299,5 +320,5 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
 
 module.exports = {
   CONTRACT_TOOLS, TranslationError,
-  isStandardName, parseStandardName, parseTicker, readCache, standardRoot, canonicalName, createTranslator,
+  isStandardName, parseStandardName, parseTicker, readCache, serverLimits, standardRoot, canonicalName, createTranslator,
 };

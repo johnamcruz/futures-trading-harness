@@ -1007,4 +1007,8 @@ const SUMMARY_KEYS = ['labels', 'decisions', 'taken', 'unknownOutcome', 'skipped
   'takenWon', 'takenLost', 'skippedWouldWin', 'skippedWouldLose', 'refusedWouldWin', 'refusedWouldLose', 'noCycleWouldWin', 'noCycleWouldLose', 'unsimulated', 'brokerRefused', 'priorRefusals', 'cycleFailed', 'unattributedOrders', 'unmatchedOpenings'];
 const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : s[k]}`).join(', ')}\n${Object.keys(s.uncloneableBy).length ? `uncloneable by reason: ${Object.entries(s.uncloneableBy).map(([k, v]) => `${k} ${v}`).join(', ')}\n` : ''}`;
 
-module.exports = { VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec };
+module.exports = {
+  VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
+  // For the label dataset (rl/label-dataset.js): the same fills, bars, specs and paths the labels read.
+  allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir,
+};

@@ -18,6 +18,7 @@
  *   liveSpecs(env)                         the spec source of the selected broker (FTH_HOME, FTH_BROKER)
  *   noSpecsMessage(root)                   the refusal when none is recorded
  *   specMismatch(root, spec)               a message when the broker's spec differs from the static table, else null
+ *   brokerOrderLimit(file)                 the server's recorded maxOrderSize (get_server_config), or null with why
  */
 
 const { specFor } = require('./contracts');
@@ -88,6 +89,22 @@ function contractsFileFor(home, env = process.env) {
 
 const liveSpecs = (env = process.env) => brokerSpecs(contractsFileFor(harnessHome(env), env));
 
+/**
+ * The server's max order size, as the translator recorded it from get_server_config in the same file:
+ * { maxOrderSize, readAt } when the last answer had a whole number of 1 or more, else { maxOrderSize: null, why }.
+ */
+function brokerOrderLimit(file) {
+  const rec = file ? require('../broker/translator').readCache(file).server : null; // lazy, as above
+  const n = rec ? rec.maxOrderSize : undefined;
+  if (typeof n === 'number' && Number.isInteger(n) && n >= 1) return { maxOrderSize: n, readAt: rec.readAt || null };
+  return {
+    maxOrderSize: null,
+    why: rec
+      ? 'the broker server\'s last get_server_config answer had no valid maxOrderSize (a whole number of contracts, 1 or more): the harness can\'t check the order size, so no entries until get_server_config reports one'
+      : 'the broker server\'s max order size is not recorded yet: call get_server_config (the harness records its maxOrderSize), then try again',
+  };
+}
+
 function noSpecsMessage(root) {
   const r = String(root || '').toUpperCase() || 'this contract';
   return `no tick specs from the broker for ${r} yet: call get_contract or search_contracts for ${r} first (the harness records the broker's tick size and value), then try again`;
@@ -107,4 +124,4 @@ function specMismatch(root, spec) {
     + `(${table.tickSize} = ${money(table.tickValue)}, scripts/lib/trading/contracts.js): training does not equal live; fix the table or the broker`;
 }
 
-module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, whyNoSpec, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch };
+module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, whyNoSpec, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch, brokerOrderLimit };

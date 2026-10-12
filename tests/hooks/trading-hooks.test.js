@@ -27,6 +27,14 @@ const ROOT = (() => {
     'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1', '---',
     '## When to Use', '## How It Works', '## Examples', '',
   ].join('\n'));
+  // A manual strategy with a per-trade dollar cap (the gate's max-risk check).
+  const capped = path.join(root, 'strategies', 'capped');
+  fs.mkdirSync(capped, { recursive: true });
+  fs.writeFileSync(path.join(capped, 'STRATEGY.md'), [
+    '---', 'name: capped', 'description: Test strategy valid at any time for MNQ, with a 30 dollar per-trade risk cap.',
+    'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1', '  max_risk_usd: 30', '---',
+    '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
   const prop = path.join(root, 'strategies', 'propped');
   fs.mkdirSync(prop, { recursive: true });
   fs.writeFileSync(path.join(prop, 'STRATEGY.md'), [
@@ -1034,7 +1042,7 @@ test('session-start and stop hooks read the trading day at the replayed time wit
 // --- The gateway with a configured broker (behind the contract translator), as installed. ---
 const FAKE_MCP = path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js');
 const CONTRACTS = JSON.stringify([{ id: 'MNQ', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]);
-const serverSays = (serverTime, replay = true) => JSON.stringify({ tradingEnabled: true, serverTime, ...(replay ? { replay: true } : {}) });
+const serverSays = (serverTime, replay = true) => JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime, ...(replay ? { replay: true } : {}) });
 
 /** A harness home under `dir` whose broker "sim" runs the fake server; returns its brokers.json path. */
 function simHome(dir, { replay = true, journalEntries = [] } = {}) {
@@ -1204,4 +1212,82 @@ test('order gate wiring: without the broker\'s tick specs the hook and the gatew
   const recorded = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')).specs.MNQ;
   assert.deepStrictEqual([recorded.tickSize, recorded.tickValue, recorded.name], [0.25, 0.5, 'MNQZ6']);
   assert.match(textOf(r[4]), /"orderId":\s*5/, textOf(r[4]));
+});
+
+test('order gate wiring: the hook refuses an entry over the broker\'s max order size or its strategy\'s max_risk_usd (even with the checks named skipped); exits, stops and stop moves of any size go', () => {
+  const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const { env } = setup(plan);
+  recordBrokerSpecs(env.FTH_HOME, { server: { maxOrderSize: 5 } });
+  const over = gate(orderPayload({ ...ORDER, size: 27 }), env);
+  assert.strictEqual(over.code, 2);
+  assert.match(over.stderr, /\[max-order-size\] size 27 over the broker's max order size 5 \(get_server_config maxOrderSize\): reduce the size to 5 or less/);
+  const auto = gate(orderPayload({ ...ORDER, size: 6 }), { ...env, FTH_ORDER_GATE_SKIP: 'max-order-size,max-risk' });
+  assert.strictEqual(auto.code, 2);
+  assert.match(auto.stderr, /\[max-order-size\]/);
+  assert.strictEqual(gate(orderPayload({ ...ORDER, size: 5 }), env).code, 0);
+  // setup:capped caps a trade at $30: MNQ at a 40-tick stop is $20 a contract.
+  const capped = { ...ORDER, rationale: 'setup:capped long, stop 21480, target 21540' };
+  assert.strictEqual(gate(orderPayload(capped), env).code, 0);
+  const risky = gate(orderPayload({ ...capped, size: 2 }), env);
+  assert.strictEqual(risky.code, 2);
+  assert.match(risky.stderr, /\[max-risk\] risk \$40\.00 \(size 2 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:capped's risk\.max_risk_usd \$30\.00: reduce the size to 1 or less, or tighten to a stop of at most 30 ticks at size 2/);
+  // The replayed 27-lot: market, no bracket, the stop only in the rationale.
+  const { stopLossBracket: _b, ...bare } = capped;
+  const replayed = gate(orderPayload({ ...bare, size: 27 }), env);
+  assert.strictEqual(replayed.code, 2);
+  assert.match(replayed.stderr, /\[max-order-size\] size 27 over/);
+  assert.match(replayed.stderr, /\[max-risk\] setup:capped caps risk at \$30\.00 .*can't be computed: a market entry with its stop only in the rationale/);
+  // Exits, protective stops, a stop move and a close of any size: never refused by either.
+  for (const input of [
+    { ...EXIT_BASE, size: 27, side: 'sell', rationale: '[exit] flatten' },
+    { ...EXIT_BASE, size: 27, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' },
+  ]) {
+    const r = gate(orderPayload(input), env);
+    assert.strictEqual(r.code, 0, `${input.rationale}: ${r.stderr}`);
+  }
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, stopPrice: 21470, reason: '[protect] trail' } }, env).code, 0);
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__close_position', tool_input: { accountId: 1, contractId: 'MNQ' } }, env).code, 0);
+  // No get_server_config answer recorded: no entry, saying how to fix it; the exit still goes.
+  const raw = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), 'utf8'));
+  delete raw.server;
+  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify(raw));
+  const unknown = gate(orderPayload(), env);
+  assert.strictEqual(unknown.code, 2);
+  assert.match(unknown.stderr, /\[max-order-size\] the broker server's max order size is not recorded yet: call get_server_config/);
+  assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, size: 27, side: 'sell', rationale: '[exit] flatten' }), env).code, 0);
+});
+
+test('order gate wiring: the gateway, behind the translator, refuses an entry until get_server_config records the max order size, then over it or over max_risk_usd; exits of any size go', async () => {
+  const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  const dir = tmpDir();
+  const { home } = simHome(dir, { replay: false, journalEntries: plan });
+  trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 2 }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
+  const capped = { ...ORDER, rationale: 'setup:capped long, stop 21480, target 21540' };
+  const r = await gatewayCfg(base, [
+    call(1, 'search_contracts', { searchText: 'MNQ' }),
+    call(2, 'place_order', ORDER),
+    call(3, 'get_server_config', {}),
+    call(4, 'place_order', { ...ORDER, size: 3 }),
+    call(5, 'place_order', { ...capped, size: 2 }),
+    call(6, 'place_order', { ...ORDER, size: 2 }),
+  ], { dir });
+  assert.match(textOf(r[2]), /\[max-order-size\] the broker server's max order size is not recorded yet: call get_server_config/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')).server.maxOrderSize, 2, 'recorded by the translator');
+  assert.match(textOf(r[4]), /\[max-order-size\] size 3 over the broker's max order size 2/);
+  assert.match(textOf(r[5]), /\[max-risk\] risk \$40\.00 \(size 2 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:capped's risk\.max_risk_usd \$30\.00/);
+  assert.doesNotMatch(textOf(r[5]), /max-order-size/);
+  assert.match(textOf(r[6]), /"orderId":\s*5/, textOf(r[6]));
+  // An exit (and a protective stop) larger than the max order size goes to the broker, which enforces its own.
+  const LONG27 = JSON.stringify([{ contractId: 'MNQ', type: 1, size: 27 }]);
+  for (const input of [
+    { ...EXIT_BASE, size: 27, side: 'sell', rationale: '[exit] flatten' },
+    { ...EXIT_BASE, size: 27, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' },
+  ]) {
+    const d2 = tmpDir();
+    const h2 = simHome(d2, { replay: false }).home;
+    recordBrokerSpecs(h2, { broker: 'sim', server: { maxOrderSize: 1 } });
+    const x = await gatewayCfg({ ...base, FAKE_POSITIONS: LONG27, FAKE_PLACE_RESULT: '' }, [call(7, 'place_order', input)], { dir: d2 });
+    assert.strictEqual(textOf(x[7]), 'forwarded:tools/call:place_order', `${input.rationale}: ${textOf(x[7])}`);
+  }
 });

@@ -66,7 +66,8 @@ Check, in order, and stop at the first failure:
    scan's `confluence.against`) → VETO unless the plan is a reversal at a
    higher-timeframe level and says why.
 2. Account tradable and flat or within the plan's intent; no unprotected position.
-3. Symbol and size within server limits.
+3. Symbol and size within server limits (an entry over `maxOrderSize`: VETO,
+   the gate refuses it anyway).
 4. Entry, stop, and target are on the correct sides; prices are multiples of
    `tickSize` (from `get_contract`).
 5. Risk $ = |entry − stop| ÷ tickSize × tickValue × size ≤ the Phase 1 per-trade
@@ -86,7 +87,10 @@ Check, in order, and stop at the first failure:
 6. The strategy (`strategies_show` with its name) is `active`, trades this symbol,
    is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
    trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);
-   risk ≤ its `risk.max_risk_usd` if set. Size within position-sizing, or
+   risk ≤ its `risk.max_risk_usd` if set (the gate refuses an entry over it,
+   or one whose stop it can't measure: a market entry needs
+   `stopLossBracket.ticks`; for a policy strategy only its own cap applies,
+   not its components'). Size within position-sizing, or
    within the verdict for a policy strategy; a `mixed` multi-timeframe read
    halves it (`floor(size / 2)`, VETO if 0).
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;

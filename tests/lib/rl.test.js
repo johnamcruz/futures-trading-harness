@@ -7,7 +7,7 @@ const path = require('path');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
-const { OBS_DIM, OBS_FIELDS, observationFields } = require('../../scripts/lib/rl/observation');
+const { OBS_DIM, OBS_FIELDS, observationFields, observationVersion } = require('../../scripts/lib/rl/observation');
 const envlib = require('../../scripts/lib/rl/challenge-env');
 const { serve } = require('../../scripts/lib/rl/env-server');
 const { loadBundle, checkBundle, gateFailures, BUNDLE_FORMAT, BUNDLE_VERSION } = require('../../scripts/lib/rl/policy-bundle');
@@ -120,6 +120,7 @@ test('the env server: an episode is the backtest paused at each decision, reward
   const e = envlib.createEnv({ markets: [market(bars)], strategies: [wide], account: account(), engine });
   const [info, { starts }] = talk(e, [{ cmd: 'info' }, { cmd: 'starts', from: '2026-01-08', to: '2026-02-10' }]);
   assert.deepStrictEqual(info.obsFields, OBS_FIELDS);
+  assert.strictEqual(info.obsVersion, observationVersion(), 'the observation version a label dataset must match');
   assert.strictEqual(info.actionN, 3);
   assert.strictEqual(info.bundleFormat, BUNDLE_FORMAT);
   assert.deepStrictEqual(info.promotionGate, { minPassRate: 0.4, maxBlows: 0, minAttempts: 20, minMonths: 2 });
