@@ -81,6 +81,7 @@
           "volume-liquidity-analyst": "allow"
         },
         "broker_*": "allow",
+        "broker_place_order": "deny",
         "harness_*": "allow"
       }
     },
@@ -564,6 +565,7 @@
       "volume-liquidity-analyst": "allow"
     },
     "broker_*": "allow",
+    "broker_place_order": "deny",
     "harness_*": "allow"
   }
 }

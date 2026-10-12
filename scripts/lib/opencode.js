@@ -144,8 +144,11 @@ function sessionPermission(roles, denied = []) {
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
     skill: 'allow', todowrite: 'allow', websearch: 'allow',
     task: { '*': 'deny', ...Object.fromEntries(roles.filter(r => !denied.includes(r)).map(r => [r, 'allow'])) },
-    // Orders go through the gateway, which enforces the order gate on every call.
+    // Orders go through the gateway, which enforces the order gate on every call. An entry is the trade-executor's
+    // alone (it holds place_order; the head trader delegates the approved plan to it); the head trader keeps the
+    // reads and the risk-reducing calls (close, partial close, cancel, a stop tightened).
     [`${BROKER_SERVER}_*`]: 'allow',
+    [`${BROKER_SERVER}_place_order`]: 'deny',
     [`${HARNESS_SERVER}_*`]: 'allow',
   };
 }

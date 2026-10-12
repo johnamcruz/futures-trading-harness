@@ -1450,7 +1450,7 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
   const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
-    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'report' }] } })];
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'VERDICT: APPROVE - size 1' }] } })];
   const transcript = path.join(dir, 'session.jsonl');
   fs.writeFileSync(transcript, [...skills, ...role('r1', 'risk-manager')].join('\n'));
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
@@ -1468,6 +1468,12 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /roles-ran/);
   fs.writeFileSync(transcript, skills.join('\n'));
   assert.match(gate({ ...orderPayload(), transcript_path: sub }, env).stderr, /\[roles-ran\]/);
+  // Phase 2 vetoed, and the order went anyway: refused (every role ran; the verdict is what decides).
+  const vetoed = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`v${i}`, t));
+  const veto = [content({ type: 'tool_use', id: 'vp2', name: 'Task', input: { subagent_type: 'risk-manager', prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'vp2', content: 'VERDICT: VETO - mixed alignment at size 1: stand aside' }] } })];
+  fs.writeFileSync(transcript, [...skills, ...vetoed, ...veto].join('\n'));
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\][^\n]*risk-manager phase 2 approving the plan/);
   // Roles the runner served from its report cache (FTH_CYCLE_CACHED) count: only phase 2 ran this cycle.
   fs.writeFileSync(transcript, [...skills, ...role('p2', 'risk-manager')].join('\n'));
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\]/, 'control: nothing cached');

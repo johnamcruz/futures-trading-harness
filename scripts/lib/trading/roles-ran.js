@@ -144,6 +144,17 @@ function rolesInTranscript(text) {
   return counts;
 }
 
+/**
+ * Phase 2's answer: the latest phase-2 report (the last to return) must say `VERDICT: APPROVE` (agents/risk-manager.md);
+ * a VETO, or no verdict line, is not an approval (fails closed).
+ */
+const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
+function approved(phase2) {
+  const last = phase2.slice().sort((a, b) => a.end - b.end)[phase2.length - 1];
+  const verdicts = String(last.text || '').match(/VERDICT:?\**\s*(APPROVE|VETO)\b/gi) || [];
+  return verdicts.length > 0 && /APPROVE/i.test(verdicts[verdicts.length - 1]);
+}
+
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
 function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   if (!CYCLES.includes(cycle)) return [];
@@ -165,14 +176,18 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
   const ranAfter = needed.filter(r => fresh.some(c => c.role === r)).map(firstEnd);
   if (counted.includes('risk-manager')) {
     // Phase 1 served from the cache: phase 2 is a risk-manager call started after every analyst that ran.
-    if (!rm.some(c => c.start > Math.max(-Infinity, ...ranAfter))) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
+    const p2 = rm.filter(c => c.start > Math.max(-Infinity, ...ranAfter));
+    if (!p2.length) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
+    else if (!approved(p2)) missing.push(NOT_APPROVED);
     return missing;
   }
   if (!rm.length) return [...missing, 'risk-manager phase 1', `${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`];
   // Phase 2 reviews the plan: it starts once phase 1 (and every analyst) has returned.
   const phase1End = Math.min(...rm.map(c => c.end));
   const after = Math.max(phase1End, ...ranAfter);
-  if (!rm.some(c => c.start > after)) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
+  const p2 = rm.filter(c => c.start > after);
+  if (!p2.length) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
+  else if (!approved(p2)) missing.push(NOT_APPROVED);
   return missing;
 }
 

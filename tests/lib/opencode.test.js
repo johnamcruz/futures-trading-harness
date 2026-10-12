@@ -65,7 +65,10 @@ test('the main session gets what the other adapters allow an autonomous run: no 
   for (const p of ['bash', 'edit', 'webfetch', 'question', 'lsp', 'codesearch', 'doom_loop', 'some_future_tool']) assert.strictEqual(decide(session, p), 'deny', p);
   for (const p of ['skill', 'websearch', 'todowrite', 'glob', 'grep', 'list']) assert.strictEqual(decide(session, p), 'allow', p);
   // The broker (orders through the gateway's gate) and the harness tools.
-  for (const t of [...ORDER_TOOLS, 'broker_get_bars', 'harness_strategies_scan', 'harness_blackouts_list']) assert.strictEqual(decide(session, t), 'allow', t);
+  for (const t of [...ORDER_TOOLS.filter(t => t !== 'broker_place_order'), 'broker_get_bars', 'harness_strategies_scan', 'harness_blackouts_list']) assert.strictEqual(decide(session, t), 'allow', t);
+  // An entry is the trade-executor's alone: the main session (the head trader) can't place one; it keeps the reads
+  // and the risk-reducing calls (close, partial close, cancel, modify).
+  assert.strictEqual(decide(session, 'broker_place_order'), 'deny');
   // Reading: anything inside the project but a .env; outside it, nothing (the runner adds its directories).
   assert.strictEqual(decide(session, 'read', 'strategies/orb/STRATEGY.md'), 'allow');
   for (const f of ['.env', 'workspace/.env', '../x/.env.local']) assert.strictEqual(decide(session, 'read', f), 'deny', f);
@@ -96,6 +99,7 @@ test('a hostile user config (everything allowed, its own default agent, rules fo
     const head = headRules(merged);
     for (const p of ['bash', 'edit', 'webfetch']) assert.strictEqual(decide(head, p), 'deny', p);
     assert.strictEqual(decide(head, 'task', 'general'), 'deny');
+    assert.strictEqual(decide(head, 'broker_place_order'), 'deny', 'a hostile config can\'t give the head trader entries');
     const risk = [...rules(merged.permission), ...rules(merged.agent['risk-manager'].permission)];
     for (const p of ['bash', 'task', 'broker_place_order']) assert.strictEqual(decide(risk, p), 'deny', `risk-manager: ${p}`);
     assert.strictEqual(decide(risk, 'broker_get_account_snapshot'), 'allow');
