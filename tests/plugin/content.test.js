@@ -256,3 +256,15 @@ test('the session hours read unambiguously (a 9B model read "18:00 ET to 16:00 E
     assert.doesNotMatch(read(f), /18:00 ET to 16:00 ET|18:00-16:00 ET session/, f);
   }
 });
+
+test('the prop policy is active (live and replay), and the replay skill says a paper policy with an attempt refuses every entry', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const p = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  assert.ok(p && p.valid && p.status === 'active');
+  assert.match(fs.readFileSync(path.join(ROOT, 'skills/prop-challenge-pacing/SKILL.md'), 'utf8'), /policy strategy must be `active` \(`prop_portfolio` is; until a bundle\s+passed `rl\/ship\.py`/);
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'skills/policy-training/SKILL.md'), 'utf8'), /keeps `status: paper` until/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'skills/policy-training/SKILL.md'), 'utf8'), /and keeps its status \(a `paper` policy stays paper until the user\s+activates it; an `active` one, like `prop_portfolio`, stays active\)/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'rl/fth_rl/pipeline.py'), 'utf8'), /\(keep its status: a paper policy stays paper until the user activates it\)/, 'the hint ship prints');
+  const r = fs.readFileSync(path.join(ROOT, 'skills/replay/SKILL.md'), 'utf8');
+  assert.match(r, /The policy strategy must be `active` \(`prop_portfolio` is\)[^]*?so with a `paper` policy every entry is refused\.\s+Without a trained bundle the policy sizes each setup by its `sizing`\s+rules: full within the budget, or skip\./);
+});

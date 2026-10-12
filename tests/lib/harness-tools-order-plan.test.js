@@ -227,7 +227,8 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   // $100K, $3,000 cushion: 30% = $900 at 18 ticks ($90 + fees per NQ) -> 9 NQ; the verdict said 12.
   assert.deepStrictEqual([r.args.contractId, r.args.side, r.args.size, r.args.stopLossBracket.ticks, r.args.takeProfitBracket], ['NQ', 'buy', 9, 18, undefined]);
   assert.match(r.args.rationale, /^setup:prop_portfolio long at market from 27427\.50 .*stop 27423\.00 \(18 ticks\), 9 NQ risks \$810\.00$/);
-  assert.match(r.text, /size 9: the verdict's full size 12, cut to the size budget now \(9\), for bos's setup; the stop is the verdict's 18 ticks \| status paper: plan only/);
+  assert.match(r.text, /size 9: the verdict's full size 12, cut to the size budget now \(9\), for bos's setup; the stop is the verdict's 18 ticks$/m);
+  assert.doesNotMatch(r.text, /status paper/, "prop_portfolio is active: a live entry, no plan-only note");
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'short' }, ctx), /verdict is for a long entry, not short/);
   verdict({ contract: 'MNQ', maxSize: 50 });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the size budget now allows 9 NQ at a 18-tick stop, not MNQ/);
