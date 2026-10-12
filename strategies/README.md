@@ -30,14 +30,14 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `supertrend` | SuperTrend flip | active |
 | `bos` | break of structure | active |
 | `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
-| `vwap_reclaim` | rules (written in Markdown) | paper |
+| `vwap_reclaim` | rules (written in Markdown) | active |
 | `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | paper |
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
-| `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | paper |
-| `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | paper |
+| `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | active |
+| `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | active |
 | `value_area` | rules: a rejection of, or breakout through, the prior day's POC, confirmed by order flow or a range expansion on volume; target the edge of value | paper |
-| `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | paper |
-| `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | paper |
+| `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | active |
+| `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | active |
 
 The value area strategies read the prior RTH day's volume profile
 (`prior_poc prior_vah prior_val`, `scripts/lib/trading/volume-profile.js`):

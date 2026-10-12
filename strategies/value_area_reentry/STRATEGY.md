@@ -2,7 +2,7 @@
 name: value_area_reentry
 description: Volume profile 80 percent rule on equity index micros - the RTH session opens outside the prior day's value area, two 3-minute closes back inside accept it, and the trade targets the far side of value. Reversal setup, from the prior RTH day's bar-based volume profile.
 version: 1
-status: paper
+status: active
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["09:30-15:00@America/New_York"]

@@ -2,7 +2,7 @@
 name: vwap_reclaim
 description: Trend-day VWAP reclaim on equity index micros - a 3-minute close back through RTH VWAP in the direction of the 50 EMA with ADX confirming. Example of a strategy whose trigger is written as rules in Markdown, no code.
 version: 1
-status: paper
+status: active
 instruments: [MNQ, MES]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
