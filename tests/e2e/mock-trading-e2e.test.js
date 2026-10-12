@@ -110,6 +110,10 @@ function signalOnFiredBar(w) {
   fs.appendFileSync(w.journal, `${JSON.stringify({ ts: now.toISOString(), kind: 'plan', contractId: 'MNQ', tags: ['setup:bos', 'MNQ'], text: 'bos long on the break' })}\n`);
   // The broker's bars are the ones the scan read (the gateway's regime check fetches them).
   exchange.update(w.state, s => { s.prices[MNQ_ID] = last.c; s.bars = { ...(s.bars || {}), [MNQ_ID]: bars.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v })) }; });
+  // The window the gateway's regime check reads is the evaluator's: the last 500 closed bars, across breaks.
+  const { barsRequest } = require('../../scripts/lib/trading/account-gate');
+  const served = exchange.HANDLERS.get_bars(exchange.read(w.state), { ...barsRequest(MNQ_ID, '3m'), endTime: now.toISOString() });
+  assert.deepStrictEqual(served.bars.map(b => b.t), bars.slice(-500).map(b => b.t));
   const ticks = Math.ceil(fired.stopDistance / 0.25);
   return { price: last.c, ticks, side: fired.direction, now };
 }
