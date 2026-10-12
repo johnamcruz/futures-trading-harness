@@ -53,6 +53,9 @@ const NO_ATTEMPT = new RegExp([
   `\\bthere\\s+(?:is\\s+not|isn't|is\\s+no|'s\\s+no)\\s+(?:an?\\s+)?(?:active\\s+|running\\s+|prop\\s+|combine\\s+)*attempts?\\b${NOT_DENIAL}`,
 ].join('|'), 'i');
 
+// A report's Attempt line: "Attempt: ...", "**Attempts:** ...", "Prop attempt: ...", "| Attempt | ... |".
+const ATTEMPT_LINE = /^[\s*_>|-]*(?:prop\s+|combine\s+)?attempts?\b/i;
+const LINE_DENIAL = /\b(?:not|n't|never)\s+(?:currently\s+|yet\s+|been\s+)*(?:running|started|active)\b|\bnone\b|\binactive\b|\bwas\s+active\b/i;
 const activeAttempts = account => (account && Array.isArray(account.attempts) ? account.attempts.filter(x => x && x.status === 'active') : []);
 const escapeRe = t => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -68,7 +71,10 @@ function deniesActiveAttempt(text, account) {
  */
 function phase1Holds(text, account) {
   const t = String(text || '');
-  const confirmed = activeAttempts(account).every(x => new RegExp(`^[\\s*_>-]*attempt\\b[^\\n]*\\b${escapeRe(x.account)}\\b[^\\n]*\\bactive\\b`, 'im').test(t));
+  // The account's Attempt line, its status right after the name ("Attempt: topstep_100k active, cushion ..."), and
+  // nothing on that line saying it isn't running ("... active but not running", "none").
+  const lines = t.split('\n').filter(l => ATTEMPT_LINE.test(l));
+  const confirmed = activeAttempts(account).every(x => lines.some(l => new RegExp(`(?<![\\w-])${escapeRe(x.account)}(?![\\w-])[\\s\`*_:()|]*active\\b`, 'i').test(l) && !LINE_DENIAL.test(l)));
   return confirmed && !deniesActiveAttempt(t, account);
 }
 

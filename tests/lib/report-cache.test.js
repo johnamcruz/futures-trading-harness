@@ -210,6 +210,18 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   assert.strictEqual(record('Attempt: topstep_50k active', active).phase1, null, 'another account');
   assert.strictEqual(record('Attempt: topstep_100k blown', active).phase1, null, 'not as listed');
   assert.ok(record('**Attempt:** topstep_100k active, cushion $3,000', active).phase1, 'markdown bold');
+  for (const t of ['Attempts: topstep_100k active', 'Prop attempt: topstep_100k active', '| Attempt | topstep_100k | active |', 'Attempt: topstep_100k (active), no entry block']) {
+    assert.ok(record(t, active).phase1, t);
+  }
+  // An Attempt line that names the account but says it isn't running doesn't confirm it.
+  for (const t of ['Attempt: topstep_100k not active', 'Attempt: topstep_100k not started (should be active)', 'Attempt: topstep_100k listed active but not running',
+    'Attempt: topstep_100k status: active? none running', 'Attempt: topstep_100k was active, now none', 'Attempt: topstep_100k active but not running']) {
+    assert.strictEqual(record(t, active).phase1, null, t);
+  }
+  // Exact names: a longer account name never stands in for this one.
+  const two = { ...ACCT, attempts: [...active.attempts, { account: 'topstep_100k-b', status: 'active' }] };
+  assert.strictEqual(record('Attempt: topstep_100k-b active', two).phase1, null);
+  assert.ok(record('Attempt: topstep_100k active\nAttempt: topstep_100k-b active', two).phase1);
   assert.strictEqual(RC.phase1Holds('Budget: per trade $900', ACCT), true, 'no active attempt: nothing to confirm');
   // With no active attempt the same words are true: cached as before.
   assert.strictEqual(record('no attempt is running', ACCT).phase1.text, 'no attempt is running');
