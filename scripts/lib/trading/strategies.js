@@ -52,13 +52,12 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
-  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'policy', 'source'];
+  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'source'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
-const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts', 'policy'];
+const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd'];
-const POLICY_KEYS = ['bundle'];
 /**
  * Data connectors a strategy can declare, like a skill declares its tools.
  *   order_flow: aggressor buy/sell volume per bar (series ofi, delta), from
@@ -112,15 +111,15 @@ function validateStrategy(data, body, folderName) {
   const legacy = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote'].includes(data.signal);
   req(SIGNALS.includes(data.signal), legacy
     ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (copy the rules block from strategies/${data.signal}/STRATEGY.md)`
-    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a trained policy trades other strategies' setups on a prop account)`);
+    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a prop-challenge strategy trades other strategies' setups on a prop account, sized from its budget)`);
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
   } else if (data.rules !== undefined) {
     errors.push('rules: only used with signal: rules');
   }
   // A policy strategy: the prop challenge as a strategy. It trades the setups
-  // of other (rules) strategies on an account, sized from the cushion, with a
-  // trained policy deciding which to take and when to bank a trade.
+  // of other (rules) strategies on an account, each sized from the cushion (or
+  // skipped), and exits every trade by its own trail.
   if (data.signal === 'policy') {
     const list = data.strategies;
     req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
@@ -133,13 +132,8 @@ function validateStrategy(data, body, folderName) {
       req(!(z && z.cushion_frac > 1), 'sizing.cushion_frac: at most 1 (a trade never risks more than the whole cushion)');
     }
     req(data.contracts === undefined || CONTRACT_MODES.includes(data.contracts), `contracts: ${CONTRACT_MODES.join(' | ')} (auto: minis once the size reaches one mini)`);
-    if (data.policy !== undefined) {
-      const p = data.policy;
-      req(p && typeof p === 'object' && !Array.isArray(p) && Object.keys(p).every(k => POLICY_KEYS.includes(k)) && typeof p.bundle === 'string' && /^[a-z0-9][a-z0-9_.-]*$/.test(p.bundle),
-        'policy: { bundle: <name> } (models/<name>.json, shipped by rl/ship.py); without it the setups are taken as sized');
-    }
     req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");
-    req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (past the ratchet the policy may bank the trade)');
+    req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (the trail that exits every trade it takes)');
     // Its setups come from other strategies' scans, which carry no target distance of its own.
     req(!(data.exit && data.exit.target !== undefined), 'exit.target: not for a policy strategy (its trades exit by its trail; the strategies it lists keep their own targets only when traded on their own)');
     req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
@@ -326,7 +320,7 @@ function loadStrategies(pluginRoot, env = process.env) {
       else if (c.signal !== 'rules') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies only`);
       // Not re-run on other bars: its periods and stop are in its own bars (a 3m strategy on 1m bars is another strategy).
       else if (c.timeframe !== s.timeframe) errs.push(`strategies: ${n} trades ${c.timeframe} bars, not ${s.timeframe} (a policy strategy lists strategies on its own timeframe; they are not re-run on other bars)`);
-      else if (c.status === 'disabled') errs.push(`strategies: ${n} is disabled; remove it from the list (the policy was trained on the list as it is)`);
+      else if (c.status === 'disabled') errs.push(`strategies: ${n} is disabled; remove it from the list`);
     }
     // Every index the policy strategy trades must be scanned by at least one of its strategies (on the micro's bars).
     const { familyRoot } = require('./contracts');

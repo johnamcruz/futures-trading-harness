@@ -1,0 +1,47 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const path = require('path');
+const combine = require('../../scripts/lib/trading/combine');
+const { accountNamed } = require('../../scripts/lib/trading/accounts');
+const { decideSetup, setupPlan } = require('../../scripts/lib/prop/verdict');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const account = accountNamed(ROOT, 'topstep_50k', {});
+const strategy = { name: 'prop_x', timeframe: '3m', contracts: 'micro', strategies: ['trendy'] };
+const spec = { tickSize: 0.25, tickValue: 0.5 };
+const now = new Date('2026-10-07T15:30:00Z');
+const bars = Array.from({ length: 50 }, (_, k) => ({ t: new Date(Date.parse('2026-10-07T13:00:00Z') + k * 180000).toISOString(), o: 21500, h: 21502, l: 21498, c: 21500, v: 100 }));
+const args = (extra = {}) => ({ account, cs: combine.start(account), strategy, component: 'trendy', symbol: 'MNQ', contractId: 'MNQ', rawBars: bars, spec, scan: { direction: 'long', stopDistance: 10 }, now, ...extra });
+
+test('the sizing verdict: full at the largest size the budget allows at the setup\'s stop, on the last closed bar', () => {
+  const v = decideSetup(args());
+  // $50,000 start, $48,000 floor: cushion $2,000, budget 0.2 x = $400. A 10-point stop is 40 ticks:
+  // $20 + $0.74 fees = $20.74 a micro, so 19 MNQ.
+  assert.deepStrictEqual([v.action, v.contract, v.maxSize, v.riskPerContract, v.stopTicks], ['full', 'MNQ', 19, 20.74, 40]);
+  assert.deepStrictEqual([v.strategy, v.component, v.direction, v.account], ['prop_x', 'trendy', 'long', 'topstep_50k']);
+  assert.strictEqual(v.bar, bars[bars.length - 1].t, 'the last closed bar');
+  assert.strictEqual(v.expiresAt, '2026-10-07T15:33:00.000Z', 'one bar after the bar\'s close');
+  assert.strictEqual(v.policy, undefined, 'no record of a trained policy');
+  assert.strictEqual(v.combine.cushion, 2000);
+});
+
+test('the sizing verdict says only full or skip; a stop too wide for the budget is a skip with the reason', () => {
+  const wide = decideSetup(args({ scan: { direction: 'short', stopDistance: 1000 } }));
+  assert.deepStrictEqual([wide.action, wide.maxSize, wide.contract], ['skip', 0, null]);
+  assert.match(wide.reason, /size budget \(\$400\) is below one contract at this stop; with a cushion of \$2000/);
+  // An attempt that can't enter (blown) says why.
+  const blown = decideSetup(args({ cs: combine.blow(combine.start(account)) }));
+  assert.strictEqual(blown.action, 'skip');
+  for (const stop of [1, 2.5, 10, 40, 400, 4000]) assert.ok(['full', 'skip'].includes(decideSetup(args({ scan: { direction: 'long', stopDistance: stop } })).action));
+});
+
+test('setupPlan: the stop in ticks (half to even, as the engine) and a plan per size fraction', () => {
+  const p = setupPlan(args({ scan: { direction: 'long', stopDistance: 10.125 } }));
+  assert.strictEqual(p.stopTicks, 40, '40.5 ticks rounds to even');
+  assert.strictEqual(p.cp.size, p.plan(1).size);
+  assert.ok(p.plan(0.5).size <= Math.ceil(p.cp.size / 2));
+  assert.strictEqual(p.i, bars.length - 1);
+  assert.deepStrictEqual(p.sizing, { ...combine.DEFAULT_SIZING });
+});

@@ -177,7 +177,7 @@ test('labels: a taken winner, managed, skipped, a short loser, refused, limit en
 
   // Refused: the intent kept (long, orb), flagged refused with the check; no outcome but refused.
   assert.deepStrictEqual([L[7].teacher.action, L[7].gate.decision, L[7].gate.checks, L[7].outcome.result], ['long', 'refused', ['plan-required'], 'refused']);
-  assert.strictEqual(L[7].clone.ok, true, 'cloneable as intent; the BC config decides on refused ones');
+  assert.strictEqual(L[7].clone.ok, true, 'cloneable as intent; a consumer decides on refused ones');
 
   // The limit entry with a target: uncloneable, counted; never filled.
   assert.deepStrictEqual([L[8].teacher.action, L[8].clone.ok, L[8].outcome.result], ['long', false, 'unfilled']);
@@ -585,8 +585,8 @@ test('labels: a trade cycle with no cycle log line is a decision whose orders ar
   assert.deepStrictEqual([L.decision, L.clone.reasons], ['flat', ['no cycle log']]);
 });
 
-test('labels: the stop\'s ATR is the student\'s (rl/observation.js atr20 over the whole series), bar for bar', () => {
-  const { marketFeatures } = require('../../scripts/lib/rl/observation');
+test('labels: the stop\'s ATR is the market features\' (trading/market-features.js atr20 over the whole series), bar for bar', () => {
+  const { marketFeatures } = require('../../scripts/lib/trading/market-features');
   const list = bars(160).map((b, i) => ({ ...b, h: b.h + (i % 7), l: b.l - (i % 5), c: b.c + (i % 3) })).map(b => ({ ...b, ms: Date.parse(b.t) }));
   const atr20 = marketFeatures(list).atr20;
   for (const i of [19, 60, 120, 159]) assert.ok(Math.abs(atrAt(list, 180000, list[i].ms + 180000) - atr20[i]) < 1e-9, `bar ${i}`);

@@ -14,7 +14,7 @@
  *     qwen-extension.json, QWEN.md            `qwen extensions link`): generated
  *     agents/<role>.md, commands/<name>.md    Qwen-format agents and commands, plus
  *     skills, scripts, strategies, hooks,     symlinks to the shared sources so
- *     accounts, models -> ../<dir>            there is a single harness root (the
+ *     accounts -> ../<dir>                    there is a single harness root (the
  *                                             rules are embedded in QWEN.md, not linked)
  */
 
@@ -205,9 +205,9 @@ function opencodeJson(root) {
 }
 
 /** Shared directories the Qwen extension links to instead of copying. */
-const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'accounts', 'models'];
-/** Links an older sync made that are no longer wanted: rules are embedded in QWEN.md (contextFileName). */
-const QWEN_STALE_LINKS = ['rules'];
+const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'accounts'];
+/** Links an older sync made that are no longer wanted: rules are embedded in QWEN.md (contextFileName); models went with the trained policy. */
+const QWEN_STALE_LINKS = ['rules', 'models'];
 
 /** Map of relative path -> expected file content. */
 function expectedFiles(root) {

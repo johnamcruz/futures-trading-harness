@@ -631,9 +631,9 @@ test('after the session, with trades today, the runner keeps housekeeping until 
   assert.strictEqual(decide(cfg, s, new Date(et(15, 55))).action, 'eod');
 });
 
-/** A fake prop-challenge hook set (rl/live-runner.js) that records its calls. */
-function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503', owners = undefined } = {}) {
-  const calls = { snapshots: [], eod: [], eodDays: [], positions: [], screens: [], summaries: 0 };
+/** A fake prop-challenge hook set (prop/live-runner.js) that records its calls. */
+function fakeProp({ screen = r => r, summariesFail = false, eodFails = 0, eodError = 'HTTP 503', owners = undefined } = {}) {
+  const calls = { snapshots: [], eod: [], eodDays: [], screens: [], summaries: 0 };
   return {
     calls,
     ...(owners ? { owners } : {}),
@@ -650,7 +650,6 @@ function fakeProp({ position = () => 'hold', screen = r => r, summariesFail = fa
       return [{ account: 'mini', status: 'active', asOf: now.toISOString(), balance, floor: 48000, cushion: balance - 48000, profit: balance - 50000, target: 3000, dayPnl: 100, sessionsLeft: 29, budgets: [], entryBlock: null }];
     },
     screen(results, info) { calls.screens.push({ results, info }); return screen(results); },
-    position(args) { calls.positions.push(args); return position(args); },
   };
 }
 
@@ -686,20 +685,13 @@ test('end of day never deadlocks on the closing balance: a failed record is retr
   assert.deepStrictEqual(c.cycles.filter(x => x === 'eod'), ['eod']);
 });
 
-test('prop challenge: past the ratchet the policy is asked every bar and may close the trade', async () => {
-  // Bar 10:03 peaks at 21525 (2.5R): past the 2R ratchet. The policy closes at once.
-  const prop = fakeProp({ position: () => 'close' });
-  const r = await trailSim({ tape: { 3: [21525, 21521, 21522] }, prop });
-  assert.ok(prop.calls.positions.length >= 1);
-  const asked = prop.calls.positions[0];
-  assert.ok(asked.pos.peakR >= 2, 'never asked before the ratchet');
-  assert.deepStrictEqual({ sign: asked.pos.sign, entry: asked.pos.entry, risk: asked.pos.risk, size: asked.pos.size }, { sign: 1, entry: 21500, risk: 10, size: 1 });
-  assert.deepStrictEqual(r.closedIds, ['MNQ']);
-  assert.ok(r.cancelled.includes(9) && r.cancelled.includes(10));
-  // Hold: the trail manages it alone.
-  const holder = fakeProp({ position: () => 'hold' });
-  const h = await trailSim({ tape: { 3: [21525, 21521, 21522] }, prop: holder });
-  assert.ok(holder.calls.positions.length >= 1);
+test('prop challenge: past the ratchet nothing closes the trade early; the trail manages it', async () => {
+  // Bar 10:03 peaks at 21525 (2.5R): past the 2R ratchet. A hook set offering an in-trade decision is never asked.
+  const prop = fakeProp();
+  let asked = 0;
+  prop.position = () => { asked += 1; return 'close'; };
+  const h = await trailSim({ tape: { 3: [21525, 21521, 21522] }, prop });
+  assert.strictEqual(asked, 0);
   assert.deepStrictEqual(h.closedIds, []);
 });
 

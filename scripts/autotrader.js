@@ -48,7 +48,7 @@ const path = require('path');
 const { validateConfig, prompts, buildCommand, childEnv, decide, runResult, cycleOutcome, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
-const { createPropHooks } = require('./lib/rl/live-runner');
+const { createPropHooks } = require('./lib/prop/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
@@ -248,7 +248,7 @@ const writeEvent = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKe
 
 function buildRunner(cfg, dataDir, opts, client, log, event) {
   const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: () => loadStrategies(ROOT, process.env).strategies, paper: cfg.paper, log });
-  if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policies screen setups)`);
+  if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policy strategies size setups)`);
   return wireRunner({
     cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event,
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),

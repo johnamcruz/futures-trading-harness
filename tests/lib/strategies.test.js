@@ -326,8 +326,12 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   assert.ok(validateStrategy({ ...base, account: undefined }, body, 'p').some(e => /account:/.test(e)));
   assert.ok(validateStrategy({ ...base, sizing: { cushion_frac: 1.5 } }, body, 'p').some(e => /at most 1/.test(e)));
   const rules = { name: 'r', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules: { long: ['close > 1'] }, risk: { stop: 'atr:1', min_rr: 2 } };
-  for (const k of ['account', 'sizing', 'policy', 'strategies', 'contracts']) {
-    assert.ok(validateStrategy({ ...rules, [k]: k === 'sizing' ? { cushion_frac: 0.2 } : k === 'policy' ? { bundle: 'b' } : k === 'strategies' ? ['x'] : k === 'contracts' ? 'auto' : 'topstep_100k' }, body, 'r').some(e => e.startsWith(`${k}: only a policy strategy`)), k);
+  for (const k of ['account', 'sizing', 'strategies', 'contracts']) {
+    assert.ok(validateStrategy({ ...rules, [k]: k === 'sizing' ? { cushion_frac: 0.2 } : k === 'strategies' ? ['x'] : k === 'contracts' ? 'auto' : 'topstep_100k' }, body, 'r').some(e => e.startsWith(`${k}: only a policy strategy`)), k);
+  }
+  // The trained policy is retired: `policy: { bundle }` is no key of any strategy, a policy strategy included.
+  for (const x of [base, rules]) {
+    assert.ok(validateStrategy({ ...x, policy: { bundle: 'b' } }, body, x.name).some(e => /^unknown key "policy"/.test(e)), x.name);
   }
   // Cross-checks against the other strategies, at load time.
   const dir = tmpDir();

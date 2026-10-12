@@ -15,7 +15,7 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true })
 const lines = file => (fs.readFileSync(file, 'utf8').match(/\n/g) || []).length;
 
 // Logic lives in scripts/lib/ and is tested: each module is loaded by a test of its own.
-const LIB_WITHOUT_OWN_TEST = ['paths', 'rl/policy-net', 'trading/cisd-ote'];
+const LIB_WITHOUT_OWN_TEST = ['paths', 'trading/cisd-ote'];
 // CLIs stay thin (logic goes to scripts/lib/): a new CLI stays under 200 lines; the larger ones that
 // predate the rule are pinned near their size and may only shrink. Hook scripts stay under 200 lines.
 const CLI_MAX_LINES = 200;

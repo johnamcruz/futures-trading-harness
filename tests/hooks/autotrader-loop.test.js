@@ -127,7 +127,7 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
 // A copy of the harness whose harness tools server is a foreign MCP server (the fake broker).
 function foreignToolsRoot() {
   const root = tmpDir();
-  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'models', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  for (const d of ['scripts', 'strategies', 'accounts', 'mcp-configs', 'agents', 'skills', 'workspace']) fs.cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
   fs.copyFileSync(path.join(ROOT, 'package.json'), path.join(root, 'package.json'));
   fs.writeFileSync(path.join(root, 'scripts', 'harness-tools-mcp.js'), `require(${JSON.stringify(FAKE_BROKER)});\n`);
   return root;

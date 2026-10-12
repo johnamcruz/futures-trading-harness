@@ -2,14 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
 const path = require('path');
-const { createPropHooks } = require('../../scripts/lib/rl/live-runner');
+const { createPropHooks } = require('../../scripts/lib/prop/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
-const { observationFields } = require('../../scripts/lib/rl/observation');
-const { ACTIONS } = require('../../scripts/lib/rl/challenge-env');
-const { BUNDLE_FORMAT, BUNDLE_VERSION } = require('../../scripts/lib/rl/policy-bundle');
 const { main: combineCli } = require('../../scripts/combine');
 const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
@@ -17,21 +13,6 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const CONTRACT = 'MNQ';
 
 const COMPONENTS = ['trendy', 'other'];
-const FIELDS = observationFields(COMPONENTS);
-const DIM = FIELDS.length;
-
-/** A validated bundle for prop_x whose network always picks `action` (0 skip / 1 half / 2 full; position: 0 hold / 1 close). */
-function bundle(action) {
-  const sizes = [DIM, 3];
-  const b = [0, 0, 0];
-  b[action] = 10;
-  return {
-    format: BUNDLE_FORMAT, version: BUNDLE_VERSION, name: `always_${action}`, strategy: 'prop_x', components: COMPONENTS, strategies: COMPONENTS,
-    account: 'topstep_50k', symbol: 'MNQ', timeframe: 3, sizing: null, contracts: 'micro', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, obsFields: FIELDS, profile: require('../../scripts/lib/trading/volume-profile').DEFAULTS, actions: ACTIONS,
-    network: { obsDim: DIM, actionN: 3, hidden: [], actor: { sizes, layers: [{ W: new Array(3 * DIM).fill(0), b }] }, normalizer: { mean: new Array(DIM).fill(0), var: new Array(DIM).fill(1), count: 1, clip: 5 } },
-    gate: { minPassRate: 0.4, maxBlows: 0 }, validated: true, engine: { gate: true, slippageTicks: 1, fill: 'next-open' }, oos: { attempts: 20, passed: 10, blown: 0, passRate: 0.5, months: { '2026-01': { attempts: 10, blown: 0 }, '2026-02': { attempts: 10, blown: 0 } } },
-  };
-}
 
 function bars(n = 200) {
   const t0 = Date.parse('2026-10-07T13:00:00Z');
@@ -41,17 +22,15 @@ function bars(n = 200) {
   });
 }
 
-function setup({ policy = 'always_2', start = true, models = {}, contracts = 'micro', specs = true } = {}) {
+function setup({ start = true, contracts = 'micro', specs = true } = {}) {
   const home = tmpDir();
   if (specs) recordBrokerSpecs(home); // the broker's tick specs, as the translator records them
-  const modelsDir = tmpDir();
-  for (const [name, b] of Object.entries(models)) fs.writeFileSync(path.join(modelsDir, `${name}.json`), JSON.stringify(b));
-  const env = { FTH_MODELS_DIRS: modelsDir };
+  const env = {};
   const account = accountNamed(ROOT, 'topstep_50k', {});
   if (start) prop.startAttempt(home, account, new Date('2026-10-05T14:00:00Z'));
   const strategy = {
     name: 'prop_x', valid: true, status: 'active', instruments: ['MNQ', 'NQ'], timeframe: '3m', signal: 'policy', strategies: COMPONENTS,
-    account: 'topstep_50k', contracts, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, policy: policy ? { bundle: policy } : undefined,
+    account: 'topstep_50k', contracts, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 },
   };
   const logs = [];
   const balances = [];
@@ -127,7 +106,7 @@ test('no end-of-day or position deadlock: a day before the attempt is not an err
 
 test('a setup whose stop is too wide for the cushion is skipped with the reason, not silently', async () => {
   const now = new Date('2026-10-07T23:00:00Z');
-  const { hooks, home } = setup({ policy: null });
+  const { hooks, home } = setup();
   await hooks.snapshot(now);
   // A 1,000-point stop risks $2,000 a micro, far over the $450 budget.
   hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 1000 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
@@ -144,40 +123,38 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
     { name: 'prop_x', candidate: false, signal: 'policy' },
     { name: 'loner', candidate: true, direction: 'long', stopDistance: 4 },
   ];
-  for (const [action, maxOk] of [[2, true], [1, true], [0, false]]) {
-    const { hooks, home } = setup({ policy: `always_${action}`, models: { [`always_${action}`]: bundle(action) } });
-    await hooks.snapshot(now);
-    const out = hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-    assert.strictEqual(out.find(r => r.name === 'trendy').candidate, false, 'its strategies stop being candidates on their own');
-    assert.strictEqual(out.find(r => r.name === 'loner'), scan[3], 'other strategies pass through');
-    const mine = out.find(r => r.name === 'prop_x');
-    assert.strictEqual(mine.component, 'trendy', 'the first in the policy strategy\'s order, not the scan\'s');
-    assert.strictEqual(mine.candidate, maxOk);
-    const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
-    assert.strictEqual(v.action, ACTIONS.setup[action]);
-    assert.strictEqual(v.component, 'trendy');
-    assert.strictEqual(v.stopTicks, 40);
-    // Balance $50,250: cushion $2,250 over the $48,000 floor, budget 0.2 x = $450.
-    // A 40-tick stop risks $20 + $0.74 fees = $20.74 a contract: 21 micros; half: 10.
-    assert.strictEqual(v.maxSize, [0, 10, 21][action]);
-    if (action) assert.strictEqual(v.contract, 'MNQ');
-    assert.ok(Date.parse(v.expiresAt) > now.getTime());
-  }
+  const { hooks, home } = setup();
+  await hooks.snapshot(now);
+  const out = hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  assert.strictEqual(out.find(r => r.name === 'trendy').candidate, false, 'its strategies stop being candidates on their own');
+  assert.strictEqual(out.find(r => r.name === 'loner'), scan[3], 'other strategies pass through');
+  const mine = out.find(r => r.name === 'prop_x');
+  assert.strictEqual(mine.component, 'trendy', 'the first in the policy strategy\'s order, not the scan\'s');
+  assert.strictEqual(mine.candidate, true);
+  const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
+  assert.strictEqual(v.action, 'full', 'the sizing says full or skip');
+  assert.strictEqual(v.component, 'trendy');
+  assert.strictEqual(v.stopTicks, 40);
+  // Balance $50,250: cushion $2,250 over the $48,000 floor, budget 0.2 x = $450.
+  // A 40-tick stop risks $20 + $0.74 fees = $20.74 a contract: 21 micros.
+  assert.deepStrictEqual([v.maxSize, v.contract], [21, 'MNQ']);
+  assert.strictEqual(v.policy, undefined, 'the verdict records no trained policy');
+  assert.ok(Date.parse(v.expiresAt) > now.getTime());
   // The runner's contract is the selected leg: MNQ stays 21 micros under contracts auto (never switched to
   // 2 NQ), and NQ selected sizes in minis (NQ: $200 + $2.80 fees = $202.80 each: 2).
-  for (const [leg, want] of [['MNQ', ['MNQ', 21, null, 'full']], ['NQ', ['NQ', 2, null, 'full']]]) {
+  for (const [leg, want] of [['MNQ', ['MNQ', 21, 'full']], ['NQ', ['NQ', 2, 'full']]]) {
     for (const contracts of ['auto', 'micro', 'mini']) {
-      const auto = setup({ policy: null, contracts });
+      const auto = setup({ contracts });
       recordBrokerSpecs(auto.home, { roots: ['MNQ', 'NQ'] });
       await auto.hooks.snapshot(now);
       auto.hooks.screen(scan, { symbol: leg, contractId: leg, bars: bars(), now });
       const va = prop.latestVerdict(auto.home, 'prop_x', leg);
-      assert.deepStrictEqual([va.contract, va.maxSize, va.policy, va.action], want, `${leg} selected, contracts ${contracts}: the selected leg`);
+      assert.deepStrictEqual([va.contract, va.maxSize, va.action], want, `${leg} selected, contracts ${contracts}: the selected leg`);
     }
   }
   // The tick specs are the broker's: none recorded for the contract (or the family's other one) is a skip saying so.
   for (const roots of [[], ['MNQ']]) {
-    const bare = setup({ policy: null, contracts: 'auto', specs: false });
+    const bare = setup({ contracts: 'auto', specs: false });
     if (roots.length) recordBrokerSpecs(bare.home, { roots });
     await bare.hooks.snapshot(now);
     bare.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
@@ -186,59 +163,19 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
     assert.match(vb.reason, new RegExp(`no tick specs from the broker for ${roots.length ? 'NQ' : 'MNQ'} yet: call get_contract or search_contracts`));
   }
   // A broker spec unlike the static table (NQ at $0.50, a units mix-up): a skip, never a 10x size.
-  const odd = setup({ policy: null, contracts: 'auto', specs: false });
+  const odd = setup({ contracts: 'auto', specs: false });
   recordBrokerSpecs(odd.home, { roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0.5 } } });
   await odd.hooks.snapshot(now);
   odd.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   const vo = prop.latestVerdict(odd.home, 'prop_x', 'MNQ');
   assert.deepStrictEqual([vo.action, vo.maxSize], ['skip', 0]);
   assert.match(vo.reason, /^NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table/);
-  // A bundle trained for another policy strategy, account, sizing, or contract mode never decides.
-  for (const [meta, why] of [[{ strategy: 'other_prop' }, /trained for other_prop/], [{ components: ['trendy'] }, /different observation/], [{ account: 'topstep_100k' }, /account topstep_100k/],
-    [{ sizing: { cushion_frac: 0.5 } }, /sizing/], [{ symbol: 'MES' }, /trained on MES/], [{ contracts: 'auto' }, /contracts: auto/]]) {
-    const other = setup({ policy: 'b', models: { b: { ...bundle(2), ...meta } } });
-    await other.hooks.snapshot(now);
-    other.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-    assert.match(prop.latestVerdict(other.home, 'prop_x', 'MNQ').reason, why);
-  }
-  // Live sizes the selected leg only: a bundle trained on one leg decides only on that leg (minis here: NQ, not MNQ).
-  for (const [leg, why] of [['MNQ', /policy b was trained on minis only \(contracts: mini\), and the selected contract MNQ is the micro: select the NQ, or retrain/], ['NQ', null]]) {
-    const m = setup({ policy: 'b', contracts: 'mini', models: { b: { ...bundle(2), contracts: 'mini' } } });
-    recordBrokerSpecs(m.home, { roots: ['MNQ', 'NQ'] });
-    await m.hooks.snapshot(now);
-    m.hooks.screen(scan, { symbol: leg, contractId: leg, bars: bars(), now });
-    const vm = prop.latestVerdict(m.home, 'prop_x', leg);
-    if (why) assert.match(vm.reason, why, leg);
-    else assert.deepStrictEqual([vm.contract, vm.policy, vm.action], ['NQ', 'always_2', 'full'], leg);
-  }
-  const broken = setup({ policy: 'missing' });
-  await broken.hooks.snapshot(now);
-  const out = broken.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-  assert.strictEqual(out.find(r => r.name === 'prop_x').candidate, false);
-  assert.match(prop.latestVerdict(broken.home, 'prop_x', 'MNQ').reason, /not found/);
-  const cand = setup({ policy: 'cand', models: { cand: { ...bundle(2), validated: false } } });
-  await cand.hooks.snapshot(now);
-  cand.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-  assert.match(prop.latestVerdict(cand.home, 'prop_x', 'MNQ').reason, /not validated/);
 });
 
-test('in a trade past the ratchet the policy says hold or close, from the verdict the trade was entered on', async () => {
-  const pos = { sign: 1, entry: 21500, risk: 10, size: 1, peakR: 2.5, troughR: -0.3, barsHeld: 6 };
-  const enter = async h => {
-    await h.hooks.snapshot(new Date('2026-10-07T22:59:00Z'));
-    h.hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now: new Date('2026-10-07T23:00:00Z') });
-  };
-  const close = setup({ policy: 'always_1', models: { always_1: bundle(1) } });
-  // No verdict for this trade yet: the trail manages it alone.
-  assert.strictEqual(close.hooks.position({ strategy: close.strategy, contractId: CONTRACT, bars: bars(), pos }), null);
-  await enter(close);
-  assert.strictEqual(close.hooks.position({ strategy: close.strategy, contractId: CONTRACT, bars: bars(), pos }), 'close');
-  const hold = setup({ policy: 'always_2', models: { always_2: bundle(2) } });
-  await enter(hold);
-  assert.strictEqual(hold.hooks.position({ strategy: hold.strategy, contractId: CONTRACT, bars: bars(), pos }), 'hold');
-  const none = setup({ policy: 'missing' });
-  assert.strictEqual(none.hooks.position({ strategy: none.strategy, contractId: CONTRACT, bars: bars(), pos }), null);
-  assert.strictEqual(none.hooks.position({ strategy: { ...none.strategy, policy: undefined }, contractId: CONTRACT, bars: bars(), pos }), null);
+test('the prop hooks have no in-trade decision: an open trade is left to the policy strategy\'s exit', () => {
+  const { hooks } = setup();
+  assert.strictEqual(hooks.position, undefined);
+  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'owners', 'screen', 'snapshot', 'summaries']);
 });
 
 test('combine CLI: start an attempt and read its status', () => {
@@ -266,29 +203,23 @@ test('a policy strategy owns its strategies\' setups only while it is active and
   const now = new Date('2026-10-07T23:00:00Z');
   const scan = [{ name: 'trendy', status: 'active', candidate: true, direction: 'long', stopDistance: 10 }];
   // No attempt: the rules strategy trades as before, and no verdict is recorded.
-  const idle = setup({ policy: null, start: false });
+  const idle = setup({ start: false });
   const out = idle.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   assert.deepStrictEqual(out, scan);
   assert.strictEqual(prop.latestVerdict(idle.home, 'prop_x', 'MNQ'), null);
   // A paper policy strategy doesn't take setups from active strategies in a live run.
-  const paper = setup({ policy: null });
+  const paper = setup();
   paper.strategy.status = 'paper';
   await paper.hooks.snapshot(now);
   assert.deepStrictEqual(paper.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }), scan);
-  // A trained exit is part of the contract: an edited exit block refuses the bundle.
-  const edited = setup({ policy: 'always_2', models: { always_2: { ...bundle(2), exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } } } });
-  edited.strategy.exit = { trail_activate_r: 1, trail_giveback_r: 0.5 };
-  await edited.hooks.snapshot(now);
-  edited.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
-  assert.match(prop.latestVerdict(edited.home, 'prop_x', 'MNQ').reason, /trained with exit/);
 });
 
 test('owners: the strategies an active policy with a running attempt owns on the contract; none otherwise', () => {
-  const on = setup({ policy: null });
+  const on = setup();
   const owners = on.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT });
   assert.ok(owners.size > 0 && [...owners.values()].every(v => v === 'prop_x'), JSON.stringify([...owners]));
   assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'GC' }).size, 0, 'another instrument');
-  const off = setup({ policy: null, start: false });
+  const off = setup({ start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
 });
 

@@ -40,6 +40,7 @@ test('generated files parse in their harness formats', () => {
   assert.deepStrictEqual(ext.mcpServers.harness, { command: 'node', args: ['${extensionPath}${/}scripts${/}harness-tools-mcp.js'], cwd: '${extensionPath}', timeout: 60000 });
   for (const l of QWEN_LINKS) assert.ok(fs.existsSync(path.join(ROOT, 'qwen-extension', l, '.')), `qwen-extension/${l} resolves`);
   assert.ok(!QWEN_LINKS.includes('rules') && QWEN_STALE_LINKS.includes('rules'));
+  assert.ok(!QWEN_LINKS.includes('models') && QWEN_STALE_LINKS.includes('models'), 'the policy bundles are retired');
 });
 
 test('the Qwen extension embeds every always-on rule in QWEN.md (its rules are not linked)', () => {
