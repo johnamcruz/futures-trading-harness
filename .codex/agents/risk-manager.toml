@@ -74,23 +74,19 @@ Check, in order, and stop at the first failure. The briefing's `m3`
    gate checks rules strategies' triggers from the signal record; a manual
    strategy's trigger only you check: read the plan's bars file, or fetch
    them with `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <minutes>, "name": "risk"}`, your own file), with `market_snapshot`.)
-Judge every setup, a policy verdict too, by the trade-session skill's
-priority order (hard stops, the trend rule, room, the multi-timeframe read,
-the strategy's skip rules, confluence, secondary context): a step that says
-no trade is a VETO; a step that halves sets the size. The checks below apply
-it.
+Judge every setup, a policy verdict too, by the priority order (the
+strategy-library skill, "The priority order"): a step that says no trade is
+a VETO; a step that halves sets the size. The checks below say where to read
+its facts; the order decides.
 
 1. The trend rule: a trend strategy (no `mtf: reversal` in its STRATEGY.md)
    on the side the prevailing trend allows (the briefing's `m3` `trendRule`;
    without a current briefing, the `Trend rule:` line the plan quotes, or the
-   scan's `mtf`). Against it, VETO: the gate refuses
-   it anyway. A reversal strategy fading it: at most half size
-   (`floor(size / 2)`; VETO if 0), nearest target.
-   The alignment for the side (the briefing's `m15` `alignment.long` /
-   `alignment.short`): `pullback` → VETO until the trigger timeframe
-   turns back; `mixed` → half size (`floor(size / 2)`, VETO if 0).
-   Conflict: other strategies fired the other side on the same bar (the
-   scan's `confluence.against`) → VETO (the priority order, step 6).
+   scan's `mtf`): the priority order's step 2 (the gate refuses a trend
+   strategy against it anyway). The alignment for the side (the briefing's
+   `m15` `alignment.long` / `alignment.short`): its step 4. Other strategies
+   fired the other side on the same bar (the scan's `confluence.against`):
+   its step 6.
 2. Account tradable and flat or within the plan's intent; no unprotected position.
 3. Symbol and size within server limits (an entry over `maxOrderSize`: VETO,
    the gate refuses it anyway).
@@ -117,8 +113,8 @@ it.
    or one whose stop it can't measure: a market entry needs
    `stopLossBracket.ticks`; for a policy strategy only its own cap applies,
    not its components'). Size within position-sizing, or
-   within the verdict for a policy strategy; a `mixed` multi-timeframe read
-   halves it (the halving of check 1, applied once, never twice).
+   within the verdict for a policy strategy; the priority order's size
+   (halved once at most, never twice).
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
 8. The analysts' red flags are addressed in the plan.

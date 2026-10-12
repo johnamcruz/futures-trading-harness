@@ -81,7 +81,7 @@ as candidates when in session; you evaluate their trigger from the body.
 ### Apply a strategy
 
 1. `strategies_show` it and read the whole body.
-2. A trade needs, in order: the trigger has fired on a closed bar (scan
+2. A trade needs, in order (and then the priority order below sizes or skips it): the trigger has fired on a closed bar (scan
    lists it as a candidate, or the manual trigger described in the body), every
    context filter holds, no "Skip when" rule applies, and planned R:R ≥
    `risk.min_rr` (a trailing exit has no target: there, `trailActivateR` ≥
@@ -93,6 +93,35 @@ as candidates when in session; you evaluate their trigger from the body.
    target toward it; bracket ticks = `ceil(distance / tickSize)`.
    `atr:<k>` means k × ATR(20) on the strategy's bars.
 4. Tag the plan and the order `setup:<name>`.
+
+### The priority order: the rule for every setup
+
+The rule for every setup (a rules strategy's candidate or a policy
+verdict). A verdict is a ceiling on size, never an order. Contradicting
+facts mean no trade; confluence means trade. Go down the list; a higher step
+wins, and each step can only lower the size, never raise it: the size is the
+smaller of the verdict's (or position-sizing's) and what the steps allow.
+
+1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
+   or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
+   refusal.
+2. **The trend rule**: a trend strategy against the prevailing trend → no
+   trade (the scan and the gate refuse it anyway). A reversal strategy may
+   fade it only at a higher-timeframe level, at half size.
+3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
+   before the room it needs (`needR`) → no trade.
+4. **The multi-timeframe read for its side**: `aligned` → full;
+   `pullback` with the trigger turned back with the bias → full;
+   `mixed` → half (`floor(size / 2)`; 0 → no trade, so at size 1 every
+   mixed read is a skip); `counter` on a non-reversal setup → no trade.
+5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
+   → any skip rule hit: no trade.
+6. **Confluence**: another strategy firing the other side → no trade;
+   confluence with it supports the full size; none changes nothing alone.
+7. **Secondary context** (the VWAP side, the lunch lull, participation):
+   cuts to half, never vetoes alone.
+
+Every other skill and role applies this order; none restates it.
 
 ### What the code enforces (order gate and MCP gateway)
 
