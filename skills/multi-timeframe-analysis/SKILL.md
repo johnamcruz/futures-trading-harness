@@ -83,7 +83,7 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
 - **Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`, `cisd_ote`,
   `ofi_absorption`, `value_area_reentry`): may fade it. That is their setup, a raid at a
   higher-timeframe level; when they do, the priority order (strategy-library,
-  step 2) sizes them.
+  step 2) decides them: level, size, target.
 
 Where it is enforced:
 
