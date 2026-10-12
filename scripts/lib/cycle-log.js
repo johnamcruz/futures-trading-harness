@@ -12,7 +12,8 @@
  *       transcript, and the parsed summary
  *   <FTH_HOME>/logs/cycles-<day>.jsonl   one summary line per cycle: result,
  *       skills loaded, tool calls by name, shell commands, orders sent, and
- *       the skills an entry needed but the model never loaded
+ *       the skills an entry needed but the model never loaded, and every
+ *       delegation to a subagent (delegated)
  *
  * Transcripts: Claude Code runs with --output-format stream-json (one JSON
  * event per line, tool calls included); Codex with --json; Qwen Code with
@@ -27,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
-const { documents, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
+const { documents, parsed, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, SUBAGENT_CALLS, subagentRole, codexSubagentItem } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -71,11 +72,17 @@ function toolCalls(output) {
       // 'mcp_tool_call', ... } }. One call per item id, its latest form (a call still in flight when the turn
       // ended, only started, still counts); an item with no id counts once it completed.
       const item = /^item\.(started|updated|completed)$/.test(String(ev.type)) || ev.type === undefined ? ev.item : null;
-      if (!item || !['command_execution', 'mcp_tool_call'].includes(item.type)) continue;
+      // A subagent spawned: by its role, or any spawn_agent item (Codex may report one without a role).
+      const spawn = codexSubagentItem(item) || Boolean(item && item.tool === 'spawn_agent' && item.type !== 'agent_message');
+      if (!item || (!spawn && !['command_execution', 'mcp_tool_call'].includes(item.type))) continue;
       if ((item.id === undefined || item.id === null) && !(ev.type === 'item.completed' || ev.type === undefined)) continue;
       let call;
       if (item.type === 'command_execution') call = { name: 'Bash', input: { command: item.command } };
-      else {
+      else if (spawn) {
+        // A subagent spawned (spawn_agent): failed when its status or error says so.
+        const failed = Boolean(item.error) || item.status === 'failed';
+        call = { name: 'spawn_agent', input: subagentRole(item) ? item : subagentRole(item.arguments) ? parsed(item.arguments) : {}, ...(failed ? { failed: true, error: String(item.error ? item.error.message || JSON.stringify(item.error) : 'failed').slice(0, 300) } : {}) };
+      } else {
         // An error: a failed status, an error, or a result the tool marked as one (isError).
         const failed = item.status === 'failed' || Boolean(item.error) || Boolean(item.result && typeof item.result === 'object' && (item.result.isError || item.result.is_error));
         const error = !failed ? '' : item.error ? String(item.error.message || JSON.stringify(item.error)) : resultText(item.result && typeof item.result === 'object' ? item.result.content : item.result);
@@ -112,11 +119,15 @@ function summarize(output) {
     contractId: c.input.contractId, side: c.input.side, size: c.input.size, type: c.input.type, rationale: String(c.input.rationale || '').slice(0, 200),
   }));
   const entries = orders.filter(o => !RISK_REDUCING.test(o.rationale));
+  // Every delegation to a subagent, by the role it named (a lean cycle's run must have none that ran:
+  // autotrader.js delegates); "(refused)" when it came back an error or the harness stopped it.
+  const delegated = calls.filter(c => SUBAGENT_CALLS.has(c.name)).map(c => `${subagentRole(c.input) || c.name}${c.failed || c.stopped ? ' (refused)' : ''}`);
   return {
     skills,
     tools,
     commands,
     orders,
+    delegated,
     // An entry sent without the skills a trade decision needs (a Claude transcript lists every Skill load).
     missingSkills: entries.length && calls.length ? REQUIRED_FOR_ENTRY.filter(s => !skills.includes(s)) : [],
   };

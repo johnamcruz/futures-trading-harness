@@ -45,7 +45,7 @@ const DEFAULTS = {
   weekdaysOnly: true, // kept for old configs: the market session already excludes weekends
   maxCyclesPerDay: null, // default: one per bar of the 22-hour session (+10); after it, cycles only manage
   cycleTimeoutMinutes: null, // default max(3, 2 x timeframe)
-  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no analysts or news, the trader runs the snapshot, scan, and MTF read and calls risk-manager only on a candidate (use for 1m)
+  cycle: 'full', // 'full': parallel analysts every cycle; 'lean': no subagents and no news, the trader plays every role itself in order (snapshot, scan, MTF read; on a candidate the risk-manager's checks, then execution); the runner withholds the subagent tool from its trade and manage runs (use for 1m)
   // Added to the built-in CME calendar (trading/exchange-calendar.js), which covers 2026-2027:
   // Added to the built-in CME calendar (trading days, YYYY-MM-DD of the date they end on). To trade past its end,
   // add a whole year: every holiday and every early close (exchange-calendar.js cmeHolidays lists the rules).
@@ -82,9 +82,9 @@ const abs = p => `/${p}`;
  * broader allow in the user's settings): reading credentials and other
  * agents' configs, and writing the harness, its state, or Claude settings.
  */
-function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness') } = {}) {
+function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, home), stateDir = path.join(home, '.futures-trading-harness'), delegate = true } = {}) {
   return [
-    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', 'Agent', 'WebSearch',
+    `mcp__${SERVER_NAME}`, `mcp__${HARNESS_SERVER}`, 'Skill', ...(delegate ? ['Agent'] : []), 'WebSearch',
     ...NEWS_DOMAINS.map(d => `WebFetch(domain:${d})`),
     // The runner's logs (scans-<day>.jsonl: why each bar did or didn't fire), read-only.
     `Read(${abs(root)}/**)`, `Read(${abs(dataDir)}/**)`, `Read(${abs(stateDir)}/logs/**)`, `Read(${abs(scratchDir({ FTH_HOME: stateDir }))}/**)`,
@@ -94,10 +94,12 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
   ];
 }
 
-function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null } = {}) {
+function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = null, delegate = true } = {}) {
   const h = p => abs(path.join(home, p));
   const state = stateDir && stateDir !== path.join(home, '.futures-trading-harness') ? [`Edit(${abs(stateDir)}/**)`, `Write(${abs(stateDir)}/**)`] : [];
   return [
+    // A run without subagents: denied too, so no allow rule in the user's settings brings them back (deny wins).
+    ...(delegate ? [] : SUBAGENT_TOOLS),
     ...state,
     'Read(//proc/**)', `Read(${h('.claude')}/**)`, `Read(${h('.claude.json')})`, `Read(${h('.qwen')}/**)`,
     `Read(${h('.codex')}/**)`, `Read(${h('.ssh')}/**)`, `Read(${abs(root)}/**/.env)`,
@@ -109,6 +111,39 @@ function claudeDenied(root, { home = os.homedir(), stateDir = null, journal = nu
     ...(journal ? [`Edit(${abs(journal)})`, `Write(${abs(journal)})`] : []),
     `Edit(${h('.claude')}/**)`, `Write(${h('.claude')}/**)`,
   ];
+}
+
+/** The harnesses' subagent tool as Claude and Qwen Code permission rules name it (Task: its older name). */
+const SUBAGENT_TOOLS = ['Agent', 'Task'];
+
+/**
+ * Whether a run may delegate to the harness's roles as subagents. A lean cycle's trade and manage runs
+ * may not: the trader plays every role itself (trade-session skill), and the runner withholds the
+ * subagent tool so a model that would delegate anyway can't (on one local server each subagent runs
+ * after the last, and the cycle outlasts its bar). Premarket and end of day delegate as always.
+ */
+function delegates(cfg, action = 'trade') {
+  return !(cfg.cycle === 'lean' && (action === 'trade' || action === 'manage'));
+}
+
+/**
+ * Codex extra arguments that could turn subagents back on over the runner's -c features.multi_agent=false
+ * (a lean cycle): a profile (its own [profiles.<name>.features]), --enable, or a -c / --config that sets
+ * a feature, the agents table, or the profile. Returns the offending arguments, [] when none.
+ */
+function codexLeanBadArgs(args) {
+  const bad = [];
+  // The setting's key only (before the first =): a value such as a file name may say "agents".
+  const risky = v => /^(features|agents|profiles?)(\.|$)|multi_agent/i.test(String(v).split('=')[0].replace(/["'\s]/g, ''));
+  for (let i = 0; i < args.length; i += 1) {
+    const [flag, inline] = String(args[i]).split(/=(.*)/s);
+    const value = inline !== undefined ? inline : args[i + 1];
+    // -p<name>: a short flag with its value attached is the same profile.
+    if (['--profile', '-p', '--enable'].includes(flag) || /^-p./.test(flag)) bad.push(String(args[i]));
+    else if (['-c', '--config'].includes(flag) && risky(value)) bad.push(inline !== undefined ? String(args[i]) : `${flag} ${value}`);
+    else if (/^-c./.test(flag) && risky(String(args[i]).slice(2))) bad.push(String(args[i]));
+  }
+  return bad;
 }
 
 const ORDER_TOOL_NAMES = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
@@ -251,6 +286,10 @@ function validateConfig(raw) {
     const unsafe = opencode.badExtraArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
     if (unsafe.length) errors.push(`extraArgs: not ${unsafe.join(', ')} for opencode (only ${Object.keys(opencode.EXTRA_ARGS).join(', ')}: an unattended run gets only what the workspace config and the runner allow)`);
   }
+  if (cfg.harness === 'codex' && cfg.cycle === 'lean') {
+    const bad = codexLeanBadArgs(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
+    if (bad.length) errors.push(`extraArgs: not ${bad.join(', ')} for codex with cycle "lean": a profile, a feature switch, or a features/agents setting could turn its subagents back on (the runner sets features.multi_agent=false). Put the model in "model" and leave these out, or use cycle "full"`);
+  }
   if (cfg.alertWebhook && !/^https:\/\/\S+$/.test(String(cfg.alertWebhook))) errors.push('alertWebhook: an https:// URL, or "" for none');
   if (cfg.alertCommand !== null && !(Array.isArray(cfg.alertCommand) && cfg.alertCommand.length && cfg.alertCommand.every(a => typeof a === 'string'))) errors.push('alertCommand: an argv array (the message is in FTH_ALERT), or null');
   if (typeof cfg.eodReview !== 'boolean') errors.push('eodReview: true or false');
@@ -379,7 +418,7 @@ function prompts(cfg, now, root = '') {
       const symbols = list.map(x => x.symbol).join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
-        cfg.cycle === 'lean' ? 'lean cycle (see the trade-session skill)' : '',
+        cfg.cycle === 'lean' ? 'lean cycle: no subagents; play each role yourself (see the trade-session skill)' : '',
         manageOnly ? 'manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries)' : '',
       ].filter(Boolean).join('; ');
       const recover = recovered ? ' The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.' : '';
@@ -415,8 +454,11 @@ function prompts(cfg, now, root = '') {
   };
 }
 
-/** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
-function childEnv(cfg, root, base = process.env) {
+/**
+ * Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode.
+ * `action` is the run's (premarket, trade, manage, eod): a lean cycle's trade and manage runs get no subagents (delegates).
+ */
+function childEnv(cfg, root, base = process.env, { action = 'trade' } = {}) {
   // The gate learns the exchange calendar from the runner's config.
   const env = { ...base, FTH_ROOT: root, FTH_AUTONOMOUS: '1', FTH_CLOSED_DATES: cfg.closedDates.join(','), FTH_EARLY_CLOSE_DATES: cfg.earlyCloseDates.join(',') };
   // The harness tools read bars files from the runner's bar directory (harness-tools/paths.js).
@@ -429,32 +471,39 @@ function childEnv(cfg, root, base = process.env) {
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir) });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), delegate: delegates(cfg, action) });
   }
   return env;
 }
 
-/** argv for one headless run. */
-function buildCommand(cfg, prompt, root, env = process.env) {
+/**
+ * argv for one headless run. `action` as for childEnv: a lean cycle's trade and manage runs are
+ * started without the subagent tool (opencode's is withheld in childEnv's per-run config).
+ */
+function buildCommand(cfg, prompt, root, env = process.env, { action = 'trade' } = {}) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
+  const delegate = delegates(cfg, action);
   switch (cfg.harness) {
     case 'claude':
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
-        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env) }).join(','),
-        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath }).join(','),
+        '--allowedTools', claudeTools(root, { dataDir: resolveDataDir(cfg, os.homedir(), env), stateDir: harnessHome(env), delegate }).join(','),
+        '--disallowedTools', claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, delegate }).join(','),
         ...(model ? ['--model', model] : []), ...extra];
     case 'codex':
       // The sandbox may also write the news-blackouts directory (premarket records FOMC/CPI windows there).
       return ['codex', 'exec', '--json', '--sandbox', 'workspace-write', '-c', 'approval_policy="never"',
         '-c', `sandbox_workspace_write.writable_roots=[${JSON.stringify(path.dirname(loadGateConfig(env).blackoutsFile))}]`,
-        ...(model ? ['-m', model] : []), ...extra, prompt];
+        ...(model ? ['-m', model] : []), ...extra,
+        // No subagents: Codex's multi-agent tools (spawn_agent, ...) off for this run, after the extra arguments (a later -c wins).
+        ...(delegate ? [] : ['-c', 'features.multi_agent=false']), prompt];
     case 'qwen':
       // Default approval mode: only tools allowed in workspace/.qwen/settings.json
       // permissions (written by the installer and refreshed by the runner) run headless.
+      // No subagents: the agent tool excluded (a deny rule, which beats the allowlist's Agent(<role>)), last, after the extra arguments.
       return ['qwen', '-p', prompt, '--approval-mode', 'default', '--output-format', 'json', '--max-session-turns', '80',
-        ...(model ? ['--model', model] : []), ...extra];
+        ...(model ? ['--model', model] : []), ...extra, ...(delegate ? [] : ['--exclude-tools', ...SUBAGENT_TOOLS])];
     case 'opencode':
       // JSON events (cycle-log.js). Headless, anything workspace/opencode.json doesn't allow is refused;
       // the model is the user's opencode default unless the config names one (provider/model).
@@ -666,6 +715,9 @@ module.exports = {
   HARNESSES,
   claudeTools,
   claudeDenied,
+  delegates,
+  SUBAGENT_TOOLS,
+  codexLeanBadArgs,
   claudeOrderToolConflicts,
   resolveDataDir,
   NEWS_DOMAINS,

@@ -34,6 +34,15 @@ test('probe: started exactly as the runner starts a cycle (argv, workspace, lock
   assert.deepStrictEqual(fake.argv.slice(0, 3), [process.execPath, '/x/fake.js', '-p']);
   assert.deepStrictEqual(hc.probeCommand('claude', ROOT, env, { bin: '/x/claude2' }).argv.slice(0, 2), ['/x/claude2', '-p']);
   assert.throws(() => hc.probeCommand('cursor', ROOT, env), /unknown harness "cursor"/);
+  // A lean cycle's config still probes the delegation: the probe runs as a full cycle, on every harness.
+  const leanCfg = h => ({ harness: h, cycle: 'lean' });
+  const leanClaude = hc.probeCommand('claude', ROOT, env, { config: leanCfg('claude') }).argv;
+  assert.ok(leanClaude[leanClaude.indexOf('--allowedTools') + 1].split(',').includes('Agent'));
+  assert.ok(!leanClaude.join(' ').split(/[ ,]/).includes('Task'));
+  assert.ok(!hc.probeCommand('codex', ROOT, env, { config: leanCfg('codex') }).argv.some(a => /multi_agent/.test(a)));
+  assert.ok(!hc.probeCommand('qwen', ROOT, env, { config: leanCfg('qwen') }).argv.includes('Agent'));
+  const leanOc = JSON.parse(hc.probeCommand('opencode', ROOT, env, { config: leanCfg('opencode') }).env.OPENCODE_CONFIG_CONTENT);
+  assert.strictEqual(leanOc.agent['fth-head-trader'].permission.task['risk-manager'], 'allow');
   // The broker narrowed to reading on every harness: no order tool, no journal write.
   const orderTools = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position', 'journal_add'];
   assert.deepStrictEqual([...hc.PROBE_DENIED].sort(), [...orderTools].sort());

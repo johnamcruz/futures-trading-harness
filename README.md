@@ -436,8 +436,19 @@ More runner settings:
   session, the runner checks the account once a minute and closes anything
   open. `earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME
   early-close days.
-- `"cycle": "lean"` skips the parallel analysts unless a strategy fires (use
-  it for 1-minute bars so a cycle fits in one bar).
+- `"cycle": "lean"` runs trade cycles without subagents: the trader plays
+  every role itself, in order, with the risk manager's checks before any
+  entry (use it for 1-minute bars so a cycle fits in one bar). The runner
+  withholds the subagent tool from those runs (Claude Code: `Agent` left out
+  of the allowlist and denied; Codex: `features.multi_agent=false`; Qwen
+  Code: `--exclude-tools Agent Task`; opencode: the head trader's `task`
+  permission denied for every role). A `custom` harness gets the prompt
+  only. With Codex, a lean config may not pass `--profile`, `--enable`, or a
+  `-c` features/agents/profile setting in `extraArgs` (they could turn its
+  subagents back on), and a Codex profile selected in your own config could
+  still do so. Every cycle log lists the subagent calls (`delegated`), and
+  the runner warns when a lean cycle's run delegated anyway. Premarket and
+  end of day still delegate.
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)
   switches to manage-only cycles once reached.
 - The CME equity index calendar for 2026-2027 is built in

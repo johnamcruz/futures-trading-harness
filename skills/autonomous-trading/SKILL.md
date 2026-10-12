@@ -17,7 +17,11 @@ description: Rules for running the trading harness unattended (headless, schedul
    through the whole 18:00-16:00 ET session, and hands you the closed bars in a
    file. Run exactly one trade-session (or premarket / end-of-day when the
    prompt says so). Don't wait, sleep, or poll inside a run; a bar that closes
-   while you are still running is skipped, so finish within one bar.
+   while you are still running is skipped, so finish within one bar. A
+   lean cycle (the prompt says "lean cycle") has no subagents: the runner
+   doesn't offer the subagent tool, so play every role yourself as the
+   trade-session skill's lean cycle says, the risk manager's checks before
+   any entry included. Don't try to delegate, or retry a refused delegation.
 2. **No questions.** Nobody is there to answer. Where the interactive workflow
    would ask, take the conservative branch: stand aside, keep the stop, flatten
    at end of day.

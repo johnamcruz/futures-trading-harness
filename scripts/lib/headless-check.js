@@ -34,7 +34,7 @@ const { harnessHome } = require('./paths');
 const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
 const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 // Transcript parsing and the bridge wrappers (Qwen's tool_call), shared with the cycle log.
-const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall } = require('./transcript');
+const { documents, parsed, BRIDGE_TOOLS, unwrap, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, SUBAGENT_CALLS: AGENT_TOOLS, subagentRole: roleOf, codexSubagentItem } = require('./transcript');
 const { denyTools } = require('./opencode');
 
 const MARKER = 'FTH-HEADLESS-PROBE';
@@ -63,8 +63,9 @@ function probeConfig(harness, config = {}) {
   const { model: _m, extraArgs: _a, command: _c, ...shared } = config || {};
   // A config without a harness runs the runner's default one.
   const own = config && (config.harness || DEFAULTS.harness) === harness ? config : shared;
-  // Paper: the broker server itself refuses every order, whatever the probe's run does.
-  return validateConfig({ ...own, harness, paper: true });
+  // Paper: the broker server itself refuses every order, whatever the probe's run does. A full cycle:
+  // the probe delegates to a role, which a lean cycle's trade runs may not (autotrader.js delegates).
+  return validateConfig({ ...own, harness, paper: true, cycle: 'full' });
 }
 
 /** argv, working directory and environment of the probe, exactly as the runner would start a cycle. */
@@ -106,11 +107,6 @@ function probeCommand(harness, root, env = process.env, { bin = null, config = {
   return { argv, cwd: path.resolve(root, cfg.workdir), env: harness === 'opencode' ? readOnlyOpencode(runEnv) : runEnv };
 }
 
-const AGENT_TOOLS = new Set(['Agent', 'Task', 'agent', 'task', 'spawn_agent']);
-const roleOf = input => {
-  const i = parsed(input);
-  return i && typeof i === 'object' ? String(i.subagent_type || i.agent_type || i.agent_name || i.agent || i.role || '') : '';
-};
 const textOf = v => (typeof v === 'string' ? v : JSON.stringify(v === undefined ? '' : v));
 
 /** What the probe reached, from a transcript. */
@@ -148,7 +144,7 @@ function analyze(text) {
       item(v, { name: `mcp__${v.server}__${v.tool}`, input: v.arguments || {}, done: pending(v.status) ? null : { isError: v.status !== 'completed' || Boolean(v.error), text: textOf(v.error || v.result) } });
     } else if (v.type === 'command_execution') {
       item(v, { name: 'shell', input: { command: v.command }, done: pending(v.status) ? null : { isError: !(v.status === 'completed' && v.exit_code === 0), text: textOf(v.aggregated_output || v.status) } });
-    } else if (typeof v.type === 'string' && (/agent/i.test(v.type) || v.tool === 'spawn_agent') && (roleOf(v) || roleOf(v.arguments))) {
+    } else if (codexSubagentItem(v)) {
       item(v, { name: 'spawn_agent', input: roleOf(v) ? v : parsed(v.arguments), done: pending(v.status) ? null : { isError: Boolean(v.error) || (v.status !== undefined && v.status !== 'completed'), text: textOf(v.error || '') } });
     }
     for (const x of Object.values(v)) walk(x, depth + 1);
