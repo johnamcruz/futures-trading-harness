@@ -138,7 +138,8 @@ function codexLeanBadArgs(args) {
   for (let i = 0; i < args.length; i += 1) {
     const [flag, inline] = String(args[i]).split(/=(.*)/s);
     const value = inline !== undefined ? inline : args[i + 1];
-    if (['--profile', '-p', '--enable'].includes(flag)) bad.push(String(args[i]));
+    // -p<name>: a short flag with its value attached is the same profile.
+    if (['--profile', '-p', '--enable'].includes(flag) || /^-p./.test(flag)) bad.push(String(args[i]));
     else if (['-c', '--config'].includes(flag) && risky(value)) bad.push(inline !== undefined ? String(args[i]) : `${flag} ${value}`);
     else if (/^-c./.test(flag) && risky(String(args[i]).slice(2))) bad.push(String(args[i]));
   }
