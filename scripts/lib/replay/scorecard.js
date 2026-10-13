@@ -379,7 +379,9 @@ function classify(label, facts, expected, reasons) {
     return true;
   };
   const grounds = reasons.claims.filter(x => x.check === true && GROUNDS.has(x.kind) && bears(x));
-  const judged = reasons.judgment.length > 0 || reasons.claims.some(x => x.check === 'unchecked');
+  // An unverifiable claim excuses a skip only when it bears on the expected setup too (an unchecked claim about
+  // another setup is no more a ground than a true one); judgment clauses (steps 5, 7) are bar-wide.
+  const judged = reasons.judgment.length > 0 || reasons.claims.some(x => x.check === 'unchecked' && bears(x));
   if (grounds.length) return why.push(`a true ground the facts missed: ${grounds.map(x => x.kind).join(', ')}`), out('unchecked', null);
   if (judged) return why.push('skipped on judgment (steps 5 and 7 are the model\'s)'), out('unchecked', null);
   if (reasons.unparsed.length && !falseReason) return why.push('its reasons are not parsed'), out('unchecked', null);

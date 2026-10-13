@@ -550,7 +550,11 @@ test('a true claim excuses a skip only when it bears on the setup the order says
   const own = facts({ setups: [setup({ name: 'keltner', component: null, policy: false, verdict: null, trendAllows: true })], trendRule: { prevailing: '15m up', long: true, short: false } });
   assert.strictEqual(classify(label(), own, expectedDecision(own), checkReasons('CYCLE RESULT: no-trade - 15m up trend blocks shorts', own)).category, 'unchecked');
   // keltner's own room, stated short while its record says enough: a false reason, not a ground.
-  assert.strictEqual(classify(label(), g, expectedDecision(g), checkReasons('CYCLE RESULT: no-trade - keltner insufficient room', g)).category, 'excessive abstention');
+  assert.strictEqual(classify(label(), g, expectedDecision(g), checkReasons('CYCLE RESULT: no-trade - keltner insufficient room', g)).category, 'excessive abstention');  // Unverifiable, about another setup (orb's room unknown): no more a ground than a true one.
+  const unknown = facts({ setups: [keltner, setup({ name: 'orb', component: null, policy: false, verdict: null, room: null })] });
+  const vague = checkReasons('CYCLE RESULT: no-trade - orb short insufficient room', unknown);
+  assert.ok(vague.claims.some(c => c.check === 'unchecked'), JSON.stringify(vague.claims));
+  assert.strictEqual(classify(label(), unknown, expectedDecision(unknown), vague).category, 'excessive abstention');
 });
 
 test('"no room concerns" is not a room shortage', () => {
