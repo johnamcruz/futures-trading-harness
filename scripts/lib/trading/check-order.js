@@ -19,6 +19,7 @@ const { loadAccounts } = require('./accounts');
 const { resolveClock, createGatewayClock } = require('./harness-now');
 const { activeBroker } = require('../broker/config');
 const { liveEntryRefusal } = require('../broker/allow-list');
+const { heldByRunner } = require('../account-lock');
 const { loadEnvFiles } = require('../env-file');
 
 function readBlackouts(file) {
@@ -89,6 +90,9 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     loadEnvFiles({ env: serverEnv });
     const why = liveEntryRefusal({ broker: activeBroker(env), env: serverEnv, accountId: (input || {}).accountId, replay: c.replay === true });
     if (why) result.violations.push({ check: 'allowed-accounts', message: `${why}. Exits, protective stops, cancels and close_position still go.` });
+    // Outside a runner (no FTH_ACCOUNT_LOCK): no entry on an account a live runner holds (account-lock.js).
+    const held = config.accountLock ? null : heldByRunner({ env: serverEnv, broker: activeBroker(env), accountId: (input || {}).accountId });
+    if (held) result.violations.push({ check: 'account-lock', message: held });
   }
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now };

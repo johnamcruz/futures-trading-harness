@@ -93,7 +93,7 @@ function setup(entries, extraEnv = {}) {
     dir,
     env: {
       FTH_HOME: home,
-      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, entries),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
       FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
@@ -135,7 +135,7 @@ test('order gate allows a planned entry', () => {
 });
 
 test('order gate: a setup tag that is not first is refused with where it goes', () => {
-  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[setup-tag\] Rationale must start with the strategy as setup:<name>/);
@@ -160,7 +160,7 @@ test('order gate wiring: an entry carries its stop as stopLossBracket; a stop on
 });
 
 test('order gate: an order that contradicts its rationale is refused with what disagrees', () => {
-  const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ side: 'sell', rationale: 'setup:orb long break above 21500, stop 21480' })), env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[order-consistency\] The order doesn't agree with itself: the rationale says long but the order side is sell/);
@@ -388,7 +388,7 @@ test('order gate fails closed on malformed input', () => {
 
 test('order gate fails closed when the journal is unreadable', () => {
   const { dir, env } = setup([]);
-  const r = gate(orderPayload(), { ...env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: dir });
+  const r = gate(orderPayload(), { ...env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: dir });
   assert.strictEqual(r.code, 2);
 });
 
@@ -509,7 +509,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
     PATH: process.env.PATH,
     HOME: dir,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
@@ -549,7 +549,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -573,7 +573,7 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
     const dir = tmpDir();
     const env = {
       PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
-      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
     let out = '';
@@ -659,7 +659,7 @@ test('MCP gateway: the configured server sits behind the contract translator: st
 async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}) {
   const { spawn } = require('child_process');
   const env = {
-    PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
@@ -1040,7 +1040,7 @@ test('MCP gateway: a stop can\'t be moved toward the market right after a close 
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '600', STOP_ORDER: '1',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -1069,7 +1069,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -1472,7 +1472,7 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MES', type: 1, size: 1 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -1497,7 +1497,7 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'MES', type: 1, side: 0, size: 1, limitPrice: 5000 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -2002,4 +2002,92 @@ test('MCP gateway: the server attests live entries - an override can\'t spoof a 
   }
   // Control: both lists hold the account and the server trades: the entry goes.
   assert.match(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1' } }), /"orderId":\s*5/);
+});
+
+test('order gate wiring: FTH_ACCOUNT_LOCK - an entry from a cycle without its runner\'s lock (or one it lost) is refused; exits pass; held, no refusal', () => {
+  const L = require('../../scripts/lib/account-lock');
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const lockEnv = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
+  const lock = L.acquireAccountLocks({ env: lockEnv, broker: { name: 'live' }, servers: ['cmd:/s'], accountId: String(entryOrder().accountId) });
+  try {
+    const none = gate(orderPayload(), { ...env, FTH_ACCOUNT_LOCK: 'none' });
+    assert.strictEqual(none.code, 2);
+    assert.match(none.stderr, /\[account-lock\] This cycle runs without its account's runner lock/);
+    const exit = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[exit] flatten before the close' })), { ...env, FTH_ACCOUNT_LOCK: 'none' });
+    assert.strictEqual(exit.code, 0, 'exits are always allowed');
+    const held = gate(orderPayload(), { ...env, FTH_ACCOUNT_LOCK: L.lockSpec(lock) });
+    assert.doesNotMatch(held.stderr, /account-lock/);
+    fs.writeFileSync(lock.files[0], JSON.stringify({ pid: process.pid, host: require('os').hostname(), token: 'theirs' }));
+    const lost = gate(orderPayload(), { ...env, FTH_ACCOUNT_LOCK: L.lockSpec(lock) });
+    assert.strictEqual(lost.code, 2);
+    assert.match(lost.stderr, /\[account-lock\] The runner no longer holds its account's lock/);
+  } finally {
+    lock.release();
+  }
+});
+
+test('order gate wiring: outside a runner (no FTH_ACCOUNT_LOCK), an entry on an account a live runner holds is refused; exits pass; free, no refusal', () => {
+  const L = require('../../scripts/lib/account-lock');
+  const os = require('os');
+  const { spawn } = require('child_process');
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const lockEnv = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test' };
+  const full = { ...env, ...lockEnv };
+  const free = gate(orderPayload(), full);
+  assert.doesNotMatch(free.stderr, /account-lock/);
+  const runner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
+  try {
+    const file = L.lockFileFor({ env: lockEnv, server: 'api:https://api.fake-broker.test', accountId: entryOrder().accountId });
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ pid: runner.pid, host: os.hostname(), home: '/homes/runner', startedAt: 't', token: 'x' }));
+    const held = gate(orderPayload(), full);
+    assert.strictEqual(held.code, 2);
+    assert.match(held.stderr, new RegExp(`\\[account-lock\\] account \\d+ on broker "fake" is already traded by another runner \\(pid ${runner.pid}.*Entries from another session are refused`));
+    const exit = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[exit] flatten before the close' })), full);
+    assert.strictEqual(exit.code, 0, 'exits are always allowed');
+    const protect = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[protect] stop at 21480' })), full);
+    assert.doesNotMatch(protect.stderr, /account-lock/);
+  } finally {
+    runner.kill();
+  }
+});
+
+test('order gate wiring: inside a runner (FTH_ACCOUNT_LOCK), an entry on another account is refused even when no runner holds that one; an exit there passes', () => {
+  const L = require('../../scripts/lib/account-lock');
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const lockEnv = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
+  const mine = String(entryOrder().accountId);
+  const lock = L.acquireAccountLocks({ env: lockEnv, broker: { name: 'live' }, servers: ['cmd:/s'], accountId: mine });
+  try {
+    const full = { ...env, ...lockEnv, FTH_ACCOUNT_LOCK: L.lockSpec(lock) };
+    const other = gate(orderPayload(entryOrder({ accountId: 7 })), full);
+    assert.strictEqual(other.code, 2);
+    assert.match(other.stderr, new RegExp(`\\[account-lock\\] This runner holds account ${mine}'s lock, not account 7's`));
+    const exit = gate(orderPayload(entryOrder({ accountId: 7, side: 'sell', rationale: '[exit] flatten before the close' })), full);
+    assert.strictEqual(exit.code, 0, 'exits on any account are always allowed');
+    const own = gate(orderPayload(), full);
+    assert.doesNotMatch(own.stderr, /account-lock/);
+  } finally {
+    lock.release();
+  }
+});
+
+test('order gate wiring: outside a runner, an entry with no valid account id is refused by the lock check; exits pass', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const full = { ...env, FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
+  const r = gate(orderPayload(entryOrder({ accountId: 'x' })), full);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[account-lock\] The order names no valid accountId \("x"\)/);
+  const exit = gate(orderPayload(entryOrder({ accountId: 'x', side: 'sell', rationale: '[exit] flatten before the close' })), full);
+  assert.doesNotMatch(exit.stderr, /account-lock/, 'exits never meet the lock check');
+});
+
+test('order gate wiring: outside a runner, a live broker whose API URL variable is unset refuses entries (naming it); exits pass', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const full = { ...env, FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: '' };
+  const r = gate(orderPayload(), full);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[account-lock\] broker "fake": FAKE_BROKER_API_URL is not set, .*Set FAKE_BROKER_API_URL/);
+  const exit = gate(orderPayload(entryOrder({ side: 'sell', rationale: '[exit] flatten before the close' })), full);
+  assert.strictEqual(exit.code, 0, 'exits are always allowed');
 });

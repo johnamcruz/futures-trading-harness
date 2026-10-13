@@ -29,6 +29,7 @@ const { checkSkillsLoaded } = require('./skills-loaded');
 const { checkRolesRan } = require('./roles-ran');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
+const { lockGateRefusal } = require('../account-lock');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -250,6 +251,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   add('kill-switch', config.killSwitchFile && fs.existsSync(config.killSwitchFile)
     ? `Kill switch is on (${config.killSwitchFile}). No new entries until the user removes it.`
     : null);
+  // Hard rule: a runner's cycle enters only while the runner holds its account's lock (one runner per account).
+  const lockMsg = lockGateRefusal(config.accountLock, input.accountId);
+  if (lockMsg) violations.push({ check: 'account-lock', message: lockMsg });
   add('setup-tag', setup ? null
     : 'Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. '
       + 'If this order exits or protects a position, start the rationale with [exit] or [protect].');

@@ -66,7 +66,8 @@ Read-only: it places no orders. It starts the broker server as the runner does
 and sessions, a live run's account and allow-list), that the CLI harness command
 resolves (and its `--version`; skip with `--no-version`), the broker interface,
 that the server trades the account, the clock against the server's, the account
-(exists, can trade, balance, profile size), prop attempts, the bar fields active
+(exists, can trade, balance, profile size), that no other runner trades the
+account (`account lock`), prop attempts, the bar fields active
 strategies read with `field(...)` (a warning when missing), market hours (a
 warning when closed) and the kill switch. Exit 0: ready (warnings allowed);
 exit 1: fix every `FAIL` line first. `--json` prints the report as JSON.
@@ -78,8 +79,45 @@ node scripts/autotrader.js --config ~/autotrader.json --dry-run   # the next act
 node scripts/autotrader.js --config ~/autotrader.json             # the live loop
 ```
 
-One runner per machine (a lock file). It refuses to start when the server lacks
-an interface tool, has trading disabled, or (live) doesn't allow the account.
+One runner per harness home (a lock file), and one live runner per broker
+account across every harness home: the account's lock is in
+`~/.futures-trading-harness/locks/` of your OS account, whatever `FTH_HOME` or
+`HOME` say (another OS user has other locks). `FTH_LOCK_DIR` moves it for tests
+only: without `FTH_TEST_LOCKS=1` a live run refuses to start. It is keyed by the
+broker server, not by the broker's name, so one server under two names is one
+lock: by its resolved command and by the API URL the broker config names
+(`apiUrlEnv`: one of its `env` variables, never a credential; a live run refuses
+when it is missing or empty), both checked before the server is started; and by
+the API its `get_server_config` reports (`apiUrl`, which a live run requires),
+checked once it answers. So another install of the server on the same API is
+refused before it starts. A
+second runner on the same account, or a manual `--once trade` or `premarket`
+run, is refused, naming the first one's pid, harness home and start time; a
+live manual run names its account. A manual end of day (risk-reducing only)
+never is refused, and takes no lock, so the gate refuses its entries
+(`[account-lock]`). Paper runs and confirmed replays are exempt. A lock left by
+a runner that is gone is taken over at start, with a log line. Before every
+pass the runner checks its lock, and does exactly one of these: a lock file of
+its own that was removed and stayed gone is linked back (logged); a lock held by
+another runner it positively identifies (on this host, its pid alive and an
+autotrader, the same on a re-read a second later) means that runner manages the
+account, so this one takes no broker action at all (no cancels, flattens, trails
+or end of day), logs and records it, and exits; anything else (unreadable,
+another host's, a holder it can't identify) stops new entries (the kill switch,
+with the reason) while it keeps full risk management of the account, as before
+the lock existed (trailing, protection, exits, the end-of-day flatten), with an
+alert every pass. Agent cycles other than end of day don't run while the kill
+switch is on, so agent-decided exits wait for end of day; held again, the runner
+re-arms nothing, so removing the kill switch resumes it. The gate refuses that runner's cycles' entries as soon as the lock isn't its
+own, and any entry of theirs on another account than the one it locked, and,
+outside any runner, refuses entries on an account a live runner holds, that
+name no valid account, or on a live broker whose `apiUrlEnv` variable is unset
+or no URL (so a runner of another install can't be seen; the refusal names the
+variable). It checks the default lock directory: an
+`FTH_LOCK_DIR` override without `FTH_TEST_LOCKS=1` is ignored there. Exits,
+protective stops, cancels and closes always go. The lock directory must be writable and support hard links (a local
+disk). The runner also refuses to start when the server lacks an interface
+tool, has trading disabled, or (live) doesn't allow the account.
 
 ## 6. What to watch
 

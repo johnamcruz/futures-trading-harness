@@ -632,13 +632,13 @@ test('report: month by month, trades from round trips or closing fills, R, stand
 
 test('runner wiring: the broker must trade for a live account; the runner is built from the harness home', async () => {
   const closed = [];
-  const fake = (cfgOver, extra = {}) => ({ verify: async () => {}, serverConfig: async () => ({ tradingEnabled: cfgOver, allowedAccountIds: [7], ...extra }), close: () => closed.push(1) });
-  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED' };
-  const env = { LIVE_ALLOWED: '7' };
+  const fake = (cfgOver, extra = {}) => ({ verify: async () => {}, serverConfig: async () => ({ apiUrl: 'https://api.example.test', tradingEnabled: cfgOver, allowedAccountIds: [7], ...extra }), close: () => closed.push(1) });
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'] };
+  const env = { LIVE_ALLOWED: '7', LIVE_API_URL: 'https://api.example.test', FTH_LOCK_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'fth-locks-')), FTH_TEST_LOCKS: '1' }; // never the user's lock directory
   await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: () => fake(false) }), /trading disabled/);
   assert.strictEqual(closed.length, 1, 'closed when refused');
   // Live: the allow-list must name the account, and the server must not take any account.
-  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: {}, broker, open: () => fake(true) }), /LIVE_ALLOWED is empty/);
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: { FTH_LOCK_DIR: env.FTH_LOCK_DIR, FTH_TEST_LOCKS: '1', LIVE_API_URL: env.LIVE_API_URL }, broker, open: () => fake(true) }), /LIVE_ALLOWED is empty/);
   await assert.rejects(openRunnerBroker({ cfg: { account: '8', paper: false }, root: ROOT, env, broker, open: () => fake(true, { allowedAccountIds: [8] }) }), /account 8 is not in LIVE_ALLOWED/);
   await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: () => fake(true, { allowedAccountIds: 'any' }) }), /allows any account/);
   await assert.rejects(openRunnerBroker({ cfg: { account: '', paper: false }, root: ROOT, env, broker, open: () => fake(true) }), /names its account/);
@@ -655,6 +655,92 @@ test('runner wiring: the broker must trade for a live account; the runner is bui
   const runner = wireRunner({ cfg: cfgOf({}), root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date('2026-10-10T15:00:00Z'), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {} });
   assert.strictEqual(typeof runner.step, 'function');
   assert.strictEqual(typeof (await runner.step()), 'number', 'a Saturday: nothing to do');
+});
+
+test('runner wiring: a live run holds its account\'s lock across harness homes until its adapter closes; paper and a confirmed replay never take or check it', async () => {
+  const { lockFileFor, serverIdentities } = require('../../scripts/lib/account-lock');
+  const closed = [];
+  const fake = (extra = {}) => ({ verify: async () => {}, serverConfig: async () => ({ apiUrl: 'https://api.example.test', tradingEnabled: true, allowedAccountIds: [7, 8], ...extra }), close: () => closed.push(1) });
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'] };
+  const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-locks-'));
+  const envOf = home => ({ LIVE_ALLOWED: '7,8', LIVE_API_URL: 'https://api.example.test', FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1', FTH_HOME: home });
+  const file = lockFileFor({ env: envOf('/a'), server: serverIdentities({ broker })[0], accountId: '7' });
+  const logs = [];
+  const first = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/a'), broker, open: () => fake(), log: m => logs.push(m) });
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).home, path.resolve('/homes/a'), 'taken once the account is known');
+  // Another harness home, the same account (as the gate normalizes it): refused, its adapter closed.
+  await assert.rejects(openRunnerBroker({ cfg: { account: '007', paper: false }, root: ROOT, env: envOf('/homes/b'), broker, open: () => fake() }),
+    new RegExp(`account 7 on broker "live" is already traded by another runner \\(pid ${process.pid} on host .*, harness home ${path.resolve('/homes/a')}, started `));
+  assert.strictEqual(closed.length, 1);
+  // Another account: both run.
+  const other = await openRunnerBroker({ cfg: { account: '8', paper: false }, root: ROOT, env: envOf('/homes/b'), broker, open: () => fake() });
+  // Paper and a confirmed replay, on the held account: run, and take nothing.
+  for (const [cfg, b, extra] of [[{ account: '7', paper: true }, broker, {}], [{ account: '7', paper: false }, { ...broker, replay: true }, { replay: true }]]) {
+    (await openRunnerBroker({ cfg, root: ROOT, env: envOf('/homes/r'), broker: b, open: () => fake(extra) })).close();
+  }
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).home, path.resolve('/homes/a'), 'the live lock stands');
+  // A broker labelled replay whose server doesn't confirm it is live: refused.
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/r'), broker: { ...broker, replay: true }, open: () => fake() }), /already traded by another runner/);
+  first.close();
+  other.close();
+  assert.deepStrictEqual(fs.readdirSync(locks), [], 'closing the adapter releases the lock');
+  assert.deepStrictEqual(logs, []);
+  // A replay with the account held by a live runner still runs: replays never block live, nor live replays.
+  const live = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/a'), broker, open: () => fake() });
+  (await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/r'), broker: { ...broker, replay: true }, open: () => fake({ replay: true }) })).close();
+  live.close();
+  // One server under two broker names (the same entry, or the same apiUrl): one lock, the second refused.
+  const entry = path.join(locks, '..', path.basename(locks) + '-server.js');
+  fs.writeFileSync(entry, '');
+  const named = (name, command) => ({ ...broker, name, command });
+  const one = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/a'), broker: named('live', [process.execPath, entry]), open: () => fake() });
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/b'), broker: named('live2', ['node', entry]), open: () => fake() }), /account 7 on broker "live2" is already traded by another runner/);
+  one.close();
+  const api = { apiUrl: 'https://api.example.test' };
+  const viaApi = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/a'), broker: named('live', ['server-a']), open: () => fake(api) });
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf('/homes/b'), broker: named('other', ['server-b']), open: () => fake(api) }), /already traded by another runner/);
+  viaApi.close();
+  fs.rmSync(entry);
+  assert.deepStrictEqual(fs.readdirSync(locks), []);
+});
+
+test('runner wiring: a manual run that can place live orders takes the account lock; end of day, paper, and no account take none', async () => {
+  const { manualRunBroker } = require('../../scripts/lib/runner-wiring');
+  const fake = () => ({ verify: async () => {}, serverConfig: async () => ({ apiUrl: 'https://api.example.test', tradingEnabled: true, allowedAccountIds: [7] }), close: () => {} });
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'] };
+  const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-locks-'));
+  const env = { LIVE_ALLOWED: '7', LIVE_API_URL: 'https://api.example.test', FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1' };
+  const opened = [];
+  const open = () => { opened.push(1); return fake(); };
+  for (const [cfg, once] of [[{ account: '7', paper: false }, 'eod'], [{ account: '', paper: false }, 'eod'], [{ account: '7', paper: true }, 'trade'], [{ account: '', paper: true }, 'trade']]) {
+    assert.strictEqual(await manualRunBroker({ cfg, once, root: ROOT, env, broker, open }), null, `${once} ${JSON.stringify(cfg)}`);
+  }
+  // A live manual run that names no account has no lock to take: refused, as the loop is.
+  for (const once of ['trade', 'premarket']) {
+    await assert.rejects(manualRunBroker({ cfg: { account: ' ', paper: false }, once, root: ROOT, env, broker, open }), new RegExp(`a live manual run \\(--once ${once}, paper: false\\) names its account`));
+  }
+  assert.strictEqual(opened.length, 0);
+  // Held by another live runner: refused before the server is started (a refused run never logs in).
+  const L = require('../../scripts/lib/account-lock');
+  const runner = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
+  const lockFile = L.lockFileFor({ env, server: L.serverIdentities({ broker })[0], accountId: '7' });
+  try {
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: runner.pid, host: os.hostname(), home: '/homes/other', startedAt: 't', token: 'x' }));
+    await assert.rejects(openRunnerBroker({ cfg: { account: '007', paper: false }, root: ROOT, env, broker, open }), new RegExp(`already traded by another runner \\(pid ${runner.pid}`));
+    assert.strictEqual(opened.length, 0, 'no server started for the refused run');
+  } finally {
+    runner.kill();
+    fs.rmSync(lockFile, { force: true });
+  }
+  for (const once of ['trade', 'premarket']) {
+    const held = await manualRunBroker({ cfg: { account: '7', paper: false }, once, root: ROOT, env, broker, open });
+    assert.strictEqual(fs.readdirSync(locks).length, 2, `${once} holds the lock (its command and its API)`);
+    await assert.rejects(manualRunBroker({ cfg: { account: '7', paper: false }, once: 'trade', root: ROOT, env, broker, open }), /already traded by another runner/);
+    held.close();
+    assert.deepStrictEqual(fs.readdirSync(locks), []);
+  }
+  // A live manual run is checked as the loop is: an account off the allow-list is refused.
+  await assert.rejects(manualRunBroker({ cfg: { account: '8', paper: false }, once: 'trade', root: ROOT, env, broker, open }), /account 8 is not in LIVE_ALLOWED/);
 });
 
 test('runner wiring: the runner scans with its symbols as the selected contracts - NQ selected, the micro-listed rules strategies scan NQ; MNQ selected, they don\'t', () => {
@@ -1061,3 +1147,48 @@ test('driver: a run home salt that can\'t be read is logged once and recorded as
   assert.match(man.fingerprints.fingerprintError, /broker sim: its bar settings can't be fingerprinted \(.*not a fingerprint salt/);
   assert.strictEqual(said.filter(m => /ERROR .*fingerprintError/.test(m)).length, 1, 'logged once for the run');
 });
+
+test('runner wiring: a live run needs the server\'s apiUrl; its cycles carry FTH_ACCOUNT_LOCK; a manual end of day runs with "none"; the configured API is checked before the server starts', async () => {
+  const L = require('../../scripts/lib/account-lock');
+  const { manualRunBroker } = require('../../scripts/lib/runner-wiring');
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED', apiUrlEnv: 'LIVE_API_URL', env: ['LIVE_ALLOWED', 'LIVE_API_URL'], command: ['srv-a'] };
+  const locks = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-locks-'));
+  const envOf = () => ({ LIVE_ALLOWED: '7', FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1', LIVE_API_URL: 'https://api.example.test' });
+  const opened = [];
+  const fake = cfg => () => { opened.push(1); return { verify: async () => {}, serverConfig: async () => ({ tradingEnabled: true, allowedAccountIds: [7], ...cfg }), close: () => {} }; };
+  const noApi = envOf();
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: noApi, broker, open: fake({}) }), /reports no apiUrl .*a live run refuses/);
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf(), broker, open: fake({ apiUrl: 'not a url' }) }), /reports no apiUrl that is a URL with a host \(get_server_config: "not a url"\)/);
+  assert.deepStrictEqual(fs.readdirSync(locks), [], 'no lock taken');
+  assert.strictEqual(noApi.FTH_ACCOUNT_LOCK, undefined);
+  const env = envOf();
+  const client = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: fake({ apiUrl: 'https://api.example.test' }) });
+  const spec = JSON.parse(env.FTH_ACCOUNT_LOCK);
+  assert.strictEqual(spec.files.length, 2);
+  assert.strictEqual(L.lockGateRefusal(env.FTH_ACCOUNT_LOCK, '7'), null, 'held');
+  assert.strictEqual(spec.account, '7');
+  assert.strictEqual(await client.ensureLock({ stableMs: 0 }), 'held');
+  client.close();
+  assert.deepStrictEqual(fs.readdirSync(locks), []);
+  // Another install of the server (another command) on the same configured API, while a live runner holds that
+  // API's lock: refused before it is started.
+  const runner = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '/x/scripts/autotrader.js'], { stdio: 'ignore' });
+  const apiFile = L.lockFileFor({ env: envOf(), server: 'api:https://api.example.test', accountId: '7' });
+  try {
+    fs.writeFileSync(apiFile, JSON.stringify({ pid: runner.pid, host: os.hostname(), home: '/homes/a', api: 'https://api.example.test', token: 't' }));
+    const before = opened.length;
+    await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: envOf(), broker: { ...broker, name: 'copy', command: ['srv-b'] }, open: fake({ apiUrl: 'https://api.example.test' }) }), new RegExp(`account 7 on broker "copy" is already traded by another runner \\(pid ${runner.pid}`));
+    assert.strictEqual(opened.length, before, 'never started');
+  } finally {
+    runner.kill();
+    fs.rmSync(apiFile, { force: true });
+  }
+  const eod = envOf();
+  assert.strictEqual(await manualRunBroker({ cfg: { account: '7', paper: false }, once: 'eod', root: ROOT, env: eod, broker, open: fake({}) }), null);
+  assert.strictEqual(eod.FTH_ACCOUNT_LOCK, 'none');
+  assert.match(L.lockGateRefusal(eod.FTH_ACCOUNT_LOCK), /without its account's runner lock/);
+  const paper = envOf();
+  assert.strictEqual(await manualRunBroker({ cfg: { account: '7', paper: true }, once: 'eod', root: ROOT, env: paper, broker, open: fake({}) }), null);
+  assert.strictEqual(paper.FTH_ACCOUNT_LOCK, undefined, 'paper: the gate refuses entries anyway');
+});
+

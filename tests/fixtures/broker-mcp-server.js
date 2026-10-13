@@ -48,7 +48,7 @@ const journal = entry => {
 const ok = { success: true, errorCode: 0, errorName: 'Success', errorMessage: null };
 
 const HANDLERS = {
-  get_server_config: () => ({ tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: 1, maxPositionSize: 2, maxDailyLoss: 500, allowedAccountIds: [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString(), ...(process.env.FAKE_REPLAY_NOW ? { replay: true, serverTime: process.env.FAKE_REPLAY_NOW } : {}) }),
+  get_server_config: () => ({ apiUrl: process.env.FAKE_BROKER_API_URL || 'https://api.fake-broker.test', tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: 1, maxPositionSize: 2, maxDailyLoss: 500, allowedAccountIds: process.env.FAKE_SERVER_ACCOUNTS ? process.env.FAKE_SERVER_ACCOUNTS.split(',').map(Number) : [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString(), ...(process.env.FAKE_REPLAY_NOW ? { replay: true, serverTime: process.env.FAKE_REPLAY_NOW } : {}) }),
   list_accounts: () => state.accounts,
   get_account_snapshot: a => ({ account: state.accounts.find(x => x.id === a.accountId) || null, positions: state.positions, openOrders: state.orders, today: { realizedNetPnL: 0 } }),
   search_contracts: a => state.contracts.filter(c => c.name.startsWith(String(a.searchText).toUpperCase())),

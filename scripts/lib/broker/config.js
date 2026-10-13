@@ -61,7 +61,7 @@ const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const SERVER_NAME = 'broker';
 // Settings of a shipped broker an override can't change (the gate's paper and allow-list checks read them).
 // The fingerprint allowlist too: an override can't add a variable (a credential) to what a session records.
-const LOCKED = ['paperEnv', 'allowedAccountsEnv', 'fingerprintEnv'];
+const LOCKED = ['paperEnv', 'allowedAccountsEnv', 'fingerprintEnv', 'apiUrlEnv'];
 // A variable name that looks like a credential: never on a fingerprint, whatever a config lists.
 const CREDENTIAL = /KEY|SECRET|PASS|PWD|PIN|TOKEN|JWT|DSN|URL|URI|SESSION|BEARER|LOGIN|USER|AUTH|COOKIE|CERT|CREDENTIAL|PRIVATE/i;
 const SALT_FILE = 'fingerprint.salt';

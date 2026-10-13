@@ -41,6 +41,7 @@ const GATE_CHECKS = [
   'review-before-next-entry',
   'max-entries',
   'replay-clock', // hard: listed for completeness, never skippable
+  'account-lock', // hard: listed for completeness, never skippable
 ];
 
 function intEnv(env, name, fallback, { min = 0 } = {}) {
@@ -111,6 +112,9 @@ function loadConfig(env = process.env) {
     selection: selectionOf(env),
     // Paper mode: every new entry is refused (plans, reviews, and exits still work).
     paper: env.FTH_PAPER === '1',
+    // The runner's account lock (FTH_ACCOUNT_LOCK, account-lock.js lockSpec): its files and token, or 'none' for a
+    // cycle that runs without it. Unset outside the runner. A hard check: entries only while the runner holds it.
+    accountLock: String(env.FTH_ACCOUNT_LOCK || '').trim() || null,
     skipChecks: env.FTH_AUTONOMOUS === '1' ? new Set() : listEnv(env, 'FTH_ORDER_GATE_SKIP'),
     // Exchange calendar (trading days, YYYY-MM-DD of the day they end on): holidays with no
     // session, and early closes at 13:00 ET. The built-in CME calendar (exchange-calendar.js)

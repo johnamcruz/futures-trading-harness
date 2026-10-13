@@ -78,7 +78,7 @@ for (const s of ACTIVE) {
     const now = new Date(closeMs + 30000).toISOString(); // the cycle, 30 s after the bar closed
     const journal = writeJournal(home, []);
     const env = {
-      FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
+      FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
       FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
       FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT,
     };
@@ -145,7 +145,7 @@ test('every strategy with rules provides its context on every scanned bar; a pap
   const paper = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: path.dirname(dir) }).strategies.find(s => s.name === 'value_area_paper');
   assert.strictEqual(paper.status, 'paper');
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
-  const env = { FTH_HOME: home, FTH_STRATEGIES_DIRS: path.dirname(dir), FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
+  const env = { FTH_HOME: home, FTH_STRATEGIES_DIRS: path.dirname(dir), FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
   const res = node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], env,
     JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:value_area_paper long, stop 27400' } }));
   assert.strictEqual(res.status, 2);

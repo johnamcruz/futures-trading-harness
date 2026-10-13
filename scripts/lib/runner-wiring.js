@@ -7,7 +7,11 @@
  * and, under a replay clock, for one pass per process (`--once`), so a
  * replayed cycle is built exactly as a live one.
  *
- *   openRunnerBroker({ cfg, root, env })   the adapter, verified; throws when a live run can't manage positions
+ *   openRunnerBroker({ cfg, root, env, log })   the adapter, verified, holding a live run's account lock; throws
+ *                                         when a live run can't manage positions or another runner trades the account
+ *   holdAccountLock(client, { killSwitchFile, log, event })   before each pass (async, never rejects): 'held' | 'relinked'
+ *                                         | 'taken' (the caller exits, no broker action) | 'unknown' (kill switch, full risk management) | 'none'
+ *   manualRunBroker({ cfg, once, root, env, log })   the same for a manual (--once) run that can place live orders, else null
  *   closedBarsOnly(client, now)           the adapter, bars closing after now() dropped (replay)
  *   replayUnattested(serverConfig, at)     why a replay server doesn't attest the replayed time, or null
  *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
@@ -31,6 +35,8 @@ const { SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
 const { cutAtClock } = require('./trading/look-ahead');
 const { openAdapter, liveRunBlocked } = require('./broker/adapter');
 const { activeBroker } = require('./broker/config');
+const { acquireAccountLocks, checkAccountLock, lockExemption, serverIdentities, lockSpec, normApi } = require('./account-lock');
+const { normId } = require('./broker/allow-list');
 const { dayKey } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
@@ -53,20 +59,92 @@ const { resolveJournalPath, readJournal } = require('./trading/journal');
 const { barsArchiver } = require('./session/bars-archive');
 const { fieldValues } = require('./session/record');
 
-/** The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades. */
-async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter, broker = null }) {
+/**
+ * The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades.
+ * A live run holds its account's lock (account-lock.js: one runner per broker account, across every harness
+ * home; paper and confirmed replays are exempt): checked before the server is started (a refused runner never
+ * logs in), taken once the server answers, released when the adapter closes or the process exits. The adapter's
+ * ensureLock() (async) says whether the lock is still this runner's (holdAccountLock).
+ */
+async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter, broker = null, log = () => {} }) {
+  const b = cfg.paper ? null : broker || activeBroker(env);
+  if (b && b.replay !== true && normId(cfg.account) !== null) checkAccountLock({ env, broker: b, servers: serverIdentities({ broker: b, env }), accountId: cfg.account });
   const client = open({ root, env });
   try {
     await client.verify();
     // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those,
     // and trades only an account on the broker's allow-list (a confirmed replay is exempt).
-    const why = !cfg.paper ? liveRunBlocked({ broker: broker || activeBroker(env), config: await client.serverConfig(), env, accountId: cfg.account }) : null;
+    const config = cfg.paper ? null : await client.serverConfig();
+    const why = cfg.paper ? null : liveRunBlocked({ broker: b, config, env, accountId: cfg.account });
     if (why) throw new Error(why);
-    return client;
+    if (lockExemption({ paper: cfg.paper, broker: b, config })) return client;
+    // The API it trades keys the lock across installs: a server that names none can't be locked, so no live run.
+    if (!normApi(config && config.apiUrl)) throw new Error(`the broker server reports no apiUrl that is a URL with a host (get_server_config: ${JSON.stringify(config && config.apiUrl)}), so its account can't be locked against another install of it: a live run refuses`);
+    const lock = acquireAccountLocks({ env, broker: b, servers: serverIdentities({ broker: b, config, env }), accountId: cfg.account, log });
+    env.FTH_ACCOUNT_LOCK = lockSpec(lock); // the run's cycles: the gate refuses their entries once the lock isn't ours
+    return { ...client, ensureLock: opts => lock.ensure(opts), close: () => { lock.release(); client.close(); } };
   } catch (err) {
     client.close();
     throw err;
   }
+}
+
+const LOCK_UNKNOWN = 'ALERT: the account lock can\'t be confirmed as this runner\'s (unreadable, another host\'s, or a holder that can\'t be positively identified): no new entries (this kill switch); full risk management of the account continues (trailing, protection, exits, end-of-day flatten). Find out which runner should trade the account, stop any other, then remove this file to resume.';
+
+/** Append `reason` to the kill switch unless it already says it (re-armed after the user removed it). */
+function armKillSwitch(killSwitchFile, reason) {
+  let text;
+  try { text = fs.readFileSync(killSwitchFile, 'utf8'); } catch (_err) { text = ''; }
+  if (!text.includes(reason)) fs.appendFileSync(killSwitchFile, `${reason}\n`);
+}
+
+/**
+ * Before every pass, never rejecting: 'held'; 'relinked' (a file of ours that vanished and stayed gone: linked back,
+ * logged); 'taken' (another runner, positively identified twice, holds the lock: it manages the account, so this
+ * runner takes no broker action at all: logged and recorded; the caller exits); 'unknown' (anything else, the check
+ * failing included): no new entries (the kill switch, re-armed every pass), full risk management of the account as
+ * before the lock existed, an alert logged every pass and an event recorded once per episode. Nothing is sticky: held
+ * again, the runner re-arms nothing, so removing the kill switch resumes it. 'none': no lock (paper, replay).
+ */
+async function holdAccountLock(client, { killSwitchFile, log = () => {}, event = () => {}, command, stableMs } = {}) {
+  if (!client || typeof client.ensureLock !== 'function') return 'none';
+  let st;
+  try {
+    st = await client.ensureLock({ ...(command ? { command } : {}), ...(stableMs !== undefined ? { stableMs } : {}) });
+  } catch (err) {
+    log(`account lock: the check failed (${err.message})`, 'error');
+    st = 'unknown';
+  }
+  const record = kind => { try { event({ at: new Date().toISOString(), kind, pid: process.pid }); } catch (_err) { /* the record never stops the runner */ } };
+  if (st === 'relinked') log('account lock: its file had vanished and stayed gone: linked it back');
+  if (st === 'taken') {
+    log('the account lock is held by another runner now (identified on this host, twice): it manages the account. This runner takes no broker action (no cancels, flattens, trails or end of day) and exits', 'error');
+    record('account_lock_taken');
+  }
+  if (st === 'unknown') {
+    log(LOCK_UNKNOWN, 'error');
+    if (!client.lockUnknown) record('account_lock_unknown');
+    client.lockUnknown = true;
+    try { armKillSwitch(killSwitchFile, LOCK_UNKNOWN); } catch (err) { log(`account lock: could not write the kill switch (${err.message})`, 'error'); }
+  } else client.lockUnknown = false;
+  return st;
+}
+
+/**
+ * A manual run (`--once`): one that can place orders on a live account holds the account's lock as the loop does
+ * (openRunnerBroker: the server trades the account, the allow-list holds it, no other runner trades it), or is
+ * refused; a live one that names no account (no lock to key) is refused too, as the loop is. End of day only
+ * reduces risk (flatten, cancel), so it is never refused for the lock; paper takes none. The adapter (null when
+ * none) is closed after the run.
+ */
+async function manualRunBroker({ cfg, once, root, env = process.env, log = () => {}, open = openAdapter, broker = null }) {
+  if (cfg.paper) return null;
+  if (once === 'eod') {
+    env.FTH_ACCOUNT_LOCK = lockSpec(null); // no lock taken: the gate refuses the cycle's entries
+    return null;
+  }
+  if (!String(cfg.account || '').trim()) throw new Error(`a live manual run (--once ${once}, paper: false) names its account ("account" in the runner config), so no other runner trades it; or run it with paper: true`);
+  return openRunnerBroker({ cfg, root, env, open, broker, log });
 }
 
 /**
@@ -314,4 +392,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

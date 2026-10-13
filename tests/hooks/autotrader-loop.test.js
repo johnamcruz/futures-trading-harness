@@ -24,7 +24,7 @@ function runAutotrader(config, home, calls = path.join(home, 'calls.txt'), extra
     env: {
       PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls,
-      FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7,8', ...extraEnv,
+      FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7,8', FTH_LOCK_DIR: path.join(home, 'locks'), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test', ...extraEnv,
     },
   });
   const limit = setTimeout(() => runner.kill('SIGKILL'), limitMs);
@@ -224,7 +224,7 @@ test('live loop: a harness tools server that fails the start check turns trading
   const state = path.join(home, '.futures-trading-harness');
   const start = () => {
     const runner = spawn(process.execPath, [path.join(root, 'scripts', 'autotrader.js'), '--config', config], {
-      env: { PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7' },
+      env: { PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7', FTH_LOCK_DIR: path.join(home, 'locks'), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test' },
     });
     const io = { out: '' };
     runner.stdout.on('data', c => { io.out += c; });
@@ -250,5 +250,153 @@ test('live loop: a harness tools server that fails the start check turns trading
   } finally {
     if (first.runner.exitCode === null) first.runner.kill('SIGTERM');
     await first.done;
+  }
+});
+
+test('live loop: one runner per broker account across harness homes - a second home (or another broker name for the same server, or a manual trade run) on the same account is refused, another account runs, SIGTERM releases', { timeout: 120000 }, async () => {
+  const { lockFileFor, serverIdentities } = require('../../scripts/lib/account-lock');
+  const locks = tmpDir(); // shared by every home here, as the user's default lock directory is
+  const live = account => {
+    const home = tmpDir();
+    const config = path.join(home, 'auto.json');
+    fs.writeFileSync(config, JSON.stringify({
+      harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], account, timeframe: 1,
+      sessions: ['18:00-15:50@America/New_York'], premarketAt: '', eodAt: '15:50@America/New_York', weekdaysOnly: false,
+    }));
+    return { config, home };
+  };
+  // The fake broker's server, whatever a home calls it.
+  const server = serverIdentities({ broker: { name: 'fake', command: [process.execPath, FAKE_BROKER] } })[0];
+  const lockOf = account => lockFileFor({ env: { FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1' }, server, accountId: account });
+  const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const lockEnv = { FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1', FAKE_SERVER_ACCOUNTS: '7,8' };
+  const once = (dir, action, extra = {}) => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', dir.config, '--once', action], {
+    encoding: 'utf8', timeout: 60000,
+    env: { PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: dir.home, FTH_KILL_SWITCH_FILE: path.join(dir.home, 'STOP'), FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7,8', FAKE_BROKER_API_URL: 'https://api.fake-broker.test', ...lockEnv, ...extra },
+  });
+  const a = live('7');
+  const first = runAutotrader(a.config, a.home, undefined, lockEnv, 90000);
+  const runners = [first];
+  try {
+    await waitFor('the account lock', 30000, () => fs.existsSync(lockOf(7)) || first.runner.exitCode !== null);
+    assert.strictEqual(first.runner.exitCode, null, first.io.out);
+    const held = JSON.parse(fs.readFileSync(lockOf(7), 'utf8'));
+    assert.strictEqual(held.pid, first.runner.pid);
+    const refused = new RegExp(`account 7 on broker "(fake|fake2)" is already traded by another runner \\(pid ${first.runner.pid} on host .*, harness home ${escape(held.home)}, started ${escape(held.startedAt)}\\)`);
+    // Another harness home (its own runner lock), the same account as the gate normalizes it: refused at the broker.
+    const b = live('007');
+    const second = runAutotrader(b.config, b.home, undefined, lockEnv, 30000);
+    assert.strictEqual(await second.done, 1, second.io.out);
+    assert.match(second.io.out, /broker: can't start \(account 7 on broker "fake"/);
+    assert.match(second.io.out, refused);
+    // The same server under another broker name (that home's own brokers.json): still the same lock.
+    const renamed = live('7');
+    const fakeCfg = JSON.parse(fs.readFileSync(FAKE_BROKERS, 'utf8')).brokers.fake;
+    fs.writeFileSync(path.join(renamed.home, 'brokers.json'), JSON.stringify({ broker: 'fake2', brokers: { fake2: fakeCfg } }));
+    const alias = runAutotrader(renamed.config, renamed.home, undefined, { ...lockEnv, FTH_BROKERS_FILE: path.join(renamed.home, 'brokers.json') }, 30000);
+    assert.strictEqual(await alias.done, 1, alias.io.out);
+    assert.match(alias.io.out, /broker: can't start \(account 7 on broker "fake2"/);
+    assert.match(alias.io.out, refused);
+    // A manual trade run on the held account: refused before any cycle. End of day (risk-reducing only) is not.
+    const manual = once(live('7'), 'trade');
+    assert.strictEqual(manual.status, 1, manual.stdout + manual.stderr);
+    assert.match(manual.stderr, refused);
+    assert.doesNotMatch(manual.stdout, /CYCLE RESULT/, 'no cycle ran');
+    const eod = once(live('7'), 'eod');
+    assert.doesNotMatch(eod.stdout + eod.stderr, /already traded by another runner/);
+    assert.match(eod.stdout, /CYCLE RESULT/, 'end of day ran');
+    // A manual trade run on a free account takes its lock (here over a stale one, logged) and releases it.
+    fs.writeFileSync(lockOf(8), JSON.stringify({ pid: 2 ** 30, host: os.hostname(), home: '/gone' }));
+    const free = once(live('8'), 'trade');
+    assert.strictEqual(free.status, 0, free.stdout + free.stderr);
+    assert.match(free.stdout, /account lock: took over .* from pid 1073741824 \(harness home \/gone/);
+    assert.ok(!fs.existsSync(lockOf(8)), 'released after the run');
+    assert.strictEqual(JSON.parse(fs.readFileSync(lockOf(7), 'utf8')).pid, first.runner.pid, 'the first runner\'s lock stands');
+    // A different account: both run.
+    const c = live('8');
+    const third = runAutotrader(c.config, c.home, undefined, lockEnv, 90000);
+    runners.push(third);
+    await waitFor('the second account\'s lock', 30000, () => fs.existsSync(lockOf(8)) || third.runner.exitCode !== null);
+    assert.strictEqual(third.runner.exitCode, null, third.io.out);
+    assert.strictEqual(first.runner.exitCode, null);
+  } finally {
+    for (const r of runners) if (r.runner.exitCode === null) r.runner.kill('SIGTERM');
+    await Promise.all(runners.map(r => r.done));
+  }
+  assert.deepStrictEqual(fs.readdirSync(locks), [], 'SIGTERM released both locks');
+});
+
+function liveConfig(account) {
+  const home = tmpDir();
+  const config = path.join(home, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({
+    harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], account, timeframe: 1,
+    sessions: ['18:00-15:50@America/New_York'], premarketAt: '', eodAt: '15:50@America/New_York', weekdaysOnly: false,
+  }));
+  return { home, config };
+}
+
+test('live loop: its lock file removed by hand is linked back; a lock it can\'t confirm stops new entries (kill switch, alert) while it keeps running and managing the account', { timeout: 200000 }, async () => {
+  const { lockFileFor, serverIdentities } = require('../../scripts/lib/account-lock');
+  const locks = tmpDir();
+  const { home, config } = liveConfig('7');
+  const file = lockFileFor({ env: { FTH_LOCK_DIR: locks }, server: serverIdentities({ broker: { command: [process.execPath, FAKE_BROKER] } })[0], accountId: '7' });
+  const stop = path.join(home, 'STOP');
+  const run = runAutotrader(config, home, undefined, { FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1' }, 190000);
+  try {
+    await waitFor('the account lock', 30000, () => fs.existsSync(file) || run.runner.exitCode !== null);
+    assert.strictEqual(run.runner.exitCode, null, run.io.out);
+    const mine = fs.readFileSync(file, 'utf8');
+    fs.rmSync(file);
+    await waitFor('the lock linked back', 80000, () => fs.existsSync(file) || run.runner.exitCode !== null);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), mine, 'its own record');
+    assert.match(run.io.out, /account lock: its file had vanished and stayed gone: linked it back/);
+    fs.writeFileSync(file, 'junk');
+    await waitFor('manage-only', 80000, () => fs.existsSync(stop) || run.runner.exitCode !== null);
+    assert.match(fs.readFileSync(stop, 'utf8'), /ALERT: the account lock can't be confirmed as this runner's .*full risk management of the account continues/);
+    assert.match(run.io.out, /ERROR ALERT: the account lock can't be confirmed/);
+    assert.strictEqual(run.runner.exitCode, null, 'it keeps running: the account is still managed');
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), 'junk', 'the lock is left alone');
+  } finally {
+    if (run.runner.exitCode === null) run.runner.kill('SIGTERM');
+    await run.done;
+  }
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), 'junk', 'not removed on exit either');
+});
+
+test('live loop: two runners, one account, an open position - once another live runner holds the lock, the first takes no broker action and exits; exactly one acts', { timeout: 200000 }, async () => {
+  const { lockFileFor, serverIdentities } = require('../../scripts/lib/account-lock');
+  const locks = tmpDir();
+  const a = liveConfig('7');
+  const b = liveConfig('7');
+  const file = lockFileFor({ env: { FTH_LOCK_DIR: locks }, server: serverIdentities({ broker: { command: [process.execPath, FAKE_BROKER] } })[0], accountId: '7' });
+  const open = { FTH_LOCK_DIR: locks, FTH_TEST_LOCKS: '1', FAKE_FLAT: '' }; // the fake account holds a position and its stop
+  const callsA = path.join(a.home, 'calls.txt');
+  const first = runAutotrader(a.config, a.home, callsA, open, 190000);
+  let second = null;
+  try {
+    await waitFor('the first runner\'s lock', 30000, () => fs.existsSync(file) || first.runner.exitCode !== null);
+    assert.strictEqual(first.runner.exitCode, null, first.io.out);
+    // Right after one of its passes (its heartbeat), its lock goes and a second runner takes the account.
+    const beat = path.join(a.home, '.futures-trading-harness', 'autotrader-heartbeat.json');
+    const seen = fs.existsSync(beat) ? fs.statSync(beat).mtimeMs : 0;
+    await waitFor('a pass', 80000, () => (fs.existsSync(beat) && fs.statSync(beat).mtimeMs > seen) || first.runner.exitCode !== null);
+    for (const f of fs.readdirSync(locks)) fs.rmSync(path.join(locks, f)); // its every key: the command's and the API's
+    second = runAutotrader(b.config, b.home, path.join(b.home, 'calls.txt'), open, 190000);
+    await waitFor('the second runner\'s lock', 30000, () => (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).pid === second.runner.pid) || second.runner.exitCode !== null);
+    assert.strictEqual(second.runner.exitCode, null, second.io.out);
+    const before = fs.existsSync(callsA) ? fs.readFileSync(callsA, 'utf8').split('\n').length : 0;
+    assert.strictEqual(await first.done, 1, first.io.out);
+    assert.match(first.io.out, /ERROR the account lock is held by another runner now \(identified on this host, twice\): it manages the account\. This runner takes no broker action/);
+    const after = fs.readFileSync(callsA, 'utf8').split('\n').slice(before - 1);
+    assert.deepStrictEqual(after.filter(c => /place_order|modify_order|cancel_order|close_position/.test(c)), [], 'the first runner sent nothing once the lock was another\'s');
+    const events = fs.readdirSync(path.join(a.home, '.futures-trading-harness', 'logs')).filter(f => /^events-/.test(f))
+      .flatMap(f => fs.readFileSync(path.join(a.home, '.futures-trading-harness', 'logs', f), 'utf8').trim().split('\n').map(l => JSON.parse(l)));
+    assert.ok(events.some(e => e.kind === 'account_lock_taken'), 'recorded in its session events');
+    assert.strictEqual(second.runner.exitCode, null, 'the holder runs on');
+    assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).pid, second.runner.pid, 'its lock stands');
+  } finally {
+    for (const r of [first, second].filter(Boolean)) if (r.runner.exitCode === null) r.runner.kill('SIGTERM');
+    await Promise.all([first, second].filter(Boolean).map(r => r.done));
   }
 });
