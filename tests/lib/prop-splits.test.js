@@ -238,3 +238,111 @@ test('a timestamp range end holds its own session: a range reaching into the nex
   assert.strictEqual(unitContaining('2026-07-01', '2026-10-01').part, 'tuning');
   assert.deepStrictEqual(blocksBetween('2026-06-01', '2026-07-01').map(b => b.block), ['recent']);
 });
+
+test('pins: the frozen windows, Recent, the half-year rule and the recorded looks never move', () => {
+  // Raise a window only when one is retired through the ledger (R16), reviewed; never edit a recorded look.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(SPLITS)), {
+    train: ['2021-01-01', '2023-07-01'], select: ['2023-07-01', '2024-07-01'], oos: ['2024-07-01', '2025-07-01'],
+  });
+  assert.deepStrictEqual([...RECENT], ['2025-07-01', '2026-07-01']);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(RECORDED_LOOKS)), [
+    { block: 'recent', from: '2026-06-01', to: '2026-06-06', what: 'LLM replay, June 1-5 2026', use: 'adherence only, no candidate claims (R22)' },
+    { block: 'select', from: '2024-03-04', to: '2024-06-22', what: 'flow parity check', use: 'decided recalibration only, no threshold value' },
+    { block: 'oos', from: '2024-08-01', to: '2024-08-10', what: 'flow parity check', use: 'decided recalibration only, no threshold value' },
+  ]);
+  const shape = b => [b.block, b.role, b.from, b.to, (b.parts || []).map(p => [p.part, p.from, p.to])];
+  assert.deepStrictEqual(blocksBetween('2025-07-01', '2029-01-01').map(shape), [
+    ['recent', 'recent', '2025-07-01', '2026-07-01', []],
+    ['2026-H2', 'walk-forward', '2026-07-01', '2027-01-01', [['tuning', '2026-07-01', '2026-10-01'], ['held-out', '2026-10-01', '2027-01-01']]],
+    ['2027-H1', 'reserve', '2027-01-01', '2027-07-01', []],
+    ['2027-H2', 'walk-forward', '2027-07-01', '2028-01-01', [['tuning', '2027-07-01', '2027-10-01'], ['held-out', '2027-10-01', '2028-01-01']]],
+    ['2028-H1', 'reserve', '2028-01-01', '2028-07-01', []],
+    ['2028-H2', 'walk-forward', '2028-07-01', '2029-01-01', [['tuning', '2028-07-01', '2028-10-01'], ['held-out', '2028-10-01', '2029-01-01']]],
+  ]);
+  // roleOf's contract (tools refuse held-out months by it): these keys, no more, no fewer.
+  assert.deepStrictEqual(Object.keys(roleOf('2026-11-02')).sort(), ['block', 'from', 'llm', 'part', 'role', 'to']);
+});
+
+const { FLOW_COVERAGE, hasSession, attemptSessions, isFlowCovered, attemptFlowCovered } = require('../../scripts/lib/prop/splits');
+
+test('sessions: weekdays the exchange is open; every exchange holiday is closed', () => {
+  assert.strictEqual(hasSession(ms('2025-11-26')), true);
+  assert.strictEqual(hasSession(ms('2025-11-27')), false, 'Thanksgiving');
+  assert.strictEqual(hasSession(ms('2025-11-29')), false, 'Saturday');
+  assert.strictEqual(hasSession(ms('2025-11-28')), true, 'an early close is a session');
+  assert.strictEqual(hasSession(ms('2026-07-03')), false, 'Independence Day observed (built-in calendar)');
+  assert.strictEqual(hasSession(ms('2025-04-18')), false, 'Good Friday');
+  assert.strictEqual(hasSession(ms('2022-04-15')), false, 'Good Friday 2022');
+  assert.strictEqual(hasSession(ms('2022-04-22')), true);
+  // Juneteenth is an exchange holiday from 2022: 2021-06-18 traded; 2022's, on a Sunday, is kept Monday June 20.
+  assert.strictEqual(hasSession('2021-06-18'), true);
+  assert.strictEqual(hasSession('2022-06-20'), false);
+  // A timestamp is its session: 18:00 ET (EST) on Nov 26 opens the Thanksgiving session, which is closed.
+  assert.strictEqual(hasSession(Date.parse('2025-11-26T23:00:00Z')), false);
+  assert.strictEqual(hasSession(Date.parse('2025-11-26T20:00:00Z')), true);
+  const count = (from, to) => {
+    let n = 0;
+    for (let t = ms(from); t < ms(to); t += 86400000) if (hasSession(t)) n++;
+    return n;
+  };
+  // Each walk-forward quarter holds about 63 sessions: at least two 30-session attempts (R17).
+  for (const b of blocksBetween(NEW_MONTHS_FROM, '2031-01-01').filter(x => x.parts)) {
+    for (const p of b.parts) {
+      const n = count(p.from, p.to);
+      assert.ok(n >= 60 && n <= 66, `${b.block} ${p.part}: ${n} sessions`);
+    }
+  }
+  // Section 4: 2025-07 to 2025-11 hold about 106 sessions.
+  assert.strictEqual(count('2025-07-01', '2025-12-01'), 106);
+});
+
+test('attemptSessions: the first session on or after the start, the last of `sessions`, and the start plus `sessions`', () => {
+  const plain = o => ({ ...o });
+  assert.deepStrictEqual(plain(attemptSessions('2025-11-26', 2)), { first: '2025-11-26', last: '2025-11-28', bound: '2025-12-01' });
+  assert.deepStrictEqual(plain(attemptSessions('2025-11-27', 1)), { first: '2025-11-28', last: '2025-11-28', bound: '2025-12-01' }, 'a holiday start');
+  assert.deepStrictEqual(plain(attemptSessions('2025-11-29', 1)), { first: '2025-12-01', last: '2025-12-01', bound: '2025-12-02' }, 'a weekend start');
+  assert.deepStrictEqual(plain(attemptSessions('2025-10-17', 30)), { first: '2025-10-17', last: '2025-11-28', bound: '2025-12-01' });
+  // A bar timestamp is read as its session: 18:00 ET (EDT) on Oct 16 opens the Oct 17 session.
+  assert.strictEqual(attemptSessions(Date.parse('2025-10-16T22:00:00Z'), 30).first, '2025-10-17');
+  assert.strictEqual(attemptSessions(Date.parse('2025-10-16T21:59:00Z'), 30).first, '2025-10-16');
+  for (const bad of [0, -1, 1.5, '30', NaN, undefined, null]) assert.throws(() => attemptSessions('2025-07-01', bad), /sessions/);
+  assert.throws(() => attemptSessions('2025-13-01', 30), /not an ISO date|not a date/);
+});
+
+test('flow coverage: 2021-05 to 2025-11, by session; it changes no role', () => {
+  assert.deepStrictEqual([...FLOW_COVERAGE], ['2021-05-01', '2025-12-01']);
+  assert.ok(Object.isFrozen(FLOW_COVERAGE));
+  assert.deepStrictEqual(['2021-04-30', '2021-05-01', '2021-05-03', '2025-11-28', '2025-11-30', '2025-12-01'].map(d => isFlowCovered(d)),
+    [false, true, true, true, true, false]);
+  // A timestamp is read as its session: 18:00 ET (EST, after the November DST change) on Sunday Nov 30 opens Dec 1.
+  assert.strictEqual(isFlowCovered(Date.parse('2025-11-30T23:00:00Z')), false);
+  assert.strictEqual(isFlowCovered(Date.parse('2025-11-28T18:00:00Z')), true);
+  assert.strictEqual(isFlowCovered(new Date('2021-05-03T13:30:00Z')), true);
+  assert.strictEqual(isFlowCovered(Date.parse('2021-04-29T22:00:00Z')), false, '18:00 EDT Apr 29 opens the Apr 30 session');
+  // Select and oos wholly, train from 2021-05, Recent's first five months; not the new months or the LLM months.
+  for (const m of MONTHS) {
+    const covered = m >= '2021-05-01' && m < '2025-12-01';
+    assert.strictEqual(isFlowCovered(m), covered, m);
+    assert.strictEqual(isFlowCovered(`${m.slice(0, 8)}28`), covered, m);
+  }
+  assert.strictEqual(roleOf('2025-11-15').role, roleOf('2025-12-15').role, 'coverage limits flow, never the role');
+  assert.throws(() => isFlowCovered('2025-02-30'), /not an ISO date|not a date/);
+});
+
+test('flow coverage of an attempt: decided at the start, by its start day plus `sessions` sessions', () => {
+  // 30 sessions (every account today): the start plus 30 sessions must itself be a covered session date.
+  assert.strictEqual(attemptFlowCovered('2025-10-16', 30), true);
+  assert.strictEqual(attemptFlowCovered('2025-10-17', 30), false, 'its 30th session ends coverage; the start plus 30 is Dec 1');
+  assert.strictEqual(attemptFlowCovered('2025-10-20', 30), false);
+  assert.strictEqual(attemptFlowCovered(Date.parse('2025-10-15T22:00:00Z'), 30), true, 'the Oct 16 session');
+  assert.strictEqual(attemptFlowCovered(Date.parse('2025-10-16T22:00:00Z'), 30), false, 'the Oct 17 session');
+  // Thanksgiving is not a session: a short attempt across it.
+  assert.strictEqual(attemptFlowCovered('2025-11-25', 2), true, 'Nov 25, 26; the start plus 2 is Nov 28');
+  assert.strictEqual(attemptFlowCovered('2025-11-26', 2), false, 'Nov 26, 28; the start plus 2 is Dec 1');
+  // The start must be covered too.
+  assert.strictEqual(attemptFlowCovered('2021-04-30', 30), false);
+  assert.strictEqual(attemptFlowCovered('2021-05-01', 30), true, 'a Saturday start: its first session is May 3');
+  assert.strictEqual(attemptFlowCovered('2024-08-01', 30), true);
+  assert.strictEqual(attemptFlowCovered('2026-08-03', 30), false, 'new months are not covered');
+  assert.throws(() => attemptFlowCovered('2024-08-01', 0), /sessions/);
+});

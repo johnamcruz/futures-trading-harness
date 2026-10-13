@@ -60,11 +60,26 @@ test('cmeHolidays: the rules reproduce the built-in table, and the CME calendars
     closed: ['2025-01-01', '2025-01-20', '2025-02-17', '2025-04-18', '2025-05-26', '2025-06-19', '2025-07-04', '2025-09-01', '2025-11-27', '2025-12-25'],
     early: ['2025-07-03', '2025-11-28', '2025-12-24'],
   });
+  // Juneteenth is an exchange holiday from 2022: 2021-06-18 traded; 2022's, on a Sunday, is kept Monday June 20.
+  assert.deepStrictEqual(cmeHolidays(2021), {
+    closed: ['2021-01-01', '2021-01-18', '2021-02-15', '2021-04-02', '2021-05-31', '2021-07-05', '2021-09-06', '2021-11-25', '2021-12-24'],
+    early: ['2021-11-26'],
+  });
+  assert.deepStrictEqual(cmeHolidays(2022), {
+    closed: ['2022-01-17', '2022-02-21', '2022-04-15', '2022-05-30', '2022-06-20', '2022-07-04', '2022-09-05', '2022-11-24', '2022-12-26'],
+    early: ['2022-11-25'],
+  });
   // 2028: New Year's Day on a Saturday isn't kept; Christmas Eve on a Sunday has no early close.
   assert.deepStrictEqual(cmeHolidays(2028), {
     closed: ['2028-01-17', '2028-02-21', '2028-04-14', '2028-05-29', '2028-06-19', '2028-07-04', '2028-09-04', '2028-11-23', '2028-12-25'],
     early: ['2028-07-03', '2028-11-24'],
   });
+  // Good Friday, two days before Gregorian Easter (a wrong Easter put 2022's on April 22 and 2029's on April 6).
+  const goodFriday = { 2021: '04-02', 2022: '04-15', 2023: '04-07', 2024: '03-29', 2025: '04-18', 2029: '03-30', 2030: '04-19', 2032: '03-26', 2035: '03-23', 2038: '04-23' };
+  for (const [y, md] of Object.entries(goodFriday)) {
+    const spring = cmeHolidays(Number(y)).closed.filter(d => ['03', '04'].includes(d.slice(5, 7)));
+    assert.deepStrictEqual(spring, [`${y}-${md}`], `${y} Good Friday`);
+  }
   for (const y of [2026, 2027, 2028, 2029, 2030, 2031, 2032]) {
     for (const d of [...cmeHolidays(y).closed, ...cmeHolidays(y).early]) assert.ok(![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()), `${d} is a weekday`);
   }
