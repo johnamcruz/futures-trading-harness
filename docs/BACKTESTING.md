@@ -330,6 +330,52 @@ the retention (out-of-sample over in-sample mean R), how many folds were
 positive, and how often the same point won. Keep the defaults unless the
 tuned run beats them out of sample.
 
+## The field-forward study
+
+Before a strategy's rules lean on a field the broker puts on its bars, ask
+whether the field predicts anything: does its value at bar t line up with
+the price move **after** t? `scripts/field-study.js` (logic in
+`scripts/lib/field-study.js`) measures that and nothing else. It is
+generic: a field is a dotted path read as `field("...")` reads it, with
+`[n]` for the value n bars earlier; the harness computes nothing of its
+own.
+
+```bash
+node scripts/field-study.js --data data/MNQ-1m/ --symbol MNQ \
+  --fields a.b,a.c[1] --horizons 1,3,5,15 --by hour,session --out out/study
+```
+
+- **Predictive only.** The forward move is `close[t+k] - close[t]` in
+  ticks (with the largest excursions up and down over bars t+1..t+k); the
+  field is read from bar t's own data. The same bar's move is shown only as
+  a labelled contemporaneous reference: a field that describes its own bar
+  correlates with that bar's move whether or not it predicts the next.
+- **No pair spans a break**: a new file, a new trading day, a time gap over
+  twice the timeframe, or a change of a per-bar `contractId` (bars fetched
+  through the broker interface carry none: the contract is on the reply, so
+  a roll is caught by the file and trading-day breaks); skipped pairs are
+  counted. Give a long span as one file per contract stretch (a directory
+  of files, which must not overlap in time): each file is its own chunk.
+- **Statistics** per field and horizon: Pearson and Spearman IC, deciles
+  (mean and median move, hit rate, excursions), |field| thresholds (p80,
+  p90, p95, p99 by default, or `--thresholds`) with the move signed by the
+  field and the result net of the round-trip cost (`--cost-ticks`, default
+  2), 95% block-bootstrap intervals (one trading day a block, seeded) for
+  the IC (Spearman's on the full sample's ranks), the top and bottom
+  deciles and each threshold (deciles are by rank, so equal values share
+  one; a discrete field can leave deciles empty); a threshold clears the
+  cost only when its whole interval does, and breakdowns by New York hour and
+  by session (RTH 09:30-16:00 ET vs overnight). The tick comes from
+  `--symbol`'s contract spec, or `--tick`.
+- **The split rule.** The report states every month's role
+  (`scripts/lib/prop/splits.js`). Only Train months run freely: a span with
+  a Select, Out-of-sample, Recent, walk-forward or reserve month is refused
+  unless `--held-out-look "<reason>"` is given, and that look must then be
+  recorded in `RECORDED_LOOKS` and the ledger (`docs/LEARNED-RULEBOOK.md`,
+  section 4 and R16). A study is a claim's first measurement, on Train;
+  thresholds it suggests are judged on held-out months by calibration
+  (R11-R13, R34), never by rerunning the study there.
+
 ## Trusting a result
 
 Every report gives the mean R's 95% interval and an edge verdict
