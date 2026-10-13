@@ -31,9 +31,33 @@ test('entry needs a setup tag, a stop, and a fresh plan', () => {
   assert.deepStrictEqual(checks(r), ['plan-required', 'setup-tag', 'stop-defined']);
 });
 
-test('stop stated in the rationale satisfies stop-defined', () => {
-  const r = evaluate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:bos long, stop at 21480.25, target 21540' }), [plan()]);
-  assert.deepStrictEqual(r.violations, []);
+test('stop-defined: every entry carries its stop as stopLossBracket; a stop stated only in the rationale is refused', () => {
+  const stopInText = 'setup:bos long, stop at 21480.25, target 21540';
+  const r = evaluate(entryOrder({ stopLossBracket: undefined, rationale: stopInText }), [plan()]);
+  assert.deepStrictEqual(checks(r), ['stop-defined']);
+  // Broker-neutral: the stop goes as the bracket, a broker that can't attach it refuses, never re-sent without it.
+  assert.match(r.violations[0].message, /every entry carries its stop as stopLossBracket/);
+  assert.match(r.violations[0].message, /a stop stated only in the rationale is not one/i);
+  assert.match(r.violations[0].message, /refuses the entry: never send it again without one, and report the broker's message to the user/);
+  assert.doesNotMatch(r.violations[0].message, /\[protect\]|TopstepX|OCO/i);
+  // Ticks must be a whole number above 0: zero, negative, a fraction, not a number, or missing are no bracket.
+  for (const bad of [{ ticks: 0 }, { ticks: -40 }, { ticks: 2.5 }, { ticks: '2.5' }, { ticks: '' }, { ticks: 'forty' }, { ticks: null }, { ticks: true },
+    { ticks: [40] }, { ticks: NaN }, { ticks: Infinity }, { type: 'stop' }, null, 40, 'stop 40']) {
+    const v = evaluate(entryOrder({ stopLossBracket: bad, rationale: stopInText }), [plan()]).violations;
+    assert.ok(v.some(x => x.check === 'stop-defined'), JSON.stringify(bad));
+  }
+  // The bracket is a stop leg with numeric ticks: a limit or market leg, no type, or ticks as a string are no stop bracket.
+  for (const bad of [{ ticks: 40, type: 'limit' }, { ticks: 40, type: 'market' }, { ticks: 40 }, { ticks: 40, type: '' }, { ticks: 40, type: 4 }, { ticks: '40', type: 'stop' }, { ticks: 40, type: 'Stop' }, { ticks: 40, type: 'STOP' }, { ticks: 40, type: 'Trailing_Stop' }]) {
+    const v = evaluate(entryOrder({ stopLossBracket: bad }), [plan()]).violations;
+    assert.ok(v.some(x => x.check === 'stop-defined'), JSON.stringify(bad));
+  }
+  // A whole number of ticks above 0 with a stop type is the bracket.
+  assert.deepStrictEqual(evaluate(entryOrder({ stopLossBracket: { ticks: 1, type: 'stop' } }), [plan()]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder({ stopLossBracket: { ticks: 40, type: 'trailing_stop' } }), [plan()]).violations, []);
+  // [exit] and [protect] orders carry no bracket and are never refused by it.
+  for (const rationale of ['[exit] flatten', '[protect] stop for the filled long', ' [PROTECT] stop after the partial exit']) {
+    assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale }), []).violations, [], rationale);
+  }
 });
 
 test('stale, other-symbol, and previous-day plans do not count', () => {
@@ -54,7 +78,7 @@ test('setup tag must open the rationale and the stop must be a number after "sto
   // The message says where the tag goes, not just that it's needed.
   assert.match(evaluate(entryOrder({ rationale: 'long setup:orb, stop 21480' }), [plan()]).violations[0].message, /must start with the strategy as setup:<name>.*the tag goes first/);
   assert.deepStrictEqual(checks(evaluate(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb never stop out, 2x size' }), [plan()])), ['stop-defined']);
-  assert.deepStrictEqual(evaluate(entryOrder({ stopLossBracket: undefined, rationale: '  setup:orb long, stop: 21480' }), [plan()]).violations, []);
+  assert.deepStrictEqual(evaluate(entryOrder({ rationale: '  setup:orb long, stop: 21480' }), [plan()]).violations, []);
 });
 
 test('reviews without a result tag or for another contract do not clear the review gate', () => {
@@ -437,6 +461,8 @@ test('policy: an entry needs a fresh verdict for this contract and side, at no m
   assert.match(none(entryOrder()).violations.find(v => v.check === 'policy').message, /no verdict for MNQ/);
   const ok = propSetup({ policy: true, verdict: {} });
   assert.deepStrictEqual(ok(entryOrder({ size: 3 })).violations, []);
+  // The verdict's entry carries its stop as the bracket too: the ticks only in the rationale are refused.
+  assert.ok(ok(entryOrder({ size: 3, stopLossBracket: undefined, rationale: 'setup:orb long, stop 40 ticks' })).violations.some(v => v.check === 'stop-defined'));
   assert.match(ok(entryOrder({ size: 4 })).violations[0].message, /size 4 is over the verdict's 3 MNQ/);
   assert.match(ok(entryOrder({ stopLossBracket: { ticks: 60, type: 'stop' } })).violations.map(v => v.message).join(), /the stop is 60 ticks; the verdict was sized for 40/);
   assert.match(ok(entryOrder({ side: 'sell' })).violations.find(v => v.check === 'policy').message, /for a long entry, not sell/);
@@ -755,7 +781,7 @@ test('order-consistency: the side named in the rationale must be the order side'
 test('order-consistency: stop and target on the right sides of a known entry and of each other', () => {
   const limit = extra => entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: { ticks: 80, type: 'stop' }, ...extra });
   assert.deepStrictEqual(evaluate(limit({ rationale: 'setup:orb long, stop 21480, target 21540' }), [plan()]).violations, []);
-  assert.match(evaluate(limit({ stopLossBracket: undefined, rationale: 'setup:orb long, stop 21520' }), [plan()]).violations[0].message,
+  assert.match(evaluate(limit({ rationale: 'setup:orb long, stop 21520' }), [plan()]).violations[0].message,
     /stop 21520 is on the wrong side of the buy entry 21500/);
   assert.match(evaluate(limit({ rationale: 'setup:orb long, stop 21480, target 21490' }), [plan()]).violations[0].message,
     /target 21490 is on the wrong side of the buy entry 21500/);
@@ -766,9 +792,9 @@ test('order-consistency: stop and target on the right sides of a known entry and
 
 test('order-consistency: prices on the tick and whole bracket ticks', () => {
   assert.match(evaluate(entryOrder({ rationale: 'setup:orb long, stop 21480.10' }), [plan()]).violations[0].message, /stop 21480\.1 is not on the 0\.25 tick/);
-  assert.match(evaluate(entryOrder({ type: 'limit', limitPrice: 21500.3, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480' }), [plan()]).violations[0].message,
+  assert.match(evaluate(entryOrder({ type: 'limit', limitPrice: 21500.3, rationale: 'setup:orb long, stop 21480' }), [plan()]).violations[0].message,
     /limitPrice 21500\.3 is not on the 0\.25 tick/);
-  assert.match(evaluate(entryOrder({ stopLossBracket: { ticks: 7.5, type: 'stop' } }), [plan()]).violations[0].message, /whole number of ticks/);
+  assert.match(evaluate(entryOrder({ stopLossBracket: { ticks: 7.5, type: 'stop' } }), [plan()]).violations.find(v => v.check === 'order-consistency').message, /whole number of ticks/);
   // A number with a unit is not a price.
   assert.deepStrictEqual(evaluate(entryOrder({ rationale: 'setup:orb long, stop 40 ticks, target 2R' }), [plan()]).violations, []);
   // An unknown contract has no tick spec: only the side checks apply.
@@ -1049,7 +1075,8 @@ test('contract-specs: an entry with no tick specs from the broker is refused (ha
 test('contract-specs: prices are checked on the broker\'s tick, not the static table\'s', () => {
   const home = trendHome(undefined, { specs: false });
   const cfg = { ...config, home };
-  const limit = entryOrder({ type: 'limit', limitPrice: 21500.1, stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480.1, target 21540.1' });
+  // 21500.1 to 21480.1 is 200 ticks on a 0.1 tick.
+  const limit = entryOrder({ type: 'limit', limitPrice: 21500.1, stopLossBracket: { ticks: 200, type: 'stop' }, rationale: 'setup:orb long, stop 21480.1, target 21540.1' });
   recordBrokerSpecs(home, { roots: ['MNQ'] }); // 0.25: 21500.1 is off the tick
   assert.match(evaluate(limit, [plan()], { config: cfg }).violations.find(v => v.check === 'order-consistency').message, /limitPrice 21500\.1 is not on the 0\.25 tick/);
   // A broker that says 0.1 (unlike the table): not trusted either way; the entry is refused.
@@ -1154,7 +1181,8 @@ test('max-risk: an entry over its strategy\'s risk.max_risk_usd is refused with 
 });
 
 test('max-risk: the stop only in the rationale - measured from a limit entry\'s price; a market entry\'s is not computable (refused)', () => {
-  const cfg = { ...config, home: limitsHome({ maxOrderSize: 50 }), skipChecks: new Set(['strategy']) };
+  // max-risk alone: stop-defined, which refuses every one of these unbracketed entries, is skipped here.
+  const cfg = { ...config, home: limitsHome({ maxOrderSize: 50 }), skipChecks: new Set(['strategy', 'stop-defined']) };
   const run = (input, cap) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg, strategies: [capped(cap)] }).violations;
   // Buy limit 21500, stop 21480: 80 ticks = $40 a contract.
   const limit = entryOrder({ type: 'limit', limitPrice: 21500, stopLossBracket: undefined, rationale: 'setup:orb long at 21500, stop 21480, target 21540' });

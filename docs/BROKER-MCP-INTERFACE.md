@@ -255,12 +255,22 @@ Input: **`accountId`**, **`contractId`**, **`side`** (`buy` | `sell`),
 `join_ask`), **`size`** (positive integer), `limitPrice` (required for limit),
 `stopPrice` (required for stop), `trailPrice` (required for trailing_stop; an
 absolute price level, not a distance), `stopLossBracket` / `takeProfitBracket`
-(`{ ticks, type }`, ticks from the fill; only on accounts with auto OCO
-brackets), `customTag` (≤ 100 chars, unique per account), **`rationale`**
+(`{ ticks, type }`: `ticks` a whole number above 0 from the fill, `type`
+`stop` for the stop leg and `limit` for the target; the harness sends every
+entry with its `stopLossBracket`), `customTag` (≤ 100 chars, unique per account), **`rationale`**
 (≥ 20 chars: setup, stop and why, target, $ risk).
 
 Result: `{ orderId (number | null), success, errorCode, errorName, errorMessage }`.
 `isError` is set when `success` is false.
+
+Brackets: given a `stopLossBracket`, the server either attaches the stop leg
+to the entry as its broker requires; or refuses the entry (`success: false`
+with an `errorCode`: nothing opened); or, if it opened a position whose stop
+it can't confirm, flattens it and says so in its reply. If it can't confirm
+that flatten either, it returns an error reply saying a position may be
+open: that reply is not a refusal, and the harness treats its outcome as
+unknown. A server never leaves an entry open without the stop leg it was
+given.
 
 The harness's gateway sends every `place_order` with a `customTag` (the
 client's, or one it adds) and, when a reply never comes, looks the order up by

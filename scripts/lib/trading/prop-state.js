@@ -189,7 +189,7 @@ function dayEndMs(day) {
   return tradingDayStart(new Date(`${day}T23:59:00Z`)).getTime();
 }
 
-/** A fill's costs: its fees, and its commissions where the broker reports them apart (TopstepX can). */
+/** A fill's costs: its fees, and its commissions where the broker reports them apart (some brokers do). */
 function costOf(f) {
   const n = v => (v === null || v === undefined ? 0 : Number(v));
   return n(f.fees) + n(f.commissions);

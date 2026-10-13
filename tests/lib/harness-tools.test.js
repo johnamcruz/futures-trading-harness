@@ -182,6 +182,10 @@ test('combine: status only (start, stop, record-day stay the user\'s, in scripts
   assert.match(combine.status({}, ctx).text, /^topstep_50k: active, balance \$50000 .*entries blocked/);
   assert.strictEqual(JSON.parse(combine.status({ json: true }, ctx).text).attempts[0].startedAt, AT.toISOString());
   assert.deepStrictEqual(Object.keys(combine.OPS), ['status']);
+  // A live verdict names its stop as the whole bracket the gate requires: ticks and type "stop".
+  require('../../scripts/lib/trading/prop-state').appendVerdict(home, { strategy: 'prop_portfolio', component: 'keltner', direction: 'short', action: 'full', maxSize: 2, contract: 'MNQ', stopTicks: 40,
+    bar: '2026-04-28T14:12:00.000Z', at: AT.toISOString(), expiresAt: new Date(AT.getTime() + 120000).toISOString() });
+  assert.match(combine.status({}, ctx).text, /prop_portfolio: short setup from keltner: full, at most 2 MNQ with a 40-tick stop \(stopLossBracket \{ticks: 40, type: "stop"\}, rationale/);
 });
 
 test('lessons and reconcile read the broker\'s journal and the day\'s decision log', () => {

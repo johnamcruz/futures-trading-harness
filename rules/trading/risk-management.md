@@ -4,11 +4,14 @@
 - Risk per trade = |entry − stop| ÷ tickSize × tickValue × size. Keep it at or
   below 25% of the remaining daily loss allowance (`remainingBeforeLimit` in
   `get_account_snapshot`), and at or below the plan's stated $ risk.
-- Every open position has a protective stop working at the exchange: a
-  `stopLossBracket`, or a separate `[protect]` stop order placed as soon as the
-  fill shows (the order's one status check, or the next cycle's read). If the stop can't be placed, close the
-  position. An entry without a stop bracket that is still unfilled at its one
-  status check is cancelled, not waited on (broker-mcp skill).
+- Every open position has a protective stop working at the exchange: the
+  entry's `stopLossBracket`, checked as soon as the fill shows (the order's
+  one status check, or the next cycle's read). A separate `[protect]` stop
+  only repairs protection on an existing position (resized after a partial
+  exit, or a stop cancelled or missing), placed at once; never a way to
+  enter without a bracket. If the stop can't be placed, close the position. A working entry
+  without a stop bracket (one the gate never checked, e.g. placed outside
+  the harness) is cancelled, not waited on (broker-mcp skill).
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the

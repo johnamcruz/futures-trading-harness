@@ -69,7 +69,7 @@ function entryStopTicks(input, stopPrices, spec) {
   if (hasBracket) return { ticks: Math.max(bracket, fromText || 0) };
   if (fromText) return { ticks: fromText };
   if (stops.length) {
-    return { why: `a ${type || 'market'} entry with its stop only in the rationale has no entry price to measure the stop from: add stopLossBracket.ticks (order_plan gives them), or enter with a limit or stop order at a price` };
+    return { why: `a ${type || 'market'} entry with its stop only in the rationale has no entry price to measure the stop from: add stopLossBracket.ticks (order_plan gives them; every entry carries it)` };
   }
   return { why: 'the entry has no stop to measure its risk from: add stopLossBracket.ticks (order_plan gives them)' };
 }

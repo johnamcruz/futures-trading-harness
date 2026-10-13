@@ -651,7 +651,7 @@ test('mock trading: losses counted from the broker\'s own fills stop new entries
   }
 });
 
-test('mock trading: malformed brackets and inconsistent prices are refused before the broker sees them; an [exit] can\'t carry a bracket', async () => {
+test('mock trading: a missing or malformed bracket and inconsistent prices are refused before the broker sees them; an [exit] can\'t carry a bracket', async () => {
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000).toISOString();
   const w = world(at);
   const sig = signalOnFiredBar(w);
@@ -680,6 +680,10 @@ test('mock trading: malformed brackets and inconsistent prices are refused befor
       assert.ok(v, `${label}: ${JSON.stringify(lastBlock(w))}`);
       assert.match(v.message, why, label);
     }
+    // No bracket, the stop only in the rationale: no entry (every entry carries its stop as stopLossBracket).
+    const unbracketed = await attempt(gw, 'place_order', bosEntry(sig, { stopLossBracket: undefined }));
+    assert.ok(!unbracketed.ok);
+    assert.ok(lastBlock(w).some(v => v.check === 'stop-defined' && /every entry carries its stop as stopLossBracket/.test(v.message)), JSON.stringify(lastBlock(w)));
     assert.strictEqual(placed(w), 0, 'none reached the broker');
     // The well-formed entry goes.
     const good = await attempt(gw, 'place_order', bosEntry(sig));

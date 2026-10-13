@@ -75,7 +75,7 @@ function status({ account: name, json = false } = {}, ctx) {
     text += v.action === 'skip'
       ? `${v.strategy}: ${v.direction} setup from ${v.component} skipped (${v.reason || 'the policy'}), until ${v.expiresAt}\n`
       : `${v.strategy}: ${v.direction} setup from ${v.component}: ${v.action}, at most ${v.maxSize} ${v.contract} with a ${v.stopTicks}-tick stop `
-        + `(stopLossBracket.ticks ${v.stopTicks}, rationale "setup:${v.strategy} ..."), until ${v.expiresAt}\n`;
+        + `(stopLossBracket {ticks: ${v.stopTicks}, type: "stop"}, rationale "setup:${v.strategy} ..."), until ${v.expiresAt}\n`;
   }
   return { text };
 }

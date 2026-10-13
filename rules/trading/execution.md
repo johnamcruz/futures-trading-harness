@@ -14,9 +14,13 @@
   the position, price, or working orders.
 - Prices are multiples of `tickSize` (MNQ/MES 0.25). Round before sending.
 - `trailPrice` is an absolute price level, not a distance.
-- `stopLossBracket` / `takeProfitBracket` are in ticks and work only on
-  accounts with Auto OCO Brackets. If the account rejects brackets, enter
-  without them and immediately place a separate `[protect]` stop.
+- Every entry carries `stopLossBracket` (and `takeProfitBracket` when it has
+  a target), in whole ticks from the fill. A broker that can't attach them
+  refuses the entry: never enter without them; report the broker's message.
+  A refusal is `success: false` with an `errorCode` other than 6
+  (`OrderPending`) or 7 (`UnknownError`). Any other error reply (codes 6 and 7
+  included) is an unknown outcome: read positions and orders, protect first,
+  never re-send.
 - `close_position` does not cancel resting stops and targets. After any exit,
   check `list_open_orders` and cancel leftovers.
 - Rationale convention (the order gate reads it):

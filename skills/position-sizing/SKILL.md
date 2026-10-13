@@ -44,15 +44,14 @@ description: Size futures trades from the stop distance, tick value, and the rem
    records it from `get_server_config`, and refuses entries until it has),
    and, when the strategy sets `risk.max_risk_usd`, size × stop ticks ×
    tickValue at most that cap. It measures the stop from
-   `stopLossBracket.ticks`, or from a limit or stop entry's price to the
-   rationale's stop price (the farthest one on the losing side; a part tick
-   counts as a whole one); a market
-   entry with its stop only in the rationale can't be measured, so a
-   strategy with a cap is refused unless you send `stopLossBracket.ticks`.
+   `stopLossBracket.ticks`, which every entry carries (the gate refuses an
+   entry without one; always send it), and, for a limit or stop entry, from its price to the
+   rationale's stop price when that is farther (the farthest one on the
+   losing side; a part tick counts as a whole one).
    Over a cap, reduce the size (never split the entry into several orders,
    never shrink the stop to fit). The cap is checked when the entry is
-   placed: the `[protect]` stop you place after the fill goes where the
-   rationale said, never farther.
+   placed: a `[protect]` stop that later repairs the position's protection
+   goes where the rationale said, never farther.
 6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
    policy strategy, the verdict's contract (the selected one), size, and stop
    ticks were sized from the attempt's budget (`combine_status`), each
