@@ -506,6 +506,83 @@ repository's code, gated exactly as a rulebook change, and judged only on
 months it never trained on. The harness never depends on it: the agent runs
 the same with or without the adapter, on any model.
 
+**R33. A strategy change re-learns automatically** (owner's decision).
+Strategies are documents read live, so an edited `STRATEGY.md` is traded
+on the next cycle; what was *learned* about it is not, and goes stale. So:
+
+- **Fingerprints, defined.** A strategy's fingerprint hashes its parsed
+  frontmatter in canonical form (sorted keys, YAML comments stripped,
+  `status` and `version` excluded so a paper-to-active flip doesn't churn)
+  and its body with whitespace normalized (the model reads it). Learned
+  values also depend on things outside the document, so each rulebook
+  records, beside the strategies' fingerprints: a content hash of the code
+  their rules and sizing run on (the evaluator, rules, indicators, the
+  facts functions of R6, `combine.js`), the account's `ACCOUNT.md`
+  fingerprint (its limits and `sessions`: a change there makes that
+  account's whole rulebook stale), and the policy strategy's own
+  fingerprint (its `sizing`, `exit`, `contracts` and list: a change makes
+  the whole policy stale). The skills are not fingerprinted: they are what
+  the training loop itself changes (R24): each change is reviewed, and
+  changes from the training loop are also replayed (R26).
+- **Day one (owner's decision):** when this is built (section 10), the
+  champion then in use is sealed as the baseline with the fingerprints in
+  the tree at that moment, so nothing changes when it lands. Only a strategy, code, account or policy that
+  changes after that, or a strategy added after that, goes stale.
+- **Staleness in code.** A fingerprint that differs from the one recorded
+  marks what depends on it stale. A test asserts that the runner and the
+  gate treat a mismatch as stale and fail closed (a strategy edit itself
+  still merges: it then trades paper until re-learned).
+- **Re-learning is triggered, not remembered.** A change is a trigger for
+  the training loop (R25), beside new data (R17): calibration of the
+  strategy's claims (R11-R13), the Monte Carlo search over the rulebook
+  values it affects (R8-R10), and a replay scored by the scorecard (R19),
+  in the tuning and held-out quarters as for any change. Those runs use
+  their own worktree with the candidate's sealed rulebook (R30), so the
+  changed strategy isn't stale there and its replay produces real
+  decisions to score.
+- **Paper until re-verified.** Until its re-learned rulebook passes every
+  verifier (R26) and the owner approves it (R25), a changed or new
+  strategy trades **paper only**: in this harness that means its plans are
+  journaled and its live entries refused, no fills. For a policy strategy
+  this is enforced on the verdict's component, not only the `setup:` tag:
+  the runner passes over a paper or stale component when it picks the
+  setup, and the gate refuses an entry whose latest verdict names one
+  (gate and wiring tests). Exits and protective stops of an open position
+  are never affected.
+- **The rest of the policy keeps trading only if it is still safe.**
+  Pacing, sizing and exits were searched over the whole portfolio's trade
+  stream, so taking one component out changes the paths. Before the other
+  components keep trading live, the mechanical Monte Carlo re-scores the
+  champion without that component; any blow puts the whole policy on
+  paper until re-learned. The re-score's result is a recorded entry keyed
+  to the champion's seal and the set of stale components; the runner and
+  the gate require a passing entry before the other components trade
+  live, and with none (or one still running) the whole policy is on
+  paper.
+- **What was learned can't be changed by a later change.** Each promoted
+  rulebook is sealed with a hash over its values, the evidence frozen at
+  promotion, and the fingerprints above. The ledger (R16), which grows
+  after promotion, sits outside the seal, in its own append-only file
+  with a test that it is never rewritten. Each version's seal is also
+  recorded in an append-only version list (R18) and in its promotion pull
+  request, so recomputing a seal in the same file is caught. Versions are
+  kept, never edited in place.
+- **Verified before use, cheaply.** The runner and the gate check that the
+  rulebook's seal matches its contents and appears in the version list,
+  and that the recorded fingerprints match the named strategy, its
+  verdict's component, the account, and the code hash now in the tree.
+  The hook hashes only those (a few local files), and fails closed on a
+  missing or unreadable seal. A code-hash mismatch puts every strategy the
+  rulebook covers on paper. A seal mismatch (an edited or partial
+  rulebook) and a fingerprint mismatch (a stale one) both leave the
+  strategies it covers on paper.
+- **Rollback restores the set.** Rolling back (R18) restores the rulebook
+  version together with the strategy documents, code and account it was
+  learned on; restoring only the rulebook leaves it stale, by design.
+- **Promotion as always:** a reviewed pull request with the owner's
+  approval; the new seal and fingerprints are recorded with the promoted
+  rulebook and in the version list.
+
 ## 8. The LLM: adherence and learning
 
 **R19. Adherence scorecard.** For every replay or live decision, the
@@ -606,30 +683,38 @@ Each step is its own pull request and is reviewed as today.
    used.
 4. Fact-checked reasons in the risk manager's phase 2 (R29, #4): the fix for
    the "wrong reason" misreads the replays show.
-5. The dynamic account: limits as fractions of the MLL, with the account and
+5. Paper components stay paper inside a policy (owner's decision, right
+   after step 4): the runner passes over a component whose status is not
+   `active` when it picks the setup, and the gate refuses an entry whose
+   latest verdict names one; gate and wiring tests. Today a `paper`
+   component (e.g. `value_area`) can be traded live through
+   `prop_portfolio`.
+6. The dynamic account: limits as fractions of the MLL, with the account and
    its contract taken from the running attempt.
-6. The rulebook document, its single-place test, the enforced or taught
+7. The rulebook document, its single-place test, the enforced or taught
    classification, and the verdict's multiplier (R1-R4). It starts from
    today's values, so nothing is learned yet.
-7. Slippage-safe sizing: `contractPlan`'s risk per contract includes the
+8. Slippage-safe sizing: `contractPlan`'s risk per contract includes the
    stop's expected slippage, so a stopped trade never ends past the floor or
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
-8. The two-layer evaluator and the attempt simulation (R6-R9).
-9. Calibration: the registry, the measurements and the reports (R11-R13).
+9. The two-layer evaluator and the attempt simulation (R6-R9).
+10. Calibration: the registry, the measurements and the reports (R11-R13).
    It starts with the claims the June replay shows the LLM relies on most
    (by how often, never by their June outcomes).
-10. The search and promotion (R8, R10, R15-R16, R18). This produces the first
+11. The search and promotion (R8, R10, R15-R16, R18). This produces the first
    learned rulebook for `topstep_100k`; 50K and 150K follow.
-11. The LLM-level estimate and live readiness (R20-R21).
-12. Base rates in the briefing (R14).
-13. The training loop (R24-R28, R30): the proposer, Optuna over the agent's
+12. The LLM-level estimate and live readiness (R20-R21).
+13. Base rates in the briefing (R14).
+14. The training loop (R24-R28, R30): the proposer, Optuna over the agent's
     design with the decision-point replay mode and paired tests, the
     verifiers, the archive, and promotion as a reviewed pull request.
-14. Walk-forward re-learning (R17), run through the training loop.
-15. The other in-the-moment aids (R29): agreement on verdict decisions
+15. Walk-forward re-learning (R17), run through the training loop.
+16. Strategy-change re-learning (R33): the fingerprint, staleness in code,
+    the trigger, and paper until re-verified (enforced by the gate).
+17. The other in-the-moment aids (R29): agreement on verdict decisions
     (#3) and lessons when relevant (#5), each on its own evidence.
-16. Fine-tuning on verified decisions (R31), optional.
+18. Fine-tuning on verified decisions (R31), optional.
 
 ## 11. Decisions
 
@@ -665,6 +750,12 @@ Decided by the owner (2026-10-12):
 - **Live readiness:** at least 90% adherence on the taught items, and the
   LLM's estimated blow rate zero and its estimated pass rate meeting the
   gate (R21).
+- **A changed or new strategy trades paper until its re-learning is
+  verified and approved** (R33); re-learning is triggered automatically.
+- **Day one of R33:** the champion in use when R33 lands is sealed as the
+  baseline with the fingerprints then in the tree, so nothing changes.
+- **Paper components** are enforced inside a policy too, fixed right after
+  fact-checked reasons (section 10).
 - **Where it lives:** `rulebooks/<account>/RULEBOOK.md`, numbers in the
   frontmatter and the evidence in the body (R1).
 
