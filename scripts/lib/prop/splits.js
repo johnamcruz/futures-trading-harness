@@ -30,7 +30,12 @@
  *   computation, not a promotion: retiring a window goes through the ledger.
  *
  * The LLM role (months from LLM_FROM, after the model's training cutoff) is
- * orthogonal: a flag on a month, never a mechanical role of its own.
+ * orthogonal: a flag on a month, never a mechanical role of its own. So is
+ * flow coverage (FLOW_COVERAGE, 2021-05 to 2025-11): it limits which months
+ * carry flow, never a month's role. An attempt of a policy with a flow branch
+ * is covered when its start day plus `sessions` sessions is covered
+ * (attemptFlowCovered), decided at the start. Which looks at these months
+ * are allowed and which count against a budget: prop/looks.js.
  *
  * A date string ('YYYY-MM[-DD]') is a trading-session date (the day a
  * session counts for); a Date or a millisecond timestamp (a bar's time) is
@@ -40,6 +45,7 @@
  */
 
 const { tradingDayKey } = require('../trading/clock');
+const { CLOSED, cmeHolidays } = require('../trading/exchange-calendar');
 
 const SPLITS = Object.freeze({
   train: Object.freeze(['2021-01-01', '2023-07-01']),
@@ -57,6 +63,11 @@ const NEW_MONTHS_FROM = RECENT[1];
 const LLM_FROM = '2026-06-01';
 /** A reserve becomes an out-of-sample window once it holds this many months. */
 const RESERVE_MIN_MONTHS = 12;
+/**
+ * The replay server's flow coverage (section 4): [from, to), session dates, `to` exclusive, so 2021-05 through
+ * 2025-11. Coverage limits which months carry flow, never which role a month has.
+ */
+const FLOW_COVERAGE = Object.freeze(['2021-05-01', '2025-12-01']);
 const ROLES = Object.freeze(['train', 'select', 'oos', 'recent', 'walk-forward', 'reserve']);
 const PARTS = Object.freeze(['tuning', 'held-out']);
 
@@ -259,8 +270,71 @@ function oosQueue(asOf) {
   return out;
 }
 
+const DAY = 86400000;
+const isoOfMs = t => new Date(t).toISOString().slice(0, 10);
+const closedByYear = new Map();
+/**
+ * The closed days of a year, from the harness's one exchange calendar (trading/exchange-calendar.js): its table
+ * and its CME rules (cmeHolidays), both.
+ */
+function closedIn(year) {
+  if (!closedByYear.has(year)) {
+    closedByYear.set(year, new Set([...CLOSED.filter(d => d.startsWith(`${year}-`)), ...cmeHolidays(year).closed]));
+  }
+  return closedByYear.get(year);
+}
+
+/** Whether a session date (ms, UTC midnight) has a session: a weekday the exchange isn't closed. */
+function sessionAt(t) {
+  const d = new Date(t);
+  return ![0, 6].includes(d.getUTCDay()) && !closedIn(d.getUTCFullYear()).has(isoOfMs(t));
+}
+
+/** Whether a date has a session; a timestamp (a bar's time) is read as its session first. */
+const hasSession = date => sessionAt(parse(date).ms);
+
+/**
+ * An attempt's sessions from its start: { first, last, bound }, session dates. first is the first session on or
+ * after start (a timestamp is read as its session first); last is the `sessions`-th session counting first as
+ * one; bound is the session `sessions` sessions after first, the start day plus the maximum attempt length.
+ * Closed days are every exchange holiday (the harness doesn't trade them), so a span never counts one.
+ */
+function attemptSessions(start, sessions) {
+  if (!Number.isInteger(sessions) || sessions < 1) throw new Error(`sessions: a positive whole number, not ${String(sessions)}`);
+  let t = parse(start).ms;
+  while (!sessionAt(t)) t += DAY;
+  const first = t;
+  let last = first;
+  for (let n = 1; n <= sessions; n++) {
+    t += DAY;
+    while (!sessionAt(t)) t += DAY;
+    if (n < sessions) last = t;
+  }
+  return Object.freeze({ first: isoOfMs(first), last: isoOfMs(last), bound: isoOfMs(t) });
+}
+
+const FLOW_FROM = parse(FLOW_COVERAGE[0]).ms;
+const FLOW_TO = parse(FLOW_COVERAGE[1]).ms;
+
+/** Whether a date's session carries flow (FLOW_COVERAGE). A timestamp is read as its session first. */
+function isFlowCovered(date) {
+  const t = parse(date).ms;
+  return t >= FLOW_FROM && t < FLOW_TO;
+}
+
+/**
+ * Whether an attempt of a policy with a flow branch is covered (section 4): decided at the start, never by the
+ * outcome. Covered only if its first session and its start day plus the maximum attempt length (`sessions`
+ * sessions, the account's) are both covered, whatever the attempt does; otherwise it runs flow off.
+ */
+function attemptFlowCovered(start, sessions) {
+  const a = attemptSessions(start, sessions);
+  return isFlowCovered(a.first) && isFlowCovered(a.bound);
+}
+
 module.exports = {
   SPLITS, windowMs, overlaps,
-  RECENT, SCHEDULE_START, NEW_MONTHS_FROM, LLM_FROM, RESERVE_MIN_MONTHS, ROLES, PARTS, RECORDED_LOOKS,
+  RECENT, SCHEDULE_START, NEW_MONTHS_FROM, LLM_FROM, RESERVE_MIN_MONTHS, ROLES, PARTS, RECORDED_LOOKS, FLOW_COVERAGE,
   roleOf, isLlmMonth, blockByName, blocksBetween, unitContaining, oosQueue,
+  hasSession, attemptSessions, isFlowCovered, attemptFlowCovered,
 };

@@ -557,7 +557,16 @@ with tests; a window changes only when one is retired through the ledger
 **R32. The schedule in code.** `splits.js` encodes every role of section 4
 (Recent, the half-year walk-forward and reserve blocks, the tuning and
 held-out quarters), so "set in advance" is enforced, with tests that no two
-roles overlap and none moves backward.
+roles overlap and none moves backward. It also holds flow coverage
+(`isFlowCovered`, and `attemptFlowCovered`: the start day plus `sessions`
+sessions, every exchange holiday closed). The look ledger's rules (R16,
+R17) are in `scripts/lib/prop/looks.js`: every look names its purpose
+(tuning, judging or reasoning-fix); tuning looks are logged without a
+budget; out-of-sample looks count 3 per window, and held-out looks 3 across
+every held-out quarter together; Recent takes only reasoning-fix looks
+(section 10, step 2), logged without a budget, and the reserve none. The
+ledger itself is kept with the rulebook's evidence (R16), written by the
+search and the training loop.
 
 Zero blows in every month mostly tests the worst one or two weeks in the
 window (in this window: August 2024 and April 2025, seen on the

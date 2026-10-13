@@ -67,7 +67,7 @@ function exchangeCalendar({ closed = [], early = [] } = {}) {
  * A year's exchange holidays and early closes by the rules the table follows:
  * { closed, early }, trading days as YYYY-MM-DD. Closed: New Year's Day, MLK
  * Day (3rd Monday of January), Presidents Day (3rd Monday of February), Good
- * Friday, Memorial Day (last Monday of May), Juneteenth, Independence Day,
+ * Friday, Memorial Day (last Monday of May), Juneteenth (from 2022, its first year as an exchange holiday), Independence Day,
  * Labor Day (1st Monday of September), Thanksgiving (4th Thursday of
  * November), Christmas; a holiday on a Saturday is kept the Friday before,
  * on a Sunday the Monday after (New Year's Day on a Saturday isn't kept).
@@ -83,7 +83,7 @@ function cmeHolidays(year) {
   const kept = x => { const w = x.getUTCDay(); if (w === 6) x.setUTCDate(x.getUTCDate() - 1); if (w === 0) x.setUTCDate(x.getUTCDate() + 1); return x; };
   // Easter (anonymous Gregorian algorithm); Good Friday is two days before.
   const a = year % 19; const b = Math.floor(year / 100); const c = year % 100;
-  const h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((8 * b + 13) / 25)) / 3) + 15) % 30;
+  const h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b + 8) / 25) + 1) / 3) + 15) % 30;
   const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - (c % 4)) % 7;
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
@@ -92,7 +92,7 @@ function cmeHolidays(year) {
   const thanksgiving = nth(11, 4, 4);
   const closed = [
     ...(d(1, 1).getUTCDay() === 6 ? [] : [kept(d(1, 1))]), nth(1, 1, 3), nth(2, 1, 3), goodFriday, last(5, 1),
-    kept(d(6, 19)), kept(d(7, 4)), nth(9, 1, 1), thanksgiving, kept(d(12, 25)),
+    ...(year >= 2022 ? [kept(d(6, 19))] : []), kept(d(7, 4)), nth(9, 1, 1), thanksgiving, kept(d(12, 25)),
   ].map(iso);
   const dayAfter = new Date(thanksgiving.getTime() + 86400000);
   const july4 = d(7, 4).getUTCDay();
