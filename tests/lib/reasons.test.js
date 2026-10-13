@@ -183,3 +183,14 @@ test('no entries: a news blackout in force is a no-entry fact; news, a cooldown 
   // The live entry-block wording names no run records.
   assert.strictEqual(claim(reasonCheck('no-trade - cooldown', calm), 'entry-block').why, 'the attempt blocks no entries; a gate cooldown or limit isn\'t among these facts');
 });
+
+test('"no reentry attempt" and "no entry attempt" are not claims about the prop attempt', () => {
+  const { checkReasons } = require('../../scripts/lib/trading/reasons');
+  const facts = { window: null, scanned: true, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: { account: 'topstep_100k', status: 'active' }, attempts: [{ account: 'topstep_100k', status: 'active' }], styleOf: () => null };
+  for (const text of ['no-trade - nothing fired; no reentry attempt after the stop-out', 'no-trade - no setups, no entry attempt']) {
+    const r = checkReasons(`CYCLE RESULT: ${text}`, facts);
+    assert.ok(!r.claims.some(c => c.kind === 'no-attempt'), `${text}: ${JSON.stringify(r.claims)}`);
+  }
+  // An account-shaped name still is.
+  assert.ok(checkReasons('CYCLE RESULT: no-trade - no topstep_100k attempt', facts).claims.some(c => c.kind === 'no-attempt'));
+});

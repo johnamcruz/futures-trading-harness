@@ -117,7 +117,7 @@ const CLAIMS = [
   ['trend-blocks', /trend\b.*\b(?:blocks?|blocking|prohibits?|violation)|\bblocks? (?:all )?trend|blocked by .*trend|against the prevailing trend/i],
   ['no-entry-window', /opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|into the close|news blackout|in a (?:news )?blackout/i],
   ['verdict-skip', /verdict (?:is |was |says |action (?:is )?)?:?\s*skip|skip verdict|(?:policy|verdict) skipped|skipped by (?:the )?(?:policy|verdict)/i],
-  ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|\bno [a-z0-9_]+ attempt\b|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
+  ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|\bno [a-z0-9]+_[a-z0-9_]+ attempt\b|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
   ['nothing-fired', /\bno (?:valid )?(?:strategy |strategies |candidate |rules? )*(?:candidates?|strateg(?:y|ies)(?! verdict)|signals?|setups?)\b|\b0 candidates\b|candidates: \[\]|\bnone fired\b|\bno rules fired\b|trigger(?:s)? (?:not (?:fired|met)|conditions (?:are )?not met)|no valid entry trigger/i],
   // Room: "not enough" only in negative words; numbers ("first level 0.35R", "3R vs 2R needed") are read for what they say.
