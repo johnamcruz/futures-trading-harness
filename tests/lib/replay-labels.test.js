@@ -63,7 +63,7 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
       const openTrades = (c.positions || []).map(p => ({ contractId: p.contractId, side: p.side, stop: 'stop' in c ? c.stop : p.averagePrice - (p.side === 'long' ? 10 : -10) }));
       if (!c.noLog) fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action, prompt: `p${i}`, context: { symbols: symbols.map(symbol => ({ symbol, bar: { t: barT, c: 20000 } })), account, openTrades }, transcript }));
       rec.ran.push({ action, ok: c.ok !== false && c.ranOk !== false, timedOut: Boolean(c.timedOut), result, symbols });
-      if (!c.noLog) rec.cycles.push({ action, at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file });
+      if (!c.noLog) rec.cycles.push({ action, at: iso(wall), ok: c.ok !== false, timedOut: Boolean(c.timedOut), durationMs: 30000, result, promptHash: `hash${i}`, file: c.file || file, ...(s.attempt ? { orders: (c.orders || []).map(o => ({ tool: o.tool })) } : {}) });
       for (const [j, o] of (c.orders || []).entries()) {
         // close_position is never gated: no record, as live.
         if (o.gate === 'none' || (o.tool === 'close_position' && !o.gate)) continue;
@@ -72,6 +72,7 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
         }
       }
     }
+    if (s.attempt) rec.retried = true; // a failed attempt at this time (store.js appendAttempt): its time ran again
     lines.push(rec);
   }
   fs.writeFileSync(path.join(runDir, `${DAY}.jsonl`), lines.map(l => `${JSON.stringify(l)}\n`).join(''));
@@ -1191,4 +1192,25 @@ test('labels: a trade taken after a restart on 5m bars - its stop\'s ATR and its
   // The trade's excursions from the 5m bars wholly inside 15:05-15:30: 15 points either way on a 10-point stop.
   const cf = taken.counterfactuals[0];
   assert.deepStrictEqual([cf.source, cf.maeR, cf.mfeR], ['fills', -1.5, 1.5]);
+});
+
+test('labels: an order a failed attempt sent is labelled at its decision time, matched to its own fills, and kept out of cloning', () => {
+  const run = makeRun({ steps: [
+    { k: 0, cycle: { orders: [order('setup:orb long first, stop 19990')] } },
+    // The attempt at k1 sent an entry and then made no decision (no result line); the time ran again and sent nothing.
+    { k: 1, attempt: true, cycle: { ok: false, result: 'CYCLE RESULT: (none reported)', orders: [order('setup:orb long second, stop 19990')] } },
+    { k: 1, cycle: {} },
+    { k: 2, cycle: { positions: LONG_POS }, trades: [fill(4, 0, 20000, null)] },
+    { k: 3, cycle: {}, trades: [fill(8, 1, 20010, 20)] },
+  ] });
+  const { labels } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual(labels.map(l => l.t), [iso(at(0)), iso(at(1)), iso(at(2)), iso(at(3))], 'one label per decision time');
+  assert.strictEqual(labels[0].outcome.result, 'unfilled', 'the earlier entry never takes the attempt\'s fill');
+  assert.strictEqual(labels[1].teacher.action, 'long');
+  assert.strictEqual(labels[1].outcome.result, 'win', 'the attempt\'s entry has its own fills');
+  assert.ok(labels[1].clone.reasons.includes('orders from a failed attempt'));
+  assert.ok(!labels[1].clone.ok);
+  const { readRun } = require('../../scripts/lib/replay/store');
+  const line = readRun(run.runDir).days[DAY][1];
+  assert.deepStrictEqual([line.failedAttemptOrders, line.retries.length, line.cycles.map(c => Boolean(c.attempt))], [true, 1, [false, true]]);
 });

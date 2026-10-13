@@ -10,7 +10,10 @@
  *       log and event sinks, bar(symbol, { bar, stale, action }) notes a polled closed bar; begin() starts a
  *       pass, summary(symbols) is { ran, events, errors, bars, closed } (the "REPLAY STEP" fields and the
  *       closed bars), events() the raw events
- *   decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch, stale })   the line
+ *   failedRun(r)                                a ran cycle that counts as a failed run (not a premarket's, as live)
+ *   noDecision(ran)                             a cycle in the pass made no decision (replay runs its time again)
+ *   decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch, stale, premarketUnavailable,
+ *       premarketAvailableAt, premarketRetryStarved })   the line
  *   gateReader(file)                            { refusalsSince(ms) }: the gate log read on from where it left off
  *   killSwitchReason(file)                      the kill switch's latest line ('' when empty), null when off
  *   withEntry(fill, entries, specOf)            an opening fill with the entry the gateway recorded (setup, stop)
@@ -49,7 +52,7 @@ function passTap() {
     },
     events: () => events.slice(),
     summary: symbols => ({
-      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null })),
+      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null, ...(e.agentError ? { agentError: true } : {}), ...(e.premarketRetry ? { premarketRetry: true } : {}) })),
       events: [...new Set(events.map(e => e.kind))],
       errors: errors.slice(),
       bars: symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null })),
@@ -58,14 +61,28 @@ function passTap() {
   };
 }
 
+/**
+ * Whether a pass's cycles (passTap summary ran) include one that made no decision: an infrastructure failure
+ * (no CYCLE RESULT line, a failed or timed-out harness, a malformed result). The agent's own error result is a
+ * decision, and a premarket run's failure (the first or a retry) is no failed run, as live (runner.js): neither counts.
+ */
+const failedRun = r => Boolean(r) && !r.ok && r.action !== 'premarket';
+const noDecision = ran => (ran || []).some(r => failedRun(r) && !r.agentError);
+
 /** One decision line (replay/store.js appendRecord adds its version `v`). */
-function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch = null, stale = [] }) {
+function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch = null, stale = [], premarketUnavailable = null, premarketAvailableAt = null, premarketRetryStarved = 0 }) {
   return {
     t, day, kind, asked: pass.asked, ran: pass.ran || [], events: pass.events || [], step, cycles, refusals,
     errors: pass.errors || [], bars: pass.bars || [], trades, since,
     ...(killSwitch !== null ? { killSwitch: killSwitch || 'on' } : {}),
     // Live only: the symbols whose bar closed too long ago to start a cycle (a slow previous pass), housekeeping only.
     ...(stale && stale.length ? { stale } : {}),
+    // The day's premarket failed until its session opened (runner.js): this decision had no premarket plan.
+    ...(premarketUnavailable ? { premarketUnavailable } : {}),
+    // When a premarket retry produced the day's plan after it was unavailable (the decisions after it have it).
+    ...(premarketAvailableAt ? { premarketAvailableAt } : {}),
+    // The day's premarket retries skipped or cut short by the next bar so far (runner.js retryPremarket).
+    ...(premarketRetryStarved > 0 ? { premarketRetryStarved } : {}),
   };
 }
 
@@ -178,4 +195,4 @@ function versionAt(manifest, t) {
   return list.filter(v => Date.parse(v.since) <= ms).pop() || list[0] || null;
 }
 
-module.exports = { passTap, decisionRecord, killSwitchReason, withEntry, fillsBetween, treeDigest, fingerprints, noteVersion, versionAt, gateReader, HARNESS_DIRS, CODE_DIRS };
+module.exports = { failedRun, noDecision, passTap, decisionRecord, killSwitchReason, withEntry, fillsBetween, treeDigest, fingerprints, noteVersion, versionAt, gateReader, HARNESS_DIRS, CODE_DIRS };

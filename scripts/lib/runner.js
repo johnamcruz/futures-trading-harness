@@ -44,7 +44,10 @@ const { coverageError } = require('./trading/exchange-calendar');
 const famOf = contractId => familyRoot(contractRoot(contractId));
 const etTime = iso => { const p = zonedParts(new Date(iso), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ET`; };
 const { trailStep } = require('./trading/trail');
-const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ } = require('./trading/clock');
+const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ, parseWindows, inWindow } = require('./trading/clock');
+
+/** Whether a session window of the runner's is open at `now` (a trade cycle could run). */
+const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(now, w));
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
 
@@ -65,6 +68,8 @@ const ACCOUNT_READ_MS = 5000;
 const CLOSE_RETRY_MS = 60000;
 const CLOSE_TRIES = 5;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
+// A failed premarket is tried again after these pauses (then every 10 min), until a session window opens.
+const PREMARKET_RETRY_MS = [60000, 120000, 300000, 600000];
 
 function createRunner(deps) {
   const {
@@ -122,6 +127,7 @@ function createRunner(deps) {
   const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
   const minutes = cfg.timeframe;
   const delayMs = cfg.barDelaySeconds * 1000;
+  const sessionWindows = parseWindows(cfg.sessions.join(',')).windows;
   const timeoutMs = cfg.barTimeoutSeconds * 1000;
 
   /** An event for the event log; a failure to log never stops the pass. */
@@ -138,7 +144,8 @@ function createRunner(deps) {
     const t0 = clock.now().getTime();
     emit('cycle_start', { action, timeoutMs: limits.timeoutMs, ...info });
     const r = await runCycle(action, prompt, limits);
-    emit('cycle_end', { action, ms: clock.now().getTime() - t0, ok: Boolean(r && r.ok), timedOut: Boolean(r && r.timedOut), result: (r && r.result) || null, ...info });
+    // agentError: the agent's own "CYCLE RESULT: error", a decision (replay records it as live and goes on).
+    emit('cycle_end', { action, ms: clock.now().getTime() - t0, ok: Boolean(r && r.ok), timedOut: Boolean(r && r.timedOut), result: (r && r.result) || null, ...(r && r.agentError ? { agentError: true } : {}), ...info });
     if (r && r.result) log(`${action}: ${r.result}`);
     return r;
   }
@@ -726,6 +733,35 @@ function createRunner(deps) {
     }
   }
 
+  /**
+   * When the soonest bar any symbol waits for is due for its poll (its bar clock's expected close plus the poll
+   * delay; already past when a bar closed and is waiting), or null when a symbol's clock doesn't know: none yet,
+   * or one that has seen no bar (before the first one, its close is only a guess).
+   */
+  function nextBarDueAt() {
+    const due = syms.filter(s => s.clock && s.clock.lastBarT && Number.isFinite(s.clock.expectedCloseAt)).map(s => s.clock.expectedCloseAt + delayMs);
+    return due.length === syms.length && due.length ? Math.min(...due) : null;
+  }
+
+  /**
+   * Time from `now` (outside the session windows) to the poll of the first bar in the next one, less a margin for
+   * the run's own start; null when no window opens within a day.
+   */
+  function msToSessionPoll(now) {
+    const t0 = Math.ceil(now.getTime() / 60000) * 60000;
+    for (let k = 0; k <= 1440; k += 1) {
+      const t = t0 + k * 60000;
+      if (inSession(cfg, new Date(t))) return Math.max(0, t + delayMs - now.getTime() - 5000);
+    }
+    return null;
+  }
+
+  /** Time from `now` to the next bar's poll, less a margin for the run's own start: 0 when one is due or unknown. */
+  function msToNextBar(now) {
+    const due = nextBarDueAt();
+    return due === null ? 0 : Math.max(0, due - now.getTime() - 5000);
+  }
+
   /** The account as read for a run, for the event log. */
   function accountEvent(a) {
     if (a.error) return { id: a.id, error: a.error };
@@ -785,8 +821,29 @@ function createRunner(deps) {
       const gap = coverageError(now, { closed: cfg.closedDates, early: cfg.earlyCloseDates });
       if (gap) { log(gap, 'error'); emit('calendar_ending', { message: gap }); }
     }
-    const d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+    let d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
     state = d.state;
+    // A premarket that failed: tried again after its pause, until a session window opens; then the day trades
+    // without a plan (premarketUnavailable: the prompt, the event log and the session record say so).
+    if (d.action === 'premarket' && state.premarketTries > 0) {
+      // Before the session, a retry must end before its first bar is polled: with under 30 s left, none is tried.
+      const preCap = msToSessionPoll(now);
+      if (inSession(cfg, now) || (preCap !== null && preCap < 30000)) {
+        // Its retries go on, on the same pause, after the passes' cycles (retryPremarket), until one succeeds or end of day.
+        state = { ...recordRun(state, 'premarket', now), premarketUnavailable: { at: now.toISOString(), tries: state.premarketTries } };
+        log(`premarket: no plan after ${state.premarketTries} failed run(s) and the session is open (or opens before another try could end); trading without a premarket plan until a retry succeeds`, 'error');
+        emit('premarket_unavailable', { day: state.day, tries: state.premarketTries });
+        saveState(state);
+        d = decide(cfg, state, now, { killSwitch: isKillSwitchOn() });
+        state = d.state;
+      } else if (Date.parse(state.premarketRetryAt) > now.getTime()) {
+        // Waiting for its retry never holds up risk-reducing work: the pass goes on as if premarket were done
+        // (trailing, leftover orders, housekeeping), and still starts no cycle (it isn't done: below, decide says so).
+        const waiting = decide(cfg, { ...state, premarketDone: true }, now, { killSwitch: isKillSwitchOn() });
+        d = { ...waiting, state: { ...waiting.state, premarketDone: false } };
+        state = d.state;
+      }
+    }
     if (pendingClose && d.action !== 'eod') await recordClose(now);
 
     if (d.action === 'premarket' || d.action === 'eod') {
@@ -810,8 +867,16 @@ function createRunner(deps) {
         if (limitFor(d.action, at) < 30000) { noTime(); continue; }
         const acct = await accountSnapshot(at);
         // The time limit counts from after the account read.
-        const timeoutMs = limitFor(d.action, clock.now());
-        if (timeoutMs < 30000) { noTime(); continue; }
+        // A premarket retry before the session ends before the session's first bar is polled (the first try of
+        // the day keeps the premarket's limit).
+        const cap = d.action === 'premarket' && state.premarketTries > 0 ? msToSessionPoll(clock.now()) : null;
+        const timeoutMs = cap === null ? limitFor(d.action, clock.now()) : Math.min(limitFor(d.action, clock.now()), cap);
+        if (timeoutMs < 30000) {
+          noTime();
+          // A premarket retry with no time left is a try that failed; end of day is judged by its flatten alone.
+          if (d.action === 'premarket') ok = false;
+          continue;
+        }
         if (acct) emit('account', accountEvent(acct));
         // What the prompt was built from, for the cycle log.
         const context = { action: d.action, day: d.state.day, symbol: job.symbol, account: acct ? accountEvent(acct) : null };
@@ -835,9 +900,24 @@ function createRunner(deps) {
         pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
         await recordClose(now);
       }
+      // A failed premarket is no failed run (never toward the kill switch): it isn't done, and is tried again
+      // after a growing pause (1, 2, 5, then every 10 min) until a session window opens (above). A success
+      // clears what a failure left.
+      if (d.action === 'premarket') {
+        if (ok) state = { ...recordRun(state, 'premarket', now), premarketTries: 0, premarketRetryAt: null, premarketUnavailable: null };
+        else {
+          const tries = (state.premarketTries || 0) + 1;
+          state = { ...state, premarketTries: tries, premarketRetryAt: new Date(now.getTime() + PREMARKET_RETRY_MS[Math.min(tries, PREMARKET_RETRY_MS.length) - 1]).toISOString() };
+          log(`premarket: failed (try ${tries}); tried again at ${state.premarketRetryAt} unless a session opens first`, 'error');
+        }
+        emit('premarket', { day: d.state.day, ok, cyclesToday: state.cycles });
+        if (ok) record(true, false, now);
+        saveState(state);
+        return 0;
+      }
       // A failed end of day is retried on the next pass: flattening matters most. A day whose end of day
       // was tried keeps its catch-up after the day rolls over, whether or not it ever traded.
-      if (ok || d.action !== 'eod') state = recordRun(state, d.action, now);
+      if (ok) state = recordRun(state, d.action, now);
       else state = { ...state, eodAttempted: true };
       emit(d.action, { day: d.state.day, ok, cyclesToday: state.cycles });
       // Waiting for closes to fill (the account read, not flat yet) is no failed run, for a while.
@@ -913,6 +993,8 @@ function createRunner(deps) {
           // The journal, read once for this prompt (open trades, track records, plans, reviewed trades, mistakes).
           const entries = attempt('the journal: no open-trade setups, live results, premarket plan, reviewed trades, or lessons', () => journalEntries() || [], null);
           const journal = entries || [];
+          // Today's premarket failed until the session opened: no plan today, said in every cycle's prompt.
+          if (state.premarketUnavailable) unavailable.push(`premarket plan unavailable (today's premarket run failed ${state.premarketUnavailable.tries} time(s); there is no plan for today: trade from the bars and your skills)`);
           for (const x of run) {
             if (x.dayError) unavailable.push(`${x.symbol} day context (${x.dayError})`);
             else if (dayContext && !x.bar.day) unavailable.push(`${x.symbol} day context (the bars don't hold today's open or a whole prior day)`);
@@ -999,7 +1081,77 @@ function createRunner(deps) {
         }
       }
     }
+    // A premarket still missing is tried again when its pause is up: after this pass's cycle, never alongside one,
+    // never under the kill switch, and never at or past end of day.
+    // (A pass reaches here only on a trade, manage or housekeeping action: never at or after end of day.)
+    if (state.premarketUnavailable && !isKillSwitchOn() && Date.parse(state.premarketRetryAt) <= clock.now().getTime()) await retryPremarket();
     return sleepMs(syms.map(s => s.clock), clock.now(), { delayMs });
+  }
+
+  /**
+   * One more try at today's premarket, the trading day already under way without it. A success hands the next
+   * cycles the plan (premarketAvailableAt; premarket_recovered); a failure waits the next pause. Never a failed
+   * run: no try counts toward the kill switch.
+   */
+  async function retryPremarket() {
+    // Outside the session windows it gets the premarket's whole limit; in one, never into the next bar (its limit
+    // ends before the next bar's poll, so no bar is skipped for it). Skipped or cut short there: said, and counted.
+    const limitNow = () => {
+      const full = limitFor('premarket', clock.now());
+      return inSession(cfg, clock.now()) ? { full, ms: Math.min(full, msToNextBar(clock.now())) } : { full, ms: full };
+    };
+    const starved = (how, l) => {
+      // Counted once per bar (the passes that wait out the same bar count it once); a skip is said once per
+      // session window (on short bars a retry rarely fits: every bar would say it), a cut-short retry each time.
+      const due = nextBarDueAt();
+      const nextPollAt = due === null ? 'unknown' : new Date(due).toISOString();
+      if (how === 'skipped' && state.premarketRetryStarvedAt === nextPollAt) return;
+      state = { ...state, premarketRetryStarved: (state.premarketRetryStarved || 0) + 1, premarketRetryStarvedAt: nextPollAt };
+      const windowKey = `${state.day}|${sessionWindows.findIndex(w => inWindow(clock.now(), w))}`;
+      if (how === 'skipped' && state.premarketRetrySkipSaid === windowKey) return;
+      if (how === 'skipped') state = { ...state, premarketRetrySkipSaid: windowKey };
+      emit('premarket_retry_starved', { day: state.day, how, timeoutMs: l.ms, fullMs: l.full, nextPollAt, count: state.premarketRetryStarved });
+      log(`premarket: retry ${how} by the next bar (${Math.round(l.ms / 1000)} s of ${Math.round(l.full / 1000)} s)${how === 'skipped' ? '; said once this session window' : ''}`);
+    };
+    const first = limitNow();
+    if (first.ms < 30000) {
+      if (first.ms < first.full) starved('skipped', first);
+      saveState(state);
+      return; // no account read for a retry that can't run
+    }
+    // Never while a position is open (or the account can't be read): its management comes first. The retry waits.
+    const acct = await accountSnapshot(clock.now());
+    if (acct && (acct.error || !Array.isArray(acct.positions) || acct.positions.length > 0)) {
+      log(`premarket: retry waits (${acct.error ? 'the account could not be read' : 'a position is open'})`);
+      return;
+    }
+    let ok = true;
+    let ran = false;
+    for (const symbol of cfg.symbols) {
+      const l = limitNow();
+      const timeoutMs = l.ms;
+      if (timeoutMs < 30000) { if (l.ms < l.full) starved('skipped', l); ok = false; continue; }
+      if (timeoutMs < l.full) starved('capped', l);
+      const context = { action: 'premarket', day: state.day, symbol, retry: true, account: acct ? accountEvent(acct) : null };
+      const r = await timedCycle('premarket', prompts(cfg, clock.now(), root).premarket(symbol, { state: acct }), { timeoutMs, context }, { premarketRetry: true });
+      ran = true;
+      ok = ok && Boolean(r && r.ok);
+    }
+    const at = clock.now();
+    if (!ran) {
+      log('premarket: retry waits (not enough time before the next bar or end of day)');
+      return;
+    }
+    if (ok) {
+      log(`premarket: the retry succeeded after ${state.premarketTries} failed run(s); the next cycles have the plan`);
+      emit('premarket_recovered', { day: state.day, tries: state.premarketTries });
+      state = { ...state, premarketUnavailable: null, premarketAvailableAt: at.toISOString(), premarketTries: 0, premarketRetryAt: null };
+    } else {
+      const tries = (state.premarketTries || 0) + 1;
+      state = { ...state, premarketTries: tries, premarketUnavailable: { ...state.premarketUnavailable, tries }, premarketRetryAt: new Date(at.getTime() + PREMARKET_RETRY_MS[Math.min(tries, PREMARKET_RETRY_MS.length) - 1]).toISOString() };
+      log(`premarket: retry failed (try ${tries}); tried again at ${state.premarketRetryAt}`, 'error');
+    }
+    saveState(state);
   }
 
   return {

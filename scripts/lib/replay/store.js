@@ -14,6 +14,10 @@
  *                    tools, orders, missingSkills, file }],
  *         refusals: [{ ts, source, tool, contractId, checks }],
  *         trades: [fills the broker reports in (since, t], with every field it sends], since }
+ *       A replayed decision whose cycle failed is a line with `retried: true` (the attempt), and the time runs
+ *       again (driver.js): the attempt never counts as recorded (resume runs the time again), the manifest
+ *       says so while it is due (`cycleRetry: { t, day, kind, tries }`), and readRun folds the attempts into
+ *       the line that follows at that time (`retries`), so a time is one decision however often it ran.
  *
  * Resume: a re-run skips the days done and, inside a day left unfinished, every
  * decision time up to the last one recorded (the replay broker's clock only
@@ -24,9 +28,10 @@
  *   lastRecorded(manifest, recorded)                the last time recorded (ms)
  *   remaining(manifest, points, recorded)           points still to run, in order (recorded: recordedTimes(runDir))
  *   appendRecord(paths, manifest, rec)              write a line, then the manifest's progress
+ *   appendAttempt(paths, manifest, rec, tries)      a failed attempt's line (retried: true); the manifest's cycleRetry
  *   setTrades(paths, day, t, trades, since)         a line's fills, set after the fact (a live session's retried read)
  *   markDayDone(paths, manifest, day)
- *   readRun(runDir)                                 { manifest, days: { day: [records] } }
+ *   readRun(runDir)                                 { manifest, days: { day: [records] } }, attempts folded
  *   cycleLogsSince(home, sinceMs) / refusalsSince(home, sinceMs)   what a step wrote to the run home's logs
  *   cycleSummary(line)                              a cycle log line as the store keeps it
  *   parseStep(output)                               the step's "REPLAY STEP {json}" line, or null
@@ -88,7 +93,7 @@ function recordedTimes(runDir) {
   const out = new Set();
   let files;
   try { files = fs.readdirSync(runDir).filter(n => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)); } catch (_err) { return out; }
-  for (const f of files) for (const l of readLines(path.join(runDir, f))) if (l.t) out.add(l.t);
+  for (const f of files) for (const l of readLines(path.join(runDir, f))) if (l.t && !l.retried) out.add(l.t);
   return out;
 }
 
@@ -98,7 +103,41 @@ function appendRecord(paths, manifest, rec) {
   fs.mkdirSync(paths.runDir, { recursive: true });
   fs.appendFileSync(dayFile(paths.runDir, rec.day), `${JSON.stringify({ v: VERSION, ...rec })}\n`);
   manifest.lastT = rec.t;
+  delete manifest.cycleRetry; // the time this line records ran: no attempt of it is due any more
   writeJsonAtomic(paths.manifest, manifest);
+}
+
+/** A failed attempt at a decision time: its line (retried: true), never its progress; the time is due again. */
+function appendAttempt(paths, manifest, rec, tries) {
+  fs.mkdirSync(paths.runDir, { recursive: true });
+  fs.appendFileSync(dayFile(paths.runDir, rec.day), `${JSON.stringify({ v: VERSION, ...rec, retried: true })}\n`);
+  manifest.cycleRetry = { t: rec.t, day: rec.day, kind: rec.kind, tries };
+  writeJsonAtomic(paths.manifest, manifest);
+}
+
+/**
+ * A day's lines with each failed attempt folded into the line that followed at its time (`retries`); one still
+ * due is left out. The attempts' cycles join the line's (after its own, marked `attempt: true`), so an order a
+ * failed attempt sent is read at its decision time and in its own cycle's window, never an earlier one's; a line
+ * with such an order is tagged `failedAttemptOrders: true` (training data leaves it out).
+ */
+function foldAttempts(lines) {
+  const out = [];
+  let attempts = [];
+  for (const l of lines) {
+    if (l && l.retried) {
+      attempts = attempts.length && attempts[0].t !== l.t ? [l] : [...attempts, l];
+      continue;
+    }
+    const mine = attempts.filter(a => l && a.t === l.t);
+    if (mine.length) {
+      const extra = mine.flatMap(a => (Array.isArray(a.cycles) ? a.cycles : []).map(c => ({ ...c, attempt: true })));
+      const sent = extra.some(c => Array.isArray(c.orders) && c.orders.length > 0);
+      out.push({ ...l, cycles: [...(Array.isArray(l.cycles) ? l.cycles : []), ...extra], retries: mine, ...(sent ? { failedAttemptOrders: true } : {}) });
+    } else out.push(l);
+    attempts = [];
+  }
+  return out;
 }
 
 /**
@@ -112,7 +151,7 @@ function setTrades(paths, day, t, trades, since) {
   const text = fs.readFileSync(file, 'utf8').split('\n').map(line => {
     let rec;
     try { rec = JSON.parse(line); } catch (_err) { return line; }
-    if (!rec || rec.t !== t) return line;
+    if (!rec || rec.t !== t || rec.retried) return line;
     found = true;
     return JSON.stringify({ ...rec, trades, since });
   }).join('\n');
@@ -132,7 +171,7 @@ function readRun(runDir) {
   const manifest = readJson(path.join(runDir, 'manifest.json'), null);
   if (!manifest) throw new Error(`${runDir}: no replay run here (no manifest.json)`);
   const days = {};
-  for (const f of fs.readdirSync(runDir).filter(n => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)).sort()) days[f.slice(0, 10)] = readLines(path.join(runDir, f));
+  for (const f of fs.readdirSync(runDir).filter(n => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)).sort()) days[f.slice(0, 10)] = foldAttempts(readLines(path.join(runDir, f)));
   return { manifest, days };
 }
 
@@ -193,4 +232,4 @@ function parseStep(output) {
   }
 }
 
-module.exports = { VERSION, openRun, lastRecorded, remaining, recordedTimes, touchedSince, appendRecord, setTrades, markDayDone, toRefusal, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };
+module.exports = { VERSION, openRun, lastRecorded, remaining, recordedTimes, touchedSince, appendRecord, appendAttempt, foldAttempts, setTrades, markDayDone, toRefusal, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };

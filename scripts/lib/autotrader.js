@@ -392,7 +392,11 @@ function cachedText(cached) {
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
 
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
-const RESULT_LINE = ' End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.';
+// The outcomes a cycle may report (its result line's first word): the prompt and the autonomous-trading skill list
+// these, and only these are a result (cycleOutcome); "error" is the agent's own failed cycle.
+const CYCLE_OUTCOMES = ['no-trade', 'planned', 'executed', 'managed', 'flattened', 'blocked', 'error'];
+const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason>`;
+const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
@@ -686,18 +690,44 @@ function cycleResult(output) {
 }
 
 /**
- * What a cycle returns to the runner: ok (an end of day did its job if the run succeeded, whatever the workspace
- * guard said), its result line and exit code, and its transcript, the standard output alone (what the gate reads),
- * that the runner records the roles' reports from (report-cache.js).
+ * What a cycle returns to the runner: ok, its result line and exit code, and its transcript, the standard output
+ * alone (what the gate reads), that the runner records the roles' reports from (report-cache.js).
+ * A premarket or trade run failed (in every harness) when it exited non-zero, when it changed the workspace (the
+ * guard), when it exited 0 without a parseable CYCLE RESULT line (a provider error, a model that stopped early),
+ * when its final result line's outcome isn't one of CYCLE_OUTCOMES (read from its standard output alone: never
+ * stderr), or when it reported "CYCLE RESULT: error": it counts toward maxConsecutiveErrors once, as a failed exit does.
+ * An agent-reported error is marked agentError: a decision, which a replay records as live does and never retries.
+ * An end-of-day run is judged by its exit alone, live and in replay alike: the day is judged by the runner's own
+ * flatten (verified flat), never by the agents' result line or the workspace guard (its verdict is in the kill switch).
  */
 function cycleOutcome(res, { result, intact, action }) {
-  return { ok: res.ok && (intact || action === 'eod'), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '' };
+  const line = cycleResult(agentOutput(res));
+  const word = outcomeOf(line);
+  const reported = word !== null && word !== 'error';
+  // The agent's own error result: a decision (counted as live counts it), not an infrastructure failure.
+  const agentError = Boolean(res.ok && word === 'error');
+  return { ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '', ...(agentError ? { agentError: true } : {}) };
+}
+
+/** What the agent said: its standard output alone when the run kept it apart (never stderr), else its output. */
+const agentOutput = res => (typeof res.stdout === 'string' ? res.stdout : res.output);
+
+/**
+ * The outcome word of a result line ("no-trade") when it is exactly one of CYCLE_OUTCOMES, else null. Markdown
+ * marks around it (*no-trade*, _blocked_, `managed`) and the punctuation after it (":", ",", ".") are tolerated;
+ * the word is matched in any letter case (the set is closed: "Managed" is managed), returned as the prompt writes
+ * it (lower case), never a longer one (no-trades, blocked2).
+ */
+function outcomeOf(line) {
+  const m = /^CYCLE RESULT:\s*([A-Za-z-]+)(?![A-Za-z0-9-])/.exec(String(line || '').replace(/[*_`]/g, ''));
+  const word = m ? m[1].toLowerCase() : null;
+  return CYCLE_OUTCOMES.includes(word) ? word : null;
 }
 
 /** The result a run is logged with: a failed run's error (whatever it wrote), else its line, else "(none reported)". */
 function runResult(res) {
   if (!res.ok) return `CYCLE RESULT: error - ${res.timedOut ? 'timed out' : `exit ${res.code}`}`;
-  return cycleResult(res.output) || 'CYCLE RESULT: (none reported)';
+  return cycleResult(agentOutput(res)) || 'CYCLE RESULT: (none reported)';
 }
 
 const RUNNER_VALUE_FLAGS = ['--config', '--once', '--symbol', '--stale-minutes'];
@@ -741,6 +771,9 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
+  CYCLE_OUTCOMES,
+  RESULT_TEMPLATE,
+  outcomeOf,
   runnerArgv,
   deniedRoles,
   cycleOutcome,

@@ -339,7 +339,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -366,6 +366,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         return out;
       },
       async accountState() {
+        (calls.accountReads = calls.accountReads || []).push(clockRef.t);
         if (accountFails) throw new Error('HTTP 502');
         if (fillsAt !== null && clockRef.t >= fillsAt) flat = true;
         return {
@@ -389,8 +390,8 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       },
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
-    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
-    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
+    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
+    isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; if (realKill) killed = true; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan,
     entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
@@ -398,6 +399,9 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     event: ev => calls.events.push(ev),
     log: (msg, level) => calls.logs.push(`${level === 'error' ? 'ERROR' : 'INFO'} ${msg}`),
   });
+  // `clockRef.t += await step()` adds the pause to the time the pass started (what a cycle took is not kept);
+  // keepCycleTime: the pause counts from where the pass ended, as the live loop's does.
+  if (keepCycleTime) while (clockRef.t < until) { const ms = await runner.step(); clockRef.t += Math.max(0, ms); }
   while (clockRef.t < until) clockRef.t += await runner.step();
   return { ...calls, runner, cycles };
 }
@@ -1041,4 +1045,428 @@ test('verifiedFlat: true only after a flatten pass read the account and found no
   assert.strictEqual(await pass('working'), false, 'a working order left after the close');
   assert.strictEqual(await pass('flat'), true, 'read empty');
   assert.strictEqual(await pass('fail'), false, 'a later failed read: unknown again');
+});
+
+/** A runner whose kill switch and cycles are recorded: { kill: [cycle count when it tripped], runs, events }. */
+function outcomeWorld({ outcome = () => ({ ok: true, timedOut: false }), cfg = {} } = {}) {
+  const w = { runs: [], kill: [], events: [], logs: [] };
+  w.deps = {
+    runCycle: async action => { w.runs.push(action); return outcome(w.runs.length, action); },
+    isKillSwitchOn: () => w.kill.length > 0,
+    createKillSwitch: reason => { w.kill.push({ runs: w.runs.length, reason }); },
+    event: e => w.events.push(e),
+    log: m => w.logs.push(m),
+  };
+  w.cfg = { timeframe: 3, ...cfg };
+  return w;
+}
+
+test('no CYCLE RESULT is a failed cycle: three in a row trip the kill switch; a cycle with its result line does not count', async () => {
+  const { cycleOutcome, runResult } = require('../../scripts/lib/autotrader');
+  const exit0 = output => { const res = { ok: true, timedOut: false, code: 0, output, stdout: output }; return cycleOutcome(res, { result: runResult(res), intact: true, action: 'trade' }); };
+  // A provider error: the harness exits 0 having said nothing the runner can read.
+  const silent = outcomeWorld({ outcome: () => exit0('Error: provider returned 500\n') });
+  await simulate({ cfg: silent.cfg, from: et(10, 0), to: et(10, 30), market: fakeMarket({ minutes: 3 }), deps: silent.deps });
+  assert.deepStrictEqual(silent.kill.map(k => k.runs), [3], 'the kill switch on the third such cycle, not before');
+  const good = outcomeWorld({ outcome: () => exit0('CYCLE RESULT: no-trade - nothing fired\n') });
+  await simulate({ cfg: good.cfg, from: et(10, 0), to: et(10, 30), market: fakeMarket({ minutes: 3 }), deps: good.deps });
+  assert.strictEqual(good.kill.length, 0);
+  assert.ok(good.runs.length >= 8);
+  // A failed exit (no result either) counts once, not twice: still the third cycle.
+  const failed = outcomeWorld({ outcome: () => { const res = { ok: false, timedOut: false, code: 1, output: '', stdout: '' }; return cycleOutcome(res, { result: runResult(res), intact: true, action: 'trade' }); } });
+  await simulate({ cfg: failed.cfg, from: et(10, 0), to: et(10, 30), market: fakeMarket({ minutes: 3 }), deps: failed.deps });
+  assert.deepStrictEqual(failed.kill.map(k => k.runs), [3]);
+});
+
+test('CYCLE RESULT: error is a failed cycle and stays fail-closed: the kill switch after three, then trailing, unprotected-position closes and the end-of-day flatten still run', async () => {
+  const { cycleOutcome, runResult } = require('../../scripts/lib/autotrader');
+  const error = () => { const res = { ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: error - the tools failed\n', stdout: 'CYCLE RESULT: error - the tools failed\n' }; return cycleOutcome(res, { result: runResult(res), intact: true, action: 'trade' }); };
+  // A bar at 10:30 runs the trade past +2R (high 21525): the trailing manager moves the stop, kill switch or not.
+  const r = await trailSim({ tape: { 30: [21525, 21521, 21524] }, outcome: error, realKill: true, until: et(15, 52) });
+  assert.strictEqual(r.kills, 1, 'the kill switch, once');
+  assert.strictEqual(r.cycles.filter(c => c === 'trade').length, 3, 'no trade cycle after it');
+  assert.ok(r.modified.length >= 1, 'the trailing stop still tightened under the kill switch');
+  assert.ok(r.cycles.includes('eod'), 'end of day still runs');
+  assert.ok(r.closedIds.includes('MNQ'), 'the end-of-day flatten closed the position');
+  // Unprotected under the kill switch: closed at once (housekeeping never refuses a risk-reducing action).
+  const bare = await trailSim({ tape: {}, noStop: true, outcome: error, realKill: true, until: et(10, 20) });
+  assert.strictEqual(bare.kills, 1);
+  assert.strictEqual(bare.closed.length, 1);
+});
+
+test('end of day without a CYCLE RESULT line is no failed run, live and in replay alike: its cycle_end (what a replay step reports) is ok', async () => {
+  const { cycleOutcome, runResult } = require('../../scripts/lib/autotrader');
+  const silent = outcomeWorld({ outcome: (n, action) => { const res = { ok: true, timedOut: false, code: 0, output: 'reviewed the day\n', stdout: 'reviewed the day\n' }; return cycleOutcome(res, { result: runResult(res), intact: true, action }); } });
+  await simulate({ cfg: silent.cfg, from: et(15, 49), to: et(15, 53), market: fakeMarket({ minutes: 3 }), deps: silent.deps });
+  const ends = silent.events.filter(e => e.kind === 'cycle_end' && e.action === 'eod');
+  assert.deepStrictEqual(ends.map(e => [e.ok, e.result]), [[true, 'CYCLE RESULT: (none reported)']]);
+  assert.ok(silent.events.some(e => e.kind === 'eod' && e.ok === true));
+  assert.strictEqual(silent.kill.length, 0);
+});
+
+/** A runner with premarket at `pre` (09:00 by default, before a 09:30 session); premarket runs fail while fails(n) says so. */
+async function premarketDay(fails, { from = et(9, 0), until = et(9, 40), cfg = { premarketAt: '09:00@America/New_York', sessions: ['09:30-15:50@America/New_York'] } } = {}) {
+  const cycles = [];
+  const events = [];
+  let kill = 0;
+  let n = 0;
+  const { runner } = await simulate({
+    cfg: { timeframe: 3, ...cfg }, from, to: until, market: fakeMarket({ minutes: 3 }), cycleMs: 20000,
+    deps: {
+      runCycle: async (action, prompt, limits = {}) => {
+        if (action === 'premarket') n += 1;
+        cycles.push({ action, prompt, context: limits.context || null });
+        return action === 'premarket' && fails(n) ? { ok: false, timedOut: false, result: 'CYCLE RESULT: (none reported)' } : { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' };
+      },
+      event: e => events.push(e),
+      isKillSwitchOn: () => kill > 0, createKillSwitch: () => { kill += 1; },
+    },
+  });
+  const starts = events.filter(e => e.kind === 'cycle_start').map(e => [e.action, e.at.slice(11, 16)]);
+  return { cycles, events, starts, kill, runner };
+}
+
+test('a failed premarket never trips the kill switch: tried again after 1, 2, 5, then every 10 min, before the session and during it, never alongside a cycle', async () => {
+  const r = await premarketDay(() => true, { until: et(11, 0) });
+  assert.strictEqual(r.kill, 0, 'premarket failures are no failed runs, however many');
+  const pre = r.starts.filter(s => s[0] === 'premarket').map(s => s[1]);
+  // 09:00 ET is 13:00Z: 09:00, 09:01, 09:03, 09:08, 09:18, 09:28, then every 10 min while the session trades.
+  assert.deepStrictEqual(pre.slice(0, 6), ['13:00', '13:01', '13:03', '13:08', '13:18', '13:28']);
+  assert.ok(pre.length >= 13 && pre.length <= 16, `${pre.length} tries by 11:00`);
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 25, 'the day trades');
+  assert.match(r.starts.find(s => s[0] === 'trade')[1], /^13:3[0-3]$/, 'from the first bar of the session');
+  for (const c of trade) {
+    assert.match(c.prompt, /premarket plan unavailable \(today's premarket run failed \d+ time\(s\)/);
+    assert.ok(c.context.unavailable.some(u => /^premarket plan unavailable/.test(u)), 'the cycle log has it');
+  }
+  // One run at a time: every cycle ends before the next starts.
+  const seq = r.events.filter(e => e.kind === 'cycle_start' || e.kind === 'cycle_end').map(e => e.kind);
+  for (let i = 0; i < seq.length; i += 1) assert.strictEqual(seq[i], i % 2 ? 'cycle_end' : 'cycle_start', `overlap at ${i}`);
+  assert.deepStrictEqual(r.events.filter(e => e.kind === 'premarket_unavailable').map(e => e.tries), [6]);
+  assert.strictEqual(r.events.filter(e => e.kind === 'premarket_recovered').length, 0);
+});
+
+test('the default sessions: a premarket that fails at 18:05 leaves the first cycle without a plan; a retry during the session gets it, and the next cycles have it', async () => {
+  const r = await premarketDay(n => n === 1, { from: et(18, 0), until: et(18, 30), cfg: { premarketAt: '18:05@America/New_York' } });
+  // The first cycle after the failed 18:05 premarket (a bar closing before premarket time traded as always).
+  const firstPre = r.cycles.findIndex(c => c.action === 'premarket');
+  const trade = r.cycles.slice(firstPre + 1).filter(c => c.action === 'trade');
+  assert.match(trade[0].prompt, /premarket plan unavailable/, 'the first cycle: no plan yet');
+  const pre = r.starts.filter(s => s[0] === 'premarket').map(s => s[1]);
+  assert.deepStrictEqual(pre.length, 2, 'the failure, then one retry that succeeded');
+  const recovered = r.events.find(e => e.kind === 'premarket_recovered');
+  assert.ok(recovered, 'premarket_recovered logged');
+  const after = r.cycles.slice(r.cycles.findIndex(c => c.action === 'premarket' && c.context && c.context.retry) + 1).filter(c => c.action === 'trade');
+  assert.ok(after.length >= 3);
+  for (const c of after) assert.doesNotMatch(c.prompt, /premarket plan unavailable/, 'the following cycles have the plan');
+  assert.deepStrictEqual([r.runner.state.premarketUnavailable, typeof r.runner.state.premarketAvailableAt], [null, 'string']);
+  assert.strictEqual(r.kill, 0);
+  const seq = r.events.filter(e => e.kind === 'cycle_start' || e.kind === 'cycle_end').map(e => e.kind);
+  for (let i = 0; i < seq.length; i += 1) assert.strictEqual(seq[i], i % 2 ? 'cycle_end' : 'cycle_start', `overlap at ${i}`);
+});
+
+test('a premarket that succeeds on a later try before the session clears what the failures left: no marker, no prompt line', async () => {
+  const r = await premarketDay(n => n <= 2);
+  assert.deepStrictEqual(r.starts.filter(s => s[0] === 'premarket').map(s => s[1]), ['13:00', '13:01', '13:03']);
+  assert.deepStrictEqual([r.runner.state.premarketDone, r.runner.state.premarketUnavailable, r.runner.state.premarketTries, r.runner.state.premarketRetryAt], [true, null, 0, null]);
+  const trade = r.cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 2);
+  for (const c of trade) assert.doesNotMatch(c.prompt, /premarket plan unavailable/);
+  assert.strictEqual(r.events.filter(e => e.kind === 'premarket_unavailable').length, 0);
+});
+
+test('premarket retries stop at end of day', async () => {
+  const r = await premarketDay(() => true, { from: et(15, 0), until: et(16, 30), cfg: { premarketAt: '15:00@America/New_York', sessions: ['15:10-15:45@America/New_York'] } });
+  const eodAt = r.events.find(e => e.kind === 'cycle_start' && e.action === 'eod').at;
+  assert.ok(r.events.filter(e => e.kind === 'cycle_start' && e.action === 'premarket').every(e => e.at < eodAt), 'none at or after end of day');
+  assert.strictEqual(r.kill, 0);
+});
+
+const PRE_SESSION = { premarketAt: '09:00@America/New_York', sessions: ['09:30-15:50@America/New_York'] };
+const premarketFails = action => (action === 'premarket' ? { ok: false, timedOut: false, result: 'CYCLE RESULT: (none reported)' } : { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' });
+
+test('waiting for a premarket retry never holds up risk-reducing work: an overnight position\'s stop still trails', async () => {
+  // Long from 08:00; the 09:09 bar runs it past +2R while the 09:00 premarket keeps failing (retries 09:01, 09:03, 09:08, 09:18).
+  const r = await trailSim({
+    tape: { [-51]: [21525, 21521, 21524] }, fillAt: et(8, 0), startAt: et(9, 0) + 2000, until: et(9, 29), cfgOver: PRE_SESSION,
+    stateIn: { day: '2026-10-07', premarketDone: false, eodDone: false, cycles: 5, lastCycleAt: null }, outcome: premarketFails,
+  });
+  assert.ok(r.cycles.filter(c => c === 'premarket').length >= 4, 'the premarket is still being retried');
+  assert.ok(r.modified.length >= 1, 'the trailing stop moved meanwhile');
+  assert.ok(!r.cycles.includes('trade'), 'and no cycle ran before the session');
+  assert.strictEqual(r.kills || 0, 0);
+});
+
+test('a premarket retry never runs while a position is open', async () => {
+  const r = await trailSim({ tape: {}, fillAt: et(8, 0), startAt: et(9, 0) + 2000, until: et(11, 0), cfgOver: PRE_SESSION, outcome: premarketFails });
+  const pre = r.limits.filter(l => l[0] === 'premarket').map(l => l[1]);
+  assert.strictEqual(pre.length, 6, 'the six tries before the session, none after it while the position is open');
+  assert.ok(pre.every(t => t < et(9, 30)));
+  assert.ok(r.cycles.filter(c => c === 'trade').length > 10, 'the day trades');
+});
+
+test('no premarket retry runs while the kill switch is on', async () => {
+  const r = await trailSim({ tape: {}, startFlat: true, startAt: et(9, 0) + 2000, until: et(11, 0), cfgOver: PRE_SESSION, outcome: premarketFails, killWhen: action => action === 'trade' });
+  const firstTrade = r.limits.find(l => l[0] === 'trade')[1];
+  const pre = r.limits.filter(l => l[0] === 'premarket').map(l => l[1]);
+  assert.ok(pre.length >= 6);
+  assert.ok(pre.every(t => t < firstTrade), 'none after the kill switch came on');
+});
+
+test('a premarket retry is tagged (its failure is no failed run anywhere) and its time limit ends before the next bar\'s poll', async () => {
+  const { noDecision, passTap } = require('../../scripts/lib/session/record');
+  const r = await premarketDay(() => true, { until: et(11, 0) });
+  const ends = r.events.filter(e => e.kind === 'cycle_end' && e.action === 'premarket');
+  assert.ok(ends.slice(0, 6).every(e => !e.premarketRetry), 'the tries before the session are premarket runs');
+  const retries = ends.filter(e => e.premarketRetry);
+  assert.ok(retries.length >= 7, 'the tries during the session are retries');
+  const tap = passTap();
+  for (const e of retries) tap.event(() => {})(e);
+  assert.ok(tap.summary([]).ran.every(x => x.premarketRetry));
+  assert.strictEqual(noDecision(tap.summary([]).ran), false);
+  const step = 180000;
+  const delay = validateConfig({ harness: 'qwen' }).barDelaySeconds * 1000;
+  const starts = r.events.filter(e => e.kind === 'cycle_start' && e.premarketRetry);
+  assert.strictEqual(starts.length, retries.length);
+  for (const e of starts) {
+    const t = Date.parse(e.at);
+    const nextPoll = Math.floor((t - delay) / step) * step + step + delay;
+    assert.ok(t + e.timeoutMs <= nextPoll, `the retry at ${e.at} could run into the next bar (${e.timeoutMs} ms)`);
+  }
+});
+
+test('a premarket retry outside the session windows gets the premarket\'s whole time limit; in one, it ends before the next bar and is said to be cut short', async () => {
+  // Sessions 09:30-10:00 and 11:00-15:50: the hour between is no session (housekeeping only).
+  const r = await trailSim({
+    tape: {}, startFlat: true, startAt: et(9, 0) + 2000, until: et(12, 0), outcome: premarketFails,
+    cfgOver: { premarketAt: '09:00@America/New_York', sessions: ['09:30-10:00@America/New_York', '11:00-15:50@America/New_York'] },
+  });
+  const full = validateConfig({ harness: 'qwen', timeframe: 3 }).cycleTimeoutMinutes * 60000;
+  const retries = r.limits.filter(l => l[0] === 'premarket' && l[1] >= et(9, 30));
+  const between = retries.filter(l => l[1] >= et(10, 0) && l[1] < et(11, 0));
+  const inside = retries.filter(l => l[1] < et(10, 0) || l[1] >= et(11, 0));
+  assert.ok(between.length >= 2 && inside.length >= 2, `${between.length} between, ${inside.length} inside`);
+  assert.ok(between.every(l => l[2] === full), 'the whole limit between sessions');
+  assert.ok(inside.every(l => l[2] < 180000), 'cut to the next bar in a session');
+  const starved = r.events.filter(e => e.kind === 'premarket_retry_starved');
+  assert.strictEqual(starved.filter(e => e.how === 'capped').length, inside.length, 'each cut-short retry said');
+  assert.ok(starved.every(e => e.timeoutMs < e.fullMs));
+  assert.strictEqual(r.runner.state.premarketRetryStarved, starved.length, 'counted for the session record');
+});
+
+test('a premarket retry with no time before the next bar is skipped and said, with no account read for it', async () => {
+  // 160-second cycles on 3-minute bars: after each trade cycle there is never 30 s left before the next bar.
+  const opts = { tape: {}, startFlat: true, startAt: et(9, 0) + 2000, until: et(10, 30), cycleMs: 160000, keepCycleTime: true, cfgOver: PRE_SESSION };
+  const skipped = await trailSim({ ...opts, outcome: premarketFails });
+  const fine = await trailSim({ ...opts, outcome: a => ({ ok: true, timedOut: false, result: `CYCLE RESULT: no-trade - ${a}` }) });
+  assert.ok(!skipped.limits.some(l => l[0] === 'premarket' && l[1] >= et(9, 30)), 'no retry ran');
+  const starved = skipped.events.filter(e => e.kind === 'premarket_retry_starved');
+  assert.deepStrictEqual(starved.map(e => e.how), ['skipped'], 'said once in the session window, not every bar');
+  // Counted once per bar (an hour of 3-minute bars, every one too short after its cycle), not once per pass.
+  const n = skipped.runner.state.premarketRetryStarved;
+  assert.ok(n >= 15 && n <= 20, `${n} counted`);
+  const after = reads => (reads || []).filter(t => t >= et(9, 31)).length;
+  assert.strictEqual(after(skipped.accountReads), after(fine.accountReads), 'no account read for a skipped retry');
+});
+
+/**
+ * A day with premarket at 09:00 and a 09:30 session, on `minutes` bars anchored at `anchor` (their open times are
+ * anchor + k bars, as a broker anchors them to its session, not to the epoch). Trade cycles take tradeMs; a
+ * premarket retry runs to its whole time limit. Returns the bars each trade cycle was on.
+ */
+async function retryDay({ minutes, anchor, failPremarket, tradeMs, symbols = ['MNQ'], fails = null, retryFull = true, anchors = {}, noBars = [], preHang = false, until = et(11, 0), premarketAt = '09:00@America/New_York' }) {
+  const ref = { t: 0 };
+  const step = minutes * 60000;
+  const market = {
+    client: clockRef => {
+      Object.defineProperty(ref, 't', { get: () => clockRef.t, set: v => { clockRef.t = v; }, configurable: true });
+      return {
+        async activeContract(symbol) { return { id: symbol }; },
+        async closedBars(contractId, { limit }) {
+          if (noBars.includes(contractId)) return []; // no bar yet: its bar clock knows no close
+          const a = anchors[contractId] ?? anchor;
+          const k = Math.floor((clockRef.t - 1000 - a) / step) - 1; // the newest bar closed a second ago or more
+          return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({ t: new Date(a + (k - 4 + i) * step).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 }));
+        },
+      };
+    },
+  };
+  const trades = [];
+  const tradePrompts = [];
+  const events = [];
+  const pre = [];
+  await simulate({
+    cfg: { timeframe: minutes, symbols, premarketAt, sessions: ['09:30-15:50@America/New_York'] }, from: et(9, 0), to: until, market,
+    deps: {
+      event: e => events.push(e),
+      runCycle: async (action, prompt, limits = {}) => {
+        if (action === 'trade') {
+          trades.push(...((limits.context && limits.context.symbols) || []).map(s => `${s.symbol}@${s.bar.t}`));
+          tradePrompts.push(prompt);
+          ref.t += tradeMs;
+          return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' };
+        }
+        const retry = Boolean(limits.context && limits.context.retry);
+        pre.push({ at: ref.t, timeoutMs: limits.timeoutMs, retry, symbol: limits.context && limits.context.symbol });
+        ref.t += (retry && retryFull) || (!retry && preHang) ? limits.timeoutMs : 20000;
+        const failed = fails ? fails(limits.context && limits.context.symbol, retry) : failPremarket;
+        return failed ? { ok: false, timedOut: retry, result: 'CYCLE RESULT: (none reported)' } : { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - plan' };
+      },
+    },
+  });
+  return { trades, tradePrompts, events, pre };
+}
+
+test('a premarket retry never makes a bar go stale: capped to the soonest bar each symbol\'s own clock waits for, skipped when one is already due (200 s cycles on 3-minute bars)', async () => {
+  const anchor = Date.UTC(2026, 9, 7);
+  const failing = await retryDay({ minutes: 3, anchor, failPremarket: true, tradeMs: 200000 });
+  const fine = await retryDay({ minutes: 3, anchor, failPremarket: false, tradeMs: 200000 });
+  assert.ok(failing.pre.filter(p => p.retry).length >= 3, 'retries ran');
+  assert.deepStrictEqual(failing.trades, fine.trades, 'the same bars got their cycles as with a premarket that worked');
+});
+
+test('a premarket retry on 7-minute bars anchored at the session (not the hour) ends before the next bar is due', async () => {
+  const anchor = et(9, 30) + 3 * 60000; // 7-minute bars opening at 09:33, 09:40, ... (a broker's own anchor)
+  const failing = await retryDay({ minutes: 7, anchor, failPremarket: true, tradeMs: 20000 });
+  const fine = await retryDay({ minutes: 7, anchor, failPremarket: false, tradeMs: 20000 });
+  const retries = failing.pre.filter(p => p.retry);
+  assert.ok(retries.length >= 3, 'retries ran');
+  const delay = validateConfig({ harness: 'qwen' }).barDelaySeconds * 1000;
+  for (const r of retries) {
+    const nextDue = anchor + Math.ceil((r.at - delay - anchor) / 420000) * 420000 + delay;
+    assert.ok(r.at + r.timeoutMs <= nextDue, `the retry at ${new Date(r.at).toISOString()} runs into the bar due ${new Date(nextDue).toISOString()}`);
+  }
+  assert.deepStrictEqual(failing.trades, fine.trades);
+});
+
+test('a premarket retry that works for one symbol but fails for another is no recovery', async () => {
+  const r = await retryDay({ minutes: 3, anchor: Date.UTC(2026, 9, 7), tradeMs: 20000, symbols: ['MNQ', 'MES'], retryFull: false, fails: (symbol, retry) => !retry || symbol === 'MNQ' });
+  const retries = r.pre.filter(p => p.retry);
+  assert.ok(retries.some(p => p.symbol === 'MES') && retries.some(p => p.symbol === 'MNQ'));
+  assert.strictEqual(r.events.filter(e => e.kind === 'premarket_recovered').length, 0);
+});
+
+test('a premarket retry ends before the soonest bar of any symbol, each on its own clock', async () => {
+  const base = Date.UTC(2026, 9, 7);
+  const anchors = { MNQ: base, MES: base + 90000 }; // MES's 3-minute bars close 90 s after MNQ's
+  const r = await retryDay({ minutes: 3, anchor: base, anchors, failPremarket: true, tradeMs: 20000, symbols: ['MNQ', 'MES'], retryFull: false });
+  const delay = validateConfig({ harness: 'qwen' }).barDelaySeconds * 1000;
+  const retries = r.pre.filter(p => p.retry);
+  assert.ok(retries.length >= 3);
+  for (const p of retries) {
+    const due = Math.min(...Object.values(anchors).map(a => a + Math.ceil((p.at - delay - a) / 180000) * 180000 + delay));
+    assert.ok(p.at + p.timeoutMs <= due, `the retry at ${new Date(p.at).toISOString()} runs past ${new Date(due).toISOString()}`);
+  }
+});
+
+test('a premarket retry is skipped while a symbol has no bar clock yet (before its first bar): its next bar\'s time is unknown', async () => {
+  const r = await retryDay({ minutes: 3, anchor: Date.UTC(2026, 9, 7), failPremarket: true, tradeMs: 20000, symbols: ['MNQ', 'MES'], retryFull: false, noBars: ['MES'] });
+  assert.ok(r.trades.length >= 10, 'MNQ trades');
+  assert.strictEqual(r.pre.filter(p => p.retry).length, 0, 'no retry while MES\'s next bar is unknown');
+  const starved = r.events.filter(e => e.kind === 'premarket_retry_starved');
+  assert.ok(starved.length >= 1 && starved.every(e => e.how === 'skipped' && e.nextPollAt === 'unknown'));
+});
+
+test('a premarket that hangs before the session never costs its first bar: a retry ends before that bar is polled, or isn\'t tried', async () => {
+  const anchor = Date.UTC(2026, 9, 7);
+  const failing = await retryDay({ minutes: 3, anchor, failPremarket: true, preHang: true, tradeMs: 20000, until: et(10, 30) });
+  const fine = await retryDay({ minutes: 3, anchor, failPremarket: false, preHang: true, tradeMs: 20000, until: et(10, 30) });
+  const pre = failing.pre.filter(p => !p.retry);
+  assert.strictEqual(pre[0].timeoutMs, validateConfig({ harness: 'qwen', timeframe: 3 }).cycleTimeoutMinutes * 60000, 'the first try keeps the premarket\'s limit');
+  const firstPoll = et(9, 30) + validateConfig({ harness: 'qwen' }).barDelaySeconds * 1000;
+  for (const p of pre) assert.ok(p.at + p.timeoutMs <= firstPoll - 5000, `the try at ${new Date(p.at).toISOString()} runs into the session`);
+  assert.deepStrictEqual(failing.trades, fine.trades, 'the same bars as with a premarket that worked');
+  const gaveUp = failing.events.filter(e => e.kind === 'premarket_unavailable');
+  assert.strictEqual(gaveUp.length, 1);
+  assert.ok(Date.parse(gaveUp[0].at) < et(9, 30), 'given up before the session: no try could end in time');
+  // The first try of the day keeps the premarket's limit even close to the session (as before retries existed).
+  const late = await retryDay({ minutes: 3, anchor, failPremarket: true, preHang: true, tradeMs: 20000, until: et(9, 40), premarketAt: '09:28@America/New_York' });
+  assert.strictEqual(late.pre[0].timeoutMs, validateConfig({ harness: 'qwen', timeframe: 3 }).cycleTimeoutMinutes * 60000);
+});
+
+test('on 1-minute bars a retry that can\'t fit is said once in the session window, still counted per bar', async () => {
+  const r = await retryDay({ minutes: 1, anchor: Date.UTC(2026, 9, 7), failPremarket: true, tradeMs: 50000, until: et(11, 0) });
+  const skipped = r.events.filter(e => e.kind === 'premarket_retry_starved' && e.how === 'skipped');
+  assert.strictEqual(skipped.length, 1, 'said once, not every bar');
+  assert.ok(r.pre.filter(p => p.retry).length === 0, 'no retry fit');
+});
+
+test('a premarket retry for a later symbol isn\'t tried when the first one used up the time before the next bar', async () => {
+  const r = await retryDay({ minutes: 3, anchor: Date.UTC(2026, 9, 7), failPremarket: true, tradeMs: 20000, symbols: ['MNQ', 'MES'] });
+  const retries = r.pre.filter(p => p.retry);
+  assert.ok(retries.some(p => p.symbol === 'MNQ'), 'the first symbol\'s retries ran');
+  assert.ok(retries.every(p => p.timeoutMs >= 30000), 'never one with under 30 s');
+  assert.ok(!retries.some(p => p.symbol === 'MES'), 'the second had no time left');
+  assert.strictEqual(r.events.filter(e => e.kind === 'premarket_recovered').length, 0, 'never recovered with a symbol not tried');
+});
+
+test('in the session, a premarket still missing is given up at once (the day trades, saying so) and tried again only as a retry that fits before the next bar', async () => {
+  const r = await retryDay({ minutes: 3, anchor: Date.UTC(2026, 9, 7), failPremarket: true, tradeMs: 20000, retryFull: false });
+  assert.match(r.tradePrompts[0], /premarket plan unavailable/, 'the first cycle of the session already says so');
+  assert.match(r.trades[0], /@2026-10-07T13:27:00.000Z$/, 'the session\'s first bar got its cycle');
+  const inSessionRuns = r.pre.filter(p => p.at >= et(9, 30));
+  assert.ok(inSessionRuns.length >= 3);
+  assert.ok(inSessionRuns.every(p => p.retry && p.timeoutMs >= 30000 && p.timeoutMs < 180000), 'only retries, each fitting before the next bar');
+  for (const p of r.tradePrompts) assert.match(p, /premarket plan unavailable/, 'the marker kept while every retry fails');
+});
+
+test('end of day with no time left after its account read is no failed run: judged by its flatten alone', async () => {
+  // End of day at 15:59 ET; the pass at 15:59:22 reads the account in 4.5 s, leaving under 30 s before the close.
+  let kills = 0;
+  const clockRef = { t: et(15, 59, 22) };
+  const runner = createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:59@America/New_York', timeframe: 3, account: '7', maxConsecutiveErrors: 1 }), root: '/r',
+    client: {
+      async accountState() { clockRef.t += 4500; return { positions: [], orders: [] }; },
+      async accountBalance() { return 50000; },
+      async closePosition() {}, async cancelOrder() {},
+    },
+    clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: flattened - x' }),
+    isKillSwitchOn: () => kills > 0, createKillSwitch: () => { kills += 1; }, loadState: () => ({ day: '2026-10-07', premarketDone: true, eodDone: false, cycles: 3, lastCycleAt: null }), saveState: () => {},
+    writeBars: () => '/b.json', scanFor: () => [],
+  });
+  await runner.step();
+  assert.strictEqual(kills, 0, 'a flat end of day with no time for its review trips nothing');
+  assert.strictEqual(runner.state.eodDone, true);
+});
+
+test('a runner that starts in the session with a premarket still failing gives it up at once: its first cycle says so, its retries are retries', async () => {
+  const cycles = [];
+  await simulate({
+    cfg: { timeframe: 3, premarketAt: '09:00@America/New_York', sessions: ['09:30-15:50@America/New_York'] }, from: et(9, 35, 10), to: et(10, 30), market: fakeMarket({ minutes: 3 }),
+    deps: {
+      // Restarted mid-session (not on a minute: the session's next minute is under a minute away): today's premarket failed twice, its next retry due at 09:45.
+      loadState: () => ({ day: '2026-10-07', premarketDone: false, eodDone: false, cycles: 0, lastCycleAt: null, premarketTries: 2, premarketRetryAt: new Date(et(9, 45)).toISOString() }),
+      runCycle: async (action, prompt, limits = {}) => {
+        cycles.push({ action, prompt, retry: Boolean(limits.context && limits.context.retry), timeoutMs: limits.timeoutMs });
+        return action === 'premarket' ? { ok: false, timedOut: false, result: 'CYCLE RESULT: (none reported)' } : { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' };
+      },
+    },
+  });
+  const trade = cycles.filter(c => c.action === 'trade');
+  assert.ok(trade.length >= 10);
+  for (const c of trade) assert.match(c.prompt, /premarket plan unavailable/);
+  const pre = cycles.filter(c => c.action === 'premarket');
+  assert.ok(pre.length >= 2 && pre.every(c => c.retry && c.timeoutMs >= 30000 && c.timeoutMs < 180000), 'retries, each with at least 30 s before the next poll');
+});
+
+test('in the session a missing premarket is given up on the pass itself, even with a minute to the next poll: that pass\'s cycle says so', async () => {
+  const clockRef = { t: et(9, 33, 10) };
+  const prompts = [];
+  const runner = createRunner({
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '09:00@America/New_York', eodAt: '15:50@America/New_York', timeframe: 3, sessions: ['09:30-15:50@America/New_York'] }), root: '/r',
+    client: fakeMarket({ minutes: 3 }).client(clockRef), clock: { now: () => new Date(clockRef.t) },
+    runCycle: async (action, prompt) => { prompts.push([action, prompt]); return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x' }; },
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, saveState: () => {}, writeBars: () => '/b.json', scanFor: () => [],
+    loadState: () => ({ day: '2026-10-07', premarketDone: false, eodDone: false, cycles: 0, lastCycleAt: null, premarketTries: 2, premarketRetryAt: new Date(et(9, 45)).toISOString() }),
+  });
+  await runner.step(); // 09:33:10, 47 s to the next minute's poll
+  assert.ok(runner.state.premarketUnavailable, 'given up: the session is open');
+  clockRef.t = et(9, 36, 2); // the next bar: 55 s to the next minute's poll
+  await runner.step();
+  const trade = prompts.filter(p => p[0] === 'trade');
+  assert.ok(trade.length >= 1);
+  for (const p of trade) assert.match(p[1], /premarket plan unavailable/);
+  assert.ok(!prompts.some(p => p[0] === 'premarket'), 'no premarket run in the session but as a retry when due');
 });

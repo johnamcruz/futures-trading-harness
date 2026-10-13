@@ -79,6 +79,11 @@ function summarize(days) {
         row.points += 1;
         // A bar's pass that read no bar and ran no cycle while logging errors (driver.js counts it too).
         if (rec.kind === 'trade' && !(rec.ran || []).length && (rec.errors || []).length && (rec.bars || []).some(b => !b.lastBarT)) row.failed += 1;
+        // A time's failed attempts before it ran (store.js foldAttempts): their cycles ran and failed; the time is one point.
+        for (const c of (rec.retries || []).flatMap(a => a.ran || [])) {
+          row.cycles += 1;
+          if (!c.ok) row.failed += 1;
+        }
         for (const c of rec.ran || []) {
           row.cycles += 1;
           if (!c.ok) row.failed += 1;
