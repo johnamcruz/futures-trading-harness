@@ -51,7 +51,7 @@ const { activeBroker } = require('../broker/config');
 const { buildCommand } = require('../autotrader');
 const { GATE_ENV } = require('../replay/config');
 const { isTradeTime } = require('../replay/schedule');
-const { decisionRecord, killSwitchReason, fillsBetween, fingerprints, noteVersion, treeDigest, gateReader, HARNESS_DIRS, CODE_DIRS } = require('./record');
+const { decisionRecord, killSwitchReason, fillsBetween, fingerprints, brokerFingerprint, noteVersion, treeDigest, gateReader, HARNESS_DIRS, CODE_DIRS } = require('./record');
 
 const FILLS_TIMEOUT_MS = 10000;
 // A retry's read: shorter than the runner's idle pause, and only when the pass returned a longer wait.
@@ -75,13 +75,20 @@ function dayBounds(day) {
 
 const tryOr = (fn, fallback) => { try { return fn(); } catch (_err) { return fallback; } };
 
-/** What makes a live session's agent a version: the runner config, broker, harness command, gate settings and documents. */
+/**
+ * What makes a live session's agent a version: the runner config, broker, harness command, gate settings,
+ * the broker's bar-shaping settings (its allowlist only, R35) and documents.
+ */
 function liveHash({ cfg, root, env }) {
   const gate = Object.fromEntries(GATE_ENV.filter(k => env[k] !== undefined && env[k] !== '').map(k => [k, env[k]]));
   const body = {
     cfg, broker: tryOr(() => activeBroker(env).name, null), command: tryOr(() => buildCommand(cfg, '<prompt>', root, env), null), gate,
     harness: treeDigest(root, HARNESS_DIRS),
   };
+  // The broker's settings, or why they couldn't be fingerprinted (then no other session's hash is this one's).
+  const fp = brokerFingerprint(env);
+  body.brokerSettings = fp.broker;
+  if (fp.error) body.fingerprintError = fp.error;
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
 
@@ -114,6 +121,8 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
   const pending = new Map();
   let hash = null;
   let scanned = false;
+  let fingerprintWarned = false;
+  let credentialWarned = false;
 
   /** The day's session: created (manifest, config), or the one already there (a restart, or a catch-up end of day). */
   function session(day) {
@@ -141,7 +150,17 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
   function version(s, since) {
     const list = s.manifest.versions || [];
     const last = list[list.length - 1];
-    if (!noteVersion(s.manifest, { since, hash, fingerprints: fingerprints(root, { code }) })) return;
+    const fp = brokerFingerprint(env);
+    // Loudly, once a process: the session's broker settings are unknown (recorded as fingerprintError).
+    if (fp.error && !fingerprintWarned) {
+      fingerprintWarned = true;
+      log(`session record: ${fp.error}; recorded as fingerprintError, so no other session counts as the same version`, 'error');
+    }
+    if (fp.warning && !credentialWarned) {
+      credentialWarned = true;
+      log(`session record: ${fp.warning}`);
+    }
+    if (!noteVersion(s.manifest, { since, hash, fingerprints: fingerprints(root, { code, broker: fp.broker, error: fp.error }) })) return;
     const v = s.manifest.versions[s.manifest.versions.length - 1];
     if (!last) v.config = 'autotrader.json';
     else if (last.hash === hash) v.config = last.config || 'autotrader.json';

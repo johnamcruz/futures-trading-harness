@@ -14,6 +14,7 @@
  *   <home>/logs/gate-log.jsonl                       every order call the gate judged (hook and gateway)
  *   <home>/logs/scans-<day>.jsonl                    every scanned bar: what fired
  *   <home>/bars/<SYM>-<tf>m.json, <home>/bars-scratch/<SYM>-<tf>m*.json   bars, for ATR
+ *   <runDir>/bars-<day>.jsonl.gz                     the bars the session archived (session/bars-archive.js)
  *
  * One label per decision time and symbol (one with symbol null when a line
  * names none), in time order:
@@ -30,6 +31,13 @@
  *             than the strategy's own exit as order_plan places it (teacher.target.from), several
  *             entries, adds, partial exits, unknown arguments, an unmapped stop); the skip and hold
  *             counts read its reasons (NOT_A_SKIP)
+ *   values / valuesAbsent / valuesError / archivedBar / archiveError   the broker field values the strategies the
+ *             scan ran read on the decision bar, as the decision line recorded them ({ strategy: { path: value |
+ *             null } }; R35), and that bar as the session archived it, every field kept (joined by symbol,
+ *             contract, timeframe and barT). values null means: valuesAbsent, a line from before lines carried
+ *             values; valuesError, taking them failed (the line's error); neither, no scan of that bar. archiveError:
+ *             the day's archive can't be read, or this bar's archiving failed (the line's error); archivePruned: retention
+ *             removed the day's archive (its marker left in its place); archivedBar null
  *   counterfactuals / counterfactual   what each candidate's own trade would have done (counterfactual.js:
  *             the backtester's fills and exits walked forward on the bars) on a skipped label or a no-cycle
  *             bar, or the same fields from the real fills of a taken entry; `counterfactual` is the
@@ -64,6 +72,7 @@ const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
 const { readRun, readLines } = require('./store');
 const { versionAt } = require('../session/record');
+const { archivedBars, archiveFile, wasPruned } = require('../session/bars-archive');
 const { targetFor } = require('../trading/order-plan');
 const { exitPlan } = require('../trading/evaluator');
 const { simulate, fromFills } = require('./counterfactual');
@@ -612,7 +621,7 @@ function realDir(runDir) {
  * @param opts.barsSource { SYMBOL: sha256 } of the --bars files, for provenance (else 'run home')
  * @param opts.unfinished label a run that isn't finished (writeLabels allows it only into a folder outside the run home)
  */
-function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false, barsSource = null } = {}) {
+function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = null, unfinished = false, barsSource = null, log = msg => process.stderr.write(`[labels] ${msg}\n`) } = {}) {
   const dir = realDir(runDir);
   const { manifest, days } = readRun(dir);
   // Labels hold what came after each decision (outcomes, counterfactuals). A run that will go on would let
@@ -665,6 +674,14 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   });
   const journalUsed = new Set();
   const lineTimes = lines.map(r => Date.parse(r.t));
+  // The bars the session archived (R35), by symbol, timeframe and time.
+  const archived = archivedBars(dir, { log });
+  /** The line's values entry for the symbol's decision bar (its strategies' values and contract), or null. */
+  const recordedValues = (rec, symbol, barT) => {
+    if (!Array.isArray(rec.values)) return null;
+    const v = rec.values.find(x => isObj(x) && x.symbol === symbol && (!barT || !x.barT || x.barT === barT));
+    return v && isObj(v.strategies) ? v : null;
+  };
 
   // Pass 1: every decision's orders and action.
   const drafts = [];
@@ -909,12 +926,23 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     if (rec.failedAttemptOrders || (d.cyc && d.cyc.c && d.cyc.c.attempt && d.cyc.orders.length)) reasons.push('orders from a failed attempt');
     const cyc = d.cyc && d.cyc.c;
     const promptHash = cyc ? cyc.promptHash || null : null;
+    const entry = recordedValues(rec, d.symbol, d.barT);
+    // What the line says went wrong for this symbol's bar: its values or its archiving.
+    const symErrors = (Array.isArray(rec.errors) ? rec.errors : []).map(String).filter(e => d.symbol && e.startsWith(`${d.symbol}: `));
+    const valuesAbsent = !Array.isArray(rec.values);
+    const valuesError = !entry && !valuesAbsent ? symErrors.find(e => /no field values recorded|strategy scan failed/.test(e)) || null : null;
+    const archiveError = archived.errors[rec.day] || symErrors.find(e => /could not archive the bars/.test(e)) || null;
+    // Retention removed the day's archive (a live home's oldest days): pruned, not a bar that was never archived.
+    const archivePruned = Boolean(rec.day) && !fs.existsSync(archiveFile(dir, rec.day)) && wasPruned(dir, rec.day);
+    const values = entry ? entry.strategies : null;
+    // By contract when the line names it (a roll mid-day archives the new contract's window at the same times).
+    const archivedBar = d.barT && tfOf(d.cfg) ? archived.get(d.symbol, entry ? entry.contractId : null, tfOf(d.cfg), d.barT) : null;
     labels.push({
       v: VERSION,
       key: crypto.createHash('sha256').update(`${manifest.runId}|${rec.t}|${d.symbol}|${promptHash}`).digest('hex').slice(0, 24),
       runId: manifest.runId, t: rec.t, day: rec.day, kind: rec.kind, symbol: d.symbol, barT: d.barT,
       decision: d.decision, interrupted: Boolean(rec.interrupted), cycleFailed: d.cyc ? d.cyc.failed : null, position: d.position || null,
-      candidates: d.candidates, teacher, gate, outcome,
+      candidates: d.candidates, values, valuesAbsent, valuesError, archivedBar, archiveError, archivePruned, teacher, gate, outcome,
       counterfactual: counterfactuals.length ? pickCounterfactual(d, counterfactuals) : null, counterfactuals, counterfactualFor: counterfactuals.length ? counterfactualFor : null,
       clone: { ok: Boolean(teacher) && reasons.length === 0, reasons: [...new Set(reasons)] },
       result: d.cyc ? d.cyc.result : ((rec.ran || [])[0] || {}).result || null,

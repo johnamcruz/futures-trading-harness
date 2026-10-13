@@ -142,6 +142,26 @@ function readField(bar, path) {
   return typeof v === 'number' && Number.isFinite(v) ? v : NaN;
 }
 
+/**
+ * The broker field values a rule reads at bar i (the decision bar): each field() it names, by its path (a
+ * look-back by "path[n]", read n bars earlier), as readField reads it, a missing one null. `rule` is the
+ * rule's text, a compiled condition or group (its text), or a { any | all: [...] } group.
+ */
+function valuesFor(rule, bars, i = bars.length - 1) {
+  const out = {};
+  const texts = r => (typeof r === 'string' ? [r] : r && typeof r.text === 'string' ? [r.text]
+    : r && typeof r === 'object' ? Object.values(r).flatMap(v => (Array.isArray(v) ? v.flatMap(texts) : texts(v))) : []);
+  for (const text of texts(rule)) {
+    for (const m of text.matchAll(new RegExp(FIELD_RE.source, 'g'))) {
+      const shift = Number(m[3] || 0);
+      const j = i - shift;
+      const v = j >= 0 && j < bars.length ? readField(bars[j], m[2]) : NaN;
+      out[shift ? `${m[2]}[${shift}]` : m[2]] = Number.isFinite(v) ? v : null;
+    }
+  }
+  return out;
+}
+
 function tokenize(text) {
   const tokens = [];
   const re = /\s*(?:(\d+(?:\.\d+)?)|([a-z_][a-z0-9_]*)\s*\(\s*(\d+)\s*\)(?:\[(\d+)\])?|([a-z_][a-z0-9_]*)(?:\[(\d+)\])?|(>=|<=|>|<)|([+\-*]))/gy;
@@ -586,4 +606,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, valuesFor, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

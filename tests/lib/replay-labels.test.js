@@ -1214,3 +1214,78 @@ test('labels: an order a failed attempt sent is labelled at its decision time, m
   const line = readRun(run.runDir).days[DAY][1];
   assert.deepStrictEqual([line.failedAttemptOrders, line.retries.length, line.cycles.map(c => Boolean(c.attempt))], [true, 1, [false, true]]);
 });
+
+test('labels: each decision joined to its recorded field values and its archived bar; an old session labels with them absent', () => {
+  const { appendBars } = require('../../scripts/lib/session/bars-archive');
+  const steps = [
+    { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: {} },
+    { k: 1, cycle: {} },
+    { k: 2, cycle: {} },
+  ];
+  // An old session: no values on its lines, no archive.
+  const old = makeRun({ steps });
+  const { labels: before } = labelRun(old.runDir, { strategies: STRATEGIES });
+  assert.ok(before.length >= 3);
+  for (const l of before) assert.deepStrictEqual([l.values, l.valuesAbsent, l.valuesError, l.archivedBar, l.archiveError], [null, true, null, null, null], 'from before values existed: absent, not failed');
+  // The same run recorded today: values on the first two lines (the second's for another bar), the bars archived.
+  const run = makeRun({ steps });
+  const file = path.join(run.runDir, `${DAY}.jsonl`);
+  const recs = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const barT = r => r.bars[0].lastBarT;
+  recs[0].values = [{ symbol: 'MNQ', barT: barT(recs[0]), strategies: { orb: { 'x.y': 0.5, 'x.z': null } } }];
+  recs[1].values = [{ symbol: 'MNQ', barT: '2020-01-01T00:00:00.000Z', strategies: { orb: { 'x.y': 9 } } }];
+  recs[2].values = [];
+  // The third bar's scan failed, and its archiving: the line's errors say so.
+  recs[2].errors = ['MNQ: strategy scan failed (boom)', 'MNQ: could not archive the bars (EACCES)', 'MES: no field values recorded (x)'];
+  fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
+  const archived = recs.slice(0, 2).map(r => ({ t: barT(r), o: 1, h: 2, l: 0, c: 1, v: 3, x: { y: 0.5, w: { 3: 1 } } }));
+  appendBars(run.runDir, DAY, { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: archived });
+  appendBars(run.runDir, DAY, { symbol: 'MNQ', contractId: 'MNQ', minutes: 1, bars: [{ ...archived[1], x: 'another timeframe' }] });
+  const { labels } = labelRun(run.runDir, { strategies: STRATEGIES });
+  const at = t => labels.find(l => l.t === t);
+  assert.deepStrictEqual([at(recs[0].t).values, at(recs[0].t).valuesAbsent], [{ orb: { 'x.y': 0.5, 'x.z': null } }, false], 'a null kept as null');
+  assert.deepStrictEqual(at(recs[0].t).archivedBar, archived[0], 'every field of the bar');
+  assert.deepStrictEqual([at(recs[1].t).values, at(recs[1].t).valuesAbsent, at(recs[1].t).valuesError], [null, false, null], 'values for another bar are not this decision\'s; nor absent, nor failed');
+  assert.deepStrictEqual(at(recs[1].t).archivedBar, archived[1], 'the runner\'s timeframe\'s bar');
+  assert.deepStrictEqual([at(recs[2].t).values, at(recs[2].t).archivedBar, at(recs[2].t).valuesAbsent], [null, null, false]);
+  assert.deepStrictEqual([at(recs[2].t).valuesError, at(recs[2].t).archiveError], ['MNQ: strategy scan failed (boom)', 'MNQ: could not archive the bars (EACCES)'], 'failed, from the line\'s own errors, this symbol\'s only');
+  assert.deepStrictEqual([at(recs[0].t).valuesError, at(recs[0].t).archiveError], [null, null]);
+  // The rest of every label is what it was without them.
+  const DROP = ['values', 'valuesAbsent', 'valuesError', 'archivedBar', 'archiveError', 'archivePruned', 'key', 'runId', 'provenance'];
+  const strip = ls => ls.map(l => Object.fromEntries(Object.entries(l).filter(([k]) => !DROP.includes(k))));
+  assert.deepStrictEqual(strip(labels), strip(before));
+  // A roll mid-day: the new contract's window archived at the same times. The line names the decision's
+  // contract, so its bar is that contract's, never the old one's; with no contract named, an ambiguous time joins none.
+  appendBars(run.runDir, DAY, { symbol: 'MNQ', contractId: 'NEW', minutes: 3, bars: archived.map(b => ({ ...b, c: 7 })) });
+  recs[0].values = [{ ...recs[0].values[0], contractId: 'NEW' }];
+  fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
+  const rolled = labelRun(run.runDir, { strategies: STRATEGIES }).labels;
+  assert.deepStrictEqual(rolled.find(l => l.t === recs[0].t).archivedBar, { ...archived[0], c: 7 });
+  assert.strictEqual(rolled.find(l => l.t === recs[1].t).archivedBar, null, 'two contracts at that time, none named');
+  recs[0].values = [{ ...recs[0].values[0], contractId: 'MNQ' }];
+  fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
+  assert.deepStrictEqual(labelRun(run.runDir, { strategies: STRATEGIES }).labels.find(l => l.t === recs[0].t).archivedBar, archived[0]);
+  // An archive that can't be read: logged once, and each of its day's labels says so (never a quiet null).
+  fs.writeFileSync(path.join(run.runDir, `bars-${DAY}.jsonl.gz`), Buffer.from('not gzip at all'));
+  const said = [];
+  const broken = labelRun(run.runDir, { strategies: STRATEGIES, log: m => said.push(m) }).labels;
+  assert.strictEqual(said.length, 1, said.join('|'));
+  assert.match(said[0], /bars archive bars-2026-03-03\.jsonl\.gz: nothing in it decodes/);
+  for (const l of broken.filter(x => x.day === DAY)) {
+    assert.strictEqual(l.archivedBar, null);
+    assert.match(l.archiveError, /nothing in it decodes|could not archive/);
+    assert.strictEqual(l.archivePruned, false);
+  }
+  // Retention removed the day's archive (its marker left): each label says pruned, not a bar never archived.
+  const { prunedFile } = require('../../scripts/lib/session/bars-archive');
+  fs.rmSync(path.join(run.runDir, `bars-${DAY}.jsonl.gz`));
+  fs.writeFileSync(prunedFile(run.runDir, DAY), JSON.stringify({ prunedAt: '2026-06-01T00:00:00.000Z' }));
+  const pruned = labelRun(run.runDir, { strategies: STRATEGIES, log: () => {} }).labels.filter(x => x.day === DAY);
+  assert.ok(pruned.length > 0);
+  for (const l of pruned) assert.deepStrictEqual([l.archivedBar, l.archivePruned], [null, true]);
+  // A day archived again after its marker was left: its archive is what counts, not pruned.
+  appendBars(run.runDir, DAY, { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: archived });
+  const again = labelRun(run.runDir, { strategies: STRATEGIES, log: () => {} }).labels.filter(x => x.day === DAY);
+  assert.ok(again.every(l => l.archivePruned === false));
+  assert.ok(before.every(l => l.archivePruned === false), 'an old session with no archive: not pruned');
+});

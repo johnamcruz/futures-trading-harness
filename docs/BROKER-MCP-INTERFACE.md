@@ -34,7 +34,8 @@ harness (agents, skills, order gate, runner, CLIs)
         "journal": "~/.<name>-mcp/journal.jsonl", "journalEnv": "<NAME>_JOURNAL_PATH",
         "env": ["<NAME>_USERNAME", "<NAME>_API_KEY", "..."],
         "paperEnv": { "<NAME>_TRADING_ENABLED": "false" },
-        "allowedAccountsEnv": "<NAME>_ALLOWED_ACCOUNT_IDS"
+        "allowedAccountsEnv": "<NAME>_ALLOWED_ACCOUNT_IDS",
+        "fingerprintEnv": ["<NAME>_BARS_..."]
       }
     }
   }
@@ -48,6 +49,7 @@ harness (agents, skills, order gate, runner, CLIs)
   | `env` | The variables it reads (credentials, guardrails), forwarded by harnesses |
   | `paperEnv` | What a paper run sets so the server refuses every order |
   | `allowedAccountsEnv` | The variable (one of `env`) holding the server's allowed account ids, comma separated. A live run needs it to list the run's account: the runner won't start and the order gate refuses live entries (never exits or closes) while it is empty, `any`, or lacks the account. Paper runs and confirmed replays don't need it. The gateway also asks the server (`get_server_config`, once per process): a run is paper only when the server says `tradingEnabled: false`, and a live entry needs the server's own `allowedAccountIds` to list the account; an unreadable answer refuses entries, never exits or closes. An override can't change a shipped broker's `paperEnv` or `allowedAccountsEnv` |
+  | `fingerprintEnv` | The settings (of `env`) that shape the bars it serves, and only those: each session's fingerprint records them by name with an HMAC of each value keyed on the home's random salt (`<FTH_HOME>/fingerprint.salt`; never the value), and its hash covers them, live and replay, so two sessions of a home can be checked for the same bar settings. Never a credential: a name that isn't one of `env`, or looks like a credential (key, secret, pass, pwd, pin, token, jwt, dsn, url, uri, session, bearer, login, user, auth, cookie, cert, ...), is refused and never read. An override can't change a shipped broker's list |
   | `replay` | `true` only for a simulated broker that replays history: the harness may then take its clock from `FTH_REPLAY_NOW`, if the broker shares no server or variables with a live one and its server's `get_server_config` confirms `replay: true` (see [HARNESS-DESIGN.md](HARNESS-DESIGN.md), Replay clock). A broker the defaults ship without it stays live whatever an override says |
 
   Switching brokers is a config change. Its settings go in

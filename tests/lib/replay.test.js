@@ -246,11 +246,12 @@ test('driver: one step per decision time at its time, a line each, end of day re
   assert.deepStrictEqual(lines.map(l => l.since.slice(11, 19)), ['19:40:00', '19:42:02', '19:45:02', '19:48:02', '19:50:00']);
   assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.daysDone, ['2026-10-07']);
   // A replay's line has the live session's shape (session/record.js decisionRecord), field for field, in order.
-  for (const l of lines) assert.deepStrictEqual(Object.keys(l), ['v', 't', 'day', 'kind', 'asked', 'ran', 'events', 'step', 'cycles', 'refusals', 'errors', 'bars', 'trades', 'since']);
+  for (const l of lines) assert.deepStrictEqual(Object.keys(l), ['v', 't', 'day', 'kind', 'asked', 'ran', 'events', 'step', 'cycles', 'refusals', 'errors', 'bars', 'values', 'trades', 'since']);
   // The manifest says where its decisions came from and which version of the agent made them (R33's fingerprints today).
   const man = store.readRun(w.run.paths.runDir).manifest;
   assert.strictEqual(man.source, 'replay');
-  assert.deepStrictEqual(man.fingerprints, require('../../scripts/lib/session/record').fingerprints(ROOT));
+  // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist: none on this one), as live records its broker's.
+  assert.deepStrictEqual(man.fingerprints, require('../../scripts/lib/session/record').fingerprints(ROOT, { broker: { name: 'sim', settings: {}, refused: [] } }));
   assert.deepStrictEqual(man.versions.map(v => [v.since, v.hash]), [[lines[0].t, man.hash]], 'one version: the agent didn\'t change across the resume');
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
   // A run left with nothing to do (all ran, its flag lost): marked finished on that pass too.
@@ -1017,4 +1018,46 @@ test('driver: a failing premarket (no result line, or the agent\'s own error) is
   }
   const { noDecision } = require('../../scripts/lib/session/record');
   assert.strictEqual(noDecision([{ action: 'premarket', ok: false }]), false, 'the step exits 0 for it');
+});
+
+test('config hash: the replay broker\'s fingerprint allowlist is part of the run, a credential never', () => {
+  const w = userWorld();
+  const file = path.join(w.live, 'brokers.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  doc.brokers.sim = { ...doc.brokers.sim, env: ['SIM_DATA', 'SIM_BARS_A', 'SIM_API_KEY'], fingerprintEnv: ['SIM_BARS_A', 'SIM_API_KEY'] };
+  fs.writeFileSync(file, JSON.stringify(doc));
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const env = { ...w.env, SIM_BARS_A: 'true', SIM_API_KEY: 'k1' };
+  assert.notStrictEqual(configHash(w.run, env), configHash(w.run, { ...env, SIM_BARS_A: 'false' }), 'a bar setting on the allowlist is part of the run');
+  assert.strictEqual(configHash(w.run, env), configHash(w.run, { ...env, SIM_API_KEY: 'k2' }), 'a credential is not, listed or read');
+  assert.notStrictEqual(configHash(w.run, env), configHash(w.run, { ...env, SIM_DATA: '/other' }), 'its other settings still are');
+  // A run started before the allowlist existed keeps its hash: the list itself is no part of it (its values are).
+  const runBrokers = path.join(w.run.paths.runHome, 'brokers.json');
+  const seeded = JSON.parse(fs.readFileSync(runBrokers, 'utf8'));
+  const withList = configHash(w.run, env);
+  delete seeded.brokers.sim.fingerprintEnv;
+  fs.writeFileSync(runBrokers, JSON.stringify(seeded));
+  assert.strictEqual(configHash(w.run, env), withList, 'the same hash with and without fingerprintEnv on the entry');
+});
+
+test('driver: a run home salt that can\'t be read is logged once and recorded as fingerprintError, never a silent null', async () => {
+  const w = userWorld({ end: '2026-10-07T19:50:00Z', start: '2026-10-07T19:40:00Z', endOfDay: false });
+  const file = path.join(w.live, 'brokers.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  doc.brokers.sim = { ...doc.brokers.sim, env: ['SIM_DATA', 'SIM_BARS_A'], fingerprintEnv: ['SIM_BARS_A'] };
+  fs.writeFileSync(file, JSON.stringify(doc));
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  fs.writeFileSync(path.join(w.run.paths.runHome, 'fingerprint.salt'), 'corrupt');
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) { return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` }; },
+    async trades() { return []; },
+  };
+  const said = [];
+  const res = await runReplay({ run: w.run, baseEnv: { ...w.env, SIM_BARS_A: 'true' }, root: ROOT, deps, log: msg => said.push(msg) });
+  assert.ok(res.cycles >= 2, String(res.cycles));
+  const man = store.readRun(w.run.paths.runDir).manifest;
+  assert.strictEqual(man.fingerprints.broker, null);
+  assert.match(man.fingerprints.fingerprintError, /broker sim: its bar settings can't be fingerprinted \(.*not a fingerprint salt/);
+  assert.strictEqual(said.filter(m => /ERROR .*fingerprintError/.test(m)).length, 1, 'logged once for the run');
 });

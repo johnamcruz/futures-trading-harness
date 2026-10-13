@@ -44,7 +44,7 @@ const os = require('os');
 const path = require('path');
 const { expandHome, harnessHome } = require('../paths');
 const { validateConfig, buildCommand } = require('../autotrader');
-const { activeBroker, loadBrokers } = require('../broker/config');
+const { activeBroker, loadBrokers, CREDENTIAL } = require('../broker/config');
 const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
 const { treeDigest, HARNESS_DIRS } = require('../session/record');
@@ -62,6 +62,8 @@ const PINNED = {
   FTH_KILL_SWITCH_FILE: p => path.join(p.runHome, 'STOP'),
   FTH_BROKERS_FILE: p => path.join(p.runHome, 'brokers.json'),
   FTH_ENV_FILE: p => path.join(p.runHome, '.env'),
+  // Where a step archives the bars it used (session/bars-archive.js): the run's record dir.
+  FTH_REPLAY_RECORD_DIR: p => p.runDir,
   FTH_TEST_NOW: () => 'none', FTH_DRY_RUN: () => '0', FTH_ORDER_GATE_SKIP: () => 'none', FTH_PAPER: () => '0',
 };
 const STRIPPED = Object.keys(PINNED);
@@ -238,12 +240,16 @@ function configHash(run, base = process.env) {
   // otherwise the user's value is a broker setting of the run, so a change makes it another run.
   const setsLimit = run.propDailyLoss !== null && run.propDailyLoss !== undefined;
   const own = new Set(Object.entries(run.brokerEnv).filter(([k]) => k !== 'maxDailyLoss' || setsLimit).map(([, v]) => v).concat(b.journalEnv));
-  const brokerSettings = Object.fromEntries((b.env || []).filter(k => !own.has(k)).sort().map(k => [k, env[k] ?? null]));
+  // Its settings (a credential never: a run's identity isn't its keys), the fingerprint allowlist among them (R35:
+  // every allowlisted name is one of `env`).
+  const names = [...new Set(b.env || [])].filter(k => !own.has(k) && !CREDENTIAL.test(k));
+  const brokerSettings = Object.fromEntries(names.sort().map(k => [k, env[k] ?? null]));
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
-    brokerEntry: { ...b, journalPath: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
+    // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
+    brokerEntry: { ...b, journalPath: undefined, fingerprintEnv: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');

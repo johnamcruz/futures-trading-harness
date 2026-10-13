@@ -64,9 +64,18 @@ broker.
    line per decision time (what ran, the cycle's result, prompt hash, tool
    calls, skills and orders from the cycle log, the gate's refusals, and the
    broker's fills since the previous time, with its round-trip metrics such
-   as R, MAE and MFE), plus `manifest.json` (config hash, harness command,
-   `source: "replay"`, and the `fingerprints` and `versions` of the agent
-   that made each decision) and `steps.log` (each step's output).
+   as R, MAE and MFE, and `values`: the broker field values the rules of
+   each strategy the scan ran read on each decision bar, by path, a missing
+   one null), plus
+   `manifest.json` (config hash, harness command, `source: "replay"`, and
+   the `fingerprints` and `versions` of the agent that made each decision,
+   with the broker's bar settings its `fingerprintEnv` lists in
+   `mcp-configs/brokers.json`, each value as a digest keyed on the run
+   home's own salt, so comparable within the run only, never a credential),
+   `steps.log` (each step's output), and `bars-<day>.jsonl.gz`: every bar
+   the run's passes read, with its contract and every field the broker put
+   on it, appended as gzip JSON lines and kept with the run (never pruned;
+   live sessions' archives are, past `FTH_BARS_ARCHIVE_DAYS`, default 90).
 6. **Resume.** Run it again: completed days are skipped and an unfinished
    day continues after its last decision time (the broker's clock only moves
    forward). A changed config, harness or model needs a new `runId`.
@@ -144,7 +153,12 @@ broker.
    model), the input for measuring how closely it follows its rules: one
    per decision time and symbol in `<run dir>/labels.jsonl`, with
    `labels-summary.json`, never in the repository. Each holds the bar's
-   candidates; the teacher's action (`none`, `long`, `short` flat; `hold`,
+   candidates; the field values its line recorded (`values`; null with
+   `valuesAbsent` for a run recorded before lines carried them, with
+   `valuesError` when taking them failed) and the archived bar
+   (`archivedBar`; `archiveError` when the archive can't be read or the
+   bar's archiving failed, `archivePruned` when retention removed it);
+   the teacher's action (`none`, `long`, `short` flat; `hold`,
    `tighten`, `exit` in a trade), its setup, its stop as a multiple of
    ATR(20) on bars closed by then, its size as a step of the budget
    (`--budget USD`; unknown without it); the gate's answer (refused intents

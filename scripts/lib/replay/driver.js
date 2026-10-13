@@ -49,7 +49,7 @@ const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
-const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, noteVersion } = require('../session/record');
+const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, brokerFingerprint, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt } = require('../trading/prop-state');
 const { accountNamed } = require('../trading/accounts');
 
@@ -247,6 +247,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   let since = manifest.tradesSince ? new Date(manifest.tradesSince) : run.start;
   let cycles = 0;
   let failures = 0;
+  let fingerprintWarned = false;
+  let credentialWarned = false;
   const timeoutMs = (cfg.cycleTimeoutMinutes * Math.max(1, cfg.symbols.length) + 2) * 60000;
   const queue = [...todo];
   while (queue.length) {
@@ -309,7 +311,18 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       premarketRetryStarved: step.state && step.state.day === point.day ? step.state.premarketRetryStarved || 0 : 0,
     });
     // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
-    noteVersion(manifest, { since: rec.t, hash, fingerprints: fingerprints(root || run.root) });
+    // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist), as live records its broker's;
+    // settings that can't be fingerprinted are logged once and recorded as fingerprintError, never a silent null.
+    const fp = brokerFingerprint(env);
+    if (fp.error && !fingerprintWarned) {
+      fingerprintWarned = true;
+      log(`${rec.t}: ERROR ${fp.error}; recorded as fingerprintError, so no other version counts as the same`);
+    }
+    if (fp.warning && !credentialWarned) {
+      credentialWarned = true;
+      log(`${rec.t}: ${fp.warning}`);
+    }
+    noteVersion(manifest, { since: rec.t, hash, fingerprints: fingerprints(root || run.root, { broker: fp.broker, error: fp.error }) });
     if (cycleFailed) {
       // Never a decision done: no progress, no fills window moved (the retry reads them again), the end-of-day
       // retry as it was before this try. The attempt's line and the manifest's cycleRetry say it is due.

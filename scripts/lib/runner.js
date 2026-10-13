@@ -107,8 +107,9 @@ function createRunner(deps) {
     recentTrades = () => [],
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     prop = null, // prop-challenge hooks (prop/live-runner.js createPropHooks)
-    // A closed bar this pass polled: (symbol, { bar, stale, action }), stale when it closed too long ago to start a
-    // cycle, action the pass's (trade, manage, housekeep). The session record's decision point (session/live.js).
+    // A closed bar this pass polled: (symbol, { bar, stale, action, contractId, bars }), stale when it closed too long
+    // ago to start a cycle, action the pass's (trade, manage, housekeep), bars the window polled (never to be changed).
+    // The session record's decision point (session/live.js).
     barClosed = () => {},
     accountReadMs = ACCOUNT_READ_MS,
   } = deps;
@@ -946,12 +947,13 @@ function createRunner(deps) {
       if (item) ready.push(item);
     }
     if (ready.length) {
-      for (const x of ready) {
-        try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action }); } catch (_err) { /* recording never stops the pass */ }
-      }
       // Trailing stops and leftover orders first: they only ever reduce risk.
       const noCycles = d.action === 'housekeep';
       for (const item of ready) await housekeeping(item, { noCycles });
+      // Then the session record hears each closed bar (its values taken, its bars archived): after the risk work.
+      for (const x of ready) {
+        try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars }); } catch (_err) { /* recording never stops the pass */ }
+      }
       if (state.trails) saveState(state);
       // The account balance for the gate's prop-challenge checks, before any cycle.
       if (prop && cfg.account && !cfg.paper) {
