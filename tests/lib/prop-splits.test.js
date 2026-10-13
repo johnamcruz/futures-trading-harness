@@ -31,3 +31,165 @@ test('split windows: out of sample never overlaps train or select, and never mov
   assert.strictEqual(overlaps({ from: 0, to: 10 }, { from: 10, to: 20 }), false);
   assert.strictEqual(overlaps({ from: 0, to: 11 }, { from: 10, to: 20 }), true);
 });
+
+const {
+  RECENT, SCHEDULE_START, NEW_MONTHS_FROM, LLM_FROM, RESERVE_MIN_MONTHS, ROLES, RECORDED_LOOKS,
+  roleOf, isLlmMonth, blockByName, blocksBetween, unitContaining, oosQueue,
+} = require('../../scripts/lib/prop/splits');
+
+const SESSIONS_PER_MONTH = 21; // an attempt: one billing cycle, about 21 sessions
+const ms = iso => Date.parse(`${iso}T00:00:00Z`);
+const monthsOf = (from, to) => {
+  const out = [];
+  for (let y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7)); `${y}-${String(m).padStart(2, '0')}` <= to;) {
+    out.push(`${y}-${String(m).padStart(2, '0')}-01`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+};
+const MONTHS = monthsOf('2021-01', '2030-12');
+
+test('schedule: every month 2021-01..2030-12 has exactly one mechanical role, and no two roles overlap', () => {
+  const blocks = blocksBetween('2021-01-01', '2031-01-01');
+  for (let i = 1; i < blocks.length; i++) {
+    assert.strictEqual(blocks[i - 1].to, blocks[i].from, `${blocks[i - 1].block} and ${blocks[i].block} not contiguous`);
+  }
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      assert.ok(!overlaps({ from: ms(blocks[i].from), to: ms(blocks[i].to) }, { from: ms(blocks[j].from), to: ms(blocks[j].to) }),
+        `${blocks[i].block} overlaps ${blocks[j].block}`);
+    }
+  }
+  for (const month of MONTHS) {
+    const holders = blocks.filter(b => month >= b.from && month < b.to);
+    assert.strictEqual(holders.length, 1, `${month}: ${holders.length} roles`);
+    const r = roleOf(month);
+    assert.ok(ROLES.includes(r.role), `${month}: role ${r.role}`);
+    assert.strictEqual(r.block, holders[0].block);
+    // Every day of the month has the month's role.
+    assert.deepStrictEqual(roleOf(`${month.slice(0, 8)}28`), r);
+  }
+  assert.strictEqual(blocks[0].from, SCHEDULE_START);
+  assert.throws(() => roleOf('2020-12-31'), /before the schedule/);
+});
+
+test('schedule: the frozen splits and Recent are blocks of their own roles', () => {
+  for (const name of ['train', 'select', 'oos']) {
+    const b = blockByName(name);
+    assert.deepStrictEqual([b.role, b.from, b.to], [name, ...SPLITS[name]]);
+  }
+  assert.deepStrictEqual([...RECENT], ['2025-07-01', '2026-07-01']);
+  assert.deepStrictEqual({ ...roleOf('2025-07-01'), llm: true }, roleOf('2026-06-30'));
+  assert.strictEqual(roleOf('2025-07-01').role, 'recent');
+  assert.strictEqual(roleOf('2025-06-30').role, 'oos');
+  assert.strictEqual(roleOf('2026-07-01').role, 'walk-forward');
+  assert.strictEqual(windowMs('oos').to, ms(RECENT[0]), 'recent starts where oos ends');
+  // The one recorded look at Recent: the June 1-5, 2026 LLM replay, adherence only.
+  assert.strictEqual(RECORDED_LOOKS.length, 1);
+  const look = RECORDED_LOOKS[0];
+  assert.deepStrictEqual([look.block, look.from, look.to], ['recent', '2026-06-01', '2026-06-06']);
+  assert.strictEqual(roleOf(look.from).role, 'recent');
+  assert.match(look.use, /adherence only/);
+  assert.ok(Object.isFrozen(RECORDED_LOOKS) && Object.isFrozen(look) && Object.isFrozen(RECENT));
+});
+
+test('schedule: half-years alternate from 2026-H2 = walk-forward, by rule', () => {
+  assert.strictEqual(NEW_MONTHS_FROM, '2026-07-01');
+  assert.strictEqual(blockByName('2026-H2').role, 'walk-forward');
+  assert.strictEqual(blockByName('2027-H1').role, 'reserve');
+  assert.strictEqual(blockByName('2027-H2').role, 'walk-forward');
+  assert.throws(() => blockByName('2026-H1'), /no schedule block/);
+  assert.throws(() => blockByName('later'), /no schedule block/);
+  const half = blocksBetween(NEW_MONTHS_FROM, '2041-01-01');
+  assert.strictEqual(half.length, 29);
+  half.forEach((b, i) => {
+    assert.strictEqual(b.months, 6, `${b.block}: six months`);
+    assert.strictEqual(b.role, i % 2 === 0 ? 'walk-forward' : 'reserve', `${b.block}`);
+    assert.deepStrictEqual(blockByName(b.block), b);
+  });
+});
+
+test('schedule: each walk-forward half-year is tuning then held-out, contiguous quarters of at least two attempts', () => {
+  const weekdays = (from, to) => {
+    let n = 0;
+    for (let t = ms(from); t < ms(to); t += 86400000) if (![0, 6].includes(new Date(t).getUTCDay())) n++;
+    return n;
+  };
+  for (const b of blocksBetween(NEW_MONTHS_FROM, '2031-01-01')) {
+    if (b.role !== 'walk-forward') { assert.strictEqual(b.parts, undefined); continue; }
+    assert.deepStrictEqual(b.parts.map(p => p.part), ['tuning', 'held-out'], `${b.block}: tuning first`);
+    const [tuning, held] = b.parts;
+    assert.strictEqual(tuning.from, b.from);
+    assert.strictEqual(tuning.to, held.from, `${b.block}: quarters contiguous`);
+    assert.strictEqual(held.to, b.to);
+    for (const p of b.parts) {
+      assert.ok(p.months * SESSIONS_PER_MONTH >= 2 * SESSIONS_PER_MONTH, `${b.block} ${p.part}: two attempts`);
+      // Weekdays less up to 5 exchange holidays still hold two 21-session attempts.
+      assert.ok(weekdays(p.from, p.to) - 5 >= 2 * SESSIONS_PER_MONTH, `${b.block} ${p.part}: sessions`);
+      assert.strictEqual(roleOf(p.from).part, p.part);
+      assert.deepStrictEqual([roleOf(p.from).from, roleOf(p.from).to], [p.from, p.to]);
+    }
+  }
+  assert.strictEqual(roleOf('2026-09-30').part, 'tuning');
+  assert.strictEqual(roleOf('2026-10-01').part, 'held-out');
+  assert.strictEqual(roleOf('2027-03-01').part, null);
+  assert.strictEqual(roleOf('2024-03-01').part, null);
+});
+
+test('schedule: the windows never move backward', () => {
+  // The schedule as first set (raise these floors only when a window is retired).
+  assert.ok(RECENT[0] >= '2025-07-01' && RECENT[1] >= '2026-07-01', 'recent moved backward');
+  assert.ok(NEW_MONTHS_FROM >= '2026-07-01', 'new months moved backward');
+  assert.strictEqual(SCHEDULE_START, '2021-01-01');
+  assert.strictEqual(RESERVE_MIN_MONTHS, 12);
+  // Time order: train < select < oos < recent < half-years, as roles go.
+  const order = blocksBetween('2021-01-01', '2026-07-01').map(b => b.block);
+  assert.deepStrictEqual(order, ['train', 'select', 'oos', 'recent']);
+});
+
+test('schedule: the LLM role is a flag from 2026-06 on, not a mechanical role', () => {
+  assert.strictEqual(LLM_FROM, '2026-06-01');
+  assert.ok(!ROLES.includes('llm'));
+  assert.deepStrictEqual([roleOf('2026-05-31').llm, roleOf('2026-06-01').llm], [false, true]);
+  assert.strictEqual(roleOf('2026-06-03').role, 'recent', 'the June replay keeps Recent\'s role');
+  assert.strictEqual(roleOf('2027-02-01').role, 'reserve');
+  assert.ok(roleOf('2027-02-01').llm);
+  assert.strictEqual(isLlmMonth('2026-06-15'), true);
+  assert.strictEqual(isLlmMonth('2024-01-15'), false);
+});
+
+test('schedule: blocksBetween and unitContaining bound attempts to one unit', () => {
+  assert.deepStrictEqual(blocksBetween('2023-06-15', '2023-07-01').map(b => b.block), ['train']);
+  assert.deepStrictEqual(blocksBetween('2023-06-15', '2023-07-02').map(b => b.block), ['train', 'select']);
+  assert.deepStrictEqual(blocksBetween('2026-06-01', '2027-01-01').map(b => b.block), ['recent', '2026-H2']);
+  assert.deepStrictEqual(blocksBetween('2026-01-01', '2026-01-01'), []);
+  assert.strictEqual(unitContaining('2026-07-01', '2026-10-01').part, 'tuning');
+  assert.strictEqual(unitContaining('2026-09-15', '2026-10-15'), null, 'tuning into held-out');
+  assert.strictEqual(unitContaining('2026-10-01', '2027-01-01').part, 'held-out');
+  assert.strictEqual(unitContaining('2027-01-05', '2027-02-05').block, '2027-H1');
+  assert.strictEqual(unitContaining('2025-06-15', '2025-07-15'), null, 'oos into recent');
+  assert.strictEqual(unitContaining('2024-08-01', '2024-09-01').role, 'oos');
+  assert.strictEqual(unitContaining('2024-09-01', '2024-08-01'), null);
+  assert.throws(() => roleOf('2026-02-30'), /not an ISO date|not a date/);
+  assert.throws(() => roleOf('June 2026'), /not an ISO date/);
+  assert.throws(() => roleOf(NaN), /not a date/);
+  assert.strictEqual(roleOf(ms('2026-08-10')).part, 'tuning');
+  assert.strictEqual(roleOf(new Date(ms('2026-11-10'))).part, 'held-out');
+});
+
+test('schedule: the reserve forms out-of-sample windows of at least 12 months, Recent first', () => {
+  assert.deepStrictEqual(oosQueue('2026-06-30'), []);
+  assert.deepStrictEqual(oosQueue('2026-07-01').map(w => w.blocks), [['recent']]);
+  // 2027-H1 alone is six months: not a window yet.
+  assert.strictEqual(oosQueue('2028-06-30').length, 1);
+  const q = oosQueue('2031-01-01');
+  assert.deepStrictEqual(q.map(w => [w.blocks, w.readyAt]), [
+    [['recent'], '2026-07-01'],
+    [['2027-H1', '2028-H1'], '2028-07-01'],
+    [['2029-H1', '2030-H1'], '2030-07-01'],
+  ]);
+  for (const w of q) {
+    assert.ok(w.months >= RESERVE_MIN_MONTHS);
+    for (const name of w.blocks) assert.ok(['recent', 'reserve'].includes(blockByName(name).role), `${name} reserved`);
+  }
+});
