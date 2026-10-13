@@ -118,6 +118,14 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    refuses to build its bars from finer ones that carry broker fields, and
    reports each field's coverage (the share of bars carrying it): under 100%
    it warns, and those bars can't fire the field's conditions.
+   Before a rule leans on a broker field, check that the field predicts
+   anything: `node <root>/scripts/field-study.js --data <bars>.jsonl --symbol MNQ --fields <path>[,<path>] --horizons 1,3,5,15 --by hour,session --out <dir>`
+   measures how the field at bar t lines up with the move after t (never
+   the same bar's), with intervals and the cost line (docs/BACKTESTING.md,
+   "The field-forward study"). It runs freely on Train months only and
+   refuses any other month unless the user gives `--held-out-look "<reason>"`;
+   never pass that flag yourself. A field with no edge after costs is no
+   reason for a rule.
 
 ## Examples
 
