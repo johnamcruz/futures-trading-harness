@@ -284,6 +284,25 @@ pass, and pass and blow rates by the month an attempt starts in. (The
 retired PPO policy's `--bundle` option is gone; a config naming `bundle` is
 refused.)
 
+### No look-ahead
+
+A decision at bar t reads only bars up to t. Every rules series (each name
+and function, and `field()` at any look-back) and every shipped strategy's
+evaluation at t is the same whether or not later bars exist. An entry
+decided at t fills no sooner than bar t+1's open (`fill: next-open`, the
+default); `fill: close` fills at t's own close. The labels' decision inputs
+(the stop's ATR, the candidates, the position) read only what existed by the
+decision time. Their outcomes and counterfactuals may look ahead, because
+they record what came after. In a replay, the harness reads no bar that
+closes after the clock: the runner and `bars_fetch` drop such bars, and every
+harness tool that reads a bars file refuses a file that holds one
+(`skills/replay`). A direct broker read (an agent's `get_bars`, the order
+gate's regime check) gets what the replay server returns, so the server must
+cut at its clock; `scripts/check-broker-mcp.js` checks that. The
+no-look-ahead suite, `tests/e2e/no-look-ahead.test.js` with
+`tests/lib/look-ahead.test.js` and `tests/lib/no-look-ahead-rules.test.js`,
+proves this.
+
 ### Strategy correctness
 
 `tests/lib/parity.test.js` runs the shipped strategies' rules over the original bot's

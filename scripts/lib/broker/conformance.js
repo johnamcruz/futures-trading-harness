@@ -9,15 +9,22 @@
  * static table backtests and training use is a warning (training would not
  * equal live). Never calls an order tool or writes the journal.
  *
- *   checkConformance(mcp, { accountId, symbol }) -> { ok, results: [{ check, ok, problems }] }
+ * The dates it sends (search_trades' startTimestamp) are at the wall clock (`now`), or at the replay
+ * clock when there is one: `replayAt` (the configured replay clock, harness-now.js replayAt), else a
+ * server that reports replay mode (get_server_config.replay) and its replayed serverTime. Against a
+ * replay server (or with a replay clock configured), get_bars must return no bar that closes after that
+ * clock (no look-ahead).
+ *
+ *   checkConformance(mcp, { accountId, symbol, now, replayAt }) -> { ok, results: [{ check, ok, problems }] }
  */
 
 const { TOOLS, validateTools, validateResult } = require('./interface');
 const { tradingDayStart } = require('../trading/clock');
 const { validSpec, specMismatch } = require('../trading/broker-specs');
 const { parseTicker } = require('./translator');
+const { closesAfter } = require('../trading/look-ahead');
 
-async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = new Date() } = {}) {
+async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now: wall = new Date(), replayAt = null } = {}) {
   const results = [];
   const record = (check, problems) => results.push({ check, ok: problems.length === 0, problems });
   const probe = async (check, name, args, { optional = false } = {}) => {
@@ -44,7 +51,8 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = n
   const extra = tools.map(t => t.name).filter(n => !TOOLS[n]);
   if (extra.length) results.push({ check: `extra tools (allowed; agents won't use them): ${extra.join(', ')}`, ok: true, problems: [] });
 
-  await probe('get_server_config', 'get_server_config', {});
+  const config = await probe('get_server_config', 'get_server_config', {});
+  const { now, replay } = clockOf(config, { wall, replayAt, record, results });
   const accounts = await probe('list_accounts', 'list_accounts', { onlyActiveAccounts: false });
   const acct = accountId !== null ? Number(accountId) : (Array.isArray(accounts) && accounts[0] ? Number(accounts[0].id) : null);
   const contracts = await probe(`search_contracts ${symbol}`, 'search_contracts', { searchText: symbol, live: false });
@@ -63,6 +71,11 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = n
     const list = bars && Array.isArray(bars.bars) ? bars.bars : [];
     const ordered = list.every((b, i) => i === 0 || Date.parse(list[i - 1].t) < Date.parse(b.t));
     if (bars) record('get_bars: oldest first', ordered ? [] : ['bars are not oldest first']);
+    // A replay server serves only what had closed by its clock: a later bar is look-ahead.
+    if (bars && replay) {
+      const after = closesAfter(list, now, { stepMs: 60000 });
+      record(`get_bars: no bar closes after the replay clock (${now.toISOString()})`, after.length ? [`${after.length} of ${list.length} bar(s) close after it (the first opened ${after[0].t}): look-ahead`] : []);
+    }
     await probe('get_quote', 'get_quote', { contractId: active.id }, { optional: true });
   }
   if (acct === null) record('an account to read', ['no account: pass --account <id>']);
@@ -83,6 +96,28 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now = n
   }
   await probe('journal_read', 'journal_read', { limit: 1 });
   return { ok: results.every(r => r.ok), results };
+}
+
+/**
+ * The time the check dates its requests at: the configured replay clock, else a replay server's
+ * serverTime (a replay server without a readable one fails), else the wall clock. { now, replay }.
+ */
+function clockOf(config, { wall, replayAt, record, results }) {
+  const serverReplay = Boolean(config && config.replay === true);
+  if (replayAt) {
+    const why = serverReplay ? null : 'the server does not report replay mode (get_server_config.replay), yet a replay clock is set';
+    results.push({ check: `replay clock: every date sent is at the configured replay clock (${replayAt.toISOString()})`, ok: true, problems: why ? [why] : [] });
+    return { now: replayAt, replay: true }; // its bars are judged at the configured clock, whatever the server says
+  }
+  if (!serverReplay) return { now: wall, replay: false };
+  const t = Date.parse(String(config.serverTime || ''));
+  if (!Number.isFinite(t)) {
+    record('replay clock: a replay server reports its replayed serverTime (get_server_config)', [`serverTime ${JSON.stringify(config.serverTime)} is not a time: the dates sent fall back to the wall clock`]);
+    return { now: wall, replay: true };
+  }
+  const at = new Date(t);
+  results.push({ check: `replay clock: every date sent is at the replay server's time (${at.toISOString()})`, ok: true, problems: [] });
+  return { now: at, replay: true };
 }
 
 module.exports = { checkConformance };

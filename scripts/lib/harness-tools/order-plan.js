@@ -45,7 +45,7 @@ const { resolveJournalPath, readJournal, entriesSince } = require('../trading/jo
 const { tradingDayStart } = require('../trading/clock');
 const { FUTURE_TOLERANCE_MIN, sameBar } = require('../trading/signal-state');
 const { harnessHome } = require('../paths');
-const { context, say } = require('./cli');
+const { context, atClock, say } = require('./cli');
 const { whyNot } = require('./compact');
 
 const SIDES = { long: 'long', buy: 'long', short: 'short', sell: 'short' };
@@ -152,7 +152,7 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   const notTraded = rootRefusal(s, root, selected);
   if (notTraded) throw new Error(`${name} ${notTraded}`);
   const now = c.now(); // the harness clock: a replay broker's replayed time, else the wall clock
-  const bars = readBarsArg(file);
+  const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
   const lastBar = checkBars(bars, s.timeframe, now, c.env);
   const results = scan(strategies, bars, { symbol: root, now, selected });
   const inputs = { results, root, want, home: harnessHome(c.env), now, lastBar, specOf: liveSpecs(c.env), selected };

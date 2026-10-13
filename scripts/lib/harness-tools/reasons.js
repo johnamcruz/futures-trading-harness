@@ -11,6 +11,7 @@
  */
 
 const { readBriefing, current } = require('../trading/briefing');
+const { briefingAfterClock } = require('../trading/look-ahead');
 const { familyRoot } = require('../trading/contracts');
 const prop = require('../trading/prop-state');
 const { contractRoot } = require('../trading/journal');
@@ -28,7 +29,8 @@ const MAX_REASONS = 2000;
 /** This cycle's briefing for the root (else, outside a cycle, the current one), or null. */
 function briefingNow(c, root) {
   const b = readBriefing(harnessHome(c.env), root);
-  if (!b) return null;
+  // Never a briefing whose bar closed after a replay clock (no look-ahead).
+  if (!b || briefingAfterClock(b, c.replayAt())) return null;
   const cycleBar = cycleBarOf(c.env, root);
   return (cycleBar ? cycleBar === b.asOf : current(b, c.now())) ? b : null;
 }

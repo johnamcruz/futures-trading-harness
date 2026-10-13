@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { createRunner } = require('./runner');
 const { SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
+const { cutAtClock } = require('./trading/look-ahead');
 const { openAdapter, liveRunBlocked } = require('./broker/adapter');
 const { activeBroker } = require('./broker/config');
 const { dayKey } = require('./autotrader');
@@ -81,7 +82,7 @@ function closedBarsOnly(client, now) {
     ...client,
     closedBars: async (contractId, opts) => {
       const step = (opts.daily ? 1440 : opts.minutes) * 60000;
-      return (await client.closedBars(contractId, opts)).filter(b => Date.parse(b.t) + step <= now().getTime());
+      return cutAtClock(await client.closedBars(contractId, opts), now(), { stepMs: step });
     },
   };
 }

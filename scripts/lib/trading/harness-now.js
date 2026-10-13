@@ -26,6 +26,8 @@
  * resolveClock(env, { broker, testClock })  { replay, refused, at, now() }
  * harnessNow(env, opts)    a Date, or throws ReplayClockError when refused
  * recordNow(env, opts)     the same clock, never throws (bookkeeping, lookups)
+ * replayAt(env, opts)      the replay clock's time (a Date) when one is in force, null live (FTH_REPLAY_NOW
+ *                          unset: no broker config read); throws ReplayClockError when it is refused
  * pinGatewayClock(env, { broker, fromArgv, call })  the gateway's clock (a promise)
  * createGatewayClock(env, opts)  { ready(): Promise<clock>, now() } pinned once
  */
@@ -116,6 +118,14 @@ function harnessNow(env = process.env, opts = {}) {
   return c.now();
 }
 
+function replayAt(env = process.env, opts = {}) {
+  const raw = env.FTH_REPLAY_NOW;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const c = resolveClock(env, opts);
+  if (c.refused) throw new ReplayClockError(c.refused);
+  return c.replay ? new Date(c.at.getTime()) : null;
+}
+
 function recordNow(env = process.env, opts = {}) {
   return resolveClock(env, opts).now();
 }
@@ -157,4 +167,4 @@ function createGatewayClock(env, opts) {
   };
 }
 
-module.exports = { harnessNow, recordNow, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError, SERVER_TIME_TOLERANCE_MS };
+module.exports = { harnessNow, recordNow, replayAt, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError, SERVER_TIME_TOLERANCE_MS };

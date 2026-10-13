@@ -9,6 +9,8 @@
  *   now    () => Date: the harness clock (trading/harness-now.js harnessNow(env)
  *          by default), called where the operation reads the time
  *   root   the plugin root (strategies/, accounts/)
+ *   replayAt  () => Date | null: the replay clock when one is in force (harness-now.js replayAt(env)
+ *          by default; null live): no bar an operation reads may close after it (atClock)
  * It returns what the CLI prints: `text` on stdout, `stderr` (notes such as
  * "recorded for the order gate"), and `code` (the exit code, 0 by default).
  * A failure throws; an OpError also carries the stdout printed before it
@@ -16,7 +18,8 @@
  */
 
 const path = require('path');
-const { harnessNow } = require('../trading/harness-now');
+const { harnessNow, replayAt: replayClockAt } = require('../trading/harness-now');
+const { refuseAfterClock } = require('../trading/look-ahead');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 
@@ -34,8 +37,20 @@ class OpError extends Error {
  * `barsEnv`: the environment the bars tools resolve their directories from (the server's own, before
  * any .env load), so bars_fetch writes where market_snapshot and the rest read; default `env`.
  */
-function context({ env = process.env, barsEnv = env, now, root = ROOT, tool = false } = {}) {
-  return { env, barsEnv, root, tool: tool === true, now: typeof now === 'function' ? now : () => harnessNow(env) };
+function context({ env = process.env, barsEnv = env, now, replayAt, root = ROOT, tool = false } = {}) {
+  return {
+    env, barsEnv, root, tool: tool === true,
+    now: typeof now === 'function' ? now : () => harnessNow(env),
+    replayAt: typeof replayAt === 'function' ? replayAt : () => replayClockAt(env),
+  };
+}
+
+/**
+ * The bars an operation read from `file`, refused when a replay clock is in force and any of them
+ * closes after it (no look-ahead: trading/look-ahead.js); live, the bars unchanged.
+ */
+function atClock(c, bars, file, label = 'the bars file') {
+  return refuseAfterClock(bars, c.replayAt(), { what: `${label} ${file === '-' ? '(stdin)' : file}` });
 }
 
 /** The script's wording or the tool's, for the caller in front of it. */
@@ -98,4 +113,4 @@ async function runCli(tag, fn, { stdout = process.stdout, stderr = process.stder
   }
 }
 
-module.exports = { ROOT, OpError, context, say, ignoredRecord, withText, withTextAsync, options, runCli };
+module.exports = { ROOT, OpError, context, atClock, say, ignoredRecord, withText, withTextAsync, options, runCli };

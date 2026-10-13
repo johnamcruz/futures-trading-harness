@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { normalizeBars } = require('./trading/indicators');
+const { cutAtClock } = require('./trading/look-ahead');
 const { harnessHome } = require('./paths');
 
 const MAX_COUNT = 20000; // the most get_bars returns at once (broker MCP interface)
@@ -110,9 +111,10 @@ function outError(out, outDir, { tool = false } = {}) {
 
 /**
  * { file, contractId, count, first, last, closedAt } after writing the bars.
- * `client`: the broker adapter (activeContract, closedBars).
+ * `client`: the broker adapter (activeContract, closedBars). `cutAt`: a replay clock (a Date), or null
+ * live: under it a bar that closes after it is dropped, never written (trading/look-ahead.js).
  */
-async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, name = null, now = new Date(), env = process.env, outDir = scratchDir(env), tool = false }) {
+async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, name = null, now = new Date(), cutAt = null, env = process.env, outDir = scratchDir(env), tool = false }) {
   // By default as many bars as the runner keeps (the multi-timeframe read's whole window).
   if (count === null) count = daily ? 60 : require('./autotrader').historyBars(timeframe);
   const errors = requestErrors({ symbol, timeframe, daily, count, name });
@@ -123,8 +125,12 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   if (refused) throw new Error(refused);
   const contract = await client.activeContract(symbol);
   const raw = await client.closedBars(contract.id, { minutes: timeframe, limit: count, now, daily });
-  const bars = normalizeBars(raw);
-  if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}; the market may be closed or the contract new`);
+  const step = daily ? 864e5 : timeframe * 60000;
+  // Under a replay clock (cutAt), only the bars closed by it, whatever the server returned (no look-ahead).
+  const all = normalizeBars(raw);
+  const bars = cutAtClock(all, cutAt, { stepMs: step });
+  const dropped = all.length - bars.length;
+  if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}${dropped ? ` (${dropped} the server sent close after the replay clock: dropped)` : ''}; the market may be closed or the contract new`);
   // Checked again after the broker call (seconds), before mkdir can follow a link planted meanwhile,
   // and once more just before the write; the temp file is new, never followed.
   const again = outError(file, outDir, { tool });
@@ -136,7 +142,6 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   fs.writeFileSync(tmp, JSON.stringify({ contractId: contract.id, barSize: daily ? '1 day' : `${timeframe} minute`, count: bars.length, bars }), { flag: 'wx' });
   fs.renameSync(tmp, file);
   const last = bars[bars.length - 1];
-  const step = daily ? 864e5 : timeframe * 60000;
   return { file, contractId: contract.id, tickSize: contract.tickSize, tickValue: contract.tickValue, count: bars.length, first: bars[0].t, last: last.t, closedAt: new Date(Date.parse(last.t) + step).toISOString(), bars };
 }
 

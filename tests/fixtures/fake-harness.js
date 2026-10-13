@@ -43,6 +43,49 @@ async function orders() {
 }
 
 /**
+ * FAKE_HARNESS_LOOKAHEAD=1 (the no-look-ahead suite): what an agent's tools show it in this cycle, at the
+ * replay clock. Calls the real harness tools server from FTH_ROOT with the run's environment: bars_fetch
+ * (a 3-minute file of its own), strategies_scan, market_snapshot and mtf_read on the runner's bars file,
+ * bar_briefing, and the bars tools on a file planted with the bar after the clock. Prints one line,
+ * LOOKAHEAD <json>: the clock, when the runner's and the fetched files' last bars close, and each call's
+ * result (error flag and the start of its text).
+ */
+async function lookAhead() {
+  const root = process.env.FTH_ROOT;
+  const home = process.env.FTH_HOME;
+  const { createMcpClient } = require(path.join(root, 'scripts', 'lib', 'broker', 'mcp-client'));
+  const tools = createMcpClient({ command: process.execPath, args: [path.join(root, 'scripts', 'harness-tools-mcp.js')], env: process.env, timeoutMs: 60000 });
+  const call = async (name, args) => {
+    const r = await tools.request('tools/call', { name, arguments: args });
+    const text = r.content.map(c => c.text).join('\n');
+    return { error: r.isError === true, text: text.slice(0, 400), ...(name === 'market_snapshot' && !r.isError ? { last: (JSON.parse(text).last || {}).t || null } : {}), ...(name === 'bar_briefing' && !r.isError && text.startsWith('{') ? { closedAt: JSON.parse(text).closedAt } : {}) };
+  };
+  const barsOf = file => { const doc = JSON.parse(fs.readFileSync(file, 'utf8')); return Array.isArray(doc) ? doc : doc.bars; };
+  const lastClose = file => new Date(Math.max(...barsOf(file).map(b => Date.parse(b.t))) + 180000).toISOString();
+  const out = { clock: process.env.FTH_REPLAY_NOW };
+  try {
+    const runnerFile = path.join(home, 'bars', 'MNQ-3m.json');
+    out.runnerBarsClose = lastClose(runnerFile);
+    out.fetch = await call('bars_fetch', { symbol: 'MNQ', timeframe: 3, name: 'own' });
+    if (!out.fetch.error) out.fetchedBarsClose = lastClose(path.join(home, 'bars-scratch', 'MNQ-3m-own.json'));
+    out.scan = await call('strategies_scan', { bars: runnerFile, symbol: 'MNQ', detail: true });
+    out.snapshot = await call('market_snapshot', { bars: runnerFile });
+    out.mtf = await call('mtf_read', { bars: runnerFile, json: true });
+    out.briefing = await call('bar_briefing', { symbol: 'MNQ', json: true });
+    // The runner's bars and the bar after them, which closes after the clock.
+    const bars = barsOf(runnerFile);
+    const last = bars[bars.length - 1];
+    const planted = path.join(home, 'bars-scratch', 'MNQ-3m-planted.json');
+    fs.writeFileSync(planted, JSON.stringify({ bars: [...bars, { ...last, t: new Date(Date.parse(last.t) + 180000).toISOString() }] }));
+    out.planted = {};
+    for (const [name, args] of [['strategies_scan', { bars: planted, symbol: 'MNQ', detail: true }], ['strategies_recent', { bars: planted, symbol: 'MNQ' }], ['market_snapshot', { bars: planted }], ['mtf_read', { bars: planted, json: true }], ['order_plan', { bars: planted, symbol: 'MNQ', strategy: 'orb', side: 'long' }]]) out.planted[name] = await call(name, args);
+  } finally {
+    tools.close();
+  }
+  process.stdout.write(`LOOKAHEAD ${JSON.stringify(out)}\n`);
+}
+
+/**
  * The headless check's probe (scripts/lib/headless-check.js): calls the real harness tools server
  * from FTH_ROOT with the run's environment, and prints a transcript in the format the argv asks for
  * (Claude stream-json, Codex --json events, Qwen JSON, opencode JSON events). FAKE_PROBE=no-role skips the delegation.
@@ -97,7 +140,7 @@ if (prompt.includes('FTH-HEADLESS-PROBE')) {
     process.exit(5);
   });
 } else {
-  (process.env.FAKE_HARNESS_ORDERS === '1' ? orders() : Promise.resolve()).then(() => {
+  (process.env.FAKE_HARNESS_ORDERS === '1' ? orders() : Promise.resolve()).then(() => (process.env.FAKE_HARNESS_LOOKAHEAD === '1' ? lookAhead() : null)).then(() => {
     // FAKE_HARNESS_NO_RESULT=<text>: a prompt with that text gets a summary instead of the result line.
     // With FAKE_HARNESS_NO_RESULT_ONCE=<file>, only the first such prompt (the file marks it done).
     let noResult = process.env.FAKE_HARNESS_NO_RESULT && prompt.includes(process.env.FAKE_HARNESS_NO_RESULT);

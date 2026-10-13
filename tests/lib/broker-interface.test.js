@@ -289,3 +289,45 @@ test('the contract translator dates its front-month lookups by the harness clock
   // Not a replay broker: the override is refused for checks; lookups go on, on the wall clock.
   assert.notStrictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: {} }), '2026-03-04');
 });
+
+test('the conformance checker dates its calls at the replay clock: the configured one, else a replay server\'s serverTime; live, the wall clock', async () => {
+  const sent = [];
+  const server = (config, bars = []) => ({
+    listTools: async () => Object.keys(TOOLS).map(name => ({ name, inputSchema: { type: 'object', properties: Object.fromEntries(Object.keys(TOOLS[name].input).map(k => [k, {}])) } })),
+    call: async (name, a) => {
+      if (name === 'get_server_config') return config;
+      if (name === 'search_contracts') return [{ id: 'X', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }];
+      if (name === 'get_bars') return { contractId: 'X', barSize: '1 minute', count: bars.length, bars };
+      if (name === 'search_trades') { sent.push(a.startTimestamp || null); return []; }
+      throw new Error('not probed here');
+    },
+  });
+  const wall = new Date('2026-10-13T14:00:00Z');
+  const run = async (config, opts = {}) => {
+    sent.length = 0;
+    const r = await checkConformance(server(config, opts.bars), { accountId: 7, now: wall, ...opts });
+    return { r, since: sent.find(Boolean) };
+  };
+  const bar = t => ({ t, o: 1, h: 1, l: 1, c: 1, v: 1 });
+  const lookAhead = r => r.results.find(x => /no bar closes after the replay clock/.test(x.check));
+  // Live: the wall clock (a week back from it), and no replay check.
+  const live = await run({ replay: false, serverTime: '2026-03-04T15:00:00Z' }, { bars: [bar('2026-10-13T15:00:00Z')] });
+  assert.match(live.since, /^2026-10-0/);
+  assert.ok(!live.r.results.some(x => /replay clock/.test(x.check)));
+  // A replay server: its serverTime; a bar closing after it fails.
+  const rep = await run({ replay: true, serverTime: '2026-03-04T15:00:00Z' }, { bars: [bar('2026-03-04T14:58:00Z'), bar('2026-03-04T14:59:00Z')] });
+  assert.match(rep.since, /^2026-02-2/);
+  assert.strictEqual(lookAhead(rep.r).ok, true);
+  const leak = await run({ replay: true, serverTime: '2026-03-04T15:00:00Z' }, { bars: [bar('2026-03-04T14:59:00Z'), bar('2026-03-04T15:00:00Z')] });
+  assert.deepStrictEqual(lookAhead(leak.r).problems, ['1 of 2 bar(s) close after it (the first opened 2026-03-04T15:00:00Z): look-ahead']);
+  assert.strictEqual(leak.r.ok, false);
+  // A replay server without a readable serverTime fails.
+  const blind = await run({ replay: true, serverTime: 'soon' });
+  assert.strictEqual(blind.r.ok, false);
+  assert.match(blind.r.results.find(x => /reports its replayed serverTime/.test(x.check) && !x.ok).problems[0], /serverTime "soon" is not a time/);
+  // A configured replay clock wins; a server that doesn't report replay mode is a warning, and its bars are judged at the clock.
+  const conf = await run({ replay: false, serverTime: wall.toISOString() }, { replayAt: new Date('2026-03-04T15:00:00Z'), bars: [bar('2026-10-13T13:59:00Z')] });
+  assert.match(conf.since, /^2026-02-2/);
+  assert.deepStrictEqual(conf.r.results.find(x => /configured replay clock/.test(x.check)).problems, ['the server does not report replay mode (get_server_config.replay), yet a replay clock is set']);
+  assert.deepStrictEqual(lookAhead(conf.r).problems, ['1 of 1 bar(s) close after it (the first opened 2026-10-13T13:59:00Z): look-ahead']);
+});

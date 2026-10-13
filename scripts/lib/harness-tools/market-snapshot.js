@@ -7,11 +7,13 @@
  *                               params: { name: number } overrides of trading/market-snapshot.js PARAMS
  *
  * Output: the snapshot as JSON (compact: on one line, as the harness tool
- * returns it). Use closed bars only, oldest first.
+ * returns it). Use closed bars only, oldest first. Under a replay clock, bars
+ * that close after it are refused (cli.js atClock).
  */
 
 const { readBarsArg } = require('../backtest/data');
 const { PARAMS, snapshot: buildSnapshot } = require('../trading/market-snapshot');
+const { context, atClock } = require('./cli');
 
 const USAGE = 'usage: market-snapshot.js <bars.json | -> [--param=value ...]';
 
@@ -23,11 +25,12 @@ function paramValue(name, raw) {
   return n;
 }
 
-function snapshot({ file, params = {}, compact = false } = {}) {
+function snapshot({ file, params = {}, compact = false } = {}, ctx) {
+  const c = context(ctx);
   if (file === undefined || file === null) throw new Error(USAGE);
   const overrides = {};
   for (const [name, raw] of Object.entries(params || {})) overrides[name] = paramValue(name, raw);
-  const snap = buildSnapshot(readBarsArg(file), overrides);
+  const snap = buildSnapshot(atClock(c, readBarsArg(file), file), overrides); // no bar after a replay clock (no look-ahead)
   return { text: compact ? `${JSON.stringify(snap)}\n` : `${JSON.stringify(snap, null, 2)}\n` };
 }
 
