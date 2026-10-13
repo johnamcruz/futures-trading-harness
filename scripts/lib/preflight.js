@@ -14,7 +14,9 @@
  *   conformanceChecks(mcp, opts)              the broker MCP interface, through the translator (conformance.js)
  *   serverChecks({ cfg, broker, config, env, now })   the server trades the account; its clock agrees
  *   accountChecks({ cfg, accounts, profiles, home })  the account exists, can trade, balance read, profile size
- *   propProfiles(strategies, accounts, cfg)  the prop profiles this run trades (active policy strategies, its timeframe and symbols)
+ *   laneChecks(cfg, strategies, home)        each lane: bar, trigger, strategies, policies; listed names on their lane's timeframe
+ *   agentChecks(cfg, agents)                 each agent role's effective timeframe; one off the lane's fails (until per-agent timeframes)
+ *   propProfiles(strategies, accounts, cfg)  the prop profiles this run trades (active policy strategies, its lanes and symbols)
  *   propChecks({ profiles, home })            every prop account a policy strategy trades has its attempt started
  *   barFieldChecks({ strategies, cfg, barsBySymbol })   bars carry the field("...") paths active strategies read
  *   localChecks({ now, killSwitchFile, exists })        market hours, kill switch
@@ -32,6 +34,8 @@ const { liveRunBlocked, createAdapter } = require('./broker/adapter');
 const { createMcpClient } = require('./broker/mcp-client');
 const { checkConformance } = require('./broker/conformance');
 const { loadStrategies } = require('./trading/strategies');
+const { lanesOf, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane, agentTimeframes, agentErrors, omittedPolicyErrors } = require('./lanes');
+const { loadAgents } = require('./harness-sync');
 const { loadAccounts } = require('./trading/accounts');
 const { readAttempt } = require('./trading/prop-state');
 const { familyRoot } = require('./trading/contracts');
@@ -140,14 +144,31 @@ function accountChecks({ cfg, accounts, profiles }) {
 }
 
 /**
- * The prop account profiles this run trades: those of the policy strategies that aren't disabled, run on its
- * timeframe, and trade one of its symbols (by index family: MNQ and NQ are one).
+ * The prop account profiles this run trades: those of the policy strategies that aren't disabled, are in one of
+ * its lanes (lanes.js: on the lane's timeframe, and listed when the lane lists policies), and trade one of its symbols (by index family: MNQ and NQ are one).
  */
 function propProfiles(strategies, accounts, cfg) {
   const fams = new Set(cfg.symbols.map(familyRoot));
-  const names = new Set(strategies.filter(s => s.valid && s.signal === 'policy' && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`
+  const policies = lanesOf(cfg).flatMap(l => lanePolicies(strategies, l));
+  const names = new Set(policies.filter(s => s.valid && s.status !== 'disabled'
     && (s.instruments || []).some(x => fams.has(familyRoot(x)))).map(s => s.account));
   return accounts.filter(a => a.valid && names.has(a.name));
+}
+
+/** Each lane of the runner (lanes.js): its bar, trigger, strategies and policies; a listed name off its lane fails. */
+function laneChecks(cfg, strategies, home = null) {
+  const lanes = lanesOf(cfg);
+  const out = lanes.map((l, i) => r(`lane ${l.timeframe}m`, 'ok', `${describeLane(l, strategies)}${i === 0 && !cfg.lanes ? ' (from timeframe and trigger)' : ''}`));
+  const running = a => Boolean(home && readAttempt(home, a));
+  const why = [...laneStrategyErrors(lanes, strategies), ...signalLaneErrors(lanes, strategies), ...omittedPolicyErrors(cfg, strategies, running)];
+  return why.length ? [...out, r('lane strategies', 'fail', why.join('; '))] : out;
+}
+
+/** Each agent role's effective timeframe (its config override, its agent file's, else the lane's); a role off the lane fails. */
+function agentChecks(cfg, agents) {
+  const list = agentTimeframes(cfg, agents).map(t => `${t.role} ${t.timeframe}${t.from === 'lane' ? '' : ` (${t.from})`}`);
+  const why = agentErrors(cfg, agents);
+  return [r('agent timeframes', why.length ? 'fail' : 'ok', why.length ? why.join('; ') : list.join(', '))];
 }
 
 function propChecks({ profiles, home }) {
@@ -215,6 +236,8 @@ async function runPreflight({ raw, root, env = process.env, home = loadConfig(en
   const now = (deps.now || (() => resolveClock(env, { testClock: false }).now()))();
   results.push(...localChecks({ now, killSwitchFile: loadConfig(env).killSwitchFile }));
   const all = loadStrategies(root, env).strategies;
+  results.push(...laneChecks(cfg, all, home));
+  results.push(...agentChecks(cfg, (deps.agents || loadAgents)(root)));
   const profiles = propProfiles(all, loadAccounts(root, env).accounts, cfg);
   results.push(...propChecks({ profiles, home }));
   let opened;
@@ -257,4 +280,4 @@ function formatReport({ ok, results }) {
   return `${lines.join('\n')}\n`;
 }
 
-module.exports = { propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountChecks, propChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };
+module.exports = { laneChecks, agentChecks, propProfiles, configChecks, allowListChecks, resolveCommand, harnessChecks, conformanceChecks, serverChecks, accountChecks, propChecks, fieldPaths, barFieldChecks, localChecks, openReadOnly, runPreflight, formatReport };

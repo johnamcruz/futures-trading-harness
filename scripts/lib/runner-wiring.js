@@ -28,7 +28,8 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./trading/
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan, onTimeframe } = require('./trading/strategies');
+const { loadStrategies, scan } = require('./trading/strategies');
+const { lanesOf, laneStrategies } = require('./lanes');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
@@ -83,13 +84,13 @@ function closedBarsOnly(client, now) {
 }
 
 /**
- * The runner's scan of one symbol's closed bar: the strategies on its timeframe (only they can be
- * judged from these bars), with the runner's symbols as the selected contracts (a rules strategy
- * trades the selected leg of its family; strategies.js rootRefusal).
+ * The runner's scan of one symbol's closed bar: the strategies of its lane (lanes.js; those on its
+ * timeframe, the only ones that can be judged from these bars), with the runner's symbols as the
+ * selected contracts (a rules strategy trades the selected leg of its family; strategies.js rootRefusal).
+ * The runner cycles on its first lane (a config with more is refused until multi-lane cycling).
  */
 function runnerScan(strategies, cfg, symbol, bars, now) {
-  const sameTf = onTimeframe(strategies, `${cfg.timeframe}m`);
-  return scan(sameTf, { bars }, { symbol, now, selected: cfg.symbols });
+  return scan(laneStrategies(strategies, lanesOf(cfg)[0]), { bars }, { symbol, now, selected: cfg.symbols });
 }
 
 /**

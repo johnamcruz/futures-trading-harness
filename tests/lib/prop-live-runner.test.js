@@ -22,7 +22,7 @@ function bars(n = 200) {
   });
 }
 
-function setup({ start = true, contracts = 'micro', specs = true, paper = false } = {}) {
+function setup({ start = true, contracts = 'micro', specs = true, paper = false, lane = null } = {}) {
   const home = tmpDir();
   if (specs) recordBrokerSpecs(home); // the broker's tick specs, as the translator records them
   const env = {};
@@ -44,7 +44,7 @@ function setup({ start = true, contracts = 'micro', specs = true, paper = false 
     journal: [],
     async fillsSince(id, start) { client.fillsFrom = start.toISOString(); return client.fills.filter(f => Date.parse(f.creationTimestamp) >= start.getTime()); },
   };
-  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy, ...components], paper, log: m => logs.push(m), journal: () => client.journal });
+  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy, ...components], paper, log: m => logs.push(m), journal: () => client.journal, lane });
   return { hooks, home, account, strategy, components, logs, balances, client };
 }
 
@@ -275,6 +275,28 @@ test('owners: the strategies an active policy with a running attempt owns on the
   assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'GC' }).size, 0, 'another instrument');
   const off = setup({ start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
+});
+
+test('the runner\'s lane: only its policies screen; a policy outside it still owns its strategies\' setups (never plain setups)', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const scan = [{ name: 'trendy', status: 'active', candidate: true, direction: 'long', stopDistance: 10 }];
+  const lane = more => ({ timeframe: 3, trigger: 'bar', strategies: null, policies: null, ...more });
+  const same = setup({ lane: lane() });
+  assert.ok(same.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size > 0, 'its own lane');
+  assert.deepStrictEqual(same.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }).map(r => r.name), ['trendy', 'prop_x']);
+  for (const [why, l] of [['another timeframe', lane({ timeframe: 1 })], ['not listed', lane({ policies: ['prop_y'] })]]) {
+    const other = setup({ lane: l });
+    // Ownership is the policy's, whatever the lane: the owned setup is not a candidate, and no verdict is made for it.
+    assert.deepStrictEqual([...other.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT })], [['trendy', 'prop_x'], ['other', 'prop_x']], why);
+    const out = other.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+    assert.deepStrictEqual(out, [{ ...scan[0], candidate: false, note: 'not traded: prop_x owns it and is not in this runner\'s lane' }], why);
+    assert.strictEqual(prop.latestVerdict(other.home, 'prop_x', 'MNQ'), null, why);
+    // Account duties stay per account, whatever the lane: the snapshot and the attempt summary.
+    assert.deepStrictEqual(other.hooks.accounts().map(a => a.name), [other.account.name], why);
+  }
+  // No attempt running: nothing owns the setup, in any lane.
+  const idle = setup({ start: false, lane: lane({ policies: ['prop_y'] }) });
+  assert.deepStrictEqual(idle.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }), scan);
 });
 
 test('each bar the snapshot checks the broker\'s balance against its fills since the day\'s anchor; a broker that can\'t list them refuses entries', async () => {

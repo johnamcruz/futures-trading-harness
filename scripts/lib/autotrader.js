@@ -23,6 +23,7 @@ const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, s
 const { et: etTime, etStamp } = require('./trading/session-context');
 const { documents, isOpencodeEvent } = require('./transcript');
 const opencode = require('./opencode');
+const { parseLanes, agentOverrideErrors } = require('./lanes');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -215,6 +216,13 @@ function validateConfig(raw) {
   }
   if (parseWindows((cfg.sessions || []).join(',')).errors.length || !Array.isArray(cfg.sessions)) errors.push('sessions: ["HH:MM-HH:MM@Zone", ...]');
   for (const k of ['premarketAt', 'eodAt']) if (cfg[k] && !parseAt(cfg[k])) errors.push(`${k}: "HH:MM@Zone" or empty`);
+  // Timeframe lanes (lanes.js): with `lanes`, the first lane's timeframe and trigger are the runner's.
+  const laneSpec = parseLanes(cfg, raw);
+  errors.push(...laneSpec.errors);
+  if (raw && raw.lanes !== undefined && laneSpec.lanes.length) Object.assign(cfg, { lanes: laneSpec.lanes, timeframe: laneSpec.lanes[0].timeframe, trigger: laneSpec.lanes[0].trigger });
+  // Per-role timeframes (lanes.js): checked, and refused off the lane's until a later step reads them.
+  errors.push(...agentOverrideErrors(cfg.agents, laneSpec.lanes[0]));
+  if (laneSpec.lanes.slice(1).some(l => l.trigger === 'signal') && !cfg.account) errors.push('account: required with a lane on trigger "signal" (to see open positions)');
   if (cfg.cycleTimeoutMinutes === null && Number.isInteger(cfg.timeframe)) cfg.cycleTimeoutMinutes = Math.max(3, 2 * cfg.timeframe);
   if (!['full', 'lean'].includes(cfg.cycle)) errors.push('cycle: "full" or "lean"');
   for (const k of ['earlyCloseDates', 'closedDates']) {

@@ -42,6 +42,8 @@ test('agents declare name, description, tools, model; only the executor can writ
     const data = fm(file);
     assert.strictEqual(data.name, name, `${file}: name must match file`);
     for (const k of ['description', 'tools', 'model']) assert.ok(data[k], `${file}: missing ${k}`);
+    // Optional `timeframe` (the bars the role reads; none: the lane's): a timeframe such as 3m, 15m, 1h (lanes.js).
+    if (data.timeframe !== undefined) assert.notStrictEqual(require('../../scripts/lib/lanes').tfMinutes(data.timeframe), null, `${file}: timeframe ${data.timeframe}`);
     const tools = String(data.tools).split(',').map(t => t.trim());
     const { BY_NAME: HARNESS_TOOLS } = require('../../scripts/lib/harness-tools/registry');
     for (const t of tools.filter(x => x.startsWith('mcp__'))) {

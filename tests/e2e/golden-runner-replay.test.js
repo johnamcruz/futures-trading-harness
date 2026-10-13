@@ -29,7 +29,7 @@ const ANALYSTS = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-
 // opencode's task events, as a cycle's output carries them (report-cache.test.js).
 const task = (role, report, [s, e]) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: `<task id="s" state="completed">\n<task_result>\n${report}\n</task_result>\n</task>`, time: { start: s, end: e } } } });
 
-async function replay(bars, { end = END, state = null } = {}) {
+async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3 } = {}) {
   const home = tmpDir();
   // The prompt names the harness home from the process's environment (autotrader.js prompts): this run's home.
   const savedHome = process.env.FTH_HOME;
@@ -42,7 +42,9 @@ async function replay(bars, { end = END, state = null } = {}) {
     HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl'),
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ACCOUNTS_DIRS: path.join(home, 'no-accounts'),
   };
-  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 700 });
+  // `lanes`: the same runner configured as one lane instead of the legacy timeframe (lanes.js).
+  const { timeframe: _tf, ...noTimeframe } = { harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 700 };
+  const cfg = validateConfig(lanes ? { ...noTimeframe, lanes } : { ...noTimeframe, timeframe });
   const broker = {
     async activeContract(symbol) { return { id: symbol, name: `${symbol}M6`, tickSize: 0.25, tickValue: 0.5 }; },
     // The replay server's bars up to its clock (the pass drops any that close later: closedBarsOnly).
@@ -83,7 +85,7 @@ async function replay(bars, { end = END, state = null } = {}) {
       if (cycles.length > before) {
         const c = RC.readCache(home);
         keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.versions])), phase1: c.phase1 && { account: c.phase1.account, day: c.phase1.day }, symbols: c.symbols } : null);
-        written.push(JSON.parse(fs.readFileSync(path.join(cfg.dataDir, 'MNQ-3m.json'), 'utf8')).bars);
+        written.push(JSON.parse(fs.readFileSync(path.join(cfg.dataDir, `MNQ-${cfg.timeframe}m.json`), 'utf8')).bars);
       }
       if ((guard += 1) > 10000) throw new Error('runaway loop');
     }
@@ -124,6 +126,29 @@ test('the runner\'s scripted replay: the report cache\'s hits, misses and keys p
   assert.ok(plain.written.every(f => f.every(b => !('ext' in b))));
   assertGolden('runner-replay-cache.txt', sequenceText(plain));
   assertGolden('runner-replay-prompts.txt', plain.cycles.map(c => `=== ${c.at} ${c.action} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+});
+
+test('one lane is the legacy timeframe: the same scripted replay gives the same cycles, cache keys and prompts, against the same goldens', async () => {
+  const legacy = await replay(MNQ);
+  const laned = await replay(MNQ, { lanes: [{ timeframe: 3, trigger: 'bar' }] });
+  assert.ok(laned.cycles.length >= 10);
+  assert.strictEqual(sequenceText(laned), sequenceText(legacy));
+  assert.deepStrictEqual(laned.cycles.map(c => c.prompt), legacy.cycles.map(c => c.prompt));
+  assert.deepStrictEqual(laned.written, legacy.written);
+  assertGolden('runner-replay-cache.txt', sequenceText(laned));
+  assertGolden('runner-replay-prompts.txt', laned.cycles.map(c => `=== ${c.at} ${c.action} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+});
+
+test('one lane on 1-minute bars is the legacy 1-minute timeframe (not the default 3): the same cycles, cache keys, prompts and bars files', async () => {
+  const m1 = G.served(G.load(G.SERIES[2]));
+  const end = START + 8 * 60000;
+  const legacy = await replay(m1, { end, timeframe: 1 });
+  const laned = await replay(m1, { end, lanes: [{ timeframe: 1, trigger: 'bar' }] });
+  assert.ok(legacy.cycles.length >= 5, `cycles: ${legacy.cycles.length}`);
+  assert.match(legacy.cycles[0].prompt, /a 1-minute bar just closed/);
+  assert.strictEqual(sequenceText(laned), sequenceText(legacy));
+  assert.deepStrictEqual(laned.cycles.map(c => c.prompt), legacy.cycles.map(c => c.prompt));
+  assert.deepStrictEqual(laned.written, legacy.written);
 });
 
 test('the runner\'s prompt after a failed premarket says the plan is unavailable (pinned)', async () => {
