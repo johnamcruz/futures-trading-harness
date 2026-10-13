@@ -12,7 +12,8 @@
  * The dates it sends (search_trades' startTimestamp) are at the wall clock (`now`), or at the replay
  * clock when there is one: `replayAt` (the configured replay clock, harness-now.js replayAt), else a
  * server that reports replay mode (get_server_config.replay) and its replayed serverTime. Against a
- * replay server, get_bars must return no bar that closes after that clock (no look-ahead).
+ * replay server (or with a replay clock configured), get_bars must return no bar that closes after that
+ * clock (no look-ahead).
  *
  *   checkConformance(mcp, { accountId, symbol, now, replayAt }) -> { ok, results: [{ check, ok, problems }] }
  */
@@ -106,7 +107,7 @@ function clockOf(config, { wall, replayAt, record, results }) {
   if (replayAt) {
     const why = serverReplay ? null : 'the server does not report replay mode (get_server_config.replay), yet a replay clock is set';
     results.push({ check: `replay clock: every date sent is at the configured replay clock (${replayAt.toISOString()})`, ok: true, problems: why ? [why] : [] });
-    return { now: replayAt, replay: serverReplay };
+    return { now: replayAt, replay: true }; // its bars are judged at the configured clock, whatever the server says
   }
   if (!serverReplay) return { now: wall, replay: false };
   const t = Date.parse(String(config.serverTime || ''));

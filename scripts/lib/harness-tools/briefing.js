@@ -6,7 +6,7 @@
  * part with its version and how long it holds.
  *
  *   bar_briefing { symbol, json }   symbol: a contract root (MNQ and NQ share one)
- *   briefedThisCycle(env, symbol)   in an autonomous cycle, this bar's briefing for the symbol (null outside one, or
+ *   briefedThisCycle(env, symbol, clockAt)   (clockAt: the replay clock, default replayAt(env)) in an autonomous cycle, this bar's briefing for the symbol (null outside one, or
  *                                   when it isn't this bar's): the tools that recompute what it holds point to it
  */
 
@@ -70,7 +70,7 @@ function parseArgv(argv) {
 const OPS = { bar_briefing: barBriefing };
 
 /** This cycle's briefing for the symbol (its family), or null: no cycle bar, no briefing, or another bar's. */
-function briefedThisCycle(env, symbol) {
+function briefedThisCycle(env, symbol, clockAt = () => replayAt(env)) {
   let sym = symbol;
   if (!sym) {
     // Without a symbol: the cycle's only one, if it has one.
@@ -80,13 +80,13 @@ function briefedThisCycle(env, symbol) {
   if (!root) return null;
   const bar = cycleBarOf(env, root[1]);
   const b = bar ? readBriefing(harnessHome(env), root[1]) : null;
-  return b && b.asOf === bar && !afterReplayClock(env, b) ? b : null;
+  return b && b.asOf === bar && !afterReplayClock(clockAt, b) ? b : null;
 }
 
 /** A briefing whose bar closed after the replay clock (or a refused clock: then the caller reads the bars, and is refused there). */
-function afterReplayClock(env, b) {
+function afterReplayClock(clockAt, b) {
   try {
-    return Boolean(briefingAfterClock(b, replayAt(env)));
+    return Boolean(briefingAfterClock(b, clockAt()));
   } catch (_err) {
     return true;
   }

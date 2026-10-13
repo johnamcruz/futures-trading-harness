@@ -68,6 +68,10 @@ function cutAtClock(bars, at, { stepMs = undefined } = {}) {
  * names the bars in the message (a file, 'the daily bars').
  */
 function refuseAfterClock(bars, at, { what = 'the bars', stepMs = undefined } = {}) {
+  // Under a clock, bars whose length can't be told (one time only: a lone bar, or duplicates) can't be shown closed.
+  if (msOf(at) !== null && stepMs === undefined && stepOf(bars) === null && listOf(bars).some(b => Number.isFinite(openMs(b)))) {
+    throw new LookAheadError(`${what}: the bars are all at one time, so when they close can't be told against the replay clock (${new Date(msOf(at)).toISOString()}) (no look-ahead): use the runner's bars file or bars_fetch; not read`);
+  }
   const after = closesAfter(bars, at, { stepMs });
   if (!after.length) return bars;
   const step = stepMs === undefined ? stepOf(bars) || 0 : stepMs;

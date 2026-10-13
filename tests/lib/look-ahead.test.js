@@ -59,6 +59,15 @@ test('refuseAfterClock: the bars when none is after the clock; else a refusal na
     && /^the bars file \/x\/MNQ-3m\.json: 2 bar\(s\) close after the replay clock \(2026-10-07T14:06:02\.000Z\), the first at 2026-10-07T14:09:00\.000Z and the last at 2026-10-07T14:12:00\.000Z\. A replayed decision sees only bars closed by the clock \(no look-ahead\): use the runner's bars file or bars_fetch, which cut at the clock; not read$/.test(err.message));
 });
 
+test('refuseAfterClock: bars all at one time (no step to tell their close) are refused under a clock, read live', () => {
+  const lone = [bar('2026-10-07T13:35:00Z')];
+  const at = new Date('2026-10-07T13:36:02Z');
+  assert.throws(() => refuseAfterClock(lone, at, { what: 'f' }), /^Error: f: the bars are all at one time, so when they close can't be told against the replay clock/);
+  assert.throws(() => refuseAfterClock([...lone, bar('2026-10-07T13:35:00Z')], at), LookAheadError, 'duplicates too');
+  assert.strictEqual(refuseAfterClock(lone, null), lone);
+  assert.strictEqual(refuseAfterClock(lone, at, { stepMs: 60000 }), lone, 'a known step: judged by it');
+});
+
 test('briefingAfterClock: a briefing whose bar closed after the clock is never served under it', () => {
   const b = { closedAt: '2026-10-07T14:09:00.000Z' };
   assert.strictEqual(briefingAfterClock(b, null), null, 'live');

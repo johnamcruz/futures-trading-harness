@@ -293,9 +293,12 @@ decided at t fills no sooner than bar t+1's open (`fill: next-open`, the
 default); `fill: close` fills at t's own close. The labels' decision inputs
 (the stop's ATR, the candidates, the position) read only what existed by the
 decision time. Their outcomes and counterfactuals may look ahead, because
-they record what came after. A replay sees no bar that closes after its
-clock: the runner and `bars_fetch` drop such bars, and every harness tool that
-reads a bars file refuses a file that holds one (`skills/replay`). The
+they record what came after. In a replay, the harness reads no bar that
+closes after the clock: the runner and `bars_fetch` drop such bars, and every
+harness tool that reads a bars file refuses a file that holds one
+(`skills/replay`). A direct broker read (an agent's `get_bars`, the order
+gate's regime check) gets what the replay server returns, so the server must
+cut at its clock; `scripts/check-broker-mcp.js` checks that. The
 no-look-ahead suite, `tests/e2e/no-look-ahead.test.js` with
 `tests/lib/look-ahead.test.js` and `tests/lib/no-look-ahead-rules.test.js`,
 proves this.

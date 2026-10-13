@@ -28,7 +28,7 @@ function mtf({ file = null, tf = [15, 60, 240], daily = null, json = false, reco
   if (!file) throw new Error(USAGE);
   // Read once: in a cycle whose bar briefing is current, the default intraday read is the briefing's (m15, h1).
   const defaultTf = Array.isArray(tf) && tf.join(',') === '15,60,240';
-  if (!daily && !record && !json && defaultTf && require('./briefing').briefedThisCycle(c.env, symbol)) {
+  if (!daily && !record && !json && defaultTf && require('./briefing').briefedThisCycle(c.env, symbol, c.replayAt)) {
     return { text: 'This bar\'s briefing is current (bar_briefing): its m15 alignment and frame, its h1 frames and its trend rule are this read. Read it there, once per role (trade-session: read once); mtf_read runs with a daily file, other timeframes, or without a current briefing.\n' };
   }
   const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)

@@ -325,9 +325,9 @@ test('the conformance checker dates its calls at the replay clock: the configure
   const blind = await run({ replay: true, serverTime: 'soon' });
   assert.strictEqual(blind.r.ok, false);
   assert.match(blind.r.results.find(x => /reports its replayed serverTime/.test(x.check) && !x.ok).problems[0], /serverTime "soon" is not a time/);
-  // A configured replay clock wins; a server that doesn't report replay mode is a warning (and its bars aren't judged).
+  // A configured replay clock wins; a server that doesn't report replay mode is a warning, and its bars are judged at the clock.
   const conf = await run({ replay: false, serverTime: wall.toISOString() }, { replayAt: new Date('2026-03-04T15:00:00Z'), bars: [bar('2026-10-13T13:59:00Z')] });
   assert.match(conf.since, /^2026-02-2/);
   assert.deepStrictEqual(conf.r.results.find(x => /configured replay clock/.test(x.check)).problems, ['the server does not report replay mode (get_server_config.replay), yet a replay clock is set']);
-  assert.strictEqual(lookAhead(conf.r), undefined);
+  assert.deepStrictEqual(lookAhead(conf.r).problems, ['1 of 1 bar(s) close after it (the first opened 2026-10-13T13:59:00Z): look-ahead']);
 });

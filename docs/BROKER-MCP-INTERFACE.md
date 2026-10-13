@@ -401,8 +401,8 @@ Lists the tools and makes read-only calls, checking each result against the
 interface. It never places, changes, or cancels an order, or writes the journal.
 Against a replay server (`get_server_config` reports `replay: true`), or with
 a replay clock set (`FTH_REPLAY_NOW` with a replay broker), every date it sends
-is at the replay clock rather than the wall clock. A replay server whose
-`get_bars` returns a bar that closes after its clock fails the check (look-ahead).
+is at the replay clock rather than the wall clock, and a `get_bars` reply with
+a bar that closes after that clock fails the check (look-ahead).
 
 ## Not in the interface
 

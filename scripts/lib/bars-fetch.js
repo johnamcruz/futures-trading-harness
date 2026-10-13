@@ -127,8 +127,10 @@ async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, c
   const raw = await client.closedBars(contract.id, { minutes: timeframe, limit: count, now, daily });
   const step = daily ? 864e5 : timeframe * 60000;
   // Under a replay clock (cutAt), only the bars closed by it, whatever the server returned (no look-ahead).
-  const bars = cutAtClock(normalizeBars(raw), cutAt, { stepMs: step });
-  if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}; the market may be closed or the contract new`);
+  const all = normalizeBars(raw);
+  const bars = cutAtClock(all, cutAt, { stepMs: step });
+  const dropped = all.length - bars.length;
+  if (bars.length < 3) throw new Error(`only ${bars.length} closed bars for ${contract.id}${dropped ? ` (${dropped} the server sent close after the replay clock: dropped)` : ''}; the market may be closed or the contract new`);
   // Checked again after the broker call (seconds), before mkdir can follow a link planted meanwhile,
   // and once more just before the write; the temp file is new, never followed.
   const again = outError(file, outDir, { tool });
