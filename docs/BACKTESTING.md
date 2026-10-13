@@ -214,7 +214,14 @@ node scripts/backtest.js --data data/MNQ-3m.parquet --symbol MNQ --strategy orb,
 With `--prop <policy strategy>` (config `prop`), the run is a set of
 prop-challenge attempts of that policy strategy instead of one long backtest:
 its strategies' setups, on its account, sized by its `sizing` in micros or
-minis (`contracts`). An attempt starts every `--every N` trading days (config
+minis (`contracts`). As live, an active policy takes setups only from its
+`active` strategies: a `paper` one stays paper inside it and is left out
+(logged, and listed in `combine.json`'s `leftOut`). A left-out strategy still
+fires in the scan, as live, so it still counts as agreement or disagreement:
+its signal against a traded setup voids that setup under `conflict`, and one
+with it adds to the setup's confluence; it is only never the setup taken. A
+policy that isn't active trades only in a paper run, so its run takes setups
+from every non-disabled strategy. An attempt starts every `--every N` trading days (config
 `every`, default 1), runs for the account's `sessions`, and ends on pass,
 blow, or timeout. A stop that would reach the floor or the daily limit is
 sized down, each contract's risk counting the stop's expected slippage

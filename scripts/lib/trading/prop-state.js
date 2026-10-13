@@ -19,6 +19,7 @@ const { specFor, familyOf, selectedLeg } = require('./contracts');
 const { whyNoSpec } = require('./broker-specs');
 const { tradingDayKey, tradingDayStart } = require('./clock');
 const { sameBar, barMs, lastRecordedBar } = require('./signal-state');
+const { componentRefusal } = require('./strategies');
 
 const SNAPSHOT_MAX_AGE_MS = 10 * 60000; // the gate refuses entries on an older snapshot
 const BALANCE_TOLERANCE = 0.01; // dollars: the broker's balance against the anchor plus the fills' net
@@ -412,9 +413,13 @@ function verdictBarProblem(home, strategy, root, v) {
  *   policy:  a fresh verdict for this policy strategy, contract and side,
  *            recorded on the bar the setup is on now (the last bar of the
  *            signal record), whose action allows an entry (ENTRY_FRACTIONS:
- *            full, or half; anything else refuses), and the size is within it.
+ *            full, or half; anything else refuses), and the size is within it;
+ *            the setup it traded is from one of the policy's active strategies
+ *            (strategies.js componentRefusal against `strategies`, the
+ *            registry: none refuses). `paper` (order_plan in a paper run
+ *            only; the gate never sets it) also takes a paper one.
  */
-function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor, selected = null }) {
+function propViolations(home, { strategy, account, input = {}, now = new Date(), entries = [], journal = entries, specOf = specFor, selected = null, strategies = null, paper = false }) {
   const out = [];
   const root = contractRoot(input.contractId);
   const size = Number(input.size);
@@ -446,7 +451,9 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     const dir = side === 'buy' ? 'long' : side === 'sell' ? 'short' : null;
     let why = null;
     let barWhy; // the verdict must be for the bar the setup is on now
+    let compWhy; // a paper strategy stays paper inside a policy: the setup is from an active one
     if (!v) why = `no verdict for ${root} (the runner records one at each setup of ${(strategy.strategies || []).join(', ')})`;
+    else if ((compWhy = componentRefusal(strategy, strategies, v.component, { paper }))) why = `the latest verdict's setup is from ${v.component || 'no named strategy'}: ${compWhy}; no live entry from it`;
     else if (!(Date.parse(v.expiresAt) > now.getTime())) why = `the latest verdict (${v.bar}) expired at ${v.expiresAt}`;
     else if ((barWhy = verdictBarProblem(home, strategy, root, v))) why = barWhy;
     else if (v.action === 'skip' || !(v.maxSize >= 1)) why = `the setup was skipped${v.reason ? ` (${v.reason})` : ''}`;

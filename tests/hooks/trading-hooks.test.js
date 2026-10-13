@@ -41,7 +41,7 @@ const ROOT = (() => {
   fs.mkdirSync(prop, { recursive: true });
   fs.writeFileSync(path.join(prop, 'STRATEGY.md'), [
     '---', 'name: propped', 'description: Test policy strategy that trades the topstep_50k combine in MNQ micros, any time.',
-    'status: active', 'instruments: [MNQ, NQ]', 'timeframe: 3m', 'signal: policy', 'strategies: [crossing]', 'account: topstep_50k', 'contracts: micro',
+    'status: active', 'instruments: [MNQ, NQ]', 'timeframe: 3m', 'signal: policy', 'strategies: [crossing, drifting]', 'account: topstep_50k', 'contracts: micro',
     'exit:', '  trail_activate_r: 2', '  trail_giveback_r: 0.5', 'risk:', '  stop: strategy', '  min_rr: 2', '---',
     '## When to Use', '## How It Works', '## Examples', '',
   ].join('\n'));
@@ -50,6 +50,14 @@ const ROOT = (() => {
   fs.writeFileSync(path.join(rules, 'STRATEGY.md'), [
     '---', 'name: crossing', 'description: Test rules strategy, an EMA cross on MNQ, traded only through the propped policy strategy.',
     'status: active', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - ema(9) crosses_above ema(20)',
+    'risk:', '  stop: atr:0.5', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+  ].join('\n'));
+  // A paper component of the propped policy: it stays paper inside the policy (the gate refuses its verdict's entry).
+  const paperRules = path.join(root, 'strategies', 'drifting');
+  fs.mkdirSync(paperRules, { recursive: true });
+  fs.writeFileSync(path.join(paperRules, 'STRATEGY.md'), [
+    '---', 'name: drifting', 'description: Test paper rules strategy, an EMA cross on MNQ, listed by the propped policy strategy.',
+    'status: paper', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - ema(9) crosses_above ema(20)',
     'risk:', '  stop: atr:0.5', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
   ].join('\n'));
   return root;
@@ -984,6 +992,37 @@ test('order gate: a strategy that trades an account is gated on the attempt and 
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /19 MNQ is not within the account's size budget for a 40-tick stop \(18 MNQ at \$21\.24/);
   assert.ok(fs.existsSync(dir));
+});
+
+test('order gate wiring: a policy entry whose verdict names a paper component is refused, even with the checks skipped; exits still go', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const order = entryOrder({ rationale: 'setup:propped long, stop 21480, target 21540', size: 2 });
+  const account = accountNamed(REPO, 'topstep_50k', {});
+  const run = (component, input = order) => {
+    const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: order.contractId, text: 'plan' }], {
+      FTH_HOME: tmpDir(), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_ORDER_GATE_SKIP: 'combine,policy,strategy',
+    });
+    prop.startAttempt(env.FTH_HOME, account);
+    prop.snapshot(env.FTH_HOME, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
+    prop.appendVerdict(env.FTH_HOME, {
+      strategy: 'propped', component, contractId: order.contractId, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 18,
+      bar: HOOK_BAR, at: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), expiresAt: new Date(Date.parse(TEST_NOW) + 120000).toISOString(),
+    });
+    return gate(orderPayload(input), env);
+  };
+  const ok = run('crossing');
+  assert.strictEqual(ok.code, 0, ok.stderr);
+  const paper = run('drifting');
+  assert.strictEqual(paper.code, 2);
+  assert.match(paper.stderr, /\[policy\] setup:propped: the latest verdict's setup is from drifting: drifting has status "paper": propped trades only its active strategies live/);
+  const unknown = run('nowhere');
+  assert.strictEqual(unknown.code, 2);
+  assert.match(unknown.stderr, /\[policy\] setup:propped: the latest verdict's setup is from nowhere: nowhere is not one of propped's strategies/);
+  const exit = run('drifting', { ...EXIT_BASE, side: 'sell', size: 2, rationale: '[exit] close the policy long' });
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  const stop = run('drifting', { ...EXIT_BASE, side: 'sell', size: 2, type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the policy long' });
+  assert.strictEqual(stop.code, 0, stop.stderr);
 });
 
 test('order gate wiring: a prop size counts the stop\'s expected slippage against the room to the daily limit', () => {

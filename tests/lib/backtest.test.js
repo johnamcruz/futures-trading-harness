@@ -12,6 +12,7 @@ const { runBacktest, validateBacktestConfig } = require('../../scripts/lib/backt
 const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
+const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -329,6 +330,50 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
 });
 
+test('prop challenge mode trades what live trades: an active policy leaves out a paper component (still counted as disagreement); a paper policy (a paper run) keeps it', () => {
+  const dir = tmpDir();
+  const accounts = path.join(dir, 'accounts');
+  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(ROOT, 'accounts', 'topstep_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: topstep_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
+  const strategiesDir = path.join(dir, 'strategies');
+  const policy = (name, list, status = 'active') => {
+    fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });
+    fs.writeFileSync(path.join(strategiesDir, name, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+      .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
+      .replace(/^status: active\b/m, `status: ${status}`));
+  };
+  // value_area is paper in the repo; bos is active.
+  assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'paper');
+  policy('prop_mixed', ['value_area', 'bos']);
+  policy('prop_mixed_paper', ['value_area', 'bos'], 'paper');
+  policy('prop_all_paper', ['value_area']);
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
+  const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
+  const logs = [];
+  const mixed = run('prop_mixed', logs);
+  assert.deepStrictEqual(mixed.strategies, ['bos']);
+  assert.deepStrictEqual(mixed.leftOut, ['value_area']);
+  assert.ok(logs.some(l => /^prop_mixed: leaves out value_area: value_area has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
+  // ... but it still fires in the scan: it counts toward conflict, as live (the engine test above).
+  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; bos \(counting value_area toward conflict only\); contracts/.test(l)), logs.join('\n'));
+  const paper = run('prop_mixed_paper');
+  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['value_area', 'bos'], []]);
+  // A paper component that fires on this data (ema_cross on paper, first in the list): never picked by the active policy.
+  fs.mkdirSync(path.join(strategiesDir, 'ema_paper'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'ema_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'ema_cross', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: ema_cross$/m, 'name: ema_paper').replace(/^status: active\b/m, 'status: paper'));
+  policy('prop_ema_live', ['ema_paper', 'bos']);
+  policy('prop_ema_paper', ['ema_paper', 'bos'], 'paper');
+  const emaLive = run('prop_ema_live');
+  const emaPaper = run('prop_ema_paper');
+  assert.deepStrictEqual([emaLive.strategies, emaPaper.strategies], [['bos'], ['ema_paper', 'bos']]);
+  // The paper run's attempts take ema_paper's setups; the live policy's never do, so they differ.
+  assert.notDeepStrictEqual(emaLive.baseline, emaPaper.baseline);
+  assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(value_area has status "paper"/);
+});
+
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {
   const live = { fill: 'next-open', slippageTicks: 1 };
   // The signal bar closes at 101; the next bar opens at 101.25: filled at 101.50, the stop 1R (ATR 1) below the fill.
@@ -569,6 +614,24 @@ test('a run with an account is a prop challenge: sized from the cushion, ends on
   assert.strictEqual(tiny.combine.status, 'blown');
   assert.strictEqual(tiny.trades[tiny.trades.length - 1].reason, 'blow');
   assert.ok(tiny.combine.balance <= tiny.combine.floor + 1e-9);
+});
+
+test('a policy run picks only from the strategies it trades, but a left-out paper one still counts as disagreement, as in the live scan', () => {
+  const bars = propSeries(30);
+  const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
+  const prop = { strategy: { exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }, components: ['trendy'], contracts: 'micro' };
+  // contra (paper, listed first) fires the other side on every bar trendy fires.
+  const flip = { long: ['close crosses_below ema(20)'], short: ['close crosses_above ema(20)'] };
+  const contra = propStrategy({ name: 'contra', status: 'paper', mtf: 'reversal', rules: flip, compiledRules: compileRules(flip).compiled });
+  const alone = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop });
+  assert.ok(alone.trades.length > 0);
+  // Counted: every trendy setup conflicts with contra's (conflict 'reversal', trendy is no reversal strategy): none taken.
+  assert.deepStrictEqual(runEngine([propMarket(bars)], [contra, propStrategy()], { ...opts, prop }).trades, []);
+  // contra on the same side instead: never picked (it is first and fires), so the trades are trendy's own,
+  // with contra counted in their confluence.
+  const same = runEngine([propMarket(bars)], [propStrategy({ name: 'contra', status: 'paper' }), propStrategy()], { ...opts, prop }).trades;
+  assert.ok(same.length && same.every(t => t.confluence === 2), JSON.stringify(same.map(t => t.confluence)));
+  assert.deepStrictEqual(same.map(t => ({ ...t, confluence: 1 })), alone.trades);
 });
 
 test('micros and minis: a policy strategy run sizes in micros, trades minis by its contract mode, and settles each at its own tick value', () => {

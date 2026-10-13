@@ -162,7 +162,8 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
     // The gate's own prop checks on these exact arguments (an entry since the snapshot, the verdict
     // already used, the budget): a plan it would refuse is refused here, with its reason.
     const journal = readJournal(resolveJournalPath(c.env));
-    const found = prop.propViolations(inputs.home, { strategy: s, account: p.account, input: args, now, entries: entriesSince(journal, tradingDayStart(now)), journal, specOf: inputs.specOf, selected });
+    // A paper run (FTH_PAPER=1) plans a paper component's setup too (plan only: the gate refuses every live entry).
+    const found = prop.propViolations(inputs.home, { strategy: s, account: p.account, input: args, now, entries: entriesSince(journal, tradingDayStart(now)), journal, specOf: inputs.specOf, selected, strategies, paper: c.env.FTH_PAPER === '1' });
     if (found.length) throw new Error(`the order gate would refuse this entry: ${found.map(v => `[${v.check}] ${v.message}`).join(' ')}`);
   }
   const account = Number.isInteger(accountId) ? '' : ' (add "accountId": the account\'s id)';
