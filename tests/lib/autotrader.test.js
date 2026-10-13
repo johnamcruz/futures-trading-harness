@@ -508,7 +508,7 @@ test('a harness run ends with its process group: nothing it left behind keeps ru
   const path = require('path');
   const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-run-'));
   const marker = path.join(dir, 'ticks');
-  const r = await runHarness(['bash', '-c', `(while true; do echo x >> ${marker}; sleep 0.2; done) & exit 0`], { cwd: dir, env: process.env, timeoutMs: 10000 });
+  const r = await runHarness(['bash', '-c', `(while true; do echo x >> '${marker}'; sleep 0.2; done) & exit 0`], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r.ok, true);
   await new Promise(res => setTimeout(res, 2600));
   const n = fs.readFileSync(marker, 'utf8').length;

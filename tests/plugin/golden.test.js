@@ -59,7 +59,7 @@ test('the CLI snapshot refuses the update flag under CI too, before it writes an
   const snapshot = path.join(__dirname, '..', 'scripts', 'cli-parity.snapshot.json');
   const before = fs.readFileSync(snapshot, 'utf8');
   const r = spawnSync(process.execPath, ['--test', path.join(__dirname, '..', 'scripts', 'cli-parity.test.js')], {
-    encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, [FLAG]: '1', CI: 'true' }, timeout: 120000,
+    encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: os.tmpdir(), [FLAG]: '1', CI: 'true' }, timeout: 120000,
   });
   assert.notStrictEqual(r.status, 0, 'fails');
   assert.match(r.stdout, /is refused with CI set/);

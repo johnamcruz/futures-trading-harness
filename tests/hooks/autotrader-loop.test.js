@@ -6,6 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { FAKE_BROKERS, tmpDir } = require('../helpers');
@@ -21,7 +22,7 @@ const FAKE_BROKER = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js')
 function runAutotrader(config, home, calls = path.join(home, 'calls.txt'), extraEnv = {}, limitMs = 25000) {
   const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config], {
     env: {
-      PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
+      PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls,
       FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7,8', ...extraEnv,
     },
@@ -97,7 +98,7 @@ function passAt(at) {
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config, '--once', 'trade'], {
     encoding: 'utf8', timeout: 60000,
     env: {
-      PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: brokers, FTH_REPLAY_NOW: at,
+      PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: brokers, FTH_REPLAY_NOW: at,
       MOCK_REPLAY: '1', MOCK_STATE_DIR: path.join(home, 'state'), MOCK_CLOCK_FILE: path.join(home, 'clock.json'), MOCK_JOURNAL: path.join(home, 'journal.jsonl'), MOCK_INIT: '{}',
     },
   });
@@ -223,7 +224,7 @@ test('live loop: a harness tools server that fails the start check turns trading
   const state = path.join(home, '.futures-trading-harness');
   const start = () => {
     const runner = spawn(process.execPath, [path.join(root, 'scripts', 'autotrader.js'), '--config', config], {
-      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7' },
+      env: { PATH: process.env.PATH, TMPDIR: os.tmpdir(), HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7' },
     });
     const io = { out: '' };
     runner.stdout.on('data', c => { io.out += c; });
