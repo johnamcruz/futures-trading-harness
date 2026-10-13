@@ -314,7 +314,7 @@ liquidity in the trade's way (the candidate's `inTheWay` in the briefing's
 1R is its own stop; with `order_plan`'s stop, check there is room to the
 target or the trail's activation, and a level closer than 1R is a skip under
 the skip rules that name it), and the session window (the briefing's `m3`
-`window`; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
+`windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
 multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
 and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the

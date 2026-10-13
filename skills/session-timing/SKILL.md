@@ -16,8 +16,11 @@ All times America/New_York (ET) unless marked CT. The harness trades the
 CME Globex session, which opens at 18:00 ET and runs overnight until 16:00 ET
 the next day, Sunday evening to Friday afternoon (a hard rule in the order
 gate). The market is open that whole time, 09:30-16:00 ET included: a time
-like 10:00 ET is inside the session, not before it. Nothing from 16:00 to
+like 10:00 ET is inside the session, not before it, and so is 08:00 ET (the
+18:00 ET open was the evening before; 09:30 ET is only the RTH cash open). Nothing from 16:00 to
 18:00 ET or on weekends, and every position flat by end of day (`eodAt`, by 16:00 ET).
+CME itself trades until 17:00 ET (its daily break is 17:00-18:00 ET); the
+harness stops an hour earlier, at the 16:00 ET RTH close.
 Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
 `ny` 09:30–16:00. One trading day runs from the 18:00 ET open to the 16:00 ET
 close and is named by the date it ends on (Sunday evening and Monday are
@@ -31,8 +34,8 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout 08:25–08:40 |
-| 09:30–09:35 | Opening print, widest spreads | No entries (gate) |
-| 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Primary window for ORB |
+| 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
+| 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Entries allowed; primary window for ORB |
 | 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
 | 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
@@ -41,6 +44,20 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
 | 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |
 | 16:10 ET / 15:10 CT | A typical prop firm's own flatten | The harness is flat by 16:00 ET |
+
+Only three windows forbid entries by the clock: the opening print
+(09:30-09:35), into the close (15:45-16:00), and the daily break
+(16:00-18:00, the market closed). The opening drive is not the opening
+print: from 09:35 entries are allowed. The bar briefing states the window
+with its scope, never just its name: `m3` `window` (the name),
+`windowUntil`, `windowEntries` (`allowed` or `none`), `marketOpen`, and
+`windowText`, which the summary's `Session:` line shows, e.g. "opening drive
+(market open, entries allowed) until 11:00 ET" or "opening print (market
+open, no entries) until 09:35 ET". Take a window's end from it; never infer
+one (the opening type due at 10:00 ET and the initial balance at 10:30 ET
+are reads of the open, not entry windows). A window that allows entries
+doesn't lift the other refusals (news blackouts, holidays, early closes):
+the briefing and the gate state those on their own lines.
 
 **Holidays and early closes.** The harness treats every exchange holiday
 as closed (New Year's Day, MLK Day, Presidents Day, Good Friday, Memorial

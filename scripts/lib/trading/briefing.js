@@ -42,7 +42,7 @@
  *   renderBriefing(b, { now })                                   one text block per section, with validity
  *   briefingFile(home, root) / writeBriefing / readBriefing      <FTH_HOME>/briefing/<MICRO ROOT>.json
  *   nextClose(at, minutes)                                       when the candle containing `at` closes
- *   sessionWindow(at)                                            { name, until } (the session-timing skill's windows)
+ *   sessionWindow(at)                                            { name, until, entries, marketOpen, text } (the session-timing skill's windows)
  */
 
 const fs = require('fs');
@@ -57,12 +57,16 @@ const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./s
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
 
-// The session-timing skill's windows (ET minutes of the day, from 00:00).
+// The session-timing skill's windows (ET minutes of the day, from 00:00): [start, end, name, entries]. `entries` is
+// what the session clock allows in the window ('allowed' | 'none': the opening print 09:30-09:35, into the close
+// 15:45-16:00, the daily break 16:00-18:00 when the market is closed). The order gate's own windows are its config
+// (FTH_NO_ENTRY_WINDOWS, market hours); this is how the briefing states them, each with its scope and end.
 const WINDOWS = [
-  [-360, 180, 'asia'], [180, 570, 'london'], [570, 575, 'opening print (no entries)'], [575, 660, 'opening drive'],
-  [660, 690, 'late morning'], [690, 810, 'lunch lull'], [810, 945, 'afternoon'], [945, 960, 'into the close (no entries)'],
-  [960, 1080, 'daily break (closed)'], [1080, 1620, 'asia'],
+  [-360, 180, 'asia', 'allowed'], [180, 570, 'london', 'allowed'], [570, 575, 'opening print (no entries)', 'none'], [575, 660, 'opening drive', 'allowed'],
+  [660, 690, 'late morning', 'allowed'], [690, 810, 'lunch lull', 'allowed'], [810, 945, 'afternoon', 'allowed'], [945, 960, 'into the close (no entries)', 'none'],
+  [960, 1080, 'daily break (closed)', 'none'], [1080, 1620, 'asia', 'allowed'],
 ];
+const MARKET_CLOSED_WINDOW = 'daily break (closed)';
 
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
 function nextClose(at, minutes) {
@@ -71,11 +75,20 @@ function nextClose(at, minutes) {
   return new Date(start + (Math.floor((at.getTime() - start) / step) + 1) * step);
 }
 
+/**
+ * The session window at `at`: { name, until, entries, marketOpen, text }. Every fact states its own scope: `text` says
+ * whether the market is open, whether entries are allowed, and until when, e.g. "opening drive (market open, entries
+ * allowed) until 11:00 ET" or "opening print (market open, no entries) until 09:35 ET": a reader never has to guess
+ * which window forbids entries or when it ends.
+ */
 function sessionWindow(at) {
   const m = minutesOfDay(at, ET);
   // Asia runs 18:00-03:00 across midnight: before 03:00 it is the window that started at 18:00 the evening before.
-  const [, end, name] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= 1080));
-  return { name, until: new Date(at.getTime() + (end - m) * 60000 - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds())) };
+  const [, end, name, entries] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= 1080));
+  const until = new Date(at.getTime() + (end - m) * 60000 - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds()));
+  const marketOpen = name !== MARKET_CLOSED_WINDOW;
+  const scope = `${marketOpen ? 'market open' : 'market closed'}, ${entries === 'allowed' ? 'entries allowed' : 'no entries'}`;
+  return { name, until, entries, marketOpen, text: `${name.replace(/ \(.*\)$/, '')} (${scope}) until ${etClock(until)} ET` };
 }
 
 /**
@@ -177,7 +190,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   ];
   const room = nearest(price, oneR, levels, tick);
   const news = newsState(blackouts, closedAt);
-  const noEntry = /\(no entries\)|closed/.test(win.name);
+  // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
+  const noEntry = win.entries === 'none' ? win.text : false;
   const bar = snap.last;
   const atr14 = (snap.volatility || {}).atr14;
   return {
@@ -185,7 +199,8 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
       validUntil: new Date(closedAt.getTime() + step),
       data: {
         price, bar: { t: bar.t, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v, rangeAtr: atr14 > 0 ? round2((bar.h - bar.l) / atr14) : null },
-        et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(),
+        // The session window, with its scope stated: whether the market is open and entries are allowed, and until when.
+        et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(), windowEntries: win.entries, marketOpen: win.marketOpen, windowText: win.text,
         // R: every distance below is in points and R; 1R here is the reference stop (a setup's own stop is its 1R).
         oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: `0.5 x ATR(20) ${round2(2 * oneR)}, the reference stop` } : null,
         news,
@@ -308,7 +323,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
     ...(lunch ? ['lunch lull'] : []),
   ];
   const newsBlock = !news || news.inBlackout === false ? null : news.inBlackout === true ? 'news blackout' : 'news unknown (the blackouts file can\'t be read)';
-  const blocked = noEntry ? 'no-entry window' : newsBlock;
+  const blocked = noEntry ? (typeof noEntry === 'string' ? `no-entry window: ${noEntry}` : 'no-entry window') : newsBlock;
   return {
     name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null,
     entryRef: r.entryRef, stopPoints: round2(R), minRR: r.minRR ?? null,
@@ -444,7 +459,8 @@ function summaryLines(b, et) {
   const news = m3.news || {};
   const room = m3.nearestLiquidity || { above: [], below: [] };
   const out = [
-    `Summary (${b.symbol} ${b.minutes}m, ${m3.et} ET, ${m3.window} until ${et(m3.windowUntil)}):`,
+    `Summary (${b.symbol} ${b.minutes}m, ${m3.et} ET):`,
+    `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
     `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`,

@@ -261,7 +261,11 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
 test('the session hours read unambiguously (a 9B model read "18:00 ET to 16:00 ET" as "opens at 18:00"), and a role is never a reader', () => {
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   assert.match(read('rules/trading/execution.md'), /opens at 18:00 ET\s+and runs overnight until 16:00 ET the next day[^]*?the regular session\s+09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on\s+weekends/);
-  assert.match(read('skills/session-timing/SKILL.md'), /a time\s+like 10:00 ET is inside the session, not before it/);
+  assert.match(read('skills/session-timing/SKILL.md'), /a time\s+like 10:00 ET is inside the session, not before it, and so is 08:00 ET \(the\s+18:00 ET open\s+was the evening before; 09:30 ET is only the RTH cash open\)/);
+  // Replays read "opening drive" as the no-entry opening print and invented its end: the skill says which windows
+  // forbid entries, that the opening drive allows them, and to take a window's end from the briefing.
+  assert.match(read('skills/session-timing/SKILL.md'), /Only three windows forbid entries by the clock: the opening print\s+\(09:30-09:35\), into the close \(15:45-16:00\), and the daily break\s+\(16:00-18:00, the market closed\)\. The opening drive is not the opening\s+print: from 09:35 entries are allowed\./);
+  assert.match(read('skills/session-timing/SKILL.md'), /Take a window's end from it; never infer\s+one/);
   assert.match(read('workspace/AGENTS.md'), /runs overnight until 16:00 ET the next day/, 'the generated operator instructions carry it');
   assert.match(require('../../scripts/lib/trading/clock').MARKET_HOURS_LABEL, /from 18:00 ET until 16:00 ET the next day[^]*09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends/);
   assert.match(read('skills/trade-session/SKILL.md'), /A role's call is that\s+role's own analysis \(the order gate counts it as its report\): never ask a role\s+to read, load or summarize skills or files for you; load skills yourself \(your\s+skill tool, or without one read their `SKILL\.md`\)\./);
