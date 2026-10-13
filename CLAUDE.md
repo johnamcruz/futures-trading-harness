@@ -115,8 +115,10 @@ request, every time, whatever the size of the change:
    accounts are instructions agents act on: they get the full round. So do
    `CLAUDE.md`, `AGENTS.md`, `QWEN.md`, generated files, and every document
    that a skill, agent, command, rule, strategy, account, hook, or script
-   points to. Today those are `docs/BACKTESTING.md` and
-   `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement).
+   points to. Today those are `docs/BACKTESTING.md`,
+   `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement),
+   and `docs/LEARNED-RULEBOOK.md` (the learned-policy design the prop code is
+   built from).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
