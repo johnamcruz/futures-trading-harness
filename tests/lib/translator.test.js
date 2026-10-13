@@ -6,7 +6,7 @@ const path = require('path');
 const { parseTicker, parseStandardName, isStandardName, createTranslator, standardRoot, canonicalName, TranslationError } = require('../../scripts/lib/broker/translator');
 const fs = require('fs');
 const { contractRoot, contractMonthTag, mayBeRoot } = require('../../scripts/lib/trading/journal');
-const { tmpDir } = require('../helpers');
+const { FAKE_BROKERS, tmpDir } = require('../helpers');
 
 // A broker whose ids look nothing like the standard names: the translator learns them from its own answers.
 const CONTRACTS = [
@@ -35,7 +35,7 @@ test('names: standard names (root, or root:YYYY-MM) and exchange tickers', () =>
   assert.deepStrictEqual(parseStandardName('MNQ'), { root: 'MNQ', month: null });
   assert.deepStrictEqual(parseStandardName('NQ:2026-03'), { root: 'NQ', month: '2026-03' });
   assert.strictEqual(parseStandardName('NQ:2026-13'), null);
-  assert.ok(!isStandardName('CON.F.US.MNQ.Z26') && !isStandardName('mnq') && isStandardName('M2K'));
+  assert.ok(!isStandardName('fake:MNQ:Z26') && !isStandardName('mnq') && isStandardName('M2K'));
   assert.deepStrictEqual(parseTicker('MNQZ6', NOW), { root: 'MNQ', month: '2026-12' });
   assert.deepStrictEqual(parseTicker('NQH7', NOW), { root: 'NQ', month: '2027-03' });
   assert.deepStrictEqual(parseTicker('ESZ25', NOW), { root: 'ES', month: '2025-12' });
@@ -55,7 +55,7 @@ test('standard name -> the selected broker\'s id, and back, from that broker\'s 
   assert.strictEqual(await t.toStandard('b-301'), 'b-301', 'not a futures ticker: left as is');
   await assert.rejects(() => t.toBroker('ES'), /no ES contract found at this broker/);
   await assert.rejects(() => t.toBroker('MNQ:2030-03'), /no MNQ contract for 2030-03/);
-  await assert.rejects(() => t.toBroker('CON.F.US.MNQ.Z26'), TranslationError);
+  await assert.rejects(() => t.toBroker('fake:MNQ:Z26'), TranslationError);
   // Cached for the trading day: no second search.
   const searches = calls.filter(c => c[0] === 'search_contracts').length;
   await t.toBroker('MNQ');
@@ -101,7 +101,7 @@ test('the harness reads roots and months from standard names', () => {
 test('a broker id the translator could not name still goes through, so it can be closed', async () => {
   const { call } = fakeBroker();
   const t = createTranslator({ call, cacheFile: path.join(tmpDir(), 'c.json'), now: () => NOW });
-  assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: 'CON.F.US.MNQ.Z25' }), { contractId: 'CON.F.US.MNQ.Z25' });
+  assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: 'fake:MNQ:Z25' }), { contractId: 'fake:MNQ:Z25' });
   assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: '4471923' }), { contractId: '4471923' }, 'all digits: a broker id, not a name');
   await t.toBroker('MNQ');
   assert.deepStrictEqual(await t.translateArgs('close_position', { contractId: 'b-101' }), { contractId: 'b-101' }, 'a known broker id');
@@ -162,18 +162,22 @@ test('contract lists are learned from their own tickers, one pass, no lookup per
 test('mayBeRoot: an id the gate can\'t name may be on any contract; the translator\'s lookups name ids first', () => {
   assert.ok(mayBeRoot('MNQ', 'MNQ') && mayBeRoot('MNQ:2027-03', 'MNQ') && mayBeRoot(undefined, 'MNQ'));
   assert.ok(!mayBeRoot('MES', 'MNQ'));
-  assert.ok(mayBeRoot('CON.F.US.XYZ.Z26', 'MNQ'));
+  assert.ok(mayBeRoot('fake:XYZ:Z26', 'MNQ'));
   // A broker whose ids look like names (MNQZ5): its lookups decide, not the name's shape.
   const home = tmpDir();
-  fs.writeFileSync(path.join(home, 'contracts-topstepx.json'), JSON.stringify({ ids: { MNQZ5: { root: 'MNQ', month: '2025-12' } }, front: {} }));
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { MNQZ5: { root: 'MNQ', month: '2025-12' } }, front: {} }));
   const prev = process.env.FTH_HOME;
+  const prevBrokers = process.env.FTH_BROKERS_FILE;
   process.env.FTH_HOME = home;
+  process.env.FTH_BROKERS_FILE = FAKE_BROKERS;
   try {
     assert.strictEqual(contractRoot('MNQZ5'), 'MNQ');
     assert.ok(mayBeRoot('MNQZ5', 'MNQ') && !mayBeRoot('MNQZ5', 'MES'));
   } finally {
     if (prev === undefined) delete process.env.FTH_HOME;
     else process.env.FTH_HOME = prev;
+    if (prevBrokers === undefined) delete process.env.FTH_BROKERS_FILE;
+    else process.env.FTH_BROKERS_FILE = prevBrokers;
   }
 });
 
@@ -206,16 +210,16 @@ test('cache: a front month without a day is ignored; a cache that can\'t be writ
 
 test('canonicalName: every name for a contract becomes its one standard name (the front month by its root), from the cache only', () => {
   const cache = {
-    ids: { 'CON.F.US.MNQ.Z26': { root: 'MNQ', month: '2026-12' }, 'CON.F.US.MNQ.H27': { root: 'MNQ', month: '2027-03' } },
-    front: { MNQ: { id: 'CON.F.US.MNQ.Z26', month: '2026-12', day: '2026-10-07' } },
+    ids: { 'fake:MNQ:Z26': { root: 'MNQ', month: '2026-12' }, 'fake:MNQ:H27': { root: 'MNQ', month: '2027-03' } },
+    front: { MNQ: { id: 'fake:MNQ:Z26', month: '2026-12', day: '2026-10-07' } },
   };
   assert.strictEqual(canonicalName('MNQ', cache), 'MNQ');
   assert.strictEqual(canonicalName('MNQ:2026-12', cache), 'MNQ', 'the front month by its month');
-  assert.strictEqual(canonicalName('CON.F.US.MNQ.Z26', cache), 'MNQ', 'the front month by the broker id');
-  assert.strictEqual(canonicalName('CON.F.US.MNQ.H27', cache), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('fake:MNQ:Z26', cache), 'MNQ', 'the front month by the broker id');
+  assert.strictEqual(canonicalName('fake:MNQ:H27', cache), 'MNQ:2027-03');
   assert.strictEqual(canonicalName('MNQ:2027-03', cache), 'MNQ:2027-03');
   assert.strictEqual(canonicalName('ES:2026-12', cache), 'ES:2026-12', 'no front month known: as given');
-  assert.strictEqual(canonicalName('CON.F.US.XYZ', cache), 'CON.F.US.XYZ');
+  assert.strictEqual(canonicalName('fake:XYZ', cache), 'fake:XYZ');
   assert.strictEqual(canonicalName(undefined, cache), undefined);
 });
 

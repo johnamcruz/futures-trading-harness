@@ -55,19 +55,13 @@ The order-book data set (its own README is the schema): NQ only, 2020-12 to 2025
   have no flow.
 
 The original bot already has the pieces to port, all under its `scripts/`: `build_tick_orderflow.py` (per-minute quote-rule buy/sell
-volume from l1), `record_orderflow.py` (records live ProjectX trades), and
+volume from l1), `record_orderflow.py` (records live trades), and
 `orderflow_jsonl_to_bars.py`, plus a roll and gap mask.
 
-## Live: the ProjectX market hub
+## Live
 
-ProjectX's real-time market hub (SignalR, <https://gateway.docs.projectx.com/docs/realtime/>)
-offers `SubscribeContractTrades`; each `GatewayTrade` carries price, volume,
-timestamp and `type` (0 buy, 1 sell), which the original bot treats as the
-aggressor side. There is no REST history of trades: flow exists only from the
-moment of subscription. After every (re)connect, order-flow strategies need a
-warm-up of their longest flow lookback in complete minutes (5 for `ofi(5)`;
-9 for `value_area`'s `ofi(3)` on 3-minute bars). Bar volume averages need no
-warm-up: they use the bars' own volume, which REST `get_bars` supplies.
+Live order flow (its source, recording, gaps and warm-up) belongs to the live
+broker server and is documented in its repo.
 
 ## Design
 
@@ -88,13 +82,8 @@ can supply it, so replay equals live.
    - A broker without order flow omits both; nothing else changes.
    - Fields on `get_bars` rather than a separate tool, so flow stays aligned
      with the bars by construction.
-2. **projectx-mcp** (its own repo): a recorder per contract subscribes to the
-   trade stream and buckets trades into closed UTC minutes by trade
-   timestamp, releasing a minute about 2 seconds after it closes (late
-   prints). Any minute touched by a disconnect, through the first full minute
-   after reconnect, is `partial`; nothing is backfilled. A ring buffer (about
-   two days) holds recent minutes. A micro contract uses its mini's trade
-   stream (MNQ uses NQ), matching the replay data.
+2. **The live broker server** (its own repo): records live order flow and
+   serves it on `get_bars`; how is documented in its repo.
 3. **backtester-mcp** (its own repo): serves an optional
    `<ROOT>_1min_flow.csv` (`time,buy_volume,sell_volume`) from its data
    directory, joined to the bars by minute, for closed bars only (no
@@ -146,7 +135,7 @@ can supply it, so replay equals live.
 3. Offline conversion script (outside the harness), with a check that its
    volumes match the bar data's, writing both the replay broker's flow file
    and the backtester's CSV columns.
-4. projectx-mcp: the trade-stream recorder, partial-minute marking, warm-up.
+4. The live broker server (its own repo): live order flow on `get_bars`.
 5. Validation before promotion:
    - record live flow for a period and compare it minute by minute with the
      quote-rule flow for the same minutes (the side rule differs: exchange

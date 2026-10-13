@@ -69,7 +69,7 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
   bad('strategies_scan', { bars: '/h/bars-scratch/a.json', symbol: 'mnq' }, /symbol: must match/);
   for (const symbol of ['MNQ\n../x', 'X\nMNQ', 'MNQ\n']) bad('strategies_scan', { bars: '/h/bars-scratch/a.json', symbol }, /symbol: must match/);
   bad('reconcile', { day: '2026-10-07\nx' }, /day: must match/);
-  bad('combine_status', { account: 'topstep_50k\n../../x' }, /account: must match/);
+  bad('combine_status', { account: 'test_50k\n../../x' }, /account: must match/);
   bad('strategies_recent', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', count: 51 }, /at most 50/);
   ok('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 });
   bad('order_plan', { bars: '/h/bars-scratch/a.json', symbol: 'MNQ', strategy: 'bos' }, /side.*required|required.*side/);
@@ -92,7 +92,7 @@ test('registry: the schemas take what the tools need and refuse the rest', () =>
   bad('bars_fetch', { symbol: 'MNQ', timeframe: 61 }, /timeframe/);
   bad('bars_fetch', { symbol: 'MNQ', timeframe: 3, out: '/h/bars-scratch/x.json' }, /"out": unknown argument/);
   bad('bars_fetch', { symbol: 'MNQ', timeframe: 3, count: 20001 }, /at most 20000/);
-  ok('combine_status', { account: 'topstep_50k', json: true });
+  ok('combine_status', { account: 'test_50k', json: true });
   bad('combine_status', { account: '../x' }, /must match/);
   bad('lessons', { top: 0 }, /at least 1/);
   ok('reconcile', { day: '2026-10-07', timeframe: 3 });

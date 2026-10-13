@@ -27,6 +27,16 @@
   `run-with-flags.js`, the gateway against a fake MCP server).
 - Order gating fails closed. Don't change that.
 
+## Platform-neutral
+
+No platform-, firm- or model-specific code, names, env vars, defaults,
+contract-id formats or paths in this repository: platform specifics live in
+the broker's MCP server (its own repo), firm rules in `accounts/`, model
+specifics in your local config. `mcp-configs/brokers.json` is the one link.
+Tests use the fake broker (`tests/fixtures/brokers.json`) and fixture accounts
+(`tests/fixtures/accounts/`). `tests/plugin/no-platform-specifics.test.js`
+enforces it; see "Separation of work" in `CLAUDE.md`.
+
 ## Checks
 
 ```bash

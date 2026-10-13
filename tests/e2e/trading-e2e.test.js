@@ -24,7 +24,7 @@ const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/t
 const { scanRecord, appendJsonl } = require('../../scripts/lib/trading/scan-log');
 const { checkOrder } = require('../../scripts/lib/trading/check-order');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 const { digest, recentTrades, formSummary } = require('../../scripts/lib/trading/instincts');
 const { readJournal } = require('../../scripts/lib/trading/journal');
 
@@ -39,7 +39,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
   const dataDir = path.join(home, 'bars');
   const journal = writeJournal(home, []);
   const env = {
-    FTH_HOME: home, PROJECTX_JOURNAL_PATH: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
+    FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'),
   };
   const strategies3m = loadStrategies(ROOT, {}).strategies.filter(s => s.timeframe === '3m');

@@ -7,24 +7,24 @@ remove it in the PR that fixes it.
 
 Switching brokers should be one line of config (`FTH_BROKER`, `brokers.json`)
 plus a server that implements [the interface](BROKER-MCP-INTERFACE.md). Today
-the interface still carries conventions of its first server (projectx-mcp,
-TopstepX), so a new server has more to translate than it should. Highest
+the interface still carries conventions of the interface's first server, so a
+new server has more to translate than it should. Highest
 impact first.
 
-### 1. Outcome codes are ProjectX's tables
+### 1. Outcome codes are the first server's tables
 
-- **Today:** `errorCode` values for place, edit, and close are ProjectX's
-  numbers (`OUTCOMES` in `scripts/lib/broker/interface.js`). Agents and skills
+- **Today:** `errorCode` values for place, edit, and close are the first
+  server's numbers (`OUTCOMES` in `scripts/lib/broker/interface.js`). Agents and skills
   act on them (4 = account locked: stop; 5 = outside hours: don't retry).
 - **Cost:** a server must map its broker's errors onto another broker's numbers.
 - **Fix:** make `errorName` the contract, from a short neutral set
   (`AccountLocked`, `OutsideTradingHours`, `Rejected`, `NotFound`, `Pending`,
   `Unknown`); keep `errorCode` as broker detail. Update the broker-mcp skill.
 
-### 2. Order types include ProjectX-only ones
+### 2. Order types include the first server's own ones
 
 - **Today:** `place_order` types include `join_bid` and `join_ask`, and the
-  numeric `type` codes in results are ProjectX's.
+  numeric `type` codes in results are the first server's.
 - **Fix:** keep `market`, `limit`, `stop`, `trailing_stop` required; make
   `join_bid` / `join_ask` optional, listed in `get_server_config` capabilities.
   Return a `typeName` in results and key on it, not the code.
@@ -47,7 +47,7 @@ impact first.
   use recorded flow files.
 - **Fix:** an optional `get_order_flow` tool (per-minute buy/sell volume for a
   contract and window), listed in `get_server_config` capabilities; the
-  adapter uses it when present. Build it first in projectx-mcp (its own repo).
+  adapter uses it when present. Build it first in the live broker server (its own repo).
 
 ### 5. No way to test a server's order path
 

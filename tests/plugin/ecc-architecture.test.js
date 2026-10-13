@@ -66,3 +66,58 @@ test('ECC: no broker code in the harness (brokers are MCP servers reached throug
   const hits = walk(path.join(REPO, 'scripts')).filter(f => f.endsWith('.js') && BROKER.test(fs.readFileSync(f, 'utf8')));
   assert.deepStrictEqual(hits.map(f => path.relative(REPO, f)), []);
 });
+
+test('ECC: the platform-neutral guard is in place at its fixed paths, and the suite runs it', () => {
+  // tests/plugin/no-platform-specifics.test.js checks its pins only shrink against the base branch; a rename or a
+  // deletion of the guard must fail here, in a file of its own.
+  for (const f of ['tests/plugin/no-platform-specifics.test.js', 'tests/plugin/platform-scan.js', 'tests/plugin/no-platform-specifics.pins.json']) {
+    assert.ok(fs.existsSync(path.join(REPO, f)), `${f} is gone: the platform-neutral guard (CLAUDE.md, "Separation of work") stays`);
+  }
+  const guard = fs.readFileSync(path.join(REPO, 'tests', 'plugin', 'no-platform-specifics.test.js'), 'utf8');
+  assert.match(guard, /S\.readBasePins\(REPO, rel\(PINS\), rel\(__filename\)\)/, 'the guard checks its pins against the base branch');
+  assert.match(guard, /path\.join\(__dirname, 'no-platform-specifics\.pins\.json'\)/, 'at the fixed pins path');
+  // The base it read is the one checked, and the check's result is what the test asserts on.
+  assert.match(guard, /const base = S\.readBasePins\(REPO, rel\(PINS\), rel\(__filename\)\);[^\n]*\n\s*assert\.deepStrictEqual\(S\.baseVerdict\(pins, base\), \[\]\);/, 'the guard asserts baseVerdict(pins, base) on the base it read');
+  assert.match(guard, /const pins = JSON\.parse\(fs\.readFileSync\(PINS, 'utf8'\)\);\n\s*const rel = [^\n]*\n\s*const base = S\.readBasePins/, 'on the pins file it read');
+  // tests/run-all.js runs every *.test.js under tests/: the guard is among them.
+  const { collect } = { collect: dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => (d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)])) };
+  const runAll = fs.readFileSync(path.join(REPO, 'tests', 'run-all.js'), 'utf8');
+  assert.match(runAll, /collect\(__dirname\)/);
+  assert.match(runAll, /d\.name\.endsWith\('\.test\.js'\)/);
+  assert.ok(collect(path.join(REPO, 'tests')).includes(path.join(REPO, 'tests', 'plugin', 'no-platform-specifics.test.js')));
+});
+
+// The platform guard's base check, run here too, so switching it off takes edits to two files.
+const GUARD_PINS = 'tests/plugin/no-platform-specifics.pins.json';
+const GUARD_TEST = 'tests/plugin/no-platform-specifics.test.js';
+function guardBaseViolations(repo) {
+  const S = require('./platform-scan');
+  const pins = JSON.parse(fs.readFileSync(path.join(repo, GUARD_PINS), 'utf8'));
+  return S.baseVerdict(pins, S.readBasePins(repo, GUARD_PINS, GUARD_TEST));
+}
+
+test('ECC: the platform guard\'s pins only shrink against the base branch (checked here as well as in the guard)', () => {
+  assert.deepStrictEqual(guardBaseViolations(REPO), []);
+});
+
+test('ECC: that base check fails on a key added by hand on a branch', () => {
+  const { spawnSync } = require('child_process');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-guard-'));
+  const git = (...args) => assert.strictEqual(spawnSync('git', args, { cwd: dir, encoding: 'utf8' }).status, 0, args.join(' '));
+  const write = (rel, text) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), text); };
+  git('init', '-q');
+  git('config', 'user.email', 't@example.com');
+  git('config', 'user.name', 't');
+  git('config', 'commit.gpgsign', 'false');
+  write(GUARD_TEST, '\n');
+  write(GUARD_PINS, JSON.stringify({ 'a.md|firm': ['1'] }));
+  git('add', '-A');
+  git('commit', '-qm', 'base');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  assert.deepStrictEqual(guardBaseViolations(dir), [], 'unchanged');
+  write(GUARD_PINS, JSON.stringify({ 'a.md|firm': ['1'], 'b.md|firm': ['2'] }));
+  git('commit', '-qam', 'a key added by hand');
+  assert.match(guardBaseViolations(dir).join(), /b\.md\|firm: not pinned on the base branch/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

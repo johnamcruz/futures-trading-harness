@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Every branch and its history: the platform-name pins are checked against
+          # git merge-base HEAD origin/main (tests/plugin/no-platform-specifics.test.js).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { tradingDayStart, zonedTimeToUtc, parseWindows, inWindow, minutesOfDay } = require('../../scripts/lib/trading/clock');
 
-test('trading day starts at the most recent 17:00 CT (Topstep\'s daily reset)', () => {
+test('trading day starts at the most recent 17:00 CT (the daily reset)', () => {
   // 09:00 CDT Wednesday -> started Tuesday 17:00 CDT (22:00Z)
   assert.strictEqual(tradingDayStart(new Date('2026-10-07T14:00:00Z')).toISOString(), '2026-10-06T22:00:00.000Z');
   // 17:30 CDT -> started today 17:00 CDT

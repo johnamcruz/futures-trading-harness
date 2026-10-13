@@ -129,7 +129,7 @@ cycle on every closed bar), a cycle runs only when an active strategy fires
 (a paper one too in a paper run), a trade or working order is open, at
 premarket, or at the end of day. A trading day starts about 13 cycles.
 
-Measured on a local model (a 9B model, opencode, MNQ 3m, one window of
+Measured on a local model (a small local model, opencode, MNQ 3m, one window of
 15 bars): a cycle whose roles all run takes about 6 to 9 minutes; one whose
 reports all come from the report cache, 0.5 to 2 minutes; an entry cycle
 (plan, phase 2, the order) about 15 minutes. The bar briefing gives every

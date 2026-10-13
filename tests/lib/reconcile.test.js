@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { reconcile, toText } = require('../../scripts/lib/trading/reconcile');
-const { tmpDir, writeJournal } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const bar = t => ({ t, c: 1 });
@@ -41,7 +41,7 @@ test('scripts/reconcile.js reads the day\'s decision log and journal', () => {
   const home = tmpDir();
   fs.mkdirSync(path.join(home, 'logs'));
   fs.writeFileSync(path.join(home, 'logs', 'scans-2026-10-07.jsonl'), scans.map(s => JSON.stringify(s)).join('\n') + '\n');
-  const env = { ...process.env, FTH_HOME: home, PROJECTX_JOURNAL_PATH: writeJournal(home, journal) };
+  const env = { ...process.env, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(home, journal) };
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'reconcile.js'), '--day', '2026-10-07'], { encoding: 'utf8', env });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /1 taken \(50%\)/);

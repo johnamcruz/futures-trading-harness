@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const specs = require('../../scripts/lib/trading/broker-specs');
 const { specFor, familyOf } = require('../../scripts/lib/trading/contracts');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, recordBrokerSpecs } = require('../helpers');
 
 test('validSpec: both numbers sane, else nothing (a zero, a negative, a huge value, a non-number)', () => {
   assert.deepStrictEqual(specs.validSpec({ tickSize: 0.25, tickValue: 0.5 }), { tickSize: 0.25, tickValue: 0.5 });
@@ -20,7 +20,7 @@ test('validSpec: both numbers sane, else nothing (a zero, a negative, a huge val
 
 test('brokerSpecFor: the recorded spec of a root, read locally; an old file, a missing one, or a malformed entry gives none', () => {
   const home = tmpDir();
-  const file = path.join(home, 'contracts-topstepx.json');
+  const file = path.join(home, 'contracts-fake.json');
   assert.strictEqual(specs.brokerSpecFor(file, 'MNQ'), null, 'no file');
   assert.strictEqual(specs.brokerSpecFor(null, 'MNQ'), null, 'no broker configured');
   // A file from before specs were recorded: ids and front months only.
@@ -30,7 +30,7 @@ test('brokerSpecFor: the recorded spec of a root, read locally; an old file, a m
   assert.strictEqual(specs.brokerSpecFor(file, 'MNQ'), null);
   recordBrokerSpecs(home, { roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0 } } });
   const mnq = specs.brokerSpecFor(file, 'mnq');
-  assert.deepStrictEqual([mnq.tickSize, mnq.tickValue, mnq.feesPerSide, mnq.source, mnq.id, mnq.name], [0.25, 0.5, 0.37, 'broker', 'CON.F.US.MNQ.Z26', 'MNQZ6']);
+  assert.deepStrictEqual([mnq.tickSize, mnq.tickValue, mnq.feesPerSide, mnq.source, mnq.id, mnq.name], [0.25, 0.5, 0.37, 'broker', 'fake:MNQ:Z26', 'MNQZ6']);
   assert.strictEqual(specs.brokerSpecFor(file, 'NQ'), null, 'a malformed record (tick value 0) is none');
   assert.strictEqual(specs.brokerSpecFor(file, 'ES'), null, 'another root');
   // A root the static table lacks still gets the broker's spec (no fee estimate).
@@ -43,10 +43,12 @@ test('brokerSpecFor: the recorded spec of a root, read locally; an old file, a m
 
 test('contractsFileFor / liveSpecs: the selected broker\'s file under the home', () => {
   const home = tmpDir();
-  assert.strictEqual(specs.contractsFileFor(home, {}), path.join(home, 'contracts-topstepx.json'));
+  assert.strictEqual(specs.contractsFileFor(home, { FTH_BROKERS_FILE: FAKE_BROKERS }), path.join(home, 'contracts-fake.json'));
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: ['x'] } } }));
   assert.strictEqual(specs.contractsFileFor(home, {}), path.join(home, 'contracts-mock.json'));
-  assert.strictEqual(specs.contractsFileFor(home, { FTH_BROKER: 'topstepx' }), path.join(home, 'contracts-topstepx.json'), 'FTH_BROKER picks');
+  assert.strictEqual(specs.contractsFileFor(home, { FTH_BROKER: 'other', FTH_BROKERS_FILE: FAKE_BROKERS }), null, 'FTH_BROKER picks: not in that file');
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: ['x'] }, other: { command: ['y'] } } }));
+  assert.strictEqual(specs.contractsFileFor(home, { FTH_BROKER: 'other' }), path.join(home, 'contracts-other.json'), 'FTH_BROKER picks');
   assert.strictEqual(specs.contractsFileFor(home, { FTH_BROKER: 'nope' }), null, 'an unknown broker: no file, no specs');
   recordBrokerSpecs(home, { broker: 'mock', roots: ['MES'] });
   assert.strictEqual(specs.liveSpecs({ FTH_HOME: home })('MES').tickValue, 1.25);

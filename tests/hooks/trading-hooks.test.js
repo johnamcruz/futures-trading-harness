@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, homeBrokers, shippedBroker, tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder, recordBrokerSpecs } = require('../helpers');
 
 // The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
 // market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
@@ -87,7 +87,7 @@ function setup(entries, extraEnv = {}) {
     dir,
     env: {
       FTH_HOME: home,
-      PROJECTX_JOURNAL_PATH: writeJournal(dir, entries),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
       FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
@@ -101,7 +101,7 @@ const orderPayload = (input = ORDER) => ({ tool_name: 'mcp__broker__place_order'
 
 test('order gate: a server-written entry under a broker id the translator never named still needs its review', () => {
   const at = m => minutesAgo(m, new Date(TEST_NOW));
-  const raw = { ts: at(30), kind: 'order_placed', contractId: 'CON.F.US.MNQ.Z26', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } };
+  const raw = { ts: at(30), kind: 'order_placed', contractId: 'fake:MNQ:Z26', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } };
   const { env } = setup([raw, { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 2, 'no translator cache in this home: the id may be MNQ, so it counts');
@@ -110,7 +110,7 @@ test('order gate: a server-written entry under a broker id the translator never 
     { ts: at(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   assert.strictEqual(gate(orderPayload(), reviewed.env).code, 0, 'reviewed under the id journal_read shows: cleared');
   // With the translator's lookup on file, it counts as MNQ (and still needs the review); on another root it wouldn't.
-  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
+  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-fake.json'), JSON.stringify({ ids: { 'fake:MNQ:Z26': { root: 'MES', month: '2026-12' } }, front: {} }));
   recordBrokerSpecs(env.FTH_HOME);
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'named by the translator as another root: not this contract\'s entry');
 });
@@ -338,7 +338,7 @@ test('order gate fails closed on malformed input', () => {
 
 test('order gate fails closed when the journal is unreadable', () => {
   const { dir, env } = setup([]);
-  const r = gate(orderPayload(), { ...env, PROJECTX_JOURNAL_PATH: dir });
+  const r = gate(orderPayload(), { ...env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: dir });
   assert.strictEqual(r.code, 2);
 });
 
@@ -459,7 +459,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
     PATH: process.env.PATH,
     HOME: dir,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]),
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
@@ -499,7 +499,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -523,7 +523,7 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
     const dir = tmpDir();
     const env = {
       PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
-      PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
     let out = '';
@@ -545,9 +545,9 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
 test('MCP gateway: with no command it starts the broker server named in the broker config', async () => {
   const { spawn } = require('child_process');
   const dir = tmpDir();
-  fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'fake', brokers: { fake: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')] } } }));
+  const brokers = homeBrokers(dir, { fake: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')] } });
   const env = {
-    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_BROKERS_FILE: brokers, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const run = extra => new Promise(resolve => {
@@ -585,7 +585,7 @@ test('MCP gateway: the configured server sits behind the contract translator: st
     call(2, 'list_open_positions', { accountId: 7 }),
     call(3, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the long' }),
     call(4, 'get_bars', { contractId: 'ES', unit: 'minute', unitNumber: 1, limit: 5 }),
-    call(5, 'close_position', { accountId: 7, contractId: 'CON.F.US.MNQ.Z26' }),
+    call(5, 'close_position', { accountId: 7, contractId: 'fake:MNQ:Z26' }),
   ].join('\n')}\n`);
   await new Promise(r => setTimeout(r, 2500));
   gw.stdin.end();
@@ -600,16 +600,16 @@ test('MCP gateway: the configured server sits behind the contract translator: st
   // Below it: the server only ever saw its own ids.
   const seen = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   const placed = seen.find(c => c.name === 'place_order');
-  assert.strictEqual(placed.args.contractId, 'CON.F.US.MNQ.Z26');
+  assert.strictEqual(placed.args.contractId, 'fake:MNQ:Z26');
   assert.ok(!seen.some(c => c.args && c.args.contractId === 'MNQ'), 'no standard name reached the server');
-  assert.ok(seen.some(c => c.name === 'close_position' && c.args.contractId === 'CON.F.US.MNQ.Z26'), 'a broker id still closes: it goes through as is');
+  assert.ok(seen.some(c => c.name === 'close_position' && c.args.contractId === 'fake:MNQ:Z26'), 'a broker id still closes: it goes through as is');
   assert.ok(!byId[5].result.isError, byId[5].result.content && byId[5].result.content[0].text);
 });
 
 async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}) {
   const { spawn } = require('child_process');
   const env = {
-    PATH: process.env.PATH, HOME: dir, PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
@@ -883,7 +883,7 @@ test('MCP gateway: a stop can\'t be moved toward the market right after a close 
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '600', STOP_ORDER: '1',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -912,7 +912,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -1250,7 +1250,7 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MES', type: 1, size: 1 }]),
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -1275,7 +1275,7 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'MES', type: 1, side: 0, size: 1, limitPrice: 5000 }]),
-    PROJECTX_JOURNAL_PATH: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -1293,16 +1293,16 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
 // --- The replay clock (trading/harness-now.js): FTH_REPLAY_NOW, honored only with a replay broker. ---
 const SATURDAY = '2026-10-10T15:00:00.000Z'; // market closed
 
-/** brokers.json in `home` selecting "sim" (journal: the test's), a replay broker or not. */
-function simBroker(home, journal, { replay = true } = {}) {
-  fs.mkdirSync(home, { recursive: true });
-  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+/** brokers.json in the env's home selecting "sim" (journal: the test's), a replay broker or not; the env reads it. */
+function simBroker(env, { replay = true, extra = {} } = {}) {
+  const home = env.FTH_HOME;
+  homeBrokers(home, { sim: { command: ['node', 'sim.js'], journal: env.FAKE_BROKER_JOURNAL, ...(replay ? { replay: true } : {}), ...extra } }, { env });
   recordBrokerSpecs(home, { broker: 'sim' }); // the replay broker's tick specs, as its translator records them
 }
 
 test('order gate hook: with a replay broker it judges the order at FTH_REPLAY_NOW, not the wall clock', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
-  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  simBroker(env);
   // The wall clock (the suite's) on Saturday: closed, the plan and the trend read stale.
   const live = gate(orderPayload(), { ...env, FTH_TEST_NOW: SATURDAY });
   assert.strictEqual(live.code, 2);
@@ -1328,22 +1328,24 @@ test('order gate hook: FTH_REPLAY_NOW without a real replay broker, or unparseab
   ]) {
     const r = gate(orderPayload(), { ...env, ...extra });
     assert.strictEqual(r.code, 2, JSON.stringify(extra));
-    assert.match(r.stderr, /\[replay-clock\] FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+    assert.match(r.stderr, /\[replay-clock\] FTH_REPLAY_NOW is set but the selected broker "fake" is not a replay broker/);
     assert.match(r.stderr, /close_position still go/);
     for (const payload of [exit, protect, modify]) {
       const ok = gate(payload, { ...env, ...extra });
       assert.strictEqual(ok.code, 0, `${payload.tool_name} ${JSON.stringify(extra)}: ${ok.stderr}`);
     }
   }
-  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  simBroker(env);
   const garbage = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: 'now' });
   assert.strictEqual(garbage.code, 2);
   assert.match(garbage.stderr, /\[replay-clock\] FTH_REPLAY_NOW "now" is not an ISO 8601 UTC time/);
   // A replay broker that reads a shipped live broker's credentials is refused too (the hook can't ask the server).
-  fs.writeFileSync(path.join(env.FTH_HOME, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal: env.PROJECTX_JOURNAL_PATH, replay: true, env: ['PROJECTX_USERNAME', 'PROJECTX_API_KEY'] } } }));
+  const live = shippedBroker();
+  const vars = live.env.slice(0, 2);
+  simBroker(env, { extra: { env: vars } });
   const twin = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: TEST_NOW });
   assert.strictEqual(twin.code, 2);
-  assert.match(twin.stderr, /\[replay-clock\] .*"sim" looks live: it reads the live broker "topstepx"'s variables \(PROJECTX_USERNAME, PROJECTX_API_KEY\)/);
+  assert.ok(twin.stderr.includes(`"sim" looks live: it reads the live broker "${live.name}"'s variables (${vars.join(', ')})`), twin.stderr);
   const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.ok(log.some(e => e.decision === 'blocked' && e.violations.some(v => v.check === 'replay-clock')), 'logged');
 });
@@ -1351,7 +1353,7 @@ test('order gate hook: FTH_REPLAY_NOW without a real replay broker, or unparseab
 test('session-start and stop hooks read the trading day at the replayed time with a replay broker; a refused clock is said', () => {
   const replay = '2026-03-04T15:00:00.000Z'; // Wednesday 10:00 ET
   const { env } = setup([{ ts: '2026-03-04T14:50:00.000Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:anytime long, stop 21480', data: { result: { success: true } } }]);
-  simBroker(env.FTH_HOME, env.PROJECTX_JOURNAL_PATH);
+  simBroker(env);
   const brief = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, { ...env, FTH_REPLAY_NOW: replay });
   assert.match(brief.stdout, /Trading day started 2026-03-03T23:00:00.000Z/);
   assert.match(brief.stdout, /Today: 1 orders placed/);
@@ -1572,9 +1574,9 @@ test('order gate wiring: the hook refuses an entry over the broker\'s max order 
   assert.strictEqual(gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, stopPrice: 21470, reason: '[protect] trail' } }, env).code, 0);
   assert.strictEqual(gate({ tool_name: 'mcp__broker__close_position', tool_input: { accountId: 1, contractId: 'MNQ' } }, env).code, 0);
   // No get_server_config answer recorded: no entry, saying how to fix it; the exit still goes.
-  const raw = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), 'utf8'));
+  const raw = JSON.parse(fs.readFileSync(path.join(env.FTH_HOME, 'contracts-fake.json'), 'utf8'));
   delete raw.server;
-  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-topstepx.json'), JSON.stringify(raw));
+  fs.writeFileSync(path.join(env.FTH_HOME, 'contracts-fake.json'), JSON.stringify(raw));
   const unknown = gate(orderPayload(), env);
   assert.strictEqual(unknown.code, 2);
   assert.match(unknown.stderr, /\[max-order-size\] the broker server's max order size is not recorded yet: call get_server_config/);

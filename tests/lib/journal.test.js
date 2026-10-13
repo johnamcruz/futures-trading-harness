@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { readJournal, resolveJournalPath, reviewResult, contractRoot, entriesSince } = require('../../scripts/lib/trading/journal');
-const { tmpDir, writeJournal } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal } = require('../helpers');
 
 test('missing journal reads as empty', () => {
   assert.deepStrictEqual(readJournal(path.join(tmpDir(), 'nope.jsonl')), []);
@@ -36,9 +36,10 @@ test('unreadable journal throws so the gate can fail closed', () => {
 
 test('resolveJournalPath: the configured broker\'s journal; its variable and ~ honoured', () => {
   const home = tmpDir();
-  assert.strictEqual(resolveJournalPath({ FTH_HOME: home }), path.join(os.homedir(), '.projectx-mcp', 'journal.jsonl'));
-  assert.strictEqual(resolveJournalPath({ FTH_HOME: home, PROJECTX_JOURNAL_PATH: '~/j.jsonl' }), path.join(os.homedir(), 'j.jsonl'));
-  assert.strictEqual(resolveJournalPath({ FTH_HOME: home, PROJECTX_JOURNAL_PATH: '/x/j.jsonl' }), '/x/j.jsonl');
+  const fake = { FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS }; // tests/fixtures/brokers.json: journal ~/.fake-broker/journal.jsonl
+  assert.strictEqual(resolveJournalPath(fake), path.join(os.homedir(), '.fake-broker', 'journal.jsonl'));
+  assert.strictEqual(resolveJournalPath({ ...fake, FAKE_BROKER_JOURNAL: '~/j.jsonl' }), path.join(os.homedir(), 'j.jsonl'));
+  assert.strictEqual(resolveJournalPath({ ...fake, FAKE_BROKER_JOURNAL: '/x/j.jsonl' }), '/x/j.jsonl');
 });
 
 test('reviewResult reads result tags only from reviews', () => {

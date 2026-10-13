@@ -29,7 +29,7 @@ broker MCP server that implements the broker MCP interface
 
 ## Brokers
 
-Which server is config: `mcp-configs/brokers.json` (default `topstepx`),
+Which server is config: `mcp-configs/brokers.json` (the default is the broker it names),
 overridden by `~/.futures-trading-harness/brokers.json` (`FTH_BROKERS_FILE`),
 chosen by `FTH_BROKER` (`scripts/lib/broker/config.js`). A broker entry names
 the server's entry point (`entryEnv`), its journal (`journalEnv`), the

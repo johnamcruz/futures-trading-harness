@@ -18,7 +18,7 @@
  *   loseEntryReply  place_order is taken and filled, but no reply is sent (an order of unknown outcome)
  *   hideOrders      search_orders doesn't list orders yet (the broker is slow to show one)
  *   failBalance     list_accounts fails (the account's balance can't be read)
- *   keepLegs        bracket legs stay working after the position goes flat (no auto OCO on flat)
+ *   keepLegs        bracket legs stay working after the position goes flat (legs not cancelled on flat)
  *   oddSize         positions are listed without a size
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
  *
@@ -40,9 +40,9 @@ const { tradingDayStart } = require('../../scripts/lib/trading/clock');
 
 const ACCOUNT = 7;
 const CONTRACTS = [
-  { id: 'CON.F.US.MNQ.Z26', name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
-  { id: 'CON.F.US.MNQ.H27', name: 'MNQH7', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: false },
-  { id: 'CON.F.US.MES.Z26', name: 'MESZ6', description: 'Micro E-mini S&P 500', tickSize: 0.25, tickValue: 1.25, activeContract: true },
+  { id: 'fake:MNQ:Z26', name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
+  { id: 'fake:MNQ:H27', name: 'MNQH7', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: false },
+  { id: 'fake:MES:Z26', name: 'MESZ6', description: 'Micro E-mini S&P 500', tickSize: 0.25, tickValue: 1.25, activeContract: true },
 ];
 const TYPE = { limit: 1, market: 2, stop: 4 };
 const OK = { success: true, errorCode: 0, errorName: 'Success', errorMessage: null };
@@ -57,7 +57,7 @@ const netOf = (s, id) => {
 
 function initState(file, over = {}) {
   const state = {
-    nowMs: Date.parse('2026-10-07T14:00:00Z'), prices: { 'CON.F.US.MNQ.Z26': 21500, 'CON.F.US.MNQ.H27': 21600, 'CON.F.US.MES.Z26': 5800 },
+    nowMs: Date.parse('2026-10-07T14:00:00Z'), prices: { 'fake:MNQ:Z26': 21500, 'fake:MNQ:H27': 21600, 'fake:MES:Z26': 5800 },
     balance: 50000, nextId: 100, positions: [], orders: [], fills: [], dropCloses: 0, holdCloses: false, held: [], oddSize: false, calls: [], ...over,
   };
   fs.writeFileSync(file, JSON.stringify(state));
@@ -111,7 +111,7 @@ function fill(s, contractId, side, size, price, orderId) {
   const next = net + sign * size;
   s.positions = s.positions.filter(x => x.contractId !== contractId);
   if (next === 0) {
-    // Flat: its bracket legs go (auto OCO), unless the broker leaves them.
+    // Flat: legs cancelled on flat, unless the broker leaves them.
     if (!s.keepLegs) for (const o of s.orders) if (o.status === 1 && o.contractId === contractId && o.parentId) o.status = 3;
     return;
   }

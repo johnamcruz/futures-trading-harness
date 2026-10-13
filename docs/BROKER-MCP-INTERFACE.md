@@ -77,7 +77,7 @@ harness (agents, skills, order gate, runner, CLIs)
 | `accountId` | integer, from `list_accounts` |
 | `contractId` | the server's own id for a contract, any format. The harness never sees it: see Contract names |
 | ISO time | ISO 8601 string with an offset, e.g. `2026-10-09T13:30:00Z` |
-| trading day | starts 17:00 America/Chicago; daily figures and defaults use it |
+| trading day | starts 17:00 America/Chicago (the CME Globex day); daily figures and defaults use it |
 
 ## Contract names
 

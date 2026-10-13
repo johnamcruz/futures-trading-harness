@@ -213,7 +213,7 @@ test('labels: no ATR (too few bars closed by t) leaves the stop unmapped and cou
 });
 
 test('labels: a prop attempt alone sets no budget (its sizing needs state the run doesn\'t record): the step is unknown', () => {
-  const { runDir } = makeRun({ steps: [{ k: 0, cycle: { orders: [LONG], attempts: [{ account: 'topstep_50k', status: 'active', cushion: 200, entryBlock: null }] } }] });
+  const { runDir } = makeRun({ steps: [{ k: 0, cycle: { orders: [LONG], attempts: [{ account: 'test_50k', status: 'active', cushion: 200, entryBlock: null }] } }] });
   const { labels, summary } = labelRun(runDir);
   assert.deepStrictEqual([labels[0].teacher.size.budgetUsd, labels[0].teacher.size.step, summary.unsized], [null, null, 1]);
   // Over the budget: the step is the whole budget, flagged.

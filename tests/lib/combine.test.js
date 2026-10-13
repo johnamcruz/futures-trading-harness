@@ -244,7 +244,7 @@ test('balanceCheck: the day\'s anchor plus every fill since (P&L less fees and c
   assert.strictEqual(prop.balanceCheck(anchor, 100000, fills).diff, 41.24, 'the broker never booked the loss');
   // A fill at the anchor's own time came after the anchor was read (the cycle runs after the bar's snapshot).
   assert.strictEqual(prop.balanceCheck(anchor, 99999.63, [{ creationTimestamp: anchor.at, profitAndLoss: null, fees: 0.37 }]).diff, 0);
-  // Commissions reported apart from fees are a cost too (TopstepX can report them so).
+  // Commissions reported apart from fees are a cost too (a broker can report them so).
   assert.strictEqual(prop.balanceCheck(anchor, 99958.26, [{ creationTimestamp: '2026-06-01T14:02:00Z', profitAndLoss: -40.5, fees: 0.74, commissions: 0.5 }]).diff, 0);
   assert.strictEqual(prop.closeBefore(99958.26, [{ creationTimestamp: '2026-06-01T23:00:00Z', profitAndLoss: -40.5, fees: 0.74, commissions: 0.5 }], prop.dayEndMs('2026-06-01')), 100000);
   assert.throws(() => prop.balanceCheck(anchor, 1, [{ profitAndLoss: 1 }]), /without a time/);

@@ -190,7 +190,7 @@ test('phase 1 that denies an active attempt is never cached nor served; a cached
   const now = new Date(a.closedAt);
   const record = (text, account) => RC.recordReports({ output: task('risk-manager', text, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account, day: DAY, now });
   assert.strictEqual(record(wrong, active).phase1, null, 'not cached: the next cycle runs phase 1 again');
-  // Denials a 9B writes, alone or after a correct Attempt line: never cached.
+  // Denials a small local model writes, alone or after a correct Attempt line: never cached.
   const line = 'Attempt: topstep_100k active, cushion $3,000, budget $900';
   for (const t of ['However, no prop attempt is running', 'no active attempt', 'the attempt is not running', 'Wait for a prop attempt to be started',
     'No prop attempt is running, so the standard position-sizing limits apply', 'no attempt running; daily limit $1,000 applies', 'Attempt: none listed',
