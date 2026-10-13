@@ -40,8 +40,9 @@ const { exitPlan } = require('../trading/evaluator');
 const { createSimBroker, onTick } = require('../backtest/sim-broker');
 const { stopTicks, targetFor } = require('../trading/order-plan');
 const { tradingDayKey } = require('../trading/clock');
+const { DEFAULT_SIZING } = require('../trading/combine');
 
-const SLIPPAGE_TICKS = 1; // the backtester's default per market fill
+const SLIPPAGE_TICKS = DEFAULT_SIZING.stop_slippage_ticks; // the backtester's default per market fill (engine.js)
 const round = (x, d = 4) => (x === null || x === undefined || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
 const resultOf = net => (net > 0 ? 'win' : net < 0 ? 'loss' : 'scratch');
 

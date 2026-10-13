@@ -27,7 +27,9 @@ description: Size futures trades from the stop distance, tick value, and the rem
    Contract ids can name a root by another symbol than the exchange's
    (the harness names contracts by their root: `NQ`, `MNQ`; another month is `NQ:2026-03`). Confirm with `search_contracts`.
 2. **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
-   fees from the account, if known).
+   fees from the account, if known). A stop can fill a tick or more past its
+   price: when the room to the loss floor or the daily limit sets the size,
+   count a tick of slippage per contract too (a policy verdict already does).
 3. **Risk budget** = the smallest of:
    - the strategy / plan $ risk,
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`,
@@ -53,7 +55,9 @@ description: Size futures trades from the stop distance, tick value, and the rem
    rationale said, never farther.
 6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
    policy strategy, the verdict's contract (the selected one), size, and stop
-   ticks were sized from the attempt's budget (`combine_status`); place at
+   ticks were sized from the attempt's budget (`combine_status`), each
+   contract's risk counting its stop plus a tick of expected slippage
+   (`sizing.stop_slippage_ticks`) and fees both ways; place at
    most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own

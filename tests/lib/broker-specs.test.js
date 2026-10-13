@@ -106,5 +106,6 @@ test('brokerSpecs: a recorded spec unlike the static table is no spec (fail clos
   prop.snapshot(home, account, 50000, new Date(now.getTime() - 60000));
   const odd = r => ({ MNQ: { tickSize: 0.25, tickValue: 0.5 }, NQ: { tickSize: 0.5, tickValue: 10 } }[r] || null);
   assert.match(prop.budgetPlan(home, account, { sizing: {}, contracts: 'auto' }, 'MNQ', 40, 1, odd).error, /MNQ and NQ have different tick sizes \(0\.25, 0\.5\)/);
-  assert.strictEqual(prop.budgetPlan(home, account, { sizing: {}, contracts: 'micro' }, 'MNQ', 40, 1, specs.brokerSpecs(recordBrokerSpecs(home, { roots: ['NQ'] }))).size, 19);
+  // $400 budget; 40 ticks plus a tick of expected slippage: 41 x $0.50 + $0.74 fees = $21.24 a micro, 18 MNQ.
+  assert.strictEqual(prop.budgetPlan(home, account, { sizing: {}, contracts: 'micro' }, 'MNQ', 40, 1, specs.brokerSpecs(recordBrokerSpecs(home, { roots: ['NQ'] }))).size, 18);
 });

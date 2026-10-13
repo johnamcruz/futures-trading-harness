@@ -47,7 +47,8 @@ and at most its size, when the priority order (the strategy-library skill) says 
 
 ```text
 prop_flow_1m short setup from ofi_absorption: sizing says full (max 1 NQ, stop 30 ticks)
-NQ selected. A $200 budget: 30 ticks on MNQ = $15 + $0.74 fees = $15.74 a micro, so
-12 micros, traded as 1 NQ: 30 ticks on NQ = $150 + $2.80 fees = $152.80.
+NQ selected. A $200 budget: 30 ticks plus a tick of expected slippage on MNQ = 31 x $0.50
+= $15.50 + $0.74 fees = $16.24 a micro, so 12 micros, traded as 1 NQ: 31 x $5 = $155
++ $2.80 fees = $157.80.
 With MNQ selected, the same setup is 12 MNQ.
 ```

@@ -57,7 +57,7 @@ const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'ti
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
-const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd'];
+const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks'];
 /**
  * Data connectors a strategy can declare, like a skill declares its tools.
  *   order_flow: aggressor buy/sell volume per bar (series ofi, delta), from
@@ -130,6 +130,7 @@ function validateStrategy(data, body, folderName) {
       req(z && typeof z === 'object' && !Array.isArray(z) && Object.entries(z).every(([k, v]) => SIZING_KEYS.includes(k) && typeof v === 'number' && v >= 0),
         `sizing: a map of ${SIZING_KEYS.join(', ')} (numbers, 0 or more)`);
       req(!(z && z.cushion_frac > 1), 'sizing.cushion_frac: at most 1 (a trade never risks more than the whole cushion)');
+      req(!(z && z.stop_slippage_ticks !== undefined && z.stop_slippage_ticks < 1), 'sizing.stop_slippage_ticks: at least 1 (the backtester\'s fill slippage; sizing never counts less)');
     }
     req(data.contracts === undefined || CONTRACT_MODES.includes(data.contracts), `contracts: ${CONTRACT_MODES.join(' | ')} (auto: minis once the size reaches one mini)`);
     req(data.risk && data.risk.stop === 'strategy', "risk.stop: strategy (each setup keeps its own strategy's stop)");

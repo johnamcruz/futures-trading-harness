@@ -20,7 +20,11 @@ lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
 `topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
-`sizing` allows, or is skipped. The harness tracks the attempt and enforces
+`sizing` allows, or is skipped. A contract's risk is its stop plus the
+stop's expected slippage (`sizing.stop_slippage_ticks`, a tick by default,
+as the backtester fills stops) plus fees both ways, so a stop filled
+within its expected slippage never reaches the floor or the daily limit; a
+gap or fast market that fills it further past the stop still can. The harness tracks the attempt and enforces
 it:
 
 - In autonomous runs the cycle prompt carries each running attempt's state
@@ -123,11 +127,11 @@ prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick st
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
 prop_portfolio's sizing: 0.3 x $3250 = $975 (under the $1,000 cap; no
-drawdown from the peak). A 40-tick stop risks $20 + $0.74 fees = $20.74 a
-micro: 47 micros ($975 / $20.74), traded as 4 NQ with NQ selected (NQ: $200 +
-$2.80 fees = $202.80 each, $811.20 in all). Halved by the priority order:
-23 micros, 2 NQ. With MNQ selected the verdict is 47 MNQ ($974.78), halved
-23 MNQ.
+drawdown from the peak). A 40-tick stop plus a tick of expected slippage
+risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
+$21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
+$207.80 each, $831.20 in all). Halved by the priority order: 22 micros, 2 NQ.
+With MNQ selected the verdict is 45 MNQ ($955.80), halved 22 MNQ.
 ```
 
 ```text

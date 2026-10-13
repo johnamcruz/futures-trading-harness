@@ -217,7 +217,11 @@ its strategies' setups, on its account, sized by its `sizing` in micros or
 minis (`contracts`). An attempt starts every `--every N` trading days (config
 `every`, default 1), runs for the account's `sessions`, and ends on pass,
 blow, or timeout. A stop that would reach the floor or the daily limit is
-sized down, and equity at the floor inside a bar is a blow, liquidated there.
+sized down, each contract's risk counting the stop's expected slippage
+(`sizing.stop_slippage_ticks`, a tick by default, as live) and fees both
+ways; the fills still slip by `slippageTicks` (the same tick by default), so
+a larger `--slippage` tests the live sizing under worse fills. Equity at the
+floor inside a bar is a blow, liquidated there.
 Every setup the budget can fund is taken at its full size, and every trade
 exits by the policy strategy's trail, as live. The run writes `combine.json`
 and `combine.md`: pass, blow, and timeout rates, win rate, median days to

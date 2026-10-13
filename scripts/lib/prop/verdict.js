@@ -29,7 +29,7 @@ function setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf 
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
   const { legs, ratio, mode } = legsFor(account, symbol, specOf, selected);
   const plan = fraction => combine.contractPlan({
-    dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
+    dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,
   });
   return { bars, i, tf, closeAt, stopTicks, plan, cp: plan(1), sizing: z };
 }

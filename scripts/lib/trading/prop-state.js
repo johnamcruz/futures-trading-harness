@@ -368,7 +368,7 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   const z = { ...combine.DEFAULT_SIZING, ...(strategy.sizing || {}) };
   const { legs, ratio, mode } = legsFor(account, root, specOf, selected);
   const plan = combine.contractPlan({
-    dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio,
+    dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,
   });
   return plan || { root: null, size: 0, riskPerContract: 0 };
 }

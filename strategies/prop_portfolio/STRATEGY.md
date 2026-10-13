@@ -13,6 +13,7 @@ sizing:                       # risk from the headroom above the floor
   cap_usd: 1000               # ... and at most $1,000
   drawdown_halve_usd: 1500    # half that while the balance is $1,500 or more below its peak
   min_size_guard: 1.5         # one micro may risk up to 1.5x the budget; a mini never more than the budget
+  stop_slippage_ticks: 1      # a stop's expected slippage, counted in each contract's risk (the backtester's fill slippage)
 contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
 exit:
   trail_activate_r: 2         # hold the setup's own stop until +2R ...
@@ -52,10 +53,13 @@ skips one the budget can't fund, and its trail exits every trade.
    attempt's cushion, so while a trade is open (or an entry is in flight) on
    one index, setups on the others wait (the gate refuses them, and
    backtests do the same). Each trade is then sized from the whole
-   cushion, and a stopped trade never reaches the floor or the daily limit.
+   cushion, and a stop filled within its expected slippage (step 3) never
+   reaches the floor or the daily limit.
 3. The size budget is 30% of the cushion above the trailing floor, at most
    $1,000, halved while the balance is $1,500 or more below its peak, and
-   never a full stop's reach to the floor or the daily limit. Risking a share
+   never a full stop's reach to the floor or the daily limit, counting a tick
+   of expected slippage past the stop (`stop_slippage_ticks`) and fees both
+   ways in each contract's risk. Risking a share
    of the headroom shrinks the size as the cushion shrinks, so a losing run
    decays toward a timeout instead of reaching the floor. It is worked out in
    micros and traded in the selected contract (MNQ selected: micros; NQ
@@ -76,13 +80,15 @@ skips one the budget can't fund, and its trail exits every trade.
 
 ```text
 Cushion $3,250: budget 0.3 x $3,250 = $975.
-  NQ, a 40-tick stop (10 points): $20.74 a micro ($20 + $0.74 fees): 47 micros,
-    traded as 4 NQ ($200 + $2.80 fees = $202.80 each, $811.20).
-  ES, a 16-tick stop (4 points): $20.74 an MES ($20 + $0.74): 47 micros, 4 ES ($202.80 each).
-  YM, a 40-tick stop (40 points): $20.74 an MYM: 4 YM ($202.80 each).
-  RTY, a 40-tick stop (4.0 points): $20.74 an M2K: 4 RTY ($202.80 each).
+Each contract's risk is its stop plus a tick of expected slippage, plus fees both ways.
+  NQ, a 40-tick stop (10 points): $21.24 a micro (41 x $0.50 = $20.50 + $0.74 fees): 45 micros,
+    traded as 4 NQ (41 x $5 = $205 + $2.80 fees = $207.80 each, $831.20).
+  ES, a 16-tick stop (4 points): $21.99 an MES (17 x $1.25 = $21.25 + $0.74): 44 micros,
+    4 ES (17 x $12.50 = $212.50 + $2.80 = $215.30 each).
+  YM, a 40-tick stop (40 points): $21.24 an MYM: 4 YM ($207.80 each).
+  RTY, a 40-tick stop (4.0 points): $21.24 an M2K: 4 RTY ($207.80 each).
 Cushion $1,000, $2,000 below the peak: budget 0.3 x $1,000 / 2 = $150.
-  YM, a 40-tick stop: 7 MYM ($145.18), under one mini, so micros.
+  YM, a 40-tick stop: 7 MYM ($148.68), under one mini, so micros.
 
 prop_portfolio long setup on ES from supertrend: sizing says full (max 4 ES, stop 16 ticks)
 -> place_order ES buy 4, stopLossBracket.ticks 16,

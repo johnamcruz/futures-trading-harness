@@ -136,12 +136,13 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
   assert.strictEqual(v.component, 'trendy');
   assert.strictEqual(v.stopTicks, 40);
   // Balance $50,250: cushion $2,250 over the $48,000 floor, budget 0.2 x = $450.
-  // A 40-tick stop risks $20 + $0.74 fees = $20.74 a contract: 21 micros.
+  // A 40-tick stop plus a tick of expected slippage risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a contract:
+  // 21 micros ($446.04).
   assert.deepStrictEqual([v.maxSize, v.contract], [21, 'MNQ']);
   assert.strictEqual(v.policy, undefined, 'the verdict records no trained policy');
   assert.ok(Date.parse(v.expiresAt) > now.getTime());
   // The runner's contract is the selected leg: MNQ stays 21 micros under contracts auto (never switched to
-  // 2 NQ), and NQ selected sizes in minis (NQ: $200 + $2.80 fees = $202.80 each: 2).
+  // 2 NQ), and NQ selected sizes in minis (NQ: 41 x $5 = $205 + $2.80 fees = $207.80 each: 2).
   for (const [leg, want] of [['MNQ', ['MNQ', 21, 'full']], ['NQ', ['NQ', 2, 'full']]]) {
     for (const contracts of ['auto', 'micro', 'mini']) {
       const auto = setup({ contracts });

@@ -207,11 +207,11 @@ own.
   by 50%.
 - **What a blow is, in the simulation.** The sizing is meant never to let a
   full stop reach the floor or the daily limit (`combine.js` `room`), so a
-  blow comes only from a fill beyond the stop or a stop that wasn't
-  working. Today `contractPlan`'s risk per contract counts fees but not the
-  stop's expected slippage, so a size set by the room (not the budget) can
-  end one tick past the floor; the sizing must include the expected stop
-  slippage (a fix of its own, before the evaluator, R6-R9, is built). The
+  blow comes only from a fill further past the stop than its expected
+  slippage or a stop that wasn't working. `contractPlan`'s risk per contract counts the stop's expected
+  slippage (`sizing.stop_slippage_ticks`, a tick by default, the
+  backtester's fill slippage) as well as fees, so a size set by the room
+  (not the budget) never ends a tick past the floor or the daily limit. The
   bootstrap therefore resamples the stop overshoots actually observed in the
   history (gaps and fast markets included, by contract), never a fixed tick,
   and injects faults at measured rates: a stop placed late, missing or
