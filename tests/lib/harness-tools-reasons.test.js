@@ -47,7 +47,7 @@ test('reason_check: the June misreads are FALSE against this bar\'s facts', () =
   const run = reasons => check({ symbol: 'MNQ', reasons }, ctx(h)).text;
   assert.match(run('CYCLE RESULT: no-trade - no prop attempt running'), /- FALSE no-attempt: "no prop attempt running" - the topstep_50k attempt is active\n/);
   assert.match(run('CYCLE RESULT: no-trade - keltner short blocked by the 15m down trend rule'), /- FALSE trend-blocks: "keltner short blocked by the 15m down trend rule" - the trend rule \(1h down\) allows short\n/);
-  assert.match(run('CYCLE RESULT: no-trade - no candidate strategies'), /- FALSE nothing-fired: "no candidate strategies" - fired: keltner short, prop_portfolio short \(verdict full 2\)\n/);
+  assert.match(run('CYCLE RESULT: no-trade - no candidate strategies'), /- FALSE nothing-fired: "no candidate strategies" - fired: prop_portfolio short \(verdict full 2\)\n/);
   const window = run('CYCLE RESULT: no-trade - opening print window until 10:00 ET');
   assert.match(window, /- FALSE no-entry-window: "opening print window until 10:00 ET" - the opening drive window allows entries \(09:57 ET\)\n/);
   assert.match(window, /1 reason FALSE: name it, drop it, and make the decision again from the facts\.\n$/);
@@ -55,6 +55,18 @@ test('reason_check: the June misreads are FALSE against this bar\'s facts', () =
   const json = JSON.parse(check({ symbol: 'MNQ', reasons: 'no-trade - no candidates', json: true }, ctx(h)).text);
   assert.deepStrictEqual(json.steps.map(s => `${s.setup} ${s.direction}`), ['keltner short', 'prop_portfolio short']);
   assert.strictEqual(json.falseCount, 1);
+});
+
+test('reason_check: the same policy\'s verdict on another family (recorded later) never hides this family\'s', () => {
+  const h = home();
+  const v = { strategy: 'prop_portfolio', component: 'keltner', direction: 'short', action: 'full', maxSize: 2, stopTicks: 40, bar: AS_OF, at: CLOSED, expiresAt: '2026-06-10T14:00:00.000Z' };
+  prop.appendVerdict(h, { ...v, contract: 'MNQ' });
+  prop.appendVerdict(h, { ...v, contract: 'MES', action: 'skip', maxSize: 0 });
+  const t = check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - no active policy verdict' }, ctx(h)).text;
+  assert.match(t, /- FALSE no-verdict: "no active policy verdict" - verdict: prop_portfolio short full\n/);
+  // The latest per strategy within the family, as the gate keys it: a later MNQ skip on the bar replaces the full.
+  prop.appendVerdict(h, { ...v, contract: 'MNQ', action: 'skip', maxSize: 0, reason: 'budget below one contract' });
+  assert.match(check({ symbol: 'MNQ', reasons: 'no-trade - prop_portfolio verdict is skip' }, ctx(h)).text, /- TRUE verdict-skip: "prop_portfolio verdict is skip" - verdict: prop_portfolio short skip \(budget below one contract\)\n/);
 });
 
 test('reason_check: true reasons TRUE, the unparsed unchecked; no attempt started is "none"', () => {

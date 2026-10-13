@@ -64,7 +64,7 @@ const path = require('path');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { readLines, readRun } = require('./store');
 const { labelRun, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy } = require('./labels');
-const { buildBriefing, sessionWindow } = require('../trading/briefing');
+const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
 const { exitPlan } = require('../trading/evaluator');
 const { historyBars } = require('../autotrader');
@@ -89,7 +89,7 @@ const etClock = ms => ET.format(new Date(ms));
 // Classification
 
 // Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence and mixed alone are not.
-const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'no-room', 'counter', 'entry-block']);
+const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'no-room', 'counter', 'entry-block']);
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -239,7 +239,7 @@ function windowAt(t) {
 function factsAt(label, rec, { home, tf, accounts }) {
   const t = Date.parse(label.t);
   const facts = {
-    t: label.t, et: etClock(t), window: windowAt(t),
+    t: label.t, et: etClock(t), window: windowAt(t), news: newsState(rec.blackouts, new Date(t)),
     scanned: false, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
     // A strategy's exit plan and bar size (its max_bars count in its own bars).

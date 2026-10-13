@@ -8,7 +8,7 @@
  *   - the reason_check harness tool (harness-tools/reasons.js), which the risk manager and the head trader call before
  *     they approve, veto or skip, with the facts of the bar they decide (factsFromBriefing).
  *
- * The facts: { window: { name, until, et, entriesAllowed } | null, scanned, setups: [{ name, component, policy,
+ * The facts: { window: { name, until, et, entriesAllowed } | null, news: { inBlackout, until, reason, error } | null, scanned, setups: [{ name, component, policy,
  * direction, candidate, style, verdict, trendAllows, prevailing, room: { inTheWay, needR }, alignment, confluence,
  * blocked, vwapSide, lunch }], trendRule: { prevailing, long, short }, attempt: { account, status, entryBlock } | null }.
  * Anything unknown is null, and a claim about it is `unchecked`, never confirmed.
@@ -115,7 +115,8 @@ const CLAIMS = [
   ['nothing-fired', /\bor fail|fail(?:ed)? (?:their |its )?triggers?|all (?:rules |strategies |candidates )?failed/i],
   ['no-reversal-fired', /\bno reversal strateg|reversal strategies (?:have )?(?:no |not |failed)/i],
   ['trend-blocks', /trend\b.*\b(?:blocks?|blocking|prohibits?|violation)|\bblocks? (?:all )?trend|blocked by .*trend|against the prevailing trend/i],
-  ['no-entry-window', /opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|into the close/i],
+  ['no-entry-window', /opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|into the close|news blackout|in a (?:news )?blackout/i],
+  ['verdict-skip', /verdict (?:is |was |says |action (?:is )?)?:?\s*skip|skip verdict|(?:policy|verdict) skipped|skipped by (?:the )?(?:policy|verdict)/i],
   ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
   ['nothing-fired', /\bno (?:valid )?(?:strategy |strategies |candidate |rules? )*(?:candidates?|strateg(?:y|ies)(?! verdict)|signals?|setups?)\b|\b0 candidates\b|candidates: \[\]|\bnone fired\b|\bno rules fired\b|trigger(?:s)? (?:not (?:fired|met)|conditions (?:are )?not met)|no valid entry trigger/i],
@@ -142,19 +143,30 @@ function clausesOf(text) {
   return { stated: m ? m[1] ? m[1].toLowerCase() : m[0].toLowerCase() : null, clauses };
 }
 
+const WINDOW_NAMED = /opening (?:print|blackout)|no[- ]entry window|outside (?:the )?(?:trading )?session|session opens at|into the close|daily break/i;
+const OTHER_GROUND = /news|blackout|\bcpi\b|fomc|\bnfp\b|cooldown|loss[- ]streak|daily (?:loss )?limit|stand[- ]?down/i;
 const sidesIn = c => [...new Set((c.match(/\b(longs?|shorts?)\b/gi) || []).map(x => SIDE[x.toLowerCase()]))];
 const setupNamed = (c, facts) => facts.setups.find(s => new RegExp(`\\b${s.name}\\b|\\b${s.component || '\\0'}\\b`, 'i').test(c)) || null;
 const mainSetup = facts => facts.setups.find(s => s.candidate) || facts.setups[0] || null;
 const hhmm = s => s.replace(/^(\d):/, '0$1:');
 
 /** One claim checked against the facts: { kind, clause, check: true|false|unchecked, why }. */
-function checkClaim(kind, clause, facts) {
+function checkClaim(kind, clause, facts, text = clause) {
   const ok = (v, why) => ({ kind, clause, check: v, why });
   const fired = facts.setups.filter(s => s.candidate);
   if (kind === 'no-entry-window') {
     const w = facts.window;
+    const news = isObj(facts.news) ? facts.news : null;
+    // A clause naming a session window is about the window; any other no-entry ground (news, a cooldown, a limit),
+    // named in the clause or beside it in the same result ("entries blocked until 10:30 (cooldown)"), the window
+    // can't refute.
+    const window = WINDOW_NAMED.test(clause);
+    const other = !window && OTHER_GROUND.test(text);
+    if (!window && news && news.inBlackout === true) return ok(true, `a news blackout is in force${news.until ? ` until ${etClock(Date.parse(news.until))} ET` : ''}${news.reason ? ` (${news.reason})` : ''}`);
+    if (!window && news && news.inBlackout === null && news.error) return ok(true, news.error);
     if (!w) return ok('unchecked', 'no decision time');
     const until = /until (\d{1,2}:\d{2})/i.exec(clause);
+    if (w.entriesAllowed && other) return ok('unchecked', `the ${w.name} window allows entries (${w.et} ET)${news && news.inBlackout === false ? ' and no news blackout is in force' : ''}; a gate cooldown or limit isn't among these facts`);
     if (w.entriesAllowed) return ok(false, `the ${w.name} window allows entries (${w.et} ET)`);
     if (until && hhmm(until[1]) !== w.until) return ok(false, `the ${w.name} window ends at ${w.until} ET, not ${until[1]}`);
     return ok(true, `${w.name} until ${w.until} ET`);
@@ -171,7 +183,12 @@ function checkClaim(kind, clause, facts) {
     const sides = sidesIn(clause);
     const rule = named && named.trendAllows !== null && named.trendAllows !== undefined ? { [named.direction]: named.trendAllows } : facts.trendRule;
     const asked = sides.length ? sides : named ? [named.direction] : ['long', 'short'];
-    if (named && named.style === 'reversal') return tag(ok(false, `${named.component || named.name} is a reversal strategy: the trend rule allows it`));
+    if (named && named.style === 'reversal') {
+      // A reversal fading the prevailing trend: step 2 allows it only at a higher-timeframe level, at half size (judgment).
+      const p = named.prevailing;
+      if (p && p.trend === (named.direction === 'long' ? 'down' : 'up')) return tag(ok('unchecked', `${named.component || named.name} is a reversal fading the ${p.label} ${p.trend} trend: step 2 decides it (only at a higher-timeframe level, half size)`));
+      return tag(ok(false, `${named.component || named.name} is a reversal strategy, not fading the trend: the trend rule allows it`));
+    }
     if (asked.some(x => rule[x] === null || rule[x] === undefined)) return tag({ ...ok('unchecked', 'the trend rule for that side is not recorded'), sides: asked });
     const allowed = asked.filter(x => rule[x] === true);
     const res = allowed.length ? ok(false, `the trend rule (${facts.trendRule.prevailing || 'no prevailing trend'}) allows ${allowed.join(' and ')}`) : ok(true, `${facts.trendRule.prevailing}: ${asked.join(' and ')} blocked`);
@@ -185,9 +202,17 @@ function checkClaim(kind, clause, facts) {
     const v = facts.setups.filter(s => s.verdict);
     return v.length ? ok(false, `verdict: ${v.map(s => `${s.name} ${s.direction} ${s.verdict.action}`).join(', ')}`) : ok(true, 'no verdict on the bar');
   }
+  if (kind === 'verdict-skip') {
+    const named = setupNamed(clause, facts);
+    const v = facts.setups.filter(x => x.verdict && (!named || x.name === named.name || x.component === named.name));
+    if (!v.length) return facts.scanned ? ok(false, 'no verdict on the bar') : ok('unchecked', 'no scan recorded for the bar');
+    const skip = v.filter(x => x.verdict.action === 'skip');
+    return skip.length ? ok(true, `verdict: ${skip.map(x => `${x.name} ${x.direction} skip${x.verdict.reason ? ` (${x.verdict.reason})` : ''}`).join(', ')}`)
+      : ok(false, `verdict: ${v.map(x => `${x.name} ${x.direction} ${x.verdict.action}${x.verdict.maxSize ? ` ${x.verdict.maxSize}` : ''}`).join(', ')}`);
+  }
   if (kind === 'entry-block') {
     if (facts.attempt && facts.attempt.entryBlock) return ok(true, facts.attempt.entryBlock);
-    return ok('unchecked', 'no entry block recorded (a gate cooldown is not in the run\'s records)');
+    return ok('unchecked', 'the attempt blocks no entries; a gate cooldown or limit isn\'t among these facts');
   }
   const s = setupNamed(clause, facts) || mainSetup(facts);
   if (!s) return ok('unchecked', 'no setup on the bar to check it against');
@@ -252,7 +277,7 @@ function checkReasons(text, facts) {
     const drop = new Set([...(kinds[0] === 'nothing-fired' ? ['trend-blocks'] : []), ...(kinds.includes('no-reversal-fired') ? ['nothing-fired'] : []), ...(kinds.includes('no-attempt') ? ['entry-block'] : []), ...(kinds.includes('no-room') ? ['room'] : [])]);
     const list = kinds.filter(k => !drop.has(k));
     for (const k of list) {
-      const y0 = checkClaim(k, c, facts);
+      const y0 = checkClaim(k, c, facts, text);
       const x = { ...y0, incidental: incidental(y0, facts) };
       // The same claim twice (two clauses saying it) counts once.
       if (!claims.some(y => y.kind === x.kind && y.check === x.check && y.why === x.why)) claims.push(x);
@@ -318,15 +343,20 @@ function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
   for (const v of (verdicts || []).filter(x => isObj(x) && x.strategy && x.direction)) {
     const verdict = { action: v.action, maxSize: num(v.maxSize), contract: v.contract || null, stopTicks: num(v.stopTicks), reason: v.reason || null };
     const own = setups.find(s => s.name === v.strategy && s.direction === v.direction);
-    if (own) { Object.assign(own, { policy: true, component: v.component || null, verdict, candidate: v.action !== 'skip' }); continue; }
-    const comp = setups.find(s => s.name === v.component && s.direction === v.direction);
-    setups.push({ ...(comp || { style: null, stopPoints: null, trendAllows: rule[v.direction], prevailing: null, room: null, alignment: alignment[v.direction] || 'unknown', confluence: null, blocked: null, vwapSide: null, lunch: ctx.lunch }),
-      name: v.strategy, component: v.component || null, policy: true, direction: v.direction, candidate: v.action !== 'skip', verdict });
+    // A verdict is the policy's setup on the bar (a skip too: step 1 decides it), as the scan lists it.
+    const comp = setups.find(s => s.name === v.component && s.direction === v.direction && !s.policy);
+    if (own) Object.assign(own, { policy: true, component: v.component || null, verdict, candidate: true });
+    else {
+      setups.push({ ...(comp || { style: null, stopPoints: null, trendAllows: rule[v.direction], prevailing: null, room: null, alignment: alignment[v.direction] || 'unknown', confluence: null, blocked: null, vwapSide: null, lunch: ctx.lunch }),
+        name: v.strategy, component: v.component || null, policy: true, direction: v.direction, candidate: true, verdict });
+    }
+    // The briefing holds the scan before the runner's screen: a component a policy owns trades only through its verdict.
+    if (comp) Object.assign(comp, { candidate: false, blocked: `traded through ${v.strategy} (its verdict decides)` });
   }
   const rows = Array.isArray(attempts) ? attempts.filter(r => isObj(r) && r.started) : null;
   const a = rows ? rows.find(r => r.status === 'active') || rows[0] || null : null;
   const attempt = !rows ? null : a ? { account: a.account || null, status: a.status || 'unknown', entryBlock: a.entryBlock || null } : { account: null, status: 'none', entryBlock: null };
-  return { t: b && b.closedAt ? b.closedAt : null, et: m3.et || null, window, scanned, setups, trendRule: rule, attempt };
+  return { t: b && b.closedAt ? b.closedAt : null, et: m3.et || null, window, news: isObj(m3.news) ? m3.news : null, scanned, setups, trendRule: rule, attempt };
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -128,10 +128,10 @@ and whether it allows entries, the trend rule per side, the candidates and
 verdict, the room in R against the room needed, the multi-timeframe read
 for the side) and the attempt line, and lists each setup's priority-order
 steps as the facts answer them: judge each step on its own, not only the
-final call. A reason marked FALSE, or one no fact supports: name it, drop
-it, and decide again from the facts. Check UNCHECKED and UNPARSED reasons
-yourself against the briefing. Without a current briefing it checks
-nothing: check them against the plan and the reports.
+final call. A reason marked FALSE: name it, drop it, and decide again from
+the facts. Check UNCHECKED and UNPARSED reasons yourself against the
+briefing; they aren't false for that alone. Without a current briefing it
+checks nothing: check them against the plan and the reports.
 
 Output exactly one of:
 

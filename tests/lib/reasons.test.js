@@ -40,7 +40,10 @@ test('factsFromBriefing: the window, the trend rule, the setups with room and re
   assert.deepStrictEqual(f.window, { name: 'opening drive', until: '11:00', et: '09:57', entriesAllowed: true });
   assert.deepStrictEqual(f.trendRule, { prevailing: null, long: true, short: true });
   assert.strictEqual(f.scanned, true);
-  assert.deepStrictEqual(f.setups.map(s => [s.name, s.direction, s.policy, s.candidate, s.style, s.trendAllows]), [['orb', 'long', false, true, 'trend', true], ['prop_portfolio', 'long', true, true, 'trend', true]]);
+  // The component a policy owns trades only through its verdict (the briefing holds the scan before the runner's screen).
+  assert.deepStrictEqual(f.setups.map(s => [s.name, s.direction, s.policy, s.candidate, s.style, s.trendAllows]), [['orb', 'long', false, false, 'trend', true], ['prop_portfolio', 'long', true, true, 'trend', true]]);
+  assert.strictEqual(f.setups[0].blocked, 'traded through prop_portfolio (its verdict decides)');
+  assert.strictEqual(f.setups[1].blocked, null, "the policy's setup doesn't inherit the mark");
   assert.deepStrictEqual(f.setups[1].room, { inTheWay: { name: 'IB high', R: 3.1 }, needR: 2 }, 'the verdict takes its component\'s facts');
   assert.deepStrictEqual([f.setups[1].component, f.setups[1].verdict.maxSize], ['orb', 3]);
   assert.deepStrictEqual(f.attempt, { account: 'topstep_50k', status: 'active', entryBlock: null });
@@ -65,7 +68,7 @@ test('reasonCheck: the June misreads come back FALSE, each with the fact', () =>
   assert.strictEqual(claim(reasonCheck('no-trade - keltner short blocked by the 4h up trend rule', up), 'trend-blocks').check, true);
   const none = reasonCheck('CYCLE RESULT: no-trade - no candidate strategies', f);
   assert.strictEqual(claim(none, 'nothing-fired').check, false);
-  assert.match(claim(none, 'nothing-fired').why, /prop_portfolio long \(verdict full 3\)/);
+  assert.match(claim(none, 'nothing-fired').why, /^fired: keltner short, prop_portfolio long \(verdict full 3\)$/);
   const window = reasonCheck('CYCLE RESULT: no-trade - opening print window until 10:00 ET', f);
   assert.strictEqual(claim(window, 'no-entry-window').check, false);
   assert.match(claim(window, 'no-entry-window').why, /the opening drive window allows entries \(09:57 ET\)/);
@@ -117,4 +120,60 @@ test('reasonCheck: each setup\'s priority-order steps, one by one', () => {
 test('the scorecard and the tool share one checker', () => {
   assert.strictEqual(scorecard.checkReasons, checkReasons);
   assert.strictEqual(scorecard.STEPS, require('../../scripts/lib/trading/reasons').STEPS);
+});
+
+test('a policy component beside a skip verdict is no clean take: step 1 says it trades through the policy', () => {
+  const f = factsFromBriefing(briefing({ candidates: [ORB] }), { attempts: ACTIVE, verdicts: [{ ...VERDICT, action: 'skip', maxSize: 0, reason: 'budget below one contract' }] });
+  const r = reasonCheck('no-trade - prop_portfolio verdict is skip', f);
+  assert.deepStrictEqual(r.steps.map(s => [s.setup, s.steps[0].result, s.steps[0].why]), [
+    ['orb', 'no-trade', 'traded through prop_portfolio (its verdict decides)'],
+    ['prop_portfolio', 'no-trade', 'the verdict is skip (budget below one contract)'],
+  ]);
+  assert.strictEqual(require('../../scripts/lib/trading/reasons').expectedDecision(f).decision, 'no-trade');
+  // A skip verdict is still a verdict on the bar: "no candidates" and "no verdict" are false.
+  assert.match(claim(reasonCheck('no candidates', f), 'nothing-fired').why, /prop_portfolio long \(verdict skip\)/);
+  assert.strictEqual(claim(reasonCheck('no policy verdict', f), 'no-verdict').check, false);
+});
+
+test('verdict-skip: checked against the verdict\'s action, named or not', () => {
+  const skip = factsFromBriefing(briefing({ candidates: [ORB] }), { verdicts: [{ ...VERDICT, action: 'skip', maxSize: 0 }] });
+  const full = factsFromBriefing(briefing({ candidates: [ORB] }), { verdicts: [VERDICT] });
+  assert.strictEqual(claim(reasonCheck('no-trade - prop_portfolio verdict is skip', skip), 'verdict-skip').check, true);
+  assert.strictEqual(claim(reasonCheck('no-trade - orb skipped by the policy', skip), 'verdict-skip').check, true, 'named by its component');
+  assert.strictEqual(claim(reasonCheck('no-trade - prop_portfolio verdict is skip', full), 'verdict-skip').check, false);
+  assert.match(claim(reasonCheck('no-trade - skip verdict', full), 'verdict-skip').why, /verdict: prop_portfolio long full 3/);
+  assert.match(claim(reasonCheck('no-trade - skip verdict', factsFromBriefing(briefing({ candidates: [ORB] }))), 'verdict-skip').why, /no verdict on the bar/);
+});
+
+test('trend rule: a step-2 veto of a reversal fading the trend is judgment (unchecked), never FALSE; not fading, FALSE', () => {
+  const CISD = { ...ORB, name: 'cisd_ote', direction: 'short', trendRule: 'reversal' };
+  const up = factsFromBriefing(briefing({ rule: RULE_UP, candidates: [CISD] }));
+  const fade = claim(reasonCheck('no-trade - cisd_ote short blocked by the 4h up trend rule', up), 'trend-blocks');
+  assert.strictEqual(fade.check, 'unchecked');
+  assert.match(fade.why, /cisd_ote is a reversal fading the 4h up trend: step 2 decides it \(only at a higher-timeframe level, half size\)/);
+  const down = factsFromBriefing(briefing({ rule: 'Trend rule: prevailing trend 4h down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too.', candidates: [CISD] }));
+  assert.strictEqual(claim(reasonCheck('no-trade - cisd_ote short blocked by the trend rule', down), 'trend-blocks').check, false);
+});
+
+test('no entries: a news blackout in force is a no-entry fact; news, a cooldown or a limit the window allows is unchecked, never FALSE', () => {
+  const blackout = { inBlackout: true, reason: 'CPI', until: '2026-06-10T14:05:00.000Z' };
+  const withNews = news => { const b = briefing(); b.sections.m3.data.news = news; return factsFromBriefing(b); };
+  const r = claim(reasonCheck('no-trade - no entries until 10:05 (CPI blackout)', withNews(blackout)), 'no-entry-window');
+  assert.deepStrictEqual([r.check, r.why], [true, 'a news blackout is in force until 10:05 ET (CPI)']);
+  assert.strictEqual(claim(reasonCheck('no-trade - in a news blackout', withNews(blackout)), 'no-entry-window').check, true);
+  assert.strictEqual(claim(reasonCheck('no-trade - no entries until 10:05', withNews(blackout)), 'no-entry-window').check, true, 'a blackout in force with no word for it');
+  // The window named is still checked as a window, blackout or not.
+  assert.strictEqual(claim(reasonCheck('no-trade - opening print window until 10:00 ET', withNews(blackout)), 'no-entry-window').check, false);
+  // The blackouts unreadable: the gate refuses entries.
+  assert.strictEqual(claim(reasonCheck('no-trade - no entries until 10:05', withNews({ inBlackout: null, error: 'the blackouts file can\'t be read (x): the order gate refuses entries' })), 'no-entry-window').check, true);
+  // No blackout in force: a cooldown or news ground the window can't refute is unchecked; a bare one is still FALSE.
+  const calm = withNews({ inBlackout: false, next: null });
+  for (const text of ['no-trade - entries blocked until 10:30 (loss-streak cooldown)', 'no-trade - no entries until 10:30: news blackout']) {
+    const c = claim(reasonCheck(text, calm), 'no-entry-window');
+    assert.strictEqual(c.check, 'unchecked', text);
+    assert.match(c.why, /the opening drive window allows entries \(09:57 ET\) and no news blackout is in force; a gate cooldown or limit isn't among these facts/);
+  }
+  assert.strictEqual(claim(reasonCheck('no-trade - no entries until 10:30', calm), 'no-entry-window').check, false);
+  // The live entry-block wording names no run records.
+  assert.strictEqual(claim(reasonCheck('no-trade - cooldown', calm), 'entry-block').why, 'the attempt blocks no entries; a gate cooldown or limit isn\'t among these facts');
 });

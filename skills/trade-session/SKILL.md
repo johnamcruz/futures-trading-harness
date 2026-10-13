@@ -304,9 +304,10 @@ again, except those its prompt gives under "Cached reports".
   and verdict, the room in R against the room needed, the multi-timeframe
   read for the side) and the attempt line, and lists each setup's
   priority-order steps as the facts answer them: judge each step on its
-  own. A reason marked FALSE, or one no fact supports: name it, drop it,
-  and decide again from the facts. Check UNCHECKED and UNPARSED reasons
-  yourself. The order gate's checks still come first and don't change.
+  own. A reason marked FALSE: name it, drop it, and decide again from the
+  facts. Check UNCHECKED and UNPARSED reasons yourself; they aren't false
+  for that alone. The order gate's checks still come first and don't
+  change.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.

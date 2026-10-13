@@ -76,9 +76,12 @@ test('reasons: "keltner short blocked by 15m down trend rule" is false when the 
   // A side named without a strategy: the trend rule per side. "blocks all trend-following setups" claims both sides.
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - 15m down trend blocks trend longs', facts()), 'trend-blocks').check, true);
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - prevailing 15m down trend blocks all trend-following setups', facts()), 'trend-blocks').check, false);
-  // A reversal strategy named: the trend rule never blocks it.
+  // A reversal strategy named: the trend rule never blocks it; fading the prevailing trend, step 2 decides (judgment:
+  // only at a higher-timeframe level, half size), so a veto by it is unchecked, never false.
   const rev = checkReasons('CYCLE RESULT: no-trade - cisd_ote long blocked by the trend rule', facts({ setups: [setup({ name: 'cisd_ote', component: null, policy: false, direction: 'long', style: 'reversal', verdict: null })] }));
-  assert.strictEqual(claim(rev, 'trend-blocks').check, false);
+  assert.strictEqual(claim(rev, 'trend-blocks').check, 'unchecked');
+  const withIt = checkReasons('CYCLE RESULT: no-trade - cisd_ote short blocked by the trend rule', facts({ setups: [setup({ name: 'cisd_ote', component: null, policy: false, direction: 'short', style: 'reversal', verdict: null })] }));
+  assert.strictEqual(claim(withIt, 'trend-blocks').check, false);
   // "blocked by the trend rule or failed their triggers": a claim that nothing fired, not a trend claim.
   const or = checkReasons('CYCLE RESULT: no-trade - all strategies blocked by prevailing 15m down trend rule or failed their triggers', facts());
   assert.deepStrictEqual(or.claims.map(c => [c.kind, c.check]), [['nothing-fired', true]]);
@@ -574,4 +577,15 @@ test('the window at a decision allows entries only by its own field: the opening
   const f = { window: windowAt(at('2026-06-01T13:32:02Z')), scanned: true, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, styleOf: () => null };
   const r = checkReasons('CYCLE RESULT: no-trade - opening print window until 09:35 ET', f);
   assert.ok(r.claims.length && r.claims.every(c => c.check === true), JSON.stringify(r.claims));
+});
+
+test('scoreRun: the news at each decision is a fact, so a true "no entries until" a blackout\'s end is not scored false', () => {
+  const { home, runDir } = makeRun();
+  const t0 = Date.parse(scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }).records[0].facts.t);
+  fs.mkdirSync(path.join(home, 'blackouts'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'blackouts', 'blackouts.json'), JSON.stringify([{ start: new Date(t0 - 60000).toISOString(), end: new Date(t0 + 300000).toISOString(), reason: 'CPI' }]));
+  const f = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }).records[0].facts;
+  assert.deepStrictEqual([f.news.inBlackout, f.news.reason], [true, 'CPI']);
+  assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - no entries until the CPI blackout ends', f), 'no-entry-window'), undefined, 'no time: not a window claim');
+  assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - in a news blackout', f), 'no-entry-window').check, true);
 });

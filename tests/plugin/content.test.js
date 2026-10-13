@@ -325,7 +325,9 @@ test('the priority order is written once, in strategy-library, and every role th
 test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
   // Line breaks fall differently in each document: compare with the whitespace collapsed.
   const flat = text => text.replace(/\s+/g, ' ');
-  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE, or one no fact supports: name it, drop it, and decide again from the facts\./;
+  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE: name it, drop it, and decide again from the facts\. Check UNCHECKED and UNPARSED reasons yourself[^.]*?; they aren't false for that alone\./;
+  // Only a FALSE reason is dropped: a true one the checker can't read (UNPARSED) stays.
+  for (const doc of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md']) assert.doesNotMatch(flat(read(doc)), /no fact supports/, doc);
   const rm = read('agents/risk-manager.md');
   assert.match(rm, /^tools: .*mcp__harness__reason_check/m);
   assert.match(flat(rm), step);
@@ -334,7 +336,7 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   assert.match(rm, /\(after\s+the checks above; they and the order gate's checks don't change\)/);
   const ts = read('skills/trade-session/SKILL.md');
   assert.match(flat(ts), step);
-  assert.match(ts, /The order gate's checks still come first and don't change\./);
+  assert.match(flat(ts), /The order gate's checks still come first and don't change\./);
   // In step 3, before the no-trade note and the plan.
   assert.ok(ts.indexOf('### 3. Head-trader synthesis') < ts.indexOf('**Check every reason') && ts.indexOf('**Check every reason') < ts.indexOf('unanswered red flag → **no trade**'));
   assert.match(read('skills/autonomous-trading/SKILL.md'), /Check its reasons against the facts before you write it \(`reason_check`,\s+trade-session step 3\): a reason marked FALSE is dropped and the decision\s+made again\./);

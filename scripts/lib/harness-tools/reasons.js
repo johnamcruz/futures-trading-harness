@@ -12,12 +12,14 @@
 
 const { readBriefing, current } = require('../trading/briefing');
 const { familyRoot } = require('../trading/contracts');
+const prop = require('../trading/prop-state');
+const { contractRoot } = require('../trading/journal');
 const { loadAccounts } = require('../trading/accounts');
 const { loadStrategies } = require('../trading/strategies');
 const { factsFromBriefing, reasonCheck, renderCheck } = require('../trading/reasons');
 const { harnessHome } = require('../paths');
 const { cycleBarOf } = require('./briefing');
-const { liveVerdicts, statusOf } = require('./combine');
+const { statusOf } = require('./combine');
 const { context, say } = require('./cli');
 
 const USAGE = 'usage: reason-check.js --symbol MNQ --reasons "<the stated decision>" [--json]';
@@ -31,10 +33,19 @@ function briefingNow(c, root) {
   return (cycleBar ? cycleBar === b.asOf : current(b, c.now())) ? b : null;
 }
 
-/** The policy verdicts recorded for the briefing's bar and family, not expired. */
+/**
+ * The policy verdicts recorded for the briefing's bar and family, not expired: filtered first, then the latest per
+ * strategy, as the gate keys them (prop-state latestVerdict: strategy and contract family), so one family's verdict
+ * never hides another's.
+ */
 function verdictsFor(home, b, now) {
   const bar = Date.parse(b.asOf);
-  return liveVerdicts(home, now).filter(v => familyRoot(v.contract || v.symbol || '') === familyRoot(b.symbol) && Date.parse(v.bar) === bar);
+  const latest = new Map();
+  for (const v of prop.readVerdicts(home)) {
+    if (familyRoot(v.contract || contractRoot(v.contractId || v.symbol || '')) !== familyRoot(b.symbol) || Date.parse(v.bar) !== bar || !(Date.parse(v.expiresAt) > now.getTime())) continue;
+    latest.set(v.strategy, v);
+  }
+  return [...latest.values()];
 }
 
 function check({ symbol = null, reasons = null, json = false } = {}, ctx) {
