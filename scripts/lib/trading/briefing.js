@@ -62,7 +62,8 @@ const ET = 'America/New_York';
 // The session-timing skill's windows (ET minutes of the day, from 00:00): [start, end, name]. They name the time of
 // day; whether a new entry is allowed in them is the order gate's clock (FTH_ENTRY_HOURS, FTH_NO_ENTRY_WINDOWS:
 // clock.js entryClock; by default no entries in the opening print 09:30-09:35 and into the close 15:45-16:00). The
-// daily break is the market closed: the harness stops at 16:00 ET (Topstep's time) until the 18:00 ET open.
+// daily break is the market closed: the harness stops at 16:00 ET (inside the Topstep trading day, before its 16:10 ET
+// flatten) until the 18:00 ET open.
 const WINDOWS = [
   [-360, 180, 'asia'], [180, 570, 'london'], [570, 575, 'opening print'], [575, 660, 'opening drive'],
   [660, 690, 'late morning'], [690, 810, 'lunch lull'], [810, 945, 'afternoon'], [945, 960, 'into the close'],
@@ -96,7 +97,7 @@ function sessionWindow(at, clock = DEFAULT_ENTRY_CLOCK) {
   // A gate config that couldn't be read ({ error }): whether the gate allows an entry is unknown, so none.
   const unknown = clock && clock.error ? `the gate config can't be read (${clock.error}): entries refused until it can` : null;
   const refusalAt = unknown ? () => unknown : entryClock(clock || DEFAULT_ENTRY_CLOCK);
-  const refusal = marketOpen ? refusalAt(at) : 'closed 16:00-18:00 ET (the Topstep trading day ends at 16:00 ET)';
+  const refusal = marketOpen ? refusalAt(at) : 'closed 16:00-18:00 ET: the harness stops at 16:00 ET, before Topstep\'s 16:10 ET flatten';
   // The gate's windows are minute-grained: the first minute before the window's end where the answer changes.
   if (marketOpen) {
     for (let t = start + 60000; t < until.getTime(); t += 60000) {

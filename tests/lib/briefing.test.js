@@ -188,6 +188,21 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   assert.match(m3.candidates[0].blocked, /^no-entry window: .* \(market open, no entries\) until /);
 });
 
+test('the runner\'s briefing step reads the gate\'s clock from its env: FTH_NO_ENTRY_WINDOWS and FTH_ENTRY_HOURS reach the window', () => {
+  const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
+  // The bar opening 13:33Z closes 09:36 ET: the opening drive, entries allowed by default.
+  const bars = BARS.slice(0, BARS.findIndex(x => x.t === '2026-04-27T13:33:00.000Z') + 1);
+  const m3 = env => {
+    const home = tmpDir();
+    briefingRecorder(home, { timeframe: 3 }, () => new Date(), { FTH_HOME: home, ...env })({ symbol: 'NQ', bars }, [], null);
+    const d = B.readBriefing(home, 'NQ').sections.m3.data;
+    return [d.windowEntries, d.windowText];
+  };
+  assert.deepStrictEqual(m3({}), ['allowed', 'opening drive (market open, entries allowed) until 11:00 ET']);
+  assert.deepStrictEqual(m3({ FTH_NO_ENTRY_WINDOWS: '09:30-09:45@America/New_York' }), ['none', 'opening drive (market open, no entries) until 09:45 ET']);
+  assert.deepStrictEqual(m3({ FTH_ENTRY_HOURS: '10:00-15:00@America/New_York' }), ['none', 'opening drive (market open, no entries) until 10:00 ET']);
+});
+
 test('the day section built on the 15:57 ET bar ends on the 16:03 bar; one built on the 16:00 bar holds to tomorrow\'s', () => {
   // Find the fixture's bars opening 15:57 and 16:00 ET, and check a fresh build's day expiry through buildBriefing.
   const et = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));

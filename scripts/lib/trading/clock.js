@@ -159,17 +159,18 @@ function entryClock({ entryHours = '', noEntryWindows = '' } = {}) {
 }
 
 /**
- * Hard trading hours: the Topstep trading day, from 18:00 ET (17:00 CT,
- * Topstep's daily reset) until 16:00 ET the next day (22 hours), Sunday evening
- * to Friday afternoon. Closed 16:00-18:00 ET and over the weekend: no entry
- * then, and every position is flat by 16:00 ET (Topstep's own flatten deadline
- * is 16:10 ET; CME's Globex trades on to 17:00 ET, background only). Strategies
+ * Hard trading hours: the harness's own hours inside the Topstep trading day
+ * (which starts at Topstep's 17:00 CT / 18:00 ET reset): from 18:00 ET until
+ * 16:00 ET the next day (22 hours), Sunday evening to Friday afternoon. Closed
+ * 16:00-18:00 ET and over the weekend: no entry then, and every position is
+ * flat by 16:00 ET, before Topstep's own 16:10 ET flatten deadline (CME's Globex
+ * trades on to 17:00 ET, background only). Strategies
  * narrow it with `sessions` (e.g. [ny]).
  */
 const MARKET_TZ = 'America/New_York';
 const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
-const MARKET_HOURS_LABEL = 'the Topstep trading day: from 18:00 ET (17:00 CT) until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends';
+const MARKET_HOURS_LABEL = 'the harness\'s hours inside the Topstep trading day (17:00 CT reset): from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; Topstep\'s own flatten is 16:10 ET';
 
 /**
  * Named sessions inside the trading day, in New York time:

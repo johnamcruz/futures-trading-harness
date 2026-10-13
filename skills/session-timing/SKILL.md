@@ -13,9 +13,10 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 ## How It Works
 
 All times America/New_York (ET) unless marked CT. The harness follows the
-Topstep trading day, not CME's: from 18:00 ET (17:00 CT, Topstep's daily
-reset) until 16:00 ET the next day, Sunday evening to Friday afternoon (a
-hard rule in the order gate). The market is open that whole time,
+Topstep trading day, not CME's: it starts at 18:00 ET (17:00 CT, Topstep's
+daily reset), and the harness trades it until 16:00 ET the next day, Sunday
+evening to Friday afternoon (a hard rule in the order gate), stopping before
+Topstep's own 16:10 ET flatten. The market is open that whole time,
 09:30-16:00 ET included: a time
 like 10:00 ET is inside the session, not before it, and so is 08:00 ET (the
 18:00 ET open was the evening before; 09:30 ET is only the RTH cash open).
@@ -47,7 +48,7 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
-| 16:00–18:00 | Daily break (Topstep's day is over) | Closed: no entries, no positions (hard rule) |
+| 16:00–18:00 | Daily break (the harness's day is over; Topstep flattens by 16:10) | Closed: no entries, no positions (hard rule) |
 | 16:10 ET / 15:10 CT | Topstep's own flatten deadline | The harness is flat by 15:50 ET (runner), 16:00 ET at the latest |
 
 By default only three windows forbid entries by the clock: the opening
