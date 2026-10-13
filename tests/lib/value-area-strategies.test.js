@@ -90,14 +90,17 @@ function day2(bars, flatAt, n, extra) {
   return bars;
 }
 
-test('value_area: a POC rejection confirmed by order flow fires long, to the value area high', () => {
+// Order flow as the broker puts it on its bars: the 3-bar imbalance the strategy's field() reads.
+const flow3 = x => ({ flow: { windows: { 3: { ofiTrade: x } } } });
+
+test('value_area: a POC rejection confirmed by the broker\'s order flow fires long, to the value area high', () => {
   const { bars, p } = history(0);
   const poc = p.poc;
   bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc + 4, poc + 4)));
   // 10:00 closes above the POC; 10:03 dips to it and closes near its high, on buying.
   day2(bars, poc + 4, 10, [
-    { o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3 },
-    { o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4 },
+    { o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3, ...flow3(0.1) },
+    { o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4, ...flow3(0.34) },
   ]);
   const f = fires(STRATS.value_area, bars);
   assert.strictEqual(f.length, 1, JSON.stringify(f.map(x => bars[x.i].t)));
@@ -109,9 +112,30 @@ test('value_area: a POC rejection confirmed by order flow fires long, to the val
   assert.deepStrictEqual(confirm.parts.map(x => x.ok), [true, false], 'confirmed by order flow, not expansion');
   assert.ok(Math.abs(r.targetDistance - (p.vah - bars[i].c)) < 1e-3, 'target: the value area high');
   assert.ok(r.targetDistance >= 2 * r.stopDistance);
-  // The same bar without the buying (sellers over the last 3 bars): no trade.
-  const weak = bars.slice(0, -2).concat([{ ...bars.at(-2), c: poc + 2.1 }, { ...bars.at(-1), o: poc + 2.4, c: poc + 1 }]);
+  // The same bar with sellers in the broker's flow: no trade.
+  const weak = bars.slice(0, -1).concat([{ ...bars.at(-1), ...flow3(-0.3) }]);
   assert.strictEqual(fires(STRATS.value_area, weak).length, 0);
+  // The same bar with no flow (the broker's flow off), or a null window (minutes not complete): no estimate stands in.
+  const { flow: _f, ...plain } = bars.at(-1);
+  assert.strictEqual(fires(STRATS.value_area, bars.slice(0, -1).concat([plain])).length, 0);
+  assert.strictEqual(fires(STRATS.value_area, bars.slice(0, -1).concat([{ ...plain, ...flow3(null) }])).length, 0);
+});
+
+test('value_area short: a POC rejection from below confirmed by the broker\'s selling flow; a weak or flipped window stops it', () => {
+  const { bars, p } = history(0);
+  const poc = p.poc;
+  bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc - 4, poc - 4)));
+  // 10:00 closes below the POC; 10:03 rallies to it and closes near its low, on selling.
+  day2(bars, poc - 4, 10, [
+    { o: poc - 3, h: poc - 2, l: poc - 3.25, c: poc - 3, ...flow3(-0.1) },
+    { o: poc - 1, h: poc + 0.05, l: poc - 2.5, c: poc - 2.4, ...flow3(-0.34) },
+  ]);
+  const f = fires(STRATS.value_area, bars);
+  assert.deepStrictEqual(f.map(x => [x.i, x.r.direction]), [[bars.length - 1, 'short']]);
+  assert.deepStrictEqual(f[0].r.rules.short[3].parts.map(x => x.ok), [true, false], 'confirmed by order flow, not expansion');
+  for (const x of [0.1, -0.15, 0.3, null]) {
+    assert.strictEqual(fires(STRATS.value_area, bars.slice(0, -1).concat([{ ...bars.at(-1), ...flow3(x) }])).length, 0, String(x));
+  }
 });
 
 test('value_area: a POC breakout confirmed by range expansion on volume fires short, to the value area low', () => {
@@ -136,7 +160,7 @@ test('value_area: price sitting on the POC fires one rejection, not one per bar'
   const poc = p.poc;
   bars.splice(bars.length - 30, 30, ...Array.from({ length: 30 }, (_, k) => bar(DAY2 - (30 - k) * S, poc + 4, poc + 4)));
   // 10:00 closes above the POC, then six bars in a row dip to it and close near their highs.
-  day2(bars, poc + 4, 10, [{ o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3 }, ...Array.from({ length: 6 }, () => ({ o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4 }))]);
+  day2(bars, poc + 4, 10, [{ o: poc + 3, h: poc + 3.25, l: poc + 2, c: poc + 3 }, ...Array.from({ length: 6 }, () => ({ o: poc + 1, h: poc + 2.5, l: poc - 0.05, c: poc + 2.4, ...flow3(0.34) }))]);
   const f = fires(STRATS.value_area, bars);
   assert.ok(f.length >= 1 && f.length <= 3, `fired on ${f.length} of 6 bars`);
   assert.strictEqual(f[0].i, bars.length - 6, 'the first rejection');

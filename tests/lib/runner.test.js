@@ -339,7 +339,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, flow = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -361,7 +361,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         for (let t = lastOpen - 6 * step; t <= lastOpen; t += step) {
           const m = Math.round((t - et(10, 0)) / 60000);
           const [h, l, c] = tape[m] || [21501, 21499, 21500];
-          out.push({ t: new Date(t).toISOString(), o: c, h, l, c, v: 1 });
+          out.push({ t: new Date(t).toISOString(), o: c, h, l, c, v: 1, ...(barExtra || {}) });
         }
         return out;
       },
@@ -391,7 +391,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}),
     runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; clockRef.t += cycleMs; if (killAfterCycle) killed = true; return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
     isKillSwitchOn: () => killed, createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
-    writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan, flow,
+    writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan,
     entryOrders: () => [{ orderId: 5, contractId: 'MNQ', setup: 'trendy', side: 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
     strategyNamed: () => ({ name: 'trendy', risk: { stop: 'atr:0.5', min_rr: 2 }, exit, ...(stf ? { timeframe: stf } : {}) }),
     scanLog: rec => calls.scans.push(rec),
@@ -587,10 +587,10 @@ test('kill switch on after the day traded: a protected position is left to its s
   assert.deepStrictEqual([r.closed, r.cancelled], [[], []]);
 });
 
-test('with order flow on, the bars written and scanned carry real buy/sell volume', async () => {
-  const flow = { annotate: (id, bars, minutes) => bars.map(b => ({ ...b, bv: minutes, sv: 1 })) };
-  const r = await trailSim({ tape: {}, flow, until: et(10, 4) });
-  assert.ok(r.written.length > 0 && r.written.every(bars => bars.every(b => b.bv === 3 && b.sv === 1)));
+test('fields the broker adds to its bars reach the bars written and scanned untouched', async () => {
+  const extra = { x: { y: 0.4, w: { 5: { z: null } } } };
+  const r = await trailSim({ tape: {}, barExtra: extra, until: et(10, 4) });
+  assert.ok(r.written.length > 0 && r.written.every(bars => bars.every(b => JSON.stringify(b.x) === JSON.stringify(extra.x))));
 });
 
 test('a bars file that cannot be written still lets housekeeping protect the position', async () => {

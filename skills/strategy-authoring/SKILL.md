@@ -25,7 +25,6 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    | `timeframe` | Trigger timeframe, e.g. `3m` |
    | `sessions` | Optional windows, entries only inside: named sessions `asia` (18:00-03:00 ET), `london` (03:00-09:30 ET), `ny` (09:30-16:00 ET), or `"HH:MM-HH:MM@Zone"`. Without it the strategy trades the whole market session, from 18:00 ET until 16:00 ET the next day (closed only 16:00-18:00 ET and weekends; no position is carried past 16:00 ET) |
    | `signal` | `rules` (trigger written in `rules`, checked by code) or `manual` (agents judge the body). Every shipped single-setup strategy, the ported ones included, is `rules`; the prop strategies (`prop_*`) are `policy` (below) |
-   | `connectors` | Optional data the strategy needs beyond bars, like a skill's tools: `order_flow` (aggressor buy/sell volume per bar, for `ofi`/`delta`, from recorded flow files; without them a bar-shape estimate). Required when the rules use that data |
    | `regimes` | Optional list of regimes the strategy fits: `trend-up`, `trend-down`, `trend`, `range`, `transition`, `high-vol`, `normal-vol`, `low-vol` (any match fits). Out-of-regime strategies are never scan candidates |
    | `mtf` | `trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester skips it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design (`crt_1h`, `crt_4h`, `cisd_ote`, `ofi_absorption`, `value_area_reentry`); say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's |
    | `regime_gate` | Optional `true`: the MCP gateway also refuses entries when the live regime (from that strategy's timeframe bars) doesn't fit |
@@ -50,13 +49,12 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    must hold (AND); an item can be a group, `any: [...]` (one of them holds,
    OR) or `all: [...]` (every one), nested three deep, so one strategy can take
    two setups or two confirmations (see `value_area`: a POC rejection or
-   breakout, confirmed by order flow or expansion). The scan shows each
+   breakout, confirmed by a broker field or expansion). The scan shows each
    group's `parts`, so you can see which branch held. A condition is
    `<expr> <op> <expr>` with `>`, `>=`, `<`, `<=`, `crosses_above`,
    `crosses_below`. Expressions use series and numbers joined by `+`, `-`, and
    `number *`: `open high low close volume`, `ema(n) sma(n) atr(n) adx(n)
-   highest(n) lowest(n)` (n up to 500; adx up to 250), order flow
-   `ofi(n) delta(n) vol_sma(n)`, `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
+   highest(n) lowest(n) vol_sma(n)` (n up to 500; adx up to 250), `supertrend supertrend_dir`, `keltner_upper/mid/lower`,
    `vwap_session vwap_rth or_high or_low swing_high swing_low`,
    `prior_high prior_low prior_close overnight_high overnight_low`, `rth_open`
    (today's 09:30 ET open, until 16:00 ET), `rth_high rth_low` (today's RTH
@@ -92,11 +90,15 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    session before 9:30 ET up to the previous bar, as each bar saw them; a
    session the bars start mid-way through has none (likewise `vwap_session`
    and `vwap_rth`). The runner scans three trading days of bars, enough
-   for these and for long indicators to match a backtest. `ofi(n)` is order-flow imbalance
-   over n bars, from -1 (all selling) to +1 (all buying): real buy and sell
-   volume from recorded flow files (`<FTH_HOME>/flow/`), or, for a bar without it,
-   volume signed by where the bar closed in its range. `delta(n)` is that signed volume
-   summed, `vol_sma(n)` the average volume per bar. A value
+   for these and for long indicators to match a backtest. `vol_sma(n)` is the
+   average volume per bar. `field("a.b.c")` reads a number the broker MCP
+   server put on its bars, by dotted path (a digit segment reads a key such
+   as `"5"`; `field("a.b")[1]` is the previous bar's): the harness gives it no
+   meaning, so the strategy's body says what the field is and which broker
+   setting turns it on. A missing field or a null makes the condition false,
+   so a bar without it never fires; nothing estimates it. Bars the
+   backtester builds from shorter ones, and CSV files, carry no broker
+   fields. A value
    that doesn't exist yet (indicator warm-up, no opening range yet) makes the
    condition false and the scan marks it `missing`. At most 12 conditions per
    side. A rules strategy with only `long` rules can't be used to sell into an

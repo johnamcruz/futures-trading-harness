@@ -188,6 +188,15 @@ weekends and breaks.
 Result: `{ contractId, barSize ("5 minute"), count, bars }`, bars oldest first,
 each `{ t (bar open, UTC ISO), o, h, l, c, v }`.
 
+A bar may carry extra fields of the server's own (and the result extra
+keys). The harness passes them through untouched: it gives them no meaning,
+and only a strategy document that names a field (the rules' `field("path")`)
+reads it. A field that is missing or null reads as no value, so the
+condition using it is false. Whether a server adds such fields, and which,
+is the server's own setting (its environment, passed through by its
+`mcp-configs/brokers.json` entry), never a `get_bars` argument the harness
+sends.
+
 #### `get_quote` (read)
 
 Input: **`contractId`**, `timeoutMs` (500-15,000; 5,000).
@@ -386,8 +395,8 @@ interface. It never places, changes, or cancels an order, or writes the journal.
 
 ## Not in the interface
 
-- Live order flow (trade prints). Order-flow strategies use recorded flow files
-  (`<FTH_HOME>/flow/`), else a bar-shape estimate. An optional tool could add it.
+- Market data beyond OHLCV bars and quotes. A server may add fields to its
+  bars (`get_bars`, above); the harness computes nothing of the kind itself.
 
 ## In the harness
 

@@ -189,8 +189,7 @@ function liquidity(bars, k, atrNow) {
  * The numbers the strategies' context filters and skip rules talk about, so
  * none has to be eyeballed: EMA crosses, ADX falling, the Keltner squeeze and
  * band-close streak, SuperTrend flips, the last 5 bars' range, the session's
- * high and low so far, and order flow (OFI over 1/3/5 bars, delta over 5,
- * volume against its 60-bar average).
+ * high and low so far, and the last bar's volume against its 60-bar average.
  */
 function context(bars, series, atrNow) {
   const { emaFast, emaSlow, adx, st, kc } = series;
@@ -219,8 +218,6 @@ function context(bars, series, atrNow) {
   const session = ind.sessionKey(bars[i].t, GLOBEX_OPEN);
   const inSession = bars.filter(b => ind.sessionKey(b.t, GLOBEX_OPEN) === session);
   const sessionWhole = ind.sessionKey(bars[0].t, GLOBEX_OPEN) !== session || etDayMinute(bars[0].t).minute === GLOBEX_OPEN;
-  const ofiAt = k => { const v = ind.ofi(bars, k)[i]; return Number.isFinite(v) ? round(v, 3) : null; };
-  const delta = ind.barDelta(bars).slice(-5).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
   const vol = bars.slice(-60).map(b => Number(b.v) || 0);
   const volAvg = vol.length && vol.some(v => v > 0) ? vol.reduce((a, b) => a + b, 0) / vol.length : null;
   return {
@@ -231,12 +228,7 @@ function context(bars, series, atrNow) {
     supertrendFlipsLast20: flips,
     range5Atr: atrNow ? round((Math.max(...last5.map(b => b.h)) - Math.min(...last5.map(b => b.l))) / atrNow, 2) : null,
     session: sessionWhole ? { high: Math.max(...inSession.map(b => b.h)), low: Math.min(...inSession.map(b => b.l)) } : null,
-    flow: {
-      real: bars.slice(-5).every(b => Number.isFinite(b.bv) && Number.isFinite(b.sv)),
-      ofi1: ofiAt(1), ofi3: ofiAt(3), ofi5: ofiAt(5),
-      delta5: round(delta, 2),
-      volVsAvg60: volAvg ? round((Number(bars[i].v) || 0) / volAvg, 2) : null,
-    },
+    volVsAvg60: volAvg ? round((Number(bars[i].v) || 0) / volAvg, 2) : null,
   };
 }
 

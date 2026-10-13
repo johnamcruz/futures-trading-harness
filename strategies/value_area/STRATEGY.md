@@ -7,7 +7,6 @@ instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
 signal: rules
-connectors: [order_flow]      # ofi(3): real aggressor buy/sell volume from recorded flow files, else the bar-shape estimate
 rules:
   long:
     - minute_et >= 600                    # after the first 30 minutes of RTH
@@ -26,7 +25,7 @@ rules:
             - close > open
             - close - prior_poc >= 0.25 * atr(20)
     - any:                                # confirmation
-        - ofi(3) >= 0.2                   # order flow: buyers in control over the last 3 bars
+        - field("flow.windows.3.ofiTrade") >= 0.2   # order flow from the broker's bars: buyers in control over the last 3 bars
         - all:                            # expansion: a wide bar on heavy volume
             - high - low >= 1.5 * atr(20)
             - volume >= 1.5 * vol_sma(20)
@@ -48,7 +47,7 @@ rules:
             - close < open
             - prior_poc - close >= 0.25 * atr(20)
     - any:
-        - ofi(3) <= -0.2
+        - field("flow.windows.3.ofiTrade") <= -0.2
         - all:
             - high - low >= 1.5 * atr(20)
             - volume >= 1.5 * vol_sma(20)
@@ -70,7 +69,7 @@ exit:
     long: prior_vah - close                       # the edge of value
     short: close - prior_val
   max_bars: 40                                    # time stop: 2 hours
-source: Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); recorded order flow. Mechanical form and thresholds are starting values, not fitted on real data.
+source: Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); order flow from the broker's bars. Mechanical form and thresholds are starting values, not fitted on real data.
 ---
 
 # Strategy: Value Area POC reaction (`setup:value_area`)
@@ -91,10 +90,11 @@ it, one of two things happens:
 The level alone isn't enough: price touches the POC all day. The trade needs
 proof that someone is acting there:
 
-- **Order flow:** aggressive buyers (sellers) dominate the last 3 bars, `ofi(3)`
-  beyond ±0.2. With the `order_flow` connector this is real aggressor volume
-  where recorded flow files cover the bar; without it, an estimate from where each bar closed in
-  its range.
+- **Order flow:** aggressive buyers (sellers) dominate the last 3 bars: the
+  broker's 3-bar order-flow imbalance, `field("flow.windows.3.ofiTrade")`
+  ((buy - sell) / (buy + sell) over the 3 bars ending with this one), beyond
+  ±0.2. Without complete flow on the bars it is null and this branch is
+  false; only expansion can confirm.
 - **Expansion:** the bar's range is at least 1.5 × ATR(20) on at least 1.5 ×
   the 20-bar average volume: the market moved hard, with participation.
 
@@ -129,7 +129,6 @@ never repaints. The same module gives the developing session profile
 - Room: an HVN (`hvnAbove` for a long) between the entry and the target is
   where the move may stall; take a partial there.
 - The `vwap-volume-profile` skill: RTH VWAP on the trade's side supports it.
-- Order flow: the `order-flow-analysis` skill, if real flow is recorded.
 
 ### Trigger (mechanical, on the closed 3-minute bar)
 
@@ -144,7 +143,7 @@ Long (short is the mirror image), every line must hold:
      price sitting on the POC fires once, not on every bar.
    - *Breakout:* this bar closed up through the POC (the previous close was at
      or below it), as an up bar, at least 0.25 × ATR(20) beyond it.
-3. **Confirmation, one of:** `ofi(3) >= 0.2`, or a range of 1.5 × ATR(20) on
+3. **Confirmation, one of:** the 3-bar order-flow imbalance >= 0.2, or a range of 1.5 × ATR(20) on
    1.5 × average volume.
 4. **Room:** the value area high is at least 2R away.
 
@@ -170,14 +169,23 @@ Long (short is the mirror image), every line must hold:
 
 ### Order flow: live vs backtest
 
-With recorded flow, `ofi(3)` is real aggressor buy minus sell volume over
-the last 3 bars. Live order flow is not part of the broker MCP interface, so
-live bars, and a backtest without recorded flow, use the
-bar-shape estimate (volume signed by where each bar closed in its range),
-which overlaps the rejection's own close-in-range rule. So a backtest tests
-the estimate, not real flow, and ±0.2 is a starting value for both:
-backtest on recorded flow (`scripts/orderflow.js export`) and calibrate
-before trusting the flow branch.
+The harness computes no order flow: the broker MCP server puts it on its
+bars, and the rule reads `field("flow.windows.3.ofiTrade")`, null unless all
+3 bars' minutes are complete. The harness's former `ofi(3)` was the same
+ratio over the last 3 bars, but a bar without recorded flow used an estimate
+from where it closed in its range, so the flow branch could fire on any bar
+(and overlapped the rejection's own close-in-range rule). Now it fires only
+on real flow: with the broker's flow off, the expansion branch is the only
+confirmation, so fewer setups qualify than before.
+
+**Testing the flow branch.** Only in a replay (the `replay` skill), where the
+replay broker serves 3-minute bars with its flow fields. The local fast
+backtest (`backtest.js`) can't: `backtest.js fetch` gets 1-minute bars, and
+the 3-minute bars the backtester builds from them carry no broker fields, so
+there only the expansion branch confirms. That holds until the fast
+backtester pulls its bars from the replay broker (a planned follow-up).
+±0.2 is a starting value: calibrate it in replays before trusting the flow
+branch.
 
 ### Traded through a policy strategy
 
@@ -199,7 +207,7 @@ MNQ long, POC rejection. Prior RTH day: VAL 21480.00, POC 21522.00, VAH
 21560.00 (rounded to the tick). ATR(20) 8.00.
 10:42 bar closed 21530.50 (above the POC). The 10:45 bar: open 21527.00, high
 21531.75, low 21521.25 (within 0.80 of the POC), close 21530.25 (upper half).
-ofi(3) = +0.34: buyers.
+3-bar order-flow imbalance (flow.windows.3.ofiTrade) +0.34: buyers.
 
 Stop distance: 21530.25 - 21521.25 + 0.25 x 8.00 = 11.00 points = 44 ticks
 Stop: 21530.25 - 11.00 = 21519.25
@@ -216,6 +224,9 @@ Stop: 21512.50 + 15.50 = 21528.00
 Target: VAL 21480.00, 32.50 points = 130 ticks (2.10R; 2R needs 31.00)
 Risk per MNQ: 62 x $0.50 = $31.00; reward 130 x $0.50 = $65.00
 
-place_order rationale: "setup:value_area long, POC 21522.00 rejection,
-ofi(3) +0.34, stop 21519.25, target VAH 21560.00, risk $22.00"
+place_order rationales (1 MNQ each):
+long:  "setup:value_area long, POC 21522.00 rejection, ofi3 +0.34,
+        stop 21519.25 (44 ticks), target VAH 21560.00, risk $22.00"
+short: "setup:value_area short, POC 21522.00 breakout on expansion,
+        stop 21528.00 (62 ticks), target VAL 21480.00, risk $31.00"
 ```

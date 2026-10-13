@@ -52,18 +52,12 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
-  'signal', 'rules', 'connectors', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'source'];
+  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'source'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
 const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const SIZING_KEYS = ['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks'];
-/**
- * Data connectors a strategy can declare, like a skill declares its tools.
- *   order_flow: aggressor buy/sell volume per bar (series ofi, delta), from
- *               recorded flow files; without them, a bar-shape estimate
- */
-const CONNECTORS = { order_flow: /\b(ofi|delta)\(/ };
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd'];
 const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars'];
 const MAX_FILE_BYTES = 256 * 1024;
@@ -137,26 +131,17 @@ function validateStrategy(data, body, folderName) {
     req(data.exit && data.exit.trail_activate_r !== undefined, 'exit: trail_activate_r and trail_giveback_r (the trail that exits every trade it takes)');
     // Its setups come from other strategies' scans, which carry no target distance of its own.
     req(!(data.exit && data.exit.target !== undefined), 'exit.target: not for a policy strategy (its trades exit by its trail; the strategies it lists keep their own targets only when traded on their own)');
-    req(data.connectors === undefined, 'connectors: declared by the strategies it trades, not here');
   } else {
     for (const k of POLICY_STRATEGY_KEYS) {
       if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio)`);
     }
     if (data.risk && data.risk.stop === 'strategy') errors.push('risk.stop: strategy is only for a policy strategy');
   }
-  const connectors = data.connectors === undefined ? [] : data.connectors;
-  if (!Array.isArray(connectors) || !connectors.every(c => Object.keys(CONNECTORS).includes(c))) {
-    errors.push(`connectors: a list of ${Object.keys(CONNECTORS).join(', ')}`);
-  } else {
-    const text = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || '', (data.exit && data.exit.target) || '']);
-    for (const [name, uses] of Object.entries(CONNECTORS)) {
-      if (uses.test(text) && !connectors.includes(name)) errors.push(`connectors: the rules use ${name} data; declare connectors: [${name}]`);
-    }
-    // The initial balance and ADR need a bar at 09:30 ET: a timeframe that divides 30 minutes.
-    const tf = /^(\d+)(m|h)$/.exec(String(data.timeframe || ''));
-    const tfMin = tf ? Number(tf[1]) * (tf[2] === 'h' ? 60 : 1) : null;
-    if (/\b(ib_high|ib_low|adr\()/.test(text) && tfMin && 30 % tfMin !== 0) errors.push(`rules: ib_high, ib_low and adr(n) need a timeframe that divides 30 minutes (a bar at 09:30 ET), not ${data.timeframe}`);
-  }
+  // The initial balance and ADR need a bar at 09:30 ET: a timeframe that divides 30 minutes.
+  const ruleText = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || '', (data.exit && data.exit.target) || '']);
+  const tf = /^(\d+)(m|h)$/.exec(String(data.timeframe || ''));
+  const tfMin = tf ? Number(tf[1]) * (tf[2] === 'h' ? 60 : 1) : null;
+  if (/\b(ib_high|ib_low|adr\()/.test(ruleText) && tfMin && 30 % tfMin !== 0) errors.push(`rules: ib_high, ib_low and adr(n) need a timeframe that divides 30 minutes (a bar at 09:30 ET), not ${data.timeframe}`);
 
   if (data.sessions !== undefined && data.sessions !== null) {
     const list = Array.isArray(data.sessions) ? data.sessions : [];
@@ -487,7 +472,6 @@ module.exports = {
   exitPlan,
   STATUSES,
   SIGNALS,
-  CONNECTORS,
   FILTERS,
   strategyDirs,
   validateStrategy,

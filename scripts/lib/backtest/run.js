@@ -267,19 +267,12 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     const audit = auditBars(bars, cfg.timeframe);
     for (const w of audit.warnings) log(`warning: ${m.symbol} data: ${w}`);
     m.audit = audit;
-    if (bars.every(b => !(b.v > 0))) log(`warning: ${m.file} has no volume (no volume column, or all zero); order-flow series (ofi, delta, vol_sma) are missing, so strategies using them never fire`);
+    if (bars.every(b => !(b.v > 0))) log(`warning: ${m.file} has no volume (no volume column, or all zero); vol_sma is missing, so strategies using it never fire`);
     if (bars.length < cfg.window) throw new Error(`${m.file}: only ${bars.length} bars in range; need at least ${cfg.window} (window) before the first trade`);
     return { ...m, bars };
   });
   log(`${strategies.map(s => s.name).join(', ')} on ${markets.map(m => `${m.symbol} (${m.bars.length} ${cfg.timeframe}m bars)`).join(', ')}`);
   for (const m of markets) {
-    const flowUsers = strategies.filter(s => (s.connectors || []).includes('order_flow') && tradesRoot(s, m.symbol, [m.symbol]));
-    if (flowUsers.length && m.audit && m.audit.flowCoverage > 0 && m.audit.flowCoverage < 0.9) {
-      log(`warning: ${flowUsers.map(s => s.name).join(', ')} use order flow, but only ${Math.round(m.audit.flowCoverage * 100)}% of ${m.symbol}'s bars have real buy/sell volume; the rest use the bar-shape estimate, so results mix two kinds of data (live always has real flow)`);
-    }
-    if (flowUsers.length && !m.bars.some(b => Number.isFinite(b.bv))) {
-      log(`warning: ${flowUsers.map(s => s.name).join(', ')} declare the order_flow connector but ${m.file} has no buy/sell volume columns; ofi/delta fall back to the bar-shape estimate (record flow and export it: scripts/orderflow.js)`);
-    }
     if (!strategies.some(s => tradesRoot(s, m.symbol, [m.symbol]))) {
       log(`warning: no selected strategy lists ${m.symbol} (or the micro or mini of its family) in its instruments, so it can't trade`);
     }

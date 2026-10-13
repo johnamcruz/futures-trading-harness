@@ -106,7 +106,7 @@ combine_status {}
 reason_check {"symbol": "MNQ", "reasons": "CYCLE RESULT: no-trade - opening print window until 10:00 ET; no prop attempt running"}
 → Reasons checked against this bar's facts:
   - FALSE no-entry-window: "opening print window until 10:00 ET" - the opening drive window allows entries (09:57 ET)
-  - FALSE no-attempt: "no prop attempt running" - the topstep_50k attempt is active
+  - FALSE no-attempt: "no prop attempt running" - the my_50k attempt is active
   The priority order, step by step, as the facts answer it:
   - keltner short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room no-trade (VWAP (rth) at 0.4R before the 1.5R it needs); ...
   2 reasons FALSE: name each, drop them, and make the decision again from the facts.

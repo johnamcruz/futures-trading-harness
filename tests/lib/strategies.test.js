@@ -441,7 +441,7 @@ test('snapshot context: the numbers the skip rules talk about', () => {
   const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
   const c = snapshot(readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))).context;
-  for (const k of ['emaCrossesLast30', 'adxFallingBars', 'keltnerWidthVsAvg20', 'supertrendFlipsLast20', 'range5Atr', 'session', 'flow']) assert.ok(k in c, k);
+  for (const k of ['emaCrossesLast30', 'adxFallingBars', 'keltnerWidthVsAvg20', 'supertrendFlipsLast20', 'range5Atr', 'session', 'volVsAvg60']) assert.ok(k in c, k);
   assert.ok(Number.isInteger(c.emaCrossesLast30) && c.session.high >= c.session.low);
-  assert.strictEqual(c.flow.real, false, 'no buy/sell volume in this file: the flow is the bar-shape estimate');
+  assert.ok(!('flow' in c), 'the harness computes no order flow: a broker puts it on its bars');
 });

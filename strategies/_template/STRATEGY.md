@@ -9,7 +9,7 @@ sessions: [ny]                # optional; asia (18:00-03:00 ET), london (03:00-0
 regimes: [trend, transition]  # optional; any of: trend-up trend-down trend range transition high-vol normal-vol low-vol
 regime_gate: false            # true = the MCP gateway refuses entries when the live regime doesn't fit
 signal: rules                 # rules (conditions below) | manual (agents judge the body)
-# connectors: [order_flow]   # data the strategy needs beyond bars (order_flow: aggressor buy/sell volume for ofi/delta, from recorded flow files)
+# a rule may read a field the broker puts on its bars: field("path.to.value"); missing or null makes the condition false
 rules:                        # with signal: rules - every condition in a side must hold on the closed bar
   long:
     - close crosses_above highest(20)[1]

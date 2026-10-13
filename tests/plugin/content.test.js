@@ -297,8 +297,8 @@ test('the session hours read unambiguously (a small local model read "18:00 ET t
   // forbid entries, that the opening drive allows them, and to take a window's end from the briefing.
   assert.match(read('skills/session-timing/SKILL.md'), /By default only three windows forbid entries by the clock: the opening\s+print \(09:30-09:35\), into the close \(15:45-16:00\), and the daily break\s+\(16:00-18:00, the market closed\)\. The opening drive is not the opening\s+print: from 09:35 entries are allowed\. The gate's configured windows apply\s+in their place/);
   assert.match(read('skills/session-timing/SKILL.md'), /Take\s+a window's end from it; never infer one/);
-  // The owner's rule: the Topstep trading day, not CME's.
-  assert.match(read('skills/session-timing/SKILL.md'), /The harness follows the\s+Topstep trading day, not CME's: it starts at 18:00 ET \(17:00 CT, Topstep's\s+daily reset\), and the harness trades it until 16:00 ET the next day[^]*?stopping before\s+Topstep's own 16:10 ET flatten/);
+  // The owner's rule: the prop firm's trading day, not CME's.
+  assert.match(read('skills/session-timing/SKILL.md'), /The harness follows the\s+prop firm's trading day, not CME's: it starts at 18:00 ET \(the firm's\s+daily reset\), and the harness trades it until 16:00 ET the next day[^]*?stopping before\s+the firm's own flatten deadline, which comes after 16:00 ET/);
   assert.match(read('workspace/AGENTS.md'), /runs overnight until 16:00 ET the next day/, 'the generated operator instructions carry it');
   assert.match(require('../../scripts/lib/trading/clock').MARKET_HOURS_LABEL, /^the harness's hours inside the Topstep trading day \(17:00 CT reset\): from 18:00 ET until 16:00 ET the next day[^]*09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; Topstep's own flatten is 16:10 ET$/);
   assert.match(read('skills/trade-session/SKILL.md'), /A role's call is that\s+role's own analysis \(the order gate counts it as its report\): never ask a role\s+to read, load or summarize skills or files for you; load skills yourself \(your\s+skill tool, or without one read their `SKILL\.md`\)\./);
@@ -383,4 +383,13 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   assert.match(oc.agent['risk-manager'].prompt, /\*\*Check every reason against the facts\*\*/);
   // The head trader reads the skills from their files; the workspace instructions list the tool's skill.
   assert.match(read('workspace/AGENTS.md'), /`harness-tools` \(skills\/harness-tools\/SKILL\.md\): [^\n]*the check of stated reasons/);
+});
+
+test('the reasons check example in harness-tools has the form the check prints ("the <account> attempt is active")', () => {
+  const line = read('skills/harness-tools/SKILL.md').split('\n').find(l => l.includes('FALSE no-attempt'));
+  const m = /- the (\S+) attempt is active$/.exec(line || '');
+  assert.ok(m, line);
+  // reasons.js prints `the ${account} attempt is active`: the example names an account the same way.
+  assert.match(read('scripts/lib/trading/reasons.js'), /`the \$\{facts\.attempt\.account\} attempt is active`/);
+  assert.match(m[1], /^[a-z0-9_]+$/, 'an account name, not a phrase');
 });

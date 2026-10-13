@@ -13,22 +13,22 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 ## How It Works
 
 All times America/New_York (ET) unless marked CT. The harness follows the
-Topstep trading day, not CME's: it starts at 18:00 ET (17:00 CT, Topstep's
+prop firm's trading day, not CME's: it starts at 18:00 ET (the firm's
 daily reset), and the harness trades it until 16:00 ET the next day, Sunday
 evening to Friday afternoon (a hard rule in the order gate), stopping before
-Topstep's own 16:10 ET flatten. The market is open that whole time,
+the firm's own flatten deadline, which comes after 16:00 ET. The market is open that whole time,
 09:30-16:00 ET included: a time
 like 10:00 ET is inside the session, not before it, and so is 08:00 ET (the
 18:00 ET open was the evening before; 09:30 ET is only the RTH cash open).
 16:00 to 18:00 ET is treated as closed (no entries, no positions), and so
 are weekends. Every position is flat by the runner's end of day (`eodAt`,
-15:50 ET by default), well before Topstep's own 16:10 ET flatten deadline.
+15:50 ET by default), well before the firm's own flatten deadline.
 (Background only: CME's Globex keeps trading until 17:00 ET; the harness
 never trades 16:00-18:00 ET.) Bar data still comes from the Globex session,
 so the session VWAP, session volume profile and overnight range start at
 18:00 ET.
 Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
-`ny` 09:30–16:00. One (Topstep) trading day runs from the 18:00 ET open to the 16:00 ET
+`ny` 09:30–16:00. One (the firm's) trading day runs from the 18:00 ET open to the 16:00 ET
 close and is named by the date it ends on (Sunday evening and Monday are
 Monday's day); midnight changes nothing. Everything counted by the day uses
 it: losses and entries for the gate, end of day, the prop attempt's closes,
@@ -36,7 +36,7 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 
 | Window (ET) | Character | Harness |
 |---|---|---|
-| 18:00 (Sun–Thu) | Topstep's trading day starts (17:00 CT, its daily reset); Globex open | Session opens; daily counters reset |
+| 18:00 (Sun–Thu) | The firm's trading day starts (its daily reset); Globex open | Session opens; daily counters reset |
 | 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout 08:25–08:40 |
@@ -48,8 +48,7 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
-| 16:00–18:00 | Daily break (the harness's day is over; Topstep flattens by 16:10) | Closed: no entries, no positions (hard rule) |
-| 16:10 ET / 15:10 CT | Topstep's own flatten deadline | The harness is flat by 15:50 ET (runner), 16:00 ET at the latest |
+| 16:00–18:00 | Daily break (the harness's day is over; the firm's own flatten deadline falls in it) | Closed: no entries, no positions (hard rule); the harness is flat by 15:50 ET (runner), 16:00 ET at the latest |
 
 By default only three windows forbid entries by the clock: the opening
 print (09:30-09:35), into the close (15:45-16:00), and the daily break

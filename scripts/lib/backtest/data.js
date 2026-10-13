@@ -28,10 +28,6 @@ const GLOBEX_OPEN_MIN = 18 * 60;
 const TIME_NAMES = ['t', 'time', 'timestamp', 'datetime', 'date', 'ts', 'date_time', '__index_level_0__'];
 const FIELD_NAMES = {
   o: ['o', 'open'], h: ['h', 'high'], l: ['l', 'low'], c: ['c', 'close', 'last'], v: ['v', 'volume', 'vol'],
-  // Order flow (optional): aggressive buy and sell volume, or their difference.
-  bv: ['bv', 'buy_volume', 'buyvolume', 'buy_vol', 'ask_volume', 'askvolume'],
-  sv: ['sv', 'sell_volume', 'sellvolume', 'sell_vol', 'bid_volume', 'bidvolume'],
-  delta: ['delta', 'volume_delta'],
 };
 
 /** Epoch ms from a number whose unit is guessed by magnitude (s, ms, us, ns). */
@@ -155,13 +151,7 @@ function tableToBars(header, rows, { excel = false, date1904 = false } = {}) {
     // An empty cell is missing, not zero: the row is dropped (a missing volume reads as 0).
     const num = x => (x === null || x === undefined || (typeof x === 'string' && x.trim() === '') ? NaN : Number(x));
     const v = idx.v === -1 ? 0 : num(get('v'));
-    const bar = { t: new Date(t).toISOString(), o: num(get('o')), h: num(get('h')), l: num(get('l')), c: num(get('c')), v: Number.isFinite(v) ? v : 0 };
-    const bv = idx.bv === -1 ? NaN : num(get('bv'));
-    const sv = idx.sv === -1 ? NaN : num(get('sv'));
-    const d = idx.delta === -1 ? NaN : num(get('delta'));
-    if (Number.isFinite(bv) && Number.isFinite(sv)) Object.assign(bar, { bv, sv });
-    else if (Number.isFinite(d) && bar.v > 0) Object.assign(bar, { bv: (bar.v + d) / 2, sv: (bar.v - d) / 2 });
-    return bar;
+    return { t: new Date(t).toISOString(), o: num(get('o')), h: num(get('h')), l: num(get('l')), c: num(get('c')), v: Number.isFinite(v) ? v : 0 };
   });
 }
 
@@ -205,7 +195,8 @@ function loadBars(file, opts = {}) {
     if (out.length && out[out.length - 1].ms === b.ms) out[out.length - 1] = b; // keep the last duplicate
     else out.push(b);
   }
-  return out.map(b => ({ t: new Date(b.ms).toISOString(), ms: b.ms, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, ...flowOf(b) }));
+  // Fields a broker put on its bars (a JSON file of get_bars bars) pass through untouched.
+  return out.map(b => ({ ...b, t: new Date(b.ms).toISOString() }));
 }
 
 /**
@@ -258,14 +249,7 @@ function auditBars(bars, timeframe, { jumpAtr = 8, top = 5 } = {}) {
   if (missing) warnings.push(`${missing} bar(s) missing inside market hours in ${gaps.length} gap(s); largest ${gaps[0].bars} after ${gaps[0].after}`);
   if (jumps.length) warnings.push(`${jumps.length} open(s) jump more than ${jumpAtr} x ATR from the previous close (an unadjusted roll or a bad tick?); largest ${jumps[0].x} x ATR at ${jumps[0].t}`);
   if (invalid) warnings.push(`${invalid} malformed bar(s) (high below low, or open/close outside the range)`);
-  // Real order flow (buy/sell volume) is recorded live only; the rest is the bar-shape estimate.
-  const flowBars = bars.filter(b => Number.isFinite(b.bv) && Number.isFinite(b.sv)).length;
-  return { bars: bars.length, missing, gaps: gaps.slice(0, top), jumps: jumps.slice(0, top), invalid, flowCoverage: bars.length ? Math.round((flowBars / bars.length) * 1000) / 1000 : 0, warnings };
-}
-
-/** { bv, sv } when the bar carries real order flow, else nothing. */
-function flowOf(b) {
-  return Number.isFinite(b.bv) && Number.isFinite(b.sv) ? { bv: b.bv, sv: b.sv } : {};
+  return { bars: bars.length, missing, gaps: gaps.slice(0, top), jumps: jumps.slice(0, top), invalid, warnings };
 }
 
 /** The bar size of a series in minutes (the most common spacing). */
@@ -310,16 +294,13 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
     if (b.ms + MINUTE > nowMs) break;
     const start = bucketStart(b.ms, unit, unitNumber);
     if (!cur || cur.start !== start) {
-      cur = { start, t: new Date(start).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, bv: b.bv, sv: b.sv };
+      cur = { start, t: new Date(start).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v };
       out.push(cur);
     } else {
       cur.h = Math.max(cur.h, b.h);
       cur.l = Math.min(cur.l, b.l);
       cur.c = b.c;
       cur.v += b.v;
-      // Flow for the bar only when every minute has it (else NaN: none).
-      cur.bv += b.bv;
-      cur.sv += b.sv;
     }
   }
   const last = out[out.length - 1];
@@ -329,7 +310,8 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
       : last.start + bucketLength(unit, unitNumber) <= nowMs;
     if (!ended) out.pop();
   }
-  return out.map(({ t, o, h, l, c, v, bv, sv }) => ({ t, o, h, l, c, v, ...flowOf({ bv, sv }) }));
+  // A bar built here carries no broker fields: only the broker knows what they mean over a longer bar.
+  return out.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
 }
 
 module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, readBarsArg, auditBars, barMinutes, aggregate, bucketStart, epochMs };

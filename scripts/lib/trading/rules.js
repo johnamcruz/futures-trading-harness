@@ -21,7 +21,7 @@
  *       - any:                                  # a setup: rejection or breakout
  *           - all: [low <= prior_poc, close > prior_poc, close[1] > prior_poc]
  *           - close crosses_above prior_poc
- *       - any: [ofi(3) >= 0.2, high - low >= 1.5 * atr(20)]   # confirmed by flow or expansion
+ *       - any: [volume >= 2 * vol_sma(20), high - low >= 1.5 * atr(20)]   # confirmed by volume or expansion
  *
  * Condition:  <expr> <op> <expr>
  *   op:       >  >=  <  <=  crosses_above  crosses_below
@@ -33,9 +33,6 @@
  * Series (value at each bar):
  *   open high low close volume
  *   ema(n) sma(n) atr(n) adx(n) highest(n) lowest(n)   n = 1..500 (adx 1..250)
- *   ofi(n)      order-flow imbalance over n bars, -1 (selling) .. +1 (buying):
- *               each bar's volume signed by where it closed in its range
- *   delta(n)    that signed volume summed over n bars (contracts)
  *   vol_sma(n)  average volume per bar over n bars
  *   supertrend supertrend_dir (1 up, -1 down)
  *   keltner_upper keltner_mid keltner_lower
@@ -79,6 +76,12 @@
  *               for targets and distances (they move when price passes a node,
  *               so don't cross them). Params vpRows, vpRowSize, vpValueArea,
  *               vpNodePct, vpTroughPct, vpThreshold tune the profile.
+ * Broker fields: field("a.b.c") is a number the broker put on the bar, read by
+ *   its dotted path (letters, digits, _; a digit segment reads a key such as
+ *   "5"), e.g. field("x.y")[1] on the previous bar. The harness gives these
+ *   fields no meaning: the strategy document names them. A missing field, a
+ *   null, or anything not a number (true/false read as 1/0) has no value, so
+ *   its condition is false.
  * A value that doesn't exist yet (indicator warm-up, no opening range or
  * overnight yet, look-back before the first bar) makes its condition false;
  * the result marks it `missing` so a short bar history is visible.
@@ -106,7 +109,7 @@ const VP_LEVELS = ['poc', 'vah', 'val'];
 const VP_NODES = ['hvn_above', 'hvn_below', 'lvn_above', 'lvn_below'];
 const VP_FUNCS = [...VP_LEVELS.map(f => `vp_${f}`), ...VP_NODES];
 const VP_NAMES = ['prior', 'session'].flatMap(w => [...VP_LEVELS, ...VP_NODES].map(f => `${w}_${f}`));
-const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'ofi', 'delta', 'vol_sma', 'adr', ...HTF, ...VP_FUNCS]);
+const FUNCS = new Set(['ema', 'sma', 'atr', 'adx', 'highest', 'lowest', 'vol_sma', 'adr', ...HTF, ...VP_FUNCS]);
 const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
@@ -118,6 +121,21 @@ const MAX_RULES_PER_SIDE = 12;
 const MAX_GROUP_ITEMS = 8;
 const MAX_GROUP_DEPTH = 3;
 const MAX_CONDITIONS_PER_SIDE = 24;
+// field("a.b.c")[n]: a broker's field on the bar, by dotted path.
+const FIELD_RE = /\s*field\s*\(\s*(["'])([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\1\s*\)(?:\[(\d+)\])?/y;
+const MAX_FIELD_SEGMENTS = 8;
+const FIELD_PREFIX = 'field:';
+
+/** The number at a dotted path in a bar (own properties only), else NaN: missing, null, or not a number. */
+function readField(bar, path) {
+  let v = bar;
+  for (const seg of path.split('.')) {
+    if (v === null || typeof v !== 'object' || !Object.hasOwn(v, seg) || (Array.isArray(v) && !/^\d+$/.test(seg))) return NaN;
+    v = v[seg];
+  }
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  return typeof v === 'number' && Number.isFinite(v) ? v : NaN;
+}
 
 function tokenize(text) {
   const tokens = [];
@@ -125,6 +143,14 @@ function tokenize(text) {
   let pos = 0;
   const src = String(text).trim();
   while (pos < src.length) {
+    FIELD_RE.lastIndex = pos;
+    const f = FIELD_RE.exec(src);
+    if (f) {
+      pos = FIELD_RE.lastIndex;
+      tokens.push({ type: 'field', path: f[2], shift: Number(f[3] || 0) });
+      continue;
+    }
+    if (/^\s*field\s*\(/.test(src.slice(pos))) throw new Error('field("a.b.c"): a quoted dotted path of letters, digits and _');
     re.lastIndex = pos;
     const m = re.exec(src);
     if (!m || m.index !== pos) throw new Error(`cannot read "${src.slice(pos)}"`);
@@ -144,6 +170,10 @@ function parseFactor(tok) {
   if (!tok) throw new Error('expected a value');
   if (tok.type === 'num') return { kind: 'num', value: tok.value };
   if (tok.shift > 500) throw new Error(`[${tok.shift}]: look-back must be 0-500`);
+  if (tok.type === 'field') {
+    if (tok.path.split('.').length > MAX_FIELD_SEGMENTS) throw new Error(`field("${tok.path}"): at most ${MAX_FIELD_SEGMENTS} path segments`);
+    return { kind: 'series', key: `${FIELD_PREFIX}${tok.path}`, shift: tok.shift };
+  }
   if (tok.type === 'name') {
     if (!NAMES.has(tok.name)) throw new Error(`unknown series "${tok.name}"`);
     return { kind: 'series', key: tok.name, shift: tok.shift };
@@ -179,7 +209,7 @@ function parseExpr(tokens) {
     }
     terms.push(term);
     if (i >= tokens.length) break;
-    if (tokens[i].type !== 'arith' || tokens[i].value === '*') throw new Error(`unexpected "${tokens[i].value || tokens[i].name}"`);
+    if (tokens[i].type !== 'arith' || tokens[i].value === '*') throw new Error(`unexpected "${tokens[i].value || tokens[i].name || `field("${tokens[i].path}")`}"`);
     sign = tokens[i].value === '-' ? -1 : 1;
     i += 1;
     if (i >= tokens.length) throw new Error('expression ends with an operator');
@@ -354,6 +384,7 @@ function seriesSource(bars, params, { window = 500 } = {}) {
   };
   const rolling = (vals, len, fn) => vals.map((_, i) => (i + 1 < len ? NaN : fn(vals.slice(i + 1 - len, i + 1))));
   const make = key => {
+    if (key.startsWith(FIELD_PREFIX)) { const p = key.slice(FIELD_PREFIX.length); return bars.map(b => readField(b, p)); }
     const fn = /^([a-z_]+)\((\d+)\)$/.exec(key);
     if (fn) {
       const len = Number(fn[2]);
@@ -364,8 +395,6 @@ function seriesSource(bars, params, { window = 500 } = {}) {
         case 'adx': return ind.adx(bars, len);
         case 'highest': return rolling(field('h'), len, w => Math.max(...w));
         case 'lowest': return rolling(field('l'), len, w => Math.min(...w));
-        case 'ofi': return ind.ofi(bars, len);
-        case 'delta': return rolling(ind.barDelta(bars), len, w => w.reduce((a, b) => a + b, 0));
         // No volume at all (a file without a volume column) is unknown, not 0.
         case 'vol_sma': return rolling(field('v'), len, w => { const t = w.reduce((a, b) => a + (Number(b) || 0), 0); return t > 0 ? t / len : NaN; });
         case 'htf_open': return htf(len).prevO;
@@ -552,4 +581,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, readField, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

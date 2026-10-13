@@ -42,8 +42,8 @@ server, loading its settings from `~/.futures-trading-harness/.env`. Agents
 see `mcp__broker__<tool>` whatever the firm.
 
 Harness code reaches the broker only through the adapter
-(`scripts/lib/broker/adapter.js`): the runner, `bars.js`, `backtest.js fetch`,
-and `orderflow.js export`. Reads go straight to the server over MCP; order
+(`scripts/lib/broker/adapter.js`): the runner, `bars.js`, and `backtest.js
+fetch`. Reads go straight to the server over MCP; order
 calls go through the gateway, so they are gated and journaled.
 `scripts/check-broker-mcp.js` checks a server against the interface with
 read-only calls.
@@ -368,11 +368,10 @@ bar files through the same strategy evaluator the live scan uses.
   the backtest. A level or VWAP for a session the bars start in the middle
   of is missing rather than wrong. A manual scan on fewer bars (e.g. a
   500-bar `get_bars`) can show those as missing.
-- Order flow (`ofi`, `delta`) is real only where a recorded flow file in
-  `<FTH_HOME>/flow/` covers the bar. Live flow is not part of the broker MCP
-  interface, so the harness doesn't record it; other bars use an estimate
-  from the bar's shape and volume. A future optional interface tool could
-  serve live flow.
+- Order flow is the broker server's: it puts it on its bars as extra
+  fields, which the harness passes through untouched and the strategies
+  read with `field("path")` (`docs/ORDER-FLOW.md`). A bar without them gives
+  those strategies no signal; the harness estimates nothing.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.
 - A broker MCP server's own guardrails may have gaps (a position flip that

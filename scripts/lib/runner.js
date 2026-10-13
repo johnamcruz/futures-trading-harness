@@ -101,7 +101,6 @@ function createRunner(deps) {
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
     recentTrades = () => [],
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
-    flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (prop/live-runner.js createPropHooks)
     // A closed bar this pass polled: (symbol, { bar, stale, action }), stale when it closed too long ago to start a
     // cycle, action the pass's (trade, manage, housekeep). The session record's decision point (session/live.js).
@@ -230,14 +229,7 @@ function createRunner(deps) {
       // still feed the trailing stop and the leftover-order check.
       const stale = step.event === 'stale' && !recover;
       if (stale) log(`${sym.symbol}: bar ${step.bar.t} closed too long ago to start a cycle; housekeeping only`);
-      let bars = step.bars;
-      if (flow) {
-        try {
-          bars = flow.annotate(sym.contractId, step.bars, minutes);
-        } catch (err) {
-          log(`${sym.symbol}: order flow unavailable this bar (${err.message})`, 'error');
-        }
-      }
+      const bars = step.bars;
       let file = null;
       try {
         file = writeBars(sym, bars);

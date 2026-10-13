@@ -7,19 +7,18 @@ instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
 mtf: reversal                 # may fade the prevailing higher-timeframe trend (the trend rule, multi-timeframe-analysis)
-connectors: [order_flow]
-rules:
+rules:                        # field(...): order flow the broker puts on its bars (see ofi); none on a bar, no signal
   long:
-    - ofi(5) <= -0.25
+    - field("flow.windows.5.ofiTrade") <= -0.25
     - vol_sma(5) >= 1.5 * vol_sma(60)
     - close + 0.25 * atr(20) >= close[5]
-    - ofi(1) > 0
+    - field("flow.ofiTrade") > 0
     - close > close[1]
   short:
-    - ofi(5) >= 0.25
+    - field("flow.windows.5.ofiTrade") >= 0.25
     - vol_sma(5) >= 1.5 * vol_sma(60)
     - close <= close[5] + 0.25 * atr(20)
-    - ofi(1) < 0
+    - field("flow.ofiTrade") < 0
     - close < close[1]
 exit:
   trail_activate_r: 2
@@ -27,7 +26,7 @@ exit:
 risk:
   stop: atr:1
   min_rr: 2
-source: harness original (order flow from 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data
+source: harness original (order flow from the broker's 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data
 ---
 
 # Strategy: Absorption Reversal (`setup:ofi_absorption`)
@@ -37,9 +36,13 @@ Here it doesn't: sellers hit the market hard for 5 minutes on heavy volume,
 yet price barely gives ground, because a passive buyer is taking
 everything. When the next 1-minute bar turns up, the sellers are trapped.
 
-Order flow is aggressive buy and sell volume per minute, from recorded flow
-files, else the bar-shape estimate (see `ofi` for the data). `ofi(n)` runs
-from -1 (all selling) to +1 (all buying).
+Order flow is aggressive buy and sell volume per minute, which the broker
+MCP server puts on its bars; the harness computes none. OFI 1 is
+`field("flow.ofiTrade")` and OFI 5 `field("flow.windows.5.ofiTrade")`, from
+-1 (all selling) to +1 (all buying). See `ofi` for the fields and how they
+differ from the harness's former `ofi(n)`. A bar without complete flow has
+null fields, its conditions are false, and the strategy never fires: no
+estimate stands in for it.
 
 ## When to Use
 
@@ -58,10 +61,10 @@ from -1 (all selling) to +1 (all buying).
 
 Long, on a 1-minute close (short is the mirror):
 
-- `ofi(5) ≤ -0.25`: sellers dominated the last 5 minutes.
+- OFI 5 ≤ -0.25: sellers dominated the last 5 minutes.
 - The close is no more than 0.25 × ATR(20) below the close 5 bars back:
   the selling went nowhere (absorbed).
-- The last bar turns: `ofi(1) > 0` and the close is above the prior close.
+- The last bar turns: OFI 1 > 0 and the close is above the prior close.
 
 ### Entry, stop, targets
 
@@ -84,9 +87,9 @@ Long, on a 1-minute close (short is the mirror):
 
 ```text
 10:42 ET MNQ 1m close 21480.50 at the prior-day low 21478.00.
-ofi(5) -0.34 on vol_sma(5) 2,400 vs vol_sma(60) 1,300 (1.85x);
+OFI 5 -0.34 on vol_sma(5) 2,400 vs vol_sma(60) 1,300 (1.85x);
 close 5 bars back 21481.75, ATR(20) 7.00 -> gave up 1.25 <= 1.75 (absorbed);
-last bar ofi(1) +0.40, close 21480.50 > prior close 21478.75.
+last bar OFI 1 +0.40, close 21480.50 > prior close 21478.75.
 Entry 21480.50, stop 21473.50 (1 x ATR = 7.00 = 28 ticks), risk $14/MNQ.
 Trail from +2R (21494.50); then the stop sits 3.50 behind the best high.
 rationale: "setup:ofi_absorption long sellers absorbed at PDL, ofi5 -0.34, stop 21473.50, risk $14"

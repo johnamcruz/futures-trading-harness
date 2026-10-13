@@ -215,3 +215,63 @@ test('any/all groups: OR of branches, nested three deep, with each part in the r
     [{ long: Array.from({ length: 4 }, () => ({ any: Array.from({ length: 8 }, (_, k) => `close > ${k}`) })) }, /at most 24 conditions/],
   ]) assert.match(compileRules(rules).errors.join('; '), msg);
 });
+
+// field("path"): a number a broker put on its bars, read by dotted path. The names here are made up:
+// the harness gives broker fields no meaning.
+function withFields(extras) {
+  return normalizeBars(extras.map((x, k) => ({ t: new Date(T0 + k * 60000).toISOString(), o: 10, h: 11, l: 9, c: 10, v: 100, ...x })));
+}
+
+test('field("path") compiles to a series by dotted path, with digit segments and [n] look-back', () => {
+  assert.deepStrictEqual(compileCondition('field("a.b") >= 0.3').left[0].factors[0], { kind: 'series', key: 'field:a.b', shift: 0 });
+  assert.deepStrictEqual(compileCondition("field('w.5.x')[2] < 0").left[0].factors[0], { kind: 'series', key: 'field:w.5.x', shift: 2 });
+  assert.deepStrictEqual(compileCondition('close > 2 * field( "a" ) + 1').right[0].factors[1], { kind: 'series', key: 'field:a', shift: 0 });
+  for (const [text, msg] of [
+    ['field(a.b) > 0', /quoted dotted path/],
+    ['field("a..b") > 0', /quoted dotted path/],
+    ['field("a.b", 2) > 0', /quoted dotted path/],
+    ['field("a-b") > 0', /quoted dotted path/],
+    ['field("") > 0', /quoted dotted path/],
+    ['field("a.b.c.d.e.f.g.h.i") > 0', /at most 8 path segments/],
+    ['field("a") * field("b") > 0', /multiply a series by a number/],
+    ['field("a")[501] > 0', /look-back/],
+  ]) assert.throws(() => compileCondition(text), msg, text);
+  assert.deepStrictEqual(compileRules({ long: ['field("x.y") > 0'] }).errors, []);
+});
+
+test('field() reads the value on the bar, n bars back, and has none for a missing field, a null, or a non-number', () => {
+  const { readField } = require('../../scripts/lib/trading/rules');
+  const b = { x: { y: 0.4, w: { 5: { z: -0.2 } }, n: null, s: '1', t: true, f: false, inf: Infinity, arr: [7] } };
+  assert.strictEqual(readField(b, 'x.y'), 0.4);
+  assert.strictEqual(readField(b, 'x.w.5.z'), -0.2);
+  assert.strictEqual(readField(b, 'x.arr.0'), 7);
+  assert.strictEqual(readField(b, 'x.t'), 1);
+  assert.strictEqual(readField(b, 'x.f'), 0);
+  for (const p of ['x.n', 'x.s', 'x.inf', 'x.missing', 'x.y.deeper', 'nope', 'x.w', 'x.n.z']) assert.ok(Number.isNaN(readField(b, p)), p);
+  // Only the bar's own data: nothing from a prototype.
+  for (const p of ['constructor', 'x.constructor', '__proto__', 'x.arr.length', 'toString']) assert.ok(Number.isNaN(readField(b, p)), p);
+
+  const bs = withFields([{ x: { y: 0.1 } }, { x: { y: 0.5 } }, { x: { y: null } }, {}]);
+  const get = seriesSource(bs, {});
+  assert.deepStrictEqual(get('field:x.y').map(v => (Number.isNaN(v) ? null : v)), [0.1, 0.5, null, null]);
+  const at = (rule, index) => evaluateRules(compileRules({ long: [rule] }).compiled, bs, {}, { index }).long[0];
+  assert.strictEqual(at('field("x.y") > 0.3', 1).ok, true);
+  assert.strictEqual(at('field("x.y")[1] > 0.3', 2).ok, true, 'one bar back');
+  assert.strictEqual(at('field("x.y")[1] > 0.3', 1).ok, false);
+  // A null or missing field: every comparison is false (fail closed), and the result says the value is missing.
+  for (const rule of ['field("x.y") > 0', 'field("x.y") < 0', 'field("x.y") >= -1000', 'field("x.y") <= 1000', 'close > field("x.y")', 'field("x.y") crosses_above 0', 'field("x.y") crosses_below 1']) {
+    for (const index of [2, 3]) assert.deepStrictEqual(at(rule, index), { rule, ok: false, missing: true }, `${rule} @${index}`);
+  }
+  // A cross needs the value on both bars: 0.5 (bar 1) then null (bar 2) is no cross.
+  assert.strictEqual(at('field("x.y") crosses_above 0.3', 1).ok, true);
+});
+
+test('normalizeBars keeps the fields a broker adds to its bars, as they are', () => {
+  const raw = { t: '2026-10-07T14:00:00Z', open: 1, high: 2, low: 0.5, close: 1.5, volume: 9, x: { y: 1, w: { 5: { z: null } } }, note: 'n' };
+  const [b] = normalizeBars({ bars: [raw] });
+  assert.deepStrictEqual(b, { x: raw.x, note: 'n', t: raw.t, o: 1, h: 2, l: 0.5, c: 1.5, v: 9 });
+  // The OHLCV keys are always the harness's own, whatever extra keys the bar has.
+  const [own] = normalizeBars([JSON.parse('{"t":"2026-10-07T14:00:00Z","o":1,"h":2,"l":0.5,"c":1.5,"v":1,"__proto__":{"c":99}}')]);
+  assert.strictEqual(own.c, 1.5);
+  assert.strictEqual(Object.getPrototypeOf(own), Object.prototype, 'a __proto__ key stays a plain field');
+});

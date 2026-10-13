@@ -2,7 +2,7 @@
   "broker": "topstepx",
   "brokers": {
     "topstepx": {
-      "description": "TopstepX through projectx-mcp",
+      "description": "TopstepX through projectx-mcp. Order flow on its bars: set PROJECTX_BARS_ORDER_FLOW=true and PROJECTX_BARS_FLOW_WINDOWS=3,5 in your .env (the flow strategies read the 3- and 5-bar windows)",
       "repo": "https://github.com/johnamcruz/projectx-mcp",
       "entryEnv": "PROJECTX_MCP_ENTRY",
       "journal": "~/.projectx-mcp/journal.jsonl",
@@ -10,9 +10,28 @@
       "env": [
         "PROJECTX_USERNAME", "PROJECTX_API_KEY", "PROJECTX_TRADING_ENABLED", "PROJECTX_ALLOWED_ACCOUNT_IDS",
         "PROJECTX_ALLOWED_SYMBOLS", "PROJECTX_MAX_ORDER_SIZE", "PROJECTX_MAX_POSITION_SIZE", "PROJECTX_MAX_DAILY_LOSS",
-        "PROJECTX_JOURNAL_PATH", "PROJECTX_API_URL", "PROJECTX_MARKET_HUB_URL", "PROJECTX_MCP_ENTRY"
+        "PROJECTX_JOURNAL_PATH", "PROJECTX_API_URL", "PROJECTX_MARKET_HUB_URL", "PROJECTX_MCP_ENTRY",
+        "PROJECTX_BARS_ORDER_FLOW", "PROJECTX_BARS_FLOW_WINDOWS"
       ],
       "paperEnv": { "PROJECTX_TRADING_ENABLED": "false" }
+    },
+    "backtester": {
+      "description": "Replay broker over local historical bars (backtester-mcp). Order flow on its bars: set BACKTESTER_BARS_ORDER_FLOW=true and BACKTESTER_BARS_FLOW_WINDOWS=3,5 in your .env, and BACKTESTER_ORDERBOOK_DIR to the order-book data",
+      "repo": "https://github.com/johnamcruz/backtester-mcp",
+      "replay": true,
+      "entryEnv": "BACKTESTER_MCP_ENTRY",
+      "journal": "~/.backtester-mcp/runs/default/journal.jsonl",
+      "journalEnv": "BACKTESTER_JOURNAL_PATH",
+      "env": [
+        "BACKTESTER_DATA_DIR", "BACKTESTER_CLOCK_FILE", "BACKTESTER_NOW", "BACKTESTER_START", "BACKTESTER_END",
+        "BACKTESTER_RUN_ID", "BACKTESTER_STATE_DIR", "BACKTESTER_ACCOUNT_ID", "BACKTESTER_ACCOUNT_NAME",
+        "BACKTESTER_START_BALANCE", "BACKTESTER_SLIPPAGE_TICKS", "BACKTESTER_FEES_MICRO", "BACKTESTER_FEES_MINI",
+        "BACKTESTER_TRADING_ENABLED", "BACKTESTER_ALLOWED_ACCOUNT_IDS", "BACKTESTER_ALLOWED_SYMBOLS",
+        "BACKTESTER_MAX_ORDER_SIZE", "BACKTESTER_MAX_POSITION_SIZE", "BACKTESTER_MAX_DAILY_LOSS",
+        "BACKTESTER_JOURNAL_PATH", "BACKTESTER_MCP_ENTRY", "BACKTESTER_ORDERBOOK_DIR",
+        "BACKTESTER_BARS_ORDER_FLOW", "BACKTESTER_BARS_FLOW_WINDOWS"
+      ],
+      "paperEnv": { "BACKTESTER_TRADING_ENABLED": "false" }
     }
   }
 }
