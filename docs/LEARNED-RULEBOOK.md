@@ -510,39 +510,73 @@ the same with or without the adapter, on any model.
 Strategies are documents read live, so an edited `STRATEGY.md` is traded
 on the next cycle; what was *learned* about it is not, and goes stale. So:
 
-- **Fingerprint.** Every strategy has a content fingerprint (its rules,
-  parameters, exits and skip rules; the body's wording included, since
-  the model reads it). Every learned item records the fingerprints it was
-  learned on: the rulebook's values, the calibration verdicts, the archive
-  entries, the verified examples, and the champion.
+- **Fingerprints, defined.** A strategy's fingerprint hashes its parsed
+  frontmatter in canonical form (sorted keys, YAML comments stripped,
+  `status` and `version` excluded so a paper-to-active flip doesn't churn)
+  and its body with whitespace normalized (the model reads it). Learned
+  values also depend on things outside the document, so each rulebook
+  records, beside the strategies' fingerprints: a content hash of the code
+  their rules and sizing run on (the evaluator, rules, indicators, the
+  facts functions of R6, `combine.js`), the account's `ACCOUNT.md`
+  fingerprint (its limits and `sessions`: a change there makes that
+  account's whole rulebook stale), and the policy strategy's own
+  fingerprint (its `sizing`, `exit`, `contracts` and list: a change makes
+  the whole policy stale). The skills are not fingerprinted: they are what
+  the training loop itself changes (R24), each change already reviewed and
+  replayed.
+- **Day one (owner's decision):** the starting rulebook (step 6, today's
+  values) is sealed as the baseline with today's fingerprints, so nothing
+  changes when this lands. Only a strategy, code, account or policy that
+  changes after that, or a strategy added after that, goes stale.
 - **Staleness in code.** A fingerprint that differs from the one recorded
-  marks everything that depends on it stale; a check and a test catch it,
-  so it cannot pass unnoticed. A new strategy has no learned items and
-  starts stale.
-- **Re-learning is triggered, not remembered.** A strategy change is a
-  trigger for the training loop (R25), beside new data (R17): calibration
-  of that strategy's claims (R11-R13), the Monte Carlo search over the
-  rulebook values it affects (R8-R10), and a replay scored by the
-  scorecard (R19), in the tuning and held-out quarters as for any change.
+  marks what depends on it stale. A test asserts that the runner and the
+  gate treat a mismatch as stale and fail closed (a strategy edit itself
+  still merges: it then trades paper until re-learned).
+- **Re-learning is triggered, not remembered.** A change is a trigger for
+  the training loop (R25), beside new data (R17): calibration of the
+  strategy's claims (R11-R13), the Monte Carlo search over the rulebook
+  values it affects (R8-R10), and a replay scored by the scorecard (R19),
+  in the tuning and held-out quarters as for any change. Those runs use
+  their own worktree with the candidate's sealed rulebook (R30), so the
+  changed strategy isn't stale there and its replay produces real
+  decisions to score.
 - **Paper until re-verified.** Until its re-learned rulebook passes every
   verifier (R26) and the owner approves it (R25), a changed or new
-  strategy trades **paper only**: the gate refuses its live entries, as
-  for `status: paper`, and a policy strategy's verdict for that component
-  is a skip naming the reason. Everything else keeps trading on the
-  current champion. Exits and protective stops of an open position are
-  never affected.
+  strategy trades **paper only**: in this harness that means its plans are
+  journaled and its live entries refused, no fills. For a policy strategy
+  this is enforced on the verdict's component, not only the `setup:` tag:
+  the runner passes over a paper or stale component when it picks the
+  setup, and the gate refuses an entry whose latest verdict names one
+  (gate and wiring tests). Exits and protective stops of an open position
+  are never affected.
+- **The rest of the policy keeps trading only if it is still safe.**
+  Pacing, sizing and exits were searched over the whole portfolio's trade
+  stream, so taking one component out changes the paths. Before the other
+  components keep trading live, the mechanical Monte Carlo re-scores the
+  champion without that component; any blow puts the whole policy on
+  paper until re-learned.
 - **What was learned can't be changed by a later change.** Each promoted
-  rulebook is sealed with its own hash over its values, its evidence and
-  the strategy fingerprints it was learned on; versions are kept, never
-  edited in place (R18). The runner and the gate verify the seal before
-  using it: a rulebook whose seal doesn't match (hand-edited, partly
-  copied, or stale), or whose recorded fingerprints differ from the
-  strategies now in the tree, is not used for the strategies it covers,
-  which then trade paper as above (fails closed). Only a promotion writes
-  a new sealed version.
+  rulebook is sealed with a hash over its values, the evidence frozen at
+  promotion, and the fingerprints above. The ledger (R16), which grows
+  after promotion, sits outside the seal, in its own append-only file
+  with a test that it is never rewritten. Each version's seal is also
+  recorded in an append-only version list (R18) and in its promotion pull
+  request, so recomputing a seal in the same file is caught. Versions are
+  kept, never edited in place.
+- **Verified before use, cheaply.** The runner and the gate check that the
+  rulebook's seal matches its contents and appears in the version list,
+  and that the recorded fingerprints match the named strategy, its
+  verdict's component and the account now in the tree. The hook hashes
+  only those, locally from files it already reads, and fails closed on a
+  missing or unreadable seal. A seal mismatch (an edited or partial
+  rulebook) and a fingerprint mismatch (a stale one) both leave the
+  strategies it covers on paper.
+- **Rollback restores the set.** Rolling back (R18) restores the rulebook
+  version together with the strategy documents, code and account it was
+  learned on; restoring only the rulebook leaves it stale, by design.
 - **Promotion as always:** a reviewed pull request with the owner's
   approval; the new seal and fingerprints are recorded with the promoted
-  rulebook.
+  rulebook and in the version list.
 
 ## 8. The LLM: adherence and learning
 
