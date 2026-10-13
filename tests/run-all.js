@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-// Runs every *.test.js under tests/ with the built-in node:test runner.
-const { spawnSync } = require('child_process');
+// Runs every *.test.js under tests/ with the built-in node:test runner, inside one temporary root
+// for the run (tests/temp-root.js): removed when the run ends, kept with KEEP_TEST_TMP=1.
 const fs = require('fs');
 const path = require('path');
+const { runTests } = require('./temp-root');
 
 function collect(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => {
@@ -15,5 +16,4 @@ function collect(dir) {
 }
 
 const files = collect(__dirname).sort();
-const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' });
-process.exit(result.status === null ? 1 : result.status);
+runTests(files).then(({ status }) => process.exit(status));
