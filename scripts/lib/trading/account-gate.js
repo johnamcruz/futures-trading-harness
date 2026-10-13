@@ -27,6 +27,10 @@ const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 
 const POSITION_SIGN = { 1: 1, 2: -1 };
+// On a call the gateway names on a replayed day (mcp-gateway.js namedArgs): () => a naming function from one read
+// of the day's contract cache. NAMES: that function once applied (accountFacts), for the ledger.
+const RENAME = Symbol.for('fth.gate.rename');
+const NAMES = Symbol.for('fth.gate.names');
 // Equity index families (by their micro root): one direction-correlated bet.
 const EQUITY_INDEX = new Set(['MNQ', 'MES', 'MYM', 'M2K']);
 const STOP_TYPES = new Set([3, 4, 5]); // stop_limit, stop, trailing_stop
@@ -136,7 +140,8 @@ function restingSize(orders, contractId, sideSign, types) {
  * Returns violations [{check, message}] for a place_order given live facts
  * { positions, orders, trades } from the broker MCP server.
  */
-function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger = [], propAttempt = null }) {
+function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null }) {
+  const ledger = ledgerNamed(input, given);
   // Missing or malformed account data must block, never read as "flat".
   for (const [name, v] of Object.entries({ positions, orders, trades })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
@@ -391,7 +396,9 @@ function evaluatePartialClose({ input = {}, positions, orders, config, ledger = 
  * unknown market orders as they'd fill; `cancelLedger` also counts unknown
  * entries of any type as filled (their bracket stop may protect them).
  */
-function evaluateAccountChange(tool, { input, positions, orders, config, now, ledger = [], cancelLedger = ledger }) {
+function evaluateAccountChange(tool, { input, positions, orders, config, now, ledger: given = [], cancelLedger: givenCancel = given }) {
+  const ledger = ledgerNamed(input, given);
+  const cancelLedger = ledgerNamed(input, givenCancel);
   if (tool === 'cancel_order') return evaluateCancel({ input, positions, orders, config, ledger: cancelLedger, now });
   if (tool === 'modify_order') return evaluateModifyAccount({ input, positions, orders, config, ledger, now });
   if (tool === 'partial_close_position') return evaluatePartialClose({ input, positions, orders, config, ledger, now });
@@ -438,10 +445,30 @@ async function accountFacts(args, caller, withTrades = true) {
     caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
     withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
   ]);
-  return { positions, orders, trades };
+  // A replayed day's call: the call itself (in place: the gateway judges and records this object) and the account,
+  // named from one read of the day's cache taken now, after the reads that may have looked the front month up.
+  const r = renamed(args, positions, orders);
+  if (r.names) Object.assign(args, { contractId: r.args.contractId, [NAMES]: r.names });
+  return { positions: r.positions, orders: r.orders, trades };
 }
 
+/**
+ * { args, positions, orders, names } named again from one read of the replayed day's contract cache when the call
+ * carries RENAME (mcp-gateway.js namedArgs), else as given (names null).
+ */
+function renamed(args, positions, orders = []) {
+  const make = args && args[RENAME];
+  if (typeof make !== 'function') return { args, positions, orders, names: null };
+  const names = make();
+  const each = list => (Array.isArray(list) ? list.map(x => (x && typeof x.contractId === 'string' ? { ...x, contractId: names(x.contractId) } : x)) : list);
+  return { args: { ...args, contractId: names(args.contractId) }, positions: each(positions), orders: each(orders), names };
+}
+
+/** The gate's ledger named as the call was (NAMES, set by accountFacts), else as given. */
+const ledgerNamed = (input, ledger) => (input && typeof input[NAMES] === 'function' && Array.isArray(ledger)
+  ? ledger.map(e => (e && typeof e.contractId === 'string' ? { ...e, contractId: input[NAMES](e.contractId) } : e)) : ledger);
+
 module.exports = {
-  accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
+  RENAME, renamed, accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
   evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
 };

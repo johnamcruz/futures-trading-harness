@@ -172,13 +172,24 @@ function lineSplitter(onLine) {
  * translator's cache: MNQ:2026-12 or the broker's own id for today's front
  * month become MNQ), so the gate and its ledger of recent orders compare
  * like with like. Only for checking: the call goes out as the client sent it.
+ * Under a replay clock each replayed day has its own cache file
+ * (broker/config.js contractsCacheFile), whose front month the translator may
+ * look up only while the gateway reads the account: the call then carries
+ * RENAME (account-gate.js), so after the account reads the call, the
+ * positions, the orders and the gate's ledger are named again from one read
+ * of that file, the front month the positions were named with.
  */
 function canonicalArgs(args, env = process.env) {
   if (!args || typeof args.contractId !== 'string') return args;
   try {
     const { activeBroker, contractsCacheFile } = require('../broker/config');
     const { readCache, canonicalName } = require('../broker/translator');
-    return { ...args, contractId: canonicalName(args.contractId, readCache(contractsCacheFile(activeBroker(env).name, env))) };
+    const file = contractsCacheFile(activeBroker(env).name, env);
+    const out = { ...args, contractId: canonicalName(args.contractId, readCache(file)) };
+    if (!require('./harness-now').resolveClock(env).replay) return out;
+    const { RENAME } = require('./account-gate');
+    // One read of the day's cache, when called: how every contract is named from it.
+    return { ...out, [RENAME]: () => { const cache = readCache(file); return id => (typeof id === 'string' ? canonicalName(id, cache) : id); } };
   } catch (_err) {
     return args; // no broker config: the names are compared as given
   }
@@ -196,7 +207,8 @@ function canonicalArgs(args, env = process.env) {
  */
 function closeLedgerEntry(tool, args, positions, now) {
   if (!Array.isArray(positions)) return null;
-  const { contractNet, netPosition } = require('./account-gate');
+  const { contractNet, netPosition, renamed } = require('./account-gate');
+  ({ args, positions } = renamed(args, positions)); // a replayed day's call: named again with the positions
   const { contractRoot } = require('./journal');
   const net = contractNet(positions, args.contractId);
   const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);

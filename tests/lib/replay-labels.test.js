@@ -851,6 +851,12 @@ test('labels: tick specs are the ones the run recorded from its broker (contract
   fs.writeFileSync(path.join(mes.home, 'contracts-sim.json'), specs);
   const b = labelRun(mes.runDir, { budgetUsd: 40 }).labels[0];
   assert.deepStrictEqual([b.teacher.size.riskUsd, b.provenance.specs], [50, 'table'], 'MES from the table: 40 ticks x $1.25');
+  // Under the replay clock the run recorded one file per replayed day (broker/config.js contractsCacheFile): read them all.
+  const days = makeRun({ manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [LONG] } }] });
+  fs.writeFileSync(path.join(days.home, 'contracts-sim.2026-10-05.json'), JSON.stringify({ ids: {}, front: {}, specs: {} }));
+  fs.writeFileSync(path.join(days.home, 'contracts-sim.2026-10-06.json'), specs);
+  const d = labelRun(days.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([d.teacher.size.riskUsd, d.provenance.specs], [20, 'broker'], 'the spec from a day file');
 });
 
 test('labels: an order opencode stopped itself (a permission rule) is no order', () => {
@@ -1288,4 +1294,38 @@ test('labels: each decision joined to its recorded field values and its archived
   const again = labelRun(run.runDir, { strategies: STRATEGIES, log: () => {} }).labels.filter(x => x.day === DAY);
   assert.ok(again.every(l => l.archivePruned === false));
   assert.ok(before.every(l => l.archivePruned === false), 'an old session with no archive: not pruned');
+});
+
+test('labels: under the replay clock a broker id resolves through any day\'s cache file, and each trade is measured with its own day\'s tick spec', () => {
+  // The broker's own id recorded only by a later day's file.
+  const bt = { ...LONG, input: { ...LONG.input, contractId: 'BT.MNQ' } };
+  const close = { tool: 'close_position', input: { accountId: 7, contractId: 'BT.MNQ', reason: '[exit] done' } };
+  const run = makeRun({ manifest: { broker: 'backtester' }, steps: [
+    { k: 0, cycle: { orders: [bt] } },
+    { k: 1, cycle: { positions: LONG_POS, orders: [close] }, trades: [fill(1, 0, 20000, null, { contractId: 'BT.MNQ' })] },
+    { k: 2, cycle: {}, trades: [fill(4, 1, 20010, 20, { contractId: 'BT.MNQ' })] },
+  ] });
+  const file = d => path.join(run.home, `contracts-backtester.${d}.json`);
+  fs.writeFileSync(path.join(run.home, 'contracts-backtester.json'), JSON.stringify({ ids: {}, front: {} })); // the live file, listed first
+  fs.writeFileSync(file('2026-03-02'), JSON.stringify({ ids: {}, front: {} }));
+  fs.writeFileSync(file('2026-03-04'), JSON.stringify({ ids: { 'BT.MNQ': { root: 'MNQ', month: '2026-03' } }, front: {} }));
+  const { labels, summary } = labelRun(run.runDir, { budgetUsd: 40 });
+  assert.deepStrictEqual(labels.slice(0, 2).map(l => [l.decision, l.teacher.action, l.clone.reasons]), [['flat', 'long', []], ['in-trade', 'exit', []]]);
+  assert.deepStrictEqual([labels[0].outcome.result, summary.unattributedOrders], ['win', 0]);
+  // The trade's day (2026-03-03) recorded the table's MNQ spec; the latest day another ($1 a tick): its own day's counts.
+  const specs = (tickValue) => JSON.stringify({ ids: {}, front: {}, specs: { MNQ: { tickSize: 0.25, tickValue } } });
+  const days = makeRun({ manifest: { broker: 'sim' }, steps: [{ k: 0, cycle: { orders: [LONG] } }] });
+  const dayFile = d => path.join(days.home, `contracts-sim.${d}.json`);
+  fs.writeFileSync(dayFile('2026-03-03'), specs(0.5));
+  fs.writeFileSync(dayFile('2026-03-04'), specs(1));
+  const own = labelRun(days.runDir, { budgetUsd: 40 }).labels[0];
+  assert.deepStrictEqual([own.teacher.size.riskUsd, own.provenance.specs], [20, 'broker'], 'the trade\'s own day\'s spec, not the latest day\'s');
+  // The other way round: the trade's own day recorded the unlike one: flagged, though a later day has the table's.
+  fs.writeFileSync(dayFile('2026-03-03'), specs(1));
+  fs.writeFileSync(dayFile('2026-03-04'), specs(0.5));
+  assert.strictEqual(labelRun(days.runDir, { budgetUsd: 40 }).labels[0].provenance.specs, 'mismatch');
+  // No spec on its own day: the latest day's that has one.
+  fs.writeFileSync(dayFile('2026-03-03'), JSON.stringify({ ids: {}, front: {}, specs: {} }));
+  fs.writeFileSync(dayFile('2026-03-02'), specs(1));
+  assert.strictEqual(labelRun(days.runDir, { budgetUsd: 40 }).labels[0].provenance.specs, 'broker');
 });

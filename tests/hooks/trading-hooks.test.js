@@ -678,6 +678,113 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}
 const call = (id, name, args) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
 const LONG1 = JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]);
 
+test('MCP gateway wiring: a replayed day over a home that replayed another day first trades exactly as a fresh home does: earlier, unseen post-roll and later days, never a wrong month, never a refused exit of the position\'s own month', async () => {
+  const { spawn } = require('child_process');
+  const { stopLossBracket: _sl, ...exitBase } = ORDER;
+  // December is the front month before the roll on 2026-10-08, March from it on.
+  const contracts = day => JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: day < '2026-10-08' }, { id: 'sim-H7', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: day >= '2026-10-08' }]);
+  const newHome = () => {
+    const dir = tmpDir();
+    const home = path.join(dir, '.futures-trading-harness');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(dir, []), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', replay: true } } }));
+    return dir;
+  };
+  let k = 0;
+  const run = async (dir, day, messages, position = null) => {
+    const argsFile = path.join(dir, `args-${k += 1}.jsonl`);
+    const at = `${day}T14:30:00.000Z`;
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
+      PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: '2026-10-10T15:00:00.000Z', NODE_ENV: 'test',
+      SIM_ALLOWED_ACCOUNTS: '1,7', FAKE_ARGS: argsFile, FTH_REPLAY_NOW: at, FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: at, replay: true }),
+      FAKE_CONTRACTS: contracts(day), FAKE_POSITIONS: JSON.stringify(position ? [{ contractId: position, type: 1, size: 1 }] : []),
+    } });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+    for (const m of messages) {
+      gw.stdin.write(`${JSON.stringify(m)}\n`);
+      for (let t = 0; t < 400 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
+    }
+    gw.stdin.end();
+    await new Promise(r => gw.on('close', r));
+    const texts = replies().sort((a, b) => a.id - b.id).map(r => r.result.content[0].text.slice(0, 400));
+    const sent = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => /place_order|close/.test(c.name)).map(c => `${c.name} ${c.args.contractId}`) : [];
+    return { texts, sent };
+  };
+  const month = { 'sim-Z6': 'MNQ:2026-12', 'sim-H7': 'MNQ:2027-03' };
+  const other = { 'sim-Z6': 'MNQ:2027-03', 'sim-H7': 'MNQ:2026-12' };
+  const exit = (id, contractId) => call(id, 'place_order', { ...exitBase, contractId, side: 'sell', rationale: '[exit] flatten' });
+  // The day starts with a contract lookup (as premarket does: the fake server has no get_contract).
+  const probes = pos => [call(0, 'search_contracts', { searchText: 'MNQ' }), call(1, 'list_open_positions', { accountId: 1 }), exit(2, other[pos]), call(3, 'partial_close_position', { accountId: 1, contractId: other[pos], size: 1 }), exit(4, month[pos])];
+  const reused = newHome();
+  await run(reused, '2026-10-09', [call(0, 'search_contracts', { searchText: 'MNQ' })]); // a later day first: March
+  for (const day of ['2026-10-05', '2026-10-08', '2026-10-12', '2026-10-06']) {
+    for (const pos of ['sim-Z6', 'sim-H7']) {
+      const r = await run(reused, day, probes(pos), pos);
+      const fresh = await run(newHome(), day, probes(pos), pos);
+      assert.deepStrictEqual(r, fresh, `${day} ${pos}: as a fresh home`);
+      assert.deepStrictEqual(r.sent, [`place_order ${pos}`], `${day} ${pos}: only the position's own exit reached the server`);
+      assert.match(r.texts[2], /\[exposure\]/, `${day} ${pos}: the other month's exit is refused`);
+      assert.match(r.texts[3], /\[partial-close\]/);
+      assert.match(r.texts[1], new RegExp(`"contractId": "${day < '2026-10-08' === (pos === 'sim-Z6') ? 'MNQ' : month[pos]}"`), `${day} ${pos}: listed by that day's front month`);
+    }
+  }
+  // A day's very first call, with nothing looked up that day: the gateway has the translator look the front month up
+  // before naming it, so the two name it alike (a December long on 2026-10-07; after the roll on 2026-10-13).
+  const first = async (day, msgs) => run(reused, day, msgs, 'sim-Z6');
+  const dec = await first('2026-10-07', [exit(1, 'MNQ:2026-12')]);
+  assert.deepStrictEqual(dec.sent, ['place_order sim-Z6'], dec.texts.join(' | '));
+  const roll = await first('2026-10-13', [exit(1, 'MNQ'), exit(2, 'MNQ:2026-12')]);
+  assert.match(roll.texts[0], /\[exposure\]/, 'MNQ is March after the roll: a sell there would open a short');
+  assert.deepStrictEqual(roll.sent, ['place_order sim-Z6']);
+  // A close by the month, then an exit by the root, first thing on a new day: the close counts for the exit.
+  const closed = await run(reused, '2026-10-14', [call(1, 'close_position', { accountId: 1, contractId: 'MNQ:2027-03' }), exit(2, 'MNQ')], 'sim-H7');
+  assert.deepStrictEqual(closed.sent, ['close_position sim-H7']);
+  assert.match(closed.texts[1], /\[exposure\][\s\S]*once recent orders fill/, closed.texts.join(' | '));
+});
+
+test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup costs an exit no more than on main: one call timeout when it hangs (fail closed), a few seconds when slow', { timeout: 60000 }, async () => {
+  const { spawn } = require('child_process');
+  const { stopLossBracket: _sl, ...exitBase } = ORDER;
+  const run = async extra => {
+    const dir = tmpDir();
+    const home = path.join(dir, '.futures-trading-harness');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(dir, []), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', replay: true } } }));
+    // The day before looked MNQ up: its ids name the December long today, whatever today's lookup does.
+    fs.writeFileSync(path.join(home, 'contracts-sim.2026-10-06.json'), JSON.stringify({ ids: { 'sim-Z6': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-06' } } }));
+    const argsFile = path.join(dir, 'args.jsonl');
+    const at = '2026-10-07T14:30:00.000Z';
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
+      PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: '2026-10-10T15:00:00.000Z', NODE_ENV: 'test',
+      SIM_ALLOWED_ACCOUNTS: '1,7', FAKE_ARGS: argsFile, FTH_REPLAY_NOW: at, FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: at, replay: true }),
+      FAKE_CONTRACTS: JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]), FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]), ...extra,
+    } });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    const t0 = Date.now();
+    gw.stdin.write(`${JSON.stringify(call(1, 'place_order', { ...exitBase, contractId: 'MNQ:2026-12', side: 'sell', rationale: '[exit] flatten' }))}\n`);
+    while (!out.includes('"id":1')) await new Promise(r => setTimeout(r, 25));
+    const took = Date.now() - t0;
+    gw.stdin.end();
+    await new Promise(r => gw.on('close', r));
+    const text = JSON.parse(out.trim().split('\n').find(l => l.includes('"id":1'))).result.content[0].text;
+    const sent = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => c.name === 'place_order').map(c => c.args.contractId);
+    return { took, text, sent };
+  };
+  // The lookup hangs: the account read waits on it and the gate fails closed at one call timeout (15 s), as on
+  // main; nothing waits on a lookup of its own first, and nothing reaches the server.
+  const hung = await run({ FAKE_DROP: 'search_contracts' });
+  assert.match(hung.text, /the order gate could not run \((list_open_positions|list_open_orders|search_trades) timed out\)/, 'whichever account read times out first');
+  assert.deepStrictEqual(hung.sent, []);
+  assert.ok(hung.took < 17000, `${hung.took} ms`);
+  // A slow broker (every lookup and order reply 1.5 s late): a few seconds, never a timeout's worth.
+  const slow = await run({ FAKE_DELAY_MS: '1500' });
+  assert.deepStrictEqual(slow.sent, ['sim-Z6'], slow.text);
+  assert.ok(slow.took < 9000, `${slow.took} ms`);
+});
+
 test('MCP gateway: an entry for a regime-gated strategy (vwap_reclaim) fetches its bars: no regime refusal in a trend, a regime refusal in a range, and a refusal when the bars can\'t be read', async () => {
   const gated = { ...ORDER, rationale: 'setup:vwap_reclaim long, stop 21480, target 21540, risk $40' };
   const bars = fn => JSON.stringify({ bars: Array.from({ length: 160 }, (_, k) => {
@@ -1413,6 +1520,7 @@ function simBroker(env, { replay = true, extra = {} } = {}) {
   const home = env.FTH_HOME;
   homeBrokers(home, { sim: { command: ['node', 'sim.js'], journal: env.FAKE_BROKER_JOURNAL, ...(replay ? { replay: true } : {}), ...extra } }, { env });
   recordBrokerSpecs(home, { broker: 'sim' }); // the replay broker's tick specs, as its translator records them
+  recordBrokerSpecs(home, { broker: 'sim', day: '2026-10-07' }); // and on the replayed day (TEST_NOW's): its own file
 }
 
 test('order gate hook: with a replay broker it judges the order at FTH_REPLAY_NOW, not the wall clock', () => {
@@ -1429,6 +1537,21 @@ test('order gate hook: with a replay broker it judges the order at FTH_REPLAY_NO
   const closed = gate(orderPayload(), { ...env, FTH_REPLAY_NOW: SATURDAY });
   assert.strictEqual(closed.code, 2);
   assert.match(closed.stderr, /\[market-hours\]/);
+});
+
+test('order gate hook: on a replayed day whose file has tick specs but no front month, an entry is refused saying why; an exit goes', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env);
+  const replay = { ...env, FTH_TEST_NOW: SATURDAY, FTH_REPLAY_NOW: TEST_NOW };
+  assert.strictEqual(gate(orderPayload(), replay).code, 0, 'the day\'s front month recorded: allowed');
+  // Only a lookup by month succeeded that day: specs, no front month.
+  const file = path.join(env.FTH_HOME, 'contracts-sim.2026-10-07.json');
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), front: {} }));
+  const entry = gate(orderPayload(), replay);
+  assert.strictEqual(entry.code, 2);
+  assert.match(entry.stderr, /\[contract-specs\] the replayed day's MNQ front month \(2026-10-07\) is not looked up yet[\s\S]*call search_contracts for MNQ first/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), replay);
+  assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
 test('order gate hook: FTH_REPLAY_NOW without a real replay broker, or unparseable, blocks entries (even autonomous with checks skipped); exits, stops and stop moves still go', () => {
@@ -1639,18 +1762,22 @@ test('order gate wiring: without the broker\'s tick specs the hook and the gatew
   const { home } = simHome(dir, { journalEntries: plan });
   trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
   const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FTH_REPLAY_NOW: TEST_NOW, FAKE_SERVER_CONFIG: serverSays(TEST_NOW) };
-  const held = await gatewayCfg({ ...base, FAKE_POSITIONS: LONG1 }, [
+  // The broker's answer has no tick specs (a contract lookup records none: the gateway's own lookup of the replayed
+  // day's front month included).
+  const noSpecs = JSON.stringify(JSON.parse(CONTRACTS).map(({ tickSize: _s, tickValue: _v, ...c }) => c));
+  const held = await gatewayCfg({ ...base, FAKE_POSITIONS: LONG1, FAKE_CONTRACTS: noSpecs }, [
     call(1, 'place_order', ORDER),
     call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
   ], { dir });
   assert.match(textOf(held[1]), /\[contract-specs\] no tick specs from the broker for MNQ yet/);
   assert.strictEqual(textOf(held[2]), 'forwarded:tools/call:place_order', 'the exit goes without specs');
-  fs.rmSync(path.join(home, 'contracts-sim.json'), { force: true }); // (the exit's own translation looked MNQ up; start over)
+  // The replayed day's own file (broker/config.js contractsCacheFile).
+  fs.rmSync(path.join(home, 'contracts-sim.2026-10-07.json'), { force: true }); // (the exit's own translation looked MNQ up; start over)
   const r = await gatewayCfg({ ...base, FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) }, [
     call(3, 'search_contracts', { searchText: 'MNQ' }),
     call(4, 'place_order', ORDER),
   ], { dir });
-  const recorded = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')).specs.MNQ;
+  const recorded = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.2026-10-07.json'), 'utf8')).specs.MNQ;
   assert.deepStrictEqual([recorded.tickSize, recorded.tickValue, recorded.name], [0.25, 0.5, 'MNQZ6']);
   assert.match(textOf(r[4]), /"orderId":\s*5/, textOf(r[4]));
 });

@@ -283,11 +283,36 @@ test('the contract translator dates its front-month lookups by the harness clock
     } finally {
       client.close();
     }
-    return JSON.parse(fs.readFileSync(path.join(home, 'contracts-fake.json'), 'utf8')).front.MNQ.day;
+    // The cache file: one per replayed day under a replay clock, the live one otherwise (broker/config.js contractsCacheFile).
+    const files = fs.readdirSync(home).filter(n => /^contracts-fake.*\.json$/.test(n));
+    assert.strictEqual(files.length, 1, files.join(', '));
+    return [files[0], JSON.parse(fs.readFileSync(path.join(home, files[0]), 'utf8')).front.MNQ.day];
   };
-  assert.strictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: { replay: true } }), '2026-03-04');
-  // Not a replay broker: the override is refused for checks; lookups go on, on the wall clock.
-  assert.notStrictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: {} }), '2026-03-04');
+  assert.deepStrictEqual(await day({ now: '2026-03-04T15:00:00Z', brokerExtra: { replay: true } }), ['contracts-fake.2026-03-04.json', '2026-03-04']);
+  // Not a replay broker: the override is refused for checks; lookups go on, on the wall clock, in the live file.
+  const [file, keyed] = await day({ now: '2026-03-04T15:00:00Z', brokerExtra: {} });
+  assert.strictEqual(file, 'contracts-fake.json');
+  assert.notStrictEqual(keyed, '2026-03-04');
+});
+
+test('contractsCacheFile: one file per replayed trading day under a replay clock; the live file otherwise (refused clocks too); the files are listed', () => {
+  const { contractsCacheFile, contractsCacheFiles } = require('../../scripts/lib/broker/config');
+  const home = tmpDir();
+  const brokers = replay => fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], ...(replay ? { replay: true } : {}) } } }));
+  brokers(true);
+  const env = now => ({ FTH_HOME: home, ...(now ? { FTH_REPLAY_NOW: now } : {}) });
+  assert.strictEqual(contractsCacheFile('sim', env()), path.join(home, 'contracts-sim.json'), 'live: the one file, as before');
+  assert.strictEqual(contractsCacheFile('sim', env('2026-03-04T15:00:00Z')), path.join(home, 'contracts-sim.2026-03-04.json'));
+  assert.strictEqual(contractsCacheFile('sim', env('2026-03-04T23:30:00Z')), path.join(home, 'contracts-sim.2026-03-05.json'), 'after the 18:00 ET open: the next trading day');
+  assert.strictEqual(contractsCacheFile('s/m', env('2026-03-04T15:00:00Z')), path.join(home, 'contracts-s_m.2026-03-04.json'));
+  assert.strictEqual(contractsCacheFile('sim', env('not a time')), path.join(home, 'contracts-sim.json'), 'a refused replay clock: the live file');
+  brokers(false);
+  assert.strictEqual(contractsCacheFile('sim', env('2026-03-04T15:00:00Z')), path.join(home, 'contracts-sim.json'), 'not a replay broker: the live file');
+  // Listing: the live file first, then the days; other brokers' and other files are not theirs.
+  const day = d => path.join(home, `contracts-sim.${d}.json`);
+  for (const f of [path.join(home, 'contracts-sim.json'), day('2026-03-04'), day('2026-02-01'), path.join(home, 'contracts-simx.2026-02-01.json'), path.join(home, 'contracts-sim-notes.json')]) fs.writeFileSync(f, '{}');
+  assert.deepStrictEqual(contractsCacheFiles('sim', env()), [path.join(home, 'contracts-sim.json'), day('2026-02-01'), day('2026-03-04')]);
+  assert.deepStrictEqual(contractsCacheFiles('sim', { FTH_HOME: path.join(home, 'none') }), []);
 });
 
 test('the conformance checker dates its calls at the replay clock: the configured one, else a replay server\'s serverTime; live, the wall clock', async () => {
@@ -330,4 +355,162 @@ test('the conformance checker dates its calls at the replay clock: the configure
   assert.match(conf.since, /^2026-02-2/);
   assert.deepStrictEqual(conf.r.results.find(x => /configured replay clock/.test(x.check)).problems, ['the server does not report replay mode (get_server_config.replay), yet a replay clock is set']);
   assert.deepStrictEqual(lookAhead(conf.r).problems, ['1 of 1 bar(s) close after it (the first opened 2026-10-13T13:59:00Z): look-ahead']);
+});
+
+test('pruneReplayCaches: a pruned day\'s broker ids are kept in the broker\'s id index, so the run\'s labels and later days still name them (an expired June contract traded on 2026-06-02, pruned on 2026-08-14)', () => {
+  const { contractsCacheFiles, pruneReplayCaches } = require('../../scripts/lib/broker/config');
+  const { translatorCache } = require('../../scripts/lib/replay/labels');
+  const { readCache } = require('../../scripts/lib/broker/translator');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'backtester', brokers: { backtester: { command: ['node', 'x.js'], replay: true } } }));
+  const env = { FTH_HOME: home, FTH_REPLAY_NOW: '2026-08-14T14:30:00Z' };
+  const day = d => path.join(home, `contracts-backtester.${d}.json`);
+  fs.writeFileSync(day('2026-06-02'), JSON.stringify({ ids: { 'BT.MNQ.M26': { root: 'MNQ', month: '2026-06' }, bad: { root: 1 } }, front: { MNQ: { id: 'BT.MNQ.M26', month: '2026-06', day: '2026-06-02' } } }));
+  fs.writeFileSync(day('2026-06-03'), 'not json');
+  fs.writeFileSync(day('2026-08-13'), JSON.stringify({ ids: { 'BT.MNQ.U26': { root: 'MNQ', month: '2026-09' } }, front: {} }));
+  assert.strictEqual(translatorCache(contractsCacheFiles('backtester', env)).root('BT.MNQ.M26'), 'MNQ', 'before');
+  assert.deepStrictEqual(pruneReplayCaches('backtester', env), [day('2026-06-02')]);
+  assert.ok(!fs.existsSync(day('2026-06-02')) && fs.existsSync(day('2026-08-13')));
+  assert.ok(fs.existsSync(day('2026-06-03')), 'a day file that can\'t be read is never deleted');
+  assert.strictEqual(translatorCache(contractsCacheFiles('backtester', env)).root('BT.MNQ.M26'), 'MNQ', 'after: from the index');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, 'contracts-backtester.ids.json'), 'utf8')).ids, { 'BT.MNQ.M26': { root: 'MNQ', month: '2026-06' } }, 'root and month only; no front month, no bad entry');
+  // A day near June reads it from the index too (a rerun of June); a day after it doesn't reuse the expired contract.
+  assert.deepStrictEqual(readCache(day('2026-06-05')).ids['BT.MNQ.M26'], { root: 'MNQ', month: '2026-06' });
+  assert.strictEqual(readCache(day('2026-08-14')).ids['BT.MNQ.M26'], undefined);
+  // The index is never pruned; the index can't be written: nothing is pruned (no mapping lost).
+  fs.writeFileSync(day('2026-06-10'), JSON.stringify({ ids: { 'BT.MNQ.X': { root: 'MNQ', month: '2026-06' } } }));
+  const indexFile = path.join(home, 'contracts-backtester.ids.json');
+  fs.renameSync(indexFile, `${indexFile}.saved`);
+  fs.mkdirSync(indexFile); // the index can't be replaced
+  try {
+    assert.deepStrictEqual(pruneReplayCaches('backtester', env), []);
+  } finally {
+    fs.rmdirSync(indexFile);
+    fs.renameSync(`${indexFile}.saved`, indexFile);
+  }
+  assert.ok(fs.existsSync(day('2026-06-10')));
+  assert.deepStrictEqual(pruneReplayCaches('backtester', env), [day('2026-06-10')]);
+  assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(home, 'contracts-backtester.ids.json'), 'utf8')).ids).sort(), ['BT.MNQ.M26', 'BT.MNQ.X']);
+});
+
+test('day files: a broker named like a date never shares another broker\'s files, and pruning removes only its own day files', () => {
+  const { contractsCacheFile, contractsCacheFiles, pruneReplayCaches } = require('../../scripts/lib/broker/config');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'], replay: true } } }));
+  const env = { FTH_HOME: home, FTH_REPLAY_NOW: '2026-03-04T15:00:00Z' };
+  // Broker "sim-2026-03-01"'s live file is not one of broker "sim"'s day files, and the other way round.
+  const other = contractsCacheFile('sim-2026-03-01', { FTH_HOME: home });
+  assert.strictEqual(path.basename(other), 'contracts-sim-2026-03-01.json');
+  assert.notStrictEqual(contractsCacheFile('sim', env), other);
+  fs.writeFileSync(other, JSON.stringify({ ids: { keep: { root: 'MNQ', month: '2026-03' } } }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.2026-01-01.json'), JSON.stringify({ ids: {} }));
+  fs.writeFileSync(path.join(home, 'contracts-simx.2026-01-01.json'), JSON.stringify({ ids: {} }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.2026-01-01.json.bak'), '{}');
+  assert.deepStrictEqual(contractsCacheFiles('sim', env).map(f => path.basename(f)), ['contracts-sim.2026-01-01.json']);
+  assert.deepStrictEqual(pruneReplayCaches('sim', env).map(f => path.basename(f)), ['contracts-sim.2026-01-01.json']);
+  assert.ok(fs.existsSync(other) && fs.existsSync(path.join(home, 'contracts-simx.2026-01-01.json')) && fs.existsSync(path.join(home, 'contracts-sim.2026-01-01.json.bak')));
+  // And the translator never reads another broker's files as a day file's siblings.
+  const { readCache } = require('../../scripts/lib/broker/translator');
+  assert.strictEqual(readCache(contractsCacheFile('sim', env)).ids.keep, undefined);
+});
+
+test('pruneReplayCaches: one prune at a time (a second, started while the first is between reading and writing the index, prunes nothing and loses nothing); a corrupt index prunes nothing; live never prunes', () => {
+  const { pruneReplayCaches } = require('../../scripts/lib/broker/config');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'], replay: true } } }));
+  const env = { FTH_HOME: home, FTH_REPLAY_NOW: '2026-08-14T14:30:00Z' };
+  const day = d => path.join(home, `contracts-sim.${d}.json`);
+  const indexFile = path.join(home, 'contracts-sim.ids.json');
+  const ids = n => Object.fromEntries(Array.from({ length: n }, (_, k) => [`id-${n}-${k}`, { root: 'MNQ', month: '2026-12' }]));
+  fs.writeFileSync(day('2026-06-01'), JSON.stringify({ ids: ids(1500) }));
+  fs.writeFileSync(day('2026-06-02'), JSON.stringify({ ids: ids(7) }));
+  // Live (no replay clock): never prunes.
+  assert.deepStrictEqual(pruneReplayCaches('sim', { FTH_HOME: home }), []);
+  assert.ok(fs.existsSync(day('2026-06-01')));
+  // The injected delay: while the first prune writes its index, a second one starts (another translator).
+  const rename = fs.renameSync;
+  let inner = null;
+  fs.renameSync = (from, to) => {
+    if (inner === null && to === indexFile) inner = pruneReplayCaches('sim', env);
+    return rename(from, to);
+  };
+  // And the index is on disk (its data, then the directory) before any day file goes.
+  const fsync = fs.fsyncSync;
+  const unlink = fs.unlinkSync;
+  const order = [];
+  fs.fsyncSync = fd => { order.push('fsync'); return fsync(fd); };
+  fs.unlinkSync = file => { if (String(file).includes('contracts-sim.2026')) order.push('unlink'); return unlink(file); };
+  const quiet0 = process.stderr.write;
+  process.stderr.write = () => true;
+  let outer;
+  try {
+    outer = pruneReplayCaches('sim', env);
+  } finally {
+    fs.renameSync = rename;
+    fs.fsyncSync = fsync;
+    fs.unlinkSync = unlink;
+    process.stderr.write = quiet0;
+  }
+  assert.deepStrictEqual(order.slice(0, 3), ['fsync', 'fsync', 'unlink'], order.join(' '));
+  assert.deepStrictEqual(inner, [], 'the second prune did nothing');
+  assert.deepStrictEqual(outer, [day('2026-06-01'), day('2026-06-02')]);
+  assert.strictEqual(Object.keys(JSON.parse(fs.readFileSync(indexFile, 'utf8')).ids).length, 1507, 'no id lost');
+  assert.ok(!fs.existsSync(`${indexFile}.lock`), 'the lock is released');
+  // A lock left by another prune (or a crashed one): nothing is pruned, the lock is not ours to remove, and it
+  // says once which file to remove (the inner prune above already said it for this home: a fresh home here).
+  fs.writeFileSync(day('2026-06-03'), JSON.stringify({ ids: ids(2) }));
+  fs.writeFileSync(`${indexFile}.lock`, '123');
+  assert.deepStrictEqual(pruneReplayCaches('sim', env), []);
+  assert.ok(fs.existsSync(day('2026-06-03')) && fs.existsSync(`${indexFile}.lock`));
+  fs.unlinkSync(`${indexFile}.lock`);
+  {
+    const other = tmpDir();
+    fs.writeFileSync(path.join(other, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'], replay: true } } }));
+    fs.writeFileSync(path.join(other, 'contracts-sim.2026-06-01.json'), JSON.stringify({ ids: ids(3) }));
+    const otherLock = path.join(other, 'contracts-sim.ids.json.lock');
+    fs.writeFileSync(otherLock, '');
+    const saidLock = [];
+    const q = process.stderr.write;
+    process.stderr.write = m => { saidLock.push(String(m)); return true; };
+    try {
+      pruneReplayCaches('sim', { ...env, FTH_HOME: other });
+      pruneReplayCaches('sim', { ...env, FTH_HOME: other });
+    } finally {
+      process.stderr.write = q;
+    }
+    assert.strictEqual(saidLock.length, 1, 'once per process');
+    assert.ok(saidLock[0].includes(otherLock) && /remove that file to prune again/.test(saidLock[0]), saidLock[0]);
+    // A lock that can't be written after it was made (a full disk): removed at once, nothing pruned.
+    fs.unlinkSync(otherLock);
+    const writeSync = fs.writeSync;
+    fs.writeSync = (fd, data, ...rest) => { if (String(data) === String(process.pid)) { const e = new Error('no space'); e.code = 'ENOSPC'; throw e; } return writeSync(fd, data, ...rest); };
+    process.stderr.write = () => true;
+    try {
+      assert.deepStrictEqual(pruneReplayCaches('sim', { ...env, FTH_HOME: other }), []);
+    } finally {
+      fs.writeSync = writeSync;
+      process.stderr.write = q;
+    }
+    assert.ok(!fs.existsSync(otherLock), 'no stale lock left behind');
+    assert.ok(fs.existsSync(path.join(other, 'contracts-sim.2026-06-01.json')));
+    assert.deepStrictEqual(pruneReplayCaches('sim', { ...env, FTH_HOME: other }), [path.join(other, 'contracts-sim.2026-06-01.json')], 'and the next prune runs');
+  }
+  // An index that exists but won't parse: nothing is pruned, and it says so once.
+  const saved = fs.readFileSync(indexFile, 'utf8');
+  fs.writeFileSync(indexFile, '{"ids": {broken');
+  const quiet = process.stderr.write;
+  const said = [];
+  process.stderr.write = m => { said.push(String(m)); return true; };
+  try {
+    assert.deepStrictEqual(pruneReplayCaches('sim', env), []);
+    assert.deepStrictEqual(pruneReplayCaches('sim', env), []);
+  } finally {
+    process.stderr.write = quiet;
+  }
+  assert.ok(fs.existsSync(day('2026-06-03')));
+  assert.strictEqual(fs.readFileSync(indexFile, 'utf8'), '{"ids": {broken', 'never overwritten');
+  assert.strictEqual(said.filter(m => /not pruning old replay day files: .*can't be read/.test(m)).length, 1);
+  fs.writeFileSync(indexFile, saved);
+  assert.deepStrictEqual(pruneReplayCaches('sim', env), [day('2026-06-03')]);
+  assert.strictEqual(Object.keys(JSON.parse(fs.readFileSync(indexFile, 'utf8')).ids).length, 1509);
 });

@@ -19,6 +19,8 @@
  *   noSpecsMessage(root)                   the refusal when none is recorded
  *   specMismatch(root, spec)               a message when the broker's spec differs from the static table, else null
  *   brokerOrderLimit(file)                 the server's recorded maxOrderSize (get_server_config), or null with why
+ *   dayFrontMissing(file, root)            on a replayed day's file, why entries wait while it has no front month of
+ *                                          the root (its tick specs may come from a lookup by month alone), else null
  */
 
 const { specFor } = require('./contracts');
@@ -105,6 +107,20 @@ function brokerOrderLimit(file) {
   };
 }
 
+/**
+ * A replayed day's own cache file (contracts-<broker>.<YYYY-MM-DD>.json) records that day's front month when a
+ * lookup of the root succeeds; its tick specs may also come from a lookup by month or by id alone. Without the
+ * front month the day's lookups are not done: entries wait (the refusal), exits never do. Live files: null.
+ */
+function dayFrontMissing(file, root) {
+  const day = /\.(\d{4}-\d{2}-\d{2})\.json$/.exec(String(file || ''));
+  if (!day) return null;
+  const r = String(root || '').toUpperCase();
+  const front = require('../broker/translator').readCache(file).front[r]; // lazy, as above
+  if (front && front.id) return null;
+  return `the replayed day's ${r} front month (${day[1]}) is not looked up yet, so its tick specs and contract can't be trusted for an entry: call search_contracts for ${r} first (the harness records that day's front month and tick specs), then try again`;
+}
+
 function noSpecsMessage(root) {
   const r = String(root || '').toUpperCase() || 'this contract';
   return `no tick specs from the broker for ${r} yet: call get_contract or search_contracts for ${r} first (the harness records the broker's tick size and value), then try again`;
@@ -124,4 +140,4 @@ function specMismatch(root, spec) {
     + `(${table.tickSize} = ${money(table.tickValue)}, scripts/lib/trading/contracts.js): training does not equal live; fix the table or the broker`;
 }
 
-module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, whyNoSpec, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch, brokerOrderLimit };
+module.exports = { TICK_SIZE_MAX, TICK_VALUE_MIN, TICK_VALUE_MAX, validSpec, brokerSpecFor, brokerSpecs, whyNoSpec, contractsFileFor, liveSpecs, noSpecsMessage, specMismatch, brokerOrderLimit, dayFrontMissing };

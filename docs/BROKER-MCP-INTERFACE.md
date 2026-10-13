@@ -101,7 +101,23 @@ by asking that same server:
 
 A contract's root and month come from its `name`, the exchange ticker: root +
 month code + year (`NQZ5`, `MNQH26`). Its ids can be anything. Lookups are
-cached per broker (`~/.futures-trading-harness/contracts-<broker>.json`).
+cached per broker (`~/.futures-trading-harness/contracts-<broker>.json`). Under a
+replay clock each replayed trading day has its own file
+(`contracts-<broker>.<YYYY-MM-DD>.json`), so a replayed day has its own front
+month, tick specs and server limits, as a fresh home would; a broker id's root
+and month, which never change, are read from the live file and the day files
+within 30 days (except a contract whose month is already over that day). The
+gateway names a call and the account it checks it against from one read of the
+day's file taken after the account reads, so the gate and the translator name a
+contract alike. An entry waits until the day's front month is recorded. Day
+files more than 30 days before the replayed day are removed when a translator
+starts under a replay clock (never live), one prune at a time; their broker ids
+are kept first in `contracts-<broker>.ids.json`, never removed (a replay's labels
+fall back to the latest day's tick specs). An index that can't be read stops
+pruning; a day file that can't be read is never removed. A prune holds
+`contracts-<broker>.ids.json.lock` while it runs; one that stopped midway leaves
+it, and pruning then stops (said once on the translator's stderr): with no replay
+running in that home, remove the file to prune again.
 
 ## Tick specs
 

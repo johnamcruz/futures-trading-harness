@@ -354,3 +354,68 @@ test('one search answer listing several months keeps its front month\'s spec, ev
   await tr2.translateResult('search_contracts', CONTRACTS.filter(c => c.name.includes('MNQ')));
   assert.strictEqual(JSON.parse(fs.readFileSync(own, 'utf8')).specs.MNQ.id, 'b-101');
 });
+
+test('replay day files: a day\'s file reads the broker ids its siblings recorded (never their front month, specs or limits), so a broker fault never leaves a position unnamed', async () => {
+  const { readCache } = require('../../scripts/lib/broker/translator');
+  const home = tmpDir();
+  const file = d => path.join(home, `contracts-fake.${d}.json`);
+  // An earlier day looked MNQ up: December was its front month. Today (2026-10-08, after the roll) nothing has yet.
+  fs.writeFileSync(file('2026-10-07'), JSON.stringify({
+    ids: { 'b-101': { root: 'MNQ', month: '2026-12' }, bad: { root: 7 } }, front: { MNQ: { id: 'b-101', month: '2026-12', day: '2026-10-07' } },
+    specs: { MNQ: { tickSize: 0.25, tickValue: 0.5, readAt: '2026-10-07T13:00:00Z' } }, server: { maxOrderSize: 5, readAt: '2026-10-07T13:00:00Z' },
+  }));
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'b-102': { root: 'MNQ', month: '2027-03' } }, front: {} }));
+  fs.writeFileSync(path.join(home, 'contracts-other.2026-10-07.json'), JSON.stringify({ ids: { 'o-1': { root: 'ES', month: '2026-12' } } }));
+  fs.writeFileSync(file('2026-10-06'), 'not json');
+  const today = readCache(file('2026-10-08'));
+  assert.deepStrictEqual(today, { ids: { 'b-101': { root: 'MNQ', month: '2026-12' }, 'b-102': { root: 'MNQ', month: '2027-03' } }, front: {}, specs: {}, server: null }, 'ids only: the day\'s own front month, specs and limits are none yet');
+  assert.strictEqual(canonicalName('b-101', today), 'MNQ:2026-12', 'by its own month, never another day\'s front month');
+  assert.strictEqual(canonicalName('MNQ:2026-12', today), 'MNQ:2026-12');
+  // The broker is down today: positions are still named, by month; an order by that month goes to that contract.
+  const down = async () => ({ content: [{ type: 'text', text: 'down' }], isError: true });
+  const t = createTranslator({ call: down, cacheFile: file('2026-10-08'), now: () => new Date('2026-10-08T14:30:00Z') });
+  assert.deepStrictEqual(await t.translateResult('list_open_positions', [{ contractId: 'b-101', size: 1 }]), [{ contractId: 'MNQ:2026-12', size: 1 }]);
+  assert.strictEqual((await t.translateArgs('place_order', { contractId: 'MNQ:2026-12' })).contractId, 'b-101');
+  await assert.rejects(() => t.toBroker('MNQ'), /down/, 'the front month is never taken from another day: not sent');
+  // The day's own entries win over a sibling's; the live file and other brokers' files are not day files' business.
+  fs.writeFileSync(file('2026-10-08'), JSON.stringify({ ids: { 'b-101': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'b-102', month: '2027-03', day: '2026-10-08' } } }));
+  assert.strictEqual(readCache(file('2026-10-08')).front.MNQ.id, 'b-102');
+  assert.strictEqual(canonicalName('b-102', readCache(file('2026-10-08'))), 'MNQ');
+  assert.deepStrictEqual(Object.keys(readCache(path.join(home, 'contracts-fake.json')).ids), ['b-102'], 'the live file reads only its own');
+  // A sibling's id of a month already over on the day (an expired contract) is not reused; this month's still is.
+  fs.writeFileSync(file('2026-09-20'), JSON.stringify({ ids: { 'b-099': { root: 'MNQ', month: '2026-09' }, 'b-100': { root: 'MNQ', month: '2026-10' } } }));
+  // A day more than 30 days away is not read at all (reads stay small however many days a home holds).
+  fs.writeFileSync(file('2026-08-03'), JSON.stringify({ ids: { 'b-098': { root: 'MNQ', month: '2026-12' } } }));
+  assert.ok(!readCache(file('2026-10-08')).ids['b-098']);
+  assert.deepStrictEqual(readCache(file('2026-08-04')).ids['b-098'], { root: 'MNQ', month: '2026-12' }, 'near it: read');
+  assert.ok(!readCache(file('2026-10-08')).ids['b-099'], 'September is over on 2026-10-08');
+  assert.deepStrictEqual(readCache(file('2026-10-08')).ids['b-100'], { root: 'MNQ', month: '2026-10' });
+  assert.deepStrictEqual(readCache(file('2026-09-21')).ids['b-099'], { root: 'MNQ', month: '2026-09' }, 'still live in September');
+  // A sibling that disagrees about an id (a bad write): the day's own entry wins.
+  fs.writeFileSync(file('2026-10-07'), JSON.stringify({ ids: { 'b-101': { root: 'MNQ', month: '2027-06' } } }));
+  assert.deepStrictEqual(readCache(file('2026-10-08')).ids['b-101'], { root: 'MNQ', month: '2026-12' });
+});
+
+test('replay day files: a day file reads only its own, the live file and the days within 30 of it, however many days the home holds', () => {
+  const { readCache } = require('../../scripts/lib/broker/translator');
+  const home = tmpDir();
+  const base = Date.parse('2024-01-01T00:00:00Z');
+  for (let i = 0; i < 1000; i += 1) {
+    const d = new Date(base + i * 86400000).toISOString().slice(0, 10);
+    fs.writeFileSync(path.join(home, `contracts-fake.${d}.json`), JSON.stringify({ ids: { [`b-${i}`]: { root: 'MNQ', month: '2030-12' } }, front: {} }));
+  }
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { live: { root: 'MNQ', month: '2030-12' } } }));
+  const read = fs.readFileSync;
+  const files = [];
+  fs.readFileSync = (f, ...a) => { files.push(path.basename(String(f))); return read(f, ...a); };
+  let ids;
+  try {
+    ids = readCache(path.join(home, 'contracts-fake.2025-06-01.json')).ids;
+  } finally {
+    fs.readFileSync = read;
+  }
+  assert.ok(files.length <= 63, `${files.length} files read`);
+  const i = (Date.parse('2025-06-01T00:00:00Z') - base) / 86400000;
+  assert.ok(ids[`b-${i - 30}`] && ids[`b-${i + 30}`] && ids.live, 'the days within 30 and the live file');
+  assert.ok(!ids[`b-${i - 31}`] && !ids[`b-${i + 31}`], 'not the others');
+});
