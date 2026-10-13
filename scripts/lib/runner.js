@@ -103,6 +103,9 @@ function createRunner(deps) {
     event = () => {}, // the event log: one record per thing that happens (cycles, positions, stops, closes, errors)
     flow = null, // order-flow recorder: annotate(contractId, bars, minutes) adds real buy/sell volume
     prop = null, // prop-challenge hooks (prop/live-runner.js createPropHooks)
+    // A closed bar this pass polled: (symbol, { bar, stale, action }), stale when it closed too long ago to start a
+    // cycle, action the pass's (trade, manage, housekeep). The session record's decision point (session/live.js).
+    barClosed = () => {},
     accountReadMs = ACCOUNT_READ_MS,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
@@ -871,6 +874,9 @@ function createRunner(deps) {
       if (item) ready.push(item);
     }
     if (ready.length) {
+      for (const x of ready) {
+        try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action }); } catch (_err) { /* recording never stops the pass */ }
+      }
       // Trailing stops and leftover orders first: they only ever reduce risk.
       const noCycles = d.action === 'housekeep';
       for (const item of ready) await housekeeping(item, { noCycles });
@@ -1004,7 +1010,12 @@ function createRunner(deps) {
     return sleepMs(syms.map(s => s.clock), clock.now(), { delayMs });
   }
 
-  return { step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); } };
+  return {
+    step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); },
+    // The last flatten pass read the account and found nothing open or working (the session record retries a
+    // broker read only then: session/live.js).
+    get verifiedFlat() { return flattenRead && unflatPasses === 0; },
+  };
 }
 
 module.exports = { createRunner, IDLE_MS, ACCOUNT_READ_MS, FILL_GRACE_MS };

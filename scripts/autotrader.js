@@ -20,7 +20,7 @@
  *
  * Alerts: every runner error, and the kill switch tripping, goes to
  * <FTH_HOME>/logs/alerts-<day>.jsonl and, when configured, to alertWebhook /
- * alertCommand (scripts/lib/alerts.js).
+ * alertCommand (scripts/lib/alerts.js). Each day's decisions: <FTH_HOME>/sessions/<day>/, as a replay's (session/live.js).
  *
  * Reads contracts, bars, positions, working orders, and the balance, and does
  * its housekeeping, through the broker adapter (scripts/lib/broker/adapter.js):
@@ -60,6 +60,8 @@ const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
 const { lockHolderAlive } = require('./lib/runner-lock');
+const { passTap } = require('./lib/session/record');
+const { createLiveSession } = require('./lib/session/live');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOME_DIR = harnessHome();
@@ -246,11 +248,11 @@ const runnerLog = alert => (msg, level) => {
 };
 const writeEvent = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
 
-function buildRunner(cfg, dataDir, opts, client, log, event) {
+function buildRunner(cfg, dataDir, opts, client, log, event, tap) {
   const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: () => loadStrategies(ROOT, process.env).strategies, paper: cfg.paper, log });
   if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policy strategies size setups)`);
   return wireRunner({
-    cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event,
+    cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event, onBarClosed: tap.bar,
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     loadState: () => loadState(cfg), saveState: s => writeJsonAtomic(STATE_FILE, s), killSwitchFile: loadConfig(process.env).killSwitchFile,
   });
@@ -264,8 +266,8 @@ function buildRunner(cfg, dataDir, opts, client, log, event) {
  */
 async function replayStep(cfg, dataDir, opts, asked) {
   holdLock();
-  const errors = [];
-  const log = runnerLog(msg => errors.push(String(msg).slice(0, 300)));
+  const tap = passTap(); // the pass's cycles, events, errors and bars: the same collector the live loop records from
+  const log = tap.log(runnerLog(() => {}));
   let client;
   try {
     client = await openRunnerBroker({ cfg, root: ROOT, env: process.env });
@@ -276,14 +278,11 @@ async function replayStep(cfg, dataDir, opts, asked) {
     log(`broker: can't start (${err.message})`, 'error');
     return 1;
   }
-  const events = [];
   try {
-    const runner = buildRunner(cfg, dataDir, opts, closedBarsOnly(client, runnerNow), log, ev => { events.push(ev); writeEvent(ev); });
+    const runner = buildRunner(cfg, dataDir, opts, closedBarsOnly(client, runnerNow), log, tap.event(writeEvent), tap);
     await runner.step();
-    const ran = events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null }));
-    const kinds = [...new Set(events.map(e => e.kind))];
-    const bars = runner.symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null }));
-    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events: kinds, errors, bars, state: runner.state })}\n`);
+    const { ran, events, errors, bars } = tap.summary(runner.symbols);
+    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events, errors, bars, state: runner.state })}\n`);
     return 0;
   } finally {
     client.close();
@@ -345,7 +344,9 @@ async function main(rawArgv) {
   if (process.env.FTH_REPLAY_NOW) throw new Error('FTH_REPLAY_NOW is set: the runner loop never runs on a replayed clock. Replay drives one cycle per process (--once or --dry-run, a fresh run per cycle with the time set by the replay driver).');
   holdLock();
   await preflight(null); // the live loop: only once it holds the lock (a second start must not switch off the first)
-  const log = runnerLog(createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` }));
+  const tap = passTap();
+  const baseLog = runnerLog(createAlerter({ home: HOME_DIR, webhook: cfg.alertWebhook, command: cfg.alertCommand, label: `autotrader ${cfg.symbols.join(',')}` }));
+  const log = tap.log(baseLog);
   // Bars, positions, orders, balance, and housekeeping through the broker adapter (the configured broker MCP server).
   let client;
   try {
@@ -355,13 +356,15 @@ async function main(rawArgv) {
     return 1;
   }
   process.on('exit', () => client.close());
-  const runner = buildRunner(cfg, dataDir, opts, client, log, writeEvent);
+  const runner = buildRunner(cfg, dataDir, opts, client, log, tap.event(writeEvent), tap);
+  // Each pass's decisions, recorded as a replay's are (<FTH_HOME>/sessions/<trading day>/; session/live.js).
+  const session = createLiveSession({ cfg, root: ROOT, home: HOME_DIR, env: process.env, client, now: runnerNow, log: baseLog, tap, killSwitchFile });
   writeEvent({ at: new Date().toISOString(), kind: 'start', pid: process.pid, dryRun: Boolean(opts.dryRun), config: cfg, dataDir, killSwitchFile });
   process.on('exit', code => writeEvent({ at: new Date().toISOString(), kind: 'stop', pid: process.pid, code }));
   log(`${cfg.harness} on ${cfg.symbols.join(',')} every closed ${cfg.timeframe}m bar (trigger ${cfg.trigger}, cycle ${cfg.cycle}, timeout ${cfg.cycleTimeoutMinutes} min); bars in ${dataDir}; kill switch ${killSwitchFile}`);
   const beat = () => writeHeartbeat(HOME_DIR, { symbols: cfg.symbols, timeframe: cfg.timeframe, killSwitch: fs.existsSync(killSwitchFile) });
   for (;;) {
-    const ms = await runner.step();
+    const ms = await session.pass(runner);
     beat();
     // Long waits (the daily break, the weekend) in one-minute pieces, so the heartbeat stays fresh.
     for (let left = ms; left > 0; left -= 60000) {

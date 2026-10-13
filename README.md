@@ -399,7 +399,12 @@ thing that happens: start and stop, each cycle (start, end, duration, result
 line, timeout), the account read for it (balance, positions, prop attempt),
 positions picked up for management, stops moved, closes (why, R at close,
 best and worst R, bars held), end-of-day flattens and closes recorded, the
-kill switch, and errors. `cycles-<day>.jsonl` has one line per cycle with
+kill switch, and errors. Each trading day is also recorded as a replay
+run is, in `~/.futures-trading-harness/sessions/<day>/` (`source: live`, the
+agent's fingerprints, one line per decision point, the day's fills and the
+broker's journal at end of day), so `node scripts/replay.js scorecard
+~/.futures-trading-harness/sessions/<day>` scores live decisions exactly
+as it scores a replay's. `cycles-<day>.jsonl` has one line per cycle with
 what the model saw and did (its prompt's size, the skills it loaded, its tool
 calls by name, the orders it sent, and skills an entry needed but it never
 loaded), and `cycles/<day>/<time>-<action>.json` the whole cycle: the prompt

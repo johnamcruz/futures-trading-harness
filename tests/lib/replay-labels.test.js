@@ -46,7 +46,7 @@ function makeRun({ steps, barList = bars(), budget, manifest = {}, symbols = ['M
   const scans = [];
   for (const [i, s] of steps.entries()) {
     const t = s.t || at(s.k);
-    const barT = iso(t - 2000 - 180000);
+    const barT = iso(t - 2000 - (s.tf || 3) * 60000);
     const wall = WALL0 + i * 60000;
     const rec = { v: 1, t: iso(t), day: DAY, kind: s.kind || 'trade', asked: s.kind || 'trade', ran: [], cycles: [], refusals: [], errors: [], bars: symbols.map(symbol => ({ symbol, lastBarT: barT })), trades: s.trades || [], since: iso(t - 180000) };
     for (const j of s.journal || []) journal.push({ ts: iso(t), accountId: 7, contractId: 'BT.MNQ', ...j });
@@ -1160,4 +1160,35 @@ test('labels: when the policy\'s screen failed, the strategies it names lose the
   assert.deepStrictEqual(L.map(l => [l.candidates.map(c => c.name), l.clone.reasons, l.counterfactualFor]), [
     [['orb'], [], 'skip'], [[], [], null], [['orb'], ['policy screen failed'], null],
   ]);
+});
+
+test('labels: a trade taken after a restart on 5m bars - its stop\'s ATR and its MAE/MFE read the 5m data, not the 3m', () => {
+  // One-minute data aggregated per timeframe (outcomeBarsFor): 3m bars 10 points high to low, 5m bars 30.
+  const series = (tf, half) => Array.from({ length: Math.floor(480 / tf) }, (_, i) => {
+    const ms = Date.parse(`${DAY}T13:00:00Z`) + i * tf * 60000;
+    return { t: iso(ms), ms, o: 20000, h: 20000 + half, l: 20000 - half, c: 20000, v: 100 };
+  });
+  const outcomeBars = { byTf: { 3: { MNQ: series(3, 5) }, 5: { MNQ: series(5, 15) } } };
+  const t5 = Date.parse(`${DAY}T15:00:02Z`);
+  const minOf = isoT => (Date.parse(isoT) - T0) / 60000;
+  const { runDir } = makeRun({
+    manifest: { versions: [{ since: iso(T0), hash: 'a', config: 'autotrader.json' }, { since: `${DAY}T14:45:00.000Z`, hash: 'b', config: 'autotrader-5m.json' }] },
+    steps: [
+      { k: 0, scan: [{ name: 'orb', direction: 'long' }], cycle: {} },
+      // After the restart on 5m bars: a long with a 40-tick (10 point) stop, filled at 15:05, closed flat at 15:30.
+      { t: t5, tf: 5, scan: [{ name: 'orb', direction: 'long' }], cycle: { orders: [LONG], result: 'CYCLE RESULT: long MNQ' } },
+      { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod', trades: [fill(minOf(`${DAY}T15:05:00Z`), 0, 20000, null), fill(minOf(`${DAY}T15:30:00Z`), 1, 20000, 0)] },
+    ],
+  });
+  fs.writeFileSync(path.join(runDir, 'autotrader-5m.json'), JSON.stringify({ symbols: ['MNQ'], timeframe: 5, account: '7' }));
+  const { labels } = labelRun(runDir, { strategies: STRATEGIES, outcomeBars });
+  const taken = labels.find(l => l.t === iso(t5));
+  assert.strictEqual(taken.teacher.action, 'long');
+  // The stop's ATR on the 5m set (30), not the 3m one (10).
+  assert.strictEqual(taken.teacher.stop.atr, atrAt(outcomeBars.byTf[5].MNQ, 300000, t5));
+  assert.strictEqual(taken.teacher.stop.atr, 30);
+  assert.notStrictEqual(atrAt(outcomeBars.byTf[3].MNQ, 180000, t5), taken.teacher.stop.atr);
+  // The trade's excursions from the 5m bars wholly inside 15:05-15:30: 15 points either way on a 10-point stop.
+  const cf = taken.counterfactuals[0];
+  assert.deepStrictEqual([cf.source, cf.maeR, cf.mfeR], ['fills', -1.5, 1.5]);
 });

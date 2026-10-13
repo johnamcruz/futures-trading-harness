@@ -35,7 +35,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    log is `<FTH_HOME>/logs/autotrader-<day>.log`; your earlier cycles, with
    their prompts, tool calls, and skills loaded, are in
    `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate's
-   decisions in `logs/gate-log.jsonl`). The prompt also carries the last 10
+   decisions in `logs/gate-log.jsonl`; the runner records every decision
+   point of the day in `<FTH_HOME>/sessions/<day>/`, as a replay is, for the
+   adherence scorecard: the user's to score, not yours to edit). The prompt also carries the last 10
    closed bars and your last 10 cycle results: read them, and don't reverse a
    recent decision without saying what changed. Those results are your past
    conclusions, not facts: where one contradicts this prompt's account or

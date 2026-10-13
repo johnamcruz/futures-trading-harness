@@ -122,6 +122,12 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
   assert.ok(!fs.existsSync(path.join(home, '.futures-trading-harness', 'autotrader.lock')), 'lock released on exit');
   const state = JSON.parse(fs.readFileSync(path.join(home, '.futures-trading-harness', 'autotrader-state.json'), 'utf8'));
   assert.strictEqual(state.cycles, 1);
+  // The live loop recorded the pass as a replay records a decision time (session/live.js): the bar's cycle on a trade line.
+  const sessions = path.join(home, '.futures-trading-harness', 'sessions', state.day);
+  const recs = fs.readFileSync(path.join(sessions, `${state.day}.jsonl`), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(recs.some(r => r.kind === 'trade' && r.ran.some(x => x.action === 'trade') && r.cycles.length === 1), JSON.stringify(recs).slice(0, 400));
+  const manifest = JSON.parse(fs.readFileSync(path.join(sessions, 'manifest.json'), 'utf8'));
+  assert.deepStrictEqual([manifest.source, manifest.runId], ['live', state.day]);
 });
 
 // A copy of the harness whose harness tools server is a foreign MCP server (the fake broker).

@@ -128,6 +128,39 @@ The owner's classification is in section 11: the mechanical items enforced, judg
 | Recent | 2025-07 to 2026-06 | reserved: the next out-of-sample window once the current one is retired (R16). Nothing looks at it before then, except the June 1-5, 2026 LLM replay, which is recorded in the ledger and yields no candidate claims (R22). |
 | New months | 2026-07 on | by half-year, alternately: 2026-H2 for walk-forward checks (R17), 2027-H1 into the reserve for a later out-of-sample window (R16), and so on. Never both. |
 | LLM | 2026-06 on (after the model's cutoff), any month | the LLM's replays and adherence. These months come after the model's training cutoff, so it cannot remember them. Measuring the LLM chooses no rulebook, so it doesn't use up a month's mechanical role. |
+| Live | every live session, as it is traded | the runner's own record of live trading (`source: live` in each session's manifest, below), scored by the same scorecard as a replay. Its own split: never pooled with replay decisions, and it chooses no rulebook. |
+
+**Live sessions are recorded as replays are.** The runner records every
+decision of a live session in a replay's layout (`<FTH_HOME>/sessions/<trading
+day>/`: the manifest, one line per decision point, the runner config, the
+broker's journal for the day, and the day's fills on its end-of-day line), so
+`replay.js scorecard` and `replay.js labels` read a live session as they read
+a replay run. Each manifest says its `source` (`live` or `replay`) and the
+versions of the agent that made its decisions (R33). Live decision points are replay's (`replay/schedule.js`): premarket, end of
+day (then `eod-retry` until verified flat), and every closed bar whose time is
+one of replay's trade times (inside the runner's sessions, before end of
+day), with or without a cycle. What still differs from a replay:
+
+- A live line is written only for a bar the runner polled: with the kill
+  switch on the runner polls none unless it keeps housekeeping (an account,
+  not paper mode, the day already traded), and a bar not published in time is
+  resynced, so neither is a line; a replay records both times.
+- A bar that closed too long ago to start a cycle (a slow previous cycle) is a
+  line with no cycle, marked `stale`; a replay's bars are never stale.
+- A live line's time is when the pass ran (the close, the poll delay and the
+  poll); a replay's is the close plus the poll delay. Its `step` is always
+  `{ code: 0, timedOut: false }`, and live takes every bar (no `everyNthBar`).
+- Fills are read once, at end of day once verified flat (a replay reads them
+  at every decision time); until they are known the session isn't finished,
+  and the runner retries the read only while idle (flat, its end of day done
+  or the market closed, one day at a time).
+- The lines' refusals come from the gate log in force (`FTH_GATE_LOG`), the
+  labels read the harness home's `logs/gate-log.jsonl`.
+- A restart on another config, harness or model is a new version of the same
+  session (a replay refuses it): its runner config is kept beside the first
+  (`autotrader-<since>.json`, named by its `versions` entry), and the labels
+  and the scorecard read each line with the config in force at its time
+  (timeframe, paper mode, symbols).
 
 **R5. No double-dipping.**
 
@@ -582,6 +615,17 @@ on the next cycle; what was *learned* about it is not, and goes stale. So:
 - **Promotion as always:** a reviewed pull request with the owner's
   approval; the new seal and fingerprints are recorded with the promoted
   rulebook and in the version list.
+- **Recorded with every decision, today.** Each replay run's and live
+  session's manifest carries `fingerprints` and a `versions` list (a new
+  entry, with the decision time it starts at, whenever the agent changed):
+  `code` hashes `scripts/` (the CLIs, hooks and `scripts/lib`: a superset of
+  the code hash above, until it is narrowed to the evaluator, rules,
+  indicators, facts and `combine.js`; live, taken once when the runner
+  starts, the code it loaded),
+  `harness` hashes the strategies, accounts, skills, agents and rules (the
+  tree the replay config hash covers). The canonical strategy, account and
+  policy fingerprints and the rulebook seal are not built yet: they are
+  recorded as `null` until they are (`scripts/lib/session/record.js`).
 
 ## 8. The LLM: adherence and learning
 

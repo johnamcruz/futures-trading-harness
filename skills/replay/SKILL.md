@@ -24,7 +24,7 @@ broker.
 - Turning a run into labels: each decision, the gate's answer, the outcome
   and the counterfactuals (step 10).
 - Scoring how closely the trader followed its rules: the adherence
-  scorecard (step 11).
+  scorecard (step 11), for a replay run or a live session (step 12).
 - Not inside an autonomous cycle: replays, like backtests, are
   the user's to start. An agent may explain and prepare the config.
 
@@ -64,8 +64,9 @@ broker.
    line per decision time (what ran, the cycle's result, prompt hash, tool
    calls, skills and orders from the cycle log, the gate's refusals, and the
    broker's fills since the previous time, with its round-trip metrics such
-   as R, MAE and MFE), plus `manifest.json` (config hash, harness command)
-   and `steps.log` (each step's output).
+   as R, MAE and MFE), plus `manifest.json` (config hash, harness command,
+   `source: "replay"`, and the `fingerprints` and `versions` of the agent
+   that made each decision) and `steps.log` (each step's output).
 6. **Resume.** Run it again: completed days are skipped and an unfinished
    day continues after its last decision time (the broker's clock only moves
    forward). A changed config, harness or model needs a new `runId`.
@@ -204,6 +205,37 @@ broker.
    home; `--bars` as for labels. Read `unchecked` and `unparsed` as
    unmeasured, never as agreement; a false reason is a misread of a fact the
    trader was given.
+12. **Live sessions.** The live runner records every trading day the same
+   way, in `<FTH_HOME>/sessions/<trading day>/` (`source: "live"`): one line
+   per decision point (premarket, end of day and its retries, and every
+   closed bar at one of replay's trade times, a cycle or no cycle), the
+   runner config the session started with, and, once
+   end of day verified the account flat, the day's fills on that end of
+   day's line and the broker's journal for the day. `report`, `labels` and
+   `scorecard` take a session's folder as they take a run's:
+   `node scripts/replay.js scorecard ~/.futures-trading-harness/sessions/2026-10-07`.
+   A session is finished once its end of day is done and its fills are
+   known; a fills read that failed is retried by the runner (the manifest's
+   `fillsPending`), and until then score it only with `--out` outside the
+   harness home. Score live and replay decisions apart (the manifest's
+   `source`): live is its own split. What still differs from a replay:
+   (a) a line only for a bar the runner polled (none with the kill switch on
+   unless it keeps housekeeping: an account, not paper mode, the day already
+   traded; none for a bar not published in time), where a replay records
+   each trade time; (b) a bar too old to start a cycle (a slow previous
+   cycle) is a line with no cycle, marked `stale`; (c) a line's time is when
+   the pass ran, not the close plus the poll delay, its `step` is always
+   `{ code: 0, timedOut: false }`, and every bar counts (no `everyNthBar`);
+   (d) fills are read once, at end of day; (e) the lines' refusals come from
+   the gate log in force (`FTH_GATE_LOG`), the labels' from
+   `<FTH_HOME>/logs/gate-log.jsonl`; (f) a restart on another config,
+   harness or model is a new version of the same session (`versions`, its
+   config in `autotrader-<since>.json`); the labels and the scorecard read
+   each line with the config in force at its time (timeframe, paper mode,
+   symbols), so a day started in paper mode and restarted live is labelled
+   right on both halves (`--bars` then needs one-minute data: it is
+   aggregated at each timeframe the session used). The fills retry runs only while the runner is idle
+   (flat, its end of day done or the market closed), one day at a time.
 
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
@@ -235,6 +267,7 @@ node scripts/replay.js run --config replay.json       # resumes after the last d
 node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03   # --account topstep_50k: score another account
 node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
 node scripts/replay.js scorecard ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --bars MNQ=~/data/MNQ-1m.parquet
+node scripts/replay.js scorecard ~/.futures-trading-harness/sessions/2026-10-07   # a live trading day, scored the same way
 ```
 
 ```text

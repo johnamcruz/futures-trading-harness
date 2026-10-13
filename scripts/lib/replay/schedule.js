@@ -20,6 +20,8 @@
  *   decisionPoints(cfg, { start, end, everyNth, delayMs })
  *   tradingDays(cfg, { start, end })   [{ day, start, skipped }] (skipped: why a day has no points)
  *   holidayDates(start, end)           { closed, early } from cmeHolidays for years the built-in calendar lacks
+ *   isTradeTime(cfg, t)                whether t (a bar's close plus barDelaySeconds) is a trade decision time:
+ *                                      the rule decisionPoints applies, for the live session record (session/live.js)
  */
 
 const { tradingDayStart, tradingDayKey, inMarketHours, inWindow, parseWindows, sessionMinute, sessionMinuteOf } = require('../trading/clock');
@@ -74,6 +76,18 @@ function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelay
 }
 
 /**
+ * Whether `t` is a trade decision time by decisionPoints' rule (everyNthBar aside): a trading day that
+ * isn't closed, the market session, one of the runner's sessions, and before that day's end of day.
+ */
+function isTradeTime(cfg, t) {
+  const d = tradingDayStart(t);
+  if ((cfg.closedDates || []).includes(tradingDayKey(t)) || !inMarketHours(t)) return false;
+  const eod = endOfDayAt(cfg, new Date(d.getTime() + 12 * HOUR));
+  if (eod && sessionMinute(t) >= sessionMinuteOf(eod, d)) return false;
+  return parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(t, w));
+}
+
+/**
  * Holidays and early closes for the window's years that the built-in calendar
  * doesn't list (a replay of an earlier year): the harness's own CME rules
  * (exchange-calendar.js cmeHolidays), so the runner, the gate and the decision
@@ -92,4 +106,4 @@ function holidayDates(start, end) {
   return { closed, early };
 }
 
-module.exports = { decisionPoints, tradingDays, holidayDates };
+module.exports = { decisionPoints, tradingDays, holidayDates, isTradeTime };

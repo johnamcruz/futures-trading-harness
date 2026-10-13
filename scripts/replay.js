@@ -17,6 +17,7 @@
  *   node scripts/replay.js scorecard <run dir> [--bars SYM=file ...] [--out dir]   the adherence scorecard: each decision
  *       against the priority order's mechanical steps, its stated reasons checked against the facts, a failure
  *       category (scorecard.jsonl, scorecard-summary.json, scorecard.md); --bars and --out as for labels
+ *   report, labels and scorecard read a live session's folder (<FTH_HOME>/sessions/<day>, session/live.js) as a run's
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
  * Each run lives in its own harness home, <workDir>/<runId>, never the live

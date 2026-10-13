@@ -1,11 +1,13 @@
 'use strict';
 
 /**
- * A replay run's records, local and never in the repository:
+ * A replay run's records, local and never in the repository (a live session's are the same,
+ * in <FTH_HOME>/sessions/<trading day>/: session/live.js):
  *
- *   <run home>/replay/<run id>/manifest.json     the run: id, config hash, harness command,
+ *   <run home>/replay/<run id>/manifest.json     the run: id, source (replay or live), config hash, harness command,
  *       broker, window, created, the last decision time done, the days done, and finished (true once
- *       every decision time of the window ran: driver.js)
+ *       every decision time of the window ran: driver.js), and the versions of the agent that made its decisions
+ *       (fingerprints, versions: session/record.js)
  *   <run home>/replay/<run id>/<trading day>.jsonl   one line per decision time:
  *       { v, t, day, kind, asked, ran: [{ action, ok, timedOut, result, symbols }], step: { code, timedOut },
  *         cycles: [{ action, at, ok, timedOut, durationMs, result, promptHash, promptChars, skills,
@@ -22,6 +24,7 @@
  *   lastRecorded(manifest, recorded)                the last time recorded (ms)
  *   remaining(manifest, points, recorded)           points still to run, in order (recorded: recordedTimes(runDir))
  *   appendRecord(paths, manifest, rec)              write a line, then the manifest's progress
+ *   setTrades(paths, day, t, trades, since)         a line's fills, set after the fact (a live session's retried read)
  *   markDayDone(paths, manifest, day)
  *   readRun(runDir)                                 { manifest, days: { day: [records] } }
  *   cycleLogsSince(home, sinceMs) / refusalsSince(home, sinceMs)   what a step wrote to the run home's logs
@@ -98,6 +101,28 @@ function appendRecord(paths, manifest, rec) {
   writeJsonAtomic(paths.manifest, manifest);
 }
 
+/**
+ * A line's fills set after the fact (a live session's end-of-day read that failed and was retried):
+ * the day file rewritten whole (written to a temporary file, then renamed), every other line as it was.
+ * False when no line has time t.
+ */
+function setTrades(paths, day, t, trades, since) {
+  const file = dayFile(paths.runDir, day);
+  let found = false;
+  const text = fs.readFileSync(file, 'utf8').split('\n').map(line => {
+    let rec;
+    try { rec = JSON.parse(line); } catch (_err) { return line; }
+    if (!rec || rec.t !== t) return line;
+    found = true;
+    return JSON.stringify({ ...rec, trades, since });
+  }).join('\n');
+  if (!found) return false;
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+  return true;
+}
+
 function markDayDone(paths, manifest, day) {
   if (!manifest.daysDone.includes(day)) manifest.daysDone.push(day);
   writeJsonAtomic(paths.manifest, manifest);
@@ -135,11 +160,12 @@ function cycleLogsSince(home, sinceMs) {
   return files.flatMap(f => readLines(path.join(dir, f))).filter(l => Date.parse(l.at) >= sinceMs);
 }
 
-/** The gate's refusals (hook and gateway) logged at or after sinceMs. */
+/** A gate log entry as a line's refusal. */
+const toRefusal = e => ({ ts: e.ts, source: e.source || null, tool: e.tool || null, contractId: e.contractId || null, checks: (e.violations || []).map(v => v.check) });
+
+/** The gate's refusals (hook and gateway) logged at or after sinceMs (the home's gate log, read whole). */
 function refusalsSince(home, sinceMs) {
-  return readLines(gateLogPath({ FTH_HOME: home }))
-    .filter(e => e.decision === 'blocked' && Date.parse(e.ts) >= sinceMs)
-    .map(e => ({ ts: e.ts, source: e.source || null, tool: e.tool || null, contractId: e.contractId || null, checks: (e.violations || []).map(v => v.check) }));
+  return readLines(gateLogPath({ FTH_HOME: home })).filter(e => e && e.decision === 'blocked' && Date.parse(e.ts) >= sinceMs).map(toRefusal);
 }
 
 /**
@@ -167,4 +193,4 @@ function parseStep(output) {
   }
 }
 
-module.exports = { VERSION, openRun, lastRecorded, remaining, recordedTimes, touchedSince, appendRecord, markDayDone, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };
+module.exports = { VERSION, openRun, lastRecorded, remaining, recordedTimes, touchedSince, appendRecord, setTrades, markDayDone, toRefusal, readRun, readLines, dayFile, cycleSummary, cycleLogsSince, refusalsSince, parseStep, promptHash };

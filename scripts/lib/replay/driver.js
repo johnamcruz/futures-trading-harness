@@ -36,7 +36,6 @@ const path = require('path');
 const { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES } = require('../harness-run');
 const { loadBrokers } = require('../broker/config');
 const { withAdapter } = require('../broker/adapter');
-const { contractRoot } = require('../trading/journal');
 const { liveSpecs } = require('../trading/broker-specs');
 const { sessionMinute, tradingDayKey, MARKET_OPEN_MIN, MARKET_CLOSE_MIN } = require('../trading/clock');
 const { replayUnattested } = require('../runner-wiring');
@@ -45,6 +44,7 @@ const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
+const { decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt } = require('../trading/prop-state');
 const { accountNamed } = require('../trading/accounts');
 
@@ -76,17 +76,6 @@ function seedRunHome(run, { root, userEnv = process.env }) {
   }
   fs.writeFileSync(path.join(paths.journal), '', { flag: 'a' });
   return true;
-}
-
-/**
- * An opening fill matched to the entry the gateway recorded (its strategy and stop), for R, at the
- * tick value the replay broker reported (specOf: the run's recorded broker specs), as the gate sized it.
- */
-function withEntry(fill, entries, specOf = () => null) {
-  const e = fill.profitAndLoss === null || fill.profitAndLoss === undefined ? entries.find(x => String(x.orderId) === String(fill.orderId)) : null;
-  if (!e) return fill;
-  const spec = specOf(contractRoot(fill.contractId));
-  return { ...fill, entry: { setup: e.setup || null, stopTicks: e.stopTicks || null, tickValue: spec ? spec.tickValue : null } };
 }
 
 /**
@@ -128,10 +117,8 @@ function defaultDeps(run, root) {
       return why && `${why}: is ${run.brokerEnv.clockFile || 'its clock'} read by the server of broker "${run.broker}"?`;
     },
     async trades(env, account, since, until) {
-      const fills = await withAdapter({ root, env }, a => a.fillsSince(account, since));
-      const entries = entryOrders(run.paths.runHome);
-      const specOf = liveSpecs(env); // the run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER)
-      return fills.filter(f => Date.parse(f.creationTimestamp) > since.getTime() && Date.parse(f.creationTimestamp) <= until.getTime()).map(f => withEntry(f, entries, specOf));
+      // The run home's broker specs (env carries the run's FTH_HOME and FTH_BROKER).
+      return withAdapter({ root, env }, a => fillsBetween(a, account, since, until, { entries: entryOrders(run.paths.runHome), specOf: liveSpecs(env) }));
     },
   };
 }
@@ -165,17 +152,6 @@ function savedRetry(run, manifest, lastMs) {
   if (!r || (manifest.daysDone || []).includes(r.day) || eodVerified(run, r.day)) return null;
   const t = Date.parse(r.t);
   return t > lastMs && t < run.end.getTime() ? { t: new Date(t), kind: 'eod-retry', day: r.day, tries: r.tries } : null;
-}
-
-/** The kill switch's latest line ('' when empty or unreadable) when the file exists, else null. */
-function killSwitchReason(file) {
-  if (!file || !fs.existsSync(file)) return null;
-  try {
-    const lines = fs.readFileSync(file, 'utf8').split('\n').map(l => l.trim()).filter(Boolean);
-    return lines.length ? `${lines[lines.length - 1].slice(0, 300)}${lines.length > 1 ? ` (and ${lines.length - 1} earlier line${lines.length > 2 ? 's' : ''})` : ''}` : '';
-  } catch (_err) {
-    return '';
-  }
 }
 
 /** A pid that is running (signal 0 reaches it, or it belongs to another user). */
@@ -228,9 +204,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const startEnv = replayEnv(baseEnv, run, { at: run.start });
   const problems = brokerErrors(startEnv, run);
   if (problems.length) throw new Error(`replay refused:\n- ${problems.join('\n- ')}`);
+  const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
-    runId: run.runId, hash: configHash(run, baseEnv),
-    info: { broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
+    runId: run.runId, hash,
+    info: { source: 'replay', broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile },
   });
   const points = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   const recorded = store.recordedTimes(paths.runDir);
@@ -312,14 +289,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
         trades = { error: err.message };
       }
     }
-    const rec = {
-      t: point.t.toISOString(), day: point.day, kind: point.kind, asked: step.asked, ran: step.ran || [], events: step.events || [],
-      step: { code: res.code, timedOut: Boolean(res.timedOut) },
-      cycles: store.cycleLogsSince(paths.runHome, started).map(store.cycleSummary),
-      refusals: store.refusalsSince(paths.runHome, started),
-      errors: step.errors || [], bars: step.bars || [], trades, since: since.toISOString(),
-      ...(killed !== null ? { killSwitch: killed || 'on' } : {}),
-    };
+    const rec = decisionRecord({
+      t: point.t.toISOString(), day: point.day, kind: point.kind, pass: step, step: { code: res.code, timedOut: Boolean(res.timedOut) },
+      cycles: store.cycleLogsSince(paths.runHome, started).map(store.cycleSummary), refusals: store.refusalsSince(paths.runHome, started),
+      trades, since: since.toISOString(), killSwitch: killed,
+    });
+    // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
+    noteVersion(manifest, { since: rec.t, hash, fingerprints: fingerprints(root || run.root) });
     // A failed read is retried from the same time on the next one (also after a resume).
     if (!(trades && trades.error)) since = point.t;
     manifest.tradesSince = since.toISOString();
