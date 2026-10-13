@@ -330,6 +330,29 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
 });
 
+test('a plain backtest on a CSV says, in its log, report.json and report.md, that value_area reads a bar field the data lacks; a market it doesn\'t list is not named', () => {
+  const dir = tmpDir();
+  const csv = path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv');
+  const logs = [];
+  // GC: the same prices under a root value_area doesn't list (it trades the equity index micros).
+  const va = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area');
+  assert.ok(!va.instruments.includes('GC') && !va.instruments.includes('MGC'));
+  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: dir },
+    { root: ROOT, outRoot: dir, log: m => logs.push(m) });
+  const [p] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(va);
+  const want = [{ strategy: 'value_area', path: p, symbols: ['MNQ'] }];
+  assert.deepStrictEqual(report.missingFields, want, 'bos reads none; GC is not a market value_area trades');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8')).missingFields, want);
+  assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), new RegExp(`## Bar fields missing from this data\\n\\n- value_area reads field\\("${p.replace(/\./g, '\\.')}"\\), which no MNQ bar in this data carries:`));
+  assert.deepStrictEqual(logs.filter(l => /reads field\(/.test(l)).length, 1, logs.join('\n'));
+  // Only GC: value_area trades none of it, so nothing is said.
+  const gcLogs = [];
+  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, log: m => gcLogs.push(m) });
+  assert.strictEqual(gc.report.missingFields, undefined);
+  assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
+  assert.ok(!gcLogs.some(l => /reads field\(/.test(l)));
+});
+
 test('prop challenge mode trades what live trades: an active policy leaves out a paper component (still counted as disagreement); a paper policy (a paper run) keeps it', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
@@ -343,23 +366,38 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
       .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
       .replace(/^status: active\b/m, `status: ${status}`));
   };
-  // value_area is paper in the repo; bos is active.
-  assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'paper');
-  policy('prop_mixed', ['value_area', 'bos']);
-  policy('prop_mixed_paper', ['value_area', 'bos'], 'paper');
-  policy('prop_all_paper', ['value_area']);
+  // va_paper: a paper copy of value_area (the repo's own value_area is active, the owner's decision); bos is active.
+  fs.mkdirSync(path.join(strategiesDir, 'va_paper'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  policy('prop_mixed', ['va_paper', 'bos']);
+  policy('prop_mixed_paper', ['va_paper', 'bos'], 'paper');
+  policy('prop_all_paper', ['va_paper']);
+  // The repo's value_area is active: an active policy trades it, as prop_portfolio does live.
+  assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'active');
+  policy('prop_va', ['value_area', 'bos']);
   const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
   const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
   const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
   const logs = [];
   const mixed = run('prop_mixed', logs);
   assert.deepStrictEqual(mixed.strategies, ['bos']);
-  assert.deepStrictEqual(mixed.leftOut, ['value_area']);
-  assert.ok(logs.some(l => /^prop_mixed: leaves out value_area: value_area has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
+  assert.deepStrictEqual(mixed.leftOut, ['va_paper']);
+  assert.ok(logs.some(l => /^prop_mixed: leaves out va_paper: va_paper has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
   // ... but it still fires in the scan: it counts toward conflict, as live (the engine test above).
-  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; bos \(counting value_area toward conflict only\); contracts/.test(l)), logs.join('\n'));
+  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; bos \(counting va_paper toward conflict only\); contracts/.test(l)), logs.join('\n'));
   const paper = run('prop_mixed_paper');
-  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['value_area', 'bos'], []]);
+  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['va_paper', 'bos'], []]);
+  const vaLogs = [];
+  const va = run('prop_va', vaLogs);
+  assert.deepStrictEqual([va.strategies, va.leftOut], [['value_area', 'bos'], []], 'value_area is active: traded, not left out');
+  // The CSV carries no broker bar fields: the run says value_area's field() conditions are false here, in its log and report.
+  const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area'));
+  assert.ok(flowPath, 'value_area reads a broker bar field');
+  assert.deepStrictEqual(va.missingFields, [{ strategy: 'value_area', path: flowPath, symbols: ['MNQ'] }]);
+  assert.ok(vaLogs.some(l => l.startsWith(`warning: value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
+  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- value_area reads field/);
+  assert.strictEqual(mixed.missingFields, undefined, 'bos reads no bar field');
   // A paper component that fires on this data (ema_cross on paper, first in the list): never picked by the active policy.
   fs.mkdirSync(path.join(strategiesDir, 'ema_paper'), { recursive: true });
   fs.writeFileSync(path.join(strategiesDir, 'ema_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'ema_cross', 'STRATEGY.md'), 'utf8')
@@ -371,7 +409,7 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
   assert.deepStrictEqual([emaLive.strategies, emaPaper.strategies], [['bos'], ['ema_paper', 'bos']]);
   // The paper run's attempts take ema_paper's setups; the live policy's never do, so they differ.
   assert.notDeepStrictEqual(emaLive.baseline, emaPaper.baseline);
-  assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(value_area has status "paper"/);
+  assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(va_paper has status "paper"/);
 });
 
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {

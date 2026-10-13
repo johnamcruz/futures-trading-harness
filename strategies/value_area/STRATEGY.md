@@ -2,7 +2,7 @@
 name: value_area
 description: Volume profile POC reaction on equity index micros - price rejects the prior RTH day's point of control or breaks through it, confirmed by order flow or a range expansion on volume; target the edge of the value area. Trend setup, from the prior day's bar-based volume profile.
 version: 1
-status: paper
+status: active                # the owner activated it after order flow moved to the broker servers (replay and live)
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 3m
 sessions: ["10:00-15:00@America/New_York"]
@@ -199,6 +199,15 @@ above, as in training.
   each rule with `ok`; a group lists its `parts`, so you can see whether the
   rejection or the breakout held, and which confirmation.
 - **Backtest:** `--debug value_area` writes every bar's verdict.
+
+### Status
+
+Active, for replay and live: the owner activated it after order flow moved
+to the broker MCP servers' bars (live from the live server, history from the
+replay server's local L1/L2 store). The replay smoke and a fresh replay are
+its verification before any live session. A bar without the flow fields
+gives no signal from its flow branch (the range expansion can still
+confirm). Inside `prop_portfolio` it trades as an active strategy.
 
 ## Examples
 

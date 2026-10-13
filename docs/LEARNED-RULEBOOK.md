@@ -807,8 +807,11 @@ Decided by the owner (2026-10-12):
 
 - New strategies (after calibration shows where the current ones fall
   short).
-- Order-flow strategies beyond paper (after the pipeline works, on live
-  data).
+- Order-flow strategies beyond paper: done outside this design. The owner
+  activated `ofi`, `ofi_absorption`, `value_area` and `prop_flow_1m` once
+  order flow came from the broker servers' bars; the replay smoke and a
+  fresh replay verify them before any live session. R33's rules are
+  unchanged.
 - Changing the LLM the harness runs (it stays a small local model) or adding
   model-specific code to the harness. The optional fine-tuned adapter (R31)
   is the owner's one exception: a training artifact outside the repository

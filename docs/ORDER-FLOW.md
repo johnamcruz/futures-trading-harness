@@ -21,15 +21,19 @@ reference; the replay server reproduces the same fields from history.
 3. **A strategy document reads them.** The rules' `field("path")` reads a
    number on the bar by dotted path, `field("path")[n]` on the bar n back. A
    missing field, a null, or anything not a number has no value, so the
-   condition is false: a bar without the fields gives no signal. Nothing
-   estimates them.
+   condition is false. On a bar without the fields `ofi` and
+   `ofi_absorption` give no signal, and `value_area` can confirm only
+   through its other branch (a range expansion on volume). Nothing estimates
+   them.
 
 Only strategy documents name the fields, as data: `strategies/ofi`,
 `strategies/ofi_absorption` (and `strategies/prop_flow_1m` through them), and
 `strategies/value_area`, whose order-flow branch is one of two confirmations.
 Each says which fields it reads, what they mean, and how they differ from the
-harness's former bar-shape `ofi(n)`. They stay `status: paper` until the
-owner promotes them.
+harness's former bar-shape `ofi(n)`. The owner activated them (`status:
+active`, with `prop_flow_1m`) for replay and live once the flow came from the
+broker servers' bars; the replay smoke and a fresh replay verify them before
+any live session.
 
 ## What the server's contract defines
 

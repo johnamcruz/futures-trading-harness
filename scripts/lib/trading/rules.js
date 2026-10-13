@@ -126,6 +126,11 @@ const FIELD_RE = /\s*field\s*\(\s*(["'])([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\1\s*
 const MAX_FIELD_SEGMENTS = 8;
 const FIELD_PREFIX = 'field:';
 
+/** Every field() path in a rule's text, in either quote style, as the tokenizer reads them. */
+function fieldPathsIn(text) {
+  return [...String(text).matchAll(new RegExp(FIELD_RE.source, 'g'))].map(m => m[2]);
+}
+
 /** The number at a dotted path in a bar (own properties only), else NaN: missing, null, or not a number. */
 function readField(bar, path) {
   let v = bar;
@@ -581,4 +586,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, readField, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

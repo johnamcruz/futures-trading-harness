@@ -2,7 +2,7 @@
 name: ofi
 description: Order-flow imbalance continuation on 1-minute futures bars - enter when buying (or selling) dominates over 1, 3 and 5 minutes and price actually moves with it (real flow, not absorption).
 version: 1
-status: paper
+status: active                # the owner activated it after order flow moved to the broker servers (replay and live)
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
@@ -123,8 +123,13 @@ Long, on a 1-minute close (short is the mirror):
   fetch --out <file.json>`) keeps the fields; a CSV, or bars the backtester
   builds from shorter ones, has none, so the strategy never fires on it.
 
-Keep this in `paper` until the scorecard and a backtest on recorded flow
-support it.
+### Status
+
+Active, for replay and live: the owner activated it after order flow moved
+to the broker MCP servers' bars (live from the live server, history from the
+replay server's local L1/L2 store). The replay smoke and a fresh replay are
+its verification before any live session. A bar without the flow fields
+gives no signal.
 
 ## Examples
 

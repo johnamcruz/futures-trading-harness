@@ -1,6 +1,6 @@
 ---
 name: prop_portfolio
-description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - it sizes each setup on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade, to pass the Topstep 100K combine without blowing it.
+description: Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - it sizes each setup on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade, to pass its account's combine without blowing it.
 version: 1
 status: active                # the owner's call: live and replay; the sizing rules decide each verdict (How It Works, 4)
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
@@ -43,8 +43,9 @@ skips one the budget can't fund, and its trail exits every trade.
 1. On every closed bar of its timeframe (`timeframe: 3m`) the runner scans
    the twelve strategies in the order listed, on each index's bars. The
    first `active` one with a setup (its own rules and stop) is this
-   strategy's setup on that index. A `paper` strategy (value_area today)
-   stays paper inside it: its setup is passed over, and the gate refuses an
+   strategy's setup on that index. A `paper` strategy (none today: the
+   owner activated value_area) stays paper inside it: its setup is passed
+   over, and the gate refuses an
    entry whose verdict names it. A strategy that doesn't list an index (vwap_reclaim lists
    only MNQ and MES) never fires there. The strategies don't trade on their
    own while the attempt runs. `timeframe` is the one setting for the bar

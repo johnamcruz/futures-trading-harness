@@ -179,11 +179,11 @@ strategies/
   bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
   vwap_reclaim/STRATEGY.md   VWAP reclaim, active
-  ofi/STRATEGY.md            1m order-flow imbalance, paper
-  ofi_absorption/STRATEGY.md 1m absorption reversal, paper
+  ofi/STRATEGY.md            1m order-flow imbalance, active
+  ofi_absorption/STRATEGY.md 1m absorption reversal, active
   crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, active
   crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, active
-  value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, paper
+  value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, active
   value_area_reentry/        volume profile 80% rule, active
   value_area_breakout/       acceptance beyond the value area, active
   _template/STRATEGY.md      copy this to add a strategy
@@ -595,8 +595,11 @@ The harness computes no order flow. A broker MCP server that has it puts it
 on its bars as extra fields (turned on by the server's own settings, which
 its `mcp-configs/brokers.json` entry passes through), and the harness passes
 them through untouched. The `ofi`, `ofi_absorption`, and `value_area`
-strategies read them with the rules' `field("path")`; a bar without them
-gives no signal. See [docs/ORDER-FLOW.md](docs/ORDER-FLOW.md).
+strategies read them with the rules' `field("path")`; on a bar without them
+those conditions are false, so `ofi` and `ofi_absorption` give no signal and
+`value_area` can confirm only through its range-expansion branch. They are active for replay and live (the owner's call), as is
+`prop_flow_1m`, the policy strategy over the 1-minute pair. See
+[docs/ORDER-FLOW.md](docs/ORDER-FLOW.md).
 
 ### Order gate settings
 
