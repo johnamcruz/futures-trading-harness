@@ -63,7 +63,7 @@ const fs = require('fs');
 const path = require('path');
 const { readJson, writeJsonAtomic } = require('../harness-run');
 const { readLines, readRun } = require('./store');
-const { labelRun, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy } = require('./labels');
+const { labelRun, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
 const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
 const { exitPlan } = require('../trading/evaluator');
@@ -179,7 +179,7 @@ function earlyClose(label, facts, why, out) {
 // Facts
 
 /** The run's own records, read once. */
-function runRecords(home, { strategies, outcomeBars, tf, cfg }) {
+function runRecords(home, { strategies, outcomeBars }) {
   const scans = new Map();
   let files = [];
   try { files = fs.readdirSync(path.join(home, 'logs')).filter(n => /^scans-.*\.jsonl$/.test(n)).sort(); } catch (_err) { /* none */ }
@@ -200,18 +200,23 @@ function runRecords(home, { strategies, outcomeBars, tf, cfg }) {
   }
   const byName = new Map((strategies || []).filter(x => x && x.name).map(x => [x.name, x]));
   const bars = new Map();
-  const barsFor = sym => {
-    if (!bars.has(sym)) bars.set(sym, outcomeBars && Array.isArray(outcomeBars[sym]) ? outcomeBars[sym].map(b => ({ ...b, ms: b.ms ?? Date.parse(b.t) })) : loadBars(home, sym, tf));
-    return bars.get(sym);
+  // By symbol and the line's timeframe (the runner config at its time).
+  const barsFor = (sym, tf) => {
+    const k = `${sym}|${tf}`;
+    const given = outcomeFor(outcomeBars, sym, tf);
+    if (!bars.has(k)) bars.set(k, given ? given.map(b => ({ ...b, ms: b.ms ?? Date.parse(b.t) })) : loadBars(home, sym, tf));
+    return bars.get(k);
   };
-  return { scans, verdicts, byName, barsFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')), count: Number(cfg.bars) > 0 ? Number(cfg.bars) : tf ? historyBars(tf) : 0 };
+  // The bars the runner hands a cycle under a config.
+  const countFor = cfg => { const tf = Number(cfg.timeframe) || null; return Number(cfg.bars) > 0 ? Number(cfg.bars) : tf ? historyBars(tf) : 0; };
+  return { scans, verdicts, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')) };
 }
 
 const before = (list, t) => (list || []).filter(x => Date.parse(x.at) <= t).pop() || null;
 
 /** The briefing's candidates and alignment for the bar, rebuilt from the bars closed by it; null without them. */
-function briefingAt(rec, { symbol, barT, t, scan, tf }) {
-  const all = rec.barsFor(symbol);
+function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
+  const all = rec.barsFor(symbol, tf);
   const i = all.findIndex(b => b.t === barT || b.ms === Date.parse(barT));
   if (i < 2 || !tf) return null;
   const style = r => { const s = rec.byName.get(r.name); return s && s.mtf ? s.mtf : null; };
@@ -222,7 +227,7 @@ function briefingAt(rec, { symbol, barT, t, scan, tf }) {
     return { ...r, ...(rules ? { minRR: s.risk ? s.risk.min_rr : undefined, exit: exitPlan(s), status: s.status } : {}), ...(r.mtf ? { mtf: { ...r.mtf, style: style(r) || 'trend' } } : {}) };
   });
   try {
-    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars: all.slice(Math.max(0, i + 1 - rec.count), i + 1).map(({ ms: _ms, ...x }) => x), minutes: tf, scan: results, blackouts: rec.blackouts, now: new Date(t) });
+    const b = buildBriefing({ symbol, contractId: scan.contractId || null, bars: all.slice(Math.max(0, i + 1 - count), i + 1).map(({ ms: _ms, ...x }) => x), minutes: tf, scan: results, blackouts: rec.blackouts, now: new Date(t) });
     return { candidates: b.sections.m3.data.candidates || [], alignment: b.sections.m15.data.alignment || {} };
   } catch (_err) {
     return null;
@@ -236,10 +241,12 @@ function windowAt(t) {
 }
 
 /** The facts at one decision: window, setups (with the trend rule, room, read, confluence), trend rule per side, attempt. */
-function factsAt(label, rec, { home, tf, accounts }) {
+function factsAt(label, rec, { home, tf, count, accounts }) {
   const t = Date.parse(label.t);
   const facts = {
     t: label.t, et: etClock(t), window: windowAt(t), news: newsState(rec.blackouts, new Date(t)),
+    // The runner config at the decision's time: its bar size and the bars a cycle was handed.
+    timeframe: tf, barsHanded: count,
     scanned: false, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
     // A strategy's exit plan and bar size (its max_bars count in its own bars).
@@ -258,7 +265,7 @@ function factsAt(label, rec, { home, tf, accounts }) {
       }
     }
     const tradeable = new Set((label.candidates || []).map(c => `${c.name}|${c.direction}`));
-    const briefing = results.some(r => r.direction && (r.candidate || r.verdict)) ? briefingAt(rec, { symbol: label.symbol, barT: label.barT, t, scan, tf }) : null;
+    const briefing = results.some(r => r.direction && (r.candidate || r.verdict)) ? briefingAt(rec, { symbol: label.symbol, barT: label.barT, t, scan, tf, count }) : null;
     facts.rebuilt = Boolean(briefing);
     for (const r of results.filter(x => x.direction && (x.verdict || x.candidate))) {
       const policy = Boolean(r.verdict) || (rec.byName.get(r.name) || {}).signal === 'policy';
@@ -313,13 +320,13 @@ function attemptAt(label, facts, { home, accounts }) {
 function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, unfinished = false } = {}) {
   const dir = realDir(runDir);
   const home = path.resolve(dir, '..', '..');
-  const cfg = readJson(path.join(dir, 'autotrader.json'), {}) || {};
-  const tf = Number(cfg.timeframe) || null;
   const run = readRun(dir);
+  // The runner config at each decision's time (a live session restarted on another config: labels.js configsOf).
+  const cfgAt = configsOf(dir, run.manifest);
   const why = unfinishedWhy(run.manifest, run.days);
   if (why && !unfinished) throw new Error(`run ${run.manifest.runId} is not finished (${why}): run it to its end first, or write the scorecard outside the run home with --out <dir> (it holds what came after each decision, which a resumed run could read)`);
   const { labels, summary: ls } = labelRun(dir, { strategies, outcomeBars, unfinished });
-  const rec = runRecords(home, { strategies, outcomeBars, tf, cfg });
+  const rec = runRecords(home, { strategies, outcomeBars });
   const records = [];
   const notScored = {};
   for (const label of labels) {
@@ -327,7 +334,8 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       notScored[label.decision] = (notScored[label.decision] || 0) + 1;
       continue;
     }
-    const facts = factsAt(label, rec, { home, tf, accounts });
+    const cfg = cfgAt(label.t);
+    const facts = factsAt(label, rec, { home, tf: Number(cfg.timeframe) || null, count: rec.countFor(cfg), accounts });
     const act = label.teacher ? label.teacher.action : null;
     const expected = label.decision === 'in-trade' ? { decision: 'hold', ceiling: null, decidedBy: 'in a trade', ...NONE }
       : act === 'long' || act === 'short' ? expectedForEntry(facts, label.teacher.setup, act) : expectedDecision(facts);
@@ -444,11 +452,9 @@ function writeScorecard(runDir, { root = null, strategies = [], accounts = [], b
   const home = path.resolve(dir, '..', '..');
   if (root && (inside(dir, root) || inside(out, root))) throw new Error(`${inside(out, root) ? out : dir} is inside the repository (${root}): the scorecard is written to the run's own folder or --out, never the repository`);
   if (outDir && inside(out, home)) throw new Error(`--out ${out} is inside the run home (${home}): write the scorecard of an unfinished run outside it`);
-  const tf = Number((readJson(path.join(dir, 'autotrader.json'), {}) || {}).timeframe) || null;
-  if (Object.keys(barsFiles).length && !tf) throw new Error(`${dir}: no runner timeframe (autotrader.json) to read the bars at`);
-  const outcomeBars = Object.fromEntries(Object.entries(barsFiles).map(([sym, f]) => [sym, outcomeBarsFrom(f, tf)]));
+  const outcomeBars = outcomeBarsFor(dir, barsFiles);
   // What came after each decision (outcomes, counterfactuals) never goes where a resumed run could read it.
-  const { records, summary } = scoreRun(dir, { strategies, accounts, outcomeBars: Object.keys(outcomeBars).length ? outcomeBars : null, unfinished: Boolean(outDir) });
+  const { records, summary } = scoreRun(dir, { strategies, accounts, outcomeBars, unfinished: Boolean(outDir) });
   fs.mkdirSync(out, { recursive: true });
   const file = path.join(out, 'scorecard.jsonl');
   fs.writeFileSync(`${file}.${process.pid}.tmp`, records.map(r => `${JSON.stringify(r)}\n`).join(''));

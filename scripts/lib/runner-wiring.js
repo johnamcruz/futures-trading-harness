@@ -11,7 +11,8 @@
  *   closedBarsOnly(client, now)           the adapter, bars closing after now() dropped (replay)
  *   replayUnattested(serverConfig, at)     why a replay server doesn't attest the replayed time, or null
  *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
- *                loadState, saveState, killSwitchFile, log, event })   createRunner(...) with every dependency
+ *                loadState, saveState, killSwitchFile, log, event, onBarClosed })   createRunner(...) with every
+ *                                         dependency; onBarClosed(symbol, { bar, stale, action }) hears each closed bar the runner polls
  *   reportCacheFor(home, cfg)             the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  */
@@ -136,7 +137,7 @@ function reportCacheFor(home, cfg) {
   };
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event }) {
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {} }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
   return createRunner({
@@ -190,6 +191,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     event,
     entryOrders: () => entryOrders(home),
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
+    // A closed bar the runner polled: a decision point of the session record (session/live.js).
+    barClosed: onBarClosed,
   });
 }
 

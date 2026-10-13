@@ -245,6 +245,13 @@ test('driver: one step per decision time at its time, a line each, end of day re
   // Each line's fills are those since the previous time, across the resume.
   assert.deepStrictEqual(lines.map(l => l.since.slice(11, 19)), ['19:40:00', '19:42:02', '19:45:02', '19:48:02', '19:50:00']);
   assert.deepStrictEqual(store.readRun(w.run.paths.runDir).manifest.daysDone, ['2026-10-07']);
+  // A replay's line has the live session's shape (session/record.js decisionRecord), field for field, in order.
+  for (const l of lines) assert.deepStrictEqual(Object.keys(l), ['v', 't', 'day', 'kind', 'asked', 'ran', 'events', 'step', 'cycles', 'refusals', 'errors', 'bars', 'trades', 'since']);
+  // The manifest says where its decisions came from and which version of the agent made them (R33's fingerprints today).
+  const man = store.readRun(w.run.paths.runDir).manifest;
+  assert.strictEqual(man.source, 'replay');
+  assert.deepStrictEqual(man.fingerprints, require('../../scripts/lib/session/record').fingerprints(ROOT));
+  assert.deepStrictEqual(man.versions.map(v => [v.since, v.hash]), [[lines[0].t, man.hash]], 'one version: the agent didn\'t change across the resume');
   assert.strictEqual((await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps })).cycles, 0, 'nothing left');
   // A run left with nothing to do (all ran, its flag lost): marked finished on that pass too.
   const m = JSON.parse(fs.readFileSync(w.run.paths.manifest, 'utf8'));

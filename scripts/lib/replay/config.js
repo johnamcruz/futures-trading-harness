@@ -47,6 +47,7 @@ const { validateConfig, buildCommand } = require('../autotrader');
 const { activeBroker, loadBrokers } = require('../broker/config');
 const { resolveClock } = require('../trading/harness-now');
 const { holidayDates } = require('./schedule');
+const { treeDigest, HARNESS_DIRS } = require('../session/record');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -223,23 +224,6 @@ function brokerErrors(env, run) {
   return errors;
 }
 
-/** sha256 over every file under the given folders of the harness (what the agents and the gate read). */
-function treeDigest(root, dirs) {
-  const h = crypto.createHash('sha256');
-  const walk = d => {
-    let entries;
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_err) { return; }
-    for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      const p = path.join(d, e.name);
-      if (e.name.startsWith('.')) continue; // .DS_Store and the like aren't the harness
-      if (e.isDirectory()) walk(p);
-      else if (e.isFile()) h.update(`${path.relative(root, p)}\0`).update(fs.readFileSync(p));
-    }
-  };
-  for (const d of dirs) walk(path.join(root, d));
-  return h.digest('hex');
-}
-
 /**
  * What makes a run a run: the derived runner config, the window and decision
  * points, the harness command (harness and model), the gate's settings, the
@@ -260,7 +244,7 @@ function configHash(run, base = process.env) {
     premarket: run.premarket, endOfDay: run.endOfDay, prop: run.prop || null, command: harnessCommand(run, base), gate,
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     brokerEntry: { ...b, journalPath: undefined, command: (b.command || []).map(a => (a === process.execPath ? 'node' : a)) }, brokerSettings,
-    harness: run.root ? treeDigest(run.root, ['strategies', 'accounts', 'skills', 'agents', 'rules']) : null,
+    harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }

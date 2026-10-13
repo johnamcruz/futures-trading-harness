@@ -1015,3 +1015,30 @@ test('the Unreviewed line gets the account\'s positions and working orders as th
   assert.deepStrictEqual(calls[0].positions, []);
   assert.deepStrictEqual(calls[0].orders.map(o => o.id), [9], 'the working order reaches it (an entry not filled yet is not "closed")');
 });
+
+test('verifiedFlat: true only after a flatten pass read the account and found nothing open or working', async () => {
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', timeframe: 3, account: '7' });
+  const clockRef = { t: et(16, 30) }; // the daily break: the runner checks the account once a minute
+  let read = 'fail';
+  const open = { positions: [{ id: 1, contractId: 'MNQ', type: 1, size: 1, averagePrice: 1 }], orders: [] };
+  const working = { positions: [], orders: [{ id: 9, contractId: 'MNQ' }] };
+  const runner = createRunner({
+    cfg, root: '/r', clock: { now: () => new Date(clockRef.t) },
+    client: {
+      async accountState() {
+        if (read === 'fail') throw new Error('timeout');
+        return read === 'open' ? open : read === 'working' ? working : { positions: [], orders: [] };
+      },
+      async closePosition() {}, async cancelOrder() {},
+    },
+    runCycle: async () => ({ ok: true }), isKillSwitchOn: () => false, createKillSwitch: () => {},
+    loadState: () => null, saveState: () => {}, writeBars: () => null, scanFor: () => [],
+  });
+  assert.strictEqual(runner.verifiedFlat, false, 'before any flatten pass');
+  const pass = async what => { read = what; await runner.step(); clockRef.t += 60000; return runner.verifiedFlat; };
+  assert.strictEqual(await pass('fail'), false, 'the account read failed');
+  assert.strictEqual(await pass('open'), false, 'a position open (closed this pass, not yet read flat)');
+  assert.strictEqual(await pass('working'), false, 'a working order left after the close');
+  assert.strictEqual(await pass('flat'), true, 'read empty');
+  assert.strictEqual(await pass('fail'), false, 'a later failed read: unknown again');
+});

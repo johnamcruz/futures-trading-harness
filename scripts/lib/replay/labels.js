@@ -63,6 +63,7 @@ const { parseStandardName, readCache } = require('../broker/translator');
 const { toolCalls } = require('../cycle-log');
 const ind = require('../trading/indicators');
 const { readRun, readLines } = require('./store');
+const { versionAt } = require('../session/record');
 const { targetFor } = require('../trading/order-plan');
 const { exitPlan } = require('../trading/evaluator');
 const { simulate, fromFills } = require('./counterfactual');
@@ -543,10 +544,29 @@ function eodOf(cfg, t) {
   return at ? start.getTime() + sessionMinuteOf(at, start) * 60000 : start.getTime() + (MARKET_CLOSE_MIN - MARKET_OPEN_MIN + 24 * 60) * 60000;
 }
 
+/**
+ * The runner config in force at each decision time: a live session restarted on another config names each
+ * version's file (manifest.versions[].config, session/live.js); a run without them has one, autotrader.json.
+ */
+function configsOf(dir, manifest) {
+  const base = readJson(path.join(dir, 'autotrader.json'), {}) || {};
+  if (!(Array.isArray(manifest.versions) && manifest.versions.some(v => v && v.config))) return () => base;
+  const files = new Map();
+  return t => {
+    const v = versionAt(manifest, t);
+    const name = v && typeof v.config === 'string' ? v.config : null;
+    if (!name || name === 'autotrader.json' || !/^autotrader-[A-Za-z0-9-]+\.json$/.test(name)) return base;
+    if (!files.has(name)) files.set(name, readJson(path.join(dir, name), null) || base);
+    return files.get(name);
+  };
+}
+
 /** Why a run isn't finished (a step pending, a day not done), or null. */
 function unfinishedWhy(manifest, days) {
   const open = Object.keys(days).filter(d => !(manifest.daysDone || []).includes(d));
   if (manifest.pending) return `a step at ${manifest.pending.t} was interrupted`;
+  // A live session whose end-of-day fills read failed (session/live.js): the runner retries it.
+  if (manifest.fillsPending) return `the day's fills are not recorded yet (the broker's read at ${manifest.fillsPending.t} failed; the runner retries it)`;
   if (open.length) return `day ${open[0]} is not done`;
   // The driver marks a run finished when it ran every decision time to the run's end (driver.js): a stop
   // at a day's boundary (--max-cycles, the kill switch, the error limit) leaves every day done but not the run.
@@ -600,14 +620,15 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     throw new Error(`run ${manifest.runId} is not finished (${why}): run it to its end first, or write the labels outside the run home with --out <dir> (labels hold what came after each decision, which a resumed teacher could read)`);
   }
   const home = path.resolve(dir, '..', '..');
-  const cfg = readJson(path.join(dir, 'autotrader.json'), {}) || {};
-  const tf = Number(cfg.timeframe) || null;
-  const tfMs = tf ? tf * 60000 : 0;
+  // The runner config at each line's time (its timeframe, paper mode and symbols): a live session's can change mid-day.
+  const cfgAt = configsOf(dir, manifest);
+  const tfOf = c => Number(c.timeframe) || null;
+  const tfMsOf = c => (tfOf(c) ? tfOf(c) * 60000 : 0);
   // A strategy's status: the scan's, else the caller's strategies' (unknown: kept).
   const statusOf = new Map((strategies || []).filter(x => x && x.name).map(x => [x.name, x.status]));
-  const tradeable = r => {
+  const tradeable = (r, c) => {
     const status = r.status ?? statusOf.get(r.name);
-    return Boolean(cfg.paper) || status === undefined || status === null || status === 'active';
+    return Boolean(c.paper) || status === undefined || status === null || status === 'active';
   };
   // Malformed lines (null, arrays, numbers) are skipped wherever a record is read.
   const objs = xs => (Array.isArray(xs) ? xs.filter(isObj) : []);
@@ -627,9 +648,10 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     }
   }
   const barsBySym = new Map();
-  const barsFor = sym => {
-    if (!barsBySym.has(sym)) barsBySym.set(sym, loadBars(home, sym, tf));
-    return barsBySym.get(sym);
+  const barsFor = (sym, tf) => {
+    const k = `${sym}|${tf}`;
+    if (!barsBySym.has(k)) barsBySym.set(k, loadBars(home, sym, tf));
+    return barsBySym.get(k);
   };
   const fills = allFills(lines);
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
@@ -646,6 +668,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const drafts = [];
   for (const [li, rec] of lines.entries()) {
     const t = Date.parse(rec.t);
+    const cfg = cfgAt(rec.t);
     const nextT = lineTimes.find((x, k) => k > li && x > t) ?? Infinity;
     const tradeCycles = [];
     for (const [i, c] of (rec.cycles || []).entries()) {
@@ -684,12 +707,12 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const runnerPassed = !cyc && isObj(scan && scan.decision) && scan.decision.run === false;
       // The policy's screen failed this cycle: the strategies it owns had no verdict (the gate refuses them).
       const screen = cyc ? screenFailed(cyc.ctx, symbol) : null;
-      const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r) && !(screen && screen.names && screen.names.includes(r.name))) : [];
+      const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r, cfg) && !(screen && screen.names && screen.names.includes(r.name))) : [];
       const candidates = fired.map(r => ({ name: r.name, direction: r.direction }));
       const refPrice = scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : ctxSym && ctxSym.bar && num(ctxSym.bar.c) !== null ? ctxSym.bar.c : null;
       const isTradeTime = rec.kind === 'trade';
       const signal = { close: scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : null, fired };
-      const draft = { rec, t, symbol, fam, barT, candidates, refPrice, signal, cyc, ctx: cyc && cyc.ctx };
+      const draft = { rec, t, symbol, fam, barT, candidates, refPrice, signal, cyc, ctx: cyc && cyc.ctx, cfg };
       if (!isTradeTime) draft.decision = 'housekeeping';
       // The run's kill switch was on (the runner starts no trade cycle): its own kind, no teacher decision.
       else if (!cyc) draft.decision = rec.killSwitch ? 'kill-switch' : 'no-cycle';
@@ -788,11 +811,11 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
 
   // The data the run replayed (--bars), else the run home's bars. Counterfactuals walk forward on them
   // (by design, only into outcome fields); the stop's ATR reads only the bars closed by t.
-  const futureBars = sym => (outcomeBars && Array.isArray(outcomeBars[sym]) ? outcomeBars[sym] : barsFor(sym));
+  const futureBars = d => outcomeFor(outcomeBars, d.symbol, tfOf(d.cfg)) || barsFor(d.symbol, tfOf(d.cfg));
   const byName = new Map((strategies || []).filter(x => x && x.name && x.valid !== false).map(x => [x.name, x]));
   const simulated = (d, spec) => d.signal.fired.map(r => simulate({
-    bars: futureBars(d.symbol), tfMs, signalMs: Date.parse(d.barT), signalClose: d.signal.close, direction: r.direction,
-    stopDistance: num(r.stopDistance), targetDistance: num(r.targetDistance), strategy: byName.get(r.name) || null, spec, eodMs: eodOf(cfg, d.t),
+    bars: futureBars(d), tfMs: tfMsOf(d.cfg), signalMs: Date.parse(d.barT), signalClose: d.signal.close, direction: r.direction,
+    stopDistance: num(r.stopDistance), targetDistance: num(r.targetDistance), strategy: byName.get(r.name) || null, spec, eodMs: eodOf(d.cfg, d.t),
   }));
   // The one that stands for the label: a taken trade's own; a refused intent's candidate (its setup and side);
   // else the backtester's pick: the first candidate, in scan order, with a stop distance.
@@ -824,7 +847,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       usedSpec = ospec;
       if (ospec && ospec.source === 'mismatch') reasons.push('broker spec mismatch');
       // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
-      const atr = isEntry ? atrAt(futureBars(d.symbol), tfMs, d.t) : null;
+      const atr = isEntry ? atrAt(futureBars(d), tfMsOf(d.cfg), d.t) : null;
       const stop = isEntry ? stopOf(o, ospec, d.refPrice, atr) : null;
       const size = isEntry ? sizeOf(o, ospec, stop, budgetFor(budgetUsd)) : null;
       // A target bracket is the strategy's own exit when it is what order_plan places for the setup
@@ -864,7 +887,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const skip = d.decision === 'flat' && d.act.action === 'none' && !d.act.reasons.some(r => NOT_A_SKIP.has(r));
       counterfactualFor = isEntry ? (outcome.result === 'unknown' ? 'outcome unknown' : { allowed: 'taken', refused: 'refused intent' }[gate.decision] || null) : skip ? 'skip' : null;
       if (isEntry && gate.decision === 'allowed') {
-        counterfactuals = [fromFills(outcome, { stopPoints: stop && stop.points, targetTicks: o.targetTicks, spec: ospec, bars: futureBars(d.symbol), tfMs, strategy: o.setup, direction: d.act.action })];
+        counterfactuals = [fromFills(outcome, { stopPoints: stop && stop.points, targetTicks: o.targetTicks, spec: ospec, bars: futureBars(d), tfMs: tfMsOf(d.cfg), strategy: o.setup, direction: d.act.action })];
       } else if (d.decision === 'flat' && (counterfactualFor === 'skip' || counterfactualFor === 'refused intent') && d.candidates.length && !d.cyc.failed) {
         // A skip, or an intent refused (by the gate or the broker): what the candidates would have done.
         counterfactuals = simulated(d, spec);
@@ -979,6 +1002,32 @@ function outcomeBarsFrom(file, tf) {
   return aggregate(bars, { unit: 2, unitNumber: tf, nowMs: Infinity }).map(b => ({ ...b, ms: Date.parse(b.t) }));
 }
 
+/** Every timeframe the run's lines were decided at: its first config's and each version's (configsOf). */
+function timeframesOf(dir) {
+  const manifest = readJson(path.join(dir, 'manifest.json'), {}) || {};
+  const at = configsOf(dir, manifest);
+  const times = [null, ...(Array.isArray(manifest.versions) ? manifest.versions.map(v => v && v.since) : [])];
+  return [...new Set(times.map(t => Number(at(t).timeframe) || null).filter(Boolean))].sort((a, b) => a - b);
+}
+
+/**
+ * The --bars data at every timeframe the run used, { byTf: { tf: { SYMBOL: bars } } } (null without files): a
+ * session restarted on another timeframe reads each line's bars at its own (one-minute data aggregates to each).
+ */
+function outcomeBarsFor(dir, barsFiles) {
+  if (!Object.keys(barsFiles).length) return null;
+  const tfs = timeframesOf(dir);
+  if (!tfs.length) throw new Error(`${dir}: no runner timeframe (autotrader.json) to read the bars at`);
+  return { byTf: Object.fromEntries(tfs.map(tf => [tf, Object.fromEntries(Object.entries(barsFiles).map(([sym, f]) => [sym, outcomeBarsFrom(f, tf)]))])) };
+}
+
+/** A symbol's --bars data at a line's timeframe ({ byTf } from outcomeBarsFor, or { SYMBOL: bars }), else null. */
+function outcomeFor(outcomeBars, sym, tf) {
+  if (!outcomeBars) return null;
+  const set = outcomeBars.byTf ? outcomeBars.byTf[tf] : outcomeBars;
+  return set && Array.isArray(set[sym]) ? set[sym] : null;
+}
+
 /**
  * @param opts.barsFiles { SYMBOL: file } the data the run replayed, for the counterfactuals
  * @param opts.outDir where to write (default the run dir); required for an unfinished run, and then
@@ -990,12 +1039,10 @@ function writeLabels(runDir, { root = null, budgetUsd = null, strategies = [], b
   const home = path.resolve(dir, '..', '..');
   if (root && (inside(dir, root) || inside(out, root))) throw new Error(`${inside(out, root) ? out : dir} is inside the repository (${root}): labels are written to the run's own folder or --out, never the repository`);
   if (outDir && inside(out, home)) throw new Error(`--out ${out} is inside the run home (${home}): write the labels of an unfinished run outside it`);
-  const tf = Number((readJson(path.join(dir, 'autotrader.json'), {}) || {}).timeframe) || null;
-  if (Object.keys(barsFiles).length && !tf) throw new Error(`${dir}: no runner timeframe (autotrader.json) to read the bars at`);
-  const outcomeBars = Object.fromEntries(Object.entries(barsFiles).map(([sym, f]) => [sym, outcomeBarsFrom(f, tf)]));
+  const outcomeBars = outcomeBarsFor(dir, barsFiles);
   // Which data the labels read (--bars): each file's sha256, for the labels' provenance.
   const barsSource = Object.keys(barsFiles).length ? Object.fromEntries(Object.entries(barsFiles).sort().map(([sym, f]) => [sym, crypto.createHash('sha256').update(fs.readFileSync(path.resolve(expandHome(f)))).digest('hex')])) : null;
-  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, outcomeBars: Object.keys(outcomeBars).length ? outcomeBars : null, unfinished: Boolean(outDir), barsSource });
+  const { labels, summary } = labelRun(dir, { budgetUsd, strategies, outcomeBars, unfinished: Boolean(outDir), barsSource });
   fs.mkdirSync(out, { recursive: true });
   const file = path.join(out, 'labels.jsonl');
   const tmp = `${file}.${process.pid}.tmp`;
@@ -1012,5 +1059,5 @@ const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : 
 module.exports = {
   VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
   // The same fills, bars, specs and paths the labels read.
-  allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy,
+  allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy, configsOf, timeframesOf, outcomeBarsFor, outcomeFor,
 };
