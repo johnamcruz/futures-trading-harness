@@ -44,7 +44,7 @@ change to documents only (Markdown under `docs/`, the README, this file, and
 nothing else) still runs the regression, with a review that it is sound and
 its claims about the code are true instead of the full round. A document
 that a skill, agent, command, rule, strategy, account, hook, or script
-points to (today the backtesting and broker interface docs) gets
+points to (the list is in `CLAUDE.md`) gets
 the full round. Say both in the pull request (the template asks). See `CLAUDE.md`.
 
 Use conventional commit messages.
