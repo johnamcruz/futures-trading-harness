@@ -215,7 +215,7 @@ test('categories: each failure in the taxonomy, right, and unchecked', () => {
 // ------------------------------------------------------------------------------------------------
 // A whole run home
 
-const DAY = '2026-03-03';
+const DAY = '2021-03-02'; // a train month: a tuning look, every outcome shown (a Recent run's are hidden)
 const RUN = 'sc1';
 const iso = ms => new Date(ms).toISOString();
 const BAR0 = Date.parse(`${DAY}T14:57:00Z`); // the k-th decision's bar opens at BAR0 + 3k minutes (09:57 ET: EST in March)
@@ -249,7 +249,7 @@ function bars() {
 const MTF = { prevailing: '4h up', longAllowed: true, shortAllowed: false };
 const policyScan = (action = 'full', maxSize = 4) => [
   { name: 'orb', candidate: false, direction: 'long', stopDistance: 10, note: 'traded through prop_portfolio', confluence: { with: [], against: [] }, mtf: MTF },
-  { name: 'prop_portfolio', candidate: action !== 'skip', direction: 'long', stopDistance: 10, verdict: { action, maxSize, contract: 'MNQ', ...(action === 'skip' ? { reason: 'the daily soft limit is reached' } : {}) } },
+  { name: 'prop_portfolio', candidate: action !== 'skip', direction: 'long', stopDistance: 10, verdict: { action, maxSize, contract: 'MNQ', ...(action === 'skip' ? { reason: 'the daily soft limit ($1,000) is reached' } : {}) } },
 ];
 const quietScan = [{ name: 'orb', candidate: false, mtf: MTF }];
 const LONG = { tool: 'place_order', input: { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 2, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:prop_portfolio long breakout, stop 20523.5' } };
@@ -260,7 +260,7 @@ const fill = (ms, side, price, pnl, extra = {}) => ({ id: `${ms}-${side}`, contr
 const STEPS = [
   { k: 0, scan: policyScan(), verdict: true, cycle: { orders: [LONG], result: 'CYCLE RESULT: executed - prop_portfolio long 2 MNQ, aligned and room to 20600' } },
   { k: 1, scan: quietScan, cycle: { positions: POS, result: 'CYCLE RESULT: managed | Position running profitably with protective stop active.' }, trades: [fill(tOf(0) + 28000, 0, 20534, null, { entry: { setup: 'prop_portfolio', stopTicks: 40, tickValue: 0.5 } })] },
-  { k: 2, scan: quietScan, cycle: { positions: POS, orders: [{ tool: 'close_position', input: { accountId: 7, contractId: 'MNQ' } }], result: 'CYCLE RESULT: exited - took profit early' } },
+  { k: 2, scan: quietScan, cycle: { positions: POS, orders: [{ tool: 'close_position', input: { accountId: 7, contractId: 'MNQ' } }], result: 'CYCLE RESULT: exited - took profit early, +$40' } },
   { k: 3, scan: policyScan(), verdict: true, cycle: { result: 'CYCLE RESULT: no-trade - no candidate strategies (orb long blocked by 15m down trend rule)' }, trades: [fill(tOf(2) + 28000, 1, 20544, 20, { roundTrip: { net: 18.52, r: 0.5, maeR: -0.2, mfeR: 0.8, reason: 'exit' } })] },
   { k: 4, scan: quietScan, cycle: { result: 'CYCLE RESULT: blocked - Opening print window until 10:00 ET and no strategy candidates' } },
   { k: 5, scan: policyScan('skip', 0), verdict: true, cycle: { result: 'CYCLE RESULT: blocked - no prop attempt running' } },
@@ -371,6 +371,32 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   assert.deepStrictEqual(scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }), { records, summary });
 });
 
+test('a reasoning-fix look hides every market outcome: no P&L, no counterfactual, no account money, no early close from the excursion', () => {
+  const { runDir } = makeRun();
+  const shown = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS });
+  assert.strictEqual(shown.summary.outcomes, 'shown');
+  const { records, summary } = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS, look: { purpose: 'reasoning-fix' } });
+  assert.match(summary.outcomes, /hidden on a reasoning-fix look/);
+  // The reasoning and fact failures stay; the exit judged without its excursion is unchecked, not early close.
+  assert.deepStrictEqual(records.map(r => r.category), shown.records.map(r => (r.category === 'early close' ? 'unchecked' : r.category)));
+  assert.deepStrictEqual(records[2].why, ['the plan or the trade\'s excursion is unknown']);
+  assert.deepStrictEqual([summary.trades, summary.skipped, summary.days[0], summary.labels], [{ n: 1 }, { n: 1 }, { day: DAY, decisions: 9, agree: 5, disagree: 2 }, { noCycleWithCandidates: summary.labels.noCycleWithCandidates }]);
+  assert.deepStrictEqual(records[0].facts.attempt, { account: ATTEMPT.account, status: 'active', entryBlock: null });
+  // Nothing in what it writes carries an outcome field.
+  const out = path.join(tmpDir(), 'sc-hidden');
+  writeScorecard(runDir, { strategies: STRATS, accounts: ACCOUNTS, outDir: out, look: { purpose: 'reasoning-fix' } });
+  const OUTCOME = /"(?:trade|counterfactual|counterfactuals|pacing|outcome|net|sumR|wins|losses|wouldWin|wouldLose|simulated|mfeR|maeR|balance|dayPnl|floor|cushion|profit|dailyHeadroom|softHeadroom|noCycleWouldWin|noCycleWouldLose)"\s*:/;
+  for (const f of ['scorecard.jsonl', 'scorecard-summary.json', 'flagged.jsonl', 'flagged.md', 'scorecard.md']) {
+    const text = fs.readFileSync(path.join(out, f), 'utf8');
+    assert.doesNotMatch(text, OUTCOME, f);
+    assert.doesNotMatch(text, /\$\s?-?\d/, `${f}: no dollar amount, not even in a reason or the model's own words`);
+  }
+  assert.match(fs.readFileSync(path.join(out, 'scorecard.jsonl'), 'utf8'), /the daily soft limit \(\$…\) is reached/, 'the kind of reason stays');
+  const md = fs.readFileSync(path.join(out, 'scorecard.md'), 'utf8');
+  assert.doesNotMatch(md, /would have won|\$-?\d|## Account by day|day P&L/);
+  assert.match(md, /1 trades, 1 skipped setups; their outcomes and the account are hidden/);
+});
+
 test('scoreRun: without bars the room and read are unknown, so the expectation is unchecked, never guessed', () => {
   const { runDir } = makeRun({ withBars: false });
   const { records } = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS });
@@ -387,7 +413,8 @@ test('writeScorecard: writes the records, the summary and the report; an unfinis
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(runDir, 'scorecard-summary.json'), 'utf8')), JSON.parse(JSON.stringify(summary)));
   const md = fs.readFileSync(path.join(runDir, 'scorecard.md'), 'utf8');
   for (const h of ['# Adherence scorecard: sc1', '## Agreement by priority-order step', '## Agreement by strategy', '## Failure categories', '## Stated reasons', '## Trades and skipped setups', '## Account by day', '## Flagged decisions']) assert.ok(md.includes(h), h);
-  assert.match(md, /\| excessive abstention \| take prop_portfolio \| none \|/);
+  assert.match(md, /\| excessive abstention \| medium \| take prop_portfolio \| none \|/);
+  assert.strictEqual(fs.readFileSync(path.join(runDir, 'flagged.jsonl'), 'utf8').trim().split('\n').length, 5, 'the flagged decisions: one per failure');
   assert.throws(() => writeScorecard(runDir, { root: home }), /inside the repository/);
 
   const open = makeRun({ finished: false });
@@ -412,7 +439,7 @@ test('replay.js scorecard: the CLI writes the scorecard and prints its summary',
   const env = { PATH: process.env.PATH, HOME: path.dirname(runDir), FTH_HOME: path.dirname(runDir) };
   const out = execFileSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'replay.js'), 'scorecard', runDir], { env, encoding: 'utf8' });
   assert.match(out, /9 decisions: agreement/);
-  assert.match(out, /wrote .*scorecard\.jsonl, scorecard-summary\.json and scorecard\.md/);
+  assert.match(out, /wrote .*scorecard\.jsonl, scorecard-summary\.json, scorecard\.md, flagged\.jsonl and flagged\.md/);
   assert.ok(fs.existsSync(path.join(runDir, 'scorecard.md')));
 });
 

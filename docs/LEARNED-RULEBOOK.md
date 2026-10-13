@@ -292,8 +292,8 @@ day), with or without a cycle. What still differs from a replay:
   (timeframe, paper mode, symbols).
 
 **R35. The flow at each decision** (owner's decision, 2026-10-13; built:
-recorded and joined to the labels; the values shown to the model and the
-scorecard's join are their own pull requests).
+recorded and joined to the labels and the scorecard; the values shown to the
+model are their own pull request).
 Learning must see the broker fields a decision was made on, so:
 
 - **Recorded.** Each decision line, live and replay, records the
@@ -780,7 +780,9 @@ reads, never model-specific code.
 1. **Score.** Replays produce the adherence scorecard (R19): each decision
    against the rulebook, step by step, with a failure taxonomy (wrong-side
    entry, bad size, premature close, excessive abstention, wrong stated
-   reason, risk-rule rejection) and each trade's result.
+   reason, risk-rule rejection) and each trade's result. Built (R19): each
+   failure typed by code, with its severity and evidence, and the flagged
+   decisions for review.
 2. **Propose.** An LLM reads the scorecard, the calibration reports and the
    failure taxonomy and proposes edits: each a small diff with the failure
    it targets and the effect it expects. **Optuna then searches over the
@@ -992,6 +994,31 @@ the LLM had. The scorecard reports:
 The scorecard is produced by a tested harness script, the same for every
 run.
 
+Built (`replay.js scorecard`, `scripts/lib/replay/scorecard.js` and
+`failures.js`), with R25's failure taxonomy. Every check is code on recorded
+facts, never a model's judgment: wrong-side entry, bad size against the
+verdict's size (halved once; the multiplier, R4, when it exists), early
+close before the plan's exit, excessive abstention (a qualified setup
+skipped with no true or judgment ground), wrong stated reason (a claim the
+briefing's facts contradict, session-timing misreads counted apart, and a
+claim the cycle's own check found false when the cycle record carries its
+checks (none does yet; else "not checked"), and risk-rule rejection (the gate or the
+broker refused the entry). For a strategy whose rules read broker fields,
+its field conditions are checked on the values the decision line recorded
+(R35). Each failure has a severity and the evidence (the facts against what
+was done or said); the counts and rates are per run, per session day and
+per type; and the flagged decisions (`flagged.jsonl`, `flagged.md`) point
+into the record for the self-review. Missing data (values absent or failed,
+the archive failed or pruned) is counted, never filled in. Not checkable by
+code yet: the skip rules and secondary context (steps 5 and 7, judgment),
+a partial exit or one past the time stop, and a reason no fact covers
+(`unparsed`), which stay `unchecked`. Scoring a run is a look at its days,
+checked by the look ledger's rules (R32, `prop/looks.js`) before anything is
+read: the June replay, in Recent, is a reasoning-fix look. On reasoning-fix
+looks, outcomes are hidden (owner, 2026-10-13): no trade results, no
+counterfactuals, no account P&L, only the reasoning and fact failures;
+tuning looks show everything.
+
 **R20. From adherence to an LLM-level estimate.** The gate judges the
 mechanical rulebook, but the goal is the LLM's pass rate, and there are far
 more decisions than attempts. The scorecard's per-step deviation rates go
@@ -1069,8 +1096,8 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
 
 - the flow at each decision, recorded and shown (R35): required before the
   labels and the scorecard can join it (steps 2 and 10 use it once it
-  lands); recorded and joined to the labels: built; shown, and the
-  scorecard's join: not yet;
+  lands); recorded and joined to the labels and the scorecard: built;
+  shown: not yet;
 - the flow-covered LLM replay and label windows (section 4): required
   before the LLM's adherence on flow setups is measured;
 - the fingerprint allowlist (`fingerprintEnv`, R35) on the broker entries:
@@ -1081,7 +1108,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
 
 1. Retire PPO (section 9). Done, PR #70.
 2. The adherence scorecard (R19) with the failure taxonomy (R25), applied to
-   the June 1-5, 2026 replay. Until the automated loop exists, the loop runs
+   the June 1-5, 2026 replay. Built (R19); the June replays recorded so far
+   end inside June 1, before values were recorded, so their field checks
+   read absent. Until the automated loop exists, the loop runs
    by hand: replay, scorecard, a proposed fix, review, merge. Fixes to
    reasoning and fact errors (a stated reason the briefing contradicts) may
    come from Recent's replays, because they make no claim about the market;

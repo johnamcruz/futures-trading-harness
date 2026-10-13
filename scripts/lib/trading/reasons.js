@@ -110,12 +110,18 @@ function expectedForEntry(facts, setupName, side) {
 const SIDE = { long: 'long', longs: 'long', short: 'short', shorts: 'short' };
 // A judgment the order leaves to the model (steps 5 and 7, the strategy's own filters): a ground no fact here can check.
 const JUDGMENT = /regime|\badx\b|volatil|chop|range[- ]bound|consolidat|participation|volume|vwap|lunch|extended|pullback|value area|skip rule|context filter|filter|r:r|risk[- ]?reward|no clear|transition|quality|momentum|liquidity|swing (?:high|low)|session (?:high|low)|structure|weak|thin|conviction|confirmation|disagree|divergen|limited room to work|before .*close|reversal at|trend|veto|analyst|risk[- ]manager|phase 1|stand(?:ing)? aside|no edge|opening drive|wait/i;
+// Session timing (the June replays' misreads), as present-tense claims about the window only: the session or market
+// "is closed" (not "the prior session closed above", "market closed higher"), "still in premarket" (not "the premarket
+// high"), a clause that starts "opens 18:00" or a session or market that opens at a time, "10:48 ET < 18:00 ET open",
+// "before the 18:00 session open" (not "before the 9:30 open", a level's time). On an entry's result (executed, entered)
+// a window claim is never a ground: it is unchecked there (checkReasons), so a level's description is never called false.
+const TIMING = String.raw`(?<!\b(?:prior|previous|yesterday's|last|overnight|asia|london|friday|monday|thursday|wednesday|tuesday|nq|es|mnq|mes|eth|globex|asian|european) )\b(?:session|markets?) (?:is |are |still )?closed\b(?! (?:above|below|near|higher|lower|up|down|strong|weak|bullish|bearish|flat|\d))|(?:still|we're|we are|(?:session|markets?)(?: is| are)?(?: still)?)(?: in)? (?:the )?pre-?market\b(?! (?:high|low|range|level))|^\s*(?:re)?opens (?:at )?\d{1,2}:\d{2}(?!\s*(?:ET\s*)?(?:range|high|low|print|open))|(?<!(?:rth|eth|asian?|london|european|globex|overnight|ny|new york|cash|futures) )\b(?:the )?(?:session|markets?) (?:re)?opens (?:at )?\d{1,2}:\d{2}|<\s*\d{1,2}:\d{2}(?:\s*ET)?\s*open|before (?:the )?\d{1,2}:\d{2}(?:\s*ET)? session open`;
 // Claim detectors, in order: the first kinds are narrower (a nothing-fired "or failed" clause is not a trend claim).
 const CLAIMS = [
   ['nothing-fired', /\bor fail|fail(?:ed)? (?:their |its )?triggers?|all (?:rules |strategies |candidates )?failed/i],
   ['no-reversal-fired', /\bno reversal strateg|reversal strategies (?:have )?(?:no |not |failed)/i],
   ['trend-blocks', /trend\b.*\b(?:blocks?|blocking|prohibits?|violation)|\bblocks? (?:all )?trend|blocked by .*trend|against the prevailing trend/i],
-  ['no-entry-window', /opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|into the close|news blackout|in a (?:news )?blackout/i],
+  ['no-entry-window', new RegExp(String.raw`opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|${TIMING}|into the close|news blackout|in a (?:news )?blackout`, 'i')],
   ['verdict-skip', /verdict (?:is |was |says |action (?:is )?)?:?\s*skip|skip verdict|(?:policy|verdict) skipped|skipped by (?:the )?(?:policy|verdict)/i],
   ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|\bno [a-z0-9]+_[a-z0-9_]+ attempt\b|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
@@ -129,6 +135,8 @@ const CLAIMS = [
   ['entry-block', /cooldown|daily (?:loss )?limit|stand[- ]?down|entries blocked until (?!\d)/i],
 ];
 
+// The outcome words of an entry.
+const ENTERED = /^(?:executed|entered|traded)$/i;
 // The outcome word a CYCLE RESULT starts with (no-trade, blocked, ...): not a reason.
 const STATED = /^(?:no-trade|blocked|veto|vetoed|executed|managed|planned|error|done|skip|skipped|hold|held|entered|traded|managing|exited)\b/i;
 
@@ -143,7 +151,7 @@ function clausesOf(text) {
   return { stated: m ? m[1] ? m[1].toLowerCase() : m[0].toLowerCase() : null, clauses };
 }
 
-const WINDOW_NAMED = /opening (?:print|blackout)|no[- ]entry window|outside (?:the )?(?:trading )?session|session opens at|into the close|daily break/i;
+const WINDOW_NAMED = new RegExp(String.raw`opening (?:print|blackout)|no[- ]entry window|outside (?:the )?(?:trading )?session|session opens at|${TIMING}|into the close|daily break`, 'i');
 const OTHER_GROUND = /news|blackout|\bcpi\b|fomc|\bnfp\b|cooldown|loss[- ]streak|daily (?:loss )?limit|stand[- ]?down/i;
 const sidesIn = c => [...new Set((c.match(/\b(longs?|shorts?)\b/gi) || []).map(x => SIDE[x.toLowerCase()]))];
 const setupNamed = (c, facts) => facts.setups.find(s => new RegExp(`\\b${s.name}\\b|\\b${s.component || '\\0'}\\b`, 'i').test(c)) || null;
@@ -270,8 +278,11 @@ function incidental(c, facts) {
   return c.kind === 'no-reversal-fired' && !facts.setups.some(st => st.style === 'reversal');
 }
 
-/** Every clause of the result checked: { stated, claims, judgment, unparsed, status: none|confirmed|false|unchecked }. */
-function checkReasons(text, facts) {
+/**
+ * Every clause of the result checked: { stated, claims, judgment, unparsed, status: none|confirmed|false|unchecked }.
+ * `entered`: whether the decision was an entry (the scorecard knows it from the orders); null reads it from the outcome word.
+ */
+function checkReasons(text, facts, { entered = null } = {}) {
   const { stated, clauses } = clausesOf(text);
   const claims = [];
   const judgment = [];
@@ -285,7 +296,9 @@ function checkReasons(text, facts) {
     const drop = new Set([...(kinds[0] === 'nothing-fired' ? ['trend-blocks'] : []), ...(kinds.includes('no-reversal-fired') ? ['nothing-fired'] : []), ...(kinds.includes('no-attempt') ? ['entry-block'] : []), ...(kinds.includes('no-room') ? ['room'] : [])]);
     const list = kinds.filter(k => !drop.has(k));
     for (const k of list) {
-      const y0 = checkClaim(k, c, facts, text);
+      const y1 = checkClaim(k, c, facts, text);
+      // An entry's result: a window claim is no ground for it (only for not trading), so it is never scored false.
+      const y0 = k === 'no-entry-window' && (entered === null ? ENTERED.test(stated || '') : entered) && y1.check === false ? { ...y1, check: 'unchecked', why: `an entry's result: a window claim is no ground for it (${y1.why})` } : y1;
       const x = { ...y0, incidental: incidental(y0, facts) };
       // The same claim twice (two clauses saying it) counts once.
       if (!claims.some(y => y.kind === x.kind && y.check === x.check && y.why === x.why)) claims.push(x);

@@ -52,10 +52,18 @@
  * refused the entry), right, unchecked. A false claim about a setup the bar didn't have (a side with no
  * setup, a bar with none) is `incidental`: kept and reported apart, never the category.
  *
+ * On top of the category (failures.js): its severity, the session-timing misreads among the false claims, the field
+ * check of a setup whose rules read broker fields against the values the decision line recorded (R35; an entry the
+ * scan did not list whose own field conditions fail is a wrong-side entry or a bad size), the claim checks the cycle
+ * recorded (R29) when it did (else "not checked"), and what the record lacks (values absent or failed, the archive
+ * failed or pruned): counted, never filled in. The flagged decisions (flagged.jsonl, flagged.md) are what a
+ * self-review reads: what the model saw (pointers into the record), what it did, what the code found.
+ *
  * Deterministic: the same files give the same scorecard.
  *
  *   scoreRun(runDir, { strategies, accounts, outcomeBars, unfinished })   { records, summary }
- *   writeScorecard(runDir, { root, strategies, accounts, barsFiles, outDir })  scorecard.jsonl, scorecard-summary.json, scorecard.md
+ *   writeScorecard(runDir, { root, strategies, accounts, barsFiles, outDir })  scorecard.jsonl, scorecard-summary.json, scorecard.md,
+ *                                                                             flagged.jsonl, flagged.md
  *   checkReasons(text, facts), expectedDecision(facts), classify(label, facts, expected, reasons)   the pure steps
  */
 
@@ -70,6 +78,9 @@ const { exitPlan } = require('../trading/evaluator');
 const { historyBars } = require('../autotrader');
 const { expandHome } = require('../paths');
 const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf } = require('../trading/reasons');
+const F = require('./failures');
+const { checkLook } = require('../prop/looks');
+const { roleOf } = require('../prop/splits');
 
 const VERSION = 1;
 const CATEGORIES = ['right', 'wrong-side entry', 'bad size', 'early close', 'excessive abstention', 'wrong stated reason', 'risk-rule rejection', 'unchecked'];
@@ -175,6 +186,72 @@ function earlyClose(label, facts, why, out) {
   return out('early close', false);
 }
 
+// A look writeScorecard already checked and recorded: a private key, so no other caller of scoreRun can skip the check.
+const TAKEN = Symbol('look taken');
+const nextDay = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+
+/**
+ * The look a scorecard takes at a run's days, checked by the look ledger's rules (prop/looks.js, R16, R17, R32): its
+ * purpose (default: reasoning-fix for a run in Recent, a fix to a stated reason the briefing contradicts with no claim
+ * about the market, the only look Recent allows, e.g. the June 1-5, 2026 replay; tuning elsewhere), its candidate
+ * (default the run), and the ledger (a list; required for a judging look, which a budget counts; tuning and
+ * reasoning-fix looks spend none, so without one the recorded looks alone). On a reasoning-fix look the scorecard hides
+ * every market outcome (owner, 2026-10-13). A live session is its own split, outside the schedule: no look, all shown.
+ * Refused: throws.
+ */
+function lookAt(run, { purpose = null, candidate = null, ledger = null } = {}) {
+  if (run.manifest.source === 'live') return { purpose: null, why: 'a live session: its own split, not a look at the schedule' };
+  const days = Object.keys(run.days).sort();
+  const inRecent = d => { try { return roleOf(Date.parse(`${d}T00:00:00Z`)).role === 'recent'; } catch (_err) { return false; } };
+  purpose = purpose || (days.length && days.every(inRecent) ? 'reasoning-fix' : 'tuning');
+  if (ledger === null && purpose === 'judging') throw new Error('a judging look needs the look ledger (--ledger): it counts against a budget (R16, R17)');
+  if (!days.length) return { purpose, candidate: null, units: [] };
+  const look = { candidate: candidate || `scorecard:${run.manifest.runId}`, purpose, ranges: days.map(d => ({ from: d, to: nextDay(d) })) };
+  const res = checkLook(look, ledger === null ? [] : ledger);
+  if (!res.ok) throw new Error(`the scorecard's look at ${days[0]}..${days[days.length - 1]} is refused: ${res.refusals.join('; ')}`);
+  return { purpose, candidate: look.candidate, ranges: look.ranges, units: [...new Map(res.units.map(u => [u.key, { key: u.key, role: u.role }])).values()] };
+}
+
+/**
+ * The look checked against the ledger file and, when allowed, appended to it ({ candidate, purpose, ranges, at })
+ * before anything is read, so the next look counts it (a budget spent once per look). A ledger file that is missing
+ * or not a list refuses the look. A reasoning-fix look without a file is checked against the recorded looks only.
+ */
+function takeLook(dir, { purpose = null, candidate = null, ledgerFile = null } = {}, now = new Date()) {
+  const run = readRun(dir);
+  if (!ledgerFile) return lookAt(run, { purpose, candidate, ledger: null });
+  const file = path.resolve(expandHome(ledgerFile));
+  let ledger;
+  try { ledger = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`the look ledger ${file} can't be read (${e.message}): no look without it (R16)`, { cause: e }); }
+  if (!Array.isArray(ledger)) throw new Error(`the look ledger ${file} is not a list: no look without it (R16)`);
+  const taken = lookAt(run, { purpose, candidate, ledger });
+  if (taken.purpose && taken.ranges && taken.ranges.length) writeJsonAtomic(file, [...ledger, { candidate: taken.candidate, purpose: taken.purpose, ranges: taken.ranges, at: now.toISOString() }]);
+  return taken;
+}
+
+/**
+ * The checks the classification can't see: an entry on a setup the scan did not list whose own field conditions fail
+ * on the recorded values (wrong-side entry when the other side's hold, else a bad size: the order says no trade),
+ * and a right decision that still states a claim the cycle's own check found false (wrong stated reason).
+ */
+function withChecks(verdict, { label, facts, flow, claimChecks }) {
+  const act = label.teacher ? label.teacher.action : null;
+  // Not when the classification couldn't trust the entry itself: a failed cycle, orders it can't attribute, a manual trigger.
+  const notes = (label.clone && label.clone.reasons) || [];
+  const untrusted = Boolean(label.cycleFailed) || notes.some(r => r === 'no cycle log' || r === 'unattributed order') || facts.styleOf(label.teacher && label.teacher.setup) === 'manual';
+  if (flow.status === 'inconsistent' && !untrusted && (verdict.category === 'unchecked' || verdict.category === 'right')) {
+    const s = flow.setups[0];
+    const failed = (s.conditions || []).filter(c => !c.ok).map(c => `${c.rule}${c.missing ? ' (no value)' : ''}`);
+    const why = flow.otherSide ? `${s.strategy}'s field conditions fail for a ${act} and its ${act === 'long' ? 'short' : 'long'} conditions (all on fields) hold on the recorded values (${failed.join(', ')})`
+      : `${s.strategy}'s field conditions fail for a ${act} on the recorded values (${failed.join(', ')}): the order says no trade`;
+    return { category: flow.otherSide ? 'wrong-side entry' : 'bad size', agrees: false, why: [...verdict.why, why] };
+  }
+  if (claimChecks.status === 'checked' && claimChecks.kept.length && verdict.category === 'right') {
+    return { category: 'wrong stated reason', agrees: true, why: [...verdict.why, `stated after the cycle's own check found it false: ${claimChecks.kept.map(c => `"${c.clause}"`).join(', ')}`] };
+  }
+  return verdict;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Facts
 
@@ -247,7 +324,7 @@ function factsAt(label, rec, { home, tf, count, accounts }) {
     t: label.t, et: etClock(t), window: windowAt(t), news: newsState(rec.blackouts, new Date(t)),
     // The runner config at the decision's time: its bar size and the bars a cycle was handed.
     timeframe: tf, barsHanded: count,
-    scanned: false, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
+    scanned: false, setups: [], fired: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
     // A strategy's exit plan and bar size (its max_bars count in its own bars).
     planOf: name => { const s = rec.byName.get(name); return s && s.risk ? { ...exitPlan(s), minutes: parseInt(s.timeframe, 10) || tf } : null; },
@@ -256,6 +333,8 @@ function factsAt(label, rec, { home, tf, count, accounts }) {
   if (scan && Array.isArray(scan.results)) {
     facts.scanned = true;
     const results = scan.results.filter(isObj);
+    // Every result the scan fired, tradeable or not (name|side): what the model saw fire.
+    facts.fired = results.filter(r => r.candidate && r.direction).map(r => `${r.name}|${r.direction}`);
     // The trend rule per side, for trend strategies: blocked when any trend strategy's record says so.
     for (const r of results.filter(x => isObj(x.mtf) && facts.styleOf(x.name) !== 'reversal')) {
       facts.trendRule.prevailing = facts.trendRule.prevailing || r.mtf.prevailing || null;
@@ -317,10 +396,14 @@ function attemptAt(label, facts, { home, accounts }) {
 // ---------------------------------------------------------------------------------------------
 // Run and summary
 
-function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, unfinished = false } = {}) {
+function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, unfinished = false, look = {} } = {}) {
   const dir = realDir(runDir);
   const home = path.resolve(dir, '..', '..');
   const run = readRun(dir);
+  // Scoring a run looks at its days: the look ledger's rules decide first (refused: nothing is read); a look already
+  // checked and recorded (writeScorecard with a ledger file) is not checked twice.
+  const taken = look[TAKEN] || lookAt(run, look);
+  const hide = taken.purpose === 'reasoning-fix';
   // The runner config at each decision's time (a live session restarted on another config: labels.js configsOf).
   const cfgAt = configsOf(dir, run.manifest);
   const why = unfinishedWhy(run.manifest, run.days);
@@ -339,8 +422,15 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
     const act = label.teacher ? label.teacher.action : null;
     const expected = label.decision === 'in-trade' ? { decision: 'hold', ceiling: null, decidedBy: 'in a trade', ...NONE }
       : act === 'long' || act === 'short' ? expectedForEntry(facts, label.teacher.setup, act) : expectedDecision(facts);
-    const reasons = checkReasons(label.result, facts);
-    const verdict = classify(label, facts, expected, reasons);
+    // An entry is known from its orders, whatever the result's first word: a window claim is no ground for it.
+    const reasons = checkReasons(label.result, facts, { entered: act === 'long' || act === 'short' });
+    const cycleFile = label.provenance && label.provenance.cycleFile;
+    const doc = cycleFile && cycleFile.startsWith('logs/cycles/') ? readJson(path.join(home, cycleFile), null) : null;
+    const flow = F.flowOf(label, facts, rec.byName);
+    const claimChecks = F.claimChecksOf(doc, label.result);
+    // On a reasoning-fix look no outcome is read: an exit is judged without the trade's excursion (early close: unchecked).
+    const seen = hide ? { ...label, outcome: null } : label;
+    const verdict = withChecks(classify(seen, facts, expected, reasons), { label, facts, flow, claimChecks });
     const o = label.outcome;
     const { styleOf: _styleOf, planOf: _planOf, ...plainFacts } = facts;
     records.push({
@@ -349,12 +439,44 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       expected,
       actual: { action: label.teacher ? label.teacher.action : null, setup: label.teacher ? label.teacher.setup : null, size: label.teacher && label.teacher.size ? label.teacher.size.contracts : null, gate: label.gate, result: label.result },
       reasons, incidentalFalse: reasons.claims.filter(c => c.check === false && c.incidental).length, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
+      severity: null, flow, claimChecks, data: F.dataOf(label, facts), provenance: { cycleFile: cycleFile || null, promptHash: label.provenance ? label.provenance.promptHash : null },
       trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason } : null,
       counterfactual: label.counterfactualFor === 'skip' && label.counterfactual ? { strategy: label.counterfactual.strategy, direction: label.counterfactual.direction, simulated: label.counterfactual.simulated, result: label.counterfactual.result, R: label.counterfactual.R, net: label.counterfactual.net, reason: label.counterfactual.reason } : null,
       pacing: facts.attempt,
     });
+    const r = records[records.length - 1];
+    r.severity = F.severityOf(r);
   }
-  return { records, summary: summarize(records, { runId: ls.runId, unfinished: ls.unfinished, notScored, labels: ls }) };
+  const summary = { ...summarize(records, { runId: ls.runId, unfinished: ls.unfinished, notScored, labels: ls }), look: taken };
+  return hide ? hideOutcomes(records, summary) : { records, summary: { ...summary, outcomes: 'shown' } };
+}
+
+const HIDDEN = 'hidden on a reasoning-fix look (owner, 2026-10-13)';
+const ATTEMPT_SEEN = ['account', 'status', 'entryBlock'];
+// Dollar amounts in any text (an entry block "down $X today", a verdict reason "cushion of $Y", the model's own result
+// line): the account's money is an outcome too, so each becomes "$…" (the kind of block or reason stays). An amount
+// written with neither "$" nor a currency word ("down 400 today") can't be told from any other number: it stays.
+const MONEY = /\$\s?-?[\d,]+(?:\.\d+)?[kKmM]?\b|-?[\d,]+(?:\.\d+)?[kKmM]?\s?(?:USD|dollars)\b/gi;
+const redactMoney = x => (typeof x === 'string' ? x.replace(MONEY, '$…') : Array.isArray(x) ? x.map(redactMoney)
+  : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, redactMoney(v)])) : x);
+/**
+ * A reasoning-fix look's scorecard: the reasoning and fact failures only. Every market outcome is dropped: each trade's
+ * result, what a skipped setup would have returned, the account's balance, P&L, cushion and headroom, and what the
+ * no-cycle bars would have done. The counts of trades and skips stay (what the model did, not what the market did).
+ */
+function hideOutcomes(records, summary) {
+  const recs = records.map(({ trade: _t, counterfactual: _c, pacing: _p, ...r }) => redactMoney({
+    ...r, facts: { ...r.facts, attempt: r.facts.attempt ? Object.fromEntries(ATTEMPT_SEEN.map(k => [k, r.facts.attempt[k] ?? null])) : null },
+  }));
+  const { trades, skipped, days, labels, ...rest } = summary;
+  return {
+    records: recs,
+    summary: {
+      ...rest, outcomes: HIDDEN, trades: { n: trades.n }, skipped: { n: skipped.n },
+      days: days.map(d => ({ day: d.day, decisions: d.decisions, agree: d.agree, disagree: d.disagree })),
+      labels: { noCycleWithCandidates: labels.noCycleWithCandidates },
+    },
+  };
 }
 
 const rate = (a, b) => (b ? round(a / b, 4) : null);
@@ -414,6 +536,7 @@ function summarize(records, { runId, unfinished, notScored, labels }) {
     skipped: { list: skipped, n: skipped.length, simulated: cfs.length, wouldWin: cfs.filter(c => c.result === 'win').length, wouldLose: cfs.filter(c => c.result === 'loss').length, sumR: sum(cfs, 'R'), net: sum(cfs, 'net') },
     days: Object.keys(days).sort().map(k => days[k]),
     labels: { noCycleWithCandidates: labels.noCycleWithCandidates, noCycleWouldWin: labels.noCycleWouldWin, noCycleWouldLose: labels.noCycleWouldLose },
+    failures: F.failureSummary(records),
   };
 }
 
@@ -432,41 +555,54 @@ function toMarkdown(s, records) {
     '## Agreement by priority-order step', '', head, ...Object.entries(s.agreement.byStep).map(([k, x]) => row(k, x)), '',
     '## Agreement by strategy', '', head, ...Object.entries(s.agreement.byStrategy).map(([k, x]) => row(k, x)), '',
     '## Failure categories', '', '| category | decisions |', '| --- | ---: |', ...Object.entries(s.categories).map(([k, v]) => `| ${k} | ${v} |`), '',
+    F.failureMarkdown(s.failures),
     '## Stated reasons', '',
     `${s.reasons.claims} checkable claims: ${s.reasons.true} true, ${s.reasons.false} false (${s.reasons.falseIncidental} incidental: about a setup the bar didn't have), ${s.reasons.unchecked} unchecked; ${s.reasons.judgmentClauses} judgment clauses, ${s.reasons.unparsedClauses} unparsed. Wrong-reason rate ${pct(s.reasons.wrongReasonRate)} of the decisions with a decision-relevant checked claim; incidental ${pct(s.reasons.incidentalWrongRate)}.`, '',
     '| claim | true | false | of which incidental | unchecked |', '| --- | ---: | ---: | ---: | ---: |', ...Object.entries(s.reasons.byKind).map(([k, x]) => `| ${k} | ${x.true} | ${x.false} | ${x.incidentalFalse} | ${x.unchecked} |`), '',
     '## Trades and skipped setups', '',
-    `${s.trades.n} trades: ${s.trades.wins} won, ${s.trades.losses} lost, ${s.trades.sumR}R, $${s.trades.net}. ${s.skipped.n} skipped setups: ${s.skipped.simulated} simulated, ${s.skipped.wouldWin} would have won, ${s.skipped.wouldLose} lost, ${s.skipped.sumR}R, $${s.skipped.net}.`, '',
-    '## Account by day', '', '| day | decisions | agree | disagree | balance | day P&L | floor | cushion | daily headroom | balance check |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
-    ...s.days.map(d => `| ${d.day} | ${d.decisions} | ${d.agree} | ${d.disagree} | ${cell(d.balance)} | ${cell(d.dayPnl)} | ${cell(d.floor)} | ${cell(d.cushion)} | ${cell(d.dailyHeadroom)} | ${cell(d.balanceCheck)} |`), '',
-    '## Flagged decisions', '', flagged.length ? '| time (ET) | category | expected | actual | why | false reasons |\n| --- | --- | --- | --- | --- | --- |' : 'None.',
-    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
+    s.outcomes !== 'shown' ? `${s.trades.n} trades, ${s.skipped.n} skipped setups; their outcomes and the account are ${s.outcomes}.\n` : `${s.trades.n} trades: ${s.trades.wins} won, ${s.trades.losses} lost, ${s.trades.sumR}R, $${s.trades.net}. ${s.skipped.n} skipped setups: ${s.skipped.simulated} simulated, ${s.skipped.wouldWin} would have won, ${s.skipped.wouldLose} lost, ${s.skipped.sumR}R, $${s.skipped.net}.`, '',
+    ...(s.outcomes !== 'shown' ? [] : ['## Account by day', '', '| day | decisions | agree | disagree | balance | day P&L | floor | cushion | daily headroom | balance check |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+      ...s.days.map(d => `| ${d.day} | ${d.decisions} | ${d.agree} | ${d.disagree} | ${cell(d.balance)} | ${cell(d.dayPnl)} | ${cell(d.floor)} | ${cell(d.cushion)} | ${cell(d.dailyHeadroom)} | ${cell(d.balanceCheck)} |`), '']),
+    '## Flagged decisions', '', flagged.length ? 'Each in full, for review: flagged.md and flagged.jsonl.\n\n| time (ET) | category | severity | expected | actual | why | false reasons |\n| --- | --- | --- | --- | --- | --- | --- |' : 'None.',
+    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.severity} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
     '',
   ].filter(x => x !== null).join('\n');
 }
 
 /** Writes scorecard.jsonl, scorecard-summary.json and scorecard.md: the run's folder (finished), else --out outside the run home. */
-function writeScorecard(runDir, { root = null, strategies = [], accounts = [], barsFiles = {}, outDir = null } = {}) {
+function writeScorecard(runDir, { root = null, strategies = [], accounts = [], barsFiles = {}, outDir = null, look = {} } = {}) {
   const dir = realDir(runDir);
   const out = outDir ? path.resolve(expandHome(outDir)) : dir;
   const home = path.resolve(dir, '..', '..');
   if (root && (inside(dir, root) || inside(out, root))) throw new Error(`${inside(out, root) ? out : dir} is inside the repository (${root}): the scorecard is written to the run's own folder or --out, never the repository`);
   if (outDir && inside(out, home)) throw new Error(`--out ${out} is inside the run home (${home}): write the scorecard of an unfinished run outside it`);
+  // Every other refusal first (an unfinished run without --out), so a look is recorded only when it is taken; then the
+  // look, before anything else is read.
+  const run = readRun(dir);
+  const why = unfinishedWhy(run.manifest, run.days);
+  if (why && !outDir) throw new Error(`run ${run.manifest.runId} is not finished (${why}): run it to its end first, or write the scorecard outside the run home with --out <dir> (it holds what came after each decision, which a resumed run could read)`);
+  const taken = takeLook(dir, look);
   const outcomeBars = outcomeBarsFor(dir, barsFiles);
   // What came after each decision (outcomes, counterfactuals) never goes where a resumed run could read it.
-  const { records, summary } = scoreRun(dir, { strategies, accounts, outcomeBars, unfinished: Boolean(outDir) });
+  const { records, summary } = scoreRun(dir, { strategies, accounts, outcomeBars, unfinished: Boolean(outDir), look: { [TAKEN]: taken } });
   fs.mkdirSync(out, { recursive: true });
   const file = path.join(out, 'scorecard.jsonl');
   fs.writeFileSync(`${file}.${process.pid}.tmp`, records.map(r => `${JSON.stringify(r)}\n`).join(''));
   fs.renameSync(`${file}.${process.pid}.tmp`, file);
   writeJsonAtomic(path.join(out, 'scorecard-summary.json'), summary);
   fs.writeFileSync(path.join(out, 'scorecard.md'), toMarkdown(summary, records));
-  return { file, summary };
+  // The flagged decisions, for the self-review: each failure with what the model saw, did, and what the code found.
+  const flagged = records.filter(r => F.TYPES.includes(r.category)).map(r => F.flaggedEntry(r, { runId: summary.runId, home, decisionFile: path.relative(home, path.join(dir, `${r.day}.jsonl`)) }));
+  fs.writeFileSync(path.join(out, 'flagged.jsonl'), flagged.map(x => `${JSON.stringify(x)}\n`).join(''));
+  fs.writeFileSync(path.join(out, 'flagged.md'), F.flaggedMarkdown(summary.runId, flagged));
+  return { file, summary, flagged: flagged.length };
 }
 
 const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.overall.rate)} (${s.agreement.overall.agree} agree, ${s.agreement.overall.disagree} disagree, ${s.agreement.overall.unchecked} unchecked)\n`
   + `categories: ${Object.entries(s.categories).map(([k, v]) => `${k} ${v}`).join(', ')}\n`
+  + `failures: ${s.failures.failures} (${pct(s.failures.failureRate)}; high ${s.failures.severity.high}, medium ${s.failures.severity.medium}, low ${s.failures.severity.low}); session-timing misreads ${s.failures.sessionTiming.decisions}; values absent ${s.failures.data.valuesAbsent}, values error ${s.failures.data.valuesError}, archive error ${s.failures.data.archiveError}, pruned ${s.failures.data.archivePruned}\n`
   + `reasons: ${s.reasons.claims} claims, ${s.reasons.false} false (${s.reasons.falseIncidental} incidental); wrong-reason rate ${pct(s.reasons.wrongReasonRate)} (incidental ${pct(s.reasons.incidentalWrongRate)})\n`
-  + `trades ${s.trades.n} (${s.trades.sumR}R, $${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`;
+  + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
+    : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, CATEGORIES, STEPS, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };
+module.exports = { VERSION, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };
