@@ -49,7 +49,9 @@ function firstFire(s) {
 }
 
 test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['bos', 'cisd_ote', 'crt_1h', 'crt_4h', 'ema_cross', 'keltner', 'orb', 'supertrend']);
+  // value_area is active (the owner's decision after order flow moved to the broker servers): on this fixture, which
+  // carries no flow, it fires on its range-expansion confirmation.
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['bos', 'cisd_ote', 'crt_1h', 'crt_4h', 'ema_cross', 'keltner', 'orb', 'supertrend', 'value_area']);
   assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
   // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
   const ev = createEvaluator(BARS);
@@ -133,14 +135,19 @@ test('every strategy with rules provides its context on every scanned bar; a pap
       assert.ok(['trend', 'reversal'].includes(r.mtf.style), s.name);
     }
   }
-  // A paper strategy (value_area: its order-flow branch waits for real flow): the gate refuses a live entry.
-  const paper = ALL.find(s => s.name === 'value_area');
-  assert.strictEqual(paper.status, 'paper');
+  // A paper strategy (a paper copy of value_area in the user's strategies folder; the repo's own strategies are all
+  // active): the gate refuses a live entry.
   const home = tmpDir();
+  const dir = path.join(home, 'strategies', 'value_area_paper');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: value_area$/m, 'name: value_area_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  const paper = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: path.dirname(dir) }).strategies.find(s => s.name === 'value_area_paper');
+  assert.strictEqual(paper.status, 'paper');
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup
-  const env = { FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
+  const env = { FTH_HOME: home, FTH_STRATEGIES_DIRS: path.dirname(dir), FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(home, [{ ts: '2026-04-28T04:13:00.000Z', kind: 'plan', contractId: CONTRACT, text: 'p' }]), NODE_ENV: 'test', FTH_TEST_NOW: '2026-04-28T04:13:00.000Z', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'g.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT };
   const res = node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], env,
-    JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:value_area long, stop 27400' } }));
+    JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: { accountId: 1, contractId: CONTRACT, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 20, type: 'stop' }, rationale: 'setup:value_area_paper long, stop 27400' } }));
   assert.strictEqual(res.status, 2);
   assert.match(res.stderr, /status "paper"/);
 });

@@ -32,11 +32,11 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `bos` | break of structure | active |
 | `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
 | `vwap_reclaim` | rules (written in Markdown) | active |
-| `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | paper |
-| `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | paper |
+| `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | active |
+| `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | active |
 | `crt_1h` | CRT detector: a raid of the previous 1-hour high or low, reclaimed with a 3m shift; target the far side | active |
 | `crt_4h` | CRT detector on the 4-hour candle (06:00 and 10:00 ET raids) | active |
-| `value_area` | rules: a rejection of, or breakout through, the prior day's POC, confirmed by order flow or a range expansion on volume; target the edge of value | paper |
+| `value_area` | rules: a rejection of, or breakout through, the prior day's POC, confirmed by order flow or a range expansion on volume; target the edge of value | active |
 | `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | active |
 | `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | active |
 
@@ -54,11 +54,16 @@ nodes.
 The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`).
 The harness computes no order flow: the broker MCP server puts it on its
 bars, and the rules read its fields with `field("flow.ofiTrade")` and
-`field("flow.windows.5.ofiTrade")`. A bar without
-them gives no signal; nothing estimates them. `ofi` trades real flow, where
+`field("flow.windows.5.ofiTrade")`. On a bar without
+them those conditions are false, so the pair gives no signal; nothing
+estimates them. `ofi` trades real flow, where
 the imbalance moves price; `ofi_absorption` trades the reversal when it
 doesn't. `value_area` (3-minute) reads the 3-bar window for one of its two
-confirmations; without flow only the other (range expansion) confirms.
+confirmations; without flow only the other (range expansion) confirms. The
+owner activated the three (and `prop_flow_1m`) for replay and live once order
+flow moved to the broker servers' bars (live from the live server, history
+from the replay server's local store); the replay smoke and a fresh replay
+verify them before any live session.
 
 ## Add a strategy
 
@@ -102,12 +107,21 @@ contract), or skipped, and every trade exits by its trail.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
   A policy strategy trades one timeframe.
 
+Both are active and both trade the same account. The runner trades one
+timeframe, so a 3-minute runner's setups go through `prop_portfolio` and a
+1-minute runner's through `prop_flow_1m`; either way they share the one
+attempt. Within one runner (one harness home) the gate holds one cushion
+and one position at a time across the account. It does not see another
+runner's entries: never start a second runner on the same broker account
+(a per-account lock is coming).
+
 While an active policy strategy has an attempt running, its rules strategies
 trade only through it; otherwise they trade as before. Each rules strategy's
 own rules, sessions, filters, and regimes still decide its setups, the same
-in backtests and live. Its `status` doesn't (a `paper` one can trade through
-an active policy strategy; a `disabled` one can't be listed): the policy
-strategy's status is what goes from paper to active. The trained (PPO)
+in backtests and live, and so does its `status`: an active policy strategy
+trades only its `active` strategies (a `paper` one stays paper inside it; a
+`disabled` one can't be listed), and a `paper` policy strategy trades only in
+a paper run. The trained (PPO)
 policy that once decided its setups is retired; the learned-rulebook design
 (to come) replaces it with numbers and rules the skills teach and the gate
 enforces.

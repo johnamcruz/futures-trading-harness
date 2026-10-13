@@ -310,13 +310,37 @@ test('the session hours read unambiguously (a small local model read "18:00 ET t
   }
 });
 
-test('the prop policy is active (live and replay), and the replay skill says a paper policy with an attempt refuses every entry', () => {
+test('the prop policies are active (live and replay), and the replay skill says a paper policy with an attempt refuses every entry', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  const p = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
-  assert.ok(p && p.valid && p.status === 'active');
-  assert.match(fs.readFileSync(path.join(ROOT, 'skills/prop-challenge-pacing/SKILL.md'), 'utf8'), /policy strategy must be `active` \(`prop_portfolio` is; its sizing rules\s+decide each verdict\)/);
+  for (const name of ['prop_portfolio', 'prop_flow_1m']) {
+    const p = loadStrategies(ROOT, {}).strategies.find(s => s.name === name);
+    assert.ok(p && p.valid && p.status === 'active', name);
+  }
+  assert.match(fs.readFileSync(path.join(ROOT, 'skills/prop-challenge-pacing/SKILL.md'), 'utf8'), /policy strategy must be `active` \(`prop_portfolio` and `prop_flow_1m` are;\s+their sizing rules decide each verdict\)/);
   const r = fs.readFileSync(path.join(ROOT, 'skills/replay/SKILL.md'), 'utf8');
   assert.match(r, /The policy strategy must be `active` \(`prop_portfolio` is\)[^]*?so with a `paper` policy every entry is refused\.\s+The policy strategy sizes each setup by its `sizing` rules: full within\s+the budget, or skip\./);
+});
+
+test('the order-flow activation says what holds: one runner per broker account, value_area\'s expansion branch, the fast backtest\'s blind spot, prop_flow_1m\'s indexes', () => {
+  const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+  // The gate holds one cushion and one position per account within one runner only: no claim of more.
+  for (const f of ['skills/prop-challenge-pacing/SKILL.md', 'strategies/README.md']) {
+    const t = read(f).replace(/\s+/g, ' ');
+    assert.match(t, /Within one runner \(one harness home\) the gate holds one cushion and one position at a time across the account/, f);
+    assert.match(t, /second runner on the same broker account must not be started|never start a second runner on the same broker account/, f);
+    assert.match(t, /a per-account lock is coming/, f);
+  }
+  // Without flow the flow conditions are false; value_area can still confirm by range expansion.
+  for (const f of ['README.md', 'docs/ORDER-FLOW.md', 'docs/HARNESS-DESIGN.md']) {
+    const t = read(f).replace(/\s+/g, ' ');
+    assert.match(t, /`value_area` can (still )?confirm (only )?(through its range-expansion branch|through its other branch|by range expansion)/, f);
+    assert.doesNotMatch(t, /`value_area` strategies read them with the rules' `field\("path"\)`; a bar without them gives no signal/, f);
+  }
+  const bt = read('docs/BACKTESTING.md').replace(/\s+/g, ' ');
+  assert.match(bt, /a `prop_portfolio` run \(`--prop`\) on CSV or built bars leaves out `value_area`'s flow branch/);
+  assert.match(bt, /a walk-forward run only logs it\. In a `--prop` run only the strategies it trades are checked/);
+  assert.doesNotMatch(bt, /promotion runs included/);
+  assert.match(read('strategies/prop_flow_1m/STRATEGY.md').replace(/\s+/g, ' '), /It covers MNQ and NQ only \(`instruments`\)\. .* so the gate refuses them \(fails closed\)/);
 });
 
 test('the trained PPO policy is retired: no instruction file points to its trainer, bundles, or skill', () => {

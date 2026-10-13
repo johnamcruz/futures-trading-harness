@@ -6,9 +6,10 @@
  * prior day's POC is 27414.32; the 13:15 ET bar comes up from below, pokes
  * above it, and closes in its lower half on a range expansion: a POC
  * rejection short. The test records the multi-timeframe read and the scan,
- * plans, and sends the order through the order-gate hook: a live copy of the
- * strategy (status active) is let through with the stop sized from the scan,
- * value_area itself (paper) is refused, and a relabel is refused. Then the
+ * plans, and sends the order through the order-gate hook: value_area (status
+ * active: the owner activated it after order flow moved to the broker
+ * servers) is let through with the stop sized from the scan, a paper copy of
+ * it is refused, and a relabel is refused. Then the
  * backtester trades the same bar: entry at the next open, stop and target
  * where the strategy put them, exit as the bars dictate.
  */
@@ -31,16 +32,18 @@ const FIRE = BARS.findIndex(b => b.t === '2026-04-27T17:15:00.000Z');
 
 const node = (args, env, input) => spawnSync(process.execPath, args, { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env }, input });
 
-/** A live copy of value_area (status active, its own name) in a strategies folder of the user's. */
-function liveCopy(home) {
-  const dir = path.join(home, 'strategies', 'value_area_live');
+/** A paper copy of value_area (status paper, its own name) in a strategies folder of the user's. */
+function paperCopy(home) {
+  const dir = path.join(home, 'strategies', 'value_area_paper');
   fs.mkdirSync(dir, { recursive: true });
   const src = fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8');
-  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), src.replace(/^name: value_area$/m, 'name: value_area_live').replace(/^status: paper$/m, 'status: active'));
+  const doc = src.replace(/^name: value_area$/m, 'name: value_area_paper').replace(/^status: active\b.*$/m, 'status: paper');
+  assert.match(doc, /^status: paper$/m);
+  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), doc);
   return path.dirname(dir);
 }
 
-test('value_area e2e on real bars: POC rejection short -> records -> plan -> the gate lets the live strategy through, refuses paper and relabels', () => {
+test('value_area e2e on real bars: POC rejection short -> records -> plan -> the gate lets the active strategy through, refuses paper and relabels', () => {
   assert.ok(FIRE > 0, 'the 13:15 ET bar is in the fixture');
   const poc = profileSeries(BARS, 'prior_rth').poc[FIRE];
   assert.ok(Math.abs(poc - 27414.32) < 0.01, `prior POC ${poc}`);
@@ -54,7 +57,7 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
     FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT,
-    FTH_STRATEGIES_DIRS: liveCopy(home),
+    FTH_STRATEGIES_DIRS: paperCopy(home),
   };
 
   // 1. The multi-timeframe read, recorded for the gate.
@@ -65,9 +68,10 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
   const sc = node([path.join(ROOT, 'scripts', 'strategies.js'), 'scan', file, '--symbol', 'MNQ', '--now', now, '--record'], env);
   assert.strictEqual(sc.status, 0, sc.stderr);
   const results = JSON.parse(sc.stdout);
-  const r = results.find(x => x.name === 'value_area_live');
+  const r = results.find(x => x.name === 'value_area');
+  assert.strictEqual(r.status, 'active');
   assert.ok(r && r.candidate && r.direction === 'short', JSON.stringify(r && r.filtersFailed));
-  assert.strictEqual(results.find(x => x.name === 'value_area').direction, 'short');
+  assert.strictEqual(results.find(x => x.name === 'value_area_paper').direction, 'short');
   const [setup, confirm] = [r.rules.short[2], r.rules.short[3]];
   assert.deepStrictEqual(setup.parts.map(x => x.ok), [true, false], 'a rejection, not a breakout');
   assert.ok(confirm.ok, 'confirmed by flow or expansion');
@@ -80,10 +84,10 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
   // 3. The plan, then the order as the trade-executor sends it, through the hook.
   const ticks = Math.ceil(r.stopDistance / 0.25);
   const stop = (close + ticks * 0.25).toFixed(2);
-  fs.appendFileSync(journal, `${JSON.stringify({ ts: now, kind: 'plan', contractId: CONTRACT, tags: ['setup:value_area_live', 'MNQ', `regime:${r.regime}`], text: `value_area_live short, POC ${poc.toFixed(2)} rejection, stop ${stop}` })}\n`);
+  fs.appendFileSync(journal, `${JSON.stringify({ ts: now, kind: 'plan', contractId: CONTRACT, tags: ['setup:value_area', 'MNQ', `regime:${r.regime}`], text: `value_area short, POC ${poc.toFixed(2)} rejection, stop ${stop}` })}\n`);
   const order = {
     accountId: 1, contractId: CONTRACT, side: 'sell', type: 'market', size: 1,
-    stopLossBracket: { ticks, type: 'stop' }, rationale: `setup:value_area_live short, POC rejection on the 13:15 ET bar, stop ${stop}`,
+    stopLossBracket: { ticks, type: 'stop' }, rationale: `setup:value_area short, POC rejection on the 13:15 ET bar, stop ${stop}`,
   };
   const gate = o => node([path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'],
     env, JSON.stringify({ tool_name: 'mcp__broker__place_order', tool_input: o }));
@@ -91,12 +95,12 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
   assert.deepStrictEqual(r.confluence.against, []);
   const res = gate(order);
   assert.strictEqual(res.status, 0, `refused:\n${res.stderr}`);
-  // The paper strategy itself can't trade live.
-  const paper = gate({ ...order, rationale: order.rationale.replace('setup:value_area_live', 'setup:value_area') });
+  // A paper copy that fired on the same bar can't trade live.
+  const paper = gate({ ...order, rationale: order.rationale.replace('setup:value_area', 'setup:value_area_paper') });
   assert.strictEqual(paper.status, 2);
   assert.match(paper.stderr, /status "paper"/);
   // A strategy that didn't fire can't carry the trade.
-  const relabel = gate({ ...order, rationale: order.rationale.replace('setup:value_area_live', 'setup:orb') });
+  const relabel = gate({ ...order, rationale: order.rationale.replace('setup:value_area', 'setup:orb') });
   assert.strictEqual(relabel.status, 2);
   assert.match(relabel.stderr, /\[trigger-fired\]/);
   // value_area is a trend setup: with the 4h, 1h and 15m all up, the gate refuses the short.

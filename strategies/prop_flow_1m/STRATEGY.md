@@ -1,8 +1,8 @@
 ---
 name: prop_flow_1m
-description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - it sizes each flow setup from the attempt's budget in the selected contract (or skips it), and trails every trade, on the Topstep 100K combine.
+description: Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - it sizes each flow setup from the attempt's budget in the selected contract (or skips it), and trails every trade, on its account's combine.
 version: 1
-status: paper                 # paper until the user activates it
+status: active                # the owner activated it after order flow moved to the broker servers (replay and live)
 instruments: [MNQ, NQ]
 timeframe: 1m
 signal: policy
@@ -37,11 +37,28 @@ strategy trades one timeframe, so the flow strategies get their own.
 
 ## How It Works
 
+It covers MNQ and NQ only (`instruments`). `ofi` and `ofi_absorption` list
+MES, MYM and M2K too, but while an attempt runs on the account only a policy
+strategy that trades it may enter: their setups on those indexes have no
+policy to go through, so the gate refuses them (fails closed).
+
 As `prop_portfolio`: the first flow strategy with a setup on the closed
 1-minute bar is the setup, sized from the cushion in the selected contract
 (full, or a skip when the budget can't fund it), and the trail exits the
 trade. A verdict is a ceiling: take it with `setup:prop_flow_1m`, exactly as given
 and at most its size, when the priority order (the strategy-library skill) says so.
+
+### Status
+
+Active, for replay and live: the owner activated it, with `ofi` and
+`ofi_absorption`, after order flow moved to the broker MCP servers' bars
+(live from the live server, history from the replay server's local L1/L2
+store). The replay smoke and a fresh replay are its verification before any
+live session. On a bar without the flow fields the flow conditions are
+false, so `ofi` and `ofi_absorption` give no signal and this strategy has
+no setup. It trades the same account's attempt as
+`prop_portfolio`; the runner trades one timeframe, so a 1-minute run's
+setups come here and a 3-minute run's go to `prop_portfolio`.
 
 ## Examples
 

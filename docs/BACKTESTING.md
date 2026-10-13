@@ -80,6 +80,17 @@ reads them (`value_area`'s order-flow branch, on 3-minute bars) never fires
 on them in this fast backtest; test it in a replay (the `replay` skill),
 where the replay broker serves bars at the strategy's timeframe, until the
 fast backtester pulls its bars from the replay broker (a planned follow-up).
+The same holds inside a policy: a `prop_portfolio` run (`--prop`) on CSV or
+built bars leaves out `value_area`'s flow branch (only its range expansion
+confirms), so it can pick a different setup, or none, where live and replay
+would pick `value_area`. The backtester warns when a traded strategy reads a
+`field(...)` path the loaded bars of a market it trades don't carry, naming
+the strategy, the path and the markets: always in its log, and for a plain
+or `--prop` run in the report too (`missingFields` in `report.json` or
+`combine.json`, and a section in `report.md` or `combine.md`); a
+walk-forward run only logs it. In a `--prop` run only the strategies it
+trades are checked: a paper strategy the policy leaves out, which still
+counts toward conflict, is not.
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.

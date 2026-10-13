@@ -47,6 +47,7 @@ const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
 const { createEnv, evaluate } = require('../prop/challenge');
 const { marketHoursErrors } = require('../autotrader');
 const walkForward = require('./walk-forward');
+const { missingBarFields, describeMissing } = require('./bar-fields');
 
 const WARMUP_BARS = 2000;
 
@@ -277,8 +278,11 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
       log(`warning: no selected strategy lists ${m.symbol} (or the micro or mini of its family) in its instruments, so it can't trade`);
     }
   }
+  // Broker bar fields a traded strategy reads that these bars don't carry: said in the log and the report.
+  const missingFields = missingBarFields(traded ? strategies.filter(s => traded.includes(s.name)) : strategies, markets, (s, sym) => tradesRoot(s, sym, [sym]));
+  for (const x of missingFields) log(`warning: ${describeMissing(x)}`);
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
-  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded });
+  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields });
   if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
   const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
@@ -296,10 +300,11 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     dataAudit: Object.fromEntries(markets.map(m => [m.symbol, m.audit])),
     provenance: provenance(root, strategies, markets),
   });
+  if (missingFields.length) report.missingFields = missingFields;
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });
   writeJsonAtomic(path.join(runDir, 'report.json'), report);
-  fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report));
+  fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report) + missingMarkdown(missingFields));
   fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
   fs.writeFileSync(path.join(runDir, 'trades.jsonl'), report.trades.map(t => JSON.stringify(t)).join('\n') + (report.trades.length ? '\n' : ''));
   if (cfg.record) {
@@ -346,7 +351,7 @@ function policyStrategy(root, name, env = process.env) {
 }
 
 /** Prop challenge attempts: every setup the account's budget sizes, exited by the policy strategy's exit. */
-function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded }) {
+function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields = [] }) {
   const account = accountNamed(root, prop.account, env);
   const contracts = prop.contracts || 'auto';
   const e = createEnv({
@@ -363,13 +368,17 @@ function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, en
   const report = {
     runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: traded,
     leftOut: prop.strategies.filter(n => !traded.includes(n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
+    ...(missingFields.length ? { missingFields } : {}),
   };
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });
   writeJsonAtomic(path.join(runDir, 'combine.json'), report);
-  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report));
+  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report) + missingMarkdown(missingFields));
   return { report, runDir };
 }
+
+/** The report's section on bar fields the data doesn't carry ('' with none). */
+const missingMarkdown = list => (list.length ? `\n## Bar fields missing from this data\n\n${list.map(x => `- ${describeMissing(x)}.`).join('\n')}\n` : '');
 
 function combineMarkdown(r) {
   const pct = x => (x === null || x === undefined ? '-' : `${Math.round(x * 1000) / 10}%`);

@@ -150,15 +150,11 @@
   "strategies/README.md|account": [
     "5eeca293b452b47e"
   ],
-  "strategies/prop_flow_1m/STRATEGY.md|firm": [
-    "0fc2c0f462d43905"
-  ],
   "strategies/prop_flow_1m/STRATEGY.md|account": [
     "0dc8c6e6406f814b"
   ],
   "strategies/prop_portfolio/STRATEGY.md|firm": [
-    "315c178753462d53",
-    "6115e0ff362bcac7"
+    "315c178753462d53"
   ],
   "strategies/prop_portfolio/STRATEGY.md|account": [
     "d2c7f0eda29bc67d",
@@ -377,10 +373,6 @@
   ],
   "tests/plugin/content.test.js|firm-time": [
     "670205a9ea3f75ec"
-  ],
-  "tests/scripts/cli-parity.snapshot.json|firm": [
-    "09d16604044ba913",
-    "5a4d032b84eb2c01"
   ],
   "tests/scripts/cli-parity.snapshot.json|account": [
     "8d5ba008abd9f7d0"

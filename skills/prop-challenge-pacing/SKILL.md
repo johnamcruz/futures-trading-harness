@@ -56,11 +56,21 @@ it:
   or route around it. Once in, the policy strategy's own exit (its trail)
   manages the trade; nothing closes it early past the ratchet.
 - **Before the first live entry** (the user's steps, not an agent's): the
-  policy strategy must be `active` (`prop_portfolio` is; its sizing rules
-  decide each verdict), and the user starts the attempt with
-  `combine.js start`. A policy strategy still at `paper` (e.g. `prop_flow_1m`)
-  stays so until the user activates it, and every verdict entry is refused
+  policy strategy must be `active` (`prop_portfolio` and `prop_flow_1m` are;
+  their sizing rules decide each verdict), and the user starts the attempt
+  with `combine.js start`. A policy strategy at `paper` stays so until the
+  user activates it, and every verdict entry is refused
   (`[strategy] ... status "paper"`): report it and stand aside.
+- **Two policies, one account.** `prop_portfolio` (3-minute) and
+  `prop_flow_1m` (1-minute) both trade the same account (the `account` both
+  name). The runner trades one
+  timeframe, so only one of them has setups in a run: enter only as the
+  policy its verdict names (`setup:<that policy>`). Both draw on the one
+  attempt. Within one runner (one harness home) the gate holds one cushion
+  and one position at a time across the account; it does not see another
+  runner's entries, so a second runner on the same broker account must not
+  be started (a per-account lock is coming). If you see one, report it and
+  stand aside.
 - **A policy trades only its active strategies.** A `paper` strategy stays
   paper inside a policy: the runner passes over its setup (it takes the next
   active strategy that fired; with none, the policy has no setup that bar),

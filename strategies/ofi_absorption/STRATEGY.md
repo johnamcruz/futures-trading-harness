@@ -2,7 +2,7 @@
 name: ofi_absorption
 description: Absorption reversal on 1-minute futures bars - heavy selling (buying) over 5 minutes that fails to move price, then a 1-minute bar turns; trade against the absorbed side.
 version: 1
-status: paper
+status: active                # the owner activated it after order flow moved to the broker servers (replay and live)
 instruments: [MNQ, MES, MYM, M2K]
 timeframe: 1m
 signal: rules
@@ -82,6 +82,14 @@ Long, on a 1-minute close (short is the mirror):
 - `ofi` (real flow) fired in the same direction as the absorbed side in
   the last 3 bars: the flow is winning.
 - Within 5 minutes of high-impact news.
+
+### Status
+
+Active, for replay and live: the owner activated it after order flow moved
+to the broker MCP servers' bars (live from the live server, history from the
+replay server's local L1/L2 store). The replay smoke and a fresh replay are
+its verification before any live session. A bar without the flow fields
+gives no signal.
 
 ## Examples
 
