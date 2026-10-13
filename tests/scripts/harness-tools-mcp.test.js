@@ -278,6 +278,10 @@ test('harness-tools server: bars_fetch writes where the bars tools read, even wh
   const other = fixtureHome();
   const envFile = path.join(user, 'x.env');
   fs.writeFileSync(envFile, `FTH_HOME=${other}\n`, { mode: 0o600 });
+  // The server's own home names the same replay broker: its bars tools read at the same replay clock (a replay
+  // clock with a live broker is refused by every bars tool).
+  fs.mkdirSync(path.join(user, '.futures-trading-harness'), { mode: 0o700 });
+  fs.copyFileSync(path.join(other, 'brokers.json'), path.join(user, '.futures-trading-harness', 'brokers.json'));
   const client = server(envFor(other, { HOME: user, FTH_HOME: '', FTH_ENV_FILE: envFile }));
   try {
     const fetched = await call(client, 'bars_fetch', { symbol: 'MNQ', timeframe: 7, count: 10 });

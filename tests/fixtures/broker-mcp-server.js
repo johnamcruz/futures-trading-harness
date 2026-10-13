@@ -14,7 +14,10 @@
  * MNQ contracts: another tickSize or tickValue), FAKE_BARS (a JSON file of bars that
  * get_bars serves as they are, the server's own extra fields included, as a server whose
  * settings add fields to its bars; with FAKE_BARS_FROM_START, only those from startTime on), FAKE_BALANCE (the
- * account's balance, default 50000).
+ * account's balance, default 50000), FAKE_REPLAY_NOW (an ISO time: a replay server at that time:
+ * get_server_config reports replay: true and it as serverTime, and get_bars serves only the bars closed by
+ * it), FAKE_REPLAY_LEAK (get_bars serves bars after the clock too, as a non-conforming replay server
+ * would: with FAKE_REPLAY_NOW, every bar; with FAKE_BARS, those of the hour after endTime).
  */
 
 const fs = require('fs');
@@ -33,9 +36,11 @@ const state = {
   fills: [{ id: 3, orderId: 8, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', price: 21500, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false }],
   calls: [],
 };
-const bars = n => Array.from({ length: n }, (_, k) => {
+// n bars of the requested size (default one minute), the newest opening at 13:00 + n - 1 minutes on 2026-10-07:
+// one-minute bars run 13:00, 13:01, ...; longer ones end at the same bar, one bar size apart.
+const bars = (n, step = 60000) => Array.from({ length: n }, (_, k) => {
   const c = 21500 + k;
-  return { t: new Date(Date.parse('2026-10-07T13:00:00Z') + k * 60000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
+  return { t: new Date(Date.parse('2026-10-07T13:00:00Z') + (n - 1) * 60000 - (n - 1 - k) * step).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
 });
 const journal = entry => {
   if (process.env.FAKE_JOURNAL) fs.appendFileSync(process.env.FAKE_JOURNAL, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
@@ -43,7 +48,7 @@ const journal = entry => {
 const ok = { success: true, errorCode: 0, errorName: 'Success', errorMessage: null };
 
 const HANDLERS = {
-  get_server_config: () => ({ tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: 1, maxPositionSize: 2, maxDailyLoss: 500, allowedAccountIds: [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString() }),
+  get_server_config: () => ({ tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: 1, maxPositionSize: 2, maxDailyLoss: 500, allowedAccountIds: [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString(), ...(process.env.FAKE_REPLAY_NOW ? { replay: true, serverTime: process.env.FAKE_REPLAY_NOW } : {}) }),
   list_accounts: () => state.accounts,
   get_account_snapshot: a => ({ account: state.accounts.find(x => x.id === a.accountId) || null, positions: state.positions, openOrders: state.orders, today: { realizedNetPnL: 0 } }),
   search_contracts: a => state.contracts.filter(c => c.name.startsWith(String(a.searchText).toUpperCase())),
@@ -51,7 +56,8 @@ const HANDLERS = {
   get_contract: a => state.contracts.find(c => c.id === a.contractId) || null,
   get_bars: a => {
     if (process.env.FAKE_BARS) {
-      const end = a.endTime ? Date.parse(a.endTime) : Infinity;
+      // FAKE_REPLAY_LEAK: the bars of the hour after endTime too (a replay server leaking the future).
+      const end = a.endTime ? Date.parse(a.endTime) + (process.env.FAKE_REPLAY_LEAK ? 3600000 : 0) : Infinity;
       // FAKE_BARS_FROM_START: startTime bounds the bars too, as a server paging through history does.
       const start = process.env.FAKE_BARS_FROM_START && a.startTime ? Date.parse(a.startTime) : -Infinity;
       const list = JSON.parse(fs.readFileSync(process.env.FAKE_BARS, 'utf8')).filter(b => Date.parse(b.t) <= end && Date.parse(b.t) >= start).slice(-(a.limit || 100));
@@ -63,9 +69,12 @@ const HANDLERS = {
       const live = [2, 1, 0].map(k => ({ t: new Date(lastOpen - k * 60000).toISOString(), o: 1, h: 2, l: 0, c: 1 + k, v: 10 }));
       return { contractId: a.contractId, barSize: '1 minute', count: 3, bars: live };
     }
-    const all = bars(Math.min(a.limit || 100, 300));
+    const step = (a.unit === 'day' ? 1440 : Number(a.unitNumber) || 1) * 60000;
+    const all = bars(Math.min(a.limit || 100, 300), step);
     const end = a.endTime ? Date.parse(a.endTime) : Infinity;
-    const list = all.filter(b => Date.parse(b.t) <= end);
+    // A replay server: only the bars closed by its clock (unless it leaks later ones).
+    const clock = process.env.FAKE_REPLAY_NOW && !process.env.FAKE_REPLAY_LEAK ? Date.parse(process.env.FAKE_REPLAY_NOW) : Infinity;
+    const list = all.filter(b => Date.parse(b.t) <= end && Date.parse(b.t) + step <= clock);
     return { contractId: a.contractId, barSize: `${a.unitNumber || 5} ${a.unit || 'minute'}`, count: list.length, bars: process.env.FAKE_NEWEST_FIRST ? list.reverse() : list };
   },
   get_quote: a => ({ contractId: a.contractId, quote: null, note: 'market closed' }),

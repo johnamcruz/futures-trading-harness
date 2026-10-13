@@ -33,6 +33,7 @@
  * the exchange's time from the driver's clock file on every call, MOCK_REPLAY=1
  * makes get_server_config report replay: true, and MOCK_STATE_DIR (instead of
  * MOCK_STATE) holds the state, created on first use from MOCK_INIT (JSON overrides).
+ * MOCK_LEAK_BARS=1 serves a test's real bars past the clock too (a replay server that leaks the future).
  */
 
 const fs = require('fs');
@@ -159,7 +160,7 @@ const settle = file => update(file, s => {
   }
 });
 
-function bars(s, a) {
+function bars(s, a, env = {}) {
   const step = (a.unit === 'day' ? 1440 : Number(a.unitNumber) || 1) * 60000;
   const end = Math.min(a.endTime ? Date.parse(a.endTime) : s.nowMs, s.nowMs);
   const start = a.startTime ? Date.parse(a.startTime) : end - step * (a.limit || 100);
@@ -168,7 +169,9 @@ function bars(s, a) {
   const real = (s.bars || {})[a.contractId];
   if (Array.isArray(real)) {
     // As a broker does: with no startTime, the last `limit` closed bars by count (across breaks), else from startTime.
-    const closed = real.filter(b => Date.parse(b.t) + step <= end && (!a.startTime || Date.parse(b.t) >= start));
+    // MOCK_LEAK_BARS=1: a non-conforming replay server that serves the bars after its clock too (look-ahead).
+    const until = env.MOCK_LEAK_BARS === '1' ? Infinity : end;
+    const closed = real.filter(b => Date.parse(b.t) + step <= until && (!a.startTime || Date.parse(b.t) >= start));
     return { contractId: a.contractId, barSize: `${a.unitNumber || 1} ${a.unit || 'minute'}`, count: Math.min(closed.length, a.limit || 100), bars: closed.slice(-(a.limit || 100)) };
   }
   const out = [];
@@ -211,7 +214,7 @@ const HANDLERS = {
   search_contracts: (s, a) => CONTRACTS.filter(c => c.name.startsWith(String(a.searchText || '').toUpperCase())),
   list_available_contracts: () => CONTRACTS,
   get_contract: (s, a) => contractOf(a.contractId) || null,
-  get_bars: (s, a) => bars(s, a),
+  get_bars: (s, a, env) => bars(s, a, env),
   get_quote: (s, a) => ({ contractId: a.contractId, quote: { bid: s.prices[a.contractId] - 0.25, ask: s.prices[a.contractId], last: s.prices[a.contractId] } }),
   list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
   list_open_orders: s => s.orders.filter(o => o.status === 1),

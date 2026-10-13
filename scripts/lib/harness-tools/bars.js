@@ -15,7 +15,8 @@
  *                (refused for daily bars; ignored in autonomous runs, where the runner records it:
  *                the bars are fetched and the reply notes it)
  *
- * Asks the configured broker through the adapter; bars up to the harness clock.
+ * Asks the configured broker through the adapter; bars up to the harness clock
+ * (under a replay clock, a bar closing after it is dropped, whatever the server returned).
  * The text is one line (the file, the contract, the bar count, when the last
  * bar closed), and the recorded read with record.
  */
@@ -43,7 +44,7 @@ async function fetch(args = {}, ctx) {
   if (o.record && o.daily) throw new Error(say(c, '--record reads trigger bars (minutes), not daily bars', 'record reads trigger bars (minutes), not timeframe "daily"'));
   const pid = o.record ? liveRunner(c.env) : null;
   if (pid) throw new Error(`${record}: an autonomous runner is running (pid ${pid}): it records the reads and signals of the symbols it trades, and record is refused while it runs`);
-  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, env: c.barsEnv, tool: c.tool }));
+  const r = await withAdapter({ root: c.root, env: c.env }, broker => fetchBarsToFile({ client: broker, ...o, now, cutAt: c.replayAt(), env: c.barsEnv, tool: c.tool }));
   let text = `wrote ${r.count} ${o.daily ? 'daily' : `${o.timeframe}-minute`} bars for ${r.contractId} (tick ${r.tickSize}, $${r.tickValue}/tick) to ${r.file}; last bar ${r.last}, closed ${r.closedAt}\n`;
   if (!o.record) return ignored ? { text, stderr: ignored } : { text };
   return withTextAsync(text, async () => {

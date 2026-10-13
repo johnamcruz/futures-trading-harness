@@ -60,6 +60,16 @@ broker.
    close), premarket at `premarketAt`, and end of day; holidays, weekends and
    early closes follow the harness calendar (earlier years get the CME rules
    from `exchange-calendar.js`).
+   **No look-ahead.** A decision sees only bars closed by the replay clock,
+   as live it could see nothing else. The runner's bars and `bars_fetch`
+   drop any later bar the server sends. Every tool that reads a bars file
+   (`strategies_scan`, `strategies_recent`, `order_plan`, `market_snapshot`,
+   `mtf_read`, a daily file included) refuses a file that holds one, saying
+   which bars and when they close. A later bar's briefing is not served.
+   `scripts/check-broker-mcp.js` dates its calls at the replay clock and fails
+   a replay server whose `get_bars` returns such a bar. Live, with no replay
+   clock, nothing changes. `tests/e2e/no-look-ahead.test.js` proves it,
+   along with the rules and backtest fill guarantees in `docs/BACKTESTING.md`.
 5. **The store**, local only: `<run home>/replay/<runId>/<day>.jsonl`, one
    line per decision time (what ran, the cycle's result, prompt hash, tool
    calls, skills and orders from the cycle log, the gate's refusals, and the

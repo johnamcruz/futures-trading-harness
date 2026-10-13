@@ -18,7 +18,7 @@ const { mtfRead } = require('../trading/mtf');
 const { buildRecord, writeRecord } = require('../trading/mtf-state');
 const { harnessHome } = require('../paths');
 const { readBarsArg } = require('../backtest/data');
-const { context, say, ignoredRecord, withText } = require('./cli');
+const { context, atClock, say, ignoredRecord, withText } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 
 const USAGE = 'usage: mtf.js <bars.json | bars.csv | -> [--tf=15,60,240] [--daily=<daily bars>] [--json] [--record --symbol=MNQ]';
@@ -31,8 +31,8 @@ function mtf({ file = null, tf = [15, 60, 240], daily = null, json = false, reco
   if (!daily && !record && !json && defaultTf && require('./briefing').briefedThisCycle(c.env, symbol)) {
     return { text: 'This bar\'s briefing is current (bar_briefing): its m15 alignment and frame, its h1 frames and its trend rule are this read. Read it there, once per role (trade-session: read once); mtf_read runs with a daily file, other timeframes, or without a current briefing.\n' };
   }
-  const bars = readBarsArg(file);
-  const read = mtfRead(bars, { timeframes: tf, daily: daily ? readBarsArg(daily) : null });
+  const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
+  const read = mtfRead(bars, { timeframes: tf, daily: daily ? atClock(c, readBarsArg(daily), daily, 'the daily bars file') : null });
   const text = json ? `${JSON.stringify(read, null, 2)}\n` : `${read.lines.join('\n')}\n`;
   if (!record) return { text };
   // In autonomous runs the runner records the read from the bars it hands the cycle.

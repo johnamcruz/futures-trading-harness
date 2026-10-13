@@ -78,10 +78,11 @@ test('bars.js: fetches bars up to the replayed time and records the trend read a
   fs.writeFileSync(path.join(dir, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE], replay: true } } }));
   const out = path.join(dir, 'bars-scratch', 'replay-clock.json'); // bars files go only under the home's bars scratch directory
   const run = extra => node('bars.js', ['--symbol', 'MNQ', '--timeframe', '1', '--count', '10', '--out', out, '--record'], { FTH_HOME: dir, ...extra });
-  // The fake serves 1-minute bars from 13:00 to 13:09 and never one after the request's endTime.
+  // The fake serves 1-minute bars from 13:00 to 13:09, none opened after the request's endTime; the one opened at 13:05
+  // closes at 13:06, after the replayed time, and is not written (no look-ahead).
   const replayed = run({ FTH_REPLAY_NOW: '2026-10-07T13:05:30Z' });
   assert.strictEqual(replayed.status, 0, replayed.stderr);
-  assert.match(replayed.stdout, /wrote 6 1-minute bars .*last bar 2026-10-07T13:05:00.000Z/);
+  assert.match(replayed.stdout, /wrote 5 1-minute bars .*last bar 2026-10-07T13:04:00.000Z, closed 2026-10-07T13:05:00.000Z/);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'mtf', 'MNQ.json'), 'utf8')).recordedAt, '2026-10-07T13:05:30.000Z');
   const wall = run({});
   assert.strictEqual(wall.status, 0, wall.stderr);

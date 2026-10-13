@@ -53,6 +53,11 @@ scripts. None places, changes, or cancels an order.
 - `symbol` is a contract root in capitals (`MNQ`, `MES`).
 - No tool takes a time: the harness clock decides (a replay broker's time
   in a replay). No tool takes an output path or an environment.
+- In a replay, a bars file with a bar that closes after the replay clock is
+  refused: `[<script>] the bars file <path>: N bar(s) close after the replay
+  clock (...)`. `bars_fetch` writes only closed bars, and the runner's bars
+  file holds only those too. Read one of those files instead; don't retry the
+  same file. A briefing of a later bar is not served.
 - An unknown argument is refused, with the arguments the tool takes.
 - Give numbers as JSON numbers (`"timeframe": 3`) and flags as `true` or
   `false`. A number or flag sent as a string (`"3"`, `"true"`) is read as

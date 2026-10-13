@@ -351,12 +351,12 @@
   },
   "bars --record": {
     "status": 0,
-    "stdout": "wrote 6 1-minute bars for MNQ (tick 0.25, $0.5/tick) to <out>; last bar 2026-10-07T13:05:00.000Z, closed 2026-10-07T13:06:00.000Z\nTrend rule: no 4h trend read yet (needs 3 completed 4h candles in the bars); trend strategies can't enter yet, reversal strategies can. (recorded for the order gate: <home>/mtf/MNQ.json)\n",
+    "stdout": "wrote 5 1-minute bars for MNQ (tick 0.25, $0.5/tick) to <out>; last bar 2026-10-07T13:04:00.000Z, closed 2026-10-07T13:05:00.000Z\nTrend rule: no 4h trend read yet (needs 3 completed 4h candles in the bars); trend strategies can't enter yet, reversal strategies can. (recorded for the order gate: <home>/mtf/MNQ.json)\n",
     "stderr": ""
   },
   "bars --daily": {
     "status": 0,
-    "stdout": "wrote 5 daily bars for MNQ (tick 0.25, $0.5/tick) to <out>; last bar 2026-10-07T13:04:00.000Z, closed 2026-10-08T13:04:00.000Z\n",
+    "stdout": "wrote 4 daily bars for MNQ (tick 0.25, $0.5/tick) to <out>; last bar 2026-10-06T13:04:00.000Z, closed 2026-10-07T13:04:00.000Z\n",
     "stderr": ""
   },
   "bars bad request": {

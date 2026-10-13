@@ -14,6 +14,8 @@ const { readBriefing, renderBriefing, current } = require('../trading/briefing')
 const { familyRoot } = require('../trading/contracts');
 const { harnessHome } = require('../paths');
 const { context } = require('./cli');
+const { briefingAfterClock } = require('../trading/look-ahead');
+const { replayAt } = require('../trading/harness-now');
 
 const USAGE = 'usage: briefing.js --symbol MNQ [--json]';
 
@@ -27,6 +29,9 @@ function barBriefing({ symbol = null, json = false } = {}, ctx) {
   const b = readBriefing(harnessHome(c.env), symbol);
   const fallback = 'Take the market facts from the bars yourself, with the tools you have (or, without them, the cycle prompt and the analysts\' reports), and say so in your report\'s Data line.';
   if (!b) return { text: `No bar briefing for ${symbol}: the autonomous runner builds it after each closed bar. ${fallback}\n` };
+  // Under a replay clock, never a briefing of a bar that closed after it (no look-ahead: trading/look-ahead.js).
+  const later = briefingAfterClock(b, c.replayAt());
+  if (later) return { text: `The bar briefing for ${symbol} is not served: ${later}. ${fallback}\n` };
   // An old briefing (an earlier bar's, or yesterday's) is never served as this bar's: in an autonomous cycle, the bar
   // the cycle decides (FTH_CYCLE_BARS, from the runner) is the test, however long the cycle runs; else the clock.
   const cycleBar = cycleBarOf(c.env, symbol);
@@ -75,7 +80,16 @@ function briefedThisCycle(env, symbol) {
   if (!root) return null;
   const bar = cycleBarOf(env, root[1]);
   const b = bar ? readBriefing(harnessHome(env), root[1]) : null;
-  return b && b.asOf === bar ? b : null;
+  return b && b.asOf === bar && !afterReplayClock(env, b) ? b : null;
+}
+
+/** A briefing whose bar closed after the replay clock (or a refused clock: then the caller reads the bars, and is refused there). */
+function afterReplayClock(env, b) {
+  try {
+    return Boolean(briefingAfterClock(b, replayAt(env)));
+  } catch (_err) {
+    return true;
+  }
 }
 
 module.exports = { OPS, USAGE, barBriefing, briefedThisCycle, cycleBarOf, parseArgv };

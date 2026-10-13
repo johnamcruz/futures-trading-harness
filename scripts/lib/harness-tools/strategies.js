@@ -31,7 +31,7 @@ const { loadStrategies, scan: scanStrategies, recentSignals, barsStepMs, onTimef
 const { buildSignals, writeSignals } = require('../trading/signal-state');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
-const { context, say, ignoredRecord, withText, options } = require('./cli');
+const { context, atClock, say, ignoredRecord, withText, options } = require('./cli');
 const { liveRunner } = require('../runner-lock');
 const { scanSummary, recentLines } = require('./compact');
 const { liveSpecs } = require('../trading/broker-specs');
@@ -91,7 +91,7 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   if (view === 'summary' && !record && !at && require('./briefing').briefedThisCycle(c.env, symbol)) {
     return { text: `This bar's briefing is current (bar_briefing {"symbol": "${symbol}"}): its m3 candidates are this scan (each with its stop, exit and facts), and the trend rule and alignment are in it too. Read it there, once per role (trade-session: read once); strategies_show gives a strategy's rules, and strategies_scan with name one strategy's full result.\n` };
   }
-  const bars = readBarsArg(file);
+  const bars = atClock(c, readBarsArg(file), file); // no bar after a replay clock (no look-ahead)
   // The harness clock (a replay broker's replayed time), refused when unusable even with --now.
   const clock = c.now();
   const now = at ? new Date(at) : clock;
@@ -134,7 +134,7 @@ function recent({ file, symbol, count: raw, format = 'json' } = {}, ctx) {
   if (!file) throw new Error('recent needs a bars file');
   const count = raw === undefined ? 5 : Number(raw);
   if (!(Number.isInteger(count) && count >= 1 && count <= 50)) throw new Error(say(c, '--bars: 1 to 50', 'count: 1 to 50'));
-  const rows = recentSignals(strategies, readBarsArg(file), { symbol, count, selected: selectedSymbols(c.env) });
+  const rows = recentSignals(strategies, atClock(c, readBarsArg(file), file), { symbol, count, selected: selectedSymbols(c.env) });
   return { text: format === 'lines' ? recentLines(rows, { symbol: symbol ? String(symbol).toUpperCase() : '' }) : `${JSON.stringify(rows, null, 2)}\n` };
 }
 

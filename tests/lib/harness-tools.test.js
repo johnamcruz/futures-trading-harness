@@ -253,3 +253,29 @@ test('index: one function per agent operation, and none of the user\'s', () => {
   for (const [name, fn] of Object.entries(OPERATIONS)) assert.strictEqual(typeof fn, 'function', name);
   assert.ok(!Object.keys(OPERATIONS).some(n => /start|stop|record_day/.test(n)));
 });
+
+test('the bars operations under a replay clock (ctx.replayAt): a bar closing after it refuses the read; at or before it, or live, it reads', () => {
+  // The fixture's last bar opened 2026-04-28T04:12 and closed at 04:15.
+  const last = Date.parse('2026-04-28T04:15:00Z');
+  const ops = [
+    ['scan', ctx => strategies.scan({ file: CSV, symbol: 'MNQ' }, ctx)],
+    ['recent', ctx => strategies.recent({ file: CSV, symbol: 'MNQ' }, ctx)],
+    ['snapshot', ctx => marketSnapshot.snapshot({ file: CSV }, ctx)],
+    ['mtf', ctx => mtf.mtf({ file: CSV }, ctx)],
+    ['mtf daily', ctx => mtf.mtf({ file: CSV, daily: CSV }, ctx)],
+  ];
+  for (const [label, run] of ops) {
+    const env = { FTH_HOME: tmpDir() };
+    const ctx = at => ({ env, now: () => new Date(last + 2000), replayAt: () => at });
+    assert.throws(() => run(ctx(new Date(last - 1))), /: 1 bar\(s\) close after the replay clock \(2026-04-28T04:14:59\.999Z\), the first at 2026-04-28T04:15:00\.000Z/, label);
+    assert.doesNotThrow(() => run(ctx(new Date(last))), label);
+    assert.doesNotThrow(() => run(ctx(null)), `${label} live`);
+  }
+  // The refusal names the file read; a daily file says so.
+  assert.throws(() => mtf.mtf({ file: CSV }, { env: {}, replayAt: () => new Date(last - 1) }), new RegExp(`the bars file ${CSV.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: `));
+  const dailyBars = path.join(tmpDir(), 'd.json');
+  fs.writeFileSync(dailyBars, JSON.stringify(Array.from({ length: 5 }, (_, k) => ({ t: new Date(Date.parse('2026-04-24T00:00:00Z') + k * 864e5).toISOString(), o: 1, h: 2, l: 0, c: 1 }))));
+  assert.throws(() => mtf.mtf({ file: CSV, daily: dailyBars }, { env: {}, replayAt: () => new Date(last) }), /the daily bars file .*d\.json: 1 bar\(s\) close after the replay clock/);
+  // The default replayAt is the environment's replay clock: live, none.
+  assert.strictEqual(cli.context({ env: {} }).replayAt(), null);
+});
