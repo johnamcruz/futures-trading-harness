@@ -466,7 +466,10 @@ will judge them, before any measurement. Examples:
   fails to move price, then a turn, reverses"; `value_area`'s "the 3-bar flow
   confirmation at the prior day's POC adds edge beyond its range-expansion
   confirmation"; and for each, whether an RTH or a
-  volume condition improves it (a candidate claim, not a given).
+  volume condition improves it (a candidate claim, not a given);
+- one pre-registered hypothesis from the field-confluence study (R37): on
+  1-minute expansion bars in RTH, a move whose `flow.delta` opposes the
+  bar runs further than one whose delta agrees.
 
 **R12. Measurement.** Within the calibration fold, on NQ first, each claim
 is measured: the expectancy in R, the win rate and the drawdown with and
@@ -543,6 +546,65 @@ server's history around a roll is compared with the replay server's raw
 front-contract bars, since the indicators span the jump (section 4). The check is queued for when a practice account
 exists; until then a calibrated flow threshold is evidence about the
 replay server's history only, not trusted live.
+
+**R37. Pre-registered hypothesis: expansion against the bar's delta**
+(owner's decision, 2026-10-13; registered before any held-out look). One
+hypothesis, entered in the claim registry (R11) beside the flow
+strategies' claims (R34):
+
+> On 1m expansion bars (range ≥ 1.5-2× ATR), when `flow.delta` opposes the
+> bar's direction, the move over the next 3-5 bars continues further than
+> when it agrees (RTH).
+
+- **Motivation: the Train result.** The field-confluence study
+  (`docs/BACKTESTING.md`, "The field-confluence study") on MNQ 1-minute
+  bars from the replay server, Train only (2021-05 to 2023-06, 26 months,
+  662,009 bars), asked whether flow *confirms* a move. It found no usable
+  confluence: no agree class, for any field, event or timeframe, cleared
+  the 2-tick round-trip cost. The one consistent effect ran the other
+  way. On expansion bars in RTH, the events whose `flow.delta` disagreed
+  with the bar went further than those whose delta agreed. Moves are in
+  ticks after k bars, in the bar's direction, with 95% day-block bootstrap
+  intervals. Thresholds are the span's p60 (|delta| ≥ 26) and p80 (≥ 64):
+  - `expansion:1.5`, k = 3, p80, RTH: n agree / disagree = 16,416 / 795;
+    mean move -0.69 vs +9.47; agree minus disagree -10.17
+    [-15.84, -4.40]; follow-through 49.1% vs 53.8%.
+  - `expansion:1.5`, k = 5, p80, RTH: agree minus disagree -9.63
+    [-16.74, -2.98].
+  - `expansion:2`, k = 3, p80, RTH: n = 5,289 / 291; mean move -0.69 vs
+    +14.25; agree minus disagree -14.93 [-25.69, -4.55].
+  - `expansion:2`, k = 5, p80, RTH: agree minus disagree -18.88
+    [-31.85, -5.49].
+  - At p60, k = 3 and 5, both multiples: every RTH interval of agree minus
+    disagree also excludes zero, with the same sign.
+
+  The disagree class is small (2-5% of events). The study ran about 1,800
+  class comparisons at 1 minute, uncorrected (15% excluded zero), so this
+  is a pattern picked out of many: a hypothesis, not evidence.
+- **One hypothesis, not a family.** It is this single claim. No other
+  field, event, timeframe or session from the study becomes a claim
+  because of it. The trade side of a rule that would use it (fading or
+  following the bar) is not part of it.
+- **Tuned on Train only.** The free choices are the ATR multiple (1.5 to
+  2), the horizon (3 to 5 bars) and the |delta| threshold. They are
+  settled on Train alone, inside calibration's folds (R5, R12), and frozen
+  before any held-out month is read.
+- **Judged once.** The frozen specification is measured once on held-out
+  months: Select and Out-of-sample, the held-out half for flow parameters
+  (section 4), leaving out the months the parity look touched (March to
+  June and August 2024), which count as used (section 4, R34). It is a
+  claim like any other in the registry, so R12 and R13 judge it: it passes
+  only if agree minus disagree is below zero in RTH with its day-clustered
+  bootstrap p-value surviving Benjamini-Hochberg across the whole
+  registry, and the effect has the same sign in every year. The look is
+  logged in the ledger (R16); its Out-of-sample part counts against
+  Out-of-sample's look budget. It is never rerun or re-tuned on those
+  months.
+- **Trade side.** The replay server's history infers each trade's side
+  (R36), so `flow.delta` there is an estimate. The hypothesis is checked
+  again on flow from the live server, with the exchange's own flag, once
+  live minutes are recorded. Until then, whatever the held-out look shows
+  is evidence about the replay server's history only.
 
 ## 7. Promotion and the learning loop
 
