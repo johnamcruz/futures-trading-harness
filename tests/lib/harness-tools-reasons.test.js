@@ -104,3 +104,26 @@ test('reason_check: the MCP tool and the CLI give the operation\'s text', async 
   const cli = execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'reason-check.js'), '--symbol', 'MNQ', '--reasons', reasons], { env: { ...process.env, ...env(h) }, encoding: 'utf8' });
   assert.strictEqual(cli, want);
 });
+
+test('reason_check: the runner\'s bar-less skip (no attempt) is the verdict the model was shown: kept, its component traded through it', () => {
+  const h = home();
+  // prop/live-runner.js screen with no attempt: no bar, expiresAt = at, contract null.
+  const skip = at => ({ at, strategy: 'prop_portfolio', component: 'keltner', symbol: 'MNQ', contractId: 'MNQ:2026-06', direction: 'short', action: 'skip', maxSize: 0, contract: null, reason: 'no topstep_100k attempt', expiresAt: at });
+  prop.appendVerdict(h, skip('2026-06-10T13:57:04.000Z'));
+  const t = check({ symbol: 'MNQ', reasons: 'CYCLE RESULT: no-trade - prop_portfolio verdict is skip (no topstep_100k attempt); keltner short skipped by the policy' }, ctx(h)).text;
+  assert.match(t, /- TRUE verdict-skip: "prop_portfolio verdict is skip" - verdict: prop_portfolio short skip \(no topstep_100k attempt\)\n/);
+  assert.match(t, /- TRUE no-attempt: "no topstep_100k attempt" - no topstep_100k attempt is running\n/);
+  assert.doesNotMatch(t, /- (?:FALSE|UNPARSED|UNCHECKED) /, "the skipped component clause is the same true claim, counted once");
+  assert.match(t, /- keltner short: 1 hard stops no-trade \(traded through prop_portfolio \(its verdict decides\)\)/);
+  assert.match(t, /- prop_portfolio short: 1 hard stops no-trade \(the verdict is skip \(no topstep_100k attempt\)\)/);
+  // One written in another bar's close window is not this bar's.
+  const h2 = home();
+  prop.appendVerdict(h2, skip('2026-06-10T13:54:04.000Z'));
+  const t2 = check({ symbol: 'MNQ', reasons: 'no-trade - prop_portfolio verdict is skip' }, ctx(h2)).text;
+  assert.match(t2, /- UNCHECKED verdict-skip: "prop_portfolio verdict is skip" - no verdict on the bar in these facts\n/, 'none found: unchecked, never false');
+  assert.match(t2, /- keltner short: 1 hard stops pass/);
+  // A named account that is running: false; another account named while one runs: checked against the started ones.
+  const h3 = home({ attempt: true });
+  assert.match(check({ symbol: 'MNQ', reasons: 'no-trade - no topstep_50k attempt' }, ctx(h3)).text, /- FALSE no-attempt: "no topstep_50k attempt" - the topstep_50k attempt is active\n/);
+  assert.match(check({ symbol: 'MNQ', reasons: 'no-trade - no topstep_100k attempt' }, ctx(h3)).text, /- TRUE no-attempt: "no topstep_100k attempt" - no topstep_100k attempt is running\n/);
+});

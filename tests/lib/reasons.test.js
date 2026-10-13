@@ -142,7 +142,13 @@ test('verdict-skip: checked against the verdict\'s action, named or not', () => 
   assert.strictEqual(claim(reasonCheck('no-trade - orb skipped by the policy', skip), 'verdict-skip').check, true, 'named by its component');
   assert.strictEqual(claim(reasonCheck('no-trade - prop_portfolio verdict is skip', full), 'verdict-skip').check, false);
   assert.match(claim(reasonCheck('no-trade - skip verdict', full), 'verdict-skip').why, /verdict: prop_portfolio long full 3/);
-  assert.match(claim(reasonCheck('no-trade - skip verdict', factsFromBriefing(briefing({ candidates: [ORB] }))), 'verdict-skip').why, /no verdict on the bar/);
+  // No verdict in the facts: unchecked, never false (the runner may have shown one the facts don't hold).
+  const none = claim(reasonCheck('no-trade - skip verdict', factsFromBriefing(briefing({ candidates: [ORB] }))), 'verdict-skip');
+  assert.deepStrictEqual([none.check, none.why], ['unchecked', 'no verdict on the bar in these facts']);
+  // An account named: no-attempt, checked against the started attempts.
+  const named = factsFromBriefing(briefing(), { attempts: [{ account: 'topstep_50k', started: true, status: 'active' }] });
+  assert.strictEqual(claim(reasonCheck('no-trade - no topstep_100k attempt', named), 'no-attempt').check, true);
+  assert.strictEqual(claim(reasonCheck('no-trade - no topstep_50k attempt', named), 'no-attempt').check, false);
 });
 
 test('trend rule: a step-2 veto of a reversal fading the trend is judgment (unchecked), never FALSE; not fading, FALSE', () => {

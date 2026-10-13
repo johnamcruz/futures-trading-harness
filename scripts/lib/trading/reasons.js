@@ -117,7 +117,7 @@ const CLAIMS = [
   ['trend-blocks', /trend\b.*\b(?:blocks?|blocking|prohibits?|violation)|\bblocks? (?:all )?trend|blocked by .*trend|against the prevailing trend/i],
   ['no-entry-window', /opening (?:print|blackout)|no[- ]entry window|no entries (?:allowed )?until \d|entries (?:are )?blocked until \d|outside (?:the )?(?:trading )?session|session opens at|into the close|news blackout|in a (?:news )?blackout/i],
   ['verdict-skip', /verdict (?:is |was |says |action (?:is )?)?:?\s*skip|skip verdict|(?:policy|verdict) skipped|skipped by (?:the )?(?:policy|verdict)/i],
-  ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
+  ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|\bno [a-z0-9_]+ attempt\b|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
   ['nothing-fired', /\bno (?:valid )?(?:strategy |strategies |candidate |rules? )*(?:candidates?|strateg(?:y|ies)(?! verdict)|signals?|setups?)\b|\b0 candidates\b|candidates: \[\]|\bnone fired\b|\bno rules fired\b|trigger(?:s)? (?:not (?:fired|met)|conditions (?:are )?not met)|no valid entry trigger/i],
   // Room: "not enough" only in negative words; numbers ("first level 0.35R", "3R vs 2R needed") are read for what they say.
@@ -196,6 +196,13 @@ function checkClaim(kind, clause, facts, text = clause) {
   }
   if (kind === 'no-attempt') {
     if (!facts.attempt) return ok('unchecked', 'no attempt state recorded');
+    // An account named ("no topstep_100k attempt"): that account's attempt, from the started ones when the facts list them.
+    const named = (/\bno ([a-z0-9]+_[a-z0-9_]+) attempt\b/i.exec(clause) || [])[1];
+    if (named && named !== facts.attempt.account) {
+      if (!Array.isArray(facts.attempts)) return ok('unchecked', `the facts hold the ${facts.attempt.account || 'no'} attempt, not ${named}'s`);
+      const a = facts.attempts.find(x => x.account === named);
+      return a && a.status === 'active' ? ok(false, `the ${named} attempt is active`) : ok(true, `no ${named} attempt is running${a ? ` (it is ${a.status})` : ''}`);
+    }
     return facts.attempt.status === 'active' ? ok(false, `the ${facts.attempt.account} attempt is active`) : ok(true, `the attempt is ${facts.attempt.status}`);
   }
   if (kind === 'no-verdict') {
@@ -205,7 +212,8 @@ function checkClaim(kind, clause, facts, text = clause) {
   if (kind === 'verdict-skip') {
     const named = setupNamed(clause, facts);
     const v = facts.setups.filter(x => x.verdict && (!named || x.name === named.name || x.component === named.name));
-    if (!v.length) return facts.scanned ? ok(false, 'no verdict on the bar') : ok('unchecked', 'no scan recorded for the bar');
+    // None found: unchecked, never false (a verdict the facts don't hold may still be the one the model was shown).
+    if (!v.length) return ok('unchecked', 'no verdict on the bar in these facts');
     const skip = v.filter(x => x.verdict.action === 'skip');
     return skip.length ? ok(true, `verdict: ${skip.map(x => `${x.name} ${x.direction} skip${x.verdict.reason ? ` (${x.verdict.reason})` : ''}`).join(', ')}`)
       : ok(false, `verdict: ${v.map(x => `${x.name} ${x.direction} ${x.verdict.action}${x.verdict.maxSize ? ` ${x.verdict.maxSize}` : ''}`).join(', ')}`);
@@ -356,7 +364,8 @@ function factsFromBriefing(b, { attempts = null, verdicts = [] } = {}) {
   const rows = Array.isArray(attempts) ? attempts.filter(r => isObj(r) && r.started) : null;
   const a = rows ? rows.find(r => r.status === 'active') || rows[0] || null : null;
   const attempt = !rows ? null : a ? { account: a.account || null, status: a.status || 'unknown', entryBlock: a.entryBlock || null } : { account: null, status: 'none', entryBlock: null };
-  return { t: b && b.closedAt ? b.closedAt : null, et: m3.et || null, window, news: isObj(m3.news) ? m3.news : null, scanned, setups, trendRule: rule, attempt };
+  const started = rows ? rows.map(r => ({ account: r.account || null, status: r.status || 'unknown' })) : null;
+  return { t: b && b.closedAt ? b.closedAt : null, et: m3.et || null, window, news: isObj(m3.news) ? m3.news : null, scanned, setups, trendRule: rule, attempt, attempts: started };
 }
 
 // ---------------------------------------------------------------------------------------------

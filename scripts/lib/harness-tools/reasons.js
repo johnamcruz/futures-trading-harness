@@ -34,15 +34,22 @@ function briefingNow(c, root) {
 }
 
 /**
- * The policy verdicts recorded for the briefing's bar and family, not expired: filtered first, then the latest per
+ * The policy verdicts recorded for the briefing's bar and family, not expired (or the runner's bar-less skip written in
+ * the bar's close window): filtered first, then the latest per
  * strategy, as the gate keys them (prop-state latestVerdict: strategy and contract family), so one family's verdict
  * never hides another's.
  */
 function verdictsFor(home, b, now) {
   const bar = Date.parse(b.asOf);
+  const closed = Date.parse(b.closedAt);
+  const next = closed + (Number(b.minutes) > 0 ? Number(b.minutes) : 0) * 60000;
+  // The runner's skip with no bar (no attempt, a contract without specs: prop/live-runner.js screen) expires as it is
+  // written, yet it is the verdict the model was shown: kept when it was written in this bar's close window.
+  const barless = v => !v.bar && v.action === 'skip' && Date.parse(v.at) >= closed && Date.parse(v.at) < next;
   const latest = new Map();
   for (const v of prop.readVerdicts(home)) {
-    if (familyRoot(v.contract || contractRoot(v.contractId || v.symbol || '')) !== familyRoot(b.symbol) || Date.parse(v.bar) !== bar || !(Date.parse(v.expiresAt) > now.getTime())) continue;
+    if (familyRoot(v.contract || contractRoot(v.contractId || v.symbol || '')) !== familyRoot(b.symbol)) continue;
+    if (!barless(v) && (Date.parse(v.bar) !== bar || !(Date.parse(v.expiresAt) > now.getTime()))) continue;
     latest.set(v.strategy, v);
   }
   return [...latest.values()];
