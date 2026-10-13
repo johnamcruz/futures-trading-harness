@@ -135,6 +135,24 @@ test('order gate: a setup tag that is not first is refused with where it goes', 
   assert.match(r.stderr, /\[setup-tag\] Rationale must start with the strategy as setup:<name>/);
 });
 
+test('order gate wiring: an entry carries its stop as stopLossBracket; a stop only in the rationale is refused, [protect] and [exit] go without one', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const r = gate(orderPayload(EXIT_BASE), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[stop-defined\] Entry has no stop bracket: every entry carries its stop as stopLossBracket/);
+  assert.match(r.stderr, /never send it again without one, and report the broker's message to the user/);
+  for (const b of [{ ticks: 0, type: 'stop' }, { ticks: -40, type: 'stop' }, { ticks: 2.5, type: 'stop' }, { ticks: '40', type: 'stop' }, { ticks: 40, type: 'limit' }, { ticks: 40 }, { ticks: 40, type: 'STOP' }]) {
+    const bad = gate(orderPayload({ ...ORDER, stopLossBracket: b }), env);
+    assert.strictEqual(bad.code, 2, JSON.stringify(b));
+    assert.match(bad.stderr, /\[stop-defined\]/, JSON.stringify(b));
+  }
+  assert.strictEqual(gate(orderPayload(ORDER), env).code, 0, 'the same entry with its bracket goes');
+  for (const rationale of ['[protect] stop for the anytime long at 21480', '[exit] flatten']) {
+    const ok = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale }), env);
+    assert.strictEqual(ok.code, 0, `${rationale}: ${ok.stderr}`);
+  }
+});
+
 test('order gate: an order that contradicts its rationale is refused with what disagrees', () => {
   const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ side: 'sell', rationale: 'setup:orb long break above 21500, stop 21480' })), env);
@@ -637,6 +655,24 @@ test('MCP gateway: an entry for a regime-gated strategy (vwap_reclaim) fetches i
   // An exit naming the strategy is never regime-checked.
   const exit = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_BARS: 'not json' }, [call(4, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten setup:vwap_reclaim' })]);
   assert.strictEqual(text(exit.byId[4]), 'forwarded:tools/call:place_order');
+});
+
+test('MCP gateway wiring: an entry without its stopLossBracket is refused and never reaches the broker; with it, no stop-defined refusal', async () => {
+  const text = r => r.result.content[0].text;
+  const argsFile = path.join(tmpDir(), 'args.jsonl');
+  // (Other checks refuse this bare order too, e.g. no plan recorded: only the stop-defined line is under test.)
+  const bare = await gatewayRun({ FAKE_ARGS: argsFile }, [call(1, 'place_order', EXIT_BASE), call(2, 'place_order', { ...ORDER, stopLossBracket: { ticks: 0, type: 'stop' } })]);
+  for (const id of [1, 2]) {
+    assert.ok(bare.byId[id].result.isError, text(bare.byId[id]));
+    assert.match(text(bare.byId[id]), /\[stop-defined\] Entry has no stop bracket: every entry carries its stop as stopLossBracket/);
+  }
+  const sent = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
+  assert.ok(!sent.some(c => c.name === 'place_order'), 'no unbracketed entry reached the broker');
+  const bracketed = await gatewayRun({}, [call(3, 'place_order', ORDER)]);
+  assert.doesNotMatch(text(bracketed.byId[3]), /\[stop-defined\]/);
+  // A [protect] stop for an open position goes without a bracket.
+  const protect = await gatewayRun({ FAKE_POSITIONS: LONG1 }, [call(4, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' })]);
+  assert.strictEqual(text(protect.byId[4]), 'forwarded:tools/call:place_order');
 });
 
 test('MCP gateway: an order call reusing an in-flight request id is refused', async () => {

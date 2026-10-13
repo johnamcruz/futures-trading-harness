@@ -55,9 +55,13 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
   the position, price, or working orders.
 - Prices are multiples of `tickSize` (MNQ/MES 0.25). Round before sending.
 - `trailPrice` is an absolute price level, not a distance.
-- `stopLossBracket` / `takeProfitBracket` are in ticks and work only on
-  accounts with Auto OCO Brackets. If the account rejects brackets, enter
-  without them and immediately place a separate `[protect]` stop.
+- Every entry carries `stopLossBracket` (and `takeProfitBracket` when it has
+  a target), in whole ticks from the fill. A broker that can't attach them
+  refuses the entry: never enter without them; report the broker's message.
+  A refusal is `success: false` with an `errorCode` other than 6
+  (`OrderPending`) or 7 (`UnknownError`). Any other error reply (codes 6 and 7
+  included) is an unknown outcome: read positions and orders, protect first,
+  never re-send.
 - `close_position` does not cancel resting stops and targets. After any exit,
   check `list_open_orders` and cancel leftovers.
 - Rationale convention (the order gate reads it):
@@ -118,11 +122,14 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - Risk per trade = |entry − stop| ÷ tickSize × tickValue × size. Keep it at or
   below 25% of the remaining daily loss allowance (`remainingBeforeLimit` in
   `get_account_snapshot`), and at or below the plan's stated $ risk.
-- Every open position has a protective stop working at the exchange: a
-  `stopLossBracket`, or a separate `[protect]` stop order placed as soon as the
-  fill shows (the order's one status check, or the next cycle's read). If the stop can't be placed, close the
-  position. An entry without a stop bracket that is still unfilled at its one
-  status check is cancelled, not waited on (broker-mcp skill).
+- Every open position has a protective stop working at the exchange: the
+  entry's `stopLossBracket`, checked as soon as the fill shows (the order's
+  one status check, or the next cycle's read). A separate `[protect]` stop
+  only repairs protection on an existing position (resized after a partial
+  exit, or a stop cancelled or missing), placed at once; never a way to
+  enter without a bracket. If the stop can't be placed, close the position. A working entry
+  without a stop bracket (one the gate never checked, e.g. placed outside
+  the harness) is cancelled, not waited on (broker-mcp skill).
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the

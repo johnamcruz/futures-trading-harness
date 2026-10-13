@@ -107,7 +107,7 @@ A strategy without `sessions` trades the whole session; `orb` trades only
 | Firm rules | The prop firm (its account profile) | Daily loss, trailing drawdown, 15:10 CT (16:10 ET) flatten | No |
 | Server guardrails | The broker MCP server | Trading enabled, accounts, symbols, size, daily $ loss | No |
 | **MCP gateway** (authoritative) | `scripts/mcp-gateway.js` in front of the broker MCP server | Everything the order gate checks, plus live account facts: `[exit]`/`[protect]` orders must really reduce the open position (resting stops and limits, including join orders, can't stack beyond it), no entries while a position in any month of the contract is open, loss streak and daily losses from real fills, working orders only shrink (never leaving part of a position without a stop) and only orders working an open position can be repriced, no cancelling the last protective stop, optional regime check. Order-changing calls go through one lane, one at a time (no batches): each waits for the server's answer, and orders that filled but aren't in positions yet are counted | Not through orders (deterministic, fails closed on missing or malformed account data). Limits: a fill the exchange reports more than 30 s late, and calls made outside the gateway |
-| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the sizing verdict, the balance reconciled with the broker's fills; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, numeric stop, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
+| Order gate hook | PreToolUse on Claude Code, Codex, Qwen Code | Market session (18:00-16:00 ET, can't be skipped), prop challenge for strategies with an `account` (started attempt, fresh balance snapshot, daily limits, size budget for the stop, the sizing verdict, the balance reconciled with the broker's fills; can't be skipped), kill switch, paper mode, strategy (exists, `active`, instrument, session), setup tag first, a stop bracket (`stopLossBracket`) on every entry, plan with `contractId`, no-entry windows, news blackouts, journal loss streak, review before next entry, max entries | No (fails closed; locked in autonomous runs) |
 | Autonomous lock-down | `scripts/autotrader.js` | `FTH_AUTONOMOUS=1` (gate can't be skipped or disabled), kill switch, caps, timeouts, end-of-day catch-up. Claude: allowlist (broker tools, scoped reads incl. the home's `bars-scratch`, harness scripts, calendar sites) plus explicit denies on credentials and harness files. Qwen: the same rules in `workspace/.qwen/settings.json`. opencode: the same in the generated `workspace/opencode.json` (everything denied, then the broker and harness tools, skills, the roles, reading; no shell, edits or web fetch), the runner's directories and the same lock-down passed per run. Codex: its `workspace-write` sandbox (writes only `workspace/`, `/tmp`, and the news-blackouts directory; the shell is available), plus a fingerprint check of the workspace instructions and settings after every run | Not through its own config |
 | Rules, skills, roles | This repo | Risk math, strategy rules, process | Soft |
 
@@ -622,7 +622,12 @@ node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-0
 
 `place_order` rationales start with `setup:<strategy> ...` for entries,
 `[exit] ...` to close or reduce, and `[protect] ...` for a protective stop or
-target. Exits and protective orders skip the journal checks (plan, reviews,
+target that repairs an open position's protection. Every entry carries its
+stop as `stopLossBracket {ticks, type: "stop"}`: the gate's `stop-defined`
+check refuses an entry without one (skippable with `FTH_ORDER_GATE_SKIP`
+only outside autonomous runs), and the rule is to always send it. A broker
+that can't attach it refuses the entry, and it is never sent again without
+one. Exits and protective orders skip the journal checks (plan, reviews,
 limits) and the trading hours, so risk can always be reduced; the gateway
 only checks that they really reduce the position.
 

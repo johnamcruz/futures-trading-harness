@@ -73,7 +73,7 @@ const TOOLS = {
     input: {
       accountId: field('number', true), contractId: field('string', true), side: field('string', true, 'buy | sell'), type: field('string', true, 'market | limit | stop | trailing_stop | join_bid | join_ask'),
       size: field('number', true), limitPrice: field('number'), stopPrice: field('number'), trailPrice: field('number', false, 'an absolute price level'),
-      stopLossBracket: field('object', false, '{ ticks, type }'), takeProfitBracket: field('object', false, '{ ticks, type }'), customTag: field('string'),
+      stopLossBracket: field('object', false, '{ ticks, type: "stop" }: whole ticks above 0 from the fill; the server attaches the stop leg, or refuses the entry (success: false), or flattens a position whose stop it can\'t confirm and says so (an error that a position may be open is no refusal); every harness entry carries one'), takeProfitBracket: field('object', false, '{ ticks, type: "limit" }: whole ticks above 0 from the fill'), customTag: field('string'),
       rationale: field('string', true, 'at least 20 characters'),
     },
     result: { orderId: field('number|null', true), ...outcome },

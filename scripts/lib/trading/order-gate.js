@@ -33,15 +33,26 @@ const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
 const SETUP_TAG = /^\s*setup:([a-z0-9][a-z0-9_-]*)\b/i;
-// "stop 21450.25", "stop at 21450", "stop: 21450" - a number right after the word.
-const STOP_IN_TEXT = /\bstop(?:\s+at)?\s*[:=@]?\s*\d+(?:\.\d+)?\b/i;
-// The same, capturing the price; a number followed by a unit (40 ticks, 2R, 10 pts) is not a price.
+// An entry's stop goes with it as its stopLossBracket, or the entry doesn't go (stop-defined).
+const STOP_BRACKET_REQUIRED = 'Entry has no stop bracket: every entry carries its stop as stopLossBracket {ticks, type:"stop"}, '
+  + 'ticks a whole number above 0 from the fill and type "stop" (or "trailing_stop"); order_plan gives it. A stop stated only in the rationale is not one. '
+  + 'A broker that can\'t attach the bracket refuses the entry: never send it again without one, and report the broker\'s message to the user.';
+// "stop 21450.25", "stop at 21450", "stop: 21450": the price right after the word; a number followed by a unit (40 ticks, 2R, 10 pts) is not a price.
 // Thousands separators are allowed (21,480.25); a ratio (2:1) or an ATR multiple is not a price either.
 const PRICE_AFTER = word => new RegExp(`\\b${word}(?:\\s+at)?\\s*[:=@]?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)\\b(?![,.]?\\d)(?!\\s*(?:ticks?|pts?|points?|r\\b|x\\b|%|atr\\b|:\\s*\\d))`, 'i');
 const STOP_PRICE = PRICE_AFTER('stop');
 const TARGET_PRICE = PRICE_AFTER('target');
 // The side named right after the tag: "setup:orb long ...".
 const SIDE_WORD = /^\s*setup:[a-z0-9_-]+\s+(long|short|buy|sell)\b/i;
+
+// The order types a stop bracket may take, lowercase as the interface's enum: a stop leg (a limit or market leg is no stop).
+const STOP_BRACKET_TYPES = new Set(['stop', 'trailing_stop']);
+
+/** True when `b` is a stop bracket: {ticks: a whole number above 0, type: "stop" | "trailing_stop"}. */
+function isStopBracket(b) {
+  return Boolean(b) && typeof b === 'object' && typeof b.ticks === 'number' && Number.isInteger(b.ticks) && b.ticks > 0
+    && STOP_BRACKET_TYPES.has(b.type);
+}
 
 function isRiskReducing(rationale) {
   return RISK_REDUCING.test(String(rationale || ''));
@@ -289,10 +300,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     }
   }
 
-  const bracket = input.stopLossBracket && Number(input.stopLossBracket.ticks) > 0;
-  add('stop-defined', bracket || STOP_IN_TEXT.test(rationale) ? null
-    : 'Entry has no stop: add stopLossBracket, or state the stop price in the rationale ("stop 21450.25") '
-      + 'and place a [protect] stop order right after the fill.');
+  // Every entry carries its stop as its stopLossBracket: a stop stated only in the rationale isn't one.
+  add('stop-defined', isStopBracket(input.stopLossBracket) ? null : STOP_BRACKET_REQUIRED);
 
   add('order-consistency', checkConsistency(input, rationale, specOf));
   // The model read how to trade before trading (Claude Code transcripts; skills-loaded.js).

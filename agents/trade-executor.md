@@ -39,17 +39,30 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
    - **Time stop** (`maxBars` set): close at market once the trade has been
      open that many bars without filling stop or target.
    `place_order` with `stopLossBracket` (and `takeProfitBracket` only for a
-   target) in ticks when the account supports brackets. Rationale:
+   target) in ticks from the fill: every entry carries its stop as its
+   bracket, `stopLossBracket {ticks, type: "stop"}` (the gate refuses an
+   entry without one, a check autonomous runs can't skip; always send it). Rationale:
    `setup:<name> <side> <trigger>, stop <price>[, target <price>], risk $<x>`.
-4. If brackets are rejected, place the entry without them; if the one status
-   check (step 5) shows the fill, place the stop with rationale
-   `[protect] stop for <setup> <side> filled at <price>` and the target with
-   `[protect] target for ...`.
-5. Check the entry's status once after placing it (`list_open_orders` and
+4. Read the reply.
+   - **Refused**: a reply with `success: false` and an `errorCode` other
+     than 6 (`OrderPending`) or 7 (`UnknownError`) (a refusal of its
+     brackets included), or a `Blocked by ...` refusal (see Blocks). Nothing was opened. Report `ABORTED` (a block: `BLOCKED`)
+     with the message verbatim and journal it as a note. Never send the
+     entry again without its bracket, and never enter without it to place
+     a stop afterwards; the caller reports the message to the user.
+   - **Any other error** (codes 6 and 7 included, any other error reply, a
+     lost reply, a timeout, or a message that a position may be open): the outcome is unknown, not a refusal. Read
+     `list_open_positions` and `list_open_orders` at once. A position open
+     without a working stop that covers it gets a `[protect]` stop, or
+     `close_position`, before anything else. Never send the entry again
+     (the gateway holds new entries with `[order-pending]` until the order
+     settles). Report what you found.
+5. Check the entry's status once after a successful reply (`list_open_orders` and
    `list_open_positions`). Never wait or poll for a fill (repeated bars,
    quote, or order reads); see the broker-mcp skill.
    - **Filled**: verify with `list_open_orders` that the protective stop is
-     working. If it can't be placed, `close_position` immediately with an
+     working. If it isn't (missing or cancelled), place it as a `[protect]`
+     stop; if it can't be placed, `close_position` immediately with an
      `[exit]` rationale and report.
    - **Working, with its stop bracket** (a resting limit or stop, or a market
      order the broker hasn't filled; the bracket's stop works once it fills):
@@ -57,19 +70,17 @@ You execute. You don't analyse, re-plan, or second-guess. Load the skill
      stop bracket is attached. The caller journals that and
      ends the cycle (interactively, waits for the next check); the next
      cycle verifies the fill and the stop.
-   - **Working, without a stop bracket** (step 4): it would fill with no
-     stop, so `cancel_order` it, then read `list_open_orders` and
-     `list_open_positions` once. Any quantity that filled is protected
-     first, whatever the rest shows: its `[protect]` stop (or
-     `close_position`). Gone and flat: report `ABORTED` (entry cancelled: no
-     stop bracket); the caller journals a `result:nofill` review for it,
-     since the gate counts a placed entry until it is reviewed. Filled (in
-     whole or part) before the cancel: place its `[protect]` stop (or
-     `close_position`) and report `EXECUTED`, protected. Still working:
-     `cancel_order` once more; if it is still working after that, report
-     `ABORTED` with the entry still working and no stop bracket (the cycle
-     result is `error`), so the next cycle cancels it first (interactively,
-     the caller tells the user).
+   - **Flat, no working entry** (the reply was a success with an order id,
+     but no position and no working entry order show: the broker reports
+     the entry closed or not filled, e.g. it flattened the position because
+     it couldn't confirm the stop, or cancelled the order): report `ABORTED`
+     with the broker's message. The caller journals a review for it:
+     `result:nofill` only when nothing shows the order filled. If the reply
+     or the broker's message says a position was opened or closed, or
+     `search_trades` shows any fill for the order, the usual review of a
+     closed trade. If it can't be told yet (fills can be reported late), no
+     review this cycle: the next cycle's flat-with-an-unreviewed-entry step
+     decides from `search_trades`.
 
 ## Management (only as the plan says)
 

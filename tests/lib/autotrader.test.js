@@ -548,7 +548,7 @@ test('a policy strategy\'s verdicts go into the cycle prompt as the only allowed
     { strategy: 'prop_flow_1m', component: 'ofi', direction: 'short', action: 'skip', reason: 'the size budget is below one contract at this stop' },
   ];
   const text = p.trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 21500, file: '/b.json', contractId: 'MNQ' }, verdicts }]);
-  assert.match(text, /prop_portfolio: long setup from supertrend, verdict full: enter only as setup:prop_portfolio, NQ buy, at most 3, stopLossBracket.ticks 40/);
+  assert.match(text, /prop_portfolio: long setup from supertrend, verdict full: enter only as setup:prop_portfolio, NQ buy, at most 3, stopLossBracket \{ticks: 40, type: "stop"\}/);
   assert.match(text, /prop_flow_1m: the short setup from ofi is skipped \(the size budget is below one contract at this stop\); no entry/);
 });
 
