@@ -81,7 +81,6 @@ const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const round = (x, d = 2) => (num(x) === null ? null : Number(x.toFixed(d)));
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const etClock = ms => ET.format(new Date(ms));
-const NO_ENTRY = /\(no entries\)|closed/;
 
 // The expectation (the priority order's mechanical steps) and the reason checker: trading/reasons.js, shared with the
 // reason_check harness tool, so a cycle's roles check their reasons by the same rules the scorecard scores them.
@@ -230,12 +229,17 @@ function briefingAt(rec, { symbol, barT, t, scan, tf }) {
   }
 }
 
+/** The session window at time t as the briefing states it, with whether it allows entries (its own field, never its name). */
+function windowAt(t) {
+  const win = sessionWindow(new Date(t));
+  return { name: win.name, until: etClock(win.until.getTime()), et: etClock(t), entriesAllowed: win.entries === 'allowed' };
+}
+
 /** The facts at one decision: window, setups (with the trend rule, room, read, confluence), trend rule per side, attempt. */
 function factsAt(label, rec, { home, tf, accounts }) {
   const t = Date.parse(label.t);
-  const win = sessionWindow(new Date(t));
   const facts = {
-    t: label.t, et: etClock(t), window: { name: win.name, until: etClock(win.until.getTime()), et: etClock(t), entriesAllowed: !NO_ENTRY.test(win.name) },
+    t: label.t, et: etClock(t), window: windowAt(t),
     scanned: false, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
     // A strategy's exit plan and bar size (its max_bars count in its own bars).
@@ -274,7 +278,7 @@ function factsAt(label, rec, { home, tf, accounts }) {
         prevailing: pm ? { label: pm[1], trend: pm[2] } : null,
         room: bc && bc.needR !== undefined && num(bc.stopPoints) > 0 ? { inTheWay: bc.inTheWay ? { name: bc.inTheWay.name, R: bc.inTheWay.R } : null, needR: bc.needR } : null,
         alignment: briefing ? briefing.alignment[r.direction] || 'unknown' : null,
-        confluence: conf, blocked: bc ? bc.blocked || null : null, vwapSide: bc ? bc.vwapSide : null, lunch: /lunch/.test(win.name),
+        confluence: conf, blocked: bc ? bc.blocked || null : null, vwapSide: bc ? bc.vwapSide : null, lunch: /lunch/.test(facts.window.name),
         verdictCombine: v && isObj(v.combine) ? v.combine : null,
       });
     }
@@ -459,4 +463,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + `reasons: ${s.reasons.claims} claims, ${s.reasons.false} false (${s.reasons.falseIncidental} incidental); wrong-reason rate ${pct(s.reasons.wrongReasonRate)} (incidental ${pct(s.reasons.incidentalWrongRate)})\n`
   + `trades ${s.trades.n} (${s.trades.sumR}R, $${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`;
 
-module.exports = { VERSION, CATEGORIES, STEPS, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf };
+module.exports = { VERSION, CATEGORIES, STEPS, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt };

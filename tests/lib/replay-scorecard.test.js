@@ -562,3 +562,16 @@ test('"no room concerns" is not a room shortage', () => {
   for (const text of ['no room concerns', 'no room issue', 'no room problems']) assert.deepStrictEqual(checkReasons(`CYCLE RESULT: executed - short, ${text}`, f).claims, [], text);
   assert.strictEqual(checkReasons('CYCLE RESULT: no-trade - no room to the level', f).claims[0].kind, 'no-room');
 });
+
+test('the window at a decision allows entries only by its own field: the opening print, into the close and the daily break never do', () => {
+  const { windowAt, checkReasons } = require('../../scripts/lib/replay/scorecard');
+  const at = iso => Date.parse(iso);
+  assert.deepStrictEqual([windowAt(at('2026-06-01T13:32:02Z')).name, windowAt(at('2026-06-01T13:32:02Z')).entriesAllowed], ['opening print', false]);
+  assert.strictEqual(windowAt(at('2026-06-01T13:36:02Z')).entriesAllowed, true, 'the opening drive');
+  assert.strictEqual(windowAt(at('2026-06-01T19:47:02Z')).entriesAllowed, false, 'into the close');
+  assert.strictEqual(windowAt(at('2026-06-01T21:30:00Z')).entriesAllowed, false, 'the daily break');
+  // A true "opening print, no entries" reason at 09:32 is true, not false.
+  const f = { window: windowAt(at('2026-06-01T13:32:02Z')), scanned: true, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, styleOf: () => null };
+  const r = checkReasons('CYCLE RESULT: no-trade - opening print window until 09:35 ET', f);
+  assert.ok(r.claims.length && r.claims.every(c => c.check === true), JSON.stringify(r.claims));
+});
