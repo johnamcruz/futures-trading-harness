@@ -506,6 +506,44 @@ repository's code, gated exactly as a rulebook change, and judged only on
 months it never trained on. The harness never depends on it: the agent runs
 the same with or without the adapter, on any model.
 
+**R33. A strategy change re-learns automatically** (owner's decision).
+Strategies are documents read live, so an edited `STRATEGY.md` is traded
+on the next cycle; what was *learned* about it is not, and goes stale. So:
+
+- **Fingerprint.** Every strategy has a content fingerprint (its rules,
+  parameters, exits and skip rules; the body's wording included, since
+  the model reads it). Every learned item records the fingerprints it was
+  learned on: the rulebook's values, the calibration verdicts, the archive
+  entries, the verified examples, and the champion.
+- **Staleness in code.** A fingerprint that differs from the one recorded
+  marks everything that depends on it stale; a check and a test catch it,
+  so it cannot pass unnoticed. A new strategy has no learned items and
+  starts stale.
+- **Re-learning is triggered, not remembered.** A strategy change is a
+  trigger for the training loop (R25), beside new data (R17): calibration
+  of that strategy's claims (R11-R13), the Monte Carlo search over the
+  rulebook values it affects (R8-R10), and a replay scored by the
+  scorecard (R19), in the tuning and held-out quarters as for any change.
+- **Paper until re-verified.** Until its re-learned rulebook passes every
+  verifier (R26) and the owner approves it (R25), a changed or new
+  strategy trades **paper only**: the gate refuses its live entries, as
+  for `status: paper`, and a policy strategy's verdict for that component
+  is a skip naming the reason. Everything else keeps trading on the
+  current champion. Exits and protective stops of an open position are
+  never affected.
+- **What was learned can't be changed by a later change.** Each promoted
+  rulebook is sealed with its own hash over its values, its evidence and
+  the strategy fingerprints it was learned on; versions are kept, never
+  edited in place (R18). The runner and the gate verify the seal before
+  using it: a rulebook whose seal doesn't match (hand-edited, partly
+  copied, or stale), or whose recorded fingerprints differ from the
+  strategies now in the tree, is not used for the strategies it covers,
+  which then trade paper as above (fails closed). Only a promotion writes
+  a new sealed version.
+- **Promotion as always:** a reviewed pull request with the owner's
+  approval; the new seal and fingerprints are recorded with the promoted
+  rulebook.
+
 ## 8. The LLM: adherence and learning
 
 **R19. Adherence scorecard.** For every replay or live decision, the
@@ -627,9 +665,11 @@ Each step is its own pull request and is reviewed as today.
     design with the decision-point replay mode and paired tests, the
     verifiers, the archive, and promotion as a reviewed pull request.
 14. Walk-forward re-learning (R17), run through the training loop.
-15. The other in-the-moment aids (R29): agreement on verdict decisions
+15. Strategy-change re-learning (R33): the fingerprint, staleness in code,
+    the trigger, and paper until re-verified (enforced by the gate).
+16. The other in-the-moment aids (R29): agreement on verdict decisions
     (#3) and lessons when relevant (#5), each on its own evidence.
-16. Fine-tuning on verified decisions (R31), optional.
+17. Fine-tuning on verified decisions (R31), optional.
 
 ## 11. Decisions
 
@@ -665,6 +705,8 @@ Decided by the owner (2026-10-12):
 - **Live readiness:** at least 90% adherence on the taught items, and the
   LLM's estimated blow rate zero and its estimated pass rate meeting the
   gate (R21).
+- **A changed or new strategy trades paper until its re-learning is
+  verified and approved** (R33); re-learning is triggered automatically.
 - **Where it lives:** `rulebooks/<account>/RULEBOOK.md`, numbers in the
   frontmatter and the evidence in the body (R1).
 
