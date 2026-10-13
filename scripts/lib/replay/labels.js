@@ -1012,5 +1012,5 @@ const summaryText = s => `${SUMMARY_KEYS.map(k => `${k} ${s[k] === null ? '-' : 
 module.exports = {
   VERSION, STOP_ATR_MULTIPLES, STOP_ATR_RANGE, SIZE_STEPS, ATR_PERIOD, labelRun, writeLabels, summaryText, roundTrips, outcomeOf, atrAt, teacherAction, stopOf, sizeOf, collapsePairs, brokerOrders, contractSpec,
   // The same fills, bars, specs and paths the labels read.
-  allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir,
+  allFills, translatorCache, loadBars, outcomeBarsFrom, inside, realDir, unfinishedWhy,
 };

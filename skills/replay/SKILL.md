@@ -1,6 +1,6 @@
 ---
 name: replay
-description: Replay the live harness over history - the same runner, harness CLI, agents, skills, scripts, order gate and broker interface, cycle by cycle on a replay broker (backtester-mcp) that simulates only the data, the clock and the fills - to measure how the reasoning trader would have traded. Use when the user wants to set up, run, resume, or read a replay of the autonomous trader; replay runs are the user's to start.
+description: Replay the live harness over history - the same runner, harness CLI, agents, skills, scripts, order gate and broker interface, cycle by cycle on a replay broker (backtester-mcp) that simulates only the data, the clock and the fills - to measure how the reasoning trader would have traded and how closely it followed its rules (the adherence scorecard). Use when the user wants to set up, run, resume, or read a replay of the autonomous trader; replay runs are the user's to start.
 ---
 
 # Replay
@@ -23,6 +23,8 @@ broker.
   report.
 - Turning a run into labels: each decision, the gate's answer, the outcome
   and the counterfactuals (step 10).
+- Scoring how closely the trader followed its rules: the adherence
+  scorecard (step 11).
 - Not inside an autonomous cycle: replays, like backtests, are
   the user's to start. An agent may explain and prepare the config.
 
@@ -166,6 +168,34 @@ broker.
    the harness's transcript names tool calls (Claude Code, Codex, Qwen
    Code, opencode); a custom harness printing plain text shows it as a
    hold.
+11. **Scorecard.** `node scripts/replay.js scorecard <run dir>` scores every
+   decision against the priority order (`strategy-library`): the facts the
+   trader had at that time, from the run's own records (the scan's candidates
+   and verdict, the trend rule per side, the room and the multi-timeframe read
+   from the briefing rebuilt with the runner's own code on the bars closed by
+   then, confluence, the session window, the attempt); the decision the
+   order's mechanical steps expect (no trade, or take at most the verdict's
+   size, halved once; a step it can't compute leaves it `unchecked`, and the
+   skip rules and secondary context are left to judgment); what the trader did
+   and the reasons its CYCLE RESULT gave, each checked against the facts
+   (`true`, `false`, or `unchecked` when no fact can check it; a clause it
+   doesn't recognize is `unparsed`, never counted as right). Each decision
+   gets a category: `right`, `wrong-side entry`, `bad size` (over the ceiling,
+   or an entry where the order says no trade), `early close` (an exit the
+   trader sent in a trade), `excessive abstention` (a skip where the order
+   says take, on false grounds or none), `wrong stated reason` (the right
+   decision, a false reason), `risk-rule rejection` (the gate or the broker
+   refused the entry), or `unchecked` (a judgment skip, a failed cycle, facts
+   missing). It writes `scorecard.jsonl` (one record per decision, with the
+   trade's R and dollars, a skipped setup's counterfactual, and the account
+   pacing: cushion, daily-limit headroom, balance check),
+   `scorecard-summary.json` and `scorecard.md` (agreement overall, by step
+   and by strategy, the categories, the wrong-reason rate, trades, skipped
+   setups, the account by day). Like labels, it is written in the run's own
+   folder only once the run is finished, else to `--out` outside its run
+   home; `--bars` as for labels. Read `unchecked` and `unparsed` as
+   unmeasured, never as agreement; a false reason is a misread of a fact the
+   trader was given.
 
 A trade cycle is a full harness cycle with the model: count the decision
 times (`points`) before a long run; `--max-cycles` stops cleanly, and the
@@ -196,6 +226,7 @@ node scripts/replay.js run --config replay.json --max-cycles 50
 node scripts/replay.js run --config replay.json       # resumes after the last decision time done
 node scripts/replay.js report ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03   # --account topstep_50k: score another account
 node scripts/replay.js labels ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --budget 200 --bars MNQ=~/data/MNQ-1m.parquet
+node scripts/replay.js scorecard ~/fth-replays/mnq-ny-2024-03/replay/mnq-ny-2024-03 --bars MNQ=~/data/MNQ-1m.parquet
 ```
 
 ```text

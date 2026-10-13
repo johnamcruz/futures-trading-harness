@@ -14,6 +14,9 @@
  *   node scripts/replay.js labels <run dir> [--budget USD] [--bars SYM=file ...]   the teacher's decisions as labels (labels.jsonl);
  *       --bars: the data the run replayed (one-minute or the run's bars), for the counterfactuals of untaken setups;
  *       --out: write elsewhere (required for an unfinished run, outside its run home)
+ *   node scripts/replay.js scorecard <run dir> [--bars SYM=file ...] [--out dir]   the adherence scorecard: each decision
+ *       against the priority order's mechanical steps, its stated reasons checked against the facts, a failure
+ *       category (scorecard.jsonl, scorecard-summary.json, scorecard.md); --bars and --out as for labels
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
  * Each run lives in its own harness home, <workDir>/<runId>, never the live
@@ -38,10 +41,11 @@ const { summarize, toMarkdown, toText } = require('./lib/replay/report');
 const { resolveAccount, evaluate, verdictText, verdictMarkdown } = require('./lib/replay/verdict');
 const { loadAccounts, accountNamed } = require('./lib/trading/accounts');
 const { writeLabels, summaryText } = require('./lib/replay/labels');
+const scorecard = require('./lib/replay/scorecard');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -85,11 +89,8 @@ function report(argv) {
   return 0;
 }
 
-// Labels (stage 2): one per decision time and symbol, written in the run's folder, never the repository.
-function labels(argv) {
-  if (!argv[1] || argv[1].startsWith('--')) throw new Error(USAGE);
-  const budget = arg(argv, '--budget') !== undefined ? Number(arg(argv, '--budget')) : null;
-  if (budget !== null && !(budget > 0)) throw new Error('--budget: the dollars a trade may risk, above 0');
+// --bars SYMBOL=file, any number of times: the data the run replayed.
+function barsArgs(argv) {
   const barsFiles = {};
   argv.forEach((a, i) => {
     if (a !== '--bars') return;
@@ -97,6 +98,25 @@ function labels(argv) {
     if (!m) throw new Error('--bars: SYMBOL=file (e.g. MNQ=~/data/MNQ-1m.parquet)');
     barsFiles[m[1]] = m[2];
   });
+  return barsFiles;
+}
+
+// The adherence scorecard (scripts/lib/replay/scorecard.js), written in the run's folder or --out, never the repository.
+function score(argv) {
+  if (!argv[1] || argv[1].startsWith('--')) throw new Error(USAGE);
+  const opts = { root: ROOT, strategies: loadStrategies(ROOT, process.env).strategies, accounts: loadAccounts(ROOT, process.env).accounts, barsFiles: barsArgs(argv), outDir: arg(argv, '--out') || null };
+  const { file, summary } = scorecard.writeScorecard(argv[1], opts);
+  process.stdout.write(scorecard.summaryText(summary));
+  say(`wrote ${file}, scorecard-summary.json and scorecard.md${summary.unfinished ? ` (the run is not finished: ${summary.unfinished})` : ''}`);
+  return 0;
+}
+
+// Labels (stage 2): one per decision time and symbol, written in the run's folder, never the repository.
+function labels(argv) {
+  if (!argv[1] || argv[1].startsWith('--')) throw new Error(USAGE);
+  const budget = arg(argv, '--budget') !== undefined ? Number(arg(argv, '--budget')) : null;
+  if (budget !== null && !(budget > 0)) throw new Error('--budget: the dollars a trade may risk, above 0');
+  const barsFiles = barsArgs(argv);
   // The strategies' exits for the counterfactuals: the ones the run's gate read (the repository's and FTH_STRATEGIES_DIRS).
   const { strategies } = loadStrategies(ROOT, process.env);
   const { file, summary } = writeLabels(argv[1], { root: ROOT, budgetUsd: budget, strategies, barsFiles, outDir: arg(argv, '--out') || null });
@@ -123,6 +143,7 @@ async function main(argv) {
   if (cmd === 'points') return points(load(argv));
   if (cmd === 'report') return report(argv);
   if (cmd === 'labels') return labels(argv);
+  if (cmd === 'scorecard') return score(argv);
   throw new Error(USAGE);
 }
 
