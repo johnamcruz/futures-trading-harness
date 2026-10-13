@@ -126,6 +126,22 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    refuses any other month unless the user gives `--held-out-look "<reason>"`;
    never pass that flag yourself. A field with no edge after costs is no
    reason for a rule.
+9. When a field's values are in doubt (a new build of the replay server's
+   store, or replay against recorded live minutes), compare the two sources
+   before trusting a backtest on them (the user, or the
+   `strategy-researcher` role in an interactive authoring session; never a
+   trading run): `scripts/compare-bars.js` aligns the
+   bars by time, lists bars only in one source and bars whose prices differ,
+   and gives each field's coverage, differences, share within tolerance,
+   correlation and sign agreement (docs/BACKTESTING.md, "Comparing bar
+   sources"). Two store builds over a week, fetched to files first:
+   `node <root>/scripts/compare-bars.js --a <old>.jsonl --b <new>.jsonl --prefix <subtree> --by hour --fail-below corr=0.99,within=0.99`.
+   Recorded live minutes against the replay server (live is the reference):
+   `node <root>/scripts/compare-bars.js --a <live>.jsonl --b broker:<replay broker> --contract MNQ --from <ISO> --to <ISO> --fail-below bars=1,coverage=1,corr=0.99,within=0.99`.
+   Exit 1 means a field missed a threshold, or nothing was compared: read
+   the worst bars (or the bars only in one source) before trusting either
+   source. The tool only measures; it gives no field a
+   meaning.
 
 ## Examples
 

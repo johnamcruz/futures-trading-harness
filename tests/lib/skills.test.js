@@ -174,8 +174,9 @@ test('skills: autonomous scripts the docs rely on are in both allowlists', () =>
 // The harness tools (scripts/lib/harness-tools/registry.js): what agents use instead of the scripts.
 const { TOOLS: HARNESS_TOOLS } = require('../../scripts/lib/harness-tools/registry');
 const HARNESS_NAMES = new Set(HARNESS_TOOLS.map(t => t.name));
-// The scripts behind the harness tools: people run them; agents use the tools.
-const AGENT_RUN_SCRIPT = /\b(?:strategies|market-snapshot|mtf|blackouts|bars|lessons|reconcile)\.js\b|combine\.js status/;
+// The scripts behind the harness tools: people run them; agents use the tools. Not after a hyphen:
+// compare-bars.js is a script of its own, not bars.js.
+const AGENT_RUN_SCRIPT = /(?<![\w-])(?:strategies|market-snapshot|mtf|blackouts|bars|lessons|reconcile)\.js\b|combine\.js status/;
 
 test('skills: every harness tool the docs name exists, and the harness-tools skill lists every tool with its arguments', () => {
   const FAMILY = /^(?:strategies|market|mtf|blackouts|bars|combine)_[a-z_]+$/;

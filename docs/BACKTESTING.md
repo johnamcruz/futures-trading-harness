@@ -384,3 +384,88 @@ Sharpe ratio of daily P&L, MAE, the longest losing streak, breakdowns by
 entry hour (ET) and weekday, and a data audit (bars missing inside market
 hours, opens that jump more than 8 x ATR from the previous close, as an
 unadjusted roll does, and malformed bars).
+
+## Comparing bar sources
+
+`scripts/compare-bars.js` compares the bars two sources give for the same
+span, field by field: the broker's own fields on them (any dotted path), as
+two servers, two builds of a replay server's store, or recorded live minutes
+and the replay server's same minutes return them. The harness gives the
+fields no meaning: it reads them by path, as the rules' `field("path")` does
+(a number, or a boolean as 1/0; a missing value, a null or a string is
+missing), and says how far apart the sources are. It reads the network only
+through the broker adapter, and only for a broker source.
+
+```bash
+node scripts/compare-bars.js --a <bars.jsonl|bars.json|broker:<name>> --b <...> \
+  [--contract MNQ --from <ISO> --to <ISO> [--timeframe 1]] \
+  [--fields a.b,c.d[1] | --prefix a] [--tol 0] [--rtol 0] [--ohlcv-tol 0] \
+  [--by hour] [--worst 5] [--fail-below corr=0.95,within=0.99] [--out report.json]
+```
+
+- **Sources.** A `.jsonl` or `.json` bars file (as `backtest.js fetch` writes
+  it, every field kept), or `broker:<name>`, a broker named in `brokers.json`,
+  whose bars for `--contract`, `--from`, `--to` and `--timeframe` come
+  through the broker adapter's `history()` (the same fetch as
+  `backtest.js fetch`). `--from` and `--to`, when given, cut file sources to
+  the same span; a file is not filtered by contract, so give each source one
+  contract's bars.
+- **Alignment.** By bar open time, and by contract too when both sources
+  name one (`contract`, `contractId` or `symbol`) on every bar, compared as
+  the same text; a look-back `[n]` stays on the bar's own contract. The report
+  counts the bars only in one source and the bars whose open, high, low,
+  close or volume differ by more than `--ohlcv-tol`; those are listed and
+  left out of the field statistics, since their fields describe different
+  bars. A duplicate time keeps the last bar.
+- **Fields.** By default every numeric or boolean leaf path either source
+  carries (arrays by index, `a.list.0`), prices and volume left out;
+  `--prefix a.b` keeps one subtree, `--fields a.b,c.d[1]` names them.
+  `[n]` reads each source's own bar n bars back, as `field("c.d")[1]` does.
+- **Statistics per field**, over the bars both sources have with equal
+  prices: coverage (the share of those bars where each source has a value),
+  n (bars where both do), mean and max absolute difference, the share within
+  tolerance (`|b - a| <= --tol`, or `<= --rtol` x the larger magnitude),
+  Pearson correlation (undefined for fewer than two values or a constant
+  series), sign agreement (of the bars where either value is non-zero, the
+  share where both are and have the same sign; undefined when every pair is
+  zero), and p5, p50 and p95 of each source's compared values. `--by hour`
+  breaks them down by the bar's open hour in New York time. The worst N bars
+  outside tolerance (`--worst`, default 5) are listed with both values.
+- **Output.** Markdown on stdout; `--out x.json` also writes the JSON report
+  and the Markdown next to it (`x.md`).
+- **Exit codes.** 0 when every field meets the `--fail-below` thresholds (or
+  none are set); 1 when a field missed a threshold, or nothing was compared; 2 on a
+  usage error; 3 when a source can't be read or fetched, or `--out` can't be
+  written. Thresholds: `corr`, `within`, `sign`, `coverage`
+  (the lower of the two sources'), per field, and `bars` (the share of all
+  bar times that are in both sources with equal prices). An undefined
+  correlation passes only where two or more values were compared and every
+  one is within tolerance (a constant field equal in both); an undefined
+  sign agreement (all zeros) passes; a field with nothing compared fails.
+  A run where no bar is in both sources with equal prices fails, thresholds
+  or not.
+
+Two builds of the replay server's store, the same week of a subtree of its
+fields (fetch it once from each build, or name both in `brokers.json` and
+compare them directly):
+
+```bash
+node scripts/backtest.js fetch --contract MNQ --from 2024-06-03 --to 2024-06-08 --timeframe 1 --out data/store-old.jsonl
+# ...point the replay server at the new build, then:
+node scripts/backtest.js fetch --contract MNQ --from 2024-06-03 --to 2024-06-08 --timeframe 1 --out data/store-new.jsonl
+node scripts/compare-bars.js --a data/store-old.jsonl --b data/store-new.jsonl --prefix <subtree> --by hour \
+  --fail-below corr=0.99,within=0.99 --out reports/store-diff.json
+# or, both builds configured as brokers:
+node scripts/compare-bars.js --a broker:<old-build> --b broker:<new-build> --contract MNQ \
+  --from 2024-06-03T00:00:00Z --to 2024-06-08T00:00:00Z --prefix <subtree> --fail-below corr=0.99,within=0.99
+```
+
+Recorded live minutes against the replay server's same minutes (live is the
+reference, so it is `--a`; the replay server matches live, never the
+reverse):
+
+```bash
+node scripts/compare-bars.js --a data/live-recorded.jsonl --b broker:<replay-broker> --contract MNQ \
+  --from <first bar> --to <last bar> --fail-below bars=1,coverage=1,corr=0.99,within=0.99 \
+  --out reports/live-vs-replay.json
+```
