@@ -470,6 +470,7 @@ cp mcp-configs/replay.example.json replay.json     # runner config, replay broke
 node scripts/replay.js points --config replay.json # the decision times, nothing run
 node scripts/replay.js run --config replay.json    # run, or resume after the last decision time done
 node scripts/replay.js report <run home>/replay/<runId>
+node scripts/replay.js scorecard <run home>/replay/<runId>   # adherence: each decision against the priority order
 ```
 
 With `"prop": "topstep_100k"` in the config, a fresh run starts that combine
@@ -478,7 +479,11 @@ account's own daily loss limit ($2,000 for 100K), as the firm does.
 
 The report is month by month: cycles, trades, win rate, mean R, expectancy,
 stand-aside rate, the gate's refusals by check, and MAE/MFE when the broker
-reports them. See the `replay` skill and
+reports them. The scorecard scores each decision against the priority
+order's mechanical steps, checks the reasons the trader stated against the
+facts it had, and sorts the misses into a failure taxonomy (wrong-side entry,
+bad size, early close, excessive abstention, wrong stated reason, risk-rule
+rejection). See the `replay` skill and
 [docs/REASONING-TRADER-DESIGN.md](docs/REASONING-TRADER-DESIGN.md).
 
 ### Backtesting
