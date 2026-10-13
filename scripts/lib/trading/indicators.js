@@ -11,26 +11,28 @@ const { zonedParts } = require('./clock');
 
 const ET = 'America/New_York';
 
-/** Accept a get_bars result ({bars:[{t,o,h,l,c,v}]}) or a bare array. */
-/** Real order flow on a bar (aggressive buy and sell volume), when it has it. */
-function flowFields(b) {
-  const bv = Number(b.bv ?? b.buy_volume);
-  const sv = Number(b.sv ?? b.sell_volume);
-  return b.bv !== undefined || b.buy_volume !== undefined ? (Number.isFinite(bv) && Number.isFinite(sv) ? { bv, sv } : {}) : {};
-}
+/** The bar keys normalizeBars reads (and their long names); a bar's other fields are the broker's, kept as they are. */
+const BAR_KEYS = new Set(['t', 'time', 'o', 'open', 'h', 'high', 'l', 'low', 'c', 'close', 'v', 'volume']);
 
+/**
+ * Accept a get_bars result ({bars:[{t,o,h,l,c,v}]}) or a bare array. Fields a
+ * broker adds to its bars pass through untouched (bars are data); the rules
+ * read them with field("path").
+ */
 function normalizeBars(input) {
   const raw = Array.isArray(input) ? input : input && Array.isArray(input.bars) ? input.bars : null;
   if (!raw) throw new Error('expected get_bars output ({ bars: [...] }) or an array of bars');
+  // Own data properties only (a key such as __proto__ stays a plain field, never a prototype).
+  const extras = b => (b && typeof b === 'object' ? Object.fromEntries(Object.entries(b).filter(([k]) => !BAR_KEYS.has(k))) : {});
   return raw
     .map(b => ({
+      ...extras(b),
       t: String(b.t ?? b.time),
       o: Number(b.o ?? b.open),
       h: Number(b.h ?? b.high),
       l: Number(b.l ?? b.low),
       c: Number(b.c ?? b.close),
       v: Number(b.v ?? b.volume ?? 0),
-      ...flowFields(b),
     }))
     .filter(b => Number.isFinite(Date.parse(b.t)) && [b.o, b.h, b.l, b.c].every(Number.isFinite))
     .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
@@ -243,45 +245,6 @@ function anchoredVwap(bars, anchorMin, untilMin = null) {
 }
 
 /**
- * Order flow per bar. With real flow (bv/sv: aggressive buy and sell volume,
- * recorded flow files or in the data file) it is bv - sv.
- * Otherwise it is estimated from the bar (no bid/ask split needed): volume signed by
- * where it closed in its range, v * ((c - l) - (h - c)) / (h - l). A close
- * at the high is all buying, at the low all selling, mid-range balanced. A
- * bar with no range takes the sign of its close against the prior close.
- */
-function barDelta(bars) {
-  return bars.map((b, i) => {
-    if (hasFlow(b)) return b.bv - b.sv;
-    const v = Number(b.v) || 0;
-    const range = b.h - b.l;
-    if (range > 0) return (v * ((b.c - b.l) - (b.h - b.c))) / range;
-    const prev = i > 0 ? bars[i - 1].c : b.c;
-    return v * Math.sign(b.c - prev);
-  });
-}
-
-/**
- * Order-flow imbalance over the last n bars: summed bar delta over summed
- * volume, from -1 (all selling) to +1 (all buying). NaN until n bars exist
- * or when they traded no volume.
- */
-// Real flow counts only when it accounts for most of the bar's volume (a
-// feed that missed prints must not read as a confident imbalance).
-const hasFlow = b => Number.isFinite(b.bv) && Number.isFinite(b.sv) && !(Number(b.v) > 0 && b.bv + b.sv < 0.5 * Number(b.v));
-
-function ofi(bars, n) {
-  const d = barDelta(bars);
-  return bars.map((_, i) => {
-    if (i + 1 < n) return NaN;
-    let sd = 0;
-    let sv = 0;
-    for (let k = i + 1 - n; k <= i; k += 1) { sd += d[k]; sv += hasFlow(bars[k]) ? bars[k].bv + bars[k].sv : Number(bars[k].v) || 0; }
-    return sv > 0 ? sd / sv : NaN;
-  });
-}
-
-/**
  * Higher-timeframe candles of `minutes` (dividing a day) built from the bars,
  * aligned to the 18:00 ET Globex open: 60 opens on the hour; 240 opens at
  * 18:00, 22:00, 02:00, 06:00, 10:00, 14:00 ET. For each bar:
@@ -328,8 +291,6 @@ function htfCandles(bars, minutes) {
 
 module.exports = {
   htfCandles,
-  barDelta,
-  ofi,
   normalizeBars,
   ema,
   rma,

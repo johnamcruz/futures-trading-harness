@@ -230,7 +230,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         participation: snap.participation ? omit(snap.participation, ['note']) : null,
         // The counters the strategies' skip rules name (EMA crosses, ADX falling, Keltner squeeze and band-close streak,
         // SuperTrend flips, the last 5 bars' range in ATR).
-        context: snap.context ? omit(snap.context, ['flow', 'session']) : null,
+        context: snap.context ? omit(snap.context, ['volVsAvg60', 'session']) : null,
         referenceStop: snap.referenceStop ? { distance: round2(snap.referenceStop.distance), long: round2(snap.referenceStop.long), short: round2(snap.referenceStop.short) } : null,
         swings: { high: st.lastSwingHigh, highAt: st.lastSwingHighAt, low: st.lastSwingLow, lowAt: st.lastSwingLowAt },
         // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), open fair value gaps.

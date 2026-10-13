@@ -51,14 +51,14 @@ a bar-based profile any strategy can use, also as a developing session
 profile (`session_*`), a rolling one (`vp_*(n)`), and its high and low volume
 nodes.
 
-The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`)
-and declares `connectors: [order_flow]`: `ofi` and `delta` read aggressor
-buy and sell volume from recorded flow files (`<FTH_HOME>/flow/`) where
-they cover the bar, else an estimate from where each bar closed in its
-range. Live flow is not part of the broker MCP interface, so live these run
-on the estimate. `ofi` trades real flow, where the imbalance moves price;
-`ofi_absorption` trades the reversal when it doesn't. `value_area`
-(3-minute) declares it too, for its order-flow confirmation.
+The order-flow pair runs on 1-minute bars (the runner's `timeframe: 1`).
+The harness computes no order flow: the broker MCP server puts it on its
+bars, and the rules read its fields with `field("flow.ofiTrade")` and
+`field("flow.windows.5.ofiTrade")`. A bar without
+them gives no signal; nothing estimates them. `ofi` trades real flow, where
+the imbalance moves price; `ofi_absorption` trades the reversal when it
+doesn't. `value_area` (3-minute) reads the 3-bar window for one of its two
+confirmations; without flow only the other (range expansion) confirms.
 
 ## Add a strategy
 

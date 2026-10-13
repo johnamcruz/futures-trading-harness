@@ -133,7 +133,7 @@ reproduces the live server's output.
   `mcp__broker__<tool>`), always as the gateway alone:
   `node <repo>/scripts/mcp-gateway.js`. The gateway starts the configured
   server.
-- The runner, `bars.js`, `backtest.js fetch`, and `orderflow.js export`
+- The runner, `bars.js`, and `backtest.js fetch`
   reach it only through the broker adapter (`scripts/lib/broker/adapter.js`):
   reads straight to the server, order calls through the gateway.
 - Contracts have standard names: `MNQ`, `NQ`, `ES` for the front month,
@@ -323,7 +323,7 @@ which the gateway loads (Qwen's extension settings don't reach MCP servers).
 See `mcp-configs/` for examples.
 
 **`.env` files.** The autotrader, the MCP gateway, `bars.js`,
-`backtest.js`, `orderflow.js`, and `check-broker-mcp.js` read, in order: `$FTH_ENV_FILE` (if set),
+`backtest.js`, and `check-broker-mcp.js` read, in order: `$FTH_ENV_FILE` (if set),
 `~/.futures-trading-harness/.env` (preferred: outside the repo), and a
 `.env` in the repo root. The first value found wins, a variable already set
 in the environment wins over all of them, and only key names are logged.
@@ -591,19 +591,12 @@ trader over history and measuring its decisions is
 
 ### Order flow
 
-The `ofi` and `ofi_absorption` strategies are plain STRATEGY.md rules that
-declare the data they need: `connectors: [order_flow]`. `ofi(n)` and
-`delta(n)` read 1-minute aggressor buy and sell volume from recorded flow
-files in `<FTH_HOME>/flow/` when they cover the bar, else an estimate from
-where each bar closed in its range. Live order flow is not part of the
-broker MCP interface, so the harness doesn't record it; a future optional
-interface tool could serve it. `scripts/orderflow.js` lists previously
-recorded files and exports bars with their flow for backtests:
-
-```bash
-node scripts/orderflow.js status
-node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
-```
+The harness computes no order flow. A broker MCP server that has it puts it
+on its bars as extra fields (turned on by the server's own settings, which
+its `mcp-configs/brokers.json` entry passes through), and the harness passes
+them through untouched. The `ofi`, `ofi_absorption`, and `value_area`
+strategies read them with the rules' `field("path")`; a bar without them
+gives no signal. See [docs/ORDER-FLOW.md](docs/ORDER-FLOW.md).
 
 ### Order gate settings
 

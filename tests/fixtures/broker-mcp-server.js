@@ -11,7 +11,9 @@
  * FAKE_CALLS (a file it appends each tool call's name to), FAKE_ARGS (a file it
  * appends each call's name and arguments to, as JSON lines), FAKE_TRADING_OFF
  * (get_server_config reports trading disabled), FAKE_TICK (JSON merged into the
- * MNQ contracts: another tickSize or tickValue).
+ * MNQ contracts: another tickSize or tickValue), FAKE_BARS (a JSON file of bars that
+ * get_bars serves as they are, the server's own extra fields included, as a server whose
+ * settings add fields to its bars).
  */
 
 const fs = require('fs');
@@ -47,6 +49,11 @@ const HANDLERS = {
   list_available_contracts: () => state.contracts,
   get_contract: a => state.contracts.find(c => c.id === a.contractId) || null,
   get_bars: a => {
+    if (process.env.FAKE_BARS) {
+      const end = a.endTime ? Date.parse(a.endTime) : Infinity;
+      const list = JSON.parse(fs.readFileSync(process.env.FAKE_BARS, 'utf8')).filter(b => Date.parse(b.t) <= end).slice(-(a.limit || 100));
+      return { contractId: a.contractId, barSize: `${a.unitNumber || 5} ${a.unit || 'minute'}`, count: list.length, bars: list };
+    }
     if (process.env.FAKE_LIVE_BARS) {
       // The newest 1-minute bar closed 5 seconds ago.
       const lastOpen = Date.now() - 65000;

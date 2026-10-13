@@ -18,7 +18,7 @@ exit:
 risk:
   stop: strategy
   min_rr: 2
-source: harness design (prop_portfolio's counterpart); backtests need 1-minute bars with recorded buy/sell volume (scripts/orderflow.js export)
+source: harness design (prop_portfolio's counterpart); its strategies read order flow from the broker's 1-minute bars, so backtests need the broker's bars as JSON (backtest.js fetch --out <file.json>)
 ---
 
 # Strategy: Prop Flow 1m (`setup:prop_flow_1m`)
@@ -29,11 +29,11 @@ strategy trades one timeframe, so the flow strategies get their own.
 
 ## When to Use
 
-- A `topstep_100k` attempt is running on 1-minute bars (`ofi` and
-  `ofi_absorption` declare the order-flow connector).
-- Backtests need 1-minute bars with real buy/sell volume (recorded flow
-  files, exported with `scripts/orderflow.js export`); bars without it fall
-  back to an estimate.
+- An attempt on its account is running on 1-minute bars.
+- `ofi` and `ofi_absorption` read order flow the broker MCP server puts on
+  its bars (`field(...)`); bars without it give no setup, so neither does
+  this strategy. Backtests need the broker's 1-minute bars as JSON
+  (`backtest.js fetch --out <file.json>`); a CSV has no flow.
 
 ## How It Works
 

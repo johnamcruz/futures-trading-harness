@@ -70,10 +70,7 @@ const SHRINK_ONLY = [
   ['scripts/lib/trading/report-cache.js', 'account'],
   ['scripts/replay.js', 'account'],
   ['skills/end-of-day/SKILL.md', 'firm-time'],
-  ['skills/harness-tools/SKILL.md', 'account'],
-  ['skills/prop-challenge-pacing/SKILL.md', 'account'],
   ['skills/replay/SKILL.md', 'firm account firm-time'],
-  ['skills/session-timing/SKILL.md', 'firm firm-time'],
   ['strategies/README.md', 'account'],
   ['strategies/prop_flow_1m/STRATEGY.md', 'firm account'],
   ['strategies/prop_portfolio/STRATEGY.md', 'firm account'],
@@ -103,7 +100,6 @@ const SHRINK_ONLY = [
   ['tests/scripts/replay-clock.test.js', 'account'],
   ['workspace/AGENTS.md', 'firm firm-time'],
   ['workspace/QWEN.md', 'firm firm-time'],
-  ['workspace/opencode.json', 'firm account firm-time'],
 ].flatMap(([file, kinds, plan = 'plan C (dynamic prop account)']) => kinds.split(' ').map(kind => ({ file, kind, plan, reason: REASONS[kind] })));
 
 const readRepo = f => fs.readFileSync(path.join(REPO, f));

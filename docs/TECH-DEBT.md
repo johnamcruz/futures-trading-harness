@@ -40,14 +40,16 @@ impact first.
   `place_order` request and its result. Servers then only need
   `journal_add` / `journal_read`, or the gateway serves those too.
 
-### 4. Order flow isn't in the interface
+### 4. Extra bar fields are switched on by server settings
 
-- **Today:** live order flow (aggressor buy/sell volume) has no tool, so live
-  order-flow strategies fall back to the bar-shape estimate while backtests
-  use recorded flow files.
-- **Fix:** an optional `get_order_flow` tool (per-minute buy/sell volume for a
-  contract and window), listed in `get_server_config` capabilities; the
-  adapter uses it when present. Build it first in the live broker server (its own repo).
+- **Today:** order flow is not a tool: a server that has it puts it on its
+  `get_bars` bars as extra fields, which the harness passes through and the
+  strategies read with `field("path")`. Whether the fields are there is the
+  server's own environment setting (listed in its `brokers.json` entry's
+  `env`), so a strategy that reads them gets no signal, silently, when the
+  setting is off.
+- **Fix:** if it bites, a server could list the extra bar fields it serves
+  in `get_server_config`, for `check-broker-mcp.js` to report.
 
 ### 5. No way to test a server's order path
 

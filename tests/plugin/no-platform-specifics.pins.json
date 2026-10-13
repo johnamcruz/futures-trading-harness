@@ -132,13 +132,6 @@
   "skills/end-of-day/SKILL.md|firm-time": [
     "2f9c4cbbfcb90ea0"
   ],
-  "skills/harness-tools/SKILL.md|account": [
-    "ddd2b922314600f6"
-  ],
-  "skills/prop-challenge-pacing/SKILL.md|account": [
-    "07368d1c0d5cb4ac",
-    "f052c330161313b6"
-  ],
   "skills/replay/SKILL.md|firm": [
     "c37cddfe2ff5f33d"
   ],
@@ -154,20 +147,6 @@
   "skills/replay/SKILL.md|firm-time": [
     "06165f7a4af4cd73"
   ],
-  "skills/session-timing/SKILL.md|firm": [
-    "516b59feaa0b8cff",
-    "5afc77bc3f374761",
-    "7b087da18862a3de",
-    "9469a1eba2f47ce6",
-    "9eb901d3bdf5c580",
-    "a122c8451fe73d07",
-    "f53c0cbac84387ee"
-  ],
-  "skills/session-timing/SKILL.md|firm-time": [
-    "516b59feaa0b8cff",
-    "7b087da18862a3de",
-    "9469a1eba2f47ce6"
-  ],
   "strategies/README.md|account": [
     "5eeca293b452b47e"
   ],
@@ -175,8 +154,7 @@
     "0fc2c0f462d43905"
   ],
   "strategies/prop_flow_1m/STRATEGY.md|account": [
-    "0dc8c6e6406f814b",
-    "c4d18d471fd2f5fc"
+    "0dc8c6e6406f814b"
   ],
   "strategies/prop_portfolio/STRATEGY.md|firm": [
     "315c178753462d53",
@@ -395,12 +373,9 @@
     "a77a771a08308dee"
   ],
   "tests/plugin/content.test.js|firm": [
-    "66b4bb294596a08c",
-    "670205a9ea3f75ec",
-    "9937b50129469c78"
+    "670205a9ea3f75ec"
   ],
   "tests/plugin/content.test.js|firm-time": [
-    "66b4bb294596a08c",
     "670205a9ea3f75ec"
   ],
   "tests/scripts/cli-parity.snapshot.json|firm": [
@@ -446,19 +421,5 @@
     "b252a360b79e621f",
     "e4ea32fa118a9722",
     "fce7fc24de252e56"
-  ],
-  "workspace/opencode.json|firm": [
-    "2414e80792165753",
-    "4f8f7260f323c2ec"
-  ],
-  "workspace/opencode.json|account": [
-    "22275a62b20c06b8",
-    "4f8f7260f323c2ec",
-    "7f8a0e70a7073b62",
-    "ff6ca1f8bd4b8dcd"
-  ],
-  "workspace/opencode.json|firm-time": [
-    "2414e80792165753",
-    "4f8f7260f323c2ec"
   ]
 }

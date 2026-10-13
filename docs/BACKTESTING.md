@@ -58,22 +58,28 @@ MCP server) read only JSON and CSV bars files.
 
 The table needs a header with a time column (`time`, `timestamp`,
 `datetime`, `date`, `ts`, `t`, or a pandas datetime index) and `open`,
-`high`, `low`, `close`, and optionally `volume` (needed for the order-flow
-strategies and the `ofi`, `delta`, and `vol_sma` series). Real order flow
-comes as `buy_volume` and `sell_volume` columns (aggressive buys and sells;
-`ask_volume`/`bid_volume` and `bv`/`sv` work too), or a `delta` column. A
-bar without them falls back to the bar-shape estimate. Any letter case
-works.
+`high`, `low`, `close`, and optionally `volume` (needed for `vol_sma`). Any
+letter case works.
 
-Live order flow is not part of the broker MCP interface, so the harness
-doesn't record it. Flow files recorded earlier (`<FTH_HOME>/flow/`) can be
-exported with the bars:
+Fields a broker puts on its bars (read by the rules' `field("path")`, such
+as the order flow the `ofi` strategies use) survive in a backtest only on
+bars the broker built at the strategy's own timeframe. `backtest.js fetch`
+fetches 1-minute bars; with a `.json` output it keeps their fields as the
+broker's server returned them (with its own settings for those fields), so
+the 1-minute strategies (`ofi`, `ofi_absorption`) can be backtested on them:
 
 ```bash
-node scripts/orderflow.js status
-node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m-flow.csv
-node scripts/backtest.js --data data/MNQ-1m-flow.csv --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
+node scripts/backtest.js fetch --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m.json
+node scripts/backtest.js --data data/MNQ-1m.json --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
 ```
+
+A CSV has no such fields, and neither do bars the backtester builds from
+shorter ones (3-minute bars from 1-minute ones): only the broker knows what
+its fields mean over a longer bar. So a strategy on a longer timeframe that
+reads them (`value_area`'s order-flow branch, on 3-minute bars) never fires
+on them in this fast backtest; test it in a replay (the `replay` skill),
+where the replay broker serves bars at the strategy's timeframe, until the
+fast backtester pulls its bars from the replay broker (a planned follow-up).
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.

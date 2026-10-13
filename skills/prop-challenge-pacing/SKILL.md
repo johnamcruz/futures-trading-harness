@@ -16,8 +16,8 @@ description: Pace a prop-firm evaluation or funded account - profit target, trai
 
 A policy strategy (`signal: policy`, e.g. `prop_portfolio`) is the prop
 challenge as a strategy: it trades the setups of the rules strategies it
-lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g.
-`topstep_100k`: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
+lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
+100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
 `sizing` allows, or is skipped. A contract's risk is its stop plus the
@@ -129,7 +129,7 @@ Write the day's numbers into the `plan` entry so reviews can grade pacing.
 
 ```text
 combine_status {}
-topstep_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
+my_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
 day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries allowed
 
 prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
