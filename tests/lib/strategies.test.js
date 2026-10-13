@@ -332,6 +332,13 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   for (const k of ['account', 'sizing', 'strategies', 'contracts']) {
     assert.ok(validateStrategy({ ...rules, [k]: k === 'sizing' ? { cushion_frac: 0.2 } : k === 'strategies' ? ['x'] : k === 'contracts' ? 'auto' : 'topstep_100k' }, body, 'r').some(e => e.startsWith(`${k}: only a policy strategy`)), k);
   }
+  // priority (which policy goes first when lanes' policies collide in one cycle): a policy's own, 1 to 99, optional.
+  for (const ok of [1, 2, 99]) assert.deepStrictEqual(validateStrategy({ ...base, priority: ok }, body, 'p'), [], String(ok));
+  for (const bad of [0, 100, 1.5, -1, '1', null, true]) {
+    assert.ok(validateStrategy({ ...base, priority: bad }, body, 'p').some(e => /^priority: a whole number 1 to 99/.test(e)), String(bad));
+  }
+  assert.ok(validateStrategy({ ...rules, priority: 1 }, body, 'r').some(e => e.startsWith('priority: only a policy strategy')));
+  assert.ok(validateStrategy({ ...rules, signal: 'manual', rules: undefined, priority: 1 }, body, 'r').some(e => e.startsWith('priority: only a policy strategy')));
   // The trained policy is retired: `policy: { bundle }` is no key of any strategy, a policy strategy included.
   for (const x of [base, rules]) {
     assert.ok(validateStrategy({ ...x, policy: { bundle: 'b' } }, body, x.name).some(e => /^unknown key "policy"/.test(e)), x.name);

@@ -26,8 +26,11 @@ const { decideSetup } = require('./verdict');
 const { componentRefusal } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
+const { lanePolicies } = require('../lanes');
 
-function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {}, journal = null }) {
+// `lane` (lanes.js): the runner's lane; its policies are the ones that screen setups (a policy on another timeframe
+// has no setups in this lane's scan). null: every policy, as before lanes.
+function createPropHooks({ root, env = process.env, home, client, accountId, strategies, paper = false, log = () => {}, journal = null, lane = null }) {
   // The broker's journal (the harness's own order records): read only to know whether an order went through.
   const journalEntries = journal || (() => readJournal(resolveJournalPath({ ...env, FTH_HOME: home })));
   const specOf = liveSpecs({ ...env, FTH_HOME: home }); // the broker's tick specs, as the gate reads them
@@ -103,10 +106,13 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
 
   // A policy strategy owns its strategies' setups only while it can trade: active (or any
   // non-disabled one in a paper run) with an attempt running. Otherwise they trade as before.
-  function activePolicies(symbol, contractId) {
+  // everyLane: every such policy, whatever the lane (ownership is never lost to a lane); else the lane's only.
+  function activePolicies(symbol, contractId, everyLane = false) {
     const root = contractRoot(contractId) || symbol;
     const fam = r => (familyOf(r) ? familyOf(r).micro : r);
-    return strategies().filter(s => s.valid && s.signal === 'policy'
+    const all = strategies();
+    const inLane = lane && !everyLane ? new Set(lanePolicies(all, lane)) : null;
+    return all.filter(s => s.valid && s.signal === 'policy' && (!inLane || inLane.has(s))
       && (s.status === 'active' || (paper && s.status !== 'disabled'))
       && s.instruments.some(x => fam(x) === fam(root)) && state.readAttempt(home, s.account));
   }
@@ -169,21 +175,24 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
     /** The strategies an active policy owns on this contract now: Map(strategy -> policy); empty when none. */
     owners({ symbol, contractId }) {
       const owners = new Map();
-      for (const s of activePolicies(symbol, contractId)) for (const n of s.strategies) if (!owners.has(n)) owners.set(n, s.name);
+      for (const s of activePolicies(symbol, contractId, true)) for (const n of s.strategies) if (!owners.has(n)) owners.set(n, s.name);
       return owners;
     },
     screen(results, { symbol, contractId, bars, now = new Date() }) {
       // The contract's root (MNQ), not the plugin root this factory was given.
       const root = contractRoot(contractId) || symbol;
       const policies = activePolicies(symbol, contractId);
-      if (!policies.length) return results;
       const owners = this.owners({ symbol, contractId });
+      if (!policies.length && !owners.size) return results;
       const registry = strategies();
       const refusal = (s, n) => componentRefusal(s, registry, n, { paper }); // null: the policy may trade n's setup
       const byName = new Map((results || []).map(r => [r.name, r]));
       const ownedNote = r => {
         const owner = owners.get(r.name);
-        const why = refusal(policies.find(p => p.name === owner), r.name);
+        const p = policies.find(x => x.name === owner);
+        // A policy outside the runner's lane still owns the setup: never a plain setup (the start check refuses such a lane).
+        if (!p) return `not traded: ${owner} owns it and is not in this runner's lane`;
+        const why = refusal(p, r.name);
         return why ? `not traded through ${owner}: ${why}` : `traded through ${owner}`;
       };
       const out = (results || []).filter(r => !policies.some(s => s.name === r.name))

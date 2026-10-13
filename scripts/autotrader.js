@@ -50,6 +50,9 @@ const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/prop/live-runner');
 const { loadStrategies } = require('./lib/trading/strategies');
+const { lanesOf, startErrors } = require('./lib/lanes');
+const { loadAgents } = require('./lib/harness-sync');
+const { readAttempt } = require('./lib/trading/prop-state');
 const { appendJsonl } = require('./lib/trading/scan-log');
 const { loadConfig } = require('./lib/trading/config');
 const { harnessNow, resolveClock } = require('./lib/trading/harness-now');
@@ -183,13 +186,9 @@ function loadState(cfg) {
 }
 
 function checkStrategies(cfg) {
-  if (cfg.trigger !== 'signal') return;
-  const { strategies } = loadStrategies(ROOT, process.env);
-  const tf = `${cfg.timeframe}m`;
-  const usable = strategies.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf && s.signal !== 'manual');
-  if (usable.length === 0) {
-    throw new Error(`trigger "signal" with timeframe ${cfg.timeframe}: no active mechanical strategy uses ${tf}, so only open positions would ever start a cycle. Use trigger "bar" or a matching timeframe.`);
-  }
+  // Each lane's strategies and policies on its timeframe, a "signal" lane with something to fire, the roles' timeframes (lanes.js).
+  const why = startErrors(cfg, loadStrategies(ROOT, process.env).strategies, loadAgents(ROOT), a => Boolean(readAttempt(HOME_DIR, a)));
+  if (why.length) throw new Error(why.join('\n'));
 }
 
 /** Claude settings that would silently refuse order tools in an unattended run. */
@@ -249,7 +248,7 @@ const runnerLog = alert => (msg, level) => {
 const writeEvent = ev => appendJsonl(path.join(HOME_DIR, 'logs', `events-${dayKey(new Date(ev.at))}.jsonl`), ev);
 
 function buildRunner(cfg, dataDir, opts, client, log, event, tap) {
-  const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: () => loadStrategies(ROOT, process.env).strategies, paper: cfg.paper, log });
+  const prop = createPropHooks({ root: ROOT, env: process.env, home: HOME_DIR, client, accountId: cfg.account, strategies: () => loadStrategies(ROOT, process.env).strategies, paper: cfg.paper, log, lane: lanesOf(cfg)[0] });
   if (prop.accounts().length) log(`prop challenge: ${prop.accounts().map(a => a.name).join(', ')} (balance snapshot each bar; policy strategies size setups)`);
   return wireRunner({
     cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event, onBarClosed: tap.bar,

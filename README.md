@@ -443,6 +443,30 @@ More runner settings:
   session, the runner checks the account once a minute and closes anything
   open. `earlyCloseDates` moves end of day to `earlyCloseEodAt` on CME
   early-close days.
+- `lanes` (optional) names the runner's timeframe lanes: a list of
+  `{ "timeframe": <minutes, 1 to 60>, "trigger": "bar" | "signal", "strategies": [...], "policies": [...] }`
+  (`trigger` defaults to `bar`; `strategies` and `policies` are optional and
+  narrow the lane to those names; left out, the lane takes every strategy, or
+  every policy strategy, on its timeframe, and a listed policy's own
+  strategies always stay in). Without `lanes`, `timeframe` and `trigger` are
+  the one lane, exactly as before. Each lane's timeframe appears once; a name
+  belongs to the lane of its own timeframe and to one lane only (anything else
+  is refused at start), and with `lanes` a `timeframe` or `trigger` that
+  disagrees with the first lane's is refused. A `policies` list that leaves
+  out another policy on the lane's timeframe with a running prop attempt is
+  refused at start too: that policy owns its strategies' setups, which the
+  lane would never trade. The runner still cycles one lane:
+  a config with more than one is refused at start ("multi-lane cycling
+  arrives in a later step") rather than run on one lane with the others
+  ignored. `node scripts/preflight.js` lists each lane with its strategies and
+  policies.
+- `agents` (optional) sets an agent role's timeframe:
+  `{ "<role>": { "timeframe": "15m" } }`, over the `timeframe` its
+  `agents/<role>.md` may declare (none: the lane's). The role must exist and
+  the timeframe be one such as `3m`, `15m` or `1h`. Nothing reads it yet: a
+  role set to a timeframe other than the lane's is refused at start
+  ("per-agent timeframes arrive in a later step"). Preflight lists each
+  role's effective timeframe.
 - `"cycle": "lean"` skips the parallel analysts unless a strategy fires (use
   it for 1-minute bars so a cycle fits in one bar).
 - `maxCyclesPerDay` (default: one per bar of the 22-hour session, plus 10)

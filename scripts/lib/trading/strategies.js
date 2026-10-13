@@ -52,7 +52,7 @@ function strategyDirs(pluginRoot, env = process.env) {
 
 /** Validate parsed frontmatter + body. Returns a list of problems (empty = valid). */
 const TOP_KEYS = ['name', 'description', 'version', 'status', 'instruments', 'timeframe', 'sessions', 'regimes', 'regime_gate', 'mtf',
-  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'source'];
+  'signal', 'rules', 'params', 'filters', 'exit', 'risk', 'strategies', 'account', 'sizing', 'contracts', 'priority', 'source'];
 /** Keys only a policy strategy (signal: policy) has: the prop challenge it trades and how. */
 const POLICY_STRATEGY_KEYS = ['strategies', 'account', 'sizing', 'contracts'];
 const MTF_STYLES = require('./mtf').STYLES;
@@ -136,6 +136,12 @@ function validateStrategy(data, body, folderName) {
       if (data[k] !== undefined) errors.push(`${k}: only a policy strategy (signal: policy) trades an account; list this strategy in one (see strategies/prop_portfolio)`);
     }
     if (data.risk && data.risk.stop === 'strategy') errors.push('risk.stop: strategy is only for a policy strategy');
+    if (data.priority !== undefined) errors.push('priority: only a policy strategy (signal: policy) has one (it orders policies whose setups come in the same cycle)');
+  }
+  // Which policy goes first when two lanes' policies have a setup in the same cycle: 1 first. Parsed and
+  // checked now; the runner uses it once it cycles several lanes.
+  if (data.signal === 'policy' && data.priority !== undefined) {
+    req(Number.isInteger(data.priority) && data.priority >= 1 && data.priority <= 99, 'priority: a whole number 1 to 99 (1 goes first when policies collide in one cycle)');
   }
   // The initial balance and ADR need a bar at 09:30 ET: a timeframe that divides 30 minutes.
   const ruleText = JSON.stringify([data.rules || {}, (data.risk && data.risk.stop) || '', (data.exit && data.exit.target) || '']);

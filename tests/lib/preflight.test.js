@@ -154,6 +154,11 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   assert.strictEqual(status(report.results, 'allow-list'), 'ok');
   assert.strictEqual(status(report.results, 'broker trading'), 'ok');
   assert.strictEqual(status(report.results, 'clock'), 'ok');
+  // The runner's lane and each agent role's timeframe are reported (lanes.js).
+  assert.strictEqual(status(report.results, 'lane 3m'), 'ok');
+  assert.match(report.results.find(x => x.check === 'lane 3m').detail, /^3m bars, trigger bar; strategies: .*ema_cross.*; policies: prop_portfolio \(from timeframe and trigger\)$/);
+  assert.strictEqual(status(report.results, 'agent timeframes'), 'ok');
+  assert.match(report.results.find(x => x.check === 'agent timeframes').detail, /risk-manager 3m/);
   assert.ok(!calls.some(n => /order|close_position|journal_add/.test(n)), calls.join(', '));
   assert.ok(calls.includes('close'), 'the server is closed after');
   assert.match(P.formatReport(report), /FAIL broker: tools\/list[\s\S]*preflight FAILED: \d+ check\(s\)/);
