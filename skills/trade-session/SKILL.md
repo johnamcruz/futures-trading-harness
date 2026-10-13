@@ -217,7 +217,12 @@ background launch hasn't reported), and since the last `trade-executor` call:
 each entry has its own round of reports. The refusal names the roles that
 were missing; the refused `trade-executor` call itself ends the round, so
 report the block and end the cycle (step 6): the next cycle runs every role
-again, except those its prompt gives under "Cached reports".
+again, except those its prompt gives under "Cached reports". The gate also
+checks the `FACTS:` line of the phase-2 report that approved the entry
+against the bar briefing (`[phase2-facts]`): a fact the briefing contradicts,
+fewer than two facts it checks (with a current briefing), or facts it can't
+check, refuses the entry. Report that block with the fact
+it names, and end the cycle the same way.
 
 | Role (agent file) | Returns |
 |---|---|
@@ -412,7 +417,9 @@ numbers by the rules above and position-sizing.
 ### 5. Verdict
 
 `risk-manager` phase 2 with the plan. `VETO` → journal a note, end. In
-plan-only mode, report the plan and verdict and end.
+plan-only mode, report the plan and verdict and end. Its report ends with a
+`FACTS:` line (the briefing facts its verdict rests on); hand it on with the
+verdict line, unchanged.
 
 ### 6. Execute
 

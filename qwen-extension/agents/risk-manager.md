@@ -150,16 +150,49 @@ its facts; the order decides.
    no loss-streak cooldown.
 8. The analysts' red flags are addressed in the plan.
 
+**State the facts your verdict rests on** in one `FACTS:` line under the
+verdict line, copied from the bar briefing, each in one of these forms,
+separated by `;` (only these words; anything else goes in the verdict line).
+Always write at least two: start with the window and the trend rule for your
+side, e.g. `FACTS: window opening drive; trend long allowed`. One plan, one
+symbol: the facts are the plan's symbol's. Write each fact plainly: no "not",
+nothing in parentheses (the gate refuses those as ambiguous), and no item
+in any other form (the gate refuses the entry for it). The FACTS line is the
+last line of your report: every line after it is read as facts.
+
+- `window <name>` (the briefing's `m3` `window`, e.g. `window opening drive`), or `window rth`, `window overnight`
+- `entries allowed` or `entries none` (`m3` `windowEntries`)
+- `news clear` or `news blackout` (`m3` `news`)
+- `trend long allowed`, `trend long blocked`, `trend short allowed`, `trend short blocked` (`m3` `trendRule`)
+- `read long aligned` (or `mixed`, `pullback`, `counter`; `short` too) (`m15` `alignment`)
+- `15m up` (or `down`, `range`; `1h`, `4h` too) (`m15` `frame.trend`, `h1` `h1.trend` and `h4.trend`)
+- `vwap above` (or `below`, `at`) (`m3` `vwap.side`)
+- `value inside` (or `above`, `below`: the prior day's value area, `m3` `location.priorValue`)
+- `room long enough` or `room long short` (`short` side too; the room of
+  the plan's own setup, its `inTheWay` R against its `needR`: the gate checks
+  it against the order's `setup:` tag and side, so never a room fact about
+  another setup or side)
+- any of these with `unknown` for its value (`news unknown`, `read long
+  unknown`) when the briefing doesn't hold it; it never counts toward the two
+
+The harness checks each one against the briefing in code. The order gate
+refuses an entry approved on a fact the briefing contradicts or can't
+confirm (write `unknown` instead), on fewer than two facts the briefing
+checks, or on facts it can't check (no current briefing: write `FACTS:
+none`). A veto's facts are checked and recorded too.
+
 **Check every reason against the facts** before you approve or veto (after
 the checks above; they and the order gate's checks don't change). Write
-your verdict line, then call `reason_check {"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>"}`
+your verdict line and its FACTS line, then call `reason_check {"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>\n<your FACTS line>"}`
 once. It checks each reason against the bar briefing (the session window
 and whether it allows entries, the trend rule per side, the candidates and
 verdict, the room in R against the room needed, the multi-timeframe read
 for the side) and the attempt line, and lists each setup's priority-order
 steps as the facts answer them: judge each step on its own, not only the
-final call. A reason marked FALSE: name it, drop it, and decide again from
-the facts. Check UNCHECKED and UNPARSED reasons yourself against the
+final call. Put your FACTS line in `reasons` too, under the verdict line:
+it checks each FACTS claim as the order gate will, and a FACTS claim marked
+FALSE is a reason marked FALSE. A reason marked FALSE: name it,
+drop it, and decide again from the facts. Check UNCHECKED and UNPARSED reasons yourself against the
 briefing; they aren't false for that alone. Without a current briefing it
 checks nothing: check them against the plan and the reports.
 
@@ -171,6 +204,15 @@ last, after the VERDICT. Output exactly one of:
 ```text
 VERDICT: APPROVE - size <n>, risk $<x>, <one-line reason>
 VERDICT: VETO - <failed check>: <specific fix or "stand aside">
+```
+
+Write your VERDICT line, then the FACTS line last; nothing may follow it.
+One VERDICT line per report.
+For example:
+
+```text
+VERDICT: APPROVE - size 1, risk $10.50, orb long with the 1h up trend, room to 2R
+FACTS: window opening drive; entries allowed; trend long allowed; read long aligned; room long enough; vwap above
 ```
 
 Never suggest splitting orders, other accounts, or other symbols to get under a

@@ -51,6 +51,8 @@
  *   checkRolesRan(transcriptPath, cycle, cached, lookups)   the gate's message, or null; `lookups`: (call) -> the
  *                                                required skills it didn't look up (skill-lookups.js lookupRule):
  *                                                such a call doesn't count
+ *   approvedPhase2(transcriptPath, cycle, cached, lookups) the phase-2 report that approves this entry, judged as
+ *                                                checkRolesRan judges it: { text } | { error } | null
  */
 
 const fs = require('fs');
@@ -151,20 +153,120 @@ function rolesInTranscript(text) {
  * a VETO, or no verdict line, is not an approval (fails closed).
  */
 const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
+// Decision lines, the one definition the approval (verdictOf) and the gate (verdictProblem) both use. A line is read
+// plain: format characters dropped (markup, quotes and emoji are separators like any other). EVERY occurrence of the word "verdict" or
+// "decision" on a line is read: after it, qualifier tokens (final, phase, risk, overall, a number) and anything in (),
+// [] or \u00ab\u00bb are skipped, then the first token after any separators (':', '-', '|', '/', '=', arrows, ellipses, spaces) is
+// the decision. "is", "was", "to", "says" or "said" right after the word is prose: that occurrence isn't read (the veto
+// rule still reads its line). Nothing after it: the
+// next non-empty line's first token (a heading), unless that line holds the word itself. Only brackets after it: the
+// bracketed token is the decision; only numbers: the number is (no letters, so it refuses). The order's own setup,
+// side and size are what the gate checks, so several APPROVE lines are one approval, whatever else they say.
+//   - any decision that isn't approve, approved, full (the prop verdict's action) or take (the trader-process "8
+//     Decision: take") refuses; an approval is a verdict that says approve, approved or full;
+//   - VETO (vetoed, vetoes) in capitals anywhere, or any case on a decision line, refuses ("a read, never a veto" doesn't).
+// `full` is the prop verdict's own approving action (`skip` its other), so a model copying "verdict full" agrees.
+const AGREE = new Set(['approve', 'approved', 'full', 'take']);
+const APPROVE_WORDS = new Set(['approve', 'approved', 'full']);
+const KEYWORD_ALL = /\b(verdict|decision)\b/gi;
+const QUALIFIERS = new Set(['final', 'phase', 'risk', 'overall']);
+const PROSE = new Set(['is', 'was', 'to', 'says', 'said']);
+const BRACKETS = { '(': ')', '[': ']', '\u00ab': '\u00bb' };
+const VETO_WORD = /\bveto(?:ed|es)?\b/i;
+const VETO_CAPS = /\bVETO(?:ED|ES)?\b/;
+
+/** A line read plain: format characters dropped (markup, quotes and emoji are separators the decision reader skips). */
+const plainLine = l => String(l).replace(/\p{Cf}/gu, '');
+
 /**
- * A report's verdict (agents/risk-manager.md: `VERDICT: APPROVE ...` or `VERDICT: VETO ...`), read the way a model
- * writes it (markdown around the word or the label, a dash for the colon, "APPROVED", "VETOED"): `VETO` when any
- * verdict in it is a veto (a report that mentions both is not an approval), else `APPROVE` when one approves, else
- * null (no verdict line).
+ * The decision after one occurrence of the word: { word } (lower case; '' when nothing follows on the line), or null
+ * when the occurrence is prose ("the decision is ...").
  */
-function verdictOf(text) {
-  const found = [...String(text || '').matchAll(/\bVERDICT\b[\s*_`:\-\u2013\u2014]*(APPROVE|VETO)\w*/gi)].map(m => m[1].toUpperCase());
-  return found.includes('VETO') ? 'VETO' : found.includes('APPROVE') ? 'APPROVE' : null;
+function decisionAfter(rest) {
+  // "is", "was" or "to" right after the word (spaces only between): prose, not a decision.
+  const lead = /^\s+([A-Za-z]+)\b/.exec(rest);
+  if (lead && PROSE.has(lead[1].toLowerCase())) return null;
+  let i = 0;
+  let bracketed = null;
+  let number = null;
+  while (i < rest.length) {
+    const c = rest[i];
+    if (BRACKETS[c]) {
+      const end = rest.indexOf(BRACKETS[c], i + 1);
+      const inner = end === -1 ? rest.slice(i + 1) : rest.slice(i + 1, end);
+      if (bracketed === null) bracketed = (/[A-Za-z0-9]+/.exec(inner) || [''])[0];
+      i = end === -1 ? rest.length : end + 1;
+      continue;
+    }
+    if (!/[A-Za-z0-9]/.test(c)) { i += 1; continue; }
+    const tok = /^[A-Za-z0-9]+/.exec(rest.slice(i))[0];
+    const lower = tok.toLowerCase();
+    i += tok.length;
+    if (/^\d+$/.test(tok)) { if (number === null) number = tok; continue; }
+    if (QUALIFIERS.has(lower)) continue;
+    return { word: lower };
+  }
+  if (bracketed !== null) return { word: bracketed.toLowerCase() };
+  if (number !== null) return { word: number };
+  return { word: '' };
 }
 
-function approved(phase2) {
-  const last = phase2.slice().sort((a, b) => a.end - b.end)[phase2.length - 1];
-  return verdictOf(last.text) === 'APPROVE';
+/** Every decision in a text: [{ keyword, word (lower case), line }], one per occurrence of the word. */
+function decisionLines(text) {
+  const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').map(plainLine);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    for (const m of lines[i].matchAll(KEYWORD_ALL)) {
+      const d = decisionAfter(lines[i].slice(m.index + m[0].length));
+      if (d === null) continue;
+      let { word } = d;
+      let line = lines[i];
+      if (!word) {
+        // A heading: the decision is the next non-empty line's first token, unless that line holds the word itself.
+        const j = lines.findIndex((l, k) => k > i && l.trim());
+        if (j !== -1 && new RegExp(KEYWORD_ALL.source, 'i').test(lines[j])) continue;
+        word = j === -1 ? '' : decisionAfter(`:${lines[j]}`).word;
+        line = `${lines[i]} ${j === -1 ? '' : lines[j]}`;
+      }
+      out.push({ keyword: m[1].toLowerCase(), word, line });
+    }
+  }
+  return out;
+}
+
+/** Why a report is no approval, or null: a decision other than approve/take, or a veto. */
+function verdictProblem(text) {
+  const lines = decisionLines(text);
+  const other = lines.find(l => !AGREE.has(l.word));
+  if (other) return `a ${other.keyword} line decides ${other.word || 'nothing'}, not APPROVE ("${other.line.trim().replace(/\s+/g, ' ').slice(0, 80)}")`;
+  // The veto rule reads every line holding the word, prose too ("the verdict is veto").
+  const keyed = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').map(plainLine).filter(l => /\b(?:verdict|decision)\b/i.test(l));
+  if (lines.some(l => VETO_WORD.test(l.line)) || keyed.some(l => VETO_WORD.test(l))) return 'a decision line says veto';
+  const plain = String(text || '').replace(/\p{Cf}/gu, '');
+  if (VETO_CAPS.test(plain)) return 'the report says VETO';
+  return null;
+}
+
+/** The report's verdict: 'APPROVE' (a verdict line approves and nothing refuses), 'VETO' (anything refuses), or null. */
+function verdictOf(text) {
+  if (verdictProblem(text)) return 'VETO';
+  return decisionLines(text).some(l => l.keyword === 'verdict' && APPROVE_WORDS.has(l.word)) ? 'APPROVE' : null;
+}
+
+/** Kept for callers that count decision lines. */
+const verdictMatches = decisionLines;
+const verdictLines = decisionLines;
+
+/**
+ * THE phase-2 report: the latest completed phase-2 report by end time, or null when there is none or two end together
+ * (no single report can be told). The entry stands or falls on it alone: its verdict must approve, and its FACTS are
+ * the ones the gate checks.
+ */
+function latestPhase2(phase2) {
+  if (!phase2.length) return null;
+  const sorted = phase2.slice().sort((a, b) => a.end - b.end);
+  const last = sorted[sorted.length - 1];
+  return sorted.length > 1 && sorted[sorted.length - 2].end === last.end ? null : last;
 }
 
 /**
@@ -177,13 +279,16 @@ function roundStart(launches = []) {
   return Math.max(-Infinity, ...launches.filter(l => l !== current).map(l => (l.end ?? l.start)));
 }
 
-/** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
-function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
-  if (!CYCLES.includes(cycle)) return [];
+/**
+ * The round before this entry, from the calls since the last trade-executor call ended: { missing: what the cycle
+ * still lacks, [] when complete; p2: the phase-2 reports that count }.
+ */
+function round({ calls = [], launches = [] }, cycle, cached = []) {
+  if (!CYCLES.includes(cycle)) return { missing: [], p2: [] };
   // The trade-executor launch placing this order may still be running (Claude, Qwen: no result yet); any other
   // launch, finished, errored, running or in the background, ends the round: its end, else its start.
   const pending = launches.filter(l => l.pending);
-  if (pending.length > 1) return [`one trade-executor at a time (${pending.length} running)`];
+  if (pending.length > 1) return { missing: [`one trade-executor at a time (${pending.length} running)`], p2: [] };
   const lastExec = roundStart(launches);
   const fresh = calls.filter(c => c.start > lastExec);
   const firstEnd = role => Math.min(...fresh.filter(c => c.role === role).map(c => c.end));
@@ -199,26 +304,60 @@ function missingRoles({ calls = [], launches = [] }, cycle, cached = []) {
     // Phase 1 served from the cache: phase 2 is a risk-manager call started after every analyst that ran.
     const p2 = rm.filter(c => c.start > Math.max(-Infinity, ...ranAfter));
     if (!p2.length) missing.push(`risk-manager phase 2 (started after ${needed.length ? 'the analysts' : 'the cached reports were given'})`);
-    else if (!approved(p2)) missing.push(NOT_APPROVED);
-    return missing;
+    return { missing, p2 };
   }
-  if (!rm.length) return [...missing, 'risk-manager phase 1', `${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`];
+  if (!rm.length) return { missing: [...missing, 'risk-manager phase 1', `${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`], p2: [] };
   // Phase 2 reviews the plan: it starts once phase 1 (and every analyst) has returned.
   const phase1End = Math.min(...rm.map(c => c.end));
   const after = Math.max(phase1End, ...ranAfter);
   const p2 = rm.filter(c => c.start > after);
   if (!p2.length) missing.push(`${PHASE2}${cycle === 'full' ? ' and the analysts' : ''} returned)`);
-  else if (!approved(p2)) missing.push(NOT_APPROVED);
-  return missing;
+  return { missing, p2 };
 }
 
 /**
- * The gate's check: a message naming what hasn't returned, or null. No
- * transcript or no cycle (an interactive session) -> null. A transcript the
- * runner named but that can't be read -> refused (fails closed).
+ * The round judged once, for the roles check and the facts check alike (the same calls, the same cached list):
+ * { missing, unmet, report }. Index mode (`lookups`, skill-lookups.js): a report whose role didn't look up a skill this
+ * bar requires doesn't count toward the roles, and a cached role that needs one isn't counted as cached. The phase-2
+ * report is the latest-ending COUNTED phase-2 call; it must approve, and no uncounted risk-manager veto may end at or
+ * after it, or the entry is refused (NOT_APPROVED); `report` is it when it approves.
  */
-function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
-  if (!transcriptPath || !CYCLES.includes(cycle)) return null;
+function assessRound(found, cycle, cached = [], lookups = null) {
+  const unmet = [];
+  let calls = found.calls;
+  if (typeof lookups === 'function') {
+    // This round's calls only: a lookup made before the last trade-executor call counts for that entry, not this one.
+    const inRound = found.calls.filter(c => c.start > roundStart(found.launches));
+    calls = found.calls.filter(c => {
+      const skills = lookups(c, inRound);
+      if (skills.length) unmet.push(`${c.role} reported without looking up ${skills.join(', ')} (its skill index requires it on this bar, or on any bar when no current bar briefing shows the situation: skill_lookup with its role)`);
+      return !skills.length;
+    });
+  }
+  // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
+  const needs = typeof lookups === 'function' && typeof lookups.needs === 'function' ? lookups.needs : () => [];
+  for (const r of cached) if (needs(r).length) unmet.push(`${r} was served from the report cache, which made no lookup of ${needs(r).join(', ')} this cycle`);
+  const counted = cached.filter(r => !needs(r).length);
+  const { missing, p2 } = round({ calls, launches: found.launches }, cycle, counted);
+  // THE phase-2 report: the latest-ending COUNTED phase-2 call (round()'s set: after phase 1 and the analysts, with
+  // its lookups); it must approve (main's rule: a veto, then a revised plan approved later, passes; the reverse doesn't).
+  // An uncounted call (no lookups, started before phase 1 or the analysts returned) never approves; one that vetoes
+  // and ends at or after the selected report refuses it.
+  const latest = latestPhase2(p2);
+  const lastExec = roundStart(found.launches);
+  const counted2 = new Set(p2);
+  const laterVeto = Boolean(latest) && found.calls.some(c => c.role === 'risk-manager' && c.start > lastExec && !counted2.has(c)
+    && c.end >= latest.end && verdictOf(c.text) === 'VETO');
+  const approves = Boolean(latest) && verdictOf(latest.text) === 'APPROVE' && !laterVeto;
+  if (CYCLES.includes(cycle) && !missing.length && !approves) missing.push(NOT_APPROVED);
+  return { missing, unmet, report: approves ? latest : null };
+}
+
+/** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
+const missingRoles = (rc, cycle, cached = []) => assessRound(rc, cycle, cached).missing;
+
+/** The cycle's transcript (with its main session's, for a Claude subagent): { text }, or { error } when the named file can't be read. */
+function readTranscript(transcriptPath) {
   // A Claude subagent's hook gets its own transcript: the roles ran in its main session's.
   const files = transcriptFiles(transcriptPath).reverse();
   const texts = [];
@@ -232,28 +371,38 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
       fs.closeSync(fd);
       texts.push(buf.toString('utf8'));
     } catch (err) {
-      if (file === transcriptPath) return `The cycle's transcript can't be read (${err.code || err.message}), so the gate can't see which roles ran: no entry this cycle.`;
+      if (file === transcriptPath) return { error: err.code || err.message };
     }
   }
-  const found = roleCalls(texts.join('\n'));
-  // Index mode (skill-lookups.js): a report whose role didn't look up a skill this bar's briefing requires doesn't count.
-  const unmet = [];
-  if (typeof lookups === 'function') {
-    // This round's calls only: a lookup made before the last trade-executor call counts for that entry, not this one.
-    const round = found.calls.filter(c => c.start > roundStart(found.launches));
-    found.calls = found.calls.filter(c => {
-      const skills = lookups(c, round);
-      if (skills.length) unmet.push(`${c.role} reported without looking up ${skills.join(', ')} (its skill index requires it on this bar, or on any bar when no current bar briefing shows the situation: skill_lookup with its role)`);
-      return !skills.length;
-    });
-  }
-  // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
-  const needs = typeof lookups === 'function' && typeof lookups.needs === 'function' ? lookups.needs : () => [];
-  for (const r of cached) if (needs(r).length) unmet.push(`${r} was served from the report cache, which made no lookup of ${needs(r).join(', ')} this cycle`);
-  const missing = missingRoles(found, cycle, cached.filter(r => !needs(r).length));
+  return { text: texts.join('\n') };
+}
+
+/**
+ * The phase-2 report that approves this entry, judged exactly as checkRolesRan judges it (assessRound, the same inputs):
+ * { text }; { error } when the transcript can't be read; null when the round isn't complete or its latest phase-2
+ * report doesn't approve (checkRolesRan refuses then).
+ */
+function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null) {
+  if (!transcriptPath || !CYCLES.includes(cycle)) return null;
+  const t = readTranscript(transcriptPath);
+  if (t.error) return { error: t.error };
+  const { missing, report } = assessRound(roleCalls(t.text), cycle, cached, lookups);
+  return missing.length || !report ? null : { text: report.text };
+}
+
+/**
+ * The gate's check: a message naming what hasn't returned, or null. No
+ * transcript or no cycle (an interactive session) -> null. A transcript the
+ * runner named but that can't be read -> refused (fails closed).
+ */
+function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
+  if (!transcriptPath || !CYCLES.includes(cycle)) return null;
+  const t = readTranscript(transcriptPath);
+  if (t.error) return `The cycle's transcript can't be read (${t.error}), so the gate can't see which roles ran: no entry this cycle.`;
+  const { missing, unmet } = assessRound(roleCalls(t.text), cycle, cached, lookups);
   return missing.length
     ? `A ${cycle} cycle enters only after its roles report, in the foreground, since the last trade-executor call (trade-session skill); not returned yet: ${missing.join(', ')}${unmet.length ? ` (${[...new Set(unmet)].join('; ')})` : ''}. This refused trade-executor call ends the round: report the block and end the cycle (trade-session step 6); the next entry needs every role again, then risk-manager phase 2 approving its plan, before its trade-executor call (a role whose report the cycle prompt gave from the cache counts only before the cycle's first trade-executor call; where the harness refuses its launch, that next entry is the next cycle's).`
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, verdictOf };
+module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };

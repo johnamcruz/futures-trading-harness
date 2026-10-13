@@ -435,7 +435,7 @@ test('the priority order is written once, in strategy-library, and every role th
 test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
   // Line breaks fall differently in each document: compare with the whitespace collapsed.
   const flat = text => text.replace(/\s+/g, ' ');
-  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE: name it, drop it, and decide again from the facts\. Check UNCHECKED and UNPARSED reasons yourself[^.]*?; they aren't false for that alone\./;
+  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>(?:\\n<your FACTS line>)?"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE: name it, drop it, and decide again from the facts\. Check UNCHECKED and UNPARSED reasons yourself[^.]*?; they aren't false for that alone\./;
   // Only a FALSE reason is dropped: a true one the checker can't read (UNPARSED) stays.
   for (const doc of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md']) assert.doesNotMatch(flat(read(doc)), /no fact supports/, doc);
   const rm = read('agents/risk-manager.md');
@@ -462,6 +462,33 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   assert.match(oc.agent['risk-manager'].prompt, /\*\*Check every reason against the facts\*\*/);
   // The head trader reads the skills from their files; the workspace instructions list the tool's skill.
   assert.match(read('workspace/AGENTS.md'), /`harness-tools` \(skills\/harness-tools\/SKILL\.md\): [^\n]*the check of stated reasons/);
+});
+
+test('fact-checked reasons: phase 2 states its FACTS in the forms the code checks (fact-claims.js), in every adapter', () => {
+  const { parseClaim, checkFacts } = require('../../scripts/lib/trading/fact-claims');
+  const flat = text => text.replace(/\s+/g, ' ');
+  const rm = read('agents/risk-manager.md');
+  const list = rm.slice(rm.indexOf('**State the facts your verdict rests on**'), rm.indexOf('**Check every reason'));
+  assert.ok(list.length > 0, 'the FACTS forms come before the reason check');
+  // Every concrete form the agent teaches parses as a claim (none is "unknown"), and every claim type is taught.
+  const forms = [...list.matchAll(/^- `([^`]+)`/gm)].map(m => m[1]).concat([...list.matchAll(/, `((?:trend|room|window) [a-z ]+)`/g)].map(m => m[1]));
+  const concrete = forms.filter(f => !/[<>]/.test(f));
+  for (const f of concrete) assert.notStrictEqual(parseClaim(f).type, 'unknown', f);
+  assert.deepStrictEqual([...new Set(concrete.map(f => parseClaim(f).type))].sort(), ['entries', 'news', 'read', 'room', 'tf', 'trend', 'value', 'vwap', 'window']);
+  // The example's FACTS line is read whole.
+  const example = /^FACTS: .*$/m.exec(rm.slice(rm.indexOf('Output exactly one of:')))[0];
+  assert.ok(checkFacts(example, null).claims.every(c => c.type !== 'unknown'), example);
+  assert.match(flat(rm), /The order gate refuses an entry approved on a fact the briefing contradicts or can't confirm \(write `unknown` instead\), on fewer than two facts the briefing checks, or on facts it can't check \(no current briefing: write `FACTS: none`\)\./);
+  // The reason_check template carries the FACTS line, as the text says.
+  assert.match(rm, /`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>\\n<your FACTS line>"\}`/);
+  assert.match(flat(rm), /Always write at least two: start with the window and the trend rule for your side, e\.g\. `FACTS: window opening drive; trend long allowed`\./);
+  // Synced: Codex's and Qwen's risk manager and opencode's carry it.
+  for (const text of [read('.codex/agents/risk-manager.toml'), read('qwen-extension/agents/risk-manager.md'), JSON.parse(read('workspace/opencode.json')).agent['risk-manager'].prompt]) {
+    assert.match(flat(text), /\*\*State the facts your verdict rests on\*\* in one `FACTS:` line/);
+  }
+  // The head trader hands the line on and reads the gate's refusal.
+  assert.match(flat(read('skills/trade-session/SKILL.md')), /checks the `FACTS:` line of the phase-2 report that approved the entry against the bar briefing \(`\[phase2-facts\]`\)/);
+  assert.match(read('skills/gate-refusals/SKILL.md'), /\| `\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: <fact>` \|/);
 });
 
 test('the reasons check example in harness-tools has the form the check prints ("the <account> attempt is active")', () => {

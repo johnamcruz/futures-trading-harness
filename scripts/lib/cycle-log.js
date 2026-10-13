@@ -15,6 +15,10 @@
  *       the skills an entry needed but the model never loaded, and the roles'
  *       skill lookups (skill-lookups.js: how many, by role, and the reports a
  *       bar's required lookup applied to and met)
+ *   factCheck (in both, the line's counts only when there is a report): every
+ *       risk-manager phase-2 report's FACTS checked against the briefing
+ *       (trading/fact-claims.js cycleFactChecks), for review (the scorecard
+ *       reads its own reasonChecks, not this record)
  *
  * Transcripts: Claude Code runs with --output-format stream-json (one JSON
  * event per line, tool calls included); Codex with --json; Qwen Code with
@@ -29,6 +33,7 @@ const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
+const { cycleFactChecks } = require('./trading/fact-claims');
 const { documents, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
@@ -133,18 +138,22 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   const summary = summarize(output);
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
   if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at });
+  // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded
+  // for review; the scorecard reads its own reasonChecks, not this record (wiring it in is a separate change). Never throws.
+  const factCheck = cycleFactChecks({ home, output, context, now: at });
   const stamp = at.toISOString().slice(11, 19).replace(/:/g, '');
   const file = path.join(home, 'logs', 'cycles', day, `${stamp}-${action}.json`);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({
-      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, summary,
+      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, summary, factCheck,
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2));
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
       at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
+      ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
     })}\n`);
   } catch (_err) {
     // best effort
