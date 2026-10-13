@@ -16,9 +16,12 @@ Pass a prop combine **before the next renewal fee is charged, and the
 faster the better, without ever blowing the account**. (Trading the funded
 account is out of scope for this design; section 11.)
 
-- **The attempt length** is the billing period: about 21 trading sessions
-  for a monthly cycle (`sessions` in `ACCOUNT.md`, today 30, set to match).
-- **Consistency** means 40-50% of attempts pass within it, and **no attempt
+- **The attempt length** is the account's `sessions` (`ACCOUNT.md`, today
+  30 in every account): the cap after which an attempt ends as a timeout
+  (`scripts/lib/trading/combine.js`). **The goal** is shorter: to pass
+  within the billing period, about 21 trading sessions for a monthly cycle,
+  well inside that cap.
+- **Consistency** means 40-50% of attempts pass within the attempt length, and **no attempt
   blows the account: zero, with no exception**, in the search and in every
   out-of-sample month.
 - **Speed** is the tie-break: among settings that pass as often, the one
@@ -37,7 +40,8 @@ the LLM to trade, the strategies, and a **rulebook**: a small set of numbers
 and context rules in one place. The runner and the order gate enforce the parts that can be
 computed from facts, and the skills teach the rest to the LLM. The
 backtester runs the rulebook mechanically. A search over the rulebook's
-parameters, scored by Monte Carlo combine attempts on five years of bars,
+parameters, scored by Monte Carlo combine attempts on the replay broker
+server's history (section 4),
 picks the configuration that passes most often without blowing. Each
 skill's claims about the market are tested on the same data, and the ones
 that hold set the rulebook's numbers. Replays measure whether the LLM
@@ -54,7 +58,7 @@ the champion is replaced only with the owner's approval.
 | Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard` (`prop_portfolio` `sizing`, `combine.js` `DEFAULT_SIZING`); the soft daily stop (`daily_loss_soft` in `ACCOUNT.md`); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. keltner in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
-| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate, keltner's ADX ≥ 20), per market where they differ | Calibration |
+| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate, keltner's ADX ≥ 20), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
 | Exits | `prop_portfolio` `exit` (hold to +2R, trail 0.5R) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
@@ -107,28 +111,153 @@ The owner's classification is in section 11: the mechanical items enforced, judg
 
 ## 4. Data and splits
 
-- **Bars:** 1-minute NQ, ES, YM and RTY, from 2021-04 to 2026-07-20 (each
-  backtest config names its files); 3-minute and 15-minute bars are derived
-  from them. Order flow: NQ trades and quotes, 2020-12 to 2025-11.
-  The bars are **back-adjusted**, so price levels in early years are not the
-  prices traded then. Any rule or base rate that depends on price level
-  (percent of price, round numbers) uses unadjusted data or is excluded.
-  Dollar and tick risk are unaffected.
+- **Bars (owner's decision, 2026-10-13).** Phase B (the evaluator, the
+  Monte Carlo, calibration, Optuna and the training loop) trains and
+  evaluates on **the replay broker server's raw front-contract bars**,
+  fetched through the broker interface at **each strategy's own timeframe**
+  (1-minute bars for a 1-minute strategy, 3-minute bars for a 3-minute one,
+  and so on), with **every field the server puts on its bars kept**. They are
+  priced like live: the front contract's own prices, with the real roll
+  dates, and no back-adjustment, so a price level is the price traded then.
+  **Rolls:** the raw front-contract series jumps at each roll, and the
+  indicators (ATR, ADX, the averages, the prior day's levels) span the
+  jump. That is what live sees only as long as the live server's history
+  around a roll behaves the same way; it is checked against the live server
+  (R36) before it is relied on.
+  This is the data path live uses (the live broker server through the same
+  interface), so training sees what live sees. It replaces the back-adjusted
+  1-minute files (2021-04 to 2026-07-20) and the 3-minute and 15-minute bars
+  derived from them, which carried no broker fields (`docs/BACKTESTING.md`).
+  Phase B **requires** the backtester to fetch at a strategy's timeframe
+  while keeping the broker's fields (`backtest fetch --timeframe`, its own
+  pull request). Today `backtest.js fetch` gets 1-minute bars only, so
+  Phase B can't start before it lands.
+- **Flow coverage (owner's decision, 2026-10-13).** The replay server's
+  flow fields cover **2021-05 to 2025-11**, for NQ (MNQ's bars carry NQ's
+  flow, as `strategies/ofi` says); another market's coverage is checked
+  before it is calibrated (NQ first, section 11). Phase B's splits are restricted to that
+  span. No window in `scripts/lib/prop/splits.js` moves: coverage limits
+  which months carry flow, never which role a month has, so "set in advance"
+  still holds. What changes, split by split (the Flow column below):
+  - **Train:** its data starts 2021-05 (the old files began 2021-04-25); its
+    window in code (from 2021-01-01) is unchanged, and it still holds about
+    26 months.
+  - **Select** and **Out-of-sample:** unchanged, wholly inside coverage.
+  - **Recent:** only its first five months, 2025-07 to 2025-11, are covered;
+    2025-12 to 2026-06 are not.
+  - **New months** (2026-07 on), and with them the walk-forward half-years'
+    tuning and held-out quarters (R17) and the reserve: not covered.
+  - **LLM** months (2026-06 on): not covered.
+
+  **Outside coverage**, a bar has no flow fields, so every flow condition is
+  false: `ofi` and `ofi_absorption` give no signal, `prop_flow_1m` has no
+  setup, and `value_area` confirms only through its range expansion (fails
+  closed; nothing estimates the flow). The flow strategies are **excluded
+  from every claim on those months**: no calibration result, Monte Carlo
+  score, gate result or adherence finding about a flow strategy, or about
+  `value_area`'s flow branch, is drawn from them. The other strategies are
+  scored there as usual, on the months the replay server serves bars for.
+  **Attempts of a policy with a flow branch** (`prop_flow_1m`, or
+  `prop_portfolio` with `value_area`) on a window that is not wholly
+  covered:
+  - **coverage is decided at the start, never by the outcome:** an attempt
+    is **covered** only if its start day plus the maximum attempt length
+    lies inside coverage, whatever it does. The maximum is `sessions`
+    sessions, the account's attempt length (section 1; `sessions` in
+    `ACCOUNT.md`, validated by `scripts/lib/trading/accounts.js`; today 30
+    in every account). Deciding by where an attempt
+    actually ends would keep quick passes near the edge and drop slow
+    timeouts, inflating the pass rate;
+  - an attempt that **starts later** (its maximum length would run past
+    2025-11) is **not covered**, and **not cut**, since a cut attempt would
+    end as a timeout it never was: it runs to its end, flow off once past
+    coverage;
+  - an attempt on **uncovered months** runs flow off. Its results, and any
+    portfolio-level result there (a Monte Carlo score, a walk-forward
+    check), are marked **"flow off"**: they show the policy without its
+    flow branch and are not evidence of its live behaviour.
+
+  The gate (R15) then counts: **blows on every attempt that starts in the
+  window, whatever its coverage**, so zero blows in every month covers
+  every month in which attempts start, as for any policy; the **pass rate, its lower
+  bound and the attempt count on covered attempts only**; and the **"at
+  least 2 months" check on months with covered attempts only**, the same
+  population. With no covered attempt the policy can't be promoted. So the
+  blow check covers every attempt and month a non-flow policy's does, and
+  the attempt and month minimums are counted on a subset of its attempts,
+  so they are no easier to meet. The pass rate is the one check measured
+  on a different population: the covered attempts, chosen by start day
+  alone (so the choice can't favour passes), because only they show the
+  policy as it trades. It is not claimed to be no easier to meet: on the
+  smaller sample its lower bound is wider. The gate's
+  numbers are unchanged. Today's Out-of-sample (2024-07 to
+  2025-06) is wholly covered, so there it changes nothing; Recent, when it
+  becomes the window, is partly covered. If
+  coverage later grows (the replay server's store extended, or minutes
+  recorded from the live server), the months it adds count for the flow
+  strategies in the role they already have.
+
+  **The tuning and held-out halves for flow parameters.** Inside coverage,
+  the flow parameters (R34) are set on the **tuning half**, Train (2021-05
+  to 2023-06, 26 months; calibration inside its folds, R5), and judged on
+  the **held-out half**, Select and Out-of-sample (2023-07 to 2025-06, 24
+  months), which choose and judge as they do for every other value, under
+  the look budget (R16). These are the existing windows, not new ones. When
+  Recent becomes the out-of-sample window (R16), a flow component is judged
+  there on its five covered months only: the gate's numbers apply unchanged
+  (R15), on roughly 3-4 independent 30-session attempts, so its bound is
+  wide. (2025-07 to 2025-11 hold about 106 sessions; a covered attempt must
+  start at least 30 sessions before 2025-12, so covered starts run from
+  2025-07 to about mid-October, and 106 sessions hold 3-4 non-overlapping
+  30-session attempts.)
+- **Flow-covered LLM windows (owner's decision, 2026-10-13; planned).** The
+  2026 LLM months have no flow, so **the LLM's adherence on flow setups is
+  unmeasured until these windows exist**. Extra LLM replay and label windows
+  (the labels the loop scores, R25; the LLM replays R26 requires; the
+  decision-point panels, R30) are drawn from the covered history, 2021-05
+  to 2025-11, inside the splits:
+  - labels, tuning panels and anything else used for tuning come **only
+    from Train** (the tuning half);
+  - Select and Out-of-sample months (the held-out half) are used **only for
+    judging, each month once**, and every such look is logged in the ledger
+    (R16; an Out-of-sample look counts against its budget). The months the
+    parity look already touched (March to June and August 2024, R34) count
+    as used;
+  - Recent's covered months stay reserved (R16), as for every other use;
+  - departures seen on these windows give no candidate claims (R22 is
+    unchanged);
+  - the 2026 LLM months stay the LLM's months for the non-flow checks.
+
+  Today label windows are 30-trading-day windows, stratified and seeded
+  (drawn once and recorded), on the split windows of
+  `scripts/lib/prop/splits.js`, as `docs/QUANT-PLAN.md` ("Windows")
+  defines them; no code draws them, and `scripts/lib/replay/labels.js` only
+  reads the runs. The flow-covered windows follow the same rule inside
+  Train, and inside Select and Out-of-sample for judging; drawing and
+  recording them is planned, not built.
+
+  **Contamination risk.** These months come before the model's training
+  cutoff, so the local model may half-remember 2021-2025 prices and what
+  followed. Mitigations: replays hide the date where they can (a planned
+  change to what a replay shows), and results on these windows are compared
+  with the 2026 LLM months on the non-flow measures; a gap in the older
+  windows' favour is read as memorisation, and those results are not used.
 - **Every month has a defined role**, set in advance, and the newest data
   goes to validation and testing. **Every attempt starts and ends inside one
   block of one role** (a split, or a half-year block), and each block is
   scored on its own. Half-year blocks hold about 126 sessions, at least
   twice an attempt:
 
-| Split | Range | Use |
-| --- | --- | --- |
-| Train | 2021-04 to 2023-06 | calibration and the search |
-| Select | 2023-07 to 2024-06 | choosing among candidates |
-| Out-of-sample | 2024-07 to 2025-06 | the promotion gate, under a look budget (R16) |
-| Recent | 2025-07 to 2026-06 | reserved: the next out-of-sample window once the current one is retired (R16). Nothing looks at it before then, except the June 1-5, 2026 LLM replay, which is recorded in the ledger and yields no candidate claims (R22). |
-| New months | 2026-07 on | by half-year, alternately: 2026-H2 for walk-forward checks (R17), 2027-H1 into the reserve for a later out-of-sample window (R16), and so on. Never both. |
-| LLM | 2026-06 on (after the model's cutoff), any month | the LLM's replays and adherence. These months come after the model's training cutoff, so it cannot remember them. Measuring the LLM chooses no rulebook, so it doesn't use up a month's mechanical role. |
-| Live | every live session, as it is traded | the runner's own record of live trading (`source: live` in each session's manifest, below), scored by the same scorecard as a replay. Its own split: never pooled with replay decisions, and it chooses no rulebook. |
+| Split | Range | Use | Flow |
+| --- | --- | --- | --- |
+| Train | 2021-05 to 2023-06 | calibration and the search; the tuning half for flow parameters | covered |
+| Select | 2023-07 to 2024-06 | choosing among candidates; with Out-of-sample, the held-out half for flow parameters | covered |
+| Out-of-sample | 2024-07 to 2025-06 | the promotion gate, under a look budget (R16) | covered |
+| Recent | 2025-07 to 2026-06 | reserved: the next out-of-sample window once the current one is retired (R16). Nothing looks at it before then, except the June 1-5, 2026 LLM replay, which is recorded in the ledger and yields no candidate claims (R22). | 2025-07 to 2025-11 only |
+| New months | 2026-07 on | by half-year, alternately: 2026-H2 for walk-forward checks (R17), 2027-H1 into the reserve for a later out-of-sample window (R16), and so on. Never both. | not covered |
+| LLM | 2026-06 on (after the model's cutoff), any month | the LLM's replays and adherence. These months come after the model's training cutoff, so it cannot remember them. Measuring the LLM chooses no rulebook, so it doesn't use up a month's mechanical role. | not covered: the non-flow checks |
+| LLM, flow-covered (planned) | windows in Train (tuning, labels) and in Select or Out-of-sample (judging, once each, logged) | the LLM's adherence on flow setups (above), with the contamination risk stated there | covered |
+| Live | every live session, as it is traded | the runner's own record of live trading (`source: live` in each session's manifest, below), scored by the same scorecard as a replay. Its own split: never pooled with replay decisions, and it chooses no rulebook. | the live server's flow |
 
 **Live sessions are recorded as replays are.** The runner records every
 decision of a live session in a replay's layout (`<FTH_HOME>/sessions/<trading
@@ -162,6 +291,34 @@ day), with or without a cycle. What still differs from a replay:
   and the scorecard read each line with the config in force at its time
   (timeframe, paper mode, symbols).
 
+**R35. The flow at each decision** (owner's decision, 2026-10-13; planned,
+two changes built in their own pull requests, none of it exists today).
+Learning must see the broker fields a decision was made on, so:
+
+- **Recorded.** Each decision line, live and replay, records the
+  `field("...")` values the strategies' rules read at that bar (by strategy
+  and path, a null kept as null), and each session archives the broker bars
+  it used. The broker server's settings that shape its bar fields are
+  recorded in the session's `fingerprints` (R33), so a live session and a
+  replay can be checked for the same settings. A server's `env` list in
+  `mcp-configs/brokers.json` mixes credentials and settings, so the
+  fingerprint takes **only an explicit allowlist**: a new, planned key on
+  the server's entry (e.g. `fingerprintEnv`) naming the bar-shaping
+  settings. Only those values are recorded; a variable not on the
+  allowlist never is, and credentials never are.
+- **Shown.** The rule results the model is shown (each rule's `ok`, as the
+  scan reports it) carry those field values, so the model reads the number
+  a flow condition was judged on, not only whether it held.
+- **Joined.** The labels (`replay.js labels`) and the scorecard (R19) join
+  each decision to its recorded values and archived bars, so calibration
+  (R11-R13), the LLM-level estimate (R20) and the training loop (R25) see
+  the flow at each decision. On the flow-covered LLM windows (section 4)
+  the join carries real values; on uncovered months it carries nulls, and
+  those decisions say nothing about flow. Today a decision line names each symbol's last
+  bar time, not its field values, and no session archives its bars: until
+  both changes land, nothing in Phase B may assume a decision's flow is
+  recorded.
+
 **R5. No double-dipping.**
 
 - Calibration runs inside folds of train: claims are measured on one fold
@@ -177,7 +334,9 @@ day), with or without a cycle. What still differs from a replay:
 **R6. Evaluator, in two layers.**
 
 1. **Trade generation (slow, deterministic).** For each set of strategy
-   parameters, the backtester runs the strategies over the bars once.
+   parameters, the backtester runs the strategies over the bars once: the
+   replay server's bars at each strategy's own timeframe, with their broker
+   fields (section 4).
    - It records each setup's facts: the multi-timeframe read, the room, the
      confluence and the regime. They are computed by **the functions live
      uses** (the multi-timeframe read in `harness-tools/mtf.js`, the room in
@@ -287,7 +446,14 @@ will judge them, before any measurement. Examples:
 - "a reversal only at a higher-timeframe level, nearest target";
 - "skip when room < the setup's R";
 - "lunch-window setups are weaker";
-- each strategy's skip rules and filters.
+- each strategy's skip rules and filters;
+- the flow strategies' claims (R34), measured only on covered months
+  (section 4): `ofi`'s "flow that agrees over 1, 3 and 5 bars and moves
+  price continues"; `ofi_absorption`'s "heavy one-sided flow over 5 bars that
+  fails to move price, then a turn, reverses"; `value_area`'s "the 3-bar flow
+  confirmation at the prior day's POC adds edge beyond its range-expansion
+  confirmation"; and for each, whether an RTH or a
+  volume condition improves it (a candidate claim, not a given).
 
 **R12. Measurement.** Within the calibration fold, on NQ first, each claim
 is measured: the expectancy in R, the win rate and the drawdown with and
@@ -310,7 +476,60 @@ the LLM can read. Examples: today's range percentile for this hour, how
 often the opening range breaks, and the past expectancy of setups like this
 one in this context. They are facts, never grades or vetoes (the briefing
 rule). Each base rate is computed only from data before the bar it
-describes, and none depends on back-adjusted price levels.
+describes. Phase B's bars are not back-adjusted (section 4), so a price
+level is the price traded then.
+
+**R34. Flow strategies in scope** (owner's decision, 2026-10-13). `ofi`,
+`ofi_absorption`, `value_area` (its flow confirmation) and, through them,
+`prop_flow_1m` are calibrated, searched and gated like every other
+strategy, on covered months only (section 4).
+
+- **Their thresholds are calibrated parameters**, set on the tuning half
+  only and judged on the held-out half (section 4), never on Recent's or
+  the new months' uncovered bars. They are, by the paths the strategies
+  read:
+  - `ofi`: the one-bar imbalance `field("flow.ofiTrade")` and the 3- and
+    5-bar windows `field("flow.windows.3.ofiTrade")` and
+    `field("flow.windows.5.ofiTrade")`, each ±0.3 today;
+  - `ofi_absorption`: `field("flow.windows.5.ofiTrade")`, ±0.25 today, and
+    the sign of `field("flow.ofiTrade")` on the turning bar;
+  - `value_area`: its confirmation `field("flow.windows.3.ofiTrade")`, ±0.2
+    today.
+- **The parity finding.** Those starting values were set for the harness's
+  former bar-shape estimate. On the replay server's real flow they almost
+  never fire: under 0.05% of RTH bars. Calibration must set them from real
+  flow, and the starting values carry no evidence. That finding was
+  measured on 54 days of 2024 (March 4-22, April 8-19, May 20-24, June
+  6-21 in Select; August 1-9 in Out-of-sample), so it is **a held-out look**
+  at both windows. It is recorded as one, beside the June replay, in
+  `RECORDED_LOOKS` (`scripts/lib/prop/splits.js`: a `select` entry from
+  2024-03-04 to 2024-06-22 and an `oos` entry from 2024-08-01 to
+  2024-08-10, `to` exclusive, with a test that each lies in its block), so
+  the ledger (R16) starts with it; it counts against Out-of-sample's
+  budget. It informed only the decision to recalibrate, never a threshold
+  value: no threshold is set from those days. Restricting a flow
+  strategy to RTH, or adding a volume condition, is a **candidate** claim
+  (R11), kept only if calibration confirms it, never assumed. Those two
+  candidates came from the parity look itself (`ofi` fired overnight, on
+  thin volume), so they are hypotheses only: proposed and measured on
+  Train, and judged on held-out months other than the parity look's.
+- **Their claims go through R11-R13** like any other: listed before
+  measuring, judged with the false-discovery control, and dropped (the
+  strategy turned off for that market, R13) if they show no edge.
+- **Trusted live only after the trade-side check (R36).**
+
+**R36. Open risk: trade-side parity** (owner's decision, 2026-10-13). The
+replay server infers each trade's side from L1 (the quote rule, then the
+tick rule); the live server uses the exchange's own flag. How often they
+agree is **unmeasured**, and a threshold calibrated on inferred sides may
+not mean the same on live flow. Before any flow threshold is trusted live,
+a check compares the replay server's flow with minutes recorded from the
+live server over the same minutes, and its result is recorded with the
+rulebook's evidence. The same live check covers **rolls**: the live
+server's history around a roll is compared with the replay server's raw
+front-contract bars, since the indicators span the jump (section 4). The check is queued for when a practice account
+exists; until then a calibrated flow threshold is evidence about the
+replay server's history only, not trusted live.
 
 ## 7. Promotion and the learning loop
 
@@ -327,7 +546,8 @@ The first three are the promotion gate's numbers, frozen in code since
 PR #70 (`scripts/lib/prop/promotion.js`, with a test that they may only rise).
 **They never live in the learnable rulebook**, so no proposed diff can lower
 them. The split windows are in `scripts/lib/prop/splits.js` (train from
-2021-01-01, where the bars begin 2021-04-25; select; out-of-sample), with a
+2021-01-01, where Phase B's data begins 2021-05, the start of flow
+coverage, section 4; select; out-of-sample), with a
 test that out-of-sample never overlaps train or select and never moves
 backward. **R32** adds Recent, the half-year walk-forward and reserve roles,
 and each walk-forward half-year's tuning and held-out quarters to that module,
@@ -340,9 +560,16 @@ held-out quarters), so "set in advance" is enforced, with tests that no two
 roles overlap and none moves backward.
 
 Zero blows in every month mostly tests the worst one or two weeks in the
-window (in this window: August 2024 and April 2025). The bounds exist
+window (in this window: August 2024 and April 2025, seen on the
+back-adjusted files). The bounds exist
 because about 12 independent attempts can't separate a 25% rulebook from a
 40% one.
+
+**Old evidence is historical.** Results measured on the back-adjusted
+files (the weeks above, every earlier backtest) are historical only. The
+champion's baseline is re-run on the replay server's raw bars (section 4)
+before any paired comparison (R25, R30), so a challenger is never compared
+with a baseline on other data.
 
 **R16. Look budget.** Every out-of-sample evaluation is logged in a ledger:
 the candidate, the date and the result. The ledger is kept with the
@@ -350,7 +577,7 @@ rulebook's evidence. A window is retired after a set number of looks
 (3, the owner's decision), and the reserve (Recent first, then the reserved
 half-years) becomes the next out-of-sample window. Reserved half-years
 accumulate until they hold at least 12 months (about 12 independent
-21-session attempts, as the current window does) before they become one. Because they
+21-session attempts, or 8 at 30 sessions, as the current window does) before they become one. Because they
 alternate with walk-forward half-years, the window after Recent is ready
 only in mid-2028 (2027-H1 and 2028-H1). The look budget has to last until
 then. Select-window rankings use a lower-bound score, not the best score,
@@ -369,7 +596,7 @@ scorecards the proposer reads and the Optuna trials (R25, R30), and those
 looks are logged without a budget; its **held-out** quarter is used only by the
 verifiers (R26), is never shown to the proposer or Optuna, and only those
 looks count against the 3-look budget. One half-year holds only about 6
-independent 21-session attempts, so a single walk-forward block is weak evidence: blocks are
+independent 21-session attempts (4 at 30 sessions), so a single walk-forward block is weak evidence: blocks are
 pooled before a check can fail or confirm a rulebook. The result is a **proposed rulebook diff** with its gate
 result, its ledger entry and its evidence. The diff is adopted only with the owner's
 approval; nothing changes the rulebook on its own.
@@ -394,7 +621,7 @@ apply directly:
 | 3 | **More thought on the hard decisions** (test-time compute: Large Language Monkeys, Archon) | Ask the take-or-skip decision on a verdict several times and act only when the answers agree, or let a checker pick among them. The most direct lever on a small model's misreads; it costs model time, so verdict decisions only. | R29 |
 | 4 | **Verify before acting** (robust verification, Constitutional AI, step-level verifiers) | Deterministic checks first (the order gate). Then every reason the model states is checked against the briefing's facts ("opening window until 10:00" fails: the briefing says entries are allowed after 09:35). Each step of the priority order is checked on its own, not only the final call. | R29 |
 | 5 | **Environment feedback in the loop** (ReAct; Search-o1, MemGPT for memory) | The harness already reasons, calls tools and updates on results. Trade outcomes and gate refusals become journal lessons, retrieved when relevant or when the model is uncertain, not added to every prompt. | R29 |
-| 6 | **Evaluate over long horizons** (agentic evaluations, METR) | Reliability over whole attempts (about 21 sessions), with a failure taxonomy: wrong-side entry, bad size, early close, excessive abstention, wrong stated reason, risk-rule rejection. That is the scorecard. | R19, R25 |
+| 6 | **Evaluate over long horizons** (agentic evaluations, METR) | Reliability over whole attempts (up to `sessions`, today 30; the goal is a pass within about 21), with a failure taxonomy: wrong-side entry, bad size, early close, excessive abstention, wrong stated reason, risk-rule rejection. That is the scorecard. | R19, R25 |
 
 **Two timescales:**
 
@@ -713,15 +940,30 @@ What changes in behaviour:
 
 Each step is its own pull request and is reviewed as today.
 
+Inputs built in their own pull requests (owner's decision, 2026-10-13),
+none of which exists yet:
+
+- the backtester's fetch at a strategy's timeframe, keeping the broker's
+  fields (`backtest fetch --timeframe`): required before step 9 (section 4);
+- the flow at each decision, recorded and shown (R35): required before the
+  labels and the scorecard can join it (steps 2 and 10 use it once it
+  lands);
+- the flow-covered LLM replay and label windows (section 4): required
+  before the LLM's adherence on flow setups is measured;
+- the fingerprint allowlist (`fingerprintEnv`, R35) on the broker entries;
+- the trade-side and roll checks against minutes recorded from the live server
+  (R36): queued for when a practice account exists, and required before a
+  flow threshold is trusted live.
+
 1. Retire PPO (section 9). Done, PR #70.
 2. The adherence scorecard (R19) with the failure taxonomy (R25), applied to
    the June 1-5, 2026 replay. Until the automated loop exists, the loop runs
    by hand: replay, scorecard, a proposed fix, review, merge. Fixes to
    reasoning and fact errors (a stated reason the briefing contradicts) may
    come from Recent's replays, because they make no claim about the market;
-   any fix that changes what is traded waits for walk-forward data. Bars
-   past 2026-07-20 are needed for that (the first walk-forward half-year,
-   2026-H2, starts in the data's last weeks).
+   any fix that changes what is traded waits for walk-forward data: the
+   replay server's bars over 2026-H2 (the first walk-forward half-year), and
+   for a fix to a flow strategy, flow coverage there too (section 4).
 3. The schedule in code (R32): Recent, the walk-forward and reserve
    half-years, and their tuning and held-out quarters, before any of them is
    used.
@@ -743,7 +985,8 @@ Each step is its own pull request and is reviewed as today.
    the daily limit (R9). Stricter, not a gate weakening; tests in the order
    gate's unit and hook wiring suites.
 9. The two-layer evaluator and the attempt simulation (R6-R9).
-10. Calibration: the registry, the measurements and the reports (R11-R13).
+10. Calibration: the registry, the measurements and the reports (R11-R13),
+   the flow strategies' thresholds among them, on covered months (R34).
    It starts with the claims the June replay shows the LLM relies on most
    (by how often, never by their June outcomes).
 11. The search and promotion (R8, R10, R15-R16, R18). This produces the first
@@ -780,8 +1023,9 @@ Decided by the owner (2026-10-12):
   points, $400-1,200 a contract, so today's sizing gives mostly 0 or 1 NQ.)
   Each account's rulebook is searched, calibrated and replayed in its
   contract, so training equals live; the account profile records it.
-- **Attempt length: the billing cycle**, about 21 trading sessions.
-- **Goal: pass within it, the faster the better, with zero blows, no
+- **Attempt length: the account's `sessions`**, today 30, the cap on an
+  attempt. **The goal is the billing cycle**, about 21 trading sessions.
+- **Goal: pass within the billing cycle, the faster the better, with zero blows, no
   exception** (section 1, R8).
 - **Funded phase: out of scope.**
 - **Enforced: the mechanical items** computed from facts the harness has
@@ -803,15 +1047,38 @@ Decided by the owner (2026-10-12):
 - **Where it lives:** `rulebooks/<account>/RULEBOOK.md`, numbers in the
   frontmatter and the evidence in the body (R1).
 
+Decided by the owner (2026-10-13):
+
+- **Data:** Phase B trains and evaluates on the replay broker server's raw
+  front-contract bars at each strategy's own timeframe, every broker field
+  kept, priced like live with the real roll dates: the data path live uses
+  through the broker interface. They replace the back-adjusted 1-minute
+  files and the bars derived from them (section 4).
+- **Splits restricted to flow coverage**, 2021-05 to 2025-11; no window in
+  code moves; outside coverage the flow strategies have no signal and are
+  excluded from claims (section 4).
+- **Flow strategies in scope:** their thresholds are calibrated parameters,
+  set on the tuning half and judged on the held-out half, with their claims
+  in the registry (R34).
+- **The flow at each decision** is recorded, shown to the model and joined
+  to the labels (R35), built in its own pull requests.
+- **Flow-covered LLM windows** from 2021-05 to 2025-11: labels and
+  tuning from Train only, held-out months for judging once each, logged;
+  the 2026 LLM months for the non-flow checks; the memorisation risk
+  stated and checked (section 4).
+- **Gating a policy with a flow branch:** an attempt is covered when its
+  start plus `sessions` sessions lies inside coverage, decided at the
+  start; the pass rate, the attempt count and the months come from covered
+  attempts only; blows count on every attempt that starts in the window;
+  results on uncovered months are marked "flow off" (section 4).
+- **Trade-side parity is an open risk** (R36): a check against minutes
+  recorded from the live server comes before flow thresholds are trusted
+  live.
+
 ## 12. Not in scope
 
 - New strategies (after calibration shows where the current ones fall
   short).
-- Order-flow strategies beyond paper: done outside this design. The owner
-  activated `ofi`, `ofi_absorption`, `value_area` and `prop_flow_1m` once
-  order flow came from the broker servers' bars; the replay smoke and a
-  fresh replay verify them before any live session. R33's rules are
-  unchanged.
 - Changing the LLM the harness runs (it stays a small local model) or adding
   model-specific code to the harness. The optional fine-tuned adapter (R31)
   is the owner's one exception: a training artifact outside the repository
