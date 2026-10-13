@@ -465,17 +465,38 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
     else {
       // A verdict permits one entry, as in training: a re-entry after a stop-out would be sized
       // from a snapshot that doesn't have the loss yet. The next setup brings a new verdict.
-      const tag = new RegExp(`^\\s*setup:${strategy.name}(?![\\w-])`, 'i');
-      const fam = r => (familyOf(r) ? familyOf(r).micro : r);
-      const used = entries.some(e => e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
-        && tag.test(String(e.text || '')) && entryTime(e) >= Date.parse(v.at)
-        && (mayBeRoot(e.contractId, root) || (Boolean(e.contractId) && fam(contractRoot(e.contractId)) === fam(root))));
+      const used = verdictUsed(entries, strategy.name, v, root);
       if (!Number.isFinite(Date.parse(v.at))) why = 'the verdict has no time; wait for the next setup';
       else if (used) why = `the verdict of ${v.at} was already used for an entry; wait for the next setup`;
     }
     if (why) out.push({ check: 'policy', message: `setup:${strategy.name}: ${why}.` });
   }
   return out;
+}
+
+/** Whether a successful entry tagged setup:<name> on `root`'s family was placed at or after verdict `v`. */
+function verdictUsed(entries, name, v, root) {
+  const tag = new RegExp(`^\\s*setup:${name}(?![\\w-])`, 'i');
+  const fam = r => (familyOf(r) ? familyOf(r).micro : r);
+  return (entries || []).some(e => e.kind === 'order_placed' && e.data && e.data.result && e.data.result.success === true
+    && tag.test(String(e.text || '')) && entryTime(e) >= Date.parse(v.at)
+    && (mayBeRoot(e.contractId, root) || (Boolean(e.contractId) && fam(contractRoot(e.contractId)) === fam(root))));
+}
+
+/**
+ * The entry verdicts still open now: each policy's latest verdict per index family that allows an entry (full or
+ * half, size >= 1), unexpired, and not used for an entry yet (`entries`: the journal). A multi-lane runner settles a
+ * new setup against them, so a higher-priority policy's open setup keeps its place across cycles (lane-cycle.js).
+ */
+function openEntryVerdicts(home, entries, now = new Date()) {
+  const fam = r => (familyOf(r) ? familyOf(r).micro : r);
+  const latest = new Map();
+  for (const v of readVerdicts(home)) {
+    const root = fam(v.contract || contractRoot(v.contractId || v.symbol) || '');
+    if (v && v.strategy) latest.set(`${v.strategy}|${root}`, { v, root });
+  }
+  return [...latest.values()].filter(({ v, root }) => Object.hasOwn(ENTRY_FRACTIONS, v.action) && v.maxSize >= 1
+    && Date.parse(v.expiresAt) > now.getTime() && Number.isFinite(Date.parse(v.at)) && !verdictUsed(entries, v.strategy, v, root)).map(x => x.v);
 }
 
 function appendVerdict(home, verdict) {
@@ -506,5 +527,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, endAttempt, runningAttempts, stateFrom, snapshot, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_FRACTIONS,
+  legOf, legsFor, budgetPlan, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_FRACTIONS, verdictUsed, openEntryVerdicts,
 };

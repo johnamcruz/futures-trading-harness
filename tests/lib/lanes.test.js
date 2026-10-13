@@ -108,27 +108,30 @@ test('lanes are checked: timeframe 1 to 60 and once each, known keys, trigger ba
       assert.match(invalid({ ...BASE, lanes: [{ timeframe: 3, [k]: bad }] }), new RegExp(`lanes\\[0\\]\\.${k}: a non-empty list`), `${k} ${JSON.stringify(bad)}`);
     }
   }
-  // Unique timeframes, and a name in one lane only (checked even before multi-lane cycling).
+  // Unique timeframes, and a name in one lane only.
   assert.match(lanes([{ timeframe: 3 }, { timeframe: 3 }]).errors.join('\n'), /timeframe 3 appears in more than one lane/);
   assert.match(lanes([{ timeframe: 3, strategies: ['a3'] }, { timeframe: 1, policies: ['a3'] }]).errors.join('\n'), /a3 is listed more than once/);
   assert.match(lanes([{ timeframe: 3, strategies: ['a3'], policies: ['a3'] }]).errors.join('\n'), /a3 is listed more than once/);
 });
 
-test('more than one lane is refused at start until multi-lane cycling: never cycled on one lane with the rest ignored', () => {
+test('several lanes are accepted (the runner cycles them together); each is parsed and checked', () => {
   const two = [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }];
   const parsed = L.parseLanes({ timeframe: 3, trigger: 'bar' }, { lanes: two });
-  assert.deepStrictEqual(parsed.errors, [L.MULTI_LANE_REFUSAL]);
+  assert.deepStrictEqual(parsed.errors, []);
   assert.strictEqual(parsed.lanes.length, 2, 'both lanes are parsed and checked');
-  const msg = invalid({ ...BASE, lanes: two });
-  assert.match(msg, /multi-lane cycling arrives in a later step/);
+  assert.strictEqual(L.MULTI_LANE_REFUSAL, undefined, 'the step-2 refusal is gone');
+  const cfg = validateConfig({ ...BASE, lanes: two });
+  assert.deepStrictEqual(L.lanesOf(cfg).map(l => [l.timeframe, l.trigger]), [[3, 'bar'], [1, 'signal']]);
+  assert.deepStrictEqual([cfg.timeframe, cfg.trigger], [3, 'bar'], 'the first lane is the runner\'s');
   // A signal lane beyond the first needs the account too.
   assert.match(invalid({ ...BASE, account: '', lanes: two }), /account: required with a lane on trigger "signal"/);
   // The first lane's signal trigger: the existing check.
   assert.match(invalid({ ...BASE, account: '', lanes: [{ timeframe: 3, trigger: 'signal' }] }), /account: required with trigger "signal"/);
-  // Preflight fails the config with the same message (nothing after it runs on a refused config).
+  // Preflight passes the config and lists each lane.
   const pre = P.configChecks({ ...BASE, lanes: two });
-  assert.strictEqual(pre.cfg, null);
-  assert.match(pre.results[0].detail, /multi-lane cycling arrives in a later step/);
+  assert.ok(pre.cfg, JSON.stringify(pre.results));
+  // Per-agent timeframes stay refused until they are read (a later step).
+  assert.match(invalid({ ...BASE, lanes: two, agents: { 'market-structure-analyst': { timeframe: '15m' } } }), /per-agent timeframes arrive in a later step/);
 });
 
 test('a lane\'s strategies: those on its timeframe, narrowed by its lists; a listed policy keeps the strategies it trades', () => {
@@ -191,7 +194,7 @@ test('preflight reports each lane and fails a listing off its lane; prop profile
   assert.deepStrictEqual(P.propProfiles(REG, accounts, validateConfig({ ...BASE, lanes: [{ timeframe: 3, policies: ['pol3'] }] })).map(a => a.name), ['p']);
 });
 
-test('CLI start: a multi-lane config and a lane listing off its timeframe are refused before anything runs; one lane starts', () => {
+test('CLI start: a lane listing off its timeframe is refused before anything runs; one lane and several lanes start', () => {
   const dir = tmpDir();
   const env = { ...process.env, HOME: dir, FTH_HOME: path.join(dir, '.futures-trading-harness'), FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
   delete env.FTH_REPLAY_NOW;
@@ -203,9 +206,8 @@ test('CLI start: a multi-lane config and a lane listing off its timeframe are re
   };
   try {
     const multi = start({ account: '7', lanes: [{ timeframe: 3 }, { timeframe: 1, trigger: 'signal' }] }, 'multi');
-    assert.strictEqual(multi.status, 1);
-    assert.match(multi.stderr, /multi-lane cycling arrives in a later step/);
-    assert.doesNotMatch(multi.stdout, /next action/);
+    assert.strictEqual(multi.status, 0, multi.stderr);
+    assert.match(multi.stdout, /next action now:/);
     const off = start({ lanes: [{ timeframe: 3, policies: ['prop_flow_1m'] }] }, 'off');
     assert.strictEqual(off.status, 1);
     assert.match(off.stderr, /lanes\[0\]\.policies: prop_flow_1m trades 1m bars, not the 3m lane's/);
@@ -291,7 +293,7 @@ test('an agent\'s timeframe key changes no generated adapter (Codex, Qwen Code, 
 test('a first lane that is not an object is refused with its reason, never a crash in the cross-checks', () => {
   assert.match(invalid({ ...BASE, timeframe: 3, lanes: [5] }), /lanes\[0\]: an object/);
   assert.match(invalid({ ...BASE, trigger: 'bar', lanes: [null] }), /lanes\[0\]: an object/);
-  assert.match(invalid({ ...BASE, timeframe: 3, trigger: 'bar', lanes: ['3m', { timeframe: 3 }] }), /lanes\[0\]: an object[\s\S]*multi-lane cycling/);
+  assert.match(invalid({ ...BASE, timeframe: 3, trigger: 'bar', lanes: ['3m', { timeframe: 3 }] }), /lanes\[0\]: an object/);
 });
 
 test('a lane whose policies list leaves out a policy with a running attempt is refused at start, naming it', () => {

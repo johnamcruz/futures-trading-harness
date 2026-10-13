@@ -35,7 +35,7 @@ const { lanesOf, laneStrategies } = require('./lanes');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
-const { writeMtfRecord } = require('./trading/mtf-state');
+const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-state');
 const { buildBriefing, readBriefing, writeBriefing, removeBriefing } = require('./trading/briefing');
 const { buildSignals, writeSignals } = require('./trading/signal-state');
 const RC = require('./trading/report-cache');
@@ -91,10 +91,10 @@ function closedBarsOnly(client, now) {
  * The runner's scan of one symbol's closed bar: the strategies of its lane (lanes.js; those on its
  * timeframe, the only ones that can be judged from these bars), with the runner's symbols as the
  * selected contracts (a rules strategy trades the selected leg of its family; strategies.js rootRefusal).
- * The runner cycles on its first lane (a config with more is refused until multi-lane cycling).
+ * `lane`: the lane whose bar closed (none: the runner's first lane).
  */
-function runnerScan(strategies, cfg, symbol, bars, now) {
-  return scan(laneStrategies(strategies, lanesOf(cfg)[0]), { bars }, { symbol, now, selected: cfg.symbols });
+function runnerScan(strategies, cfg, symbol, bars, now, lane = lanesOf(cfg)[0]) {
+  return scan(laneStrategies(strategies, lane), { bars }, { symbol, now, selected: cfg.symbols });
 }
 
 /**
@@ -112,14 +112,17 @@ function barRecorder({ cfg, home, env, now, log, onBarClosed }) {
     closed(symbol, info = {}) {
       const { bars, ...rest } = info;
       contracts.set(symbol, info.contractId || null);
-      if (Array.isArray(bars) && bars.length) archive(symbol, { bars, contractId: info.contractId || null });
+      // The archive is the runner's timeframe: the first lane's bars (`minutes`: several lanes, the bar's lane).
+      const first = !info.minutes || info.minutes === cfg.timeframe;
+      if (first && Array.isArray(bars) && bars.length) archive(symbol, { bars, contractId: info.contractId || null });
       return onBarClosed(symbol, rest);
     },
-    scanned(symbol, bars, strategies, results) {
+    // `minutes`: several lanes, the lane scanned (its values join that lane's bar).
+    scanned(symbol, bars, strategies, results, minutes) {
       try {
         const names = new Set((results || []).map(r => r && r.name));
         const values = fieldValues(strategies.filter(s => names.has(s.name)), bars);
-        onBarClosed(symbol, { bar: bars[bars.length - 1].t, contractId: contracts.get(symbol) || null, values });
+        onBarClosed(symbol, { bar: bars[bars.length - 1].t, contractId: contracts.get(symbol) || null, values, ...(minutes ? { minutes } : {}) });
       } catch (err) {
         log(`${symbol}: no field values recorded (${err.message})`, 'error');
       }
@@ -174,6 +177,9 @@ function reportCacheFor(home, cfg) {
   };
 }
 
+/** A replay pass (FTH_REPLAY_NOW: one step per process) holds no cycle for a late lane; the live loop keeps the default. */
+const passHold = env => (env.FTH_REPLAY_NOW ? { coalesceHoldMs: 0 } : {});
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {} }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
@@ -189,12 +195,16 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     createKillSwitch: reason => fs.writeFileSync(killSwitchFile, `${reason}\n`),
     loadState,
     saveState,
+    // Each lane's bars in their own file (sym.minutes: the lane's timeframe).
     writeBars: (sym, bars) => {
-      const file = path.join(dataDir, `${sym.symbol}-${cfg.timeframe}m.json`);
-      writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${cfg.timeframe} minute`, count: bars.length, bars });
+      const minutes = sym.minutes || cfg.timeframe;
+      const file = path.join(dataDir, `${sym.symbol}-${minutes}m.json`);
+      writeJsonAtomic(file, { contractId: sym.contractId, barSize: `${minutes} minute`, count: bars.length, bars });
       return file;
     },
     recordMtf: (sym, bars) => writeMtfRecord(home, sym.symbol, bars, { now: now() }).line,
+    // Another lane's bar: the record the first lane's bars wrote, as the gate reads it (its line, or null).
+    readMtf: sym => { const r = readMtfRecord(home, sym.symbol); return r && !r.error && r.line ? r.line : null; },
     // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
     trackRecord: (name, { regime, at, entries }) => describeRecord({
       backtest: readRecord(home, name), live: liveRecord(entries || journal(), name, regime), regime, at,
@@ -220,12 +230,14 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
     recordBriefing: briefingRecorder(home, cfg, now, env),
     reportCache: reportCacheFor(home, cfg),
-    recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
-    // The scan of a closed bar; the session record takes the field values of the strategies it scanned.
-    scanFor: (symbol, bars) => {
+    // One record per timeframe (signal-state.js): each lane's bar records its own.
+    recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: (item.minutes || cfg.timeframe) * 60000, now: now() })),
+    // The scan of a closed bar (`lane`: several lanes, the lane whose bar it is); the session record takes the field
+    // values of the strategies it scanned.
+    scanFor: (symbol, bars, lane) => {
       const list = strategies();
-      const results = runnerScan(list, cfg, symbol, bars, now());
-      record.scanned(symbol, bars, list, results);
+      const results = runnerScan(list, cfg, symbol, bars, now(), lane || undefined);
+      record.scanned(symbol, bars, list, results, lane ? lane.timeframe : undefined);
       return results;
     },
     log,
@@ -237,7 +249,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
     // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
     barClosed: record.closed,
+    // A replay pass is one step in its own process: it can't hold a cycle for a lane that is late (runner.js).
+    ...passHold(env),
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

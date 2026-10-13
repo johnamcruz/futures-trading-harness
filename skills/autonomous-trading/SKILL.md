@@ -19,6 +19,30 @@ description: Rules for running the trading harness unattended (headless, schedul
    file. Run exactly one trade-session (or premarket / end-of-day when the
    prompt says so). Don't wait, sleep, or poll inside a run; a bar that closes
    while you are still running is skipped, so finish within one bar.
+   **Several lanes.** A runner may trade timeframe lanes (for example 3m on
+   every bar and 1m on a signal). When several lanes' bars close at the same
+   minute (each 3m close is also a 1m close), the prompt says "Lanes closed
+   this cycle: 3m (every bar), 1m (on a signal ...)" and gives each lane's
+   bars file and what fired on it: it is still ONE cycle. Run the analysts
+   once, and decide once (one plan, at most one entry) across every lane's
+   setups. A symbol's second lane adds only its own bars and signals; its
+   trend line, plan and day are the first lane's. A 1m lane cycles only
+   when its strategy fired or a position is open, and the cycle's time
+   limit is the fastest lane's, so finish within that bar. When two policy
+   strategies have a setup in the same cycle, or one comes while the other's
+   setup from an earlier cycle is still open (on any of the runner's
+   symbols: settled per runner, which trades one account), the runner keeps the one with the higher priority (lower
+   `priority` number; equal or none, the 3m-and-slower one) and marks the
+   other "skipped: lower priority": never enter it (the gate refuses it),
+   and say in your result which one you traded. A rules strategy's signal
+   expires 3 bars of its own timeframe after its bar closed, never more
+   than 45 minutes (3 min on 1m, 9 min on 3m), so a 1m setup can't wait.
+   A cycle with only a 1m bar reuses the analysts' cached reports of the
+   last 3m bar (served under "Cached reports"): don't launch them again.
+   Your last cycle results are those of the lanes that closed (each tagged
+   with its lanes, e.g. "MNQ 1m"), plus the first lane's last 3 and those
+   of the lane an open trade was entered on, so 1m cycles never crowd out
+   the slower decisions.
 2. **No questions.** Nobody is there to answer. Where the interactive workflow
    would ask, take the conservative branch: stand aside, keep the stop, flatten
    at end of day.
@@ -40,7 +64,7 @@ description: Rules for running the trading harness unattended (headless, schedul
    the broker field values the strategies read on each bar and an archive
    of the bars, for the adherence scorecard and training: the user's to
    score, not yours to edit). The prompt also carries the last 10
-   closed bars and your last 10 cycle results: read them, and don't reverse a
+   closed bars and your last 10 cycle results (with several lanes, per lane: see rule 1): read them, and don't reverse a
    recent decision without saying what changed. Those results are your past
    conclusions, not facts: where one contradicts this prompt's account or
    attempt line (e.g. it says no attempt is running and the prompt lists an

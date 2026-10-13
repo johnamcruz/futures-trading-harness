@@ -189,6 +189,50 @@ test('order gate: a rules strategy entry needs its own trigger in the signal rec
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate wiring: a signal\'s age is 3 bars of its own timeframe (FTH_SIGNAL_MAX_AGE_BARS), so a 1m signal expires sooner than a 3m one', () => {
+  const plan = [{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }];
+  // Rules strategies on 1m (quick), 15m (slow) and 1h (hourly) beside the 3m crossing.
+  const extra = path.join(tmpDir(), 'strategies');
+  for (const [name, tf] of [['quick', '1m'], ['slow', '15m'], ['hourly', '1h']]) {
+    fs.mkdirSync(path.join(extra, name), { recursive: true });
+    fs.writeFileSync(path.join(extra, name, 'STRATEGY.md'), [
+      '---', `name: ${name}`, `description: Test rules strategy on ${tf} bars, an EMA cross, for the signal age per timeframe.`,
+      'status: active', 'instruments: [MNQ]', `timeframe: ${tf}`, 'signal: rules', 'rules:', '  long:', '    - ema(9) crosses_above ema(20)',
+      'risk:', '  stop: atr:0.5', '  min_rr: 2', '---', '## When to Use', '## How It Works', '## Examples', '',
+    ].join('\n'));
+  }
+  // The gate's clock is TEST_NOW (14:30): each record's bar closed `ago` minutes before it.
+  const run = (tf, name, ago, env = {}) => {
+    const closedAt = new Date(Date.parse(TEST_NOW) - ago * 60000).toISOString();
+    // The trend record fresh (its own 15-minute limit is not under test); the signal record aged.
+    const home = trendHome(tmpDir(), { closedAt: new Date(Date.parse(TEST_NOW) - 60000).toISOString(), fired: [{ name, direction: 'long' }] });
+    fs.writeFileSync(path.join(home, 'signals', `MNQ-${tf}.json`), JSON.stringify({ symbol: 'MNQ', timeframe: tf, asOf: closedAt, closedAt, candidates: [{ name, direction: 'long' }] }));
+    const { env: e } = setup(plan, { FTH_HOME: home, FTH_STRATEGIES_DIRS: extra, ...env });
+    return gate(orderPayload({ ...ORDER, rationale: `setup:${name} long, stop 21480, target 21540` }), e);
+  };
+  // 1m: 3 bars are 3 minutes.
+  const ok1 = run('1m', 'quick', 2.5);
+  assert.strictEqual(ok1.code, 0, ok1.stderr);
+  const late1 = run('1m', 'quick', 3.6);
+  assert.strictEqual(late1.code, 2);
+  assert.match(late1.stderr, /\[trigger-fired\] The last recorded signal bar for MNQ closed 4 min ago \(limit 3 min: 3 1m bars, FTH_SIGNAL_MAX_AGE_BARS\)/);
+  // 3m: 9 minutes (the flat 10 is gone: 10 min is too old).
+  const ok3 = run('3m', 'crossing', 8.5);
+  assert.strictEqual(ok3.code, 0, ok3.stderr);
+  assert.match(run('3m', 'crossing', 9.6).stderr, /\[trigger-fired\].*limit 9 min: 3 3m bars/);
+  // 15m and 1h: 45 minutes, the ceiling (3 1h bars would be 180).
+  const slow = run('15m', 'slow', 44.5);
+  assert.strictEqual(slow.code, 0, slow.stderr);
+  assert.match(run('15m', 'slow', 45.6).stderr, /\[trigger-fired\].*limit 45 min: 3 15m bars/);
+  const hourly = run('1h', 'hourly', 44.5);
+  assert.strictEqual(hourly.code, 0, hourly.stderr);
+  assert.match(run('1h', 'hourly', 45.6).stderr, /\[trigger-fired\].*limit 45 min: 3 1h bars, FTH_SIGNAL_MAX_AGE_BARS, at most 45 min/);
+  // The count from the environment; FTH_SIGNAL_MAX_AGE_MIN only shortens it.
+  assert.strictEqual(run('1m', 'quick', 5, { FTH_SIGNAL_MAX_AGE_BARS: '6' }).code, 0);
+  assert.match(run('3m', 'crossing', 5, { FTH_SIGNAL_MAX_AGE_MIN: '4' }).stderr, /\[trigger-fired\].*capped at 4 min by FTH_SIGNAL_MAX_AGE_MIN/);
+  assert.match(run('3m', 'crossing', 10, { FTH_SIGNAL_MAX_AGE_MIN: '60' }).stderr, /\[trigger-fired\].*limit 9 min/);
+});
+
 test('order gate wiring: a rules strategy trades only the selected leg (FTH_SYMBOLS) of a family it lists, in that contract\'s own specs and dollars; exits on either leg go', () => {
   const at = m => minutesAgo(m, new Date(TEST_NOW));
   const planFor = contractId => [{ ts: at(5), kind: 'plan', contractId, text: 'plan' }];

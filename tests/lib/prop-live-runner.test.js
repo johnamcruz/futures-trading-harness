@@ -106,6 +106,38 @@ test('no end-of-day or position deadlock: a day before the attempt is not an err
   assert.match(prop.combineBlock(home, account.name, now), /a position is open on the account \(GC\).*close it to trade the attempt/);
 });
 
+test('supersede: a verdict skipped for a higher-priority policy becomes the latest the gate reads', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const { hooks, home } = setup();
+  await hooks.snapshot(now);
+  hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const full = prop.latestVerdict(home, 'prop_x', 'MNQ');
+  assert.notStrictEqual(full.action, 'skip');
+  hooks.supersede(require('../../scripts/lib/lane-cycle').skippedVerdict(full, 'prop_y', now));
+  const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
+  assert.deepStrictEqual([v.action, v.maxSize, v.bar, v.skippedBy], ['skip', 0, full.bar, 'prop_y']);
+});
+
+test('openVerdicts: a policy\'s latest entry verdict while unexpired and unused; never a skip, a used one or an expired one', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const { hooks, client } = setup();
+  await hooks.snapshot(now);
+  assert.deepStrictEqual(hooks.openVerdicts(now), []);
+  hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const [open] = hooks.openVerdicts(now);
+  assert.strictEqual(open.strategy, 'prop_x');
+  assert.ok(open.action === 'full' || open.action === 'half');
+  assert.deepStrictEqual(hooks.openVerdicts(new Date(Date.parse(open.expiresAt))), [], 'expired');
+  // Used: an entry tagged setup:prop_x went through after it.
+  client.journal = [{ ts: new Date(now.getTime() + 1000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:prop_x long', data: { result: { success: true } } }];
+  assert.deepStrictEqual(hooks.openVerdicts(now), [], 'used');
+  client.journal = [{ ts: new Date(now.getTime() + 1000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:prop_x long', data: { result: { success: false } } }];
+  assert.strictEqual(hooks.openVerdicts(now).length, 1, 'a refused order used nothing');
+  // Skipped for a higher-priority policy: no longer open.
+  hooks.supersede(require('../../scripts/lib/lane-cycle').skippedVerdict(open, 'prop_y', now));
+  assert.deepStrictEqual(hooks.openVerdicts(now), []);
+});
+
 test('a setup whose stop is too wide for the cushion is skipped with the reason, not silently', async () => {
   const now = new Date('2026-10-07T23:00:00Z');
   const { hooks, home } = setup();
@@ -229,7 +261,8 @@ test('a paper strategy stays paper inside a policy: the screen passes over a com
 test('the prop hooks have no in-trade decision: an open trade is left to the policy strategy\'s exit', () => {
   const { hooks } = setup();
   assert.strictEqual(hooks.position, undefined);
-  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'owners', 'screen', 'snapshot', 'summaries']);
+  // supersede records a verdict (a setup skipped for a higher-priority policy) and openVerdicts reads them: no in-trade decision either.
+  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'openVerdicts', 'owners', 'screen', 'snapshot', 'summaries', 'supersede']);
 });
 
 test('combine CLI: start an attempt and read its status', () => {
@@ -275,6 +308,23 @@ test('owners: the strategies an active policy with a running attempt owns on the
   assert.strictEqual(on.hooks.owners({ symbol: 'GC', contractId: 'GC' }).size, 0, 'another instrument');
   const off = setup({ start: false });
   assert.strictEqual(off.hooks.owners({ symbol: 'MNQ', contractId: CONTRACT }).size, 0, 'no attempt running');
+});
+
+test('screen in another lane (a multi-lane runner): the bar\'s lane decides which policies screen, not the factory\'s', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const lane = more => ({ timeframe: 3, trigger: 'bar', strategies: null, policies: null, ...more });
+  // The factory's lane is the 1m one; the bar is the 3m lane's: prop_x (3m) screens and sizes its setup.
+  const { hooks, home } = setup({ lane: lane({ timeframe: 1 }) });
+  await hooks.snapshot(now);
+  const scan = [{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 }];
+  const out = hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now, lane: lane() });
+  assert.strictEqual(out.find(r => r.name === 'prop_x').component, 'trendy');
+  assert.ok(prop.latestVerdict(home, 'prop_x', 'MNQ'));
+  // And the other way: the factory's 3m lane, a 1m bar: prop_x doesn't screen it (its setup is owned, not traded).
+  const other = setup({ lane: lane() });
+  await other.hooks.snapshot(now);
+  const none = other.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now, lane: lane({ timeframe: 1 }) });
+  assert.deepStrictEqual(none, [{ ...scan[0], candidate: false, note: 'not traded: prop_x owns it and is not in this runner\'s lane' }]);
 });
 
 test('the runner\'s lane: only its policies screen; a policy outside it still owns its strategies\' setups (never plain setups)', async () => {

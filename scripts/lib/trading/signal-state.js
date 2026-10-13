@@ -9,15 +9,19 @@
  * interactively, `node scripts/strategies.js scan <bars> --symbol MNQ
  * --record` writes it (refused in autonomous runs). The gate refuses a rules
  * strategy's entry unless that strategy fired in that direction on a bar that
- * closed less than FTH_SIGNAL_MAX_AGE_MIN (10) minutes ago: no entry without
- * its trigger, under any setup tag, and no entry on a stale signal.
+ * closed at most FTH_SIGNAL_MAX_AGE_BARS (3) bars of the signal's own
+ * timeframe ago (3 min on 1m, 9 min on 3m, 45 min on 15m; signalMaxAgeMin): no
+ * entry without its trigger, under any setup tag, and no entry on a stale
+ * signal. A timeframe it can't read counts as 1 minute, the strictest.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { familyRoot } = require('./contracts');
 
-const DEFAULT_MAX_AGE_MIN = 10;
+const DEFAULT_MAX_AGE_BARS = 3;
+// However slow the timeframe, a signal is never entered more than this long after its bar closed (the owner's ceiling).
+const MAX_AGE_CEILING_MIN = 45;
 // How far after now a bar's close may be dated and still be trusted: the broker's clock may run a
 // little ahead of the harness's (order_plan applies the same tolerance to the bars it plans from).
 const FUTURE_TOLERANCE_MIN = 1;
@@ -68,6 +72,22 @@ function recordTimeframe(timeframe) {
   return m && Number(m[1]) > 0 ? `${Number(m[1]) * (m[2] === 'h' ? 60 : 1)}m` : null;
 }
 
+/**
+ * How old (minutes after its bar closed) a signal on `timeframe` may be: `bars` of that timeframe, never over
+ * MAX_AGE_CEILING_MIN (45: 1h and 15m signals both get 45), an unreadable timeframe counted as 1 minute (the
+ * strictest) and a bar count that isn't a whole number >= 1 as 1 bar; `capMin` (FTH_SIGNAL_MAX_AGE_MIN, when set)
+ * only ever shortens it.
+ */
+function signalMaxAgeMin(timeframe, { bars = DEFAULT_MAX_AGE_BARS, capMin = null, ceilingMin = MAX_AGE_CEILING_MIN } = {}) {
+  const tf = recordTimeframe(timeframe);
+  const minutes = tf ? Number(tf.slice(0, -1)) : 1;
+  const n = Number.isInteger(bars) && bars >= 1 ? bars : 1;
+  // A ceiling that isn't a positive number is the owner's 45 (never "no ceiling").
+  const ceiling = Number.isFinite(ceilingMin) && ceilingMin > 0 ? ceilingMin : MAX_AGE_CEILING_MIN;
+  const limit = Math.min(n * minutes, ceiling);
+  return Number.isFinite(capMin) && capMin > 0 ? Math.min(limit, capMin) : limit;
+}
+
 function readSignals(home, root, timeframe) {
   try {
     return JSON.parse(fs.readFileSync(signalFile(home, root, timeframe), 'utf8'));
@@ -81,8 +101,12 @@ function readSignals(home, root, timeframe) {
  * The gate's check for a rules strategy's entry: did `strategy` fire `side`
  * (buy/sell) on `root`'s last closed bar, recently? Returns a message, or null.
  */
-function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe = '3m', now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN, minConfluence = 1 }) {
+function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe: given, now = new Date(), maxAgeBars = DEFAULT_MAX_AGE_BARS, maxAgeCapMin = null, maxAgeCeilingMin = MAX_AGE_CEILING_MIN, minConfluence = 1 }) {
   const fam = familyRoot(root);
+  // The record read is the 3m one when no timeframe is given; the age, the strictest (1 minute a bar).
+  const timeframe = given === undefined ? '3m' : given;
+  const maxAgeMin = signalMaxAgeMin(given, { bars: maxAgeBars, capMin: maxAgeCapMin, ceilingMin: maxAgeCeilingMin });
+  const ceilingBinds = signalMaxAgeMin(given, { bars: maxAgeBars, ceilingMin: maxAgeCeilingMin }) < signalMaxAgeMin(given, { bars: maxAgeBars, ceilingMin: Number.MAX_SAFE_INTEGER });
   const how = `Fetch fresh ${timeframe} bars (the harness tool bars_fetch {"symbol": "${root}", "timeframe": ${parseInt(timeframe, 10) || '<minutes>'}}), then scan and record them: strategies_scan {"bars": "<that file>", "symbol": "${root}", "record": true}. The autonomous runner records every bar; while it runs, recording yourself is refused.`;
   const rec = readSignals(home, root, timeframe);
   if (!rec) return `No ${timeframe} signal record for ${fam}: setup:${strategy} is a rules strategy, and the gate needs to see its trigger fire. ${how}`;
@@ -90,7 +114,7 @@ function checkTrigger(home, { root, side, strategy, style = 'trend', timeframe =
   const age = (now.getTime() - Date.parse(rec.closedAt)) / 60000;
   if (age < -FUTURE_TOLERANCE_MIN) return `The signal record for ${fam} is dated ${rec.closedAt}, after now; it can't be trusted. ${how}`;
   if (!(age <= maxAgeMin)) {
-    return `The last recorded signal bar for ${fam} closed ${Number.isFinite(age) ? `${Math.round(age)} min` : 'an unknown time'} ago (limit ${maxAgeMin}, FTH_SIGNAL_MAX_AGE_MIN): the setup has expired. ${how}`;
+    return `The last recorded signal bar for ${fam} closed ${Number.isFinite(age) ? `${Math.round(age)} min` : 'an unknown time'} ago (limit ${maxAgeMin} min: ${maxAgeBars} ${recordTimeframe(given) ? given : '1-minute (no readable timeframe)'} bar${maxAgeBars === 1 ? '' : 's'}, FTH_SIGNAL_MAX_AGE_BARS${ceilingBinds ? `, at most ${signalMaxAgeMin(given, { bars: maxAgeBars, ceilingMin: maxAgeCeilingMin })} min` : ''}${maxAgeCapMin ? `, capped at ${maxAgeCapMin} min by FTH_SIGNAL_MAX_AGE_MIN` : ''}): the setup has expired. ${how}`;
   }
   const dir = { buy: 'long', sell: 'short' }[String(side || '').toLowerCase()];
   const hit = rec.candidates.find(c => c.name === strategy && (!dir || c.direction === dir));
@@ -126,4 +150,4 @@ function lastRecordedBar(home, root, timeframe) {
   return { bar: rec.asOf, timeframe: tf };
 }
 
-module.exports = { DEFAULT_MAX_AGE_MIN, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
+module.exports = { DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };

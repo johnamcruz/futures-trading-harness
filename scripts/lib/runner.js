@@ -27,6 +27,18 @@
  *      the balance is snapshotted every bar and recorded at end of day; a
  *      policy strategy's sizing screens each setup (a skip starts no cycle;
  *      the verdict is what the gate allows). Its trades exit by its trail.
+ *   7. Timeframe lanes (lanes.js, lane-cycle.js): a bar clock per symbol and
+ *      lane. The lanes whose bars closed on a pass go into ONE cycle (a lane
+ *      due at the same close that hasn't published yet holds it a few
+ *      seconds, so a 3m close and the 1m close at that minute are one cycle);
+ *      each lane's trigger decides for its own bars (a "signal" lane runs only
+ *      on a fire or with something open: no fire and flat costs no model
+ *      call). The first lane is the runner's: its bars feed the
+ *      multi-timeframe record, the briefing and the trailing stops. With
+ *      several lanes, entry verdicts of two policies in one cycle are settled
+ *      by priority (the other's skipped and recorded so for the gate), the
+ *      cycle's budget is the fastest closed lane's, and each lane's last bar
+ *      is kept in the state (a replay pass is a new process).
  */
 
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
@@ -50,6 +62,8 @@ const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKE
 const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(now, w));
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
+const { lanesOf } = require('./lanes');
+const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory } = require('./lane-cycle');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -70,6 +84,8 @@ const CLOSE_TRIES = 5;
 const STOP_ORDER_TYPES = new Set([3, 4, 5]);
 // A failed premarket is tried again after these pauses (then every 10 min), until a session window opens.
 const PREMARKET_RETRY_MS = [60000, 120000, 300000, 600000];
+// Several lanes: how long a lane due at the same close as one that already closed may keep the cycle waiting.
+const COALESCE_HOLD_MS = 10000;
 
 function createRunner(deps) {
   const {
@@ -78,6 +94,9 @@ function createRunner(deps) {
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
+    // Several lanes: the multi-timeframe record's line as the first lane's bars wrote it (another lane's bar never
+    // rewrites it); (sym) -> line or null.
+    readMtf = () => null,
     // The day so far (trading/day-context.js): one line for the prompt, or null.
     dayContext = null,
     // A strategy's track record (trading/track-record.js): (name, { regime, at }) -> one line, or null.
@@ -112,6 +131,9 @@ function createRunner(deps) {
     // The session record's decision point (session/live.js).
     barClosed = () => {},
     accountReadMs = ACCOUNT_READ_MS,
+    // Several lanes: how long a lane due at the same close may hold the cycle. A one-pass process (a replay step)
+    // passes 0: it can't wait (its bars are all there at the point; one missing is a gap live would wait out too).
+    coalesceHoldMs = COALESCE_HOLD_MS,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   let state = loadState();
@@ -125,8 +147,20 @@ function createRunner(deps) {
   const closedAt = new Map(); // contractId -> when the runner last sent its close
   let calendarCheckedDay = null;
   let eodRunDay = null; // the trading day whose end-of-day agents' run already happened
-  const syms = cfg.symbols.map(symbol => ({ symbol, contractId: null, contractDay: null, clock: null, lastPollAt: 0, misses: 0, resyncs: 0 }));
-  const minutes = cfg.timeframe;
+  // A bar clock per symbol and lane (lanes.js): the first lane's in the symbols' order, then each further lane's.
+  const lanes = lanesOf(cfg);
+  const multi = lanes.length > 1;
+  const laneKey = s => `${s.symbol}|${s.minutes}m`;
+  // Several lanes: each lane's last bar, kept in the state (a replay pass is a new process: without it a 3m lane
+  // would take its last bar for a new one at every 1m close).
+  // { lastBarT, contractId } per lane: a clock is restored only for the contract it was kept on (a roll since starts over).
+  const restored = (symbol, minutes) => {
+    const r = multi && state && state.laneClocks ? state.laneClocks[`${symbol}|${minutes}m`] : null;
+    const ok = r && typeof r.lastBarT === 'string' && Number.isFinite(Date.parse(r.lastBarT)) && typeof r.contractId === 'string';
+    return ok ? { restoredFor: r.contractId, clock: { lastBarT: r.lastBarT, expectedCloseAt: Date.parse(r.lastBarT) + 2 * minutes * 60000, pollingSince: null } } : { restoredFor: null, clock: null };
+  };
+  const syms = lanes.flatMap((lane, li) => cfg.symbols.map(symbol => ({ symbol, lane: li, minutes: lane.timeframe, contractId: null, contractDay: null, ...restored(symbol, lane.timeframe), lastPollAt: 0, misses: 0, resyncs: 0 })));
+  let held = []; // several lanes: closed bars waiting (briefly) for a lane due at the same close
   const delayMs = cfg.barDelaySeconds * 1000;
   const sessionWindows = parseWindows(cfg.sessions.join(',')).windows;
   const timeoutMs = cfg.barTimeoutSeconds * 1000;
@@ -209,13 +243,18 @@ function createRunner(deps) {
     lookup.finally(() => partnerLookups.delete(lookup));
     if (c.id !== sym.contractId) {
       log(`${sym.symbol}: active contract ${sym.contractId ? `${sym.contractId} -> ` : ''}${c.id}`);
-      return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
+      // A roll starts the clock over; the first lookup keeps a lane's clock restored from the state when it was kept
+      // on this contract (none with one lane).
+      return { ...sym, contractId: c.id, tickSize: c.tickSize, contractDay: day, clock: !sym.contractId && sym.restoredFor === c.id ? sym.clock : null, lastPollAt: 0, misses: 0, resyncs: 0, lookupFailedAt: 0 };
     }
     return { ...sym, tickSize: c.tickSize || sym.tickSize, contractDay: day, resyncs: 0, lookupFailedAt: 0 };
   }
 
   async function pollSymbol(i, now) {
     let sym = syms[i];
+    const { minutes } = sym;
+    // The first lane's bars write the symbol's multi-timeframe record; another lane's read it.
+    const first = sym.lane === 0;
     try {
       sym = await ensureContract(sym, now);
       syms[i] = sym;
@@ -249,7 +288,7 @@ function createRunner(deps) {
       }
       let trend = null;
       try {
-        trend = recordMtf(sym, bars);
+        trend = first ? recordMtf(sym, bars) : readMtf(sym);
       } catch (err) {
         // Without a fresh record the gate refuses trend strategies' entries (fail closed).
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
@@ -262,7 +301,7 @@ function createRunner(deps) {
         dayError = err.message;
         log(`${sym.symbol}: no day context this bar (${err.message})`, 'error');
       }
-      return { symbol: sym.symbol, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, dayError, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, day, recent: bars.slice(-10) } };
+      return { symbol: sym.symbol, lane: sym.lane, minutes, contractId: sym.contractId, tickSize: sym.tickSize, bars, stale: stale || file === null, dayError, bar: { t: step.bar.t, c: step.bar.c, file, contractId: sym.contractId, trend, day, recent: bars.slice(-10) } };
     } catch (err) {
       syms[i] = { ...syms[i], lastPollAt: now.getTime() };
       log(`${sym.symbol}: ${err.message}`, 'error');
@@ -457,7 +496,8 @@ function createRunner(deps) {
     return true;
   }
 
-  async function housekeeping(item, { noCycles = false } = {}) {
+  // `trail`: apply the trailing exit to this item's bars (only the first lane's: the trail counts its bars).
+  async function housekeeping(item, { noCycles = false, trail = true } = {}) {
     if (!cfg.account || cfg.paper || typeof client.accountState !== 'function') return;
     try {
       const account = await client.accountState(cfg.account);
@@ -465,7 +505,7 @@ function createRunner(deps) {
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
       if (noCycles && await flattenUncovered(item, account)) return;
-      await trailPosition(item, account);
+      if (trail) await trailPosition(item, account);
     } catch (err) {
       log(`${item.symbol}: account housekeeping failed (${err.message})`, 'error');
     }
@@ -504,6 +544,8 @@ function createRunner(deps) {
   function briefItem(item, results, scanError) {
     if (item.briefed) return;
     item.briefed = true;
+    // The briefing is the symbol's, built on the first lane's bars (another lane's bar keeps the last one).
+    if (item.lane > 0) return;
     try {
       recordBriefing(item, results, scanError);
     } catch (err) {
@@ -514,7 +556,7 @@ function createRunner(deps) {
   // The strategy scan for an item; a failure is named in the prompt (what fired is unknown), not left out.
   function scanItem(item) {
     try {
-      item.scan = scanFor(item.symbol, item.bars);
+      item.scan = multi ? scanFor(item.symbol, item.bars, lanes[item.lane]) : scanFor(item.symbol, item.bars);
     } catch (err) {
       item.scan = null;
       item.scanError = err.message;
@@ -543,7 +585,7 @@ function createRunner(deps) {
   // means no verdict, so the gate refuses any entry: the prompt says so instead of listing the setups.
   function screenItem(item) {
     try {
-      const screened = prop.screen(item.scan, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now() });
+      const screened = prop.screen(item.scan, { symbol: item.symbol, contractId: item.contractId, bars: item.bars, now: clock.now(), ...(multi ? { lane: lanes[item.lane] } : {}) });
       item.verdicts = screened.filter(r => r.verdict).map(r => r.verdict);
       return screened;
     } catch (err) {
@@ -554,7 +596,8 @@ function createRunner(deps) {
   }
 
   async function wanted(item, manageOnly) {
-    if (cfg.trigger === 'bar' && !manageOnly) {
+    // Each lane's own trigger (one lane: the config's).
+    if ((multi ? lanes[item.lane].trigger : cfg.trigger) === 'bar' && !manageOnly) {
       // Every bar runs a cycle with what fired; a policy still records its verdicts for the gate.
       const results = scanItem(item);
       if (results) {
@@ -772,6 +815,98 @@ function createRunner(deps) {
     };
   }
 
+  /**
+   * Several lanes: entry verdicts of more than one policy among the cycle's items. The first policy's stand (its
+   * priority, else 3m and slower first: lane-cycle.js); every other's is skipped: recorded for the gate (a
+   * superseding skip verdict, so its entry is refused), shown as skipped in the prompt, and returned for the cycle
+   * record so the labels see it. A skip that can't be recorded (tried twice) leaves the skipped policy's entry
+   * verdict the gate's latest: the caller then runs the cycle manage-only (no entry at all), failing closed.
+   */
+  function settlePolicies(run) {
+    const current = run.flatMap(x => x.verdicts || []);
+    // Other policies' entry verdicts from earlier cycles, still open (unexpired, unused): the priority holds across
+    // cycles, so a lower-priority policy's new setup never jumps a higher one's open setup. One that can't be read:
+    // the cycle's own verdicts are settled alone (said in the log).
+    let open = [];
+    try {
+      // An open verdict is replaced only by this cycle's entry verdict of the same policy on the same index family
+      // (a skip, or a setup on another family, leaves it open).
+      const famKey = v => `${v.strategy}|${famOf(v.contract || v.contractId || v.symbol || '')}`;
+      const mine = new Set(current.filter(v => v.action !== 'skip').map(famKey));
+      open = prop && typeof prop.openVerdicts === 'function' ? (prop.openVerdicts(clock.now()) || []).filter(v => !mine.has(famKey(v))) : [];
+    } catch (err) {
+      log(`open policy verdicts unreadable (${err.message}); this cycle's setups are settled among themselves`, 'error');
+    }
+    // Every loser is skipped: this cycle's, and an earlier open one that a higher-priority setup now goes before.
+    const { skipped } = settleCollisions([...current, ...open], n => strategyNamed(n));
+    const out = [];
+    for (const { verdict, by } of skipped) {
+      const item = run.find(x => (x.verdicts || []).includes(verdict)) || null;
+      const where = item ? { symbol: item.symbol, lane: `${item.minutes}m` } : { symbol: verdict.symbol || contractRoot(verdict.contractId || '') || null, lane: ((strategyNamed(verdict.strategy) || {}).timeframe) || null, earlier: verdict.at || null };
+      const skip = skippedVerdict(verdict, by, clock.now());
+      let unrecorded = null;
+      for (let tries = 0; tries < 2; tries += 1) {
+        try {
+          if (!prop || typeof prop.supersede !== 'function') throw new Error('no prop hooks to record it');
+          prop.supersede(skip);
+          unrecorded = null;
+          break;
+        } catch (err) {
+          unrecorded = err.message;
+        }
+      }
+      if (unrecorded) {
+        // The gate would still read the skipped policy's entry verdict: the kill switch (another file) makes it refuse
+        // every entry until the user looks, and this cycle only manages.
+        log(`${where.symbol}: could not record ${verdict.strategy}'s skip (${unrecorded}); this cycle is manage-only and the kill switch is on`, 'error');
+        try {
+          if (!isKillSwitchOn()) createKillSwitch(`created by autotrader at ${clock.now().toISOString()}: ${verdict.strategy}'s skip for ${by} could not be recorded for the gate (${unrecorded})`);
+          emit('kill_switch', { reason: `${verdict.strategy}'s skip could not be recorded` });
+        } catch (err) {
+          log(`could not create the kill switch either (${err.message})`, 'error');
+        }
+      }
+      if (item) item.verdicts = item.verdicts.map(v => (v === verdict ? skip : v));
+      const rec = { ...where, policy: verdict.strategy, component: verdict.component || null, direction: verdict.direction || null, skipped: LOWER_PRIORITY, by, ...(unrecorded ? { unrecorded } : {}) };
+      out.push(rec);
+      emit('policy_skipped', rec);
+      log(`${where.symbol}: ${verdict.strategy} ${verdict.direction} setup from ${verdict.component}${item ? '' : ` (open since ${verdict.at})`} skipped: ${LOWER_PRIORITY} (${by} goes first)`);
+    }
+    return out;
+  }
+
+  /** Several lanes: each lane's last bar into the state (saved when it moved), for the next process's clocks. */
+  function saveLaneClocks() {
+    const prev = (state && state.laneClocks) || {};
+    const next = { ...prev };
+    for (const s of syms) if (s.clock && s.clock.lastBarT && s.contractId) next[laneKey(s)] = { lastBarT: s.clock.lastBarT, contractId: s.contractId };
+    const same = (a, b) => Boolean(a && b) && a.lastBarT === b.lastBarT && a.contractId === b.contractId;
+    if (Object.keys(next).some(k => !same(next[k], prev[k]))) {
+      state = { ...state, laneClocks: next };
+      saveState(state);
+    }
+  }
+
+  /**
+   * Several lanes: how long to wait before the cycle (ms), or null to run it now. It waits while a lane of a symbol
+   * whose bar closed is due at that close (its clock expects a bar closing no later) and hasn't published it, until
+   * coalesceHoldMs after the earliest of the closes plus the poll delay.
+   */
+  function coalesceWait(ready, at) {
+    if (!ready.length) return null;
+    const closeOf = x => Date.parse(x.bar.t) + x.minutes * 60000;
+    const late = syms.filter(s => s.contractId && s.clock && Number.isFinite(s.clock.expectedCloseAt)
+      && ready.some(x => x.symbol === s.symbol && x.lane !== s.lane && s.clock.expectedCloseAt <= closeOf(x))
+      && !ready.some(x => x.symbol === s.symbol && x.lane === s.lane));
+    if (!late.length) return null;
+    const until = Math.min(...ready.map(closeOf)) + delayMs + coalesceHoldMs;
+    if (at.getTime() >= until) {
+      log(`${late.map(laneKey).join(', ')}: no bar yet for the close the other lanes have; cycling without it`);
+      return null;
+    }
+    return Math.max(250, Math.min(cfg.barPollSeconds * 1000, until - at.getTime()));
+  }
+
   /** Milliseconds from `now` to today's end of day (Infinity if none). */
   function msToEod(now) {
     const eod = endOfDayAt(cfg, now);
@@ -783,8 +918,8 @@ function createRunner(deps) {
     return (tradingDayStart(now).getTime() + sessionMinuteOf({ minute: MARKET_CLOSE_MIN, timeZone: MARKET_TZ }, now) * 60000) - now.getTime();
   }
   /** A run's time limit: its timeout, but never past end of day (or, for end of day, the close). */
-  function limitFor(action, now) {
-    const base = cfg.cycleTimeoutMinutes * 60000;
+  function limitFor(action, now, baseMin = cfg.cycleTimeoutMinutes) {
+    const base = baseMin * 60000;
     const until = action === 'eod' ? msToClose(now) : msToEod(now);
     return Math.max(0, Math.min(base, until));
   }
@@ -816,6 +951,10 @@ function createRunner(deps) {
 
   async function stepOnce() {
     const now = clock.now();
+    // Bars held for a coalesced cycle go only into this pass's polling, while still within the hold: any other path
+    // (premarket, end of day, outside hours) drops them.
+    const carried = held;
+    held = [];
     // Once a trading day: warn while the exchange calendar is running out (after it, the gate refuses entries).
     if (dayKey(now) !== calendarCheckedDay) {
       calendarCheckedDay = dayKey(now);
@@ -939,20 +1078,29 @@ function createRunner(deps) {
     }
     if (d.action !== 'trade' && d.action !== 'manage' && d.action !== 'housekeep') return IDLE_MS;
 
-    const ready = [];
+    const ready = carried.filter(x => now.getTime() <= Date.parse(x.bar.t) + x.minutes * 60000 + delayMs + coalesceHoldMs + MAX_POLL_MS);
     for (let i = 0; i < syms.length; i += 1) {
       // A slow API can make a pass long: if end of day came due meanwhile, run it first.
       if (i > 0 && decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() }).action === 'eod') return 0;
       const item = await pollSymbol(i, now);
       if (item) ready.push(item);
     }
+    if (multi) {
+      saveLaneClocks();
+      // A lane of a symbol whose bar closed, due at that same close but not published yet: the cycle waits for it
+      // (a few seconds at most), so one close is one cycle.
+      const wait = coalesceWait(ready, clock.now());
+      if (wait !== null) { held = ready; return wait; }
+    }
     if (ready.length) {
-      // Trailing stops and leftover orders first: they only ever reduce risk.
+      // Trailing stops and leftover orders first: they only ever reduce risk. Once per symbol (its first lane's bar
+      // when that closed: the trail counts the first lane's bars), never twice on one account read's orders.
       const noCycles = d.action === 'housekeep';
-      for (const item of ready) await housekeeping(item, { noCycles });
+      const keep = ready.filter(x => !ready.some(y => y !== x && y.symbol === x.symbol && (y.lane < x.lane || (y.lane === x.lane && ready.indexOf(y) < ready.indexOf(x)))));
+      for (const item of keep) await housekeeping(item, { noCycles, trail: item.lane === 0 });
       // Then the session record hears each closed bar (its values taken, its bars archived): after the risk work.
       for (const x of ready) {
-        try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars }); } catch (_err) { /* recording never stops the pass */ }
+        try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars, ...(multi ? { minutes: x.minutes } : {}) }); } catch (_err) { /* recording never stops the pass */ }
       }
       if (state.trails) saveState(state);
       // The account balance for the gate's prop-challenge checks, before any cycle.
@@ -967,23 +1115,31 @@ function createRunner(deps) {
       const again = decide(cfg, state, clock.now(), { killSwitch: isKillSwitchOn() });
       state = again.state;
       if (again.action === 'trade' || again.action === 'manage') {
-        const manageOnly = again.action === 'manage';
+        let manageOnly = again.action === 'manage';
         const run = [];
         for (const item of ready.filter(x => !x.stale)) {
           const w = await wanted(item, manageOnly);
           // A bar not scanned (manage only, or no cycle) still gets its briefing: the file is always this bar's.
           briefItem(item, null, 'not scanned this bar');
-          if (w.run) { run.push(item); log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
-          else log(`${item.symbol} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
+          const tag = `${item.symbol}${multi ? ` ${item.minutes}m` : ''}`;
+          if (w.run) { run.push(item); log(`${tag} bar ${item.bar.t} close ${item.bar.c}: cycle (${w.reason})`); }
+          else log(`${tag} bar ${item.bar.t} close ${item.bar.c}: no cycle (${w.reason})`);
         }
+        // Several lanes: two policies' entry verdicts in one cycle are settled by priority (lane-cycle.js).
+        const skipped = multi && run.length ? settlePolicies(run) : [];
+        // A skip the gate can't read: no entry this cycle (fail closed), only managing what is open.
+        if (skipped.some(k => k.unrecorded)) manageOnly = true;
+        // The cycle's budget: the fastest closed lane's (one lane: the runner's cycleTimeoutMinutes).
+        const closedLanes = multi ? lanes.filter((l, li) => run.some(x => x.lane === li)) : [];
+        const budgetMin = multi ? cycleTimeoutMin(cfg, closedLanes) : cfg.cycleTimeoutMinutes;
         let cycleNow = clock.now();
-        let timeoutMs = limitFor(again.action, cycleNow);
+        let timeoutMs = limitFor(again.action, cycleNow, budgetMin);
         let acct = null;
         if (run.length && timeoutMs >= 30000) {
           acct = await accountSnapshot(cycleNow);
           // The time limit counts from after the account read.
           cycleNow = clock.now();
-          timeoutMs = limitFor(again.action, cycleNow);
+          timeoutMs = limitFor(again.action, cycleNow, budgetMin);
         }
         if (run.length && timeoutMs < 30000) log(`no cycle: ${Math.round(timeoutMs / 1000)} s left before end of day`);
         else if (run.length) {
@@ -1026,31 +1182,60 @@ function createRunner(deps) {
           const withRecords = x => (Array.isArray(x.scan) ? x.scan.map(r => {
             if (!(r.candidate && r.direction)) return r;
             try {
-              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + cfg.timeframe * 60000).toISOString(), entries: journal }) };
+              return { ...r, record: trackRecord(r.name, { regime: r.regime, at: new Date(Date.parse(x.bar.t) + x.minutes * 60000).toISOString(), entries: journal }) };
             } catch (err) {
               log(`prompt: ${x.symbol} track record for ${r.name} unavailable (${err.message})`, 'error');
               return { ...r, record: `track record unavailable (${err.message})` };
             }
           }) : x.scan);
-          const items = run.map(x => ({
+          // Several lanes: the first lane's items first; a symbol's further lane says only its own bars and signals.
+          const ordered = multi ? [...run].sort((a, b) => a.lane - b.lane) : run;
+          const repeat = x => multi && ordered.some(y => y !== x && y.symbol === x.symbol && ordered.indexOf(y) < ordered.indexOf(x));
+          const items = ordered.map(x => ({
             symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [],
-            bar: { ...x.bar, plan: entries ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
+            bar: { ...x.bar, plan: entries && !repeat(x) ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
+            ...(multi ? { minutes: x.minutes, repeat: repeat(x) } : {}),
           }));
+          const symbolsOf = list => (multi ? [...new Set(list.map(x => x.symbol))] : list.map(x => x.symbol));
+          for (const k of skipped.filter(x => x.unrecorded)) unavailable.push(`${k.symbol} ${k.policy}'s skip for ${k.by} could not be recorded for the gate (${k.unrecorded}): this cycle is manage-only, no entry`);
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
-          const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(items.map(x => x.symbol), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
+          const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(symbolsOf(items), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
           // Trade cycles left today after this one (the cap counts this cycle).
           const cyclesLeft = Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0) - 1) : null;
           // The reports still valid from earlier cycles (the roles the prompt lists: not when it lists none).
-          const cacheSymbols = items.map(x => ({ symbol: x.symbol, bar: x.bar.t, contractId: x.bar.contractId || null }));
-          const served = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow }), null) : null;
+          // Keyed on the briefing's bar, the first lane's: a cycle with only another lane's bar is keyed on the first
+          // lane's last bar (the briefing the analysts' reports rest on is still that one), so it reuses them.
+          // Only until the first lane's next bar is due (its last bar's open plus two bars): one overdue (a bar that didn't
+          // arrive, whatever a resync rearmed) means the
+          // briefing may be past its parts' time, so the cycle is keyed on its own bar (no report served).
+          const briefingBar = x => {
+            if (!multi || x.lane === 0) return x.bar.t;
+            const f = syms.find(s => s.symbol === x.symbol && s.lane === 0);
+            const current = f && f.clock && f.clock.lastBarT && cycleNow.getTime() < Date.parse(f.clock.lastBarT) + 2 * f.minutes * 60000 + delayMs;
+            return current ? f.clock.lastBarT : x.bar.t;
+          };
+          const cacheSymbols = ordered.filter((x, i) => !items[i].repeat).map(x => ({ symbol: x.symbol, bar: briefingBar(x), contractId: x.bar.contractId || null }));
+          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow }), null) : null;
+          // Several lanes: an analyst's report is served only until its parts' time (`until`, the next 15m close): a
+          // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
+          const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
+          const served = multi && fromCache ? { ...fromCache, roles: fromCache.reports.filter(live).map(r => r.role), reports: fromCache.reports.filter(live) } : fromCache;
+          // Several lanes: the decisions of the lanes that closed (and the first lane's and each open trade's lane's
+          // last few), never a fast lane's flood; one lane: the last 10, as before.
+          const firstLane = `${lanes[0].timeframe}m`;
+          const openLanes = multi ? [...new Set(tradeObjs.map(t => { try { const s = t.setup ? strategyNamed(t.setup) : null; return s && s.timeframe ? s.timeframe : null; } catch (_err) { return null; } }).filter(Boolean))] : [];
+          const shownHistory = multi
+            ? laneHistory((state && state.history) || [], { closed: closedLanes.map(l => `${l.timeframe}m`), first: firstLane, open: openLanes })
+            : (state && state.history) || [];
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
-            manageOnly, recovered: recover, state: acct, history: (state && state.history) || [],
+            manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
             cyclesLeft,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
+            ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
           });
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
@@ -1058,6 +1243,7 @@ function createRunner(deps) {
               symbol: x.symbol, bar: { t: x.bar.t, c: x.bar.c, contractId: x.bar.contractId, file: x.bar.file }, trend: x.bar.trend || null, day: x.bar.day || null, plan: x.bar.plan || null,
               fired: (x.scan || []).filter(r => r.candidate && r.direction).map(r => ({ name: r.name, direction: r.direction, status: r.status, regime: r.regime || null, confluence: r.confluence || null, record: r.record || null })),
               verdicts: x.verdicts || [],
+              ...(multi ? { lane: `${x.minutes}m` } : {}),
             })),
             account: acct ? accountEvent(acct) : null,
             openTrades: tradeObjs, openTradeLines: (acct && acct.openTrades) || [], manageAlso,
@@ -1065,19 +1251,24 @@ function createRunner(deps) {
             attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
             eodAt: (() => { const eod = endOfDayAt(cfg, cycleNow); return eod ? new Date(tradingDayStart(cycleNow).getTime() + sessionMinuteOf(eod, cycleNow) * 60000).toISOString() : null; })(),
             cyclesLeft,
-            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: ((state && state.history) || []).slice(-10),
+            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)),
             manageOnly, recovered: recover, unavailable,
             action: again.action, cachedRoles: served ? served.roles : [],
+            // Several lanes: the lanes that closed, and the setups skipped for a higher-priority policy (labels see them).
+            ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`), skipped } : {}),
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
-          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [] });
+          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}) });
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
           if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [] }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
-          state = { ...state, history: [...((state && state.history) || []), { at: cycleNow.toISOString(), symbols: run.map(x => x.symbol), result: (r && r.result) || null }].slice(-10) };
+          // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).
+          const entry = { at: cycleNow.toISOString(), symbols: symbolsOf(run), result: (r && r.result) || null, ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`) } : {}) };
+          const history = [...((state && state.history) || []), entry];
+          state = { ...state, history: multi ? boundHistory(history, firstLane) : history.slice(-10) };
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
         }
@@ -1157,7 +1348,8 @@ function createRunner(deps) {
   }
 
   return {
-    step, get state() { return state; }, get symbols() { return syms.map(s => ({ ...s })); },
+    // The first lane's clocks, as with one lane (the session record's bars).
+    step, get state() { return state; }, get symbols() { return syms.filter(s => s.lane === 0).map(({ lane: _l, minutes: _m, restoredFor: _r, ...s }) => ({ ...s })); },
     // The last flatten pass read the account and found nothing open or working (the session record retries a
     // broker read only then: session/live.js).
     get verifiedFlat() { return flattenRead && unflatPasses === 0; },

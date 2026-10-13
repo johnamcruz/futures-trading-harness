@@ -271,9 +271,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     const msg = checkTrend(config.home, { root, side: input.side, style: judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
-    // recent bar (signal-state.js): no relabelled setup tag, no stale signal.
+    // recent bar (signal-state.js): no relabelled setup tag, no stale signal (age in bars of its own timeframe).
     if (named.signal === 'rules') {
-      const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, style: named.mtf || 'trend', timeframe: named.timeframe, now, maxAgeMin: config.signalMaxAgeMin, minConfluence: config.minConfluence });
+      const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, style: named.mtf || 'trend', timeframe: named.timeframe, now, maxAgeBars: config.signalMaxAgeBars, maxAgeCapMin: config.signalMaxAgeCapMin, maxAgeCeilingMin: config.signalMaxAgeCeilingMin, minConfluence: config.minConfluence });
       if (fired) violations.push({ check: 'trigger-fired', message: fired });
     }
   }

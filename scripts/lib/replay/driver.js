@@ -309,6 +309,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       premarketUnavailable: step.state && step.state.day === point.day ? step.state.premarketUnavailable || null : null,
       premarketAvailableAt: step.state && step.state.day === point.day ? step.state.premarketAvailableAt || null : null,
       premarketRetryStarved: step.state && step.state.day === point.day ? step.state.premarketRetryStarved || 0 : 0,
+      lanes: point.lanes || null,
     });
     // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
     // With the replay broker's bar-shaping settings (its fingerprintEnv allowlist), as live records its broker's;

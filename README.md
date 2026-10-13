@@ -455,11 +455,35 @@ More runner settings:
   disagrees with the first lane's is refused. A `policies` list that leaves
   out another policy on the lane's timeframe with a running prop attempt is
   refused at start too: that policy owns its strategies' setups, which the
-  lane would never trade. The runner still cycles one lane:
-  a config with more than one is refused at start ("multi-lane cycling
-  arrives in a later step") rather than run on one lane with the others
-  ignored. `node scripts/preflight.js` lists each lane with its strategies and
-  policies.
+  lane would never trade. `node scripts/preflight.js` lists each lane with
+  its strategies and policies.
+
+  Several lanes cycle together: a bar clock per symbol and lane, and the
+  lanes whose bars close at the same time go into ONE cycle (each 3m close is
+  also a 1m close: the analysts run once, the risk manager, the executor and
+  the gate decide once; a lane due at that close that publishes a few
+  seconds late holds the cycle up to 10 s; a replay pass, one step per process, never holds: a lane missing its bar there is a gap in the data, and live cycles without it after the hold too). A `"bar"` lane cycles on every
+  bar; a `"signal"` lane only when one of its strategies fired on the bar or
+  a position is open (no fire and flat: no model call). The prompt says
+  which lanes closed, and its "last cycles" history is those lanes' (10 each, kept per lane
+  in the state), plus the first lane's last 3 and an open trade's lane's last 3 (the last
+  reviewed trades are unchanged). The first lane is the runner's own: its bars write the
+  multi-timeframe record, the bar briefing and the trailing stops (the
+  report cache keys on its bar: a cycle with only a 1m bar reuses the
+  reports cached at the last 3m bar), and its timeframe sets
+  `cycleTimeoutMinutes`; a cycle's time limit is the fastest closed lane's
+  (another lane's is max(3, 2 x its minutes), never over
+  `cycleTimeoutMinutes`). When two policy strategies have an entry verdict
+  in one cycle, or one arrives while another policy's entry verdict from an earlier cycle is still open
+  (unexpired and unused), on any of the runner's symbols (collisions are settled per runner, that is per
+  account: a runner trades one account), the one with the lower `priority` goes first (equal or
+  unset: the one on 3m or slower; then the slower timeframe); the other's
+  setup is skipped as "lower priority", recorded so for the gate (which
+  refuses it; when that skip can't be recorded, the cycle runs manage-only and the runner turns the kill switch on, so the gate refuses every entry until the user looks) and in the cycle log and event log (`policy_skipped`). Each
+  lane's last bar is kept in the runner state, so a replay pass (a new
+  process per decision time) never takes a 3m lane's last bar for a new one
+  at a 1m close; the replay schedule is the union of the lanes' closes, each
+  decision point listing its lanes.
 - `agents` (optional) sets an agent role's timeframe:
   `{ "<role>": { "timeframe": "15m" } }`, over the `timeframe` its
   `agents/<role>.md` may declare (none: the lane's). The role must exist and
