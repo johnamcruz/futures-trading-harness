@@ -66,6 +66,20 @@ test('a prop attempt runs the account from a start day to pass, blow, or timeout
   assert.strictEqual(o.start, new Date(all[0]).toISOString());
 });
 
+test('the attempt simulation sizes with the policy strategy\'s own stop_slippage_ticks, as live', () => {
+  // The first trade of an attempt: $200 budget (0.2 x $1,000 cushion), a 14-tick stop. The default tick:
+  // 15 x $0.50 = $7.50 + $0.74 = $8.24 a micro, 24 MNQ ($197.76); stop_slippage_ticks 3: 17 x $0.50 + $0.74 = $9.24, 21 ($194.04).
+  const bars = series(40);
+  const acct = account({ max_contracts: { MNQ: 100 } });
+  const first = sizing => {
+    const e = createEnv({ markets: [market(bars)], strategies: [strategy()], account: acct, sizing, engine });
+    const t = runAttempt(e, e.starts(Date.parse('2026-01-08T00:00:00Z'), Infinity)[0], Infinity).trades[0];
+    return [t.size, Math.round(t.risk / 0.25)];
+  };
+  assert.deepStrictEqual(first(null), [24, 14]);
+  assert.deepStrictEqual(first({ stop_slippage_ticks: 3 }), [21, 14]);
+});
+
 test('evaluate aggregates attempts overall and by start month: pass, blow, timeout, win rate, and R', () => {
   const bars = series(40);
   const e = createEnv({ markets: [market(bars)], strategies: [strategy()], account: account(), engine });

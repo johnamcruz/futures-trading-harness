@@ -543,6 +543,22 @@ test('combine: the room counts the stop\'s expected slippage: a stopped size nev
   assert.deepStrictEqual(ev(3).violations, []);
 });
 
+test('combine: the gate sizes with the policy strategy\'s own stop_slippage_ticks, as its verdict does', () => {
+  // $400 budget, a 40-tick MNQ stop. sizing.stop_slippage_ticks 3: 43 x $0.50 = $21.50 + $0.74 = $22.24 a micro,
+  // 17 MNQ ($378.08); the default tick sizes 18 ($21.24 each).
+  const home = trendHome();
+  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 60000));
+  const slow = propStrategy({ sizing: { stop_slippage_ticks: 3 } });
+  assert.deepStrictEqual(prop.budgetPlan(home, MINI, slow, 'MNQ', 40), { root: 'MNQ', size: 17, riskPerContract: 22.24 });
+  assert.deepStrictEqual(prop.budgetPlan(home, MINI, propStrategy(), 'MNQ', 40), { root: 'MNQ', size: 18, riskPerContract: 21.24 });
+  prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize: 18, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+  const ev = (size, s) => evaluateOrder({ input: entryOrder({ size }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [s], accounts: [MINI] }).violations;
+  assert.deepStrictEqual(ev(18, propStrategy()), []);
+  assert.match(ev(18, slow).map(v => v.message).join(), /18 MNQ is not within the account's size budget for a 40-tick stop \(17 MNQ at \$22\.24/);
+  assert.deepStrictEqual(ev(17, slow), []);
+});
+
 test('combine: minis and micros, by the policy strategy\'s contract mode', () => {
   // $50,000 on the mini account: budget 0.2 x $2,000 = $400. A 40-tick stop risks $21.24 a micro (41 ticks x $0.50 + $0.74)
   // (18 fit) or $207.80 a mini (NQ: 41 x $5 = $205 + $2.80 fees). auto trades minis once the size reaches 10 micros: 1 NQ.

@@ -22,8 +22,9 @@ sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
 `sizing` allows, or is skipped. A contract's risk is its stop plus the
 stop's expected slippage (`sizing.stop_slippage_ticks`, a tick by default,
-as the backtester fills stops) plus fees both ways, so a stopped trade
-never reaches the floor or the daily limit. The harness tracks the attempt and enforces
+as the backtester fills stops) plus fees both ways, so a stop filled
+within its expected slippage never reaches the floor or the daily limit; a
+gap or fast market that fills it further past the stop still can. The harness tracks the attempt and enforces
 it:
 
 - In autonomous runs the cycle prompt carries each running attempt's state

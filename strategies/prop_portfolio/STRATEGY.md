@@ -53,7 +53,8 @@ skips one the budget can't fund, and its trail exits every trade.
    attempt's cushion, so while a trade is open (or an entry is in flight) on
    one index, setups on the others wait (the gate refuses them, and
    backtests do the same). Each trade is then sized from the whole
-   cushion, and a stopped trade never reaches the floor or the daily limit.
+   cushion, and a stop filled within its expected slippage (step 3) never
+   reaches the floor or the daily limit.
 3. The size budget is 30% of the cushion above the trailing floor, at most
    $1,000, halved while the balance is $1,500 or more below its peak, and
    never a full stop's reach to the floor or the daily limit, counting a tick

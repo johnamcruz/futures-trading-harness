@@ -27,6 +27,12 @@ test('the sizing verdict: full at the largest size the budget allows at the setu
   assert.strictEqual(v.combine.cushion, 2000);
 });
 
+test('the sizing verdict counts the policy strategy\'s own stop_slippage_ticks', () => {
+  // As above with sizing.stop_slippage_ticks 3: 43 x $0.50 = $21.50 + $0.74 = $22.24 a micro, so 17 MNQ ($378.08).
+  const v = decideSetup(args({ strategy: { ...strategy, sizing: { stop_slippage_ticks: 3 } } }));
+  assert.deepStrictEqual([v.action, v.contract, v.maxSize, v.riskPerContract], ['full', 'MNQ', 17, 22.24]);
+});
+
 test('the sizing verdict says only full or skip; a stop too wide for the budget is a skip with the reason', () => {
   const wide = decideSetup(args({ scan: { direction: 'short', stopDistance: 1000 } }));
   assert.deepStrictEqual([wide.action, wide.maxSize, wide.contract], ['skip', 0, null]);
