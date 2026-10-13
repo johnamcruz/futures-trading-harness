@@ -999,7 +999,8 @@ function outcomeBarsFrom(file, tf) {
   const m = bars.length > 1 ? barMinutes(bars) : tf;
   if (m === tf) return bars;
   if (m !== 1) throw new Error(`${file}: ${m}-minute bars; the run trades ${tf}-minute bars (give one-minute bars or the run's)`);
-  return aggregate(bars, { unit: 2, unitNumber: tf, nowMs: Infinity }).map(b => ({ ...b, ms: Date.parse(b.t) }));
+  // Outcomes read prices only: the broker's own fields, which the harness can't combine, are dropped here on purpose.
+  return aggregate(bars, { unit: 2, unitNumber: tf, nowMs: Infinity, extraFields: 'drop' }).map(b => ({ ...b, ms: Date.parse(b.t) }));
 }
 
 /** Every timeframe the run's lines were decided at: its first config's and each version's (configsOf). */

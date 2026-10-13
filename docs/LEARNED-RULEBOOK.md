@@ -128,10 +128,10 @@ The owner's classification is in section 11: the mechanical items enforced, judg
   interface), so training sees what live sees. It replaces the back-adjusted
   1-minute files (2021-04 to 2026-07-20) and the 3-minute and 15-minute bars
   derived from them, which carried no broker fields (`docs/BACKTESTING.md`).
-  Phase B **requires** the backtester to fetch at a strategy's timeframe
-  while keeping the broker's fields (`backtest fetch --timeframe`, its own
-  pull request). Today `backtest.js fetch` gets 1-minute bars only, so
-  Phase B can't start before it lands.
+  Phase B fetches at each strategy's timeframe with the broker's fields
+  kept (`backtest.js fetch --timeframe`, `docs/BACKTESTING.md`); the
+  backtester refuses to build a strategy's bars from 1-minute ones that
+  carry fields it reads, and reports each field's coverage.
 - **Flow coverage (owner's decision, 2026-10-13).** The replay server's
   flow fields cover **2021-05 to 2025-11**, for NQ (MNQ's bars carry NQ's
   flow, as `strategies/ofi` says); another market's coverage is checked
@@ -943,8 +943,6 @@ Each step is its own pull request and is reviewed as today.
 Inputs built in their own pull requests (owner's decision, 2026-10-13),
 none of which exists yet:
 
-- the backtester's fetch at a strategy's timeframe, keeping the broker's
-  fields (`backtest fetch --timeframe`): required before step 9 (section 4);
 - the flow at each decision, recorded and shown (R35): required before the
   labels and the scorecard can join it (steps 2 and 10 use it once it
   lands);

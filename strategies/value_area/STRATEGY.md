@@ -178,12 +178,14 @@ from where it closed in its range, so the flow branch could fire on any bar
 on real flow: with the broker's flow off, the expansion branch is the only
 confirmation, so fewer setups qualify than before.
 
-**Testing the flow branch.** Only in a replay (the `replay` skill), where the
-replay broker serves 3-minute bars with its flow fields. The local fast
-backtest (`backtest.js`) can't: `backtest.js fetch` gets 1-minute bars, and
-the 3-minute bars the backtester builds from them carry no broker fields, so
-there only the expansion branch confirms. That holds until the fast
-backtester pulls its bars from the replay broker (a planned follow-up).
+**Testing the flow branch.** In a replay (the `replay` skill), or in the
+fast backtest on 3-minute bars fetched from the broker with their flow
+fields: `backtest.js fetch --contract MNQ --from <date> --to <date>
+--timeframe 3 --out <file>.jsonl`, then `backtest.js --data <file>.jsonl
+--timeframe 3` (docs/BACKTESTING.md). The backtester refuses to build
+3-minute bars from 1-minute ones that carry the flow fields, and reports
+the share of bars carrying `flow.windows.3.ofiTrade` (a span past the
+broker's flow data has none, so there only the expansion branch confirms).
 ±0.2 is a starting value, set for the former bar-shape estimate: the
 learned-rulebook design calibrates it from real flow on history
 (`docs/LEARNED-RULEBOOK.md`, R34) before the flow branch is trusted.

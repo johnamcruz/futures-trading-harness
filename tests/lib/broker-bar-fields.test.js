@@ -120,9 +120,39 @@ test('backtest bar files: a JSON file of the broker\'s bars keeps their fields; 
   const csv = path.join(dir, 'b.csv');
   fs.writeFileSync(csv, `time,open,high,low,close,volume,buy_volume,sell_volume\n${bars.map(b => [b.t, b.o, b.h, b.l, b.c, b.v, 300, 100].join(',')).join('\n')}\n`);
   assert.deepStrictEqual(Object.keys(loadBars(csv)[0]).sort(), ['c', 'h', 'l', 'ms', 'o', 't', 'v']);
-  // Bars built from shorter ones: only the broker knows what its fields mean over a longer bar.
-  const five = aggregate(loaded, { unit: 2, unitNumber: 5, nowMs: T0 + 75 * M });
+  // Bars built from shorter ones: only the broker knows what its fields mean over a longer bar. Never dropped
+  // silently: refused, unless the caller says it drops them.
+  assert.throws(() => aggregate(loaded, { unit: 2, unitNumber: 5, nowMs: T0 + 75 * M }), /carry the broker's own fields \(flow\), which the harness can't combine into longer bars: fetch bars at the timeframe you need from the broker instead/);
+  const five = aggregate(loaded, { unit: 2, unitNumber: 5, nowMs: T0 + 75 * M, extraFields: 'drop' });
   assert.ok(five.length > 0 && five.every(b => !('flow' in b)));
+  assert.strictEqual(aggregate(loadBars(csv), { unit: 2, unitNumber: 5, nowMs: T0 + 75 * M }).length, five.length, 'plain bars aggregate as before');
+});
+
+test('JSON lines bar files: one bar a line, every nested field kept; a bad line is refused without echoing it', () => {
+  const dir = tmpDir();
+  const bars = series(1, (k, burst) => flow(burst ? 0.6 : 0));
+  const file = path.join(dir, 'b.jsonl');
+  fs.writeFileSync(file, `\ufeff${bars.map(b => JSON.stringify(b)).join('\n')}\n\n`);
+  const loaded = loadBars(file);
+  assert.strictEqual(loaded.length, bars.length);
+  assert.deepStrictEqual(loaded[72].flow, bars[72].flow);
+  const bad = path.join(dir, 'bad.jsonl');
+  fs.writeFileSync(bad, `${JSON.stringify(bars[0])}\nSECRET=hunter2\n`);
+  assert.throws(() => loadBars(bad), err => /bad\.jsonl: line 2: not valid JSON/.test(err.message) && !/hunter2/.test(err.message));
+});
+
+test('a backtest on finer bars that carry broker fields: refused when a strategy reads broker fields, built with a warning when none does', () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'one.json');
+  // 1-minute bars with the broker's flow, for a 3-minute run.
+  const bars = [];
+  for (let k = 0; k < 600; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
+  fs.writeFileSync(file, JSON.stringify({ bars }));
+  const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, log: m => logs.push(m) });
+  assert.throws(() => run(['value_area', 'bos']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
+  const logs = [];
+  run(['bos'], logs);
+  assert.ok(logs.some(l => /^warning: .*one\.json: building 3-minute bars from 1-minute ones drops the broker's own fields \(flow\): no strategy here reads them/.test(l)), logs.join('\n'));
 });
 
 test('a backtest on the broker\'s 1-minute bars trades from their flow fields, and nothing without them', () => {
@@ -143,4 +173,28 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
   const withFlow = run('with', absorbed(true));
   assert.ok(withFlow.summary.trades >= 1 && withFlow.trades.every(t => t.strategy === 'ofi_absorption' && t.direction === 'long'), JSON.stringify(withFlow.summary));
   assert.strictEqual(run('without', absorbed(false)).summary.trades, 0);
+});
+
+test('a prop run on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
+  const dir = tmpDir();
+  // va_paper: a paper copy of value_area (it reads the broker's flow), listed by an active policy with bos.
+  const strategies = path.join(dir, 'strategies');
+  const write = (name, text) => { fs.mkdirSync(path.join(strategies, name), { recursive: true }); fs.writeFileSync(path.join(strategies, name, 'STRATEGY.md'), text); };
+  write('va_paper', fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8').replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, bos]'));
+  const file = path.join(dir, 'one.json');
+  const bars = [];
+  for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
+  fs.writeFileSync(file, JSON.stringify({ bars }));
+  const env = { ...process.env, FTH_STRATEGIES_DIRS: strategies };
+  const run = (prop, logs) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, prop, gate: false, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) });
+  const logs = [];
+  try {
+    run('prop_mixed', logs);
+  } catch (err) {
+    // The run may find no attempt in so short a span; it must not be the bar-fields refusal.
+    assert.doesNotMatch(err.message, /carry the broker's own fields/);
+  }
+  assert.ok(logs.some(l => /^prop_mixed: leaves out va_paper/.test(l)), logs.join('\n'));
+  assert.ok(logs.some(l => /building 3-minute bars from 1-minute ones drops the broker's own fields \(flow\): no strategy here reads them/.test(l)), logs.join('\n'));
 });

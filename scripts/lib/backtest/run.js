@@ -32,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadStrategies, tradesRoot, componentRefusal } = require('../trading/strategies');
-const { loadBars, barMinutes, aggregate, auditBars } = require('./data');
+const { loadBars, barMinutes, aggregate, auditBars, extraKeys } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
 const { buildReport, toMarkdown, toCsv } = require('./report');
@@ -47,7 +47,7 @@ const { DEFAULT_SIZING: combineDefaults } = require('../trading/combine');
 const { createEnv, evaluate } = require('../prop/challenge');
 const { marketHoursErrors } = require('../autotrader');
 const walkForward = require('./walk-forward');
-const { missingBarFields, describeMissing } = require('./bar-fields');
+const { fieldPaths, fieldCoverage, describeMissing, describeCoverage } = require('./bar-fields');
 
 const WARMUP_BARS = 2000;
 
@@ -156,8 +156,13 @@ function validateBacktestConfig(raw, baseDir) {
   return { ...cfg, start, end, markets };
 }
 
-/** Bars at the trading timeframe: as given, or aggregated from finer bars. */
-function barsAt(file, timeframe, sheet) {
+/**
+ * Bars at the trading timeframe: as given, or aggregated from finer bars. The harness can't combine
+ * the broker's own fields into a longer bar: finer bars that carry them are refused when a strategy
+ * here (`readers`: their names) reads broker fields, and otherwise built with them dropped, said in
+ * the log. Fetch bars at the timeframe from the broker to keep them.
+ */
+function barsAt(file, timeframe, sheet, { readers = [], log = () => {} } = {}) {
   const raw = loadBars(file, { sheet });
   if (raw.length < 2) throw new Error(`${file}: not enough bars`);
   const step = barMinutes(raw);
@@ -165,8 +170,14 @@ function barsAt(file, timeframe, sheet) {
   if (step > timeframe || timeframe % step !== 0) {
     throw new Error(`${file}: ${step}-minute bars can't make ${timeframe}-minute bars (need ${timeframe}-minute data or a divisor of it)`);
   }
+  const extra = extraKeys(raw);
+  const fetch = `fetch ${timeframe}-minute bars from the broker instead (backtest.js fetch --contract <symbol> --timeframe ${timeframe} --from <date> --to <date> --out <file>.jsonl)`;
+  if (extra.length && readers.length) {
+    throw new Error(`${file}: its ${step}-minute bars carry the broker's own fields (${extra.slice(0, 5).join(', ')}), which the harness can't combine into ${timeframe}-minute bars, and ${readers.join(', ')} read${readers.length === 1 ? 's' : ''} broker fields: ${fetch}`);
+  }
+  if (extra.length) log(`warning: ${file}: building ${timeframe}-minute bars from ${step}-minute ones drops the broker's own fields (${extra.slice(0, 5).join(', ')}): no strategy here reads them; to keep them, ${fetch}`);
   const last = raw[raw.length - 1];
-  return aggregate(raw, { unit: 2, unitNumber: timeframe, nowMs: last.ms + step * 60000 });
+  return aggregate(raw, { unit: 2, unitNumber: timeframe, nowMs: last.ms + step * 60000, extraFields: 'drop' });
 }
 
 function pickStrategies(all, cfg) {
@@ -259,7 +270,9 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   // indicators settle well within that, and a long file stays fast.
   const markets = cfg.markets.map(m => {
     log(`loading ${m.symbol} from ${m.file}`);
-    let bars = barsAt(m.file, cfg.timeframe, m.sheet);
+    // The traded strategies only (a paper one a policy leaves out never picks a setup), as the coverage counts them.
+    const readers = (traded ? strategies.filter(s => traded.includes(s.name)) : strategies).filter(s => fieldPaths(s).length && tradesRoot(s, m.symbol, [m.symbol])).map(s => s.name);
+    let bars = barsAt(m.file, cfg.timeframe, m.sheet, { readers, log });
     const ms = b => Date.parse(b.t);
     const first = cfg.start === null ? 0 : bars.findIndex(b => ms(b) >= cfg.start);
     const from = cfg.start === null ? 0 : Math.max(0, (first === -1 ? bars.length : first) - cfg.window - WARMUP_BARS);
@@ -278,11 +291,14 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
       log(`warning: no selected strategy lists ${m.symbol} (or the micro or mini of its family) in its instruments, so it can't trade`);
     }
   }
-  // Broker bar fields a traded strategy reads that these bars don't carry: said in the log and the report.
-  const missingFields = missingBarFields(traded ? strategies.filter(s => traded.includes(s.name)) : strategies, markets, (s, sym) => tradesRoot(s, sym, [sym]));
+  // Broker bar fields a traded strategy reads: the share of the bars in range that carry each, and a warning
+  // for each one some market carries on under 100% of them; said in the log and the report.
+  const fieldsCovered = fieldCoverage(traded ? strategies.filter(s => traded.includes(s.name)) : strategies, markets, (s, sym) => tradesRoot(s, sym, [sym]), { from: cfg.start });
+  const missingFields = fieldsCovered.filter(x => x.symbols.length);
+  for (const x of fieldsCovered) log(`field coverage: ${describeCoverage(x)}`);
   for (const x of missingFields) log(`warning: ${describeMissing(x)}`);
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
-  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields });
+  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields, fieldsCovered });
   if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
   const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
@@ -300,11 +316,12 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     dataAudit: Object.fromEntries(markets.map(m => [m.symbol, m.audit])),
     provenance: provenance(root, strategies, markets),
   });
+  if (fieldsCovered.length) report.fieldCoverage = fieldsCovered;
   if (missingFields.length) report.missingFields = missingFields;
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });
   writeJsonAtomic(path.join(runDir, 'report.json'), report);
-  fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report) + missingMarkdown(missingFields));
+  fs.writeFileSync(path.join(runDir, 'report.md'), toMarkdown(report) + fieldsMarkdown(fieldsCovered, missingFields));
   fs.writeFileSync(path.join(runDir, 'trades.csv'), toCsv(report.trades));
   fs.writeFileSync(path.join(runDir, 'trades.jsonl'), report.trades.map(t => JSON.stringify(t)).join('\n') + (report.trades.length ? '\n' : ''));
   if (cfg.record) {
@@ -351,7 +368,7 @@ function policyStrategy(root, name, env = process.env) {
 }
 
 /** Prop challenge attempts: every setup the account's budget sizes, exited by the policy strategy's exit. */
-function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields = [] }) {
+function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded, missingFields = [], fieldsCovered = [] }) {
   const account = accountNamed(root, prop.account, env);
   const contracts = prop.contracts || 'auto';
   const e = createEnv({
@@ -368,17 +385,24 @@ function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, en
   const report = {
     runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: traded,
     leftOut: prop.strategies.filter(n => !traded.includes(n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
+    ...(fieldsCovered.length ? { fieldCoverage: fieldsCovered } : {}),
     ...(missingFields.length ? { missingFields } : {}),
   };
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });
   writeJsonAtomic(path.join(runDir, 'combine.json'), report);
-  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report) + missingMarkdown(missingFields));
+  fs.writeFileSync(path.join(runDir, 'combine.md'), combineMarkdown(report) + fieldsMarkdown(fieldsCovered, missingFields));
   return { report, runDir };
 }
 
-/** The report's section on bar fields the data doesn't carry ('' with none). */
-const missingMarkdown = list => (list.length ? `\n## Bar fields missing from this data\n\n${list.map(x => `- ${describeMissing(x)}.`).join('\n')}\n` : '');
+/** The report's sections on the broker bar fields its strategies read: coverage, and the ones not on every bar ('' with none). */
+function fieldsMarkdown(covered, missing) {
+  if (!covered.length) return '';
+  const pct = (x) => `${Math.floor((x.bars ? x.carried / x.bars : 0) * 1000) / 10}%`;
+  const rows = covered.flatMap(c => Object.entries(c.coverage).map(([sym, x]) => `| ${c.strategy} | \`${c.path}\` | ${sym} | ${pct(x)} | ${x.carried} / ${x.bars} |`));
+  const table = `\n## Bar field coverage\n\nThe share of the bars in range that carry each broker field a traded strategy reads.\n\n| Strategy | Field | Market | Coverage | Bars |\n|---|---|---|---|---|\n${rows.join('\n')}\n`;
+  return table + (missing.length ? `\n## Bar fields missing from this data\n\n${missing.map(x => `- ${describeMissing(x)}.`).join('\n')}\n` : '');
+}
 
 function combineMarkdown(r) {
   const pct = x => (x === null || x === undefined ? '-' : `${Math.round(x * 1000) / 10}%`);

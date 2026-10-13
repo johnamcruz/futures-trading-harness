@@ -6,6 +6,8 @@
  *   - Parquet (.parquet, .pq): pandas/pyarrow, polars, DuckDB, fastparquet
  *   - Excel (.xlsx, .xlsm): the first sheet, or `sheet`
  *   - CSV (.csv, .txt) and JSON ({t,o,h,l,c,v} bars or { bars: [...] })
+ *   - JSON lines (.jsonl, .ndjson): one bar per line, as `backtest.js fetch` writes
+ *     the broker's bars (every field kept; no one huge string for years of bars)
  * Tables need a header naming the time column (time, timestamp, datetime,
  * date, ts, t) and open, high, low, close, optionally volume (any case).
  * Times are ISO 8601 (UTC unless an offset is given), epoch s/ms/us/ns, a
@@ -167,6 +169,21 @@ function parseCsv(text) {
   return tableToBars(header, lines.slice(1).map(l => l.split(',', header.length)));
 }
 
+/** The objects of a JSON lines file, one a line (blank lines skipped), read line by line from the bytes. */
+function readJsonLines(file) {
+  const buf = fs.readFileSync(file);
+  const out = [];
+  let start = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf ? 3 : 0;
+  for (let n = 1; start < buf.length; n += 1) {
+    let end = buf.indexOf(10, start);
+    if (end === -1) end = buf.length;
+    const line = buf.toString('utf8', start, end).trim();
+    start = end + 1;
+    if (line) out.push(parseJson(line, `${file}: line ${n}`));
+  }
+  return out;
+}
+
 /** Raw bars from any supported file. */
 function readTable(file, { sheet = null } = {}) {
   const ext = path.extname(file).toLowerCase();
@@ -180,6 +197,7 @@ function readTable(file, { sheet = null } = {}) {
     if (start === -1) return [];
     return tableToBars(rows[start], rows.slice(start + 1).filter(r => r.some(x => x !== null)), { excel: true, date1904 });
   }
+  if (ext === '.jsonl' || ext === '.ndjson') return jsonBars(readJsonLines(file), file);
   if (ext === '.xls') throw new Error(`${file}: legacy .xls is not supported; save it as .xlsx`);
   const text = stripBom(fs.readFileSync(file, 'utf8'));
   const trimmed = text.trimStart();
@@ -281,13 +299,32 @@ function bucketLength(unit, unitNumber) {
   return 24 * 60 * MINUTE;
 }
 
+/** Keys a bar carries beyond its time and prices (the broker's own fields), sorted; [] for none. */
+function extraKeys(bars) {
+  const keys = new Set();
+  for (const b of bars) for (const k of Object.keys(b)) if (!PLAIN_KEYS.has(k)) keys.add(k);
+  return [...keys].sort();
+}
+const PLAIN_KEYS = new Set(['t', 'o', 'h', 'l', 'c', 'v', 'ms']);
+
 /**
  * Aggregate 1-minute bars (oldest first) that have closed by `nowMs` into
  * bars of the requested size. A bar is complete once its period has ended
  * (or, for daily bars, once a later trading day has started). With
  * `includePartial`, the forming bar is included too.
+ *
+ * A bar built here carries only time, prices and volume: the harness can't combine the broker's own
+ * fields (only the broker knows what they mean over a longer bar). So bars that carry any are refused
+ * unless the caller says `extraFields: 'drop'` (and says so itself, where it drops them); fetch them
+ * from the broker at the timeframe instead.
  */
-function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false }) {
+function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false, extraFields = 'refuse' }) {
+  if (extraFields !== 'drop') {
+    const extra = extraKeys(minuteBars);
+    if (extra.length) {
+      throw new Error(`these bars carry the broker's own fields (${extra.slice(0, 5).join(', ')}${extra.length > 5 ? ', ...' : ''}), which the harness can't combine into longer bars: fetch bars at the timeframe you need from the broker instead (backtest.js fetch --timeframe <minutes>)`);
+    }
+  }
   const out = [];
   let cur = null;
   for (const b of minuteBars) {
@@ -310,8 +347,7 @@ function aggregate(minuteBars, { unit, unitNumber, nowMs, includePartial = false
       : last.start + bucketLength(unit, unitNumber) <= nowMs;
     if (!ended) out.pop();
   }
-  // A bar built here carries no broker fields: only the broker knows what they mean over a longer bar.
   return out.map(({ t, o, h, l, c, v }) => ({ t, o, h, l, c, v }));
 }
 
-module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, loadBars, readBarsArg, auditBars, barMinutes, aggregate, bucketStart, epochMs };
+module.exports = { MINUTE, parseTime, parseCsv, tableToBars, readTable, readJsonLines, loadBars, readBarsArg, auditBars, barMinutes, aggregate, extraKeys, bucketStart, epochMs };

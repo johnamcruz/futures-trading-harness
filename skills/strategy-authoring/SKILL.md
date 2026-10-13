@@ -98,7 +98,7 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    setting turns it on. A missing field or a null makes the condition false,
    so a bar without it never fires; nothing estimates it. Bars the
    backtester builds from shorter ones, and CSV files, carry no broker
-   fields. A value
+   fields (step 8 says how to backtest on them). A value
    that doesn't exist yet (indicator warm-up, no opening range yet) makes the
    condition false and the scan marks it `missing`. At most 12 conditions per
    side. A rules strategy with only `long` rules can't be used to sell into an
@@ -110,7 +110,14 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    role in an interactive authoring session; never a trading run):
    `node <root>/scripts/backtest.js --data <bars.parquet|.xlsx|.csv> --symbol MNQ --strategy <name>`
    (docs/BACKTESTING.md). Check that it fires where you expect (`trades.csv`)
-   and that its R statistics hold up with harness rules on.
+   and that its R statistics hold up with harness rules on. A strategy that
+   reads broker fields (`field(...)`) needs the broker's bars at its own
+   timeframe: fetch them first,
+   `node <root>/scripts/backtest.js fetch --contract MNQ --from <date> --to <date> --timeframe <its minutes> --out <file>.jsonl`,
+   and backtest on that file (`--timeframe <its minutes>`). The backtester
+   refuses to build its bars from finer ones that carry broker fields, and
+   reports each field's coverage (the share of bars carrying it): under 100%
+   it warns, and those bars can't fire the field's conditions.
 
 ## Examples
 

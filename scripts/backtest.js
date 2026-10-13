@@ -12,10 +12,11 @@
  *       [--min-confluence 2] [--conflict reversal|skip|priority]   require agreeing strategies / skip disagreement
  *       [--prop <policy strategy> [--every 5]]   prop challenge attempts
  *       [--walk-forward --strategy <one> --grid crtMinRR=1.5,2,2.5 [--grid ...] [--train-months 6] [--test-months 1] [--min-trades 20]]
- *   node scripts/backtest.js fetch --contract MNQ:2025-03 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
+ *   node scripts/backtest.js fetch --contract MNQ --from 2025-03-03 --to 2025-03-15 [--timeframe 3] --out data/MNQ-3m.jsonl
  *
- * `fetch` downloads 1-minute bars from the broker (through the broker adapter)
- * to CSV or JSON; backtests themselves only read files.
+ * `fetch` downloads the broker's bars at a timeframe (minutes, default 1; or 30s, 1h, 1d) through the
+ * broker adapter to JSON lines or JSON, every field the broker put on them kept (lib/backtest/fetch.js),
+ * or to CSV when they carry none; backtests themselves only read files.
  */
 
 'use strict';
@@ -29,8 +30,8 @@ const fs = require('fs');
 const path = require('path');
 const { runBacktest } = require('./lib/backtest/run');
 const { withAdapter } = require('./lib/broker/adapter');
+const { fetchToFile } = require('./lib/backtest/fetch');
 const { harnessHome } = require('./lib/paths');
-const { writeJsonAtomic } = require('./lib/harness-run');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -44,18 +45,12 @@ async function fetchBars(argv) {
   const from = new Date(arg(argv, '--from') || '');
   const to = new Date(arg(argv, '--to') || '');
   const out = arg(argv, '--out');
+  const timeframe = arg(argv, '--timeframe') || '1';
   if (!contractId || !Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || !out) {
-    throw new Error('usage: backtest.js fetch --contract <id> --from <ISO> --to <ISO> --out <file.csv|file.json>');
+    throw new Error('usage: backtest.js fetch --contract <id> --from <ISO> --to <ISO> [--timeframe 3] --out <file.jsonl|file.json|file.csv>');
   }
-  const bars = await withAdapter({ root: ROOT, env: process.env }, broker => broker.history(contractId, { start: from, end: to }));
-  const file = path.resolve(out);
-  if (file.endsWith('.csv')) {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, `time,open,high,low,close,volume\n${bars.map(b => [b.t, b.o, b.h, b.l, b.c, b.v].join(',')).join('\n')}\n`);
-  } else {
-    writeJsonAtomic(file, { contractId, barSize: '1 minute', count: bars.length, bars });
-  }
-  process.stdout.write(`[backtest] wrote ${bars.length} 1-minute bars for ${contractId} to ${out}\n`);
+  const r = await withAdapter({ root: ROOT, env: process.env }, broker => fetchToFile(broker, { contractId, from, to, timeframe, out: path.resolve(out) }));
+  process.stdout.write(`[backtest] wrote ${r.count} ${r.barSize} bars for ${contractId} to ${out}${r.extra.length ? ` (with the broker's own fields: ${r.extra.slice(0, 5).join(', ')})` : ''}\n`);
   return 0;
 }
 

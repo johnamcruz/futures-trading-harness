@@ -11,7 +11,9 @@
  *   verify()                               the server lists every interface tool, or throws
  *   activeContract(symbol)                 { id, name, tickSize, tickValue }
  *   closedBars(contractId, { minutes, limit, now, daily })   oldest first
- *   history(contractId, { start, end })    1-minute bars, oldest first
+ *   history(contractId, { start, end, timeframe })   bars of any size (default 1 minute), oldest first, every field kept
+ *   barSpec(timeframe)                     { unit, unitNumber, ms }: 3 or "3m" (minutes), "30s", "1h", "1d" (1 s to 1 day)
+ *   pageHistory(page, { from, to, chunk }) history()'s paging, whatever a server does at a page's edges
  *   accountState(accountId)                { positions, orders }
  *   accountBalance(accountId)              realized balance
  *   workingOrders(accountId, contractId)   working orders in the contract
@@ -36,7 +38,77 @@ const { signedSize } = require('../trading/positions');
 class BrokerError extends Error {}
 
 const BAR_LIMIT = 20000; // the most get_bars returns at once (interface)
-const HISTORY_CHUNK_MS = 10000 * 60000; // 10,000 one-minute bars per call
+const HISTORY_CHUNK_BARS = 10000; // bars per get_bars call when paging through history (half the limit)
+const UNITS = { s: ['second', 1000], m: ['minute', 60000], h: ['hour', 3600000], d: ['day', 86400000] };
+
+/**
+ * A timeframe as the interface's get_bars unit and unitNumber: a number (or "3") is minutes, as the
+ * runner's and the backtester's timeframe; "30s", "3m", "1h", "1d" name the unit. Throws on anything else.
+ */
+const MAX_BAR_MS = 86400000; // the longest bar history() pages: one day
+
+function barSpec(timeframe = 1) {
+  const m = /^(\d+)([smhd]?)$/.exec(String(timeframe).trim().toLowerCase());
+  const n = m ? Number(m[1]) : NaN;
+  const [unit, unitMs] = UNITS[(m && m[2]) || 'm'];
+  if (!m || !(n >= 1) || n * unitMs > MAX_BAR_MS) throw new BrokerError(`timeframe ${JSON.stringify(timeframe)}: minutes (3), or a count and unit (30s, 3m, 1h, 1d), from 1 second to 1 day`);
+  return { unit, unitNumber: n, ms: n * unitMs };
+}
+/**
+ * Every bar in [from, to] (both inclusive), oldest first, from `page(a, b)` (the bars one get_bars call returns,
+ * as { ms, bar }), whatever the server does at a call's edges: a start or end it treats as exclusive (each call
+ * asks 1 ms wider), a startTime it ignores (older bars come back too: only bars in the span are kept), or a cap
+ * on how many bars one call returns, from either end. Each planned page of `chunk` ms is asked for; one that came
+ * back short of its end is asked again from its last bar (the overlap is deduplicated by time), and one that came
+ * back starting after its start is asked again up to its first bar, until a call brings nothing new.
+ *
+ * Refused: a call that returns bars after the endTime it was asked for (it isn't answering the call: the same
+ * page every time, say). A call that returned `limit` bars (the most asked for) and none after its start (the bar
+ * a continuation starts from, or the span's start) is either a session break or the end of the data under a
+ * server that ignores startTime and keeps the newest bars up to endTime, or a server that ignores startTime, keeps
+ * the oldest bars and cut the rest at `limit`. One more call up to just before its newest bar tells them apart:
+ * the first kind returns `limit` bars again, the second fewer, and is refused. The safe side: a newest-keeping
+ * server that ignores startTime and holds exactly `limit` bars up to the end of its data is refused there too.
+ *
+ * Not caught: a server that ignores startTime, keeps the oldest bars and caps them below `limit` looks like one
+ * that has no more bars, so the bars past its cap are lost. The interface's get_bars `startTime` is the window's
+ * start (docs/BROKER-MCP-INTERFACE.md); exact paging relies on the server honouring it.
+ */
+async function pageHistory(page, { from, to, chunk, limit = Infinity }) {
+  const out = new Map();
+  for (let start = from; start < to; start += chunk) {
+    const spans = [{ a: start, b: Math.min(to, start + chunk) }];
+    while (spans.length) {
+      const { a, b } = spans.pop();
+      const got = await page(a - 1, b + 1);
+      if (got.some(x => x.ms > b + 1)) {
+        throw new BrokerError(`get_bars returned bars after the endTime it was asked for (${new Date(b + 1).toISOString()}): it can't be paged`);
+      }
+      if (got.length >= limit && !got.some(x => x.ms > a)) {
+        const newest = got.reduce((m, x) => Math.max(m, x.ms), -Infinity);
+        const again = await page(newest - chunk, newest - 1);
+        if (again.length < limit) {
+          throw new BrokerError(`get_bars made no progress: asked from ${new Date(a).toISOString()}, it returned ${got.length} bars (the most asked for), none new, and fewer up to just before its newest: it keeps the oldest bars and cuts the newer ones, so it can't be paged`);
+        }
+      }
+      let first = Infinity;
+      let last = -Infinity;
+      for (const x of got) {
+        if (x.ms < a || x.ms > b) continue;
+        out.set(x.ms, x.bar);
+        if (x.ms < first) first = x.ms;
+        if (x.ms > last) last = x.ms;
+      }
+      if (last === -Infinity) continue; // nothing there
+      // Short of either end: ask again from the bar it ended on, or up to the bar it started with (each span
+      // strictly smaller, so this ends; a call that only returns that bar again means nothing more is there).
+      if (last < b && last > a) spans.push({ a: last, b });
+      if (first > a && first < b) spans.push({ a, b: first });
+    }
+  }
+  return [...out.entries()].sort((x, y) => x[0] - y[0]).map(e => e[1]);
+}
+
 const listOf = (data, what) => {
   if (!Array.isArray(data)) throw new BrokerError(`${what} is not a list`);
   return data;
@@ -96,16 +168,22 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       });
     },
 
-    /** Historical 1-minute bars between two times, oldest first, in chunks the interface allows. */
-    async history(contractId, { start, end }) {
-      const out = new Map();
-      for (let from = start.getTime(); from < end.getTime(); from += HISTORY_CHUNK_MS) {
-        const to = Math.min(end.getTime(), from + HISTORY_CHUNK_MS);
-        for (const bar of await bars({ contractId, unit: 'minute', unitNumber: 1, limit: BAR_LIMIT, startTime: new Date(from).toISOString(), endTime: new Date(to).toISOString() })) {
-          out.set(Date.parse(bar.t), bar);
-        }
-      }
-      return [...out.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    /**
+     * Historical bars between two times (`start`/`end`, or `from`/`to`), oldest first, at `timeframe`
+     * (barSpec; default 1 minute), paged in chunks the interface allows. Each bar is the broker's own
+     * object, with every field its server put on it, untouched.
+     */
+    async history(contractId, { start, end, from = start, to = end, timeframe = 1 }) {
+      const spec = barSpec(timeframe);
+      const t0 = new Date(from).getTime();
+      const t1 = new Date(to).getTime();
+      if (!Number.isFinite(t0) || !Number.isFinite(t1)) throw new BrokerError('history: from and to must be times');
+      const page = async (a, b) => (await bars({ contractId, unit: spec.unit, unitNumber: spec.unitNumber, limit: BAR_LIMIT, startTime: new Date(a).toISOString(), endTime: new Date(b).toISOString() })).map(bar => {
+        const ms = Date.parse(bar && bar.t);
+        if (!Number.isFinite(ms)) throw new BrokerError('get_bars returned a bar with no readable time (t)');
+        return { ms, bar };
+      });
+      return pageHistory(page, { from: t0, to: t1, chunk: HISTORY_CHUNK_BARS * spec.ms, limit: BAR_LIMIT });
     },
 
     /** Open positions and working orders of an account. */
@@ -195,4 +273,4 @@ async function withAdapter(opts, fn) {
   }
 }
 
-module.exports = { createAdapter, openAdapter, withAdapter, tradingBlocked, BrokerError };
+module.exports = { createAdapter, openAdapter, withAdapter, tradingBlocked, barSpec, pageHistory, BrokerError };
