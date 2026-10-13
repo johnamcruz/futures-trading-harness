@@ -539,7 +539,7 @@ instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared 
 timeframe: 3m                # the one bar-size setting: every listed strategy trades it
 strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
-sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5 }   # risk from the headroom
+sizing: { cushion_frac: 0.3, cap_usd: 1000, drawdown_halve_usd: 1500, min_size_guard: 1.5, stop_slippage_ticks: 1 }   # risk from the headroom; a contract's risk counts a tick of stop slippage
 contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode
 ```
 

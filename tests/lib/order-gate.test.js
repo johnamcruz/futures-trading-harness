@@ -367,10 +367,11 @@ test('combine: a strategy that trades an account needs a started attempt and a f
 test('combine: the account blocks entries at the soft daily limit and sizes from the cushion for the order\'s stop', () => {
   // Down $600 today: past the $500 soft limit.
   assert.match(propSetup({ balance: 49400 })(entryOrder()).violations[0].message, /soft daily limit/);
-  // Budget: 0.2 x $2,000 cushion = $400. 40-tick MNQ stop = $20 + $0.74 fees = $20.74 a contract: 19 contracts.
+  // Budget: 0.2 x $2,000 cushion = $400. A 40-tick MNQ stop plus 1 tick of expected slippage: 41 x $0.50 = $20.50
+  // + $0.74 fees = $21.24 a contract: 18 contracts ($382.32; 19 would be $403.56).
   const ev = propSetup();
-  assert.deepStrictEqual(ev(entryOrder({ size: 19 })).violations, []);
-  assert.match(ev(entryOrder({ size: 20 })).violations[0].message, /20 MNQ is not within the account's size budget for a 40-tick stop \(19 MNQ at \$20.74/);
+  assert.deepStrictEqual(ev(entryOrder({ size: 18 })).violations, []);
+  assert.match(ev(entryOrder({ size: 19 })).violations[0].message, /19 MNQ is not within the account's size budget for a 40-tick stop \(18 MNQ at \$21.24/);
   assert.match(ev(entryOrder({ stopLossBracket: undefined, rationale: 'setup:orb long, stop 21480' })).violations[0].message, /needs stopLossBracket.ticks/);
 });
 
@@ -516,7 +517,7 @@ test('combine: a close the runner missed stops entries until it is recorded', ()
 
 test('combine: a size never risks the room to the daily limit, whatever the budget or guard', () => {
   // Down $900 of a $1,000 daily limit (soft limit off): $100 of room. Budget 0.2 x $1,100 cushion = $220.
-  // A 40-tick stop risks $20.74 a contract: 4 fit in the room ($82.96), not the budget's 10.
+  // A 40-tick stop plus a tick of slippage risks $21.24 a contract: 4 fit in the room ($84.96), not the budget's 10.
   const home = trendHome();
   prop.startAttempt(home, { ...MINI, daily_loss_soft: 0 }, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, { ...MINI, daily_loss_soft: 0 }, 49100, new Date(NOW.getTime() - 60000));
@@ -527,9 +528,24 @@ test('combine: a size never risks the room to the daily limit, whatever the budg
   assert.match(ev(5).violations[0].message, /5 MNQ is not within the account's size budget for a 40-tick stop \(4 MNQ/);
 });
 
+test('combine: the room counts the stop\'s expected slippage: a stopped size never reaches the daily limit a tick past the stop', () => {
+  // Down $917 of a $1,000 daily limit: $83 of room. Without slippage, 4 micros at a 40-tick stop ($20.74 each,
+  // $82.96) fit; stopped a tick past the stop they lose 4 x $21.24 = $84.96, past the limit. With it: 3 ($63.72).
+  const acct = { ...MINI, daily_loss_soft: 0 };
+  const home = trendHome();
+  prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, acct, 49083, new Date(NOW.getTime() - 60000));
+  const verdict = maxSize => prop.appendVerdict(home, { bar: BAR, strategy: 'orb', contract: 'MNQ', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, maxSize, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+  const ev = size => evaluateOrder({ input: entryOrder({ size }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy()], accounts: [acct] });
+  verdict(4);
+  assert.match(ev(4).violations.map(v => v.message).join(), /4 MNQ is not within the account's size budget for a 40-tick stop \(3 MNQ at \$21\.24/);
+  verdict(3);
+  assert.deepStrictEqual(ev(3).violations, []);
+});
+
 test('combine: minis and micros, by the policy strategy\'s contract mode', () => {
-  // $50,000 on the mini account: budget 0.2 x $2,000 = $400. A 40-tick stop risks $20.74 a micro
-  // (19 fit) or $202.80 a mini (NQ: $200 + $2.80 fees). auto trades minis once the size reaches 10 micros: 1 NQ.
+  // $50,000 on the mini account: budget 0.2 x $2,000 = $400. A 40-tick stop risks $21.24 a micro (41 ticks x $0.50 + $0.74)
+  // (18 fit) or $207.80 a mini (NQ: 41 x $5 = $205 + $2.80 fees). auto trades minis once the size reaches 10 micros: 1 NQ.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const NQ = 'NQ';
   const run = (contracts, input, verdict) => {
@@ -540,15 +556,15 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
     return evaluateOrder({ input, entries: [plan(5, { contractId: input.contractId })], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts })], accounts: [acct] }).violations;
   };
   assert.deepStrictEqual(run('auto', entryOrder({ contractId: NQ, size: 1 }), { contract: 'NQ', maxSize: 1 }), []);
-  assert.match(run('auto', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }).map(v => v.message).join(), /19 MNQ is not within .*\(1 NQ at \$202.80/);
-  assert.deepStrictEqual(run('micro', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }), []);
-  assert.match(run('micro', entryOrder({ contractId: NQ, size: 1 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /1 NQ is not within .*\(19 MNQ/);
+  assert.match(run('auto', entryOrder({ size: 18 }), { contract: 'MNQ', maxSize: 18 }).map(v => v.message).join(), /18 MNQ is not within .*\(1 NQ at \$207.80/);
+  assert.deepStrictEqual(run('micro', entryOrder({ size: 18 }), { contract: 'MNQ', maxSize: 18 }), []);
+  assert.match(run('micro', entryOrder({ contractId: NQ, size: 1 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /1 NQ is not within .*\(18 MNQ/);
   assert.deepStrictEqual(run('mini', entryOrder({ contractId: NQ, size: 1 }), { contract: 'NQ', maxSize: 1 }), []);
   assert.match(run('auto', entryOrder({ contractId: NQ, size: 2 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /2 NQ is not within/);
 });
 
 test('combine: a selected leg is the only one a policy strategy trades and is sized in, whatever its contract mode', () => {
-  // As above: $400 budget, a 40-tick stop. MNQ selected: 19 MNQ under auto (never 1 NQ); NQ selected: 1 NQ under micro.
+  // As above: $400 budget, a 40-tick stop. MNQ selected: 18 MNQ under auto (never 1 NQ); NQ selected: 1 NQ under micro.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const run = (contracts, symbols, input, verdict) => {
     const home = trendHome();
@@ -559,12 +575,12 @@ test('combine: a selected leg is the only one a policy strategy trades and is si
     return evaluateOrder({ input, entries: [plan(5, { contractId: input.contractId })], now: NOW, config: { ...config, home, selection }, strategies: [propStrategy({ contracts })], accounts: [acct] }).violations;
   };
   for (const contracts of ['auto', 'mini', 'micro']) {
-    assert.deepStrictEqual(run(contracts, 'MNQ', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }), [], `MNQ selected, ${contracts}`);
+    assert.deepStrictEqual(run(contracts, 'MNQ', entryOrder({ size: 18 }), { contract: 'MNQ', maxSize: 18 }), [], `MNQ selected, ${contracts}`);
     const nq = run(contracts, 'MNQ', entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 });
     assert.ok(nq.some(v => v.check === 'strategy' && /trades MNQ \(the selected contract\), not NQ/.test(v.message)), `MNQ selected, ${contracts}: NQ refused`);
-    assert.ok(nq.some(v => v.check === 'combine' && /1 NQ is not within .*\(19 MNQ/.test(v.message)), `MNQ selected, ${contracts}: the budget is in MNQ`);
+    assert.ok(nq.some(v => v.check === 'combine' && /1 NQ is not within .*\(18 MNQ/.test(v.message)), `MNQ selected, ${contracts}: the budget is in MNQ`);
     assert.deepStrictEqual(run(contracts, 'NQ', entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 }), [], `NQ selected, ${contracts}`);
-    assert.match(run(contracts, 'NQ', entryOrder({ size: 19 }), { contract: 'MNQ', maxSize: 19 }).map(v => v.message).join(), /19 MNQ is not within .*\(1 NQ at \$202.80/, `NQ selected, ${contracts}`);
+    assert.match(run(contracts, 'NQ', entryOrder({ size: 18 }), { contract: 'MNQ', maxSize: 18 }).map(v => v.message).join(), /18 MNQ is not within .*\(1 NQ at \$207.80/, `NQ selected, ${contracts}`);
   }
   // The strategy check skipped: the budget alone still refuses the other leg (hard, unskippable).
   const home = trendHome();
@@ -572,7 +588,7 @@ test('combine: a selected leg is the only one a policy strategy trades and is si
   prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
   prop.appendVerdict(home, { bar: BAR, strategy: 'orb', contractId: CONTRACT, direction: 'long', action: 'full', stopTicks: 40, contract: 'NQ', maxSize: 1, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
   const skipped = evaluateOrder({ input: entryOrder({ contractId: 'NQ', size: 1 }), entries: [plan(5, { contractId: 'NQ' })], now: NOW, config: { ...config, home, selection: loadConfig({ FTH_SYMBOLS: 'MNQ' }).selection, skipChecks: new Set(['strategy']) }, strategies: [propStrategy({ contracts: 'auto' })], accounts: [acct] });
-  assert.ok(skipped.violations.some(v => v.check === 'combine' && /1 NQ is not within .*\(19 MNQ/.test(v.message)));
+  assert.ok(skipped.violations.some(v => v.check === 'combine' && /1 NQ is not within .*\(18 MNQ/.test(v.message)));
 });
 
 test('combine: an untagged entry is refused while an attempt runs, even with the setup-tag check skipped', () => {
@@ -584,7 +600,8 @@ test('combine: an untagged entry is refused while an attempt runs, even with the
 
 test('policy: a half verdict is checked at half size, even when full size is minis and half is micros', () => {
   // $600 budget (0.2 x $3,000 cushion on a $3,000 max loss), auto. 60-tick stop:
-  // a micro risks $30 + $0.74 = $30.74 (19 fit: 1 NQ at $302.80); half: 9 micros, under one mini.
+  // a micro risks 61 ticks (a tick of slippage) x $0.50 = $30.50 + $0.74 = $31.24 (19 fit, $593.56: 1 NQ at $307.80);
+  // half: 9 micros, under one mini.
   const acct = { ...MINI, max_loss: 3000, daily_loss_soft: 0, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const home = trendHome();
   prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
@@ -992,13 +1009,14 @@ test('contract-specs: a prop entry is sized in dollars with the broker\'s tick v
     prop.snapshot(home, ACCT, 50000, new Date(NOW.getTime() - 60000));
     return home;
   };
-  // Budget $400 (0.2 x $2,000). 40 ticks: MNQ $20 + $0.74 = $20.74 (19 micros); NQ $200 + $2.80 = $202.80 (1 mini).
+  // Budget $400 (0.2 x $2,000). 40 ticks plus a tick of slippage: MNQ $20.50 + $0.74 = $21.24 (18 micros);
+  // NQ $205 + $2.80 = $207.80 (1 mini).
   const both = setupHome({ roots: ['MNQ', 'NQ'] });
-  assert.deepStrictEqual(run('MNQ', 19, both), []);
-  assert.match(run('MNQ', 20, both)[0].message, /20 MNQ is not within the account's size budget for a 40-tick stop \(19 MNQ at \$20\.74/);
+  assert.deepStrictEqual(run('MNQ', 18, both), []);
+  assert.match(run('MNQ', 19, both)[0].message, /19 MNQ is not within the account's size budget for a 40-tick stop \(18 MNQ at \$21\.24/);
   assert.deepStrictEqual(run('NQ', 1, both), []);
-  assert.match(run('NQ', 2, both)[0].message, /2 NQ is not within the account's size budget for a 40-tick stop \(1 NQ at \$202\.80/);
-  // A broker that says NQ ticks are worth $0.50 (a units mix-up; the table: $5) would size 19 NQ ($3,853 of real risk):
+  assert.match(run('NQ', 2, both)[0].message, /2 NQ is not within the account's size budget for a 40-tick stop \(1 NQ at \$207\.80/);
+  // A broker that says NQ ticks are worth $0.50 (a units mix-up; the table: $5) would size 17 NQ ($400 / $23.30, $3,532.60 of real risk):
   // unlike the table, so the entry is refused (fail closed), the gate's own check as well as the budget's.
   const cheap = setupHome({ roots: ['MNQ', 'NQ'], specs: { NQ: { tickValue: 0.5 } } });
   const refused = evaluateOrder({ input: entryOrder({ contractId: 'NQ', size: 19 }), entries: [plan(10, { contractId: 'NQ' })], now: NOW, config: { ...config, home: cheap, skipChecks: new Set(['strategy']) }, strategies: [propStrategy({ contracts: 'mini' })], accounts: [ACCT] }).violations;
@@ -1118,22 +1136,22 @@ test('max-order-size and max-risk: exits, protective orders and stop moves are n
 });
 
 test('max-risk: a policy strategy\'s entry is checked against its own cap, not its components\' (prop sizing sizes it)', () => {
-  // The mini account at $50,000: budget $400; 19 micros at a 40-tick stop ($20.74 each) fit it.
+  // The mini account at $50,000: budget $400; 18 micros at a 40-tick stop ($21.24 each, a tick of slippage counted) fit it.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
   const run = policyRisk => {
     const home = limitsHome({ maxOrderSize: 50 });
     prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
     prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
-    prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 19, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
-    // The component caps a trade at $20; 19 micros risk $380.
+    prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, contract: 'MNQ', direction: 'long', action: 'full', stopTicks: 40, maxSize: 18, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString() });
+    // The component caps a trade at $20; 18 micros risk $360 at the stop.
     const component = { ...capped(20), name: 'ema_cross' };
-    return evaluateOrder({ input: entryOrder({ size: 19 }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts: 'micro', ...(policyRisk ? { risk: { stop: 'strategy', min_rr: 2, max_risk_usd: policyRisk } } : {}) }), component], accounts: [acct] }).violations;
+    return evaluateOrder({ input: entryOrder({ size: 18 }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts: 'micro', ...(policyRisk ? { risk: { stop: 'strategy', min_rr: 2, max_risk_usd: policyRisk } } : {}) }), component], accounts: [acct] }).violations;
   };
   assert.deepStrictEqual(run(null), [], 'within the prop budget; the component\'s cap does not apply');
   assert.deepStrictEqual(run(400), []);
   const v = run(300);
   assert.deepStrictEqual(v.map(x => x.check), ['max-risk']);
-  assert.match(v[0].message, /^risk \$380\.00 \(size 19 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:orb's risk\.max_risk_usd \$300\.00: reduce the size to 15 or less/);
+  assert.match(v[0].message, /^risk \$360\.00 \(size 18 x 40-tick stop x \$0\.50 a tick on MNQ\) over setup:orb's risk\.max_risk_usd \$300\.00: reduce the size to 15 or less/);
 });
 
 // --- Roles: an autonomous cycle's entry waits for its roles' reports (roles-ran.js). ---

@@ -67,7 +67,8 @@ const DEFAULTS = {
   size: 1,
   riskPerTrade: null, // $ risked per trade; sizes contracts from the stop (like the original bot's --risk)
   maxContracts: 5,
-  slippageTicks: 1, // per market fill (entries and stops), in ticks
+  // Per market fill (entries and stops), in ticks: the one number a prop size counts for its stop (combine sizing.stop_slippage_ticks).
+  slippageTicks: combine.DEFAULT_SIZING.stop_slippage_ticks,
   fill: 'next-open', // 'next-open': entries fill at the next bar's open (live latency); 'close': at the signal bar's close
   minConfluence: 1, // strategies that must fire the same side on the bar (the entry's own included)
   // Strategies firing both sides on the bar: 'reversal' (as the live gate: only a reversal strategy, mtf: reversal,
@@ -359,7 +360,7 @@ function runEngine(markets, strategies, opts = {}) {
       const legs = fam ? { micro: legOf(book, fam.micro), mini: legOf(book, fam.mini) } : { micro: legOf(book, book.symbol), mini: null };
       const sizeFor = fraction => combine.contractPlan({
         dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
-        guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10,
+        guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks,
       });
       const cp = sizeFor(1);
       if (!cp) return;

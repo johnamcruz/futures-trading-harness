@@ -18,8 +18,8 @@ const args = (extra = {}) => ({ account, cs: combine.start(account), strategy, c
 test('the sizing verdict: full at the largest size the budget allows at the setup\'s stop, on the last closed bar', () => {
   const v = decideSetup(args());
   // $50,000 start, $48,000 floor: cushion $2,000, budget 0.2 x = $400. A 10-point stop is 40 ticks:
-  // $20 + $0.74 fees = $20.74 a micro, so 19 MNQ.
-  assert.deepStrictEqual([v.action, v.contract, v.maxSize, v.riskPerContract, v.stopTicks], ['full', 'MNQ', 19, 20.74, 40]);
+  // plus a tick of expected slippage, 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro, so 18 MNQ ($382.32).
+  assert.deepStrictEqual([v.action, v.contract, v.maxSize, v.riskPerContract, v.stopTicks], ['full', 'MNQ', 18, 21.24, 40]);
   assert.deepStrictEqual([v.strategy, v.component, v.direction, v.account], ['prop_x', 'trendy', 'long', 'topstep_50k']);
   assert.strictEqual(v.bar, bars[bars.length - 1].t, 'the last closed bar');
   assert.strictEqual(v.expiresAt, '2026-10-07T15:33:00.000Z', 'one bar after the bar\'s close');

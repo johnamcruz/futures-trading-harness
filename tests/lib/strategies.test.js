@@ -325,6 +325,9 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   assert.ok(validateStrategy({ ...base, exit: { target_r: 3 } }, body, 'p').some(e => /trail_activate_r/.test(e)));
   assert.ok(validateStrategy({ ...base, account: undefined }, body, 'p').some(e => /account:/.test(e)));
   assert.ok(validateStrategy({ ...base, sizing: { cushion_frac: 1.5 } }, body, 'p').some(e => /at most 1/.test(e)));
+  // The stop's expected slippage in sizing: at least the backtester's tick (more is stricter, less is refused).
+  assert.deepStrictEqual(validateStrategy({ ...base, sizing: { stop_slippage_ticks: 2 } }, body, 'p'), validateStrategy(base, body, 'p'));
+  assert.ok(validateStrategy({ ...base, sizing: { stop_slippage_ticks: 0 } }, body, 'p').some(e => /stop_slippage_ticks: at least 1/.test(e)));
   const rules = { name: 'r', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'rules', rules: { long: ['close > 1'] }, risk: { stop: 'atr:1', min_rr: 2 } };
   for (const k of ['account', 'sizing', 'strategies', 'contracts']) {
     assert.ok(validateStrategy({ ...rules, [k]: k === 'sizing' ? { cushion_frac: 0.2 } : k === 'strategies' ? ['x'] : k === 'contracts' ? 'auto' : 'topstep_100k' }, body, 'r').some(e => e.startsWith(`${k}: only a policy strategy`)), k);

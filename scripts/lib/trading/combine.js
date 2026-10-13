@@ -29,6 +29,10 @@ const DEFAULT_SIZING = {
   r_per_session: 0.3,
   min_size_guard: 1.5, // skip when one contract risks more than guard x budget
   drawdown_halve_usd: 0, // > 0: halve the budget while the balance is at least this far below its peak
+  // A stop's expected slippage, in ticks per contract, counted in each contract's risk: a full stop
+  // plus this never reaches the floor or the daily limit. At least the backtester's fill slippage
+  // (engine.js DEFAULTS.slippageTicks, 1), so a backtest sizes and fills as live.
+  stop_slippage_ticks: 1,
 };
 
 const round2 = x => Math.round(x * 100) / 100;
@@ -174,12 +178,17 @@ const CONTRACT_MODES = ['micro', 'mini', 'auto'];
  *   auto:  minis once the size reaches one mini, else micros.
  * Rounding is always down, so the mini trade never risks more than the micro
  * one would. legs: { micro: { root, tickValue, fee, max }, mini: { ... } | null }.
+ * A contract's risk is its stop plus `slipTicks` (the stop's expected
+ * slippage, sizing.stop_slippage_ticks) in ticks, plus fees both ways, so a
+ * stopped trade's expected loss fits the budget and never reaches the room.
  * Returns { root, size, riskPerContract } or null when no contract fits.
  */
-function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = DEFAULT_SIZING.min_size_guard, fraction = 1, ratio = 10 }) {
+function contractPlan({ dollars, room = Infinity, stopTicks, legs, mode = 'auto', guard = DEFAULT_SIZING.min_size_guard, fraction = 1, ratio = 10, slipTicks = DEFAULT_SIZING.stop_slippage_ticks }) {
   const mi = legs.micro;
   const mn = legs.mini;
-  const riskOf = leg => stopTicks * leg.tickValue + 2 * leg.fee;
+  // Never less than the default: a missing or smaller expected slippage only ever sizes the same or down.
+  const slip = Math.max(DEFAULT_SIZING.stop_slippage_ticks, Number(slipTicks) || 0);
+  const riskOf = leg => (stopTicks + slip) * leg.tickValue + 2 * leg.fee;
   const canMini = mode !== 'micro' && mn && mn.max > 0;
   const canMicro = mode !== 'mini' && mi && mi.max > 0;
   // The most micros the account allows, counting a mini as `ratio` micros.

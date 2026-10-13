@@ -224,10 +224,11 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   });
   verdict();
   const r = plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
-  // $100K, $3,000 cushion: 30% = $900 at 18 ticks ($90 + fees per NQ) -> 9 NQ; the verdict said 12.
-  assert.deepStrictEqual([r.args.contractId, r.args.side, r.args.size, r.args.stopLossBracket.ticks, r.args.takeProfitBracket], ['NQ', 'buy', 9, 18, undefined]);
-  assert.match(r.args.rationale, /^setup:prop_portfolio long at market from 27427\.50 .*stop 27423\.00 \(18 ticks\), 9 NQ risks \$810\.00$/);
-  assert.match(r.text, /size 9: the verdict's full size 12, cut to the size budget now \(9\), for bos's setup; the stop is the verdict's 18 ticks$/m);
+  // $100K, $3,000 cushion: 30% = $900, sized in micros at 18 ticks plus a tick of expected slippage:
+  // 19 x $0.50 = $9.50 + $0.74 fees = $10.24 a micro -> 87 micros -> 8 NQ; the verdict said 12.
+  assert.deepStrictEqual([r.args.contractId, r.args.side, r.args.size, r.args.stopLossBracket.ticks, r.args.takeProfitBracket], ['NQ', 'buy', 8, 18, undefined]);
+  assert.match(r.args.rationale, /^setup:prop_portfolio long at market from 27427\.50 .*stop 27423\.00 \(18 ticks\), 8 NQ risks \$720\.00$/);
+  assert.match(r.text, /size 8: the verdict's full size 12, cut to the size budget now \(8\), for bos's setup; the stop is the verdict's 18 ticks$/m);
   assert.doesNotMatch(r.text, /status paper/, "prop_portfolio is active: a live entry, no plan-only note");
   // MNQ selected (FTH_SYMBOLS): the budget is in MNQ only, so an NQ verdict is refused and an MNQ one is planned in MNQ.
   const mnq = { ...ctx, env: { ...ctx.env, FTH_SYMBOLS: 'MNQ' } };
@@ -237,7 +238,7 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   verdict();
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'short' }, ctx), /verdict is for a long entry, not short/);
   verdict({ contract: 'MNQ', maxSize: 50 });
-  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the size budget now allows 9 NQ at a 18-tick stop, not MNQ/);
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /the size budget now allows 8 NQ at a 18-tick stop, not MNQ/);
   verdict({ action: 'skip', maxSize: 0, contract: null, reason: 'the size budget is below one contract' });
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx), /prop_portfolio skipped the setup \(the size budget is below one contract\)/);
   verdict({ expiresAt: new Date(NOW.getTime() - 1).toISOString() });
@@ -269,7 +270,7 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   // The gate's own prop checks on the exact arguments: an entry already journaled since the snapshot (and the
   // verdict it used) makes the plan one the gate would refuse, so order_plan refuses it with the gate's reasons.
   verdict();
-  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx).args.size, 9);
+  assert.strictEqual(plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, ctx).args.size, 8);
   fs.writeFileSync(path.join(home, 'journal.jsonl'), `${JSON.stringify({ ts: new Date(NOW.getTime() + 1000).toISOString(), kind: 'order_placed', contractId: 'NQ', text: 'setup:prop_portfolio long', data: { result: { success: true } } })}\n`);
   const later = { ...ctx, now: () => new Date(NOW.getTime() + 5000) };
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, later), /the order gate would refuse this entry: \[combine\] .*since the snapshot|the order gate would refuse this entry: .*\[policy\] .*already used/);
@@ -289,9 +290,9 @@ test('order_plan: a policy strategy is sized with the broker\'s tick values, and
   const go = () => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, ctx);
   recordBrokerSpecs(home, { broker: 'mock', roots: ['MNQ'] });
   assert.throws(go, /topstep_100k: no tick specs from the broker for NQ yet: call get_contract or search_contracts for NQ first/);
-  // NQ at the broker's $5 a tick: $900 budget / ($90 + $2.80) = 9 NQ.
+  // NQ at the broker's $5 a tick: $900 budget / $10.24 a micro (19 ticks, a tick of slippage counted) = 87 micros = 8 NQ.
   recordBrokerSpecs(home, { broker: 'mock', roots: ['NQ'] });
-  assert.strictEqual(go().args.size, 9);
+  assert.strictEqual(go().args.size, 8);
   // NQ recorded at $0.50 (a units mix-up): unlike the table, so refused, never sized at 10x.
   recordBrokerSpecs(home, { broker: 'mock', roots: ['NQ'], specs: { NQ: { tickValue: 0.5 } } });
   assert.throws(go, /topstep_100k: NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table .*no entries on it until they agree/);

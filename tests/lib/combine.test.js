@@ -137,6 +137,52 @@ test('size budget: a share of the cushion, capped, clock-limited, never past the
   assert.strictEqual(c.contracts(6000, 50, 100), 100, 'capped at max contracts');
 });
 
+// MNQ: 0.25 a tick = $0.50, $0.37 a side; NQ: $5 a tick, $1.40 a side.
+const MNQ_LEGS = { micro: { root: 'MNQ', tickValue: 0.5, fee: 0.37, max: 50 }, mini: { root: 'NQ', tickValue: 5, fee: 1.4, max: 5 } };
+
+test('contractPlan: a contract\'s risk counts the stop\'s expected slippage (a tick by default), fees both ways', () => {
+  const plan = extra => c.contractPlan({ dollars: 400, stopTicks: 40, legs: MNQ_LEGS, mode: 'micro', ...extra });
+  // 40 ticks + 1 of slippage = 41 x $0.50 = $20.50 + $0.74 = $21.24 a micro: $400 buys 18 ($382.32); 19 would be $403.56.
+  assert.deepStrictEqual(plan(), { root: 'MNQ', size: 18, riskPerContract: 21.24 });
+  // A mini: 41 x $5 = $205 + $2.80 = $207.80. $1,000 is 47 micros ($998.28), so 4 NQ ($831.20).
+  assert.deepStrictEqual(c.contractPlan({ dollars: 1000, stopTicks: 40, legs: MNQ_LEGS, mode: 'auto' }), { root: 'NQ', size: 4, riskPerContract: 207.8 });
+  // More expected slippage sizes down: 43 x $0.50 + $0.74 = $22.24, 17 micros ($378.08).
+  assert.deepStrictEqual(plan({ slipTicks: 3 }), { root: 'MNQ', size: 17, riskPerContract: 22.24 });
+  // Never less than the default: 0, a fraction, or junk size as 1 tick does (stricter only).
+  for (const slipTicks of [0, 0.5, -2, undefined, null, 'x']) assert.deepStrictEqual(plan({ slipTicks }), plan(), String(slipTicks));
+  // The backtester fills (and the replay counterfactual) slip by the same default number of ticks.
+  assert.strictEqual(c.DEFAULT_SIZING.stop_slippage_ticks, 1);
+  assert.strictEqual(require('../../scripts/lib/backtest/engine').DEFAULTS.slippageTicks, c.DEFAULT_SIZING.stop_slippage_ticks);
+  assert.strictEqual(require('../../scripts/lib/replay/counterfactual').SLIPPAGE_TICKS, c.DEFAULT_SIZING.stop_slippage_ticks);
+});
+
+test('contractPlan: when the room to the floor sets the size, a stop a tick past its price never reaches the floor', () => {
+  // $50,000 start, $2,000 max loss, no daily limit: down $1,917, so $83 of cushion ($48,083 over a $48,000 floor).
+  const s = c.applyClose(c.start(acct({ starting_balance: 50000, max_loss: 2000, daily_loss_limit: 0, daily_loss_soft: 0, consistency_pct: 0 })), -1917);
+  assert.deepStrictEqual([s.status, c.room(s)], ['active', 83]);
+  const z = { cushion_frac: 1 }; // the whole cushion as the budget: the room is what limits
+  const cp = c.contractPlan({ dollars: c.budget(s, z), room: c.room(s), stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' });
+  // Without the slippage term: $20.74 a micro, floor($82.99 / $20.74) = 4 ($82.96), and 4 stopped a tick past the
+  // stop lose 4 x $21.24 = $84.96: $47,998.04, under the floor. With it: floor($82.99 / $21.24) = 3.
+  assert.deepStrictEqual(cp, { root: 'MNQ', size: 3, riskPerContract: 21.24 });
+  assert.strictEqual(c.applyClose(s, -4 * 21.24).status, 'blown', 'the old size, stopped a tick past its stop');
+  const after = c.applyClose(s, -cp.size * cp.riskPerContract); // -$63.72
+  assert.deepStrictEqual([after.status, after.balance], ['active', 48019.28]);
+});
+
+test('contractPlan: when the daily-limit headroom sets the size, a stop a tick past its price never reaches the daily limit', () => {
+  // A $1,000 firm daily limit (soft limit off), down $917 today: $83 of headroom; the cushion ($2,083) is larger.
+  const s = c.applyClose(c.start(acct({ max_loss: 3000, daily_loss_limit: 1000, daily_loss_soft: 0 })), -917);
+  assert.deepStrictEqual([c.room(s), c.budget(s)], [83, 83], 'the budget is held to the daily headroom too');
+  const cp = c.contractPlan({ dollars: c.budget(s), room: c.room(s), stopTicks: 40, legs: MNQ_LEGS, mode: 'micro' });
+  assert.deepStrictEqual(cp, { root: 'MNQ', size: 3, riskPerContract: 21.24 });
+  assert.ok(c.dailyBreached(s, -4 * 21.24), 'the old size (4), stopped a tick past its stop: -$1,001.96 today');
+  assert.ok(!c.dailyBreached(s, -cp.size * cp.riskPerContract), '3 stopped a tick past: -$980.72 today');
+  // A mini sized by the room: $250 of headroom is 11 micros ($233.64), so 1 NQ ($207.80; two would be $415.60).
+  const wide = c.applyClose(c.start(acct({ max_loss: 3000, daily_loss_limit: 1000, daily_loss_soft: 0 })), -750);
+  assert.deepStrictEqual(c.contractPlan({ dollars: 1000, room: c.room(wide), stopTicks: 40, legs: MNQ_LEGS, mode: 'auto' }), { root: 'NQ', size: 1, riskPerContract: 207.8 });
+});
+
 test('sizing in a drawdown: the budget halves while the balance is far enough below its peak', () => {
   const combine = require('../../scripts/lib/trading/combine');
   const acct = { name: 'a', starting_balance: 100000, profit_target: 6000, max_loss: 3000, max_loss_mode: 'trailing_eod', daily_loss_limit: 0, sessions: 30 };
