@@ -87,14 +87,16 @@ function rthWindow() {
 /**
  * Join chunks into one table with segments: runs of bars a pair may span. A segment ends at a chunk's
  * end, a contract change, a new trading day, a time not after the last, or a gap above 2x timeframe.
- * Returns { ms, o, h, l, c, f, day (index), dayKeys, hour, rth (0/1), segEnd (exclusive end per bar) }.
+ * Returns { ms, o, h, l, c, f, day (index), dayKeys, hour, rth (0/1), segEnd (exclusive end per bar),
+ * runStart (the first bar of the bar's run of the same chunk, contract and trading day, gaps allowed: the
+ * bars a look-back such as an event's ATR may use) }.
  */
 function joinChunks(chunks, { timeframeMin }) {
   if (!(timeframeMin > 0)) throw new Error('timeframe: minutes per bar');
   const n = chunks.reduce((a, ch) => a + ch.n, 0);
   const nf = chunks.length ? chunks[0].f.length : 0;
   const col = () => new Float64Array(n);
-  const t = { n, ms: col(), o: col(), h: col(), l: col(), c: col(), f: Array.from({ length: nf }, col), day: new Int32Array(n), hour: new Int8Array(n), rth: new Uint8Array(n), segEnd: new Int32Array(n), dayKeys: [] };
+  const t = { n, ms: col(), o: col(), h: col(), l: col(), c: col(), f: Array.from({ length: nf }, col), day: new Int32Array(n), hour: new Int8Array(n), rth: new Uint8Array(n), segEnd: new Int32Array(n), runStart: new Int32Array(n), dayKeys: [] };
   const meta = hourMeta();
   const rth = rthWindow();
   const dayIndex = new Map();
@@ -112,8 +114,9 @@ function joinChunks(chunks, { timeframeMin }) {
       t.hour[i] = m.hour;
       const minute = m.hour * 60 + Math.floor((((ms % 3600000) + 3600000) % 3600000) / MINUTE);
       t.rth[i] = minute >= rth.start && minute < rth.end ? 1 : 0;
-      const breaks = j === 0 || ch.contract[j] !== ch.contract[j - 1] || t.day[i] !== t.day[i - 1] || !(ms > t.ms[i - 1]) || ms - t.ms[i - 1] > maxGap;
-      if (breaks) starts.push(i);
+      const hard = j === 0 || ch.contract[j] !== ch.contract[j - 1] || t.day[i] !== t.day[i - 1] || !(ms > t.ms[i - 1]);
+      t.runStart[i] = hard ? i : t.runStart[i - 1];
+      if (hard || ms - t.ms[i - 1] > maxGap) starts.push(i);
     }
   }
   starts.push(n);
@@ -449,4 +452,4 @@ function toMarkdown(header, results) {
   return `${L.join('\n')}\n`;
 }
 
-module.exports = { parseFieldSpec, parseHorizons, columns, joinChunks, pairs, pearson, ranks, summarize, bootstrap, costVerdict, study, monthsBetween, splitCheck, toMarkdown, rng, FREE_ROLES };
+module.exports = { mean, quantile, parseFieldSpec, parseHorizons, columns, joinChunks, pairs, pearson, ranks, summarize, bootstrap, costVerdict, study, monthsBetween, splitCheck, toMarkdown, rng, FREE_ROLES };

@@ -395,6 +395,59 @@ node scripts/field-study.js --data data/MNQ-1m/ --symbol MNQ \
   thresholds it suggests are judged on held-out months by calibration
   (R11-R13, R34), never by rerunning the study there.
 
+## The field-confluence study
+
+A field need not predict on its own to be useful: it can **confirm** a
+move. The question then is conditional: given an event with a direction (a
+wide-range bar, a breakout, a strategy's trigger), does the event follow
+through better when the field at the event bar agrees with its direction
+than when it disagrees or is neutral? `--event` turns the field-forward
+study into that one (logic in `scripts/lib/field-confluence.js`), with the
+same data, breaks, intervals and split rule.
+
+```bash
+node scripts/field-study.js --data data/MNQ-3m/ --symbol MNQ --fields a.b \
+  --event expansion:1.5,breakout:20,strategy:all --horizons 1,3,5,15 \
+  --by session --r bar --out out/confluence
+```
+
+- **Events**, each from bars up to t only:
+  `expansion:<k>`, bar t's range is at least k x ATR(14) of the bars
+  before it (Wilder, within its trading day), in the direction of close
+  minus open (a bar that closes where it opened is no event);
+  `breakout:<n>`, the close beyond the high (long) or low (short) of the n
+  bars before it, in the same trading day; `strategy:<name>`, the bars
+  where that rules strategy's rules fire inside its sessions (the trigger,
+  evaluated causally as the scan evaluates it; the regime, trend-rule and
+  filter checks are not applied), with its side, on the strategy's own
+  timeframe only, and not in the first 500 bars of each file, where its
+  series are still warming up (the report counts them, and warns about a
+  file too short to give any; use a month a file); `strategy:all`, every
+  valid rules strategy on the bars' timeframe. A strategy's conditions that read the field under test are
+  removed (the report lists them), so a strategy never confirms itself;
+  any other field it still reads is reported.
+- **Classes** at each threshold: agree (the field has the event's sign and
+  |field| is at least the threshold), disagree (the other sign, past the
+  threshold), neutral (anything else). Thresholds are `--thresholds`, or
+  the p60 and p80 of |field| over every bar of the span.
+- **Outcomes** after the event, signed by its direction, at each horizon:
+  the move in ticks, the follow-through rate (the move is above zero), the
+  largest favourable and adverse excursions, and the shares touching +1R
+  and -1R first (R is the event bar's range, or with `--r atr` the prior
+  ATR; both in one bar is a tie). Pairs that cross a file, a trading day,
+  a contract change or a gap are skipped, as in the field-forward study.
+- **Per class**: n and those numbers, with the differences agree minus
+  disagree and agree minus neutral; each with a 95% day-block bootstrap
+  interval. `--by session,hour` adds RTH vs overnight and New York hour.
+  The cost line: a class clears the round-trip cost when its mean move's
+  interval lies wholly above it, and the report says when only the agree
+  class does. A class with fewer than 30 events or 10 trading days is
+  marked few: it gets no interval, no difference interval and no cost
+  verdict, and "agree only" is claimed only when the other two were
+  tested. The many comparisons are not corrected for each other: a
+  lone interval that excludes zero is a hypothesis for held-out months,
+  never a finding.
+
 ## Trusting a result
 
 Every report gives the mean R's 95% interval and an edge verdict
