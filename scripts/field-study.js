@@ -8,6 +8,8 @@
  *       [--thresholds 0.2,0.4] [--by hour,session] [--reps 1000] [--seed 1]
  *       [--held-out-look "<reason>"] [--out <dir>]
  *   node scripts/field-study.js --contract MNQ --from <ISO> --to <ISO> --timeframe 3 --fields ... (bars from the broker)
+ *   ... --event expansion:1.5,breakout:20,strategy:<name|all> [--r bar|atr]   the confluence study instead
+ *       (lib/field-confluence.js): given an event, does it follow through better when the field agrees?
  *
  * Each file (or each file in a directory, in name order) is its own chunk: no pair spans two files.
  * Spans with months outside Train are refused without --held-out-look (lib/prop/splits.js roleOf).
@@ -20,13 +22,15 @@ require('./lib/env-file').loadEnvForCli('field-study');
 const fs = require('fs');
 const path = require('path');
 const fsy = require('./lib/field-study');
+const fcf = require('./lib/field-confluence');
 const { loadBars, barMinutes } = require('./lib/backtest/data');
 const { specFor } = require('./lib/trading/contracts');
 const { normalizeBars } = require('./lib/trading/indicators');
 const { parseStandardName } = require('./lib/broker/translator');
+const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const VALUE_FLAGS = ['--data', '--contract', '--from', '--to', '--symbol', '--fields', '--horizons', '--timeframe', '--tick', '--cost-ticks', '--thresholds', '--by', '--reps', '--seed', '--held-out-look', '--out'];
+const VALUE_FLAGS = ['--data', '--contract', '--from', '--to', '--symbol', '--fields', '--horizons', '--timeframe', '--tick', '--cost-ticks', '--thresholds', '--by', '--reps', '--seed', '--held-out-look', '--out', '--event', '--r'];
 
 function parseArgs(argv) {
   const a = { data: [] };
@@ -57,7 +61,7 @@ function dataFiles(items) {
     const p = path.resolve(item);
     if (!fs.statSync(p).isDirectory()) return [p];
     // A report this tool wrote (field-study.json) is never read back as bars.
-    return fs.readdirSync(p).filter(f => /\.(jsonl|ndjson|json)$/i.test(f) && f !== 'field-study.json').sort().map(f => path.join(p, f));
+    return fs.readdirSync(p).filter(f => /\.(jsonl|ndjson|json)$/i.test(f) && !['field-study.json', 'field-confluence.json'].includes(f)).sort().map(f => path.join(p, f));
   });
 }
 
@@ -72,11 +76,13 @@ async function brokerBars(a, timeframe) {
   return normalizeBars(bars).map(b => ({ ...b, ms: Date.parse(b.t) }));
 }
 
-/** One chunk: its columns, first and last time, and bar size; the bars themselves are dropped. */
-function chunkOf(bars, fields) {
+/** One chunk: its columns, strategy events (`ev`: the events and loaded strategies), first and last time, and bar size; the bars are dropped. */
+function chunkOf(bars, fields, ev = null) {
   if (!bars.length) return null;
   const ms = bars.map(b => b.ms);
-  return { cols: fsy.columns(bars, fields), first: ms.reduce((x, y) => (y < x ? y : x)), last: ms.reduce((x, y) => (y > x ? y : x)), tf: barMinutes(bars), n: bars.length };
+  const tf = barMinutes(bars);
+  const events = ev ? fcf.chunkStrategyEvents(bars, ev.events, { strategies: ev.strategies, fields, timeframeMin: ev.timeframe || tf || 1 }) : null;
+  return { cols: fsy.columns(bars, fields), events, first: ms.reduce((x, y) => (y < x ? y : x)), last: ms.reduce((x, y) => (y > x ? y : x)), tf, n: bars.length };
 }
 
 async function main(argv) {
@@ -94,8 +100,14 @@ async function main(argv) {
   const thresholds = a.thresholds === undefined ? null : list(a.thresholds).map(Number);
   if (thresholds && !thresholds.every(v => Number.isFinite(v) && v >= 0)) throw new Error('--thresholds: non-negative numbers');
 
+  const rMode = a.r || 'bar';
+  if (!['bar', 'atr'].includes(rMode)) throw new Error('--r: bar or atr');
+  if (a.r !== undefined && a.event === undefined) throw new Error('--r is for the confluence study: give --event too');
+  const events = a.event === undefined ? null : fcf.parseEvents(a.event);
+  const ev = events && events.some(e => e.kind === 'strategy') ? { events, strategies: loadStrategies(ROOT, process.env).strategies } : null;
   let timeframe = num(a, 'timeframe', { min: 1, int: true });
-  const chunks = (a.contract ? [chunkOf(await brokerBars(a, timeframe || 1), fields)] : dataFiles(a.data).map(f => chunkOf(loadBars(f), fields))).filter(Boolean);
+  if (ev) ev.timeframe = timeframe;
+  const chunks = (a.contract ? [chunkOf(await brokerBars(a, timeframe || 1), fields, ev)] : dataFiles(a.data).map(f => chunkOf(loadBars(f), fields, ev))).filter(Boolean);
   const source = a.contract ? `broker history (${process.env.FTH_BROKER || 'the configured broker'}), ${a.contract}` : `files: ${a.data.join(', ')}`;
   if (!chunks.length) throw new Error('no bars');
   const seen = chunks.reduce((x, y) => (y.n > x.n ? y : x)).tf;
@@ -112,18 +124,24 @@ async function main(argv) {
   if (check.warning) process.stderr.write(`[field-study] ${check.warning}\n`);
   const t = fsy.joinChunks(chunks.map(c => c.cols), { timeframeMin: timeframe });
   const costTicks = num(a, 'cost-ticks', { min: 0 }) ?? 2;
-  const results = fsy.study(t, { fields, horizons, tick, thresholds, costTicks, by, reps: num(a, 'reps', { min: 10, int: true }) ?? 1000, seed: num(a, 'seed', { int: true }) ?? 1 });
+  const opts = { fields, horizons, tick, thresholds, costTicks, by, reps: num(a, 'reps', { min: 10, int: true }) ?? 1000, seed: num(a, 'seed', { int: true }) ?? 1 };
+  const cold = ev ? chunks.filter(c => c.n <= fcf.WARMUP).length : 0;
+  if (cold) process.stderr.write(`[field-study] WARNING: ${cold} file(s) hold no more than ${fcf.WARMUP} bars: strategy events skip each file's first ${fcf.WARMUP} (warm-up), so none come from them\n`);
+  const results = events
+    ? fcf.confluence(t, { ...opts, rMode, events: [...events.filter(e => e.kind !== 'strategy'), ...fcf.joinStrategyEvents(ev ? chunks.map(c => c.events) : [], t.n)] })
+    : fsy.study(t, opts);
   const header = {
     span: { from: new Date(first).toISOString(), to: new Date(last).toISOString() }, source, symbol,
-    timeframeMin: timeframe, tick, costTicks, months: check.months, warning: check.warning, bars: t.n, segments: t.segments,
+    timeframeMin: timeframe, tick, costTicks, months: check.months, warning: check.warning, bars: t.n, segments: t.segments, ...(events ? { events: events.map(e => e.spec), rMode } : {}),
   };
-  const md = fsy.toMarkdown(header, results);
+  const md = (events ? fcf : fsy).toMarkdown(header, results);
+  const name = events ? 'field-confluence' : 'field-study';
   if (a.out) {
     const dir = path.resolve(a.out);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'field-study.md'), md);
-    fs.writeFileSync(path.join(dir, 'field-study.json'), `${JSON.stringify({ header, results }, null, 1)}\n`);
-    process.stdout.write(`[field-study] ${t.n} bars, ${results.length} field x horizon results: ${path.join(dir, 'field-study.md')}\n`);
+    fs.writeFileSync(path.join(dir, `${name}.md`), md);
+    fs.writeFileSync(path.join(dir, `${name}.json`), `${JSON.stringify({ header, results }, null, 1)}\n`);
+    process.stdout.write(`[field-study] ${t.n} bars, ${results.length} results: ${path.join(dir, `${name}.md`)}\n`);
   } else {
     process.stdout.write(md);
   }

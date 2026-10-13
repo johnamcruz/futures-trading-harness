@@ -131,6 +131,14 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    refuses any other month unless the user gives `--held-out-look "<reason>"`;
    never pass that flag yourself. A field with no edge after costs is no
    reason for a rule.
+   A field meant as a confirmation (a rule that takes an event only when the
+   field agrees) is checked as one: add `--event expansion:1.5,breakout:20,strategy:<name>`
+   and the study compares the event's follow-through when the field agrees,
+   disagrees or is neutral, with intervals and the cost line
+   (docs/BACKTESTING.md, "The field-confluence study"). Keep the confirmation
+   only if agree beats disagree and neutral with an interval that excludes
+   zero, on Train; held-out months judge it by calibration (R11-R13), never
+   by rerunning the study there.
 9. When a field's values are in doubt (a new build of the replay server's
    store, or replay against recorded live minutes), compare the two sources
    before trusting a backtest on them (the user, or the
