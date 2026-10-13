@@ -72,8 +72,8 @@ broker.
    R, and the gate's refusals by check (`replay-clock` refusals are the
    replay's plumbing, counted apart). It also writes `report.md` in the run's
    folder.
-   **The combine verdict**: each calendar month (by CME trading day, 17:00
-   Chicago) scored as a fresh prop attempt from the account's starting
+   **The combine verdict**: each calendar month (by trading day, 17:00 CT,
+   Topstep's daily reset) scored as a fresh prop attempt from the account's starting
    balance (fresh each month is the default; one month never carries into
    the next), by the same `combine.js` rules the backtester
    uses: PASS (and the day it passed: profit at the target at a day's end,

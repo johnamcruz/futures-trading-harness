@@ -89,6 +89,21 @@ test('no new entries in the opening 5 minutes of New York, into the close, or af
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan(1, { ts: '2026-10-07T20:04:00Z' })], { now: new Date('2026-10-07T20:05:00Z') })), ['market-hours']);
 });
 
+test('the bar briefing\'s session window says what the gate does: no entries exactly when the gate\'s clock refuses one', () => {
+  const { sessionWindow } = require('../../scripts/lib/trading/briefing');
+  const envs = [{}, { FTH_ENTRY_HOURS: 'ny' }, { FTH_NO_ENTRY_WINDOWS: '09:30-09:45@America/New_York,12:15-12:30@America/New_York' }, { FTH_NO_ENTRY_WINDOWS: '' }, { FTH_ENTRY_HOURS: 'whenever' }];
+  for (const env of envs) {
+    const cfg = { ...config, entryHours: loadConfig(env).entryHours, noEntryWindows: loadConfig(env).noEntryWindows };
+    // A Wednesday trading day, from Tuesday's 18:00 ET open to the next one, every 11 minutes.
+    for (let t = Date.parse('2026-10-06T22:00:00Z'); t < Date.parse('2026-10-07T22:00:00Z'); t += 11 * 60000) {
+      const now = new Date(t);
+      const refused = checks(evaluate(entryOrder(), [plan(1, { ts: new Date(t - 60000).toISOString() })], { now, config: cfg })).some(c => c === 'time-window' || c === 'market-hours');
+      const w = sessionWindow(now, { entryHours: cfg.entryHours, noEntryWindows: cfg.noEntryWindows });
+      assert.strictEqual(w.entries === 'none', refused, `${JSON.stringify(env)} at ${now.toISOString()}: briefing ${w.text}`);
+    }
+  }
+});
+
 test('invalid window config blocks (fail closed)', () => {
   const bad = { ...config, noEntryWindows: 'whenever' };
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: bad })), ['time-window']);

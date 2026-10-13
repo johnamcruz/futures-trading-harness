@@ -24,9 +24,9 @@ test('nextClose: candles from the 18:00 ET session open; sessionWindow: the sess
   assert.strictEqual(B.nextClose(new Date('2026-06-01T15:01:00Z'), 60).toISOString(), '2026-06-01T16:00:00.000Z');
   // 4h candles from 18:00 ET: 18, 22, 02, 06, 10, 14 ET; at 10:57 ET the next close is 14:00 ET.
   assert.strictEqual(B.nextClose(t, 240).toISOString(), '2026-06-01T18:00:00.000Z');
-  assert.deepStrictEqual(B.sessionWindow(t), { name: 'opening drive', until: new Date('2026-06-01T15:00:00Z'), entries: 'allowed', marketOpen: true, text: 'opening drive (market open, entries allowed) until 11:00 ET' });
+  assert.deepStrictEqual(B.sessionWindow(t), { name: 'opening drive', until: new Date('2026-06-01T15:00:00Z'), entries: 'allowed', marketOpen: true, text: 'opening drive (market open, entries allowed) until 11:00 ET', refusal: null });
   assert.strictEqual(B.sessionWindow(new Date('2026-06-01T16:00:00Z')).name, 'lunch lull');
-  assert.strictEqual(B.sessionWindow(new Date('2026-06-01T20:30:00Z')).name, 'daily break (closed)');
+  assert.strictEqual(B.sessionWindow(new Date('2026-06-01T20:30:00Z')).name, 'daily break');
 });
 
 test('a section is kept, same version, until its timeframe\'s next close; then recomputed as expired', () => {
@@ -183,7 +183,9 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   const m3 = B.readBriefing(home2, 'NQ').sections.m3.data;
   assert.strictEqual(m3.news.inBlackout, null);
   assert.match(m3.news.error, /config unreadable/);
-  assert.strictEqual(m3.candidates[0].blocked, 'news unknown (the blackouts file can\'t be read)');
+  // The gate's clock is unknown too: no entries, and a candidate is blocked by the window first.
+  assert.deepStrictEqual([m3.windowEntries, m3.windowRefusal], ['none', 'the gate config can\'t be read (config unreadable): entries refused until it can']);
+  assert.match(m3.candidates[0].blocked, /^no-entry window: .* \(market open, no entries\) until /);
 });
 
 test('the day section built on the 15:57 ET bar ends on the 16:03 bar; one built on the 16:00 bar holds to tomorrow\'s', () => {
@@ -348,13 +350,13 @@ test('session windows state their own scope: market open or closed, entries allo
   const cases = [
     // 2026-06-01 is EDT (UTC-4).
     ['2026-06-01T12:00:00Z', 'london', 'allowed', true, 'london (market open, entries allowed) until 09:30 ET'],
-    ['2026-06-01T13:32:00Z', 'opening print (no entries)', 'none', true, 'opening print (market open, no entries) until 09:35 ET'],
+    ['2026-06-01T13:32:00Z', 'opening print', 'none', true, 'opening print (market open, no entries) until 09:35 ET'],
     ['2026-06-01T13:36:00Z', 'opening drive', 'allowed', true, 'opening drive (market open, entries allowed) until 11:00 ET'],
     ['2026-06-01T13:39:00Z', 'opening drive', 'allowed', true, 'opening drive (market open, entries allowed) until 11:00 ET'],
     ['2026-06-01T13:54:00Z', 'opening drive', 'allowed', true, 'opening drive (market open, entries allowed) until 11:00 ET'],
     ['2026-06-01T16:00:00Z', 'lunch lull', 'allowed', true, 'lunch lull (market open, entries allowed) until 13:30 ET'],
-    ['2026-06-01T19:47:00Z', 'into the close (no entries)', 'none', true, 'into the close (market open, no entries) until 16:00 ET'],
-    ['2026-06-01T21:30:00Z', 'daily break (closed)', 'none', false, 'daily break (market closed, no entries) until 18:00 ET'],
+    ['2026-06-01T19:47:00Z', 'into the close', 'none', true, 'into the close (market open, no entries) until 16:00 ET'],
+    ['2026-06-01T21:30:00Z', 'daily break', 'none', false, 'daily break (market closed, no entries) until 18:00 ET'],
     ['2026-06-01T22:03:00Z', 'asia', 'allowed', true, 'asia (market open, entries allowed) until 03:00 ET'],
     ['2026-06-02T05:00:00Z', 'asia', 'allowed', true, 'asia (market open, entries allowed) until 03:00 ET'],
   ];
@@ -362,9 +364,32 @@ test('session windows state their own scope: market open or closed, entries allo
     const w = at(iso);
     assert.deepStrictEqual([w.name, w.entries, w.marketOpen, w.text], [name, entries, marketOpen, text], iso);
   }
-  // Only the opening print, into the close and the daily break forbid entries; only the daily break is the market closed.
-  assert.deepStrictEqual(B.WINDOWS.filter(w => w[3] === 'none').map(w => w[2]), ['opening print (no entries)', 'into the close (no entries)', 'daily break (closed)']);
-  assert.ok(B.WINDOWS.every(w => ['allowed', 'none'].includes(w[3])));
+  // A no-entry window carries the gate's reason.
+  assert.strictEqual(at('2026-06-01T13:32:00Z').refusal, 'New entries are not allowed during 09:30-09:35@America/New_York.');
+});
+
+test('the window\'s entries are the gate\'s clock: FTH_ENTRY_HOURS and FTH_NO_ENTRY_WINDOWS move them, and the end where they change', () => {
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  const clock = env => { const c = loadConfig(env); return { entryHours: c.entryHours, noEntryWindows: c.noEntryWindows }; };
+  const w = (iso, env) => { const x = B.sessionWindow(new Date(iso), clock(env)); return [x.entries, x.text]; };
+  // Entries only in New York: 08:00 ET is London with no entries, until the New York open.
+  assert.deepStrictEqual(w('2026-06-01T12:00:00Z', { FTH_ENTRY_HOURS: 'ny' }), ['none', 'london (market open, no entries) until 09:30 ET']);
+  assert.match(B.sessionWindow(new Date('2026-06-01T12:00:00Z'), clock({ FTH_ENTRY_HOURS: 'ny' })).refusal, /^New entries only during ny .*\(FTH_ENTRY_HOURS\)\.$/);
+  // A longer opening window: 09:36 is the opening drive with no entries until 09:45, then entries until 11:00.
+  const longer = { FTH_NO_ENTRY_WINDOWS: '09:30-09:45@America/New_York,15:45-16:00@America/New_York' };
+  assert.deepStrictEqual(w('2026-06-01T13:36:00Z', longer), ['none', 'opening drive (market open, no entries) until 09:45 ET']);
+  assert.deepStrictEqual(w('2026-06-01T13:45:00Z', longer), ['allowed', 'opening drive (market open, entries allowed) until 11:00 ET']);
+  // An allowed window ends early where a configured no-entry window starts inside it.
+  assert.deepStrictEqual(w('2026-06-01T16:00:00Z', { FTH_NO_ENTRY_WINDOWS: '12:15-12:30@America/New_York' }), ['allowed', 'lunch lull (market open, entries allowed) until 12:15 ET']);
+  // No no-entry windows: the opening print allows entries (what the gate does); an invalid config refuses them all.
+  assert.deepStrictEqual(w('2026-06-01T13:32:00Z', { FTH_NO_ENTRY_WINDOWS: '' }), ['allowed', 'opening print (market open, entries allowed) until 09:35 ET']);
+  assert.deepStrictEqual(w('2026-06-01T13:36:00Z', { FTH_NO_ENTRY_WINDOWS: 'whenever' }), ['none', 'opening drive (market open, no entries) until 11:00 ET']);
+  // The daily break is closed whatever the config.
+  assert.deepStrictEqual(w('2026-06-01T21:30:00Z', { FTH_NO_ENTRY_WINDOWS: '' }), ['none', 'daily break (market closed, no entries) until 18:00 ET']);
+  // The briefing takes the clock it is given.
+  const bars = BARS.slice(0, BARS.findIndex(x => x.t === '2026-04-27T13:33:00.000Z') + 1);
+  const d = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, clock: clock(longer) }).sections.m3.data;
+  assert.deepStrictEqual([d.et, d.windowEntries, d.windowText], ['09:36', 'none', 'opening drive (market open, no entries) until 09:45 ET']);
 });
 
 test('the briefing states the window with its scope, in the JSON and the summary; a candidate in a no-entry window says which and until when', () => {
@@ -373,10 +398,10 @@ test('the briefing states the window with its scope, in the JSON and the summary
   const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', entryRef: 1, stopDistance: 10, mtf: { style: 'trend', longAllowed: true }, confluence: { with: [], against: [] }, exit: { trailActivateR: 2 } }];
   const cases = [
     ['2026-04-27T11:57:00.000Z', '08:00', 'london', 'allowed', true, 'london (market open, entries allowed) until 09:30 ET'],
-    ['2026-04-27T13:30:00.000Z', '09:33', 'opening print (no entries)', 'none', true, 'opening print (market open, no entries) until 09:35 ET'],
+    ['2026-04-27T13:30:00.000Z', '09:33', 'opening print', 'none', true, 'opening print (market open, no entries) until 09:35 ET'],
     ['2026-04-27T13:33:00.000Z', '09:36', 'opening drive', 'allowed', true, 'opening drive (market open, entries allowed) until 11:00 ET'],
     ['2026-04-27T13:51:00.000Z', '09:54', 'opening drive', 'allowed', true, 'opening drive (market open, entries allowed) until 11:00 ET'],
-    ['2026-04-27T19:45:00.000Z', '15:48', 'into the close (no entries)', 'none', true, 'into the close (market open, no entries) until 16:00 ET'],
+    ['2026-04-27T19:45:00.000Z', '15:48', 'into the close', 'none', true, 'into the close (market open, no entries) until 16:00 ET'],
   ];
   for (const [bar, et, name, entries, marketOpen, text] of cases) {
     const b = build(n(bar), null, { scan, blackouts: { items: [] } });

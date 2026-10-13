@@ -264,10 +264,12 @@ test('the session hours read unambiguously (a 9B model read "18:00 ET to 16:00 E
   assert.match(read('skills/session-timing/SKILL.md'), /a time\s+like 10:00 ET is inside the session, not before it, and so is 08:00 ET \(the\s+18:00 ET open\s+was the evening before; 09:30 ET is only the RTH cash open\)/);
   // Replays read "opening drive" as the no-entry opening print and invented its end: the skill says which windows
   // forbid entries, that the opening drive allows them, and to take a window's end from the briefing.
-  assert.match(read('skills/session-timing/SKILL.md'), /Only three windows forbid entries by the clock: the opening print\s+\(09:30-09:35\), into the close \(15:45-16:00\), and the daily break\s+\(16:00-18:00, the market closed\)\. The opening drive is not the opening\s+print: from 09:35 entries are allowed\./);
-  assert.match(read('skills/session-timing/SKILL.md'), /Take a window's end from it; never infer\s+one/);
+  assert.match(read('skills/session-timing/SKILL.md'), /By default only three windows forbid entries by the clock: the opening\s+print \(09:30-09:35\), into the close \(15:45-16:00\), and the daily break\s+\(16:00-18:00, the market closed\)\. The opening drive is not the opening\s+print: from 09:35 entries are allowed\. The gate's configured windows apply\s+in their place/);
+  assert.match(read('skills/session-timing/SKILL.md'), /Take\s+a window's end from it; never infer one/);
+  // The owner's rule: the Topstep trading day, not CME's.
+  assert.match(read('skills/session-timing/SKILL.md'), /The harness follows the\s+Topstep trading day, not CME's: from 18:00 ET \(17:00 CT, Topstep's daily\s+reset\) until 16:00 ET the next day/);
   assert.match(read('workspace/AGENTS.md'), /runs overnight until 16:00 ET the next day/, 'the generated operator instructions carry it');
-  assert.match(require('../../scripts/lib/trading/clock').MARKET_HOURS_LABEL, /from 18:00 ET until 16:00 ET the next day[^]*09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends/);
+  assert.match(require('../../scripts/lib/trading/clock').MARKET_HOURS_LABEL, /^the Topstep trading day: from 18:00 ET \(17:00 CT\) until 16:00 ET the next day[^]*09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends$/);
   assert.match(read('skills/trade-session/SKILL.md'), /A role's call is that\s+role's own analysis \(the order gate counts it as its report\): never ask a role\s+to read, load or summarize skills or files for you; load skills yourself \(your\s+skill tool, or without one read their `SKILL\.md`\)\./);
   assert.match(read('workspace/AGENTS.md'), /load the skill you need yourself \(your skill tool, or read\s+`<root>\/skills\/<name>\/SKILL\.md` if your harness has none\), never through a\s+role/);
   assert.match(read('skills/strategy-authoring/SKILL.md'), /the whole market session, from 18:00 ET until 16:00 ET the next day \(closed only 16:00-18:00 ET/);

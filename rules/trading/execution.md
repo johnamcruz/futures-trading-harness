@@ -1,10 +1,10 @@
 # Execution
 
-- **Hard rule: trade only in the CME Globex session, which opens at 18:00 ET
+- **Hard rule: trade only in the Topstep trading day (its 17:00 CT reset), which opens at 18:00 ET
   and runs overnight until 16:00 ET the next day (Sunday evening to Friday
   afternoon). The market is open all of that time, the regular session
   09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on
-  weekends. Never carry a position past the 16:00 ET close.** Every position is
+  weekends (CME's Globex trades on to 17:00 ET; the harness doesn't). Never carry a position past the 16:00 ET close.** Every position is
   flat by end of day (`eodAt`, no later than 16:00 ET). The order gate
   refuses entries outside the session whatever the configuration says, and
   the runner closes any position it finds outside it. Exits are always

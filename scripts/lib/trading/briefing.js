@@ -37,12 +37,13 @@
  * whatever was built on it (an analyst's report) stays valid while the
  * versions it used are unchanged.
  *
- *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, now })   the briefing (prev: the last one, reused where valid)
+ *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, blackouts, clock, now })   the briefing (prev: the last one,
+ *                                                              reused where valid; clock: the gate config's entry windows)
  *   current(b, now)                                              whether it is this bar's (its m3 still holds at now)
  *   renderBriefing(b, { now })                                   one text block per section, with validity
  *   briefingFile(home, root) / writeBriefing / readBriefing      <FTH_HOME>/briefing/<MICRO ROOT>.json
  *   nextClose(at, minutes)                                       when the candle containing `at` closes
- *   sessionWindow(at)                                            { name, until, entries, marketOpen, text } (the session-timing skill's windows)
+ *   sessionWindow(at, clock)                                     { name, until, entries, marketOpen, text, refusal } (the skill's windows, the gate's clock)
  */
 
 const fs = require('fs');
@@ -50,23 +51,25 @@ const path = require('path');
 const { snapshot } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
-const { tradingDayStart, minutesOfDay } = require('./clock');
+const { tradingDayStart, minutesOfDay, entryClock } = require('./clock');
+const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, specFor } = require('./contracts');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
 
-// The session-timing skill's windows (ET minutes of the day, from 00:00): [start, end, name, entries]. `entries` is
-// what the session clock allows in the window ('allowed' | 'none': the opening print 09:30-09:35, into the close
-// 15:45-16:00, the daily break 16:00-18:00 when the market is closed). The order gate's own windows are its config
-// (FTH_NO_ENTRY_WINDOWS, market hours); this is how the briefing states them, each with its scope and end.
+// The session-timing skill's windows (ET minutes of the day, from 00:00): [start, end, name]. They name the time of
+// day; whether a new entry is allowed in them is the order gate's clock (FTH_ENTRY_HOURS, FTH_NO_ENTRY_WINDOWS:
+// clock.js entryClock; by default no entries in the opening print 09:30-09:35 and into the close 15:45-16:00). The
+// daily break is the market closed: the harness stops at 16:00 ET (Topstep's time) until the 18:00 ET open.
 const WINDOWS = [
-  [-360, 180, 'asia', 'allowed'], [180, 570, 'london', 'allowed'], [570, 575, 'opening print (no entries)', 'none'], [575, 660, 'opening drive', 'allowed'],
-  [660, 690, 'late morning', 'allowed'], [690, 810, 'lunch lull', 'allowed'], [810, 945, 'afternoon', 'allowed'], [945, 960, 'into the close (no entries)', 'none'],
-  [960, 1080, 'daily break (closed)', 'none'], [1080, 1620, 'asia', 'allowed'],
+  [-360, 180, 'asia'], [180, 570, 'london'], [570, 575, 'opening print'], [575, 660, 'opening drive'],
+  [660, 690, 'late morning'], [690, 810, 'lunch lull'], [810, 945, 'afternoon'], [945, 960, 'into the close'],
+  [960, 1080, 'daily break'], [1080, 1620, 'asia'],
 ];
-const MARKET_CLOSED_WINDOW = 'daily break (closed)';
+const MARKET_CLOSED_WINDOW = 'daily break';
+const DEFAULT_ENTRY_CLOCK = { entryHours: DEFAULT_ENTRY_HOURS, noEntryWindows: DEFAULT_NO_ENTRY_WINDOWS };
 
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
 function nextClose(at, minutes) {
@@ -76,19 +79,33 @@ function nextClose(at, minutes) {
 }
 
 /**
- * The session window at `at`: { name, until, entries, marketOpen, text }. Every fact states its own scope: `text` says
- * whether the market is open, whether entries are allowed, and until when, e.g. "opening drive (market open, entries
- * allowed) until 11:00 ET" or "opening print (market open, no entries) until 09:35 ET": a reader never has to guess
- * which window forbids entries or when it ends.
+ * The session window at `at`: { name, until, entries, marketOpen, text, refusal }. Every fact states its own scope:
+ * `text` says whether the market is open, whether a new entry is allowed, and until when, e.g. "opening drive (market
+ * open, entries allowed) until 11:00 ET" or "opening print (market open, no entries) until 09:35 ET". `entries`
+ * ('allowed' | 'none') is the gate's clock for `clock` ({ entryHours, noEntryWindows }, the gate config; its defaults
+ * when not given; { error } when it couldn't be read: no entries), and `until` is the window's end or, sooner, when
+ * that changes. `refusal`: the gate's reason.
  */
-function sessionWindow(at) {
+function sessionWindow(at, clock = DEFAULT_ENTRY_CLOCK) {
   const m = minutesOfDay(at, ET);
   // Asia runs 18:00-03:00 across midnight: before 03:00 it is the window that started at 18:00 the evening before.
-  const [, end, name, entries] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= 1080));
-  const until = new Date(at.getTime() + (end - m) * 60000 - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds()));
+  const [, end, name] = WINDOWS.find(([a, b]) => m >= a && m < b && !(a < 0 && m >= 1080));
+  const start = at.getTime() - (at.getUTCSeconds() * 1000 + at.getUTCMilliseconds());
+  let until = new Date(start + (end - m) * 60000);
   const marketOpen = name !== MARKET_CLOSED_WINDOW;
+  // A gate config that couldn't be read ({ error }): whether the gate allows an entry is unknown, so none.
+  const unknown = clock && clock.error ? `the gate config can't be read (${clock.error}): entries refused until it can` : null;
+  const refusalAt = unknown ? () => unknown : entryClock(clock || DEFAULT_ENTRY_CLOCK);
+  const refusal = marketOpen ? refusalAt(at) : 'closed 16:00-18:00 ET (the Topstep trading day ends at 16:00 ET)';
+  // The gate's windows are minute-grained: the first minute before the window's end where the answer changes.
+  if (marketOpen) {
+    for (let t = start + 60000; t < until.getTime(); t += 60000) {
+      if (!refusalAt(new Date(t)) !== !refusal) { until = new Date(t); break; }
+    }
+  }
+  const entries = refusal ? 'none' : 'allowed';
   const scope = `${marketOpen ? 'market open' : 'market closed'}, ${entries === 'allowed' ? 'entries allowed' : 'no entries'}`;
-  return { name, until, entries, marketOpen, text: `${name.replace(/ \(.*\)$/, '')} (${scope}) until ${etClock(until)} ET` };
+  return { name, until, entries, marketOpen, text: `${name} (${scope}) until ${etClock(until)} ET`, refusal };
 }
 
 /**
@@ -121,13 +138,13 @@ const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, tick }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick }) {
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
   const day = snap.day || {};
   const price = snap.last.c;
-  const win = sessionWindow(closedAt);
+  const win = sessionWindow(closedAt, clock);
   const f15 = frameOf(read15, 15);
   const f60 = frameOf(readH1, 60);
   const prior = vp.priorRth || {};
@@ -200,7 +217,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
       data: {
         price, bar: { t: bar.t, o: bar.o, h: bar.h, l: bar.l, c: bar.c, v: bar.v, rangeAtr: atr14 > 0 ? round2((bar.h - bar.l) / atr14) : null },
         // The session window, with its scope stated: whether the market is open and entries are allowed, and until when.
-        et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(), windowEntries: win.entries, marketOpen: win.marketOpen, windowText: win.text,
+        et: etClock(closedAt), window: win.name, windowUntil: win.until.toISOString(), windowEntries: win.entries, marketOpen: win.marketOpen, windowText: win.text, windowRefusal: win.refusal,
         // R: every distance below is in points and R; 1R here is the reference stop (a setup's own stop is its 1R).
         oneR: Number.isFinite(oneR) ? { points: round2(oneR), basis: `0.5 x ATR(20) ${round2(2 * oneR)}, the reference stop` } : null,
         news,
@@ -353,7 +370,7 @@ function newsState(blackouts, at) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, now = new Date() }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, now = new Date() }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -377,7 +394,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
   // Levels within a tick are one level: the contract's tick (contracts.js), 0.25 for a root it doesn't list.
   const tick = (specFor(String(symbol || '').split(':')[0]) || {}).tickSize || 0.25;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, tick });
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};

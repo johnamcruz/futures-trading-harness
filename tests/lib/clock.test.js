@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { tradingDayStart, zonedTimeToUtc, parseWindows, inWindow, minutesOfDay } = require('../../scripts/lib/trading/clock');
 
-test('trading day starts at the most recent 17:00 Chicago time', () => {
+test('trading day starts at the most recent 17:00 CT (Topstep\'s daily reset)', () => {
   // 09:00 CDT Wednesday -> started Tuesday 17:00 CDT (22:00Z)
   assert.strictEqual(tradingDayStart(new Date('2026-10-07T14:00:00Z')).toISOString(), '2026-10-06T22:00:00.000Z');
   // 17:30 CDT -> started today 17:00 CDT
@@ -71,4 +71,19 @@ test('one trading day runs from the 18:00 ET open to the 16:00 ET close, the sam
   assert.strictEqual(dayEndMs('2026-10-16'), et('2026-10-16', '18:00').getTime());
   // Across a clock change: the Sunday 18:00 open after the November change is Monday's day.
   assert.strictEqual(tradingDayKey(et('2026-11-01', '18:30')), '2026-11-02');
+});
+
+test('entryClock: the gate\'s entry windows (FTH_ENTRY_HOURS, FTH_NO_ENTRY_WINDOWS) as one function, failing closed on a bad spec', () => {
+  const { entryClock } = require('../../scripts/lib/trading/clock');
+  const at = iso => new Date(iso);
+  const dflt = entryClock({ entryHours: '', noEntryWindows: '09:30-09:35@America/New_York,15:45-16:00@America/New_York' });
+  assert.strictEqual(dflt(at('2026-10-07T13:32:00Z')), 'New entries are not allowed during 09:30-09:35@America/New_York.');
+  assert.strictEqual(dflt(at('2026-10-07T13:35:00Z')), null, 'the window ends at 09:35');
+  assert.strictEqual(dflt(at('2026-10-07T12:00:00Z')), null);
+  const ny = entryClock({ entryHours: 'ny', noEntryWindows: '' });
+  assert.strictEqual(ny(at('2026-10-07T12:00:00Z')), 'New entries only during ny (09:30-16:00@America/New_York) (FTH_ENTRY_HOURS).');
+  assert.strictEqual(ny(at('2026-10-07T14:00:00Z')), null);
+  assert.match(entryClock({ entryHours: 'whenever' })(at('2026-10-07T14:00:00Z')), /^FTH_ENTRY_HOURS has invalid entries \(whenever\)/);
+  assert.match(entryClock({ noEntryWindows: 'whenever' })(at('2026-10-07T14:00:00Z')), /^FTH_NO_ENTRY_WINDOWS has invalid entries \(whenever\)/);
+  assert.strictEqual(entryClock()(at('2026-10-07T13:32:00Z')), null, 'no windows: any time');
 });

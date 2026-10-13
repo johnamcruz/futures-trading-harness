@@ -7,7 +7,8 @@
  *
  * Candles are aligned to the 18:00 ET Globex open (indicators.htfCandles):
  * 60 opens on the hour, 240 at 18, 22, 02, 06, 10, 14 ET, 1440 is the
- * session (18:00-17:00 ET). Only completed candles are read; the one in
+ * trading day from 18:00 ET (its candle holds the Globex data to 17:00 ET; the
+ * harness trades the Topstep day, 18:00-16:00 ET). Only completed candles are read; the one in
  * progress is reported but never decides the trend.
  *
  * Per timeframe (readTimeframe):

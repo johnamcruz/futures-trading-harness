@@ -18,7 +18,7 @@
  * The MCP server still enforces its own size and loss limits on all of them.
  */
 
-const { tradingDayStart, parseWindows, inWindow, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
+const { tradingDayStart, entryClock, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot } = require('./journal');
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
@@ -172,15 +172,7 @@ function marketClosed(now, config = {}) {
 }
 
 function checkWindows(now, config) {
-  const hours = parseWindows(config.entryHours || '');
-  if (hours.errors.length > 0) return `FTH_ENTRY_HOURS has invalid entries (${hours.errors.join(', ')}); fix the config.`;
-  if (hours.windows.length && !hours.windows.some(w => inWindow(now, w))) {
-    return `New entries only during ${hours.windows.map(w => w.label).join(', ')} (FTH_ENTRY_HOURS).`;
-  }
-  const { windows, errors } = parseWindows(config.noEntryWindows);
-  if (errors.length > 0) return `FTH_NO_ENTRY_WINDOWS has invalid entries (${errors.join(', ')}); fix the config.`;
-  const hit = windows.find(w => inWindow(now, w));
-  return hit ? `New entries are not allowed during ${hit.label}.` : null;
+  return entryClock(config)(now);
 }
 
 function checkBlackouts(now, blackouts) {
