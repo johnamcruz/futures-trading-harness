@@ -176,13 +176,21 @@ broker.
    then, confluence, the session window, the attempt); the decision the
    order's mechanical steps expect (no trade, or take at most the verdict's
    size, halved once; a step it can't compute leaves it `unchecked`, and the
-   skip rules and secondary context are left to judgment); what the trader did
+   skip rules and secondary context are left to judgment; an entry is judged
+   against the setup it traded, a skip against the best one on the bar; a
+   take that a judgment step can still turn down, a pullback, a reversal
+   fading the trend, or halving a size the record doesn't give, scores
+   neither a skip nor an entry right or wrong); what the trader did
    and the reasons its CYCLE RESULT gave, each checked against the facts
    (`true`, `false`, or `unchecked` when no fact can check it; a clause it
-   doesn't recognize is `unparsed`, never counted as right). Each decision
+   doesn't recognize is `unparsed`, never counted as right; a claim about a
+   setup the bar didn't have is `incidental`, reported apart and never the
+   category). Each decision
    gets a category: `right`, `wrong-side entry`, `bad size` (over the ceiling,
    or an entry where the order says no trade), `early close` (an exit the
-   trader sent in a trade), `excessive abstention` (a skip where the order
+   trader sent before the plan's exit was reached; a partial exit, one past
+   the time stop, or one after giving back most of a large best is
+   `unchecked`), `excessive abstention` (a skip where the order
    says take, on false grounds or none), `wrong stated reason` (the right
    decision, a false reason), `risk-rule rejection` (the gate or the broker
    refused the entry), or `unchecked` (a judgment skip, a failed cycle, facts

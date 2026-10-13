@@ -9,7 +9,7 @@ const fs = require('fs');
 const { execFileSync } = require('child_process');
 const path = require('path');
 const { tmpDir } = require('../helpers');
-const { scoreRun, writeScorecard, checkReasons, expectedDecision, classify, clausesOf, CATEGORIES } = require('../../scripts/lib/replay/scorecard');
+const { scoreRun, writeScorecard, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, CATEGORIES } = require('../../scripts/lib/replay/scorecard');
 
 // ------------------------------------------------------------------------------------------------
 // Pure steps
@@ -27,7 +27,13 @@ function setup(over = {}) {
   };
 }
 function facts(over = {}) {
-  return { window: WINDOW.drive, scanned: true, setups: [], trendRule: TREND_DOWN, attempt: ACTIVE, styleOf: n => ({ keltner: 'trend', orb: 'trend', cisd_ote: 'reversal', manual_x: 'manual' }[n] || null), ...over };
+  return {
+    t: '2026-06-01T14:30:02.000Z', window: WINDOW.drive, scanned: true, setups: [], trendRule: TREND_DOWN, attempt: ACTIVE,
+    styleOf: n => ({ keltner: 'trend', orb: 'trend', cisd_ote: 'reversal', manual_x: 'manual' }[n] || null),
+    // prop_portfolio holds to +2R then trails; crt_1h exits at its level or after 40 bars.
+    planOf: n => ({ prop_portfolio: { targetR: null, trailActivateR: 2, maxBars: null, minutes: 3 }, crt_1h: { targetR: null, trailActivateR: null, maxBars: 40, minutes: 3 } }[n] || null),
+    ...over,
+  };
 }
 const claim = (r, kind) => r.claims.find(c => c.kind === kind);
 
@@ -102,16 +108,16 @@ test('reasons: "no prop attempt running" is false with an active attempt, true w
 test('reasons: room, mixed, counter, confluence, verdict and entry block against the setup; unchecked and unparsed are never ok', () => {
   const f = facts({ setups: [setup({ room: { inTheWay: { name: 'round number', R: 0.35 }, needR: 2 }, alignment: 'mixed' })] });
   const r = checkReasons('CYCLE RESULT: veto - keltner short skipped for insufficient room (needs 2R but first level is 0.35R); mixed alignment across timeframes; no confluence', f);
-  assert.deepStrictEqual(r.claims.map(c => [c.kind, c.check]), [['room', true], ['mixed', true], ['no-confluence', true]]);
+  assert.deepStrictEqual(r.claims.map(c => [c.kind, c.check]), [['no-room', true], ['mixed', true], ['no-confluence', true]], 'the figures (0.35R vs 2R) say the same as the words: one claim');
   assert.strictEqual(r.status, 'confirmed');
-  const roomy = checkReasons('CYCLE RESULT: no-trade - stop is 0.69R away from prior VAL, need 2R minimum', facts({ setups: [setup()] }));
+  const roomy = checkReasons('CYCLE RESULT: no-trade - insufficient room; not enough room', facts({ setups: [setup()] }));
   assert.strictEqual(roomy.claims.length, 1, 'two clauses saying the same claim count once');
   assert.strictEqual(roomy.claims[0].check, false);
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - counter read', facts({ setups: [setup()] })), 'counter').check, false);
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - policy strategy prop_portfolio has no verdict for MNQ', facts({ setups: [setup()] })), 'no-verdict').check, false);
   // A room claim with no room fact, a cooldown with no entry block recorded: unchecked, and the status says so.
   const unknown = checkReasons('CYCLE RESULT: no-trade | Account on 2-loss cooldown until 17:00 CT; insufficient room', facts({ setups: [setup({ room: null })] }));
-  assert.deepStrictEqual(unknown.claims.map(c => [c.kind, c.check]), [['entry-block', 'unchecked'], ['room', 'unchecked']]);
+  assert.deepStrictEqual(unknown.claims.map(c => [c.kind, c.check]), [['entry-block', 'unchecked'], ['no-room', 'unchecked']]);
   assert.strictEqual(unknown.status, 'unchecked');
   assert.strictEqual(checkReasons('CYCLE RESULT: no-trade | daily loss limit', facts({ attempt: { ...ACTIVE, entryBlock: 'the daily soft limit is reached' } })).claims[0].check, true);
   // A clause nothing recognizes is unparsed: the status is unchecked, never confirmed.
@@ -192,8 +198,8 @@ test('categories: each failure in the taxonomy, right, and unchecked', () => {
   assert.strictEqual(run(entry('short', 30), take).category, 'bad size');
   assert.strictEqual(run(entry('short', 12), facts({ setups: [setup({ alignment: 'mixed' })] })).category, 'bad size', 'mixed halves 22 to 11');
   assert.deepStrictEqual([run(entry('short', 1), roomless).category, run(entry('short', 1), roomless).why], ['bad size', ['the order says no trade (step 3)']]);
-  // early close: an exit the model sent in a trade; a hold is right.
-  assert.strictEqual(run(label({ decision: 'in-trade', teacher: { action: 'exit', orders: [] } }), facts()).category, 'early close');
+  // early close: an exit the model sent before the plan's exit was reached (its own test below); a hold is right.
+  assert.strictEqual(run(label({ decision: 'in-trade', teacher: { action: 'exit', orders: [] }, outcome: { setup: 'prop_portfolio', r: 0.5, mfeR: 0.8, entryTime: '2026-06-01T14:20:00.000Z' } }), facts()).category, 'early close');
   assert.strictEqual(run(label({ decision: 'in-trade', teacher: { action: 'hold', orders: [] } }), facts()).category, 'right');
   // unchecked: a failed cycle, a manual strategy's entry, facts the steps can't compute.
   assert.deepStrictEqual(run(label({ cycleFailed: 'cycle timed out' }), take), { category: 'unchecked', agrees: null, why: ['cycle timed out'] });
@@ -216,7 +222,7 @@ const WALL0 = Date.parse('2026-10-11T00:00:00Z');
 const ATTEMPT = { account: 'topstep_100k', status: 'active', balance: 100000, floor: 97000, cushion: 3000, profit: 0, target: 6000, dayPnl: -500, sessionsLeft: 30, entryBlock: null };
 const STRATS = [
   { name: 'orb', valid: true, signal: 'rules', mtf: 'trend', status: 'active', risk: { min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } },
-  { name: 'prop_portfolio', valid: true, signal: 'policy', status: 'active', risk: { min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } },
+  { name: 'prop_portfolio', valid: true, signal: 'policy', status: 'active', timeframe: '3m', risk: { min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } },
 ];
 const ACCOUNTS = [{ name: 'topstep_100k', daily_loss_limit: 2000, daily_loss_soft: 1000 }];
 
@@ -250,13 +256,13 @@ const fill = (ms, side, price, pnl, extra = {}) => ({ id: `${ms}-${side}`, contr
 /** The day: a right entry, a hold, an early close, an excessive abstention, a false window, a skip verdict, a refusal, a judged stand-aside, a failed cycle. */
 const STEPS = [
   { k: 0, scan: policyScan(), verdict: true, cycle: { orders: [LONG], result: 'CYCLE RESULT: executed - prop_portfolio long 2 MNQ, aligned and room to 20600' } },
-  { k: 1, scan: quietScan, cycle: { positions: POS, result: 'CYCLE RESULT: managed | Position running profitably with protective stop active.' }, trades: [fill(tOf(0) + 28000, 0, 20534, null)] },
+  { k: 1, scan: quietScan, cycle: { positions: POS, result: 'CYCLE RESULT: managed | Position running profitably with protective stop active.' }, trades: [fill(tOf(0) + 28000, 0, 20534, null, { entry: { setup: 'prop_portfolio', stopTicks: 40, tickValue: 0.5 } })] },
   { k: 2, scan: quietScan, cycle: { positions: POS, orders: [{ tool: 'close_position', input: { accountId: 7, contractId: 'MNQ' } }], result: 'CYCLE RESULT: exited - took profit early' } },
-  { k: 3, scan: policyScan(), verdict: true, cycle: { result: 'CYCLE RESULT: no-trade - no candidate strategies (orb long blocked by 15m down trend rule)' }, trades: [fill(tOf(2) + 28000, 1, 20544, 20, { roundTrip: { net: 18.52, r: 0.5, reason: 'exit' } })] },
+  { k: 3, scan: policyScan(), verdict: true, cycle: { result: 'CYCLE RESULT: no-trade - no candidate strategies (orb long blocked by 15m down trend rule)' }, trades: [fill(tOf(2) + 28000, 1, 20544, 20, { roundTrip: { net: 18.52, r: 0.5, maeR: -0.2, mfeR: 0.8, reason: 'exit' } })] },
   { k: 4, scan: quietScan, cycle: { result: 'CYCLE RESULT: blocked - Opening print window until 10:00 ET and no strategy candidates' } },
   { k: 5, scan: policyScan('skip', 0), verdict: true, cycle: { result: 'CYCLE RESULT: blocked - no prop attempt running' } },
   { k: 6, scan: policyScan(), verdict: true, cycle: { orders: [{ ...LONG, gate: { source: 'gateway', decision: 'blocked', violations: [{ check: 'combine-verdict', message: 'no' }] } }], result: 'CYCLE RESULT: blocked - the gate refused' } },
-  { k: 7, scan: quietScan, cycle: { result: 'CYCLE RESULT: no-trade - ADX falling, thin volume' } },
+  { k: 7, scan: quietScan, cycle: { result: 'CYCLE RESULT: no-trade - ADX falling, thin volume; prevailing 4h up trend blocks all trend-following setups' } },
   { k: 8, scan: quietScan, cycle: { ok: false, result: 'CYCLE RESULT: error - exit 1' } },
   { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
 ];
@@ -329,7 +335,7 @@ test('scoreRun: every decision of a run scored from its own records', () => {
 
   // 1, 2: in the trade, a hold, then an exit the model sent.
   assert.deepStrictEqual([R[1].decision, R[1].category], ['in-trade', 'right']);
-  assert.deepStrictEqual([R[2].category, R[2].agrees], ['early close', false]);
+  assert.deepStrictEqual([R[2].category, R[2].agrees, R[2].why], ['early close', false, ['closed at 0.5R, its best 0.8R, before the plan\'s 2R']]);
   // 3: the order says take; skipped on false grounds, with what the setup would have done.
   assert.deepStrictEqual([R[3].expected.decision, R[3].category], ['take', 'excessive abstention']);
   assert.deepStrictEqual(R[3].reasons.claims.map(c => [c.kind, c.check]), [['nothing-fired', false], ['trend-blocks', false]]);
@@ -342,8 +348,9 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   assert.deepStrictEqual([R[5].expected.decision, R[5].expected.decidedBy, R[5].category], ['no-trade', 1, 'wrong stated reason']);
   // 6: the gate refused the entry; the room (1.85R before the 2R it needs) said no trade anyway.
   assert.deepStrictEqual([R[6].category, R[6].expected.decidedBy], ['risk-rule rejection', 3]);
-  // 7: no setup, judgment reasons; 8: a failed cycle.
-  assert.deepStrictEqual([R[7].category, R[7].reasons.judgment.length], ['right', 2]);
+  // 7: no setup, judgment reasons, and a false claim about trend setups the bar didn't have: incidental, still right.
+  assert.deepStrictEqual([R[7].category, R[7].reasons.judgment.length, R[7].incidentalFalse], ['right', 2, 1]);
+  assert.deepStrictEqual(R[7].reasons.claims.map(c => [c.kind, c.check, c.incidental]), [['trend-blocks', false, true]]);
   assert.deepStrictEqual([R[8].category, R[8].agrees], ['unchecked', null]);
 
   // The summary.
@@ -355,6 +362,7 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   assert.deepStrictEqual([summary.trades.n, summary.trades.wins, summary.trades.sumR, summary.trades.net], [1, 1, 0.5, 18.52]);
   assert.strictEqual(summary.skipped.n, 1);
   assert.strictEqual(summary.reasons.byKind['no-attempt'].false, 1);
+  assert.deepStrictEqual([summary.reasons.falseIncidental, summary.reasons.byKind['trend-blocks'].incidentalFalse, summary.reasons.incidentalWrongRate], [1, 1, 1]);
   assert.deepStrictEqual(summary.days, [{ day: DAY, decisions: 9, agree: 5, disagree: 3, balance: 100000, dayPnl: -500, floor: 97000, cushion: 3000, dailyHeadroom: 1500, balanceCheck: 'ok' }]);
   // Deterministic.
   assert.deepStrictEqual(scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }), { records, summary });
@@ -403,4 +411,100 @@ test('replay.js scorecard: the CLI writes the scorecard and prints its summary',
   assert.match(out, /9 decisions: agreement/);
   assert.match(out, /wrote .*scorecard\.jsonl, scorecard-summary\.json and scorecard\.md/);
   assert.ok(fs.existsSync(path.join(runDir, 'scorecard.md')));
+});
+
+// ------------------------------------------------------------------------------------------------
+// Review findings
+
+test('an entry is judged against the setup it traded, not the best setup on the bar', () => {
+  const orb = setup({ name: 'orb', component: null, policy: false, verdict: null });
+  const keltner = setup({ name: 'keltner', component: null, policy: false, verdict: null, room: { inTheWay: { name: 'prior day low', R: 0.3 }, needR: 2 } });
+  const f = facts({ setups: [orb, keltner] });
+  const enter = name => { const l = entry('short', 1, undefined, name); return classify(l, f, expectedForEntry(f, name, 'short'), checkReasons('CYCLE RESULT: executed', f)); };
+  // keltner's room says no trade, though orb's setup passes.
+  assert.deepStrictEqual([expectedForEntry(f, 'keltner', 'short').decidedBy, enter('keltner').category], [3, 'bad size']);
+  assert.strictEqual(enter('orb').category, 'right');
+  // A setup tag the bar has no setup for: unchecked.
+  assert.deepStrictEqual([expectedForEntry(f, 'vwap_reclaim', 'short').decidedBy, enter('vwap_reclaim').category], ['no matching setup', 'unchecked']);
+  // A policy strategy is matched by its own name, and its verdict's size is the ceiling.
+  const p = facts({ setups: [setup(), setup({ name: 'orb', component: null, policy: false, verdict: null, direction: 'short', room: { inTheWay: { name: 'x', R: 0.1 }, needR: 2 } })] });
+  assert.strictEqual(expectedForEntry(p, 'prop_portfolio', 'short').ceiling, 22);
+  // The setup it named exists only on the other side: wrong side.
+  assert.strictEqual(classify(entry('long', 1, undefined, 'keltner'), facts({ setups: [keltner, setup({ name: 'orb', component: null, policy: false, verdict: null, direction: 'long', style: 'trend', trendAllows: true })] }), expectedForEntry(f, 'keltner', 'long'), checkReasons('', f)).category, 'wrong-side entry');
+});
+
+test('an exit in a trade is early close only when the plan\'s exit is known not reached', () => {
+  const exit = (outcome, extra = {}) => classify(label({ decision: 'in-trade', teacher: { action: 'exit', orders: extra.orders || [] }, clone: { ok: false, reasons: extra.reasons || [] }, outcome }), facts(), { decision: 'hold' }, checkReasons('', facts()));
+  const base = { setup: 'prop_portfolio', r: 0.5, mfeR: 0.8, entryTime: '2026-06-01T14:20:00.000Z' };
+  assert.strictEqual(exit(base).category, 'early close');
+  // A partial exit (scale-out), by the label's reason or its tool.
+  assert.strictEqual(exit(base, { reasons: ['partial exit'] }).category, 'unchecked');
+  assert.strictEqual(exit(base, { orders: [{ tool: 'partial_close_position' }] }).category, 'unchecked');
+  // The trail's activation reached: managing it is the plan's.
+  assert.strictEqual(exit({ ...base, mfeR: 2.4, r: 1.9 }).category, 'unchecked');
+  // Gave back most of a large best.
+  assert.deepStrictEqual(exit({ ...base, mfeR: 1.6, r: 0.4 }).why, ['gave back most of a 1.6R best']);
+  // Past the time stop: crt_1h's 40 bars of 3 minutes (120 minutes) before 14:30.
+  assert.deepStrictEqual(exit({ ...base, setup: 'crt_1h', entryTime: '2026-06-01T12:20:00.000Z' }).why, ['past the time stop (40 bars)']);
+  // Unknown plan or excursion: unchecked, never early close.
+  assert.strictEqual(exit({ ...base, setup: 'unknown_x' }).category, 'unchecked');
+  assert.strictEqual(exit({ ...base, mfeR: null }).category, 'unchecked');
+});
+
+test('room figures are read for what they say: enough room is not a no-room claim', () => {
+  const f = facts({ setups: [setup()] }); // round number at 3R, needs 2R
+  const enough = checkReasons('CYCLE RESULT: executed - short MNQ 11, room 3R vs 2R needed', f);
+  assert.deepStrictEqual(enough.claims.map(c => [c.kind, c.check, c.asserts]), [['room', true, 'enough']]);
+  const tight = facts({ setups: [setup({ room: { inTheWay: { name: 'prior VAL', R: 0.5 }, needR: 2 } })] });
+  assert.strictEqual(checkReasons('CYCLE RESULT: executed - room 3R vs 2R needed', tight).claims[0].check, false);
+  assert.deepStrictEqual(checkReasons('CYCLE RESULT: no-trade - 0.03R vs 2R needed', tight).claims.map(c => [c.kind, c.check]), [['no-room', true]]);
+  // A distance alone against the first level in its way; a need alone against what it needs.
+  assert.strictEqual(checkReasons('CYCLE RESULT: executed - first level 3R away', f).claims[0].check, true);
+  assert.strictEqual(checkReasons('CYCLE RESULT: executed - first level 1R away', f).claims[0].check, false);
+  assert.strictEqual(checkReasons('CYCLE RESULT: executed - it needs 2R', f).claims[0].check, true);
+  // A true "enough room" is no ground to skip.
+  assert.strictEqual(classify(label(), f, expectedDecision(f), checkReasons('CYCLE RESULT: no-trade - room 3R vs 2R needed', f)).category, 'excessive abstention');
+});
+
+test('a take whose judgment steps can still say no trade is never scored right or wrong on the decision', () => {
+  // A rules candidate (no verdict size) with a mixed read: half of an unknown size could be 0.
+  const unknownHalf = facts({ setups: [setup({ name: 'keltner', component: null, policy: false, verdict: null, alignment: 'mixed' })] });
+  const e = expectedDecision(unknownHalf);
+  assert.deepStrictEqual([e.decision, e.couldSkip], ['take', [4]]);
+  assert.deepStrictEqual(classify(label(), unknownHalf, e, checkReasons('CYCLE RESULT: no-trade', unknownHalf)), { category: 'unchecked', agrees: null, why: ['step 4 is judgment that can say no trade'] });
+  // With a false decision-relevant reason, the reason is still wrong.
+  assert.deepStrictEqual(classify(label(), unknownHalf, e, checkReasons('CYCLE RESULT: no-trade - no candidate strategies', unknownHalf)).category, 'wrong stated reason');
+  // A known size halves without a judgment: a skip there is still abstention.
+  assert.deepStrictEqual(expectedDecision(facts({ setups: [setup({ alignment: 'mixed' })] })).couldSkip, []);
+  // A pullback (step 4) and a reversal fading the trend (step 2): a skip and an entry are unchecked on that step.
+  const pull = facts({ setups: [setup({ alignment: 'pullback' })] });
+  assert.deepStrictEqual(expectedDecision(pull).couldSkip, [4]);
+  assert.strictEqual(classify(label(), pull, expectedDecision(pull), checkReasons('CYCLE RESULT: no-trade', pull)).category, 'unchecked');
+  assert.deepStrictEqual(classify(entry('short', 5), pull, expectedForEntry(pull, 'prop_portfolio', 'short'), checkReasons('', pull)).category, 'unchecked');
+  const fade = facts({ setups: [setup({ style: 'reversal', direction: 'long', vwapSide: 'above' })] });
+  assert.deepStrictEqual(expectedDecision(fade).couldSkip, [2]);
+  assert.strictEqual(classify(entry('long', 5), fade, expectedForEntry(fade, 'prop_portfolio', 'long'), checkReasons('', fade)).category, 'unchecked');
+  // Over the ceiling is bad size even so.
+  assert.strictEqual(classify(entry('long', 12), fade, expectedForEntry(fade, 'prop_portfolio', 'long'), checkReasons('', fade)).category, 'bad size');
+});
+
+test('a false claim about a setup the bar did not have is incidental: reported, never the category', () => {
+  const none = facts();
+  const r = checkReasons('CYCLE RESULT: no-trade - no candidate strategies, prevailing 15m down trend blocks all trend-following setups', none);
+  assert.deepStrictEqual(r.claims.map(c => [c.kind, c.check, c.incidental]), [['nothing-fired', true, false], ['trend-blocks', false, true]]);
+  assert.strictEqual(classify(label(), none, expectedDecision(none), r).category, 'right');
+  // About a side no setup is on: incidental too; about the setup's own side: relevant.
+  const shortOnly = facts({ setups: [setup({ room: { inTheWay: { name: 'x', R: 0.2 }, needR: 2 } })], trendRule: { prevailing: '15m up', long: true, short: false } });
+  assert.strictEqual(checkReasons('CYCLE RESULT: no-trade - 15m up trend blocks longs', shortOnly).claims[0].incidental, true);
+  const own = checkReasons('CYCLE RESULT: no-trade - keltner short blocked by 15m down trend rule', facts({ setups: [setup({ room: { inTheWay: { name: 'x', R: 0.2 }, needR: 2 } })] }));
+  assert.deepStrictEqual([own.claims[0].check, own.claims[0].incidental], [false, false]);
+});
+
+test('scoreRun: an entry\'s expectation is the setup it traded, though another setup on the bar ranks higher', () => {
+  const strategies = [...STRATS, { name: 'ema_cross', valid: true, signal: 'rules', mtf: 'trend', status: 'active', risk: { min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }];
+  const order = { tool: 'place_order', input: { ...LONG.input, size: 1, rationale: 'setup:ema_cross long breakout, stop 20523.5' } };
+  const scan = [...policyScan(), { name: 'ema_cross', candidate: true, direction: 'long', stopDistance: 10, mtf: MTF }];
+  const { runDir } = makeRun({ steps: [{ k: 0, scan, verdict: true, cycle: { orders: [order], result: 'CYCLE RESULT: executed - ema_cross long 1' } }] });
+  const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
+  assert.deepStrictEqual([records[0].expected.setup, records[0].expected.ceiling, records[0].category], ['ema_cross', null, 'right']);
 });

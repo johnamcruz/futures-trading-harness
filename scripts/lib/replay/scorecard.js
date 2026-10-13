@@ -39,10 +39,18 @@
  * a claim without a fact to check is `unchecked`, a clause naming a judgment (regime, ADX, volume,
  * VWAP...) is `judgment`, and a clause nothing recognizes is `unparsed`. Never silently ok.
  *
- * Categories: wrong-side entry, bad size (over the ceiling; entering where it is 0), early close (an
- * exit the model sent in a trade), excessive abstention (a skip where the order says take, with no
- * true or judgment ground stated), wrong stated reason (the decision agrees, a reason is false),
- * risk-rule rejection (the gate or the broker refused the entry), right, unchecked.
+ * An entry is judged against the setup it traded (its setup tag, a policy by its own name, on its side); a skip
+ * against the setup the order lets go furthest. A take whose judgment steps can still say no trade (a reversal
+ * fading the trend, a pullback, a halving of a size the record doesn't give) is `couldSkip`: neither a skip nor an
+ * entry on it is scored right or wrong, only its reasons.
+ *
+ * Categories: wrong-side entry, bad size (over the ceiling; entering where it is 0), early close (an exit
+ * the model sent in a trade before the plan's exit was reached; a partial exit, one past the time stop or
+ * after giving back most of a large best is the plan's management: unchecked), excessive abstention (a
+ * skip where the order says take, with no true or judgment ground stated), wrong stated reason (the
+ * decision agrees, a decision-relevant reason is false), risk-rule rejection (the gate or the broker
+ * refused the entry), right, unchecked. A false claim about a setup the bar didn't have (a side with no
+ * setup, a bar with none) is `incidental`: kept and reported apart, never the category.
  *
  * Deterministic: the same files give the same scorecard.
  *
@@ -107,25 +115,47 @@ function setupSteps(s, facts) {
   return out;
 }
 
-/** What the priority order's mechanical steps expect at a decision: no-trade | take | unchecked, the ceiling, the deciding step. */
+const NONE = { setup: null, steps: [], judgment: [], couldSkip: [] };
+
+/**
+ * One setup's expectation: no-trade | take | unchecked, the ceiling, the deciding step, and `couldSkip`: the
+ * judgment steps that can still say no trade (a reversal fading the trend: only at a level; a pullback: not until
+ * it turns; a halving of a size the record doesn't give: at 1, half is 0).
+ */
+function setupExpectation(s, facts) {
+  const steps = setupSteps(s, facts);
+  const stop = steps.find(x => x.result === 'no-trade');
+  const unknown = steps.find(x => x.result === 'unknown');
+  const halves = steps.filter(x => x.result === 'half' || (x.step === 2 && x.result === 'judgment'));
+  const max = s.verdict ? num(s.verdict.maxSize) : null;
+  const ceiling = stop ? 0 : max === null ? null : halves.length ? Math.floor(max / 2) : max;
+  const decision = stop || ceiling === 0 ? 'no-trade' : unknown ? 'unchecked' : 'take';
+  const decidedBy = stop ? stop.step : ceiling === 0 ? halves[0].step : unknown ? unknown.step : 'take';
+  const couldSkip = decision !== 'take' ? [] : [...new Set([
+    ...steps.filter(x => x.result === 'judgment' && (x.step === 2 || x.step === 4)).map(x => x.step),
+    ...(max === null ? halves.map(x => x.step) : []),
+  ])].sort((a, b) => a - b);
+  return { decision, ceiling: decision === 'unchecked' ? null : ceiling, half: halves.length > 0, decidedBy, setup: s.name, strategy: s.component || s.name, direction: s.direction, steps, judgment: steps.filter(x => x.result === 'judgment').map(x => x.step), couldSkip };
+}
+
+/** What the priority order's mechanical steps expect at a decision (a skip is judged against the setup the order lets go furthest). */
 function expectedDecision(facts) {
-  if (!facts.scanned) return { decision: 'unchecked', ceiling: null, decidedBy: 'no scan', setup: null, steps: [], judgment: [] };
-  const setups = facts.setups;
-  if (!setups.length) return { decision: 'no-trade', ceiling: 0, decidedBy: 'no setup', setup: null, steps: [], judgment: [] };
-  const each = setups.map(s => {
-    const steps = setupSteps(s, facts);
-    const stop = steps.find(x => x.result === 'no-trade');
-    const unknown = steps.find(x => x.result === 'unknown');
-    const halves = steps.filter(x => x.result === 'half' || (x.step === 2 && x.result === 'judgment'));
-    const max = s.verdict ? num(s.verdict.maxSize) : null;
-    const ceiling = stop ? 0 : max === null ? null : halves.length ? Math.floor(max / 2) : max;
-    const decision = stop || ceiling === 0 ? 'no-trade' : unknown ? 'unchecked' : 'take';
-    const decidedBy = stop ? stop.step : ceiling === 0 ? halves[0].step : unknown ? unknown.step : 'take';
-    return { decision, ceiling: decision === 'unchecked' ? null : ceiling, half: halves.length > 0, decidedBy, setup: s.name, strategy: s.component || s.name, direction: s.direction, steps, judgment: steps.filter(x => x.result === 'judgment').map(x => x.step) };
-  });
+  if (!facts.scanned) return { decision: 'unchecked', ceiling: null, decidedBy: 'no scan', ...NONE };
+  if (!facts.setups.length) return { decision: 'no-trade', ceiling: 0, decidedBy: 'no setup', ...NONE };
+  const each = facts.setups.map(s => setupExpectation(s, facts));
   // The setup the order lets go furthest: a take, else an unchecked, else the first no-trade.
   const rank = { take: 0, unchecked: 1, 'no-trade': 2 };
   return [...each].sort((a, b) => rank[a.decision] - rank[b.decision])[0];
+}
+
+/**
+ * The expectation an entry is judged against: the setup it traded (the order's setup tag, a policy strategy by its
+ * own name, else a component it names) on the side it took; none such: unchecked (no setup at all: no trade).
+ */
+function expectedForEntry(facts, setupName, side) {
+  if (!facts.scanned || facts.setups.length === 0) return expectedDecision(facts);
+  const s = facts.setups.find(x => x.direction === side && x.name === setupName) || facts.setups.find(x => x.direction === side && x.component === setupName);
+  return s ? setupExpectation(s, facts) : { decision: 'unchecked', ceiling: null, decidedBy: 'no matching setup', ...NONE, setup: setupName || null, direction: side };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -143,7 +173,9 @@ const CLAIMS = [
   ['no-attempt', /no (?:prop )?attempt(?: is)? (?:running|active|started)|no active (?:prop )?attempt|attempt (?:is )?not started|until (?:a )?(?:prop )?attempt is started|until started via combine/i],
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
   ['nothing-fired', /\bno (?:valid )?(?:strategy |strategies |candidate |rules? )*(?:candidates?|strateg(?:y|ies)(?! verdict)|signals?|setups?)\b|\b0 candidates\b|candidates: \[\]|\bnone fired\b|\bno rules fired\b|trigger(?:s)? (?:not (?:fired|met)|conditions (?:are )?not met)|no valid entry trigger/i],
-  ['room', /insufficient room|not enough room|\bno room\b|limited (?:upside |downside )?room(?! to work)|first level (?:is )?(?:at )?\d|\d+(?:\.\d+)?R away|need(?:s)? \d+(?:\.\d+)?R|\d+(?:\.\d+)?R (?:needed|required)|room requirement|\d+(?:\.\d+)?R vs \d/i],
+  // Room: "not enough" only in negative words; numbers ("first level 0.35R", "3R vs 2R needed") are read for what they say.
+  ['no-room', /insufficient room|not enough room|\bno room\b|limited (?:upside |downside )?room(?! to work)|room requirement|fails? (?:the )?room|lacks? room/i],
+  ['room', /first level (?:is )?(?:at )?\d|\d+(?:\.\d+)?R (?:away|vs)|need(?:s)? \d+(?:\.\d+)?R|\d+(?:\.\d+)?R (?:needed|required)|room (?:of |to )?\d/i],
   ['mixed', /mixed (?:alignment|read|multi-timeframe|timeframe)/i],
   ['counter', /counter(?:-trend)? (?:read|alignment)/i],
   ['no-confluence', /no confluence|lone \w+ candidate|single-strategy/i],
@@ -181,7 +213,7 @@ function checkClaim(kind, clause, facts) {
     if (until && hhmm(until[1]) !== w.until) return ok(false, `the ${w.name} window ends at ${w.until} ET, not ${until[1]}`);
     return ok(true, `${w.name} until ${w.until} ET`);
   }
-  if (!facts.scanned && ['nothing-fired', 'no-reversal-fired', 'trend-blocks', 'no-verdict', 'room', 'mixed', 'counter', 'no-confluence'].includes(kind)) return ok('unchecked', 'no scan recorded for the bar');
+  if (!facts.scanned && ['nothing-fired', 'no-reversal-fired', 'trend-blocks', 'no-verdict', 'room', 'no-room', 'mixed', 'counter', 'no-confluence'].includes(kind)) return ok('unchecked', 'no scan recorded for the bar');
   if (kind === 'nothing-fired') return fired.length ? ok(false, `fired: ${fired.map(s => `${s.name} ${s.direction}${s.verdict ? ` (verdict ${s.verdict.action}${s.verdict.maxSize ? ` ${s.verdict.maxSize}` : ''})` : ''}`).join(', ')}`) : ok(true, 'no candidate on the bar');
   if (kind === 'no-reversal-fired') {
     const rev = fired.filter(s => s.style === 'reversal');
@@ -195,7 +227,8 @@ function checkClaim(kind, clause, facts) {
     if (named && named.style === 'reversal') return ok(false, `${named.component || named.name} is a reversal strategy: the trend rule allows it`);
     if (asked.some(x => rule[x] === null || rule[x] === undefined)) return ok('unchecked', 'the trend rule for that side is not recorded');
     const allowed = asked.filter(x => rule[x] === true);
-    return allowed.length ? ok(false, `the trend rule (${facts.trendRule.prevailing || 'no prevailing trend'}) allows ${allowed.join(' and ')}`) : ok(true, `${facts.trendRule.prevailing}: ${asked.join(' and ')} blocked`);
+    const res = allowed.length ? ok(false, `the trend rule (${facts.trendRule.prevailing || 'no prevailing trend'}) allows ${allowed.join(' and ')}`) : ok(true, `${facts.trendRule.prevailing}: ${asked.join(' and ')} blocked`);
+    return { ...res, sides: asked };
   }
   if (kind === 'no-attempt') {
     if (!facts.attempt) return ok('unchecked', 'no attempt state recorded');
@@ -211,11 +244,7 @@ function checkClaim(kind, clause, facts) {
   }
   const s = setupNamed(clause, facts) || mainSetup(facts);
   if (!s) return ok('unchecked', 'no setup on the bar to check it against');
-  if (kind === 'room') {
-    if (!s.room) return ok('unchecked', 'the room is unknown');
-    const short = s.room.inTheWay && s.room.inTheWay.R < s.room.needR;
-    return ok(Boolean(short), s.room.inTheWay ? `${s.name}: ${s.room.inTheWay.name} at ${s.room.inTheWay.R}R, it needs ${s.room.needR}R` : `${s.name}: no level in its way`);
-  }
+  if (kind === 'room' || kind === 'no-room') return roomClaim(kind, clause, s, ok);
   if (kind === 'mixed' || kind === 'counter') {
     if (!s.alignment || s.alignment === 'unknown') return ok('unchecked', 'the read is unknown');
     return ok(s.alignment === kind, `${s.name} ${s.direction}: ${s.alignment}`);
@@ -223,6 +252,40 @@ function checkClaim(kind, clause, facts) {
   // no-confluence: a fact check only; none "changes nothing alone" (step 6), so it is never a ground to skip.
   if (!s.confluence) return ok('unchecked', 'confluence not recorded');
   return ok(s.confluence.with.length === 0, s.confluence.with.length ? `${s.name} with ${s.confluence.with.join(', ')}` : `${s.name}: none with it`);
+}
+
+const RNUM = '(\\d+(?:\\.\\d+)?)R';
+/**
+ * A room claim: negative words ("insufficient room") say the room is short; numbers say what they say: a distance and
+ * a need ("0.35R vs 2R needed": short when the distance is under the need, else enough), a distance alone (checked
+ * against the first level in its way), a need alone (against the R it needs). Nothing readable: unchecked.
+ */
+function roomClaim(kind, clause, s, ok) {
+  const pick = res => res.map(r => new RegExp(r, 'i').exec(clause)).find(Boolean);
+  const x = kind === 'room' ? pick([`first level (?:is )?(?:at )?${RNUM}`, `${RNUM} (?:away|vs)`, `room (?:of |to )?${RNUM}`]) : null;
+  const y = kind === 'room' ? pick([`need(?:s)? ${RNUM}`, `vs ${RNUM}`, `${RNUM} (?:needed|required)`]) : null;
+  const dist = x ? Number(x[1]) : null;
+  const need = y ? Number(y[1]) : null;
+  const asserts = kind === 'no-room' || (dist !== null && need !== null && dist < need) ? 'short' : dist !== null && need !== null ? 'enough' : dist !== null ? 'distance' : need !== null ? 'need' : null;
+  const res = (check, why) => ({ ...ok(check, why), kind: asserts === 'short' ? 'no-room' : 'room', asserts });
+  if (!asserts) return res('unchecked', 'no room figure to read');
+  if (!s.room) return res('unchecked', 'the room is unknown');
+  const way = s.room.inTheWay;
+  const fact = way ? `${s.name}: ${way.name} at ${way.R}R, it needs ${s.room.needR}R` : `${s.name}: no level in its way, it needs ${s.room.needR}R`;
+  const short = Boolean(way && way.R < s.room.needR);
+  if (asserts === 'short') return res(short, fact);
+  if (asserts === 'enough') return res(!short, fact);
+  if (asserts === 'need') return res(need === s.room.needR, fact);
+  return way ? res(Math.abs(dist - way.R) <= Math.max(0.05, 0.1 * way.R), fact) : res('unchecked', fact);
+}
+
+// Claims about a setup: on a bar with none (or about a side none is on) they had no bearing on the decision.
+const SETUP_KINDS = new Set(['trend-blocks', 'no-reversal-fired', 'room', 'no-room', 'mixed', 'counter', 'no-confluence']);
+function incidental(c, facts) {
+  if (!facts.scanned || !SETUP_KINDS.has(c.kind)) return false;
+  if (!facts.setups.length) return true;
+  if (c.kind === 'trend-blocks' && c.sides) return !c.sides.some(x => facts.setups.some(st => st.direction === x));
+  return c.kind === 'no-reversal-fired' && !facts.setups.some(st => st.style === 'reversal');
 }
 
 /** Every clause of the result checked: { stated, claims, judgment, unparsed, status: none|confirmed|false|unchecked }. */
@@ -237,10 +300,11 @@ function checkReasons(text, facts) {
     // A clause the narrower kinds explain is not also a trend or nothing-fired claim.
     // (an "or failed" clause is not a trend claim, "no reversal strategies" not a nothing-fired one, "until an
     // attempt is started" not an entry block).
-    const drop = new Set([...(kinds[0] === 'nothing-fired' ? ['trend-blocks'] : []), ...(kinds.includes('no-reversal-fired') ? ['nothing-fired'] : []), ...(kinds.includes('no-attempt') ? ['entry-block'] : [])]);
+    const drop = new Set([...(kinds[0] === 'nothing-fired' ? ['trend-blocks'] : []), ...(kinds.includes('no-reversal-fired') ? ['nothing-fired'] : []), ...(kinds.includes('no-attempt') ? ['entry-block'] : []), ...(kinds.includes('no-room') ? ['room'] : [])]);
     const list = kinds.filter(k => !drop.has(k));
     for (const k of list) {
-      const x = checkClaim(k, c, facts);
+      const y0 = checkClaim(k, c, facts);
+      const x = { ...y0, incidental: incidental(y0, facts) };
       // The same claim twice (two clauses saying it) counts once.
       if (!claims.some(y => y.kind === x.kind && y.check === x.check && y.why === x.why)) claims.push(x);
     }
@@ -257,18 +321,19 @@ function checkReasons(text, facts) {
 // Classification
 
 // Claims that, when true, are grounds to skip (a mechanical step's no trade); no-confluence and mixed alone are not.
-const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'room', 'counter', 'entry-block']);
+const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'no-room', 'counter', 'entry-block']);
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
   const act = label.teacher ? label.teacher.action : null;
   const why = [];
   const out = (category, agrees) => ({ category, agrees, why });
-  const falseReason = reasons.claims.some(x => x.check === false);
+  // A false claim that had no bearing on the decision (incidental) is reported, never the category.
+  const falseReason = reasons.claims.some(x => x.check === false && !x.incidental);
   const notes = (label.clone && label.clone.reasons) || [];
   if (label.cycleFailed || notes.some(r => r === 'no cycle log' || r === 'unattributed order')) return why.push(label.cycleFailed || 'the cycle\'s orders are unknown'), out('unchecked', null);
   if (label.decision === 'in-trade') {
-    if (act === 'exit') return why.push('closed before the plan\'s exit (stop, target, trail, end of day)'), out('early close', false);
+    if (act === 'exit') return earlyClose(label, facts, why, out);
     if (act === 'hold') return why.push('held to the plan'), out(falseReason ? 'wrong stated reason' : 'right', true);
     return why.push(`${act} in a trade: judgment`), out('unchecked', null);
   }
@@ -279,14 +344,16 @@ function classify(label, facts, expected, reasons) {
     const same = facts.setups.filter(s => s.direction === act && s.candidate);
     const other = facts.setups.filter(s => s.direction !== act && s.candidate);
     // The trend rule for the setup it traded (a policy's component), else for the strategy it named.
-    const own = facts.setups.find(s => s.name === o.setup && s.direction === act);
+    const own = facts.setups.find(s => (s.name === o.setup || s.component === o.setup) && s.direction === act);
+    const ownOther = facts.setups.some(s => (s.name === o.setup || s.component === o.setup) && s.direction !== act);
     const against = own ? own.style !== 'reversal' && own.trendAllows === false : style === 'trend' && facts.trendRule[act] === false;
     if (style === 'manual') return why.push('a manual strategy: its trigger is the model\'s'), out('unchecked', null);
-    if ((!same.length && other.length) || against) return why.push(against ? `the trend rule blocks ${act}s` : `the setup was ${other[0].direction}`), out('wrong-side entry', false);
-    if (expected.decision === 'unchecked') return why.push(`expected unchecked (step ${expected.decidedBy})`), out('unchecked', null);
+    if ((!own && ownOther) || (!same.length && other.length) || against) return why.push(against ? `the trend rule blocks ${act}s` : `the setup was ${other[0].direction}`), out('wrong-side entry', false);
+    if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
     const size = num((label.teacher.size || {}).contracts) || num(o.size);
     if (expected.ceiling === 0) return why.push(`the order says no trade (${expected.decidedBy === 'no setup' ? 'no setup' : `step ${expected.decidedBy}`})`), out('bad size', false);
     if (expected.ceiling !== null && size !== null && size > expected.ceiling) return why.push(`${size} over the ceiling ${expected.ceiling}`), out('bad size', false);
+    if (expected.couldSkip && expected.couldSkip.length) return why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`), out('unchecked', null);
     if (expected.ceiling === null || size === null) why.push('the size ceiling is unknown (no verdict size): side checked only');
     return out(falseReason ? 'wrong stated reason' : 'right', true);
   }
@@ -294,6 +361,10 @@ function classify(label, facts, expected, reasons) {
   // A skip (or standing aside with nothing to take).
   if (expected.decision === 'no-trade') return out(falseReason ? 'wrong stated reason' : 'right', true);
   if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
+  if (expected.couldSkip && expected.couldSkip.length) {
+    why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`);
+    return out(falseReason ? 'wrong stated reason' : 'unchecked', null);
+  }
   const grounds = reasons.claims.filter(x => x.check === true && GROUNDS.has(x.kind));
   const judged = reasons.judgment.length > 0 || reasons.claims.some(x => x.check === 'unchecked');
   if (grounds.length) return why.push(`a true ground the facts missed: ${grounds.map(x => x.kind).join(', ')}`), out('unchecked', null);
@@ -301,6 +372,28 @@ function classify(label, facts, expected, reasons) {
   if (reasons.unparsed.length && !falseReason) return why.push('its reasons are not parsed'), out('unchecked', null);
   why.push(falseReason ? 'its grounds are false' : 'no ground stated');
   return out('excessive abstention', false);
+}
+
+/**
+ * An exit the model sent in a trade. Early close only when the plan's exit is known not reached: the trade's best was
+ * under the trail's activation (else the target) and it was neither a partial exit (a scale-out), past the time stop,
+ * nor a give-back of most of a large best (1R or more): those are the plan's management, judgment.
+ */
+function earlyClose(label, facts, why, out) {
+  const o = label.outcome || {};
+  const notes = (label.clone && label.clone.reasons) || [];
+  const judged = msg => (why.push(msg), out('unchecked', null));
+  if (notes.includes('partial exit') || (label.teacher.orders || []).some(x => x.tool === 'partial_close_position')) return judged('a partial exit (scale-out): judgment');
+  const plan = facts.planOf ? facts.planOf(o.setup) : null;
+  if (!plan || num(o.mfeR) === null || num(o.r) === null) return judged('the plan or the trade\'s excursion is unknown');
+  const held = o.entryTime ? (Date.parse(facts.t) - Date.parse(o.entryTime)) / 60000 : null;
+  if (plan.maxBars && held !== null && held >= plan.maxBars * plan.minutes) return judged(`past the time stop (${plan.maxBars} bars)`);
+  if (o.mfeR >= 1 && o.r <= o.mfeR / 2) return judged(`gave back most of a ${o.mfeR}R best`);
+  const reach = plan.trailActivateR ?? plan.targetR;
+  if (reach === null || reach === undefined) return judged('the plan has no R exit to compare');
+  if (o.mfeR >= reach) return judged(`the plan's ${reach}R was reached: managing it is judgment`);
+  why.push(`closed at ${o.r}R, its best ${o.mfeR}R, before the plan's ${reach}R`);
+  return out('early close', false);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -365,6 +458,8 @@ function factsAt(label, rec, { home, tf, accounts }) {
     t: label.t, et: etClock(t), window: { name: win.name, until: etClock(win.until.getTime()), et: etClock(t), entriesAllowed: !NO_ENTRY.test(win.name) },
     scanned: false, setups: [], trendRule: { prevailing: null, long: null, short: null }, attempt: null, rebuilt: false,
     styleOf: name => { const s = rec.byName.get(name); return s ? (s.signal === 'manual' ? 'manual' : s.mtf || null) : null; },
+    // A strategy's exit plan and bar size (its max_bars count in its own bars).
+    planOf: name => { const s = rec.byName.get(name); return s && s.risk ? { ...exitPlan(s), minutes: parseInt(s.timeframe, 10) || tf } : null; },
   };
   const scan = before(rec.scans.get(`${label.symbol}|${label.barT}`), t);
   if (scan && Array.isArray(scan.results)) {
@@ -449,17 +544,19 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       continue;
     }
     const facts = factsAt(label, rec, { home, tf, accounts });
-    const expected = label.decision === 'in-trade' ? { decision: 'hold', ceiling: null, decidedBy: 'in a trade', setup: null, steps: [], judgment: [] } : expectedDecision(facts);
+    const act = label.teacher ? label.teacher.action : null;
+    const expected = label.decision === 'in-trade' ? { decision: 'hold', ceiling: null, decidedBy: 'in a trade', ...NONE }
+      : act === 'long' || act === 'short' ? expectedForEntry(facts, label.teacher.setup, act) : expectedDecision(facts);
     const reasons = checkReasons(label.result, facts);
     const verdict = classify(label, facts, expected, reasons);
     const o = label.outcome;
-    const { styleOf: _styleOf, ...plainFacts } = facts;
+    const { styleOf: _styleOf, planOf: _planOf, ...plainFacts } = facts;
     records.push({
       v: VERSION, key: label.key, t: label.t, day: label.day, symbol: label.symbol, barT: label.barT, decision: label.decision,
       facts: { ...plainFacts, setups: facts.setups.map(({ verdictCombine: _vc, ...s }) => s) },
       expected,
       actual: { action: label.teacher ? label.teacher.action : null, setup: label.teacher ? label.teacher.setup : null, size: label.teacher && label.teacher.size ? label.teacher.size.contracts : null, gate: label.gate, result: label.result },
-      reasons, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
+      reasons, incidentalFalse: reasons.claims.filter(c => c.check === false && c.incidental).length, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
       trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason } : null,
       counterfactual: label.counterfactualFor === 'skip' && label.counterfactual ? { strategy: label.counterfactual.strategy, direction: label.counterfactual.direction, simulated: label.counterfactual.simulated, result: label.counterfactual.result, R: label.counterfactual.R, net: label.counterfactual.net, reason: label.counterfactual.reason } : null,
       pacing: facts.attempt,
@@ -481,17 +578,22 @@ function tally(records, keyOf) {
   return Object.fromEntries(Object.keys(out).sort().map(k => [k, out[k]]));
 }
 
-const stepKey = r => (typeof r.expected.decidedBy === 'number' ? `${r.expected.decidedBy} ${STEPS[r.expected.decidedBy - 1]}` : r.expected.decidedBy);
+const stepKey = r => (typeof r.expected.decidedBy === 'number' ? `${r.expected.decidedBy} ${STEPS[r.expected.decidedBy - 1]}`
+  : r.expected.decidedBy === 'take' && r.expected.couldSkip && r.expected.couldSkip.length ? `take or judgment (step ${r.expected.couldSkip.join(', ')})` : r.expected.decidedBy);
 
 function summarize(records, { runId, unfinished, notScored, labels }) {
   const categories = Object.fromEntries(CATEGORIES.map(c => [c, records.filter(r => r.category === c).length]));
   const claims = records.flatMap(r => r.reasons.claims);
   const byKind = {};
   for (const c of claims) {
-    const row = byKind[c.kind] || (byKind[c.kind] = { true: 0, false: 0, unchecked: 0 });
+    const row = byKind[c.kind] || (byKind[c.kind] = { true: 0, false: 0, unchecked: 0, incidentalFalse: 0 });
     row[c.check === true ? 'true' : c.check === false ? 'false' : 'unchecked'] += 1;
+    if (c.check === false && c.incidental) row.incidentalFalse += 1;
   }
-  const checkable = records.filter(r => r.reasons.claims.some(x => x.check === true || x.check === false));
+  // Decision-relevant claims, and the incidental ones (about a setup the bar didn't have), rated apart.
+  const relevant = c => !c.incidental && (c.check === true || c.check === false);
+  const checkable = records.filter(r => r.reasons.claims.some(relevant));
+  const checkableInc = records.filter(r => r.reasons.claims.some(x => x.incidental && (x.check === true || x.check === false)));
   const trades = records.filter(r => r.trade && r.decision === 'flat').map(r => ({ t: r.t, setup: r.actual.setup, side: r.trade.side, size: r.trade.size, result: r.trade.result, r: r.trade.r, net: r.trade.net, category: r.category }));
   const skipped = records.filter(r => r.decision === 'flat' && r.actual.action === 'none' && r.facts.setups.some(s => s.candidate))
     .map(r => ({ t: r.t, setup: r.expected.setup, expected: r.expected.decision, category: r.category, counterfactual: r.counterfactual }));
@@ -512,7 +614,9 @@ function summarize(records, { runId, unfinished, notScored, labels }) {
     reasons: {
       claims: claims.length, true: claims.filter(c => c.check === true).length, false: claims.filter(c => c.check === false).length, unchecked: claims.filter(c => c.check === 'unchecked').length,
       judgmentClauses: records.reduce((a, r) => a + r.reasons.judgment.length, 0), unparsedClauses: records.reduce((a, r) => a + r.reasons.unparsed.length, 0),
-      wrongReasonRate: rate(checkable.filter(r => r.reasons.claims.some(x => x.check === false)).length, checkable.length), byKind: Object.fromEntries(Object.keys(byKind).sort().map(k => [k, byKind[k]])),
+      falseIncidental: claims.filter(c => c.check === false && c.incidental).length,
+      wrongReasonRate: rate(checkable.filter(r => r.reasons.claims.some(x => x.check === false && !x.incidental)).length, checkable.length),
+      incidentalWrongRate: rate(checkableInc.filter(r => r.reasons.claims.some(x => x.check === false && x.incidental)).length, checkableInc.length), byKind: Object.fromEntries(Object.keys(byKind).sort().map(k => [k, byKind[k]])),
     },
     trades: { list: trades, n: trades.length, wins: trades.filter(x => x.result === 'win').length, losses: trades.filter(x => x.result === 'loss').length, sumR: sum(trades, 'r'), net: sum(trades, 'net') },
     skipped: { list: skipped, n: skipped.length, simulated: cfs.length, wouldWin: cfs.filter(c => c.result === 'win').length, wouldLose: cfs.filter(c => c.result === 'loss').length, sumR: sum(cfs, 'R'), net: sum(cfs, 'net') },
@@ -537,14 +641,14 @@ function toMarkdown(s, records) {
     '## Agreement by strategy', '', head, ...Object.entries(s.agreement.byStrategy).map(([k, x]) => row(k, x)), '',
     '## Failure categories', '', '| category | decisions |', '| --- | ---: |', ...Object.entries(s.categories).map(([k, v]) => `| ${k} | ${v} |`), '',
     '## Stated reasons', '',
-    `${s.reasons.claims} checkable claims: ${s.reasons.true} true, ${s.reasons.false} false, ${s.reasons.unchecked} unchecked; ${s.reasons.judgmentClauses} judgment clauses, ${s.reasons.unparsedClauses} unparsed. Wrong-reason rate ${pct(s.reasons.wrongReasonRate)} of the decisions with a checked claim.`, '',
-    '| claim | true | false | unchecked |', '| --- | ---: | ---: | ---: |', ...Object.entries(s.reasons.byKind).map(([k, x]) => `| ${k} | ${x.true} | ${x.false} | ${x.unchecked} |`), '',
+    `${s.reasons.claims} checkable claims: ${s.reasons.true} true, ${s.reasons.false} false (${s.reasons.falseIncidental} incidental: about a setup the bar didn't have), ${s.reasons.unchecked} unchecked; ${s.reasons.judgmentClauses} judgment clauses, ${s.reasons.unparsedClauses} unparsed. Wrong-reason rate ${pct(s.reasons.wrongReasonRate)} of the decisions with a decision-relevant checked claim; incidental ${pct(s.reasons.incidentalWrongRate)}.`, '',
+    '| claim | true | false | of which incidental | unchecked |', '| --- | ---: | ---: | ---: | ---: |', ...Object.entries(s.reasons.byKind).map(([k, x]) => `| ${k} | ${x.true} | ${x.false} | ${x.incidentalFalse} | ${x.unchecked} |`), '',
     '## Trades and skipped setups', '',
     `${s.trades.n} trades: ${s.trades.wins} won, ${s.trades.losses} lost, ${s.trades.sumR}R, $${s.trades.net}. ${s.skipped.n} skipped setups: ${s.skipped.simulated} simulated, ${s.skipped.wouldWin} would have won, ${s.skipped.wouldLose} lost, ${s.skipped.sumR}R, $${s.skipped.net}.`, '',
     '## Account by day', '', '| day | decisions | agree | disagree | balance | day P&L | floor | cushion | daily headroom | balance check |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
     ...s.days.map(d => `| ${d.day} | ${d.decisions} | ${d.agree} | ${d.disagree} | ${cell(d.balance)} | ${cell(d.dayPnl)} | ${cell(d.floor)} | ${cell(d.cushion)} | ${cell(d.dailyHeadroom)} | ${cell(d.balanceCheck)} |`), '',
     '## Flagged decisions', '', flagged.length ? '| time (ET) | category | expected | actual | why | false reasons |\n| --- | --- | --- | --- | --- | --- |' : 'None.',
-    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}`).join('; '))} |`),
+    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
     '',
   ].filter(x => x !== null).join('\n');
 }
@@ -572,7 +676,7 @@ function writeScorecard(runDir, { root = null, strategies = [], accounts = [], b
 
 const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.overall.rate)} (${s.agreement.overall.agree} agree, ${s.agreement.overall.disagree} disagree, ${s.agreement.overall.unchecked} unchecked)\n`
   + `categories: ${Object.entries(s.categories).map(([k, v]) => `${k} ${v}`).join(', ')}\n`
-  + `reasons: ${s.reasons.claims} claims, ${s.reasons.false} false; wrong-reason rate ${pct(s.reasons.wrongReasonRate)}\n`
+  + `reasons: ${s.reasons.claims} claims, ${s.reasons.false} false (${s.reasons.falseIncidental} incidental); wrong-reason rate ${pct(s.reasons.wrongReasonRate)} (incidental ${pct(s.reasons.incidentalWrongRate)})\n`
   + `trades ${s.trades.n} (${s.trades.sumR}R, $${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`;
 
-module.exports = { VERSION, CATEGORIES, STEPS, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, classify, clausesOf };
+module.exports = { VERSION, CATEGORIES, STEPS, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf };
