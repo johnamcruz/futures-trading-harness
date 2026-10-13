@@ -84,13 +84,24 @@ test('schedule: the frozen splits and Recent are blocks of their own roles', () 
   assert.strictEqual(roleOf('2025-06-30').role, 'oos');
   assert.strictEqual(roleOf('2026-07-01').role, 'walk-forward');
   assert.strictEqual(windowMs('oos').to, ms(RECENT[0]), 'recent starts where oos ends');
-  // The one recorded look at Recent: the June 1-5, 2026 LLM replay, adherence only.
-  assert.strictEqual(RECORDED_LOOKS.length, 1);
+  // The recorded looks: the June 1-5, 2026 LLM replay at Recent (adherence only), and the 2024 flow parity
+  // check at select and oos (it decided recalibration only).
+  assert.strictEqual(RECORDED_LOOKS.length, 3);
   const look = RECORDED_LOOKS[0];
   assert.deepStrictEqual([look.block, look.from, look.to], ['recent', '2026-06-01', '2026-06-06']);
-  assert.strictEqual(roleOf(look.from).role, 'recent');
   assert.match(look.use, /adherence only/);
-  assert.ok(Object.isFrozen(RECORDED_LOOKS) && Object.isFrozen(look) && Object.isFrozen(RECENT));
+  assert.deepStrictEqual(RECORDED_LOOKS.slice(1).map(l => [l.block, l.from, l.to]), [
+    ['select', '2024-03-04', '2024-06-22'],
+    ['oos', '2024-08-01', '2024-08-10'],
+  ]);
+  for (const l of RECORDED_LOOKS) {
+    assert.strictEqual(roleOf(l.from).role, l.block, `${l.from} is in ${l.block}`);
+    assert.ok(unitContaining(l.from, l.to), `${l.from}..${l.to} lies in one unit`);
+    assert.strictEqual(unitContaining(l.from, l.to).role, l.block);
+    assert.ok(Object.isFrozen(l));
+  }
+  for (const l of RECORDED_LOOKS.slice(1)) assert.match(l.use, /recalibration only, no threshold value/);
+  assert.ok(Object.isFrozen(RECORDED_LOOKS) && Object.isFrozen(RECENT));
 });
 
 test('schedule: half-years alternate from 2026-H2 = walk-forward, by rule', () => {

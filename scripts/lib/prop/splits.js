@@ -60,11 +60,20 @@ const RESERVE_MIN_MONTHS = 12;
 const ROLES = Object.freeze(['train', 'select', 'oos', 'recent', 'walk-forward', 'reserve']);
 const PARTS = Object.freeze(['tuning', 'held-out']);
 
-/** Looks already taken at reserved months, kept so the ledger starts true. */
+/** Looks already taken at held-out or reserved months, kept so the ledger starts true. */
 const RECORDED_LOOKS = Object.freeze([
   Object.freeze({
     block: 'recent', from: '2026-06-01', to: '2026-06-06',
     what: 'LLM replay, June 1-5 2026', use: 'adherence only, no candidate claims (R22)',
+  }),
+  // The flow parity check: Mar 4-22, Apr 8-19, May 20-24 and Jun 6-21, 2024 (select), Aug 1-9, 2024 (oos).
+  Object.freeze({
+    block: 'select', from: '2024-03-04', to: '2024-06-22',
+    what: 'flow parity check', use: 'decided recalibration only, no threshold value',
+  }),
+  Object.freeze({
+    block: 'oos', from: '2024-08-01', to: '2024-08-10',
+    what: 'flow parity check', use: 'decided recalibration only, no threshold value',
   }),
 ]);
 

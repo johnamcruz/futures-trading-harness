@@ -184,8 +184,9 @@ backtest (`backtest.js`) can't: `backtest.js fetch` gets 1-minute bars, and
 the 3-minute bars the backtester builds from them carry no broker fields, so
 there only the expansion branch confirms. That holds until the fast
 backtester pulls its bars from the replay broker (a planned follow-up).
-±0.2 is a starting value: calibrate it in replays before trusting the flow
-branch.
+±0.2 is a starting value, set for the former bar-shape estimate: the
+learned-rulebook design calibrates it from real flow on history
+(`docs/LEARNED-RULEBOOK.md`, R34) before the flow branch is trusted.
 
 ### Traded through a policy strategy
 
