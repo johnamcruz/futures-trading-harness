@@ -142,6 +142,13 @@ function readField(bar, path) {
   return typeof v === 'number' && Number.isFinite(v) ? v : NaN;
 }
 
+/** A field's value `shift` bars before bar i, as readField reads it; null when missing (or before the first bar). */
+function fieldAt(bars, path, shift, i) {
+  const j = i - shift;
+  const v = j >= 0 && j < bars.length ? readField(bars[j], path) : NaN;
+  return Number.isFinite(v) ? v : null;
+}
+
 /**
  * The broker field values a rule reads at bar i (the decision bar): each field() it names, by its path (a
  * look-back by "path[n]", read n bars earlier), as readField reads it, a missing one null. `rule` is the
@@ -154,9 +161,7 @@ function valuesFor(rule, bars, i = bars.length - 1) {
   for (const text of texts(rule)) {
     for (const m of text.matchAll(new RegExp(FIELD_RE.source, 'g'))) {
       const shift = Number(m[3] || 0);
-      const j = i - shift;
-      const v = j >= 0 && j < bars.length ? readField(bars[j], m[2]) : NaN;
-      out[shift ? `${m[2]}[${shift}]` : m[2]] = Number.isFinite(v) ? v : null;
+      out[shift ? `${m[2]}[${shift}]` : m[2]] = fieldAt(bars, m[2], shift, i);
     }
   }
   return out;
@@ -578,11 +583,62 @@ function holds(cond, get, i) {
   }
 }
 
+/** The field() factors a compiled condition or group reads, in order: [{ path, shift }]. */
+function fieldReads(c) {
+  if (c.group) return c.items.flatMap(fieldReads);
+  const reads = [...c.left, ...c.right].flatMap(t => t.factors)
+    .filter(f => f.kind === 'series' && f.key.startsWith(FIELD_PREFIX))
+    .map(f => ({ path: f.key.slice(FIELD_PREFIX.length), shift: f.shift || 0 }));
+  // A cross compares this bar with the one before: both are what it read.
+  return c.op.startsWith('crosses_') ? reads.flatMap(r => [r, { ...r, shift: r.shift + 1 }]) : reads;
+}
+
+/**
+ * What a condition's fields were on bar i (its look-back [n] read n bars back), keyed as the rule writes them
+ * (`field("a.b")`, `field("a.b")[1]`): the number, a flag as 1 or 0, null when missing. null for a rule that reads none.
+ * What the scan shows; valuesFor (above) is the session record's, by a strategy's rule text and keyed by path.
+ * Both read through fieldAt.
+ */
+function fieldValues(c, bars, i) {
+  const reads = fieldReads(c);
+  if (!reads.length) return null;
+  const out = {};
+  for (const { path, shift } of reads) out[`field("${path}")${shift ? `[${shift}]` : ''}`] = fieldAt(bars, path, shift, i);
+  return out;
+}
+
+// What the model is shown of a strategy's field values on a bar: at most this many (the rest counted).
+const VALUES_PER_STRATEGY = 6;
+
+/** A value as the scan shows it: 4 significant digits, 'missing' when it has none. */
+const valueText = v => (Number.isFinite(v) ? String(Number(v.toPrecision(4))) : 'missing');
+
+/**
+ * A rule result's field values as text, `field("a.b")=0.42, field("a.b")[1]=missing` ('' when it has none), at most `cap`
+ * of them (the rest counted): what a strategy's own document says the field means is its meaning.
+ */
+function valuesText(values, cap = Infinity) {
+  const list = values && typeof values === 'object' ? Object.entries(values) : [];
+  const shown = list.slice(0, cap).map(([k, v]) => `${k}=${valueText(v)}`);
+  return list.length > shown.length ? [...shown, `+${list.length - shown.length} more`].join(', ') : shown.join(', ');
+}
+
+/** The values of a held group's parts that held, merged (each once); null when none of them reads a field. */
+function heldValues(parts) {
+  const held = parts.filter(x => x.ok && x.values);
+  return held.length ? Object.assign({}, ...held.map(x => x.values)) : null;
+}
+
+/** The field values a side's rule results read, merged (each once), as valuesText: what a fired side saw. */
+const sideValuesText = (results, cap = VALUES_PER_STRATEGY) => valuesText(Object.assign({}, ...(Array.isArray(results) ? results : []).map(r => (r && r.values) || {})), cap);
+
 /**
  * Evaluate compiled rules on the last bar. Returns { direction, long, short }
- * where long/short list each condition with its result (for explanations).
+ * where long/short list each condition with its result (for explanations): { rule, ok }, plus `missing` when a
+ * value isn't there yet, `parts` for a group, and `values` (fieldValues) for one that reads a broker's field
+ * (`values: false` leaves them out; they never change a result's direction or ok).
  */
-function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: source = null } = {}) {
+function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: source = null, values: withValues = true } = {}) {
   const get = source || seriesSource(bars, params);
   const i = index;
   const missing = c => [c.left, c.right].some(e => valueAt(e, get, i) === null)
@@ -593,10 +649,16 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
       const parts = c.items.map(result);
       const ok = c.group === 'any' ? parts.some(x => x.ok) : parts.every(x => x.ok);
       // Failing with a part that has no value yet: say so, as for a single condition.
-      return !ok && parts.some(x => x.missing) ? { rule: c.text, ok, missing: true, parts } : { rule: c.text, ok, parts };
+      const out = !ok && parts.some(x => x.missing) ? { rule: c.text, ok, missing: true, parts } : { rule: c.text, ok, parts };
+      // A group that holds shows what its holding parts read (an any's failed branch decided nothing); one that
+      // fails, every field it reads.
+      const values = withValues && (ok ? heldValues(parts) : fieldValues(c, bars, i));
+      return values ? { ...out, values } : out;
     }
     const ok = holds(c, get, i);
-    return ok || !missing(c) ? { rule: c.text, ok } : { rule: c.text, ok, missing: true };
+    const out = ok || !missing(c) ? { rule: c.text, ok } : { rule: c.text, ok, missing: true };
+    const values = withValues && fieldValues(c, bars, i);
+    return values ? { ...out, values } : out;
   };
   const side = conds => conds.map(result);
   const long = side(compiled.long);
@@ -606,4 +668,4 @@ function evaluateRules(compiled, bars, params, { index = bars.length - 1, get: s
   return { direction: longFires && !shortFires ? 'long' : shortFires && !longFires ? 'short' : null, long, short };
 }
 
-module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, valuesFor, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };
+module.exports = { OPS, FUNCS, NAMES, readField, fieldPathsIn, valuesFor, fieldValues, valuesText, sideValuesText, VALUES_PER_STRATEGY, MAX_RULES_PER_SIDE, compileCondition, compileItem, compileExpression, valueAt, compileRules, evaluateRules, seriesSource, causalLevels };

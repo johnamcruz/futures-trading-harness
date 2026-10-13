@@ -128,3 +128,29 @@ test('the operations: the scripts\' full forms by default, the tools\' compact f
   assert.deepStrictEqual(JSON.parse(one), JSON.parse(snap));
   assert.ok(snap.split('\n').length > 50 && one.split('\n').length === 2);
 });
+
+test('scanSummary: a rule that reads a broker field shows its values on the bar, for a candidate and a near miss, at most 6 per strategy', () => {
+  const v = (rule, ok, values) => ({ rule, ok, values });
+  const fired = { ...RESULTS[0], name: 'flow', rules: { long: [v('field("a.b") >= 0.3', true, { 'field("a.b")': 0.41666 }), v('field("a.b")[1] < 0.3', true, { 'field("a.b")[1]': 0.1, 'field("a.b")': 0.41666 }), { rule: 'close > 0', ok: true }], short: [] } };
+  const text = scanSummary([fired], { symbol: 'MNQ', specOf });
+  assert.match(text, /\n {2}flow long \| .* \| values: field\("a\.b"\)=0\.4167, field\("a\.b"\)\[1\]=0\.1\n/, 'each field once, 4 significant digits');
+  const miss = { ...RESULTS[2], name: 'miss', direction: null, candidate: false, rules: { long: [v('field("x.y") > 0', false, { 'field("x.y")': null }), { rule: 'close > open', ok: false }, v('field("x.big") > 0', true, { 'field("x.big")': 1234567 })], short: [v('field("x.flag") >= 1', false, { 'field("x.flag")': 0 })] } };
+  assert.match(whyNot(miss), /no rule set fired \(long: field\("x\.y"\) > 0 \[field\("x\.y"\)=missing\], close > open; short: field\("x\.flag"\) >= 1 \[field\("x\.flag"\)=0\]\)/);
+  // A rule without a field shows nothing new; a candidate without one has no values part.
+  assert.doesNotMatch(scanSummary(RESULTS, { symbol: 'MNQ', specOf }), /values:|=missing|\[field/);
+  // The cap: past 6 values for a strategy, the rest are counted, not listed.
+  const many = { ...miss, rules: { long: Array.from({ length: 5 }, (_, k) => v(`field("p${k}") > 0`, false, { [`field("p${k}")`]: k, [`field("q${k}")`]: -k })), short: [] } };
+  const line = whyNot(many);
+  assert.strictEqual((line.match(/\)=-?\d/g) || []).length, 6);
+  assert.match(line, /field\("p3"\) > 0 \[\+2 more\]/);
+  // Past the budget, a rule's values are all counted, however far past it the strategy is.
+  const seven = Object.fromEntries(Array.from({ length: 7 }, (_, k) => [`field("s${k}")`, k]));
+  const over = { ...miss, rules: { long: [v('a', false, seven), v('b', false, { 'field("t0")': 1, 'field("t1")': 2, 'field("t2")': 3 })], short: [] } };
+  assert.match(whyNot(over), /a \[field\("s0"\)=0, [^\]]*field\("s5"\)=5, \+1 more\], b \[\+3 more\]\)/);
+  // The budget is the strategy's, across both sides: 4 long values leave 2 for the short side.
+  const both = { ...miss, rules: { long: many.rules.long.slice(0, 2), short: many.rules.long.slice(2, 4) } };
+  assert.strictEqual((whyNot(both).match(/\)=-?\d/g) || []).length, 6);
+  assert.match(whyNot(both), /short: field\("p2"\) > 0 \[field\("p2"\)=2, field\("q2"\)=-2\], field\("p3"\) > 0 \[\+2 more\]/);
+  const big = { ...fired, rules: { long: [v('x', true, Object.fromEntries(Array.from({ length: 9 }, (_, k) => [`field("f${k}")`, k / 3])))], short: [] } };
+  assert.match(scanSummary([big], { symbol: 'MNQ', specOf }), /values: field\("f0"\)=0, field\("f1"\)=0\.3333, .*field\("f5"\)=1\.667, \+3 more\n/);
+});

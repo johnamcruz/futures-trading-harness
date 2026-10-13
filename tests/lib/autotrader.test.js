@@ -650,6 +650,24 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
 });
 
+test('the fired line shows the field values a candidate\'s rules read on the bar; one without fields is unchanged', () => {
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
+  const bar = { t: '2026-10-08T14:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'MNQ' };
+  const rules = { short: [{ rule: 'field("a.b") >= 0.25', ok: true, values: { 'field("a.b")': 0.28571 } }, { rule: 'field("c") < 0', ok: true, values: { 'field("c")': -0.8191 } }], long: [{ rule: 'field("z") <= -0.25', ok: false, values: { 'field("z")': 9 } }] };
+  const base = { name: 'flow', status: 'active', candidate: true, direction: 'short', signal: 'rules', confluence: { with: [], against: [] }, record: 'live 1W/0L' };
+  const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/r');
+  const withValues = p.trade([{ symbol: 'MNQ', bar, scan: [{ ...base, rules }] }]);
+  assert.match(withValues, /MNQ fired on this bar \([^)]*\): flow short \(field\("a\.b"\)=0\.2857, field\("c"\)=-0\.8191\) \[flow live 1W\/0L\]\./);
+  const without = p.trade([{ symbol: 'MNQ', bar, scan: [{ ...base, rules: { short: rules.short.map(({ rule, ok }) => ({ rule, ok })), long: [] } }] }]);
+  assert.match(without, /: flow short \[flow live 1W\/0L\]\./);
+  assert.strictEqual(withValues.length - without.length, ' (field("a.b")=0.2857, field("c")=-0.8191)'.length, 'only the values are added');
+  assert.doesNotMatch(withValues, /field\("z"\)/, 'the other side\'s values are not the candidate\'s');
+  // At most 6 values per candidate; the rest are counted.
+  const many = { short: [{ rule: 'x', ok: true, values: Object.fromEntries(Array.from({ length: 8 }, (_, k) => [`field("f${k}")`, k])) }], long: [] };
+  assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [{ ...base, rules: many }] }]), /flow short \(field\("f0"\)=0, field\("f1"\)=1, field\("f2"\)=2, field\("f3"\)=3, field\("f4"\)=4, field\("f5"\)=5, \+2 more\) \[flow/);
+});
+
 test('the fired line: a paper strategy is marked, manage-only lists nothing, a policy\'s components point at its verdict', () => {
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });

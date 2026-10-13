@@ -217,7 +217,10 @@ again, except those its prompt gives under "Cached reports".
   `inTheWay`, `needR` and `blocked` in `m3` `candidates`: what the trend rule
   says for its side, the multi-timeframe read for its side, the first level
   in its way in its own R against the room it needs, confluence, the VWAP
-  side, the window). They are context, not a verdict: judge the setup by its
+  side, the window; `values`, also in the "fired on this bar" line: the
+  broker fields its fired side's rules read, on this bar (an `any(...)`
+  group's held branches only), where a field's meaning and units are in the
+  strategy's own document). They are context, not a verdict: judge the setup by its
   strategy's STRATEGY.md (`strategies_show`: its context filter and skip
   rules) and the rules below (the trend rule, the multi-timeframe table,
   its min R:R). A setup the trend rule allows, `aligned` for its side, with

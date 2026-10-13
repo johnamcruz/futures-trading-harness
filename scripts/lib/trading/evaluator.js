@@ -143,7 +143,7 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
     let ruleDetail = null;
     let stopDistance = null;
     if (s.signal === 'rules') {
-      const r = evaluateRules(s.compiledRules, bars, paramsOf(s), { index: i, get: rulesSource(s) });
+      const r = evaluateRules(s.compiledRules, bars, paramsOf(s), { index: i, get: rulesSource(s), values: describe });
       direction = r.direction;
       ruleDetail = { long: r.long, short: r.short };
     }

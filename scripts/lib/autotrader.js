@@ -24,6 +24,7 @@ const { et: etTime, etStamp } = require('./trading/session-context');
 const { documents, isOpencodeEvent } = require('./transcript');
 const opencode = require('./opencode');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
+const { sideValuesText } = require('./trading/rules');
 
 const DEFAULTS = {
   harness: 'qwen',
@@ -333,7 +334,7 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
-    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
+    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
   // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.

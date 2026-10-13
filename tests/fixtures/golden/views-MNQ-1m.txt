@@ -4,7 +4,7 @@ Scan of MNQ on the last closed bar (opened 2026-04-23T00:10:00.000Z): 3 strategi
 Candidates: none.
 Every strategy (name | status | timeframe | direction | candidate | why not):
   ofi | active | 1m | short | no | failed: mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)
-  ofi_absorption | active | 1m | - | no | no rule set fired (long: close + 0.25 * atr(20) >= close[5], field("flow.ofiTrade") > 0, close > close[1]; short: field("flow.windows.5.ofiTrade") >= 0.25)
+  ofi_absorption | active | 1m | - | no | no rule set fired (long: close + 0.25 * atr(20) >= close[5], field("flow.ofiTrade") > 0 [field("flow.ofiTrade")=-1], close > close[1]; short: field("flow.windows.5.ofiTrade") >= 0.25 [field("flow.windows.5.ofiTrade")=-0.423])
   prop_flow_1m | active | - | - | no | a policy strategy: the runner screens the setups of ofi, ofi_absorption
 One strategy's full result: name; every strategy's (large): detail true.
 --- market_snapshot ---
@@ -73,10 +73,10 @@ Detail by timeframe:
 --- strategies_scan (the runner's, compact) ---
 Scan of MNQ on the last closed bar (opened 2026-04-23T12:46:00.000Z): 3 strategies, 1 candidate. Regime range. Trend 4h unknown, 1h range, 15m range.
 Candidates:
-  ofi_absorption short | active, 1m, rules, mtf reversal | entryRef 26956.75, stop 11.681 pts = 47 ticks ($23.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none
+  ofi_absorption short | active, 1m, rules, mtf reversal | entryRef 26956.75, stop 11.681 pts = 47 ticks ($23.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none | values: field("flow.windows.5.ofiTrade")=0.286, field("flow.ofiTrade")=-0.819
 Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
 Every strategy (name | status | timeframe | direction | candidate | why not):
-  ofi | active | 1m | - | no | no rule set fired (long: field("flow.ofiTrade") >= 0.3, field("flow.windows.3.ofiTrade") >= 0.3, field("flow.windows.5.ofiTrade") >= 0.3, close > close[1], close > close[3], close >= close[5] + 0.5 * atr(20); short: field("flow.windows.3.ofiTrade") <= -0.3, field("flow.windows.5.ofiTrade") <= -0.3)
+  ofi | active | 1m | - | no | no rule set fired (long: field("flow.ofiTrade") >= 0.3 [field("flow.ofiTrade")=-0.819], field("flow.windows.3.ofiTrade") >= 0.3 [field("flow.windows.3.ofiTrade")=0.266], field("flow.windows.5.ofiTrade") >= 0.3 [field("flow.windows.5.ofiTrade")=0.286], close > close[1], close > close[3], close >= close[5] + 0.5 * atr(20); short: field("flow.windows.3.ofiTrade") <= -0.3 [field("flow.windows.3.ofiTrade")=0.266], field("flow.windows.5.ofiTrade") <= -0.3 [field("flow.windows.5.ofiTrade")=0.286])
   ofi_absorption | active | 1m | short | yes | -
   prop_flow_1m | active | - | - | no | a policy strategy: the runner screens the setups of ofi, ofi_absorption
 One strategy's full result: name; every strategy's (large): detail true.
@@ -94,7 +94,7 @@ Summary (MNQ 1m, 08:47 ET):
 - Room above (R = the reference stop): round number 27000 (43.25 pts, 7.41R), 15m swing high 27079.75 (123 pts, 21.06R).
 - Room below (R = the reference stop): 15m swing low 26941.75 (15 pts, 2.57R), 15m swing low 26916.25 (40.5 pts, 6.93R), round number 26900 (56.75 pts, 9.72R).
 - Setups:
-  - ofi_absorption short: a reversal strategy, no prevailing trend read; multi-timeframe read for a short: mixed; first level in its way: 15m swing low at 1.28R; it needs 2R (the level comes first); confluence: none with it; the VWAP unknown. Stop 11.68 pts (its own 1R); needs 2R of room; levels ahead in its R: 15m swing low 26941.75 (15 pts, 1.28R), 15m swing low 26916.25 (40.5 pts, 3.47R), round number 26900 (56.75 pts, 4.86R).
+  - ofi_absorption short: a reversal strategy, no prevailing trend read; multi-timeframe read for a short: mixed; first level in its way: 15m swing low at 1.28R; it needs 2R (the level comes first); confluence: none with it; the VWAP unknown. Stop 11.68 pts (its own 1R); needs 2R of room; levels ahead in its R: 15m swing low 26941.75 (15 pts, 1.28R), 15m swing low 26916.25 (40.5 pts, 3.47R), round number 26900 (56.75 pts, 4.86R). Values: field("flow.windows.5.ofiTrade")=0.286, field("flow.ofiTrade")=-0.819.
 
 Detail by timeframe:
 [m3] version m3@2026-04-23T12:47:00.000Z, valid until 08:48 ET
@@ -129,7 +129,7 @@ Detail by timeframe:
   sessionProfile: null
   priorProfileNodes: null
   location: {"priorValue":null,"sessionValue":null,"initialBalance":null,"priorRthRange":null}
-  candidates: [{"name":"ofi_absorption","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":26956.75,"stopPoints":11.68,"minRR":2,"exit":{"trailActivateR":2,"trailGivebackR":0.5,"targetR":null,"maxBars":null},"target":null,"inTheWay":{"name":"15m swing low","price":26941.75,"points":15,"R":1.28},"ahead":[{"name":"15m swing low","price":26941.75,"points":15,"R":1.28},{"name":"15m swing low","price":26916.25,"points":40.5,"R":3.47},{"name":"round number","price":26900,"points":56.75,"R":4.86}],"needR":2,"trendRule":"reversal","alignment":"mixed","vwapSide":null,"facts":["a reversal strategy, no prevailing trend read","multi-timeframe read for a short: mixed","first level in its way: 15m swing low at 1.28R; it needs 2R (the level comes first)","confluence: none with it","the VWAP unknown"]}]
+  candidates: [{"name":"ofi_absorption","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":26956.75,"stopPoints":11.68,"minRR":2,"exit":{"trailActivateR":2,"trailGivebackR":0.5,"targetR":null,"maxBars":null},"target":null,"inTheWay":{"name":"15m swing low","price":26941.75,"points":15,"R":1.28},"ahead":[{"name":"15m swing low","price":26941.75,"points":15,"R":1.28},{"name":"15m swing low","price":26916.25,"points":40.5,"R":3.47},{"name":"round number","price":26900,"points":56.75,"R":4.86}],"needR":2,"trendRule":"reversal","alignment":"mixed","vwapSide":null,"facts":["a reversal strategy, no prevailing trend read","multi-timeframe read for a short: mixed","first level in its way: 15m swing low at 1.28R; it needs 2R (the level comes first)","confluence: none with it","the VWAP unknown"],"values":"field(\"flow.windows.5.ofiTrade\")=0.286, field(\"flow.ofiTrade\")=-0.819"}]
   trendRule: Trend rule: no 4h trend read yet (needs 3 completed 4h candles in the bars); trend strategies can't enter yet, reversal strategies can.
 [m15] version m15@2026-04-23T12:47:00.000Z, valid until 09:00 ET
   frame: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":27033.5,"ema20":26988.01,"ema50":26989.87,"adx":26.68,"atr":35.18,"range":{"high":27079.75,"low":26890,"mid":26984.88}}
@@ -148,8 +148,8 @@ Detail by timeframe:
 Scan of MNQ on the last closed bar (opened 2026-04-27T02:18:00.000Z): 3 strategies, 0 candidates. Regime range. Trend 4h range, 1h up, 15m up, prevailing 1h up.
 Candidates: none.
 Every strategy (name | status | timeframe | direction | candidate | why not):
-  ofi | active | 1m | - | no | no rule set fired (long: field("flow.ofiTrade") >= 0.3, field("flow.windows.3.ofiTrade") >= 0.3, field("flow.windows.5.ofiTrade") >= 0.3, vol_sma(5) >= 1.2 * vol_sma(60); short: field("flow.ofiTrade") <= -0.3, field("flow.windows.3.ofiTrade") <= -0.3, field("flow.windows.5.ofiTrade") <= -0.3, close < close[1], close < close[3], close + 0.5 * atr(20) <= close[5], vol_sma(5) >= 1.2 * vol_sma(60))
-  ofi_absorption | active | 1m | - | no | no rule set fired (long: field("flow.windows.5.ofiTrade") <= -0.25, vol_sma(5) >= 1.5 * vol_sma(60); short: field("flow.windows.5.ofiTrade") >= 0.25, vol_sma(5) >= 1.5 * vol_sma(60), close <= close[5] + 0.25 * atr(20), field("flow.ofiTrade") < 0, close < close[1])
+  ofi | active | 1m | - | no | no rule set fired (long: field("flow.ofiTrade") >= 0.3 [field("flow.ofiTrade")=0.294], field("flow.windows.3.ofiTrade") >= 0.3 [field("flow.windows.3.ofiTrade")=-0.021], field("flow.windows.5.ofiTrade") >= 0.3 [field("flow.windows.5.ofiTrade")=-0.243], vol_sma(5) >= 1.2 * vol_sma(60); short: field("flow.ofiTrade") <= -0.3 [field("flow.ofiTrade")=0.294], field("flow.windows.3.ofiTrade") <= -0.3 [field("flow.windows.3.ofiTrade")=-0.021], field("flow.windows.5.ofiTrade") <= -0.3 [field("flow.windows.5.ofiTrade")=-0.243], close < close[1], close < close[3], close + 0.5 * atr(20) <= close[5], vol_sma(5) >= 1.2 * vol_sma(60))
+  ofi_absorption | active | 1m | - | no | no rule set fired (long: field("flow.windows.5.ofiTrade") <= -0.25 [field("flow.windows.5.ofiTrade")=-0.243], vol_sma(5) >= 1.5 * vol_sma(60); short: field("flow.windows.5.ofiTrade") >= 0.25 [field("flow.windows.5.ofiTrade")=-0.243], vol_sma(5) >= 1.5 * vol_sma(60), close <= close[5] + 0.25 * atr(20), field("flow.ofiTrade") < 0 [field("flow.ofiTrade")=0.294], close < close[1])
   prop_flow_1m | active | - | - | no | a policy strategy: the runner screens the setups of ofi, ofi_absorption
 One strategy's full result: name; every strategy's (large): detail true.
 --- market_snapshot ---

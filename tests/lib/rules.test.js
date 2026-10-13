@@ -260,10 +260,74 @@ test('field() reads the value on the bar, n bars back, and has none for a missin
   assert.strictEqual(at('field("x.y")[1] > 0.3', 1).ok, false);
   // A null or missing field: every comparison is false (fail closed), and the result says the value is missing.
   for (const rule of ['field("x.y") > 0', 'field("x.y") < 0', 'field("x.y") >= -1000', 'field("x.y") <= 1000', 'close > field("x.y")', 'field("x.y") crosses_above 0', 'field("x.y") crosses_below 1']) {
-    for (const index of [2, 3]) assert.deepStrictEqual(at(rule, index), { rule, ok: false, missing: true }, `${rule} @${index}`);
+    for (const index of [2, 3]) {
+      // A cross also shows the bar before (bar 1's 0.5 on bar 2; nothing on bar 3).
+      const prev = /crosses/.test(rule) ? { 'field("x.y")[1]': index === 2 ? 0.5 : null } : {};
+      assert.deepStrictEqual(at(rule, index), { rule, ok: false, missing: true, values: { 'field("x.y")': null, ...prev } }, `${rule} @${index}`);
+    }
   }
   // A cross needs the value on both bars: 0.5 (bar 1) then null (bar 2) is no cross.
   assert.strictEqual(at('field("x.y") crosses_above 0.3', 1).ok, true);
+});
+
+test('a rule that reads a field carries its values on the evaluated bar: look-back, missing, a flag, a deep path; others none', () => {
+  const { fieldValues, sideValuesText } = require('../../scripts/lib/trading/rules');
+  const bs = withFields([{ x: { y: 0.1 } }, { x: { y: 0.5, f: true } }, { x: { y: -0.25, w: { 5: { z: 0.123456 } }, f: false } }, {}]);
+  const side = (rules, index) => evaluateRules(compileRules({ long: rules }).compiled, bs, {}, { index }).long;
+  // On bar 2: [1] is bar 1's value, [2] bar 0's; a flag is 1 or 0 (as the rule compares it); a deep path with a digit segment.
+  const [a, b, c, d] = side(['field("x.y") > field("x.y")[1]', 'field("x.y")[2] < 1', 'field("x.f") >= 1', 'field("x.w.5.z") > 0'], 2);
+  assert.deepStrictEqual(a.values, { 'field("x.y")': -0.25, 'field("x.y")[1]': 0.5 });
+  assert.deepStrictEqual(b.values, { 'field("x.y")[2]': 0.1 });
+  assert.deepStrictEqual(c.values, { 'field("x.f")': 0 });
+  assert.deepStrictEqual(d.values, { 'field("x.w.5.z")': 0.123456 });
+  assert.deepStrictEqual(side(['field("x.f")[1] >= 1'], 2)[0].values, { 'field("x.f")[1]': 1 });
+  // A cross reads the bar before too: both values.
+  assert.deepStrictEqual(side(['field("x.y") crosses_below 0'], 2)[0], { rule: 'field("x.y") crosses_below 0', ok: true, values: { 'field("x.y")': -0.25, 'field("x.y")[1]': 0.5 } });
+  // Missing (no key, or n bars back before the first bar): null, and the rule fails as before.
+  assert.deepStrictEqual(side(['field("x.y") > 0', 'field("x.w.5.z") > 0'], 3).map(r => r.values), [{ 'field("x.y")': null }, { 'field("x.w.5.z")': null }]);
+  assert.deepStrictEqual(side(['field("x.y")[3] > 0'], 1)[0], { rule: 'field("x.y")[3] > 0', ok: false, missing: true, values: { 'field("x.y")[3]': null } });
+  // A rule that reads no field is unchanged: no values key.
+  assert.deepStrictEqual(side(['close > 0'], 2)[0], { rule: 'close > 0', ok: true });
+  // A group that holds carries the values of the parts that held (an any's failed branch decided nothing); each
+  // part keeps its own; a group that fails carries every field it reads.
+  const [g] = side([{ any: ['field("x.y") > 1', { all: ['close > 0', 'field("x.w.5.z") > 0'] }] }], 2);
+  assert.strictEqual(g.ok, true);
+  assert.deepStrictEqual(g.values, { 'field("x.w.5.z")': 0.123456 });
+  assert.deepStrictEqual(g.parts.map(p => p.values), [{ 'field("x.y")': -0.25 }, { 'field("x.w.5.z")': 0.123456 }]);
+  const [both] = side([{ any: ['field("x.y") < 0', 'field("x.w.5.z") > 0'] }], 2);
+  assert.deepStrictEqual(both.values, { 'field("x.y")': -0.25, 'field("x.w.5.z")': 0.123456 }, 'both branches held');
+  const [all] = side([{ all: ['field("x.y") < 0', 'field("x.w.5.z") > 0'] }], 2);
+  assert.deepStrictEqual(all.values, { 'field("x.y")': -0.25, 'field("x.w.5.z")': 0.123456 });
+  const [failed] = side([{ any: ['field("x.y") > 1', 'field("x.w.5.z") > 1'] }], 2);
+  assert.deepStrictEqual([failed.ok, failed.values], [false, { 'field("x.y")': -0.25, 'field("x.w.5.z")': 0.123456 }], 'a near miss shows every field');
+  // The review's repro: a short side any(field <= -0.2 | close > open) with the field at 0.5 fires on the price
+  // branch and shows no field value next to it.
+  const up = withFields([{ x: { y: 0.5 } }, { o: 10, c: 12, h: 12, x: { y: 0.5 } }]);
+  const short = evaluateRules(compileRules({ short: [{ any: ['field("x.y") <= -0.2', 'close > open'] }] }).compiled, up, {}, { index: 1 });
+  assert.strictEqual(short.direction, 'short');
+  assert.ok(!('values' in short.short[0]), JSON.stringify(short.short[0]));
+  assert.strictEqual(sideValuesText(short.short), '');
+  assert.strictEqual(fieldValues(compileCondition('close > 0'), bs, 2), null);
+});
+
+test('field values change no decision: with and without them, the same direction, ok, missing and parts on every bar', () => {
+  const bs = withFields(Array.from({ length: 40 }, (_, i) => (i % 7 === 3 ? {} : { x: { y: Math.round(Math.sin(i) * 100) / 100, f: i % 2 === 0 } })));
+  const { compiled } = compileRules({ long: ['field("x.y") > 0.2', 'field("x.y")[1] < field("x.y")', { any: ['field("x.f") >= 1', 'close > open'] }], short: ['field("x.y") < -0.2', 'field("x.y")[2] > field("x.y")'] });
+  const strip = r => JSON.parse(JSON.stringify(r, (k, v) => (k === 'values' ? undefined : v)));
+  const dirs = new Set();
+  for (let i = 0; i < bs.length; i += 1) {
+    const withValues = evaluateRules(compiled, bs, {}, { index: i });
+    const without = evaluateRules(compiled, bs, {}, { index: i, values: false });
+    assert.ok(withValues.long.every(x => x.values) && JSON.stringify(without).indexOf('values') === -1, `bar ${i}`);
+    assert.deepStrictEqual(strip(withValues), without, `bar ${i}`);
+    // And the decision is what the fields say (close equals open on these bars, so the long side needs the flag).
+    const y = k => (k >= 0 && bs[k].x ? bs[k].x.y : null);
+    const want = y(i) !== null && y(i - 1) !== null && y(i) > 0.2 && y(i - 1) < y(i) && (bs[i].x.f || false) ? 'long'
+      : y(i) !== null && y(i - 2) !== null && y(i) < -0.2 && y(i - 2) > y(i) ? 'short' : null;
+    assert.strictEqual(withValues.direction, want, `bar ${i}`);
+    dirs.add(withValues.direction);
+  }
+  assert.deepStrictEqual([...dirs].sort(), ['long', 'short', null].sort(), 'both sides and none occur');
 });
 
 test('normalizeBars keeps the fields a broker adds to its bars, as they are', () => {
