@@ -55,6 +55,7 @@ const { tradingDayStart, minutesOfDay, entryClock } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, specFor } = require('./contracts');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
+const { sideValuesText } = require('./rules');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -342,6 +343,8 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   ];
   const newsBlock = !news || news.inBlackout === false ? null : news.inBlackout === true ? 'news blackout' : 'news unknown (the blackouts file can\'t be read)';
   const blocked = noEntry ? (typeof noEntry === 'string' ? `no-entry window: ${noEntry}` : 'no-entry window') : newsBlock;
+  // The broker's field values its fired rules read on this bar (the strategy's own document says what they mean).
+  const values = sideValuesText(r.rules && r.rules[r.direction]);
   return {
     name: r.name, direction: r.direction, status: r.status, confluence: r.confluence || null,
     entryRef: r.entryRef, stopPoints: round2(R), minRR: r.minRR ?? null,
@@ -349,6 +352,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
     target, inTheWay, ahead, needR,
     trendRule: mtf.style === 'reversal' ? 'reversal' : allowed === false ? 'against' : allowed === true ? 'allows' : null,
     alignment: align, vwapSide, facts,
+    ...(values ? { values } : {}),
     ...(blocked ? { blocked } : {}),
   };
 }
@@ -492,7 +496,7 @@ function summaryLines(b, et) {
   else {
     out.push('- Setups:');
     for (const c of m3.candidates) {
-      out.push(`  - ${c.name} ${c.direction}: ${c.facts.join('; ')}${c.blocked ? ` (blocked now: ${c.blocked})` : ''}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.`);
+      out.push(`  - ${c.name} ${c.direction}: ${c.facts.join('; ')}${c.blocked ? ` (blocked now: ${c.blocked})` : ''}. Stop ${c.stopPoints} pts (its own 1R)${c.target ? `; target ${c.target.points} pts (${c.target.R}R)` : ''}; needs ${c.needR}R of room; levels ahead in its R: ${(c.ahead || []).map(lvl).join(', ') || 'none found'}.${c.values ? ` Values: ${c.values}.` : ''}`);
     }
   }
   return out;

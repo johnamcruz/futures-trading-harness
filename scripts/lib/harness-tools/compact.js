@@ -23,12 +23,31 @@
  */
 
 const { whyNoSpec } = require('../trading/broker-specs');
+const { valuesText, sideValuesText, VALUES_PER_STRATEGY } = require('../trading/rules');
 const { stopTicks, targetTicks, ticksText, distanceText, targetFor } = require('../trading/order-plan');
 
 const num = x => (Number.isFinite(x) ? String(Math.round(x * 1e4) / 1e4) : '-');
 
-/** The rules of one side that did not hold, by their text. */
-const failedRules = rules => (Array.isArray(rules) ? rules.filter(r => r && r.ok === false).map(r => (String(r.rule).length > 100 ? `${String(r.rule).slice(0, 99)}…` : String(r.rule))) : []);
+/** A spender of a strategy's value budget: a rule result's values as `field("a.b")=0.42`, '' for none. */
+function valueBudget(cap = VALUES_PER_STRATEGY) {
+  let left = cap;
+  return r => {
+    const n = r && r.values && typeof r.values === 'object' ? Object.keys(r.values).length : 0;
+    if (!n) return '';
+    const text = valuesText(r.values, Math.max(left, 0));
+    left -= n;
+    return text;
+  };
+}
+
+/** The rules of one side that did not hold, by their text, each with its field values (spent from `values`). */
+const failedRules = (rules, values = valueBudget()) => (Array.isArray(rules) ? rules.filter(r => r && r.ok === false).map(r => `${String(r.rule).length > 100 ? `${String(r.rule).slice(0, 99)}…` : String(r.rule)}${(v => (v ? ` [${v}]` : ''))(values(r))}`) : []);
+
+/** The field values the rules of a fired side read, on the bar ('' when they read none). */
+function firedValues(r) {
+  const text = sideValuesText(r.rules && r.rules[r.direction], VALUES_PER_STRATEGY);
+  return text ? `values: ${text}` : '';
+}
 
 /** The first detector's own explanation (e.g. a CRT's "why"), if any. */
 function detectorWhy(r) {
@@ -45,7 +64,8 @@ function whyNot(r) {
     if (r.candidate) return 'manual: in session; evaluate its trigger from STRATEGY.md';
     reasons.push('manual');
   } else if (!r.direction) {
-    const sides = ['long', 'short'].map(side => [side, failedRules(r.rules && r.rules[side])]).filter(([, f]) => f.length);
+    const spend = valueBudget();
+    const sides = ['long', 'short'].map(side => [side, failedRules(r.rules && r.rules[side], spend)]).filter(([, f]) => f.length);
     reasons.push(sides.length ? `no rule set fired (${sides.map(([side, f]) => `${side}: ${f.join(', ')}`).join('; ')})` : 'no rule set fired');
     const why = detectorWhy(r);
     if (why) reasons.push(why);
@@ -89,6 +109,7 @@ function candidateLine(r, symbol = '', specOf = () => null) {
     // A manual strategy's side is the agent's call: which sides the trend rule leaves open (the gate enforces it).
     r.signal === 'manual' ? (r.mtf ? `trend rule: long ${r.mtf.longAllowed ? 'ok' : 'no'}, short ${r.mtf.shortAllowed ? 'ok' : 'no'}${r.mtf.reason ? ` (${r.mtf.reason})` : ''}` : 'trend rule: unknown') : `entryRef ${num(r.entryRef)}, ${stopAndTarget(r, symbol, specOf)}, minRR ${r.minRR ?? '-'}${exit ? `, exit: ${exit}` : ''}`,
     r.direction ? `with: ${c.with.join(', ') || 'none'}; against: ${c.against.join(', ') || 'none'}` : '',
+    r.direction ? firedValues(r) : '',
     detectorWhy(r),
   ];
   return `  ${parts.filter(Boolean).join(' | ')}`;

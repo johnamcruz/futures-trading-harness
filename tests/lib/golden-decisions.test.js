@@ -19,6 +19,7 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
 const { fieldPaths } = require('../../scripts/lib/backtest/bar-fields');
 const { scanSummary } = require('../../scripts/lib/harness-tools/compact');
+const { sideValuesText } = require('../../scripts/lib/trading/rules');
 const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { buildBriefing, renderBriefing } = require('../../scripts/lib/trading/briefing');
 const { specFor } = require('../../scripts/lib/trading/contracts');
@@ -27,6 +28,7 @@ const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
 const ALL = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: G.EXT_STRATEGIES }).strategies;
 const FIRST = 100; // the first bar decided
 // The goldens, by series, named in full (tests/plugin/golden.test.js maps every golden file to a name here).
+// The field values (decisions-values.txt) are pinned apart from the decisions they never change.
 const GOLDEN = {
   'MNQ 3m': { decisions: 'decisions-MNQ-3m.txt', views: 'views-MNQ-3m.txt' },
   'M2K 3m': { decisions: 'decisions-M2K-3m.txt', views: 'views-M2K-3m.txt' },
@@ -70,10 +72,14 @@ function decided(s, which) {
   return cache.get(key);
 }
 
+// A decision's digest leaves out the field values its rules read (text for the model, pinned on their own below),
+// so a change to the values alone never reads as a changed decision.
+const withoutValues = x => JSON.parse(JSON.stringify(x, (k, v) => (k === 'values' ? undefined : v)));
+
 function decisionText(s, results) {
   const lines = [`${s.label}: ${s.broker.length} bars as the broker serves them, decided from bar ${FIRST} (${s.broker[FIRST].t}) to ${s.broker.at(-1).t}`];
   for (const [name, list] of Object.entries(results)) {
-    lines.push(`${name}: fired ${list.filter(r => r.direction).length}, candidates ${list.filter(r => r.candidate).length}, every result sha256:${G.digest(list)}`);
+    lines.push(`${name}: fired ${list.filter(r => r.direction).length}, candidates ${list.filter(r => r.candidate).length}, every result sha256:${G.digest(withoutValues(list))}`);
   }
   lines.push('Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules held, filters failed):');
   for (let k = 0; k < s.broker.length - FIRST; k += 1) {
@@ -99,6 +105,46 @@ for (const s of SERIES) {
     }
   });
 }
+
+/** The field values each strategy that reads fields saw: a digest of every bar's, and the fired side's in full where it fired. */
+function valuesText(s, results, strategies) {
+  const lines = [`${s.label}: the field values of the strategies that read fields, from bar ${FIRST}`];
+  const readers = strategies.filter(readsFields).map(x => x.name);
+  for (const name of readers) {
+    const per = results[name].map(r => ['long', 'short'].map(side => ((r.rules && r.rules[side]) || []).map(x => x.values ?? null)));
+    lines.push(`${name}: every bar's values sha256:${G.digest(per)}`);
+  }
+  for (let k = 0; k < s.broker.length - FIRST; k += 1) {
+    for (const name of readers) {
+      const r = results[name][k];
+      if (r.direction) lines.push(`${s.broker[FIRST + k].t} ${name} ${r.direction} ${sideValuesText(r.rules[r.direction], Infinity) || '(none)'}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+test('the field values the strategies that read fields saw, on every series, are pinned apart from the decisions', () => {
+  assertGolden('decisions-values.txt', SERIES.map(s => valuesText(s, decided(s, 'broker'), scanned(ALL, s))).join('\n'));
+});
+
+test('without describe (a backtest) no field values are computed; with it, the same decision plus the values', () => {
+  const s = SERIES.find(x => x.label === 'MNQ 1m');
+  const readers = scanned(ALL, s).filter(readsFields);
+  assert.ok(readers.length > 0);
+  const ev = createEvaluator(s.broker);
+  let shown = 0;
+  for (const st of readers) {
+    for (let i = FIRST; i < s.broker.length; i += 97) {
+      const lean = ev.at(st, i, { describe: false });
+      const full = ev.at(st, i, { describe: true });
+      assert.ok(!JSON.stringify(lean.rules).includes('"values"'), `${st.name} @${i}: values computed without describe`);
+      assert.deepStrictEqual(withoutValues(full.rules), lean.rules, `${st.name} @${i}`);
+      assert.strictEqual(full.direction, lean.direction);
+      if (JSON.stringify(full.rules).includes('"values"')) shown += 1;
+    }
+  }
+  assert.ok(shown > 0, 'describe computes them');
+});
 
 test('the broker\'s fields fire every strategy that reads them: ofi and ofi_absorption (1m, deep paths), value_area\'s flow branch, ext_reader (a look-back and a flag)', () => {
   const fired = (label, name, which = 'broker') => decided(SERIES.find(x => x.label === label), which)[name].filter(r => r.direction).length;

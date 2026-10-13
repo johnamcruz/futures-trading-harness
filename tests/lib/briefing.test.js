@@ -92,6 +92,23 @@ test('m3 holds the per-bar facts: ET time and window, VWAP side, location agains
   assert.doesNotMatch(JSON.stringify([b.sections.m15.data.sessionProfile, b.sections.day.data.priorProfile]), /"price"/);
 });
 
+test('a candidate shows the field values its fired rules read; the cached m15, h1 and day parts are the same with or without them', () => {
+  const rules = { long: [{ rule: 'field("a.b") >= 0.3', ok: true, values: { 'field("a.b")': 0.4166666 } }, { rule: 'field("a.b")[1] < 0.3 & close > 0', ok: true, values: { 'field("a.b")[1]': null } }, { rule: 'close > 0', ok: true }], short: [{ rule: 'field("c") < 0', ok: false, values: { 'field("c")': 5 } }] };
+  const orb = { name: 'orb', candidate: true, direction: 'long', status: 'active', confluence: { with: [], against: [] }, entryRef: 1, stopDistance: 10, exit: { trailActivateR: 2 } };
+  const withValues = build(1300, null, { scan: [{ ...orb, rules }] });
+  const without = build(1300, null, { scan: [{ ...orb, rules: { long: rules.long.map(({ rule, ok }) => ({ rule, ok })), short: [] } }] });
+  // The fired side only (the short side's values are not this candidate's), 4 significant digits, a missing one named.
+  assert.strictEqual(withValues.sections.m3.data.candidates[0].values, 'field("a.b")=0.4167, field("a.b")[1]=missing');
+  assert.ok(!('values' in without.sections.m3.data.candidates[0]), 'no field read, no values key');
+  assert.match(B.renderBriefing(withValues, { now: new Date(withValues.closedAt) }), /- orb long: .* Values: field\("a\.b"\)=0\.4167, field\("a\.b"\)\[1\]=missing\.\n/);
+  assert.doesNotMatch(B.renderBriefing(without, { now: new Date(without.closedAt) }), /Values:/);
+  for (const part of ['m15', 'h1', 'day']) assert.deepStrictEqual(withValues.sections[part], without.sections[part], `${part}: the report cache's parts never see the values`);
+  // A short candidate shows its short side's values, never the long side's; at most 6, the rest counted.
+  const many = Object.fromEntries(Array.from({ length: 8 }, (_, k) => [`field("f${k}")`, k]));
+  const short = build(1300, null, { scan: [{ ...orb, direction: 'short', rules: { long: rules.long, short: [{ rule: 'x', ok: true, values: many }] } }] });
+  assert.strictEqual(short.sections.m3.data.candidates[0].values, 'field("f0")=0, field("f1")=1, field("f2")=2, field("f3")=3, field("f4")=4, field("f5")=5, +2 more');
+});
+
 test('render, write, read, and the bar_briefing tool', () => {
   const home = tmpDir();
   const b = build(1300);

@@ -95,8 +95,13 @@ description: Write a new trading strategy as a STRATEGY.md document - frontmatte
    server put on its bars, by dotted path (a digit segment reads a key such
    as `"5"`; `field("a.b")[1]` is the previous bar's): the harness gives it no
    meaning, so the strategy's body says what the field is and which broker
-   setting turns it on. A missing field or a null makes the condition false,
-   so a bar without it never fires; nothing estimates it. Bars the
+   setting turns it on. The scan shows the values its field rules read on
+   the bar (`field("a.b")=0.42`) for a candidate and for a rule set that did
+   not fire (next to each rule that did not hold), never for a strategy that
+   fired but failed a filter; a field's meaning and units are in the
+   strategy's own document, so write them there. A missing field or a null
+   makes the condition false, so a bar without it never fires; nothing
+   estimates it. Bars the
    backtester builds from shorter ones, and CSV files, carry no broker
    fields (step 8 says how to backtest on them). A value
    that doesn't exist yet (indicator warm-up, no opening range yet) makes the

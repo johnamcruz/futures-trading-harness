@@ -65,7 +65,9 @@ reports instead; don't fetch bars for them.
 
 Check, in order, and stop at the first failure. The briefing's `m3`
 `candidates` give each setup's facts (`facts`, `inTheWay`, `needR`,
-`blocked`): context for the checks below, never a check of their own.
+`blocked`, and `values`: the broker fields its rules read, whose meaning
+and units are in the strategy's own document):
+context for the checks below, never a check of their own.
 
 0. The trigger fired: the scan lists the strategy as a candidate in this
    direction on the last closed bar (or, for a manual strategy, the plan
