@@ -123,7 +123,9 @@ like any setup.
 
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
 gate refuses a rules strategy's entry unless that strategy fired, on that
-side, on a bar that closed less than 10 minutes ago, per the signal record
+side, on a bar that closed at most 3 bars of its own timeframe ago, and
+never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min on 15m
+and 1h), per the signal record
 (the runner records every bar; interactively, `strategies_scan` with the
 bars file, `symbol`, and `record: true`). A different setup tag on the
 same trade is refused: enter only on the strategy that fired.

@@ -7,7 +7,7 @@ const { loadConfig } = require('../../scripts/lib/trading/config');
 const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
-const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
 const checks = r => r.violations.map(v => v.check).sort();
 const evaluate = (input, entries, opts = {}) =>
   evaluateOrder({ input, entries, now: opts.now || NOW, config: opts.config || config, blackouts: opts.blackouts });
@@ -241,7 +241,7 @@ test('strategy check: a rules strategy trades the selected leg (FTH_SYMBOLS) of 
   assert.deepStrictEqual(runBoth(entryOrder({ contractId: 'NQ', stopLossBracket: { ticks: 20, type: 'stop' } }), mnq).violations, [{ check: 'strategy', message: 'setup:orb trades MNQ (the selected contract), not NQ.' }]);
   // An unreadable selection refuses every entry; so does a lost one (unset in an autonomous run).
   assert.match(run(entryOrder({ contractId: 'MNQ' }), withSel('MNQ,NQ')).violations.find(v => v.check === 'strategy').message, /FTH_SYMBOLS selects two contracts of one index/);
-  const lost = { ...loadConfig({ FTH_AUTONOMOUS: '1' }), home: config.home, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+  const lost = { ...loadConfig({ FTH_AUTONOMOUS: '1' }), home: config.home, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
   assert.match(run(entryOrder({ contractId: 'MNQ' }), lost).violations.find(v => v.check === 'strategy').message, /^FTH_SYMBOLS is not set in this autonomous run, .*--target <harness> \(e\.g\. codex\)\. No entries until it is fixed\.$/);
   assert.deepStrictEqual(run(entryOrder({ contractId: 'MNQ' }), { ...lost, selection: loadConfig({ FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }).selection }).violations, []);
   // max_risk_usd in NQ's dollars: 40 ticks x $5 = $200, over $100 (one MNQ at 40 ticks would be $20).
@@ -512,6 +512,11 @@ test('policy: a paper strategy stays paper inside a policy - an entry whose verd
   assert.match(pv({ strategies: [policy, EMA_CROSS, VA] }), /value_area has status "paper"/);
   assert.strictEqual(pv({ strategies: [policy, EMA_CROSS, VA], paper: true }), '');
   assert.match(pv({ strategies: [policy, EMA_CROSS, { ...VA, status: 'disabled' }], paper: true }), /value_area has status "disabled": orb trades only its active strategies \(/);
+  // A setup the runner skipped for a higher-priority policy in the same cycle (lane-cycle.js skippedVerdict, recorded
+  // by the prop hooks' supersede): the latest verdict is that skip, so the entry the full verdict allowed is refused.
+  const { skippedVerdict } = require('../../scripts/lib/lane-cycle');
+  prop.appendVerdict(home, skippedVerdict(prop.latestVerdict(home, 'orb', 'MNQ'), 'other_policy', new Date(NOW.getTime() - 1000)));
+  assert.match(pv({ strategies: [policy, EMA_CROSS, VA], paper: true }), /the setup was skipped \(skipped: lower priority \(other_policy goes first/);
 });
 
 test('policy: a verdict is tied to its own bar - the bar the signal record says the setup is on now (hard, unskippable)', () => {
@@ -874,7 +879,7 @@ test('mtf-trend: a policy strategy entry is judged by the strategy whose setup i
 
 test('trigger-fired: a rules strategy enters only on its own fired trigger, on that side, on a recent bar; hard', () => {
   const rules = trendStrategy({ signal: 'rules', mtf: 'reversal' });
-  const ev = (home, input = entryOrder(), extra = {}) => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, mtfMaxAgeMin: 15, signalMaxAgeMin: 10, skipChecks: new Set(['trigger-fired']), ...extra }, strategies: [rules] });
+  const ev = (home, input = entryOrder(), extra = {}) => evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, mtfMaxAgeMin: 15, signalMaxAgeBars: 3, skipChecks: new Set(['trigger-fired']), ...extra }, strategies: [rules] });
   assert.deepStrictEqual(ev(trendHome(undefined, { fired: [{ name: 'orb', direction: 'long' }] })).violations, []);
   const relabel = ev(trendHome(undefined, { fired: [{ name: 'bos', direction: 'long' }] }));
   assert.deepStrictEqual(checks(relabel), ['trigger-fired'], 'not skippable');
@@ -883,6 +888,52 @@ test('trigger-fired: a rules strategy enters only on its own fired trigger, on t
   // Manual strategies are the LLM's judgment: no trigger record needed.
   assert.deepStrictEqual(ev(tmpDir(), entryOrder(), {}).violations.filter(v => v.check === 'trigger-fired').length, 1);
   assert.deepStrictEqual(evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: trendHome(undefined, { fired: [] }), mtfMaxAgeMin: 15 }, strategies: [trendStrategy()] }).violations, []);
+});
+
+test('trigger-fired: the signal\'s age is counted in bars of its own timeframe (3 by default); an unknown timeframe is the strictest; FTH_SIGNAL_MAX_AGE_MIN only shortens it', () => {
+  const fs = require('fs');
+  const path = require('path');
+  // A signal record on `tf` for a bar that closed `ago` minutes before NOW, with orb long fired.
+  const homeAt = (tf, ago) => {
+    const home = trendHome(undefined, { fired: [{ name: 'orb', direction: 'long' }] });
+    const closedAt = new Date(NOW.getTime() - ago * 60000).toISOString();
+    fs.writeFileSync(path.join(home, 'signals', `MNQ-${tf}.json`), JSON.stringify({ symbol: 'MNQ', timeframe: tf, asOf: closedAt, closedAt, candidates: [{ name: 'orb', direction: 'long' }] }));
+    return home;
+  };
+  const ev = (tf, ago, timeframe, extra = {}) => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...loadConfig({}), killSwitchFile: config.killSwitchFile, home: homeAt(tf, ago), mtfMaxAgeMin: 1e9, ...extra }, strategies: [trendStrategy({ signal: 'rules', timeframe })] })
+    .violations.filter(v => v.check === 'trigger-fired').map(v => v.message);
+  // The default is 3 bars: 3 min on 1m, 9 min on 3m, 45 min on 15m (the flat 10 minutes it replaced is gone).
+  assert.deepStrictEqual(ev('1m', 3, '1m'), []);
+  assert.match(ev('1m', 4, '1m')[0], /closed 4 min ago \(limit 3 min: 3 1m bars, FTH_SIGNAL_MAX_AGE_BARS\): the setup has expired/);
+  assert.deepStrictEqual(ev('3m', 9, '3m'), []);
+  assert.match(ev('3m', 10, '3m')[0], /limit 9 min: 3 3m bars/);
+  assert.deepStrictEqual(ev('15m', 45, '15m'), []);
+  assert.match(ev('15m', 46, '15m')[0], /limit 45 min/);
+  // Never over 45 minutes: a 1h signal (3 bars would be 180) expires at 45 too, and so does a 15m one at more bars.
+  // (The record is read under the strategy's own timeframe name, as the gate reads it.)
+  assert.deepStrictEqual(ev('1h', 45, '1h'), []);
+  assert.match(ev('1h', 46, '1h')[0], /closed 46 min ago \(limit 45 min: 3 1h bars, FTH_SIGNAL_MAX_AGE_BARS, at most 45 min\)/);
+  assert.match(ev('15m', 46, '15m', { signalMaxAgeBars: 5 })[0], /limit 45 min: 5 15m bars, FTH_SIGNAL_MAX_AGE_BARS, at most 45 min/);
+  // FTH_SIGNAL_MAX_AGE_BARS sets the count; FTH_SIGNAL_MAX_AGE_MIN, when set, caps it (never lengthens it).
+  const env = e => { const c = loadConfig(e); return { signalMaxAgeBars: c.signalMaxAgeBars, signalMaxAgeCapMin: c.signalMaxAgeCapMin }; };
+  assert.deepStrictEqual(ev('3m', 5, '3m', env({ FTH_SIGNAL_MAX_AGE_BARS: '2' })), []);
+  assert.match(ev('3m', 7, '3m', env({ FTH_SIGNAL_MAX_AGE_BARS: '2' }))[0], /limit 6 min: 2 3m bars/);
+  assert.match(ev('15m', 20, '15m', env({ FTH_SIGNAL_MAX_AGE_MIN: '10' }))[0], /limit 10 min: 3 15m bars, FTH_SIGNAL_MAX_AGE_BARS, capped at 10 min by FTH_SIGNAL_MAX_AGE_MIN/);
+  assert.deepStrictEqual(ev('1m', 2, '1m', env({ FTH_SIGNAL_MAX_AGE_MIN: '60' })), [], 'a cap longer than the bars changes nothing');
+  assert.match(ev('1m', 4, '1m', env({ FTH_SIGNAL_MAX_AGE_MIN: '60' }))[0], /limit 3 min/);
+  // An unreadable bar count is the default, never "no limit".
+  for (const bad of ['0', '-3', 'x', '2.5']) assert.match(ev('3m', 10, '3m', env({ FTH_SIGNAL_MAX_AGE_BARS: bad }))[0], /the setup has expired/, bad);
+  // signalMaxAgeMin: an unknown timeframe counts as 1 minute (the strictest); a bad bar count as 1 bar.
+  const { signalMaxAgeMin } = require('../../scripts/lib/trading/signal-state');
+  assert.deepStrictEqual([signalMaxAgeMin('1m'), signalMaxAgeMin('3m'), signalMaxAgeMin('15m'), signalMaxAgeMin('1h'), signalMaxAgeMin('4h'), signalMaxAgeMin('5m')], [3, 9, 45, 45, 45, 15]);
+  assert.strictEqual(signalMaxAgeMin('15m', { bars: 100 }), 45, 'no bar count lifts it over the ceiling');
+  assert.strictEqual(signalMaxAgeMin('1h', { capMin: 60 }), 45, 'nor a cap');
+  for (const bad of [0, -5, NaN, null, '60']) assert.strictEqual(signalMaxAgeMin('1h', { ceilingMin: bad }), 45, `ceiling ${bad}: the owner's 45`);
+  assert.strictEqual(loadConfig({ FTH_SIGNAL_MAX_AGE_CEILING_MIN: '120', FTH_SIGNAL_MAX_AGE_BARS: '50' }).signalMaxAgeCeilingMin, 45, 'no setting lifts the ceiling');
+  for (const tf of [undefined, null, '', 'tick', '3', '0m', '1d', 3]) assert.strictEqual(signalMaxAgeMin(tf), 3, String(tf));
+  for (const bars of [0, -1, 2.5, NaN, null, '3']) assert.strictEqual(signalMaxAgeMin('3m', { bars }), 3, String(bars));
+  assert.strictEqual(signalMaxAgeMin('15m', { capMin: 10 }), 10);
+  assert.strictEqual(signalMaxAgeMin('1m', { capMin: 10 }), 3);
 });
 
 test('checkOrder: an unreadable broker config is a broker-config block, even for an exit', () => {

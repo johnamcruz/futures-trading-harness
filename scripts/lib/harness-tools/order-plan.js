@@ -43,7 +43,7 @@ const prop = require('../trading/prop-state');
 const { stopTicks, buildPlan } = require('../trading/order-plan');
 const { resolveJournalPath, readJournal, entriesSince } = require('../trading/journal');
 const { tradingDayStart } = require('../trading/clock');
-const { FUTURE_TOLERANCE_MIN, sameBar } = require('../trading/signal-state');
+const { FUTURE_TOLERANCE_MIN, sameBar, signalMaxAgeMin } = require('../trading/signal-state');
 const { harnessHome } = require('../paths');
 const { context, atClock, say } = require('./cli');
 const { whyNot } = require('./compact');
@@ -117,7 +117,8 @@ function policyPlan(c, s, { results, root, want, home, now, lastBar, specOf, sel
  * The bars must be the strategy's own and current, as the gate's trigger record is: bars on its
  * timeframe (the step between the last bars, as scan's record measures it), the last one closed at
  * the harness clock (within the gate's FUTURE_TOLERANCE_MIN for a broker clock ahead of it) and no
- * older than the gate's signal age (FTH_SIGNAL_MAX_AGE_MIN). Returns the last bar's open time; else a refusal.
+ * older than the gate's signal age (FTH_SIGNAL_MAX_AGE_BARS bars of the timeframe; signal-state.js signalMaxAgeMin).
+ * Returns the last bar's open time; else a refusal.
  */
 function checkBars(bars, timeframe, now, env) {
   const norm = normalizeBars(bars);
@@ -126,7 +127,8 @@ function checkBars(bars, timeframe, now, env) {
   const step = diffs.length ? Math.min(...diffs) : NaN;
   if (!(step === want)) throw new Error(`the bars are ${Number.isFinite(step) ? `${step / 60000}-minute` : 'of an unknown timeframe'}; the strategy trades ${timeframe} bars: plan it on its own timeframe's bars`);
   const closedAt = Date.parse(norm[norm.length - 1].t) + step;
-  const maxAgeMin = loadConfig(env).signalMaxAgeMin;
+  const gate = loadConfig(env);
+  const maxAgeMin = signalMaxAgeMin(timeframe, { bars: gate.signalMaxAgeBars, capMin: gate.signalMaxAgeCapMin, ceilingMin: gate.signalMaxAgeCeilingMin });
   // A close up to the gate's tolerance after the harness clock is the broker's clock running ahead (signal-state.js).
   if (closedAt - now.getTime() > FUTURE_TOLERANCE_MIN * 60000) {
     throw new Error(`the last bar closes at ${new Date(closedAt).toISOString()}, more than ${FUTURE_TOLERANCE_MIN} min after the harness clock (${now.toISOString()}): it hasn't closed`);

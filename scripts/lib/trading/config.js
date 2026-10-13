@@ -6,6 +6,7 @@
  * These sit on top of the broker MCP server's guardrails; they never loosen them.
  */
 
+const { MAX_AGE_CEILING_MIN } = require('./signal-state');
 const path = require('path');
 const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
@@ -67,8 +68,13 @@ function loadConfig(env = process.env) {
     maxEntriesPerDay: intEnv(env, 'FTH_MAX_ENTRIES_PER_DAY', 6), // 0 = off
     // How old the multi-timeframe record may be (minutes after its last bar closed).
     mtfMaxAgeMin: intEnv(env, 'FTH_MTF_MAX_AGE_MIN', 15, { min: 1 }),
-    // How long after its bar closed a rules strategy's signal may still be entered (signal-state.js).
-    signalMaxAgeMin: intEnv(env, 'FTH_SIGNAL_MAX_AGE_MIN', 10, { min: 1 }),
+    // How long after its bar closed a rules strategy's signal may still be entered, in bars of the signal's own
+    // timeframe (signal-state.js signalMaxAgeMin: 3 bars is 3 min on 1m, 9 min on 3m, 45 min on 15m).
+    signalMaxAgeBars: intEnv(env, 'FTH_SIGNAL_MAX_AGE_BARS', 3, { min: 1 }),
+    // A cap in minutes over that, only when set (the flat limit this replaced): it only ever shortens the age.
+    signalMaxAgeCapMin: intEnv(env, 'FTH_SIGNAL_MAX_AGE_MIN', null, { min: 1 }),
+    // The owner's ceiling over the bars, whatever the timeframe (signal-state.js MAX_AGE_CEILING_MIN): no setting.
+    signalMaxAgeCeilingMin: MAX_AGE_CEILING_MIN,
     // Strategies that must fire the same side for a rules entry (the entry's own included), as the backtest's minConfluence.
     minConfluence: intEnv(env, 'FTH_MIN_CONFLUENCE', 1, { min: 1 }),
     // Open equity-index positions in one direction across indexes (MNQ, MES, MYM, M2K and minis), the new one included.

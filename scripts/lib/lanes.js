@@ -31,8 +31,9 @@
  *   omittedPolicyErrors(cfg, strategies, attemptRunning)  a lane's policies list leaving out a policy with a running attempt
  *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, agents)
  *
- * Multi-lane cycling (a bar clock per lane) is a later step: a config with more
- * than one lane is refused (MULTI_LANE_REFUSAL) rather than cycled on one lane.
+ * Several lanes cycle together (runner.js, lane-cycle.js): a bar clock per symbol and lane, and the lanes whose
+ * bars closed on a pass go into one cycle. The first lane is the runner's own (its timeframe and trigger are the
+ * config's): its bars feed the multi-timeframe record, the bar briefing and the trailing stops.
  */
 
 const { onTimeframe } = require('./trading/strategies');
@@ -41,7 +42,6 @@ const { familyRoot } = require('./trading/contracts');
 const LANE_KEYS = ['timeframe', 'trigger', 'strategies', 'policies'];
 const TRIGGERS = ['bar', 'signal'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
-const MULTI_LANE_REFUSAL = 'lanes: multi-lane cycling arrives in a later step; configure one lane for now (the runner never cycles on some lanes and ignores the rest)';
 
 const AGENT_TIMEFRAME_REFUSAL = 'per-agent timeframes arrive in a later step: until then every role reads the lane\'s bars, so a role set to another timeframe is refused';
 const TIMEFRAME = /^([1-9]\d*)(m|h|d)$/;
@@ -87,7 +87,6 @@ function parseLanes(cfg, raw = {}) {
   const first = isObject(r.lanes[0]) ? lanes[0] : null;
   if (first && 'timeframe' in r && r.timeframe !== first.timeframe) errors.push(`timeframe: with lanes, the first lane's timeframe (${first.timeframe}) is the runner's; leave timeframe out or set it equal`);
   if (first && 'trigger' in r && r.trigger !== first.trigger) errors.push(`trigger: with lanes, the first lane's trigger (${first.trigger}) is the runner's; leave trigger out or set it equal`);
-  if (r.lanes.length > 1) errors.push(MULTI_LANE_REFUSAL);
   return { lanes, errors };
 }
 
@@ -225,6 +224,6 @@ const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => [
 ];
 
 module.exports = {
-  LANE_KEYS, TRIGGERS, MULTI_LANE_REFUSAL, AGENT_TIMEFRAME_REFUSAL, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
+  LANE_KEYS, TRIGGERS, AGENT_TIMEFRAME_REFUSAL, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,
   tfMinutes, agentOverrideErrors, agentErrors, agentTimeframes, omittedPolicyErrors, startErrors,
 };

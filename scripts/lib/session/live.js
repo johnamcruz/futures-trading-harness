@@ -40,6 +40,7 @@
  */
 
 const crypto = require('crypto');
+const { lanesOf } = require('../lanes');
 const fs = require('fs');
 const path = require('path');
 const store = require('../replay/store');
@@ -109,8 +110,24 @@ function copyJournal(src, dst, { start, end }) {
   fs.renameSync(tmp, dst);
 }
 
-/** The time a closed bar is decided at (its close plus the runner's poll delay), as the replay schedule places it. */
-const pointOf = (cfg, barT) => new Date(Date.parse(barT) + cfg.timeframe * 60000 + (cfg.barDelaySeconds || 0) * 1000);
+/**
+ * The time a closed bar is decided at (its close plus the runner's poll delay), as the replay schedule places it.
+ * `minutes`: the bar's lane (several lanes; none: the runner's timeframe).
+ */
+const pointOf = (cfg, barT, minutes = cfg.timeframe) => new Date(Date.parse(barT) + minutes * 60000 + (cfg.barDelaySeconds || 0) * 1000);
+
+/**
+ * Several lanes: the lanes of the closed bars, in the config's lane order (as a replay point lists them, whatever
+ * order the bars were published in); null with one lane.
+ */
+const closedLanes = (cfg, bars) => {
+  if (!bars.some(c => c.minutes)) return null;
+  const seen = new Set(bars.map(c => c.minutes));
+  return lanesOf(cfg).map(l => l.timeframe).filter(tf => seen.has(tf));
+};
+
+/** The closed bars a pass polled (passTap closed) that are at one of replay's trade times, each at its own lane's close. */
+const tradeBars = (cfg, closed) => closed.filter(c => c.bar && isTradeTime(cfg, pointOf(cfg, c.bar, c.minutes || cfg.timeframe)));
 
 function createLiveSession({ cfg, root, home, env = process.env, client, now, log = () => {}, tap, killSwitchFile, fillsTimeoutMs = FILLS_TIMEOUT_MS }) {
   // The code this process runs: hashed once, as loaded (a later edit on disk isn't running until a restart).
@@ -271,7 +288,7 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
     let day = tradingDayKey(at);
     let kind = null;
     // Replay's trade times: the bars whose close (plus the poll delay) is a trade time of the runner's sessions.
-    const bars = p.closed.filter(c => c.bar && isTradeTime(cfg, pointOf(cfg, c.bar)));
+    const bars = tradeBars(cfg, p.closed);
     if (eod) {
       day = DAY.test(String(eod.day)) ? eod.day : day; // a catch-up end of day closes an earlier day
       kind = hasEod(session(day), day) ? 'eod-retry' : 'eod';
@@ -287,6 +304,8 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
       cycles: store.cycleLogsSince(home, startedMs).map(store.cycleSummary), refusals: gate.refusalsSince(startedMs),
       trades: fills ? fills.trades : null, since: fills ? dayBounds(day).start.toISOString() : null, killSwitch: killed,
       stale: kind === 'trade' ? bars.filter(c => c.stale).map(c => c.symbol) : [],
+      // Several lanes: the lanes whose bars closed (as a replay point lists them).
+      lanes: kind === 'trade' ? closedLanes(cfg, bars) : null,
       premarketUnavailable: state.day === day ? state.premarketUnavailable || null : null,
       premarketAvailableAt: state.day === day ? state.premarketAvailableAt || null : null,
       premarketRetryStarved: state.day === day ? state.premarketRetryStarved || 0 : 0,
@@ -321,4 +340,4 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
   return { pass };
 }
 
-module.exports = { createLiveSession, sessionPaths, dayBounds, liveHash, copyJournal, pointOf, FILLS_TIMEOUT_MS, RETRY_TIMEOUT_MS, RETRY_MS, RETRY_ALERT_AFTER, BACKOFF_MS };
+module.exports = { createLiveSession, sessionPaths, dayBounds, liveHash, copyJournal, pointOf, tradeBars, closedLanes, FILLS_TIMEOUT_MS, RETRY_TIMEOUT_MS, RETRY_MS, RETRY_ALERT_AFTER, BACKOFF_MS };

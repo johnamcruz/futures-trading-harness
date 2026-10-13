@@ -15,7 +15,7 @@
  *   failedRun(r)                                a ran cycle that counts as a failed run (not a premarket's, as live)
  *   noDecision(ran)                             a cycle in the pass made no decision (replay runs its time again)
  *   decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch, stale, premarketUnavailable,
- *       premarketAvailableAt, premarketRetryStarved })   the line
+ *       premarketAvailableAt, premarketRetryStarved, lanes })   the line (lanes: several timeframe lanes only)
  *   gateReader(file)                            { refusalsSince(ms) }: the gate log read on from where it left off
  *   killSwitchReason(file)                      the kill switch's latest line ('' when empty), null when off
  *   withEntry(fill, entries, specOf)            an opening fill with the entry the gateway recorded (setup, stop)
@@ -52,11 +52,13 @@ function passTap() {
       events.push(ev);
       return fn(ev);
     },
-    // A closed bar; or (with `values`) the field values its scan read, joined to the symbol's bar of this pass.
+    // A closed bar; or (with `values`) the field values its scan read, joined to the symbol's bar of this pass (with
+    // several lanes, the bar of the same lane: `minutes`).
     bar: (symbol, info = {}) => {
-      const own = info.values ? [...closed].filter(c => c.symbol === symbol).pop() : null;
+      const lane = c => (c.minutes || null) === (info.minutes || null);
+      const own = info.values ? [...closed].filter(c => c.symbol === symbol && lane(c)).pop() : null;
       if (own) Object.assign(own, { contractId: info.contractId || null, values: info.values });
-      else closed.add({ symbol, bar: info.bar || null, stale: Boolean(info.stale), action: info.action || null, ...(info.values ? { contractId: info.contractId || null, values: info.values } : {}) });
+      else closed.add({ symbol, bar: info.bar || null, stale: Boolean(info.stale), action: info.action || null, ...(info.minutes ? { minutes: info.minutes } : {}), ...(info.values ? { contractId: info.contractId || null, values: info.values } : {}) });
     },
     begin() {
       events = [];
@@ -98,7 +100,7 @@ function fieldValues(strategies, bars, i = (bars || []).length - 1) {
 }
 
 /** One decision line (replay/store.js appendRecord adds its version `v`); `values` the pass's closed bars' (R35). */
-function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch = null, stale = [], premarketUnavailable = null, premarketAvailableAt = null, premarketRetryStarved = 0 }) {
+function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch = null, stale = [], premarketUnavailable = null, premarketAvailableAt = null, premarketRetryStarved = 0, lanes = null }) {
   return {
     t, day, kind, asked: pass.asked, ran: pass.ran || [], events: pass.events || [], step, cycles, refusals,
     errors: pass.errors || [], bars: pass.bars || [], values: pass.values || [], trades, since,
@@ -111,6 +113,8 @@ function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, si
     ...(premarketAvailableAt ? { premarketAvailableAt } : {}),
     // The day's premarket retries skipped or cut short by the next bar so far (runner.js retryPremarket).
     ...(premarketRetryStarved > 0 ? { premarketRetryStarved } : {}),
+    // Several timeframe lanes: the lanes whose bars closed at this decision point (minutes, e.g. [3, 1]).
+    ...(Array.isArray(lanes) && lanes.length ? { lanes } : {}),
   };
 }
 

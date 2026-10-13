@@ -346,21 +346,23 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
 /** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
 const HISTORY_RESULT_CHARS = 160;
 
-function historyText(history) {
-  const list = (history || []).slice(-RECENT_IN_PROMPT);
+// `all`: several lanes, the runner already chose the entries (lane-cycle.js laneHistory): every one is shown, each
+// with its lanes.
+function historyText(history, all = false) {
+  const list = all ? (history || []) : (history || []).slice(-RECENT_IN_PROMPT);
   if (!list.length) return '';
   // Repeats ("no-trade - nothing fired" every bar) say one thing once: runs of the same result collapse.
   const runs = [];
   for (const h of list) {
     const text = String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '').replace(/\s+/g, ' ').trim();
     const short = text.length > HISTORY_RESULT_CHARS ? `${text.slice(0, HISTORY_RESULT_CHARS - 1)}…` : text;
-    const sym = (h.symbols || []).join(',');
+    const sym = `${(h.symbols || []).join(',')}${Array.isArray(h.lanes) && h.lanes.length ? ` ${h.lanes.join('+')}` : ''}`;
     const last = runs[runs.length - 1];
     if (last && last.text === short && last.sym === sym) { last.n += 1; last.to = h.at; } else runs.push({ text: short, sym, n: 1, from: h.at, to: h.at });
   }
   const when = r => (r.n > 1 ? `${etTime(r.from).replace(' ET', '')}-${etTime(r.to)} (${r.n} cycles)` : etTime(r.from));
   // Past conclusions, not facts (autonomous-trading skill): a wrong one must not steer later cycles against the facts.
-  return ` Your last ${list.length} cycle(s), oldest first (not facts): ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason.`;
+  return ` Your last ${list.length} cycle(s)${all ? ' on the lanes that closed (with the first lane\'s last few, and those of the lane an open trade was entered on)' : ''}, oldest first (not facts): ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason.`;
 }
 
 // The roles a cycle runs before an entry (trade-session skill), which the order gate checks (roles-ran.js): each
@@ -418,18 +420,20 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '' } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
-      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries }) =>
+      // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
+      // already described this cycle, which adds only its own bars and signals.
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
-        ` ${symbol}: a ${cfg.timeframe}-minute bar just closed (opened ${etTime(bar.t)}); closed ${cfg.timeframe}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file for the ${cfg.timeframe}-minute timeframe instead of fetching it.`
-        + (bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
-        + (bar.plan ? ` ${sentence(bar.plan)}` : '')
-        + (bar.day ? ` ${sentence(bar.day)}` : '')
-        + recentBarsText(symbol, bar.recent, cfg.timeframe)
-        + signalsText(symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [] }));
-      const symbols = list.map(x => x.symbol).join(', ');
+        ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file for the ${minutes}-minute timeframe instead of fetching it.`
+        + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
+        + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
+        + recentBarsText(symbol, bar.recent, minutes)
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [] }));
+      const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
         cfg.cycle === 'lean' ? 'lean cycle (see the trade-session skill)' : '',
@@ -458,7 +462,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history)}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${list.length > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);

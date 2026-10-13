@@ -72,6 +72,14 @@ broker.
    and fails a server whose `get_bars` returns such a bar. Live, with no replay
    clock, nothing changes. `tests/e2e/no-look-ahead.test.js` proves it,
    along with the rules and backtest fill guarantees in `docs/BACKTESTING.md`.
+   With several timeframe lanes (the runner
+   config's `lanes`), the decision times are the union of every lane's
+   closes, one time per close however many lanes close then (the live runner
+   makes those one cycle), and each line lists its lanes (`lanes: [3, 1]`;
+   one-lane runs have no such key). A "signal" lane's time with no fire and
+   nothing open runs no cycle, as live. Each lane's last bar is kept in the
+   run's runner state, so a pass at a 1m-only time never takes the last 3m
+   bar for a new one.
 5. **The store**, local only: `<run home>/replay/<runId>/<day>.jsonl`, one
    line per decision time (what ran, the cycle's result, prompt hash, tool
    calls, skills and orders from the cycle log, the gate's refusals, and the
@@ -243,7 +251,8 @@ broker.
 12. **Live sessions.** The live runner records every trading day the same
    way, in `<FTH_HOME>/sessions/<trading day>/` (`source: "live"`): one line
    per decision point (premarket, end of day and its retries, and every
-   closed bar at one of replay's trade times, a cycle or no cycle), the
+   closed bar at one of replay's trade times, a cycle or no cycle; with
+   several lanes, the lanes whose bars closed in `lanes`), the
    runner config the session started with, and, once
    end of day verified the account flat, the day's fills on that end of
    day's line and the broker's journal for the day. `report`, `labels` and

@@ -24,7 +24,7 @@ const { createServerAttestation } = require('../../scripts/lib/broker/allow-list
 
 const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
 // As tests/lib/order-gate.test.js: a home with an up-trend record and orb fired long; record ages unlimited.
-const BASE = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+const BASE = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
 const gate = (input, entries, { now = NOW, config = BASE, blackouts, strategies = SHIPPED, accounts, journalTruncated } = {}) =>
   evaluateOrder({ input, entries, now, config, blackouts, strategies, accounts, journalTruncated });
 

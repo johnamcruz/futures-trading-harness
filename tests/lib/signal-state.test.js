@@ -52,11 +52,13 @@ test('scripts/strategies.js scan --record refuses a symbol that is not a contrac
 
 test('checkTrigger: only the strategy that fired, on its side, on a recent bar; fails closed', () => {
   const home = trendHome(tmpDir(), { fired: [{ name: 'orb', direction: 'long' }] });
-  const check = extra => checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'orb', now, ...extra });
+  const check = extra => checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'orb', timeframe: '3m', now, ...extra });
   assert.strictEqual(check(), null);
+  // No timeframe given: the 3m record is read, at the strictest age (1 minute a bar: 3 min).
+  assert.match(check({ timeframe: undefined, now: new Date('2026-10-07T14:01:00Z') }), /closed 4 min ago \(limit 3 min: 3 1-minute \(no readable timeframe\) bars/);
   assert.match(check({ side: 'sell' }), /setup:orb short did not fire on the last closed MNQ bar .*fired: orb long/);
   assert.match(check({ strategy: 'cisd_ote' }), /setup:cisd_ote long did not fire.*a different setup tag doesn't make it one/);
-  assert.match(check({ now: new Date('2026-10-07T14:20:00Z') }), /closed 23 min ago \(limit 10, FTH_SIGNAL_MAX_AGE_MIN\): the setup has expired/);
+  assert.match(check({ now: new Date('2026-10-07T14:20:00Z') }), /closed 23 min ago \(limit 9 min: 3 3m bars, FTH_SIGNAL_MAX_AGE_BARS\): the setup has expired/);
   assert.match(check({ now: new Date('2026-10-07T13:30:00Z') }), /after now/);
   // A record up to FUTURE_TOLERANCE_MIN (1) after now is a broker clock a little ahead: trusted (order_plan shares it).
   assert.strictEqual(FUTURE_TOLERANCE_MIN, 1);

@@ -107,11 +107,13 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
   // A policy strategy owns its strategies' setups only while it can trade: active (or any
   // non-disabled one in a paper run) with an attempt running. Otherwise they trade as before.
   // everyLane: every such policy, whatever the lane (ownership is never lost to a lane); else the lane's only.
-  function activePolicies(symbol, contractId, everyLane = false) {
+  // `inLaneOf`: the lane to screen for (a multi-lane runner's lane whose bar closed); none, the factory's.
+  function activePolicies(symbol, contractId, everyLane = false, inLaneOf = null) {
     const root = contractRoot(contractId) || symbol;
     const fam = r => (familyOf(r) ? familyOf(r).micro : r);
     const all = strategies();
-    const inLane = lane && !everyLane ? new Set(lanePolicies(all, lane)) : null;
+    const which = inLaneOf || lane;
+    const inLane = which && !everyLane ? new Set(lanePolicies(all, which)) : null;
     return all.filter(s => s.valid && s.signal === 'policy' && (!inLane || inLane.has(s))
       && (s.status === 'active' || (paper && s.status !== 'disabled'))
       && s.instruments.some(x => fam(x) === fam(root)) && state.readAttempt(home, s.account));
@@ -178,10 +180,10 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       for (const s of activePolicies(symbol, contractId, true)) for (const n of s.strategies) if (!owners.has(n)) owners.set(n, s.name);
       return owners;
     },
-    screen(results, { symbol, contractId, bars, now = new Date() }) {
+    screen(results, { symbol, contractId, bars, now = new Date(), lane: barLane = null }) {
       // The contract's root (MNQ), not the plugin root this factory was given.
       const root = contractRoot(contractId) || symbol;
-      const policies = activePolicies(symbol, contractId);
+      const policies = activePolicies(symbol, contractId, false, barLane);
       const owners = this.owners({ symbol, contractId });
       if (!policies.length && !owners.size) return results;
       const registry = strategies();
@@ -227,6 +229,17 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         });
       }
       return out;
+    },
+    /**
+     * A verdict that supersedes one already recorded (lane-cycle.js skippedVerdict: a policy's setup skipped for a
+     * higher-priority one in the same cycle): the gate reads the latest, so the skipped policy's entry is refused.
+     */
+    supersede(verdict) {
+      state.appendVerdict(home, verdict);
+    },
+    /** The policies' entry verdicts still open now (prop-state.js openEntryVerdicts): unexpired, unused. */
+    openVerdicts(now = new Date()) {
+      return state.openEntryVerdicts(home, journalEntries(), now);
     },
   };
 }

@@ -7,7 +7,11 @@
  *   trade      every closed bar of the timeframe inside the runner's sessions
  *              and the market session, before end of day, polled
  *              barDelaySeconds after the close as the live runner polls it
- *              (optionally every Nth bar of each trading day);
+ *              (optionally every Nth bar of each trading day); with several
+ *              timeframe lanes (lanes.js), the union of every lane's closes,
+ *              one point per close time however many lanes close then (the
+ *              live runner coalesces them into one cycle), each point listing
+ *              its lanes (`lanes`: [3, 1], in the config's lane order);
  *   premarket  the config's premarketAt (when premarket runs);
  *   eod        end of day (eodAt, or earlyCloseEodAt on an early close).
  *
@@ -27,6 +31,7 @@
 const { tradingDayStart, tradingDayKey, inMarketHours, inWindow, parseWindows, sessionMinute, sessionMinuteOf } = require('../trading/clock');
 const { endOfDayAt, parseAt } = require('../autotrader');
 const { CLOSED, cmeHolidays } = require('../trading/exchange-calendar');
+const { lanesOf } = require('../lanes');
 
 const HOUR = 3600000;
 
@@ -43,8 +48,22 @@ function tradingDays(cfg, { start, end }) {
   return out;
 }
 
+/** Every bar close of the lanes from `from` (exclusive) to `to` (inclusive): [[closeMs, [timeframes]]], by time. */
+function laneCloses(lanes, from, to) {
+  const closes = new Map();
+  for (const { timeframe } of lanes) {
+    const step = timeframe * 60000;
+    for (let close = Math.floor(from / step) * step + step; close <= to; close += step) {
+      if (!closes.has(close)) closes.set(close, []);
+      closes.get(close).push(timeframe);
+    }
+  }
+  return [...closes.entries()].sort((a, b) => a[0] - b[0]);
+}
+
 function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000 }) {
-  const step = cfg.timeframe * 60000;
+  const lanes = lanesOf(cfg);
+  const multi = lanes.length > 1;
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   const inside = t => t.getTime() >= start.getTime() && t.getTime() < end.getTime();
   const points = [];
@@ -53,14 +72,14 @@ function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelay
     const eodMin = sessionMinuteOf(endOfDayAt(cfg, new Date(d.getTime() + 12 * HOUR)), d);
     const eodAt = new Date(d.getTime() + eodMin * 60000);
     let n = 0;
-    for (let close = Math.floor(d.getTime() / step) * step + step; close <= eodAt.getTime(); close += step) {
+    for (const [close, tfs] of laneCloses(lanes, d.getTime(), eodAt.getTime())) {
       const t = new Date(close + delayMs);
       // At or after end of day the runner runs end of day, not a bar's cycle.
       if (sessionMinute(t) >= eodMin || tradingDayStart(t).getTime() !== d.getTime()) break;
       if (!inMarketHours(t) || !windows.some(w => inWindow(t, w))) continue;
       n += 1;
       if ((n - 1) % everyNth !== 0) continue;
-      if (inside(t)) points.push({ t, kind: 'trade', day });
+      if (inside(t)) points.push(multi ? { t, kind: 'trade', day, lanes: tfs } : { t, kind: 'trade', day });
     }
     const pre = parseAt(cfg.premarketAt);
     const preMin = pre ? sessionMinuteOf(pre, d) : null;
@@ -106,4 +125,4 @@ function holidayDates(start, end) {
   return { closed, early };
 }
 
-module.exports = { decisionPoints, tradingDays, holidayDates, isTradeTime };
+module.exports = { decisionPoints, laneCloses, tradingDays, holidayDates, isTradeTime };

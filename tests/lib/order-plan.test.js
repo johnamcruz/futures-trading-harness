@@ -119,7 +119,7 @@ test('buildPlan: its place_order arguments pass the order gate\'s consistency ch
 });
 
 test('buildPlan: a planned orb entry passes every gate check (tag, trigger, trend, stop, consistency)', () => {
-  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
   for (const [side, bias] of [['long', 1], ['short', -1]]) {

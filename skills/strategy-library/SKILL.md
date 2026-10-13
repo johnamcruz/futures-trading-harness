@@ -159,7 +159,9 @@ uses the contract ordered: its broker tick specs, and its size and
 `risk.max_risk_usd` in its own dollars (one NQ at a 40-tick stop risks
 $200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded. A rules strategy
 enters only on its own trigger (`trigger-fired`): the signal record must show
-it fired on that side on a bar that closed less than 10 minutes ago (the
+it fired on that side on a bar that closed at most 3 bars of the strategy's
+own timeframe ago and never more than 45 minutes ago (3 min on 1m, 9 min on
+3m, 45 min on 15m and 1h; the
 runner records every bar; interactively `strategies_scan` with `record: true`,
 whose `symbol` is a contract root such as `MNQ`; refused while the
 autonomous runner is running, which records the symbols it trades). The gate does
