@@ -55,7 +55,8 @@ scripts. None places, changes, or cancels an order.
   in a replay). No tool takes an output path or an environment.
 - In a replay, a bars file with a bar that closes after the replay clock is
   refused: `[<script>] the bars file <path>: N bar(s) close after the replay
-  clock (...)`. `bars_fetch` writes only closed bars, and the runner's bars
+  clock (...)`, and so is a file whose bars are all at one time (when they
+  close can't be told). `bars_fetch` writes only closed bars, and the runner's bars
   file holds only those too. Read one of those files instead; don't retry the
   same file. A briefing of a later bar is not served.
 - An unknown argument is refused, with the arguments the tool takes.

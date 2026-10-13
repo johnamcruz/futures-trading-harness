@@ -53,3 +53,15 @@ test('mtf_read: the default read points to the current briefing; a daily file, o
   assert.doesNotMatch(mtf({ file, symbol: 'MNQ', tf: [5, 30] }, ctx(b.asOf)).text, /briefing is current/);
   assert.doesNotMatch(mtf({ file, symbol: 'MNQ', json: true }, ctx(b.asOf)).text, /briefing is current/);
 });
+
+test('read once never points to a briefing whose bar closed after the operation\'s replay clock (ctx.replayAt)', () => {
+  const { b, file, ctx } = setup();
+  const before = () => new Date(Date.parse(b.closedAt) - 1);
+  const at = () => new Date(Date.parse(b.closedAt));
+  assert.strictEqual(briefedThisCycle(ctx(b.asOf).env, 'MNQ', before), null);
+  assert.strictEqual(briefedThisCycle(ctx(b.asOf).env, 'MNQ', at).asOf, b.asOf);
+  // Before the briefing's close, the tools don't take the shortcut: they read the bars, and are refused there (the last bar is after the clock).
+  assert.throws(() => scan({ file, symbol: 'MNQ', view: 'summary' }, { ...ctx(b.asOf), replayAt: before }), /close after the replay clock/);
+  assert.throws(() => mtf({ file, symbol: 'MNQ' }, { ...ctx(b.asOf), replayAt: before }), /close after the replay clock/);
+  assert.match(scan({ file, symbol: 'MNQ', view: 'summary' }, { ...ctx(b.asOf), replayAt: at }).text, /briefing is current/);
+});
