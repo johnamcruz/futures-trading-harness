@@ -276,6 +276,31 @@ test('order_plan: a policy strategy - its verdict\'s contract, side and stop tic
   assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, later), /the order gate would refuse this entry: \[combine\] .*since the snapshot|the order gate would refuse this entry: .*\[policy\] .*already used/);
 });
 
+test('order_plan: a policy verdict from a paper component is refused as the gate refuses it; a paper run plans it', () => {
+  const { file, home, ctx } = setup();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, '/nonexistent'], journal: path.join(home, 'journal.jsonl') } } }));
+  // The repo's strategies and accounts, with bos (a prop_portfolio component) on paper.
+  const root = path.join(home, 'plugin');
+  fs.mkdirSync(path.join(root, 'strategies', 'bos'), { recursive: true });
+  for (const d of fs.readdirSync(path.join(ROOT, 'strategies'))) if (d !== 'bos') fs.symlinkSync(path.join(ROOT, 'strategies', d), path.join(root, 'strategies', d));
+  fs.symlinkSync(path.join(ROOT, 'accounts'), path.join(root, 'accounts'));
+  const doc = fs.readFileSync(path.join(ROOT, 'strategies', 'bos', 'STRATEGY.md'), 'utf8').replace(/^status: active$/m, 'status: paper');
+  assert.match(doc, /^status: paper$/m);
+  fs.writeFileSync(path.join(root, 'strategies', 'bos', 'STRATEGY.md'), doc);
+  const account = accountNamed(ROOT, 'topstep_100k', {});
+  prop.startAttempt(home, account, NOW);
+  prop.snapshot(home, account, 100000, NOW);
+  recordBar(home, FIRED_BAR);
+  prop.appendVerdict(home, {
+    at: NOW.toISOString(), expiresAt: new Date(NOW.getTime() + 180000).toISOString(), strategy: 'prop_portfolio', component: 'bos', symbol: 'MNQ',
+    bar: FIRED_BAR, direction: 'long', stopTicks: 18, account: 'topstep_100k', action: 'full', contract: 'NQ', maxSize: 12,
+  });
+  const go = env => plan({ file, symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long', accountId: 7 }, { ...ctx, root, env: { ...ctx.env, ...env } });
+  assert.throws(() => go({}), /the order gate would refuse this entry: \[policy\] setup:prop_portfolio: the latest verdict's setup is from bos: bos has status "paper": prop_portfolio trades only its active strategies live/);
+  // A paper run (the gate refuses every live entry there): planned, as the paper run's screen picked it.
+  assert.strictEqual(go({ FTH_PAPER: '1' }).args.size, 8);
+});
+
 test('order_plan: a policy strategy is sized with the broker\'s tick values, and refused while either contract of the family has none', () => {
   const { file, home, ctx } = setup({ specs: false });
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, '/nonexistent'], journal: path.join(home, 'journal.jsonl') } } }));

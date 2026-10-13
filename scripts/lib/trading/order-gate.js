@@ -278,7 +278,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const riskMsg = checkRiskLimit({ input, stopPrices, strategy: named, specOf });
   if (riskMsg) violations.push({ check: 'max-risk', message: riskMsg });
   if (named && named.account) {
-    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf, selected: config.selection ? config.selection.symbols : null }));
+    violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf, selected: config.selection ? config.selection.symbols : null, strategies }));
   } else {
     // While an attempt runs, every entry (tagged or not) must come from a
     // policy strategy that trades it, so none skips the floor, the daily

@@ -22,7 +22,7 @@ function bars(n = 200) {
   });
 }
 
-function setup({ start = true, contracts = 'micro', specs = true } = {}) {
+function setup({ start = true, contracts = 'micro', specs = true, paper = false } = {}) {
   const home = tmpDir();
   if (specs) recordBrokerSpecs(home); // the broker's tick specs, as the translator records them
   const env = {};
@@ -32,6 +32,8 @@ function setup({ start = true, contracts = 'micro', specs = true } = {}) {
     name: 'prop_x', valid: true, status: 'active', instruments: ['MNQ', 'NQ'], timeframe: '3m', signal: 'policy', strategies: COMPONENTS,
     account: 'topstep_50k', contracts, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 },
   };
+  // Its strategies, as loadStrategies reads them: a policy trades only the active ones (status set per test).
+  const components = COMPONENTS.map(name => ({ name, valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m' }));
   const logs = [];
   const balances = [];
   const client = {
@@ -42,8 +44,8 @@ function setup({ start = true, contracts = 'micro', specs = true } = {}) {
     journal: [],
     async fillsSince(id, start) { client.fillsFrom = start.toISOString(); return client.fills.filter(f => Date.parse(f.creationTimestamp) >= start.getTime()); },
   };
-  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy], log: m => logs.push(m), journal: () => client.journal });
-  return { hooks, home, account, strategy, logs, balances, client };
+  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy, ...components], paper, log: m => logs.push(m), journal: () => client.journal });
+  return { hooks, home, account, strategy, components, logs, balances, client };
 }
 
 test('snapshots and end-of-day balances go to the attempt the gate reads', async () => {
@@ -171,6 +173,57 @@ test('a policy strategy screens its strategies\' setups: the first that fired, s
   const vo = prop.latestVerdict(odd.home, 'prop_x', 'MNQ');
   assert.deepStrictEqual([vo.action, vo.maxSize], ['skip', 0]);
   assert.match(vo.reason, /^NQ: the broker's tick spec \(0\.25 = \$0\.50\) differs from the static table/);
+});
+
+test('a paper strategy stays paper inside a policy: the screen passes over a component that is not active', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  // trendy (first in the policy's order) is paper; other (active) fired too.
+  const scan = [
+    { name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 },
+    { name: 'other', candidate: true, direction: 'short', stopDistance: 10 },
+  ];
+  const { hooks, home, components } = setup();
+  components[0].status = 'paper';
+  await hooks.snapshot(now);
+  const out = hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const mine = out.find(r => r.name === 'prop_x');
+  assert.deepStrictEqual([mine.candidate, mine.component, mine.direction], [true, 'other', 'short'], 'the next active one that fired');
+  assert.strictEqual(prop.latestVerdict(home, 'prop_x', 'MNQ').component, 'other');
+  const trendy = out.find(r => r.name === 'trendy');
+  assert.strictEqual(trendy.candidate, false, 'still owned: never a candidate on its own while the attempt runs');
+  assert.match(trendy.note, /^not traded through prop_x: trendy has status "paper": prop_x trades only its active strategies live/);
+  assert.strictEqual(out.find(r => r.name === 'other').note, 'traded through prop_x');
+
+  // Only paper components fired: no setup, no verdict, and the policy row says what it passed over.
+  const only = setup();
+  only.components[0].status = 'paper';
+  await only.hooks.snapshot(now);
+  const solo = only.hooks.screen([scan[0]], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  const row = solo.find(r => r.name === 'prop_x');
+  assert.strictEqual(row.candidate, false);
+  assert.strictEqual(row.verdict, undefined);
+  assert.match(row.note, /^no setup: passed over trendy \(trendy has status "paper": prop_x trades only its active strategies live/);
+  assert.strictEqual(prop.latestVerdict(only.home, 'prop_x', 'MNQ'), null, 'no verdict recorded');
+  assert.ok(solo.every(r => !r.candidate), 'nothing to enter');
+  assert.match(only.logs.join('\n'), /prop_x has no setup: it passed over trendy/);
+  // A component missing from the registry is passed over too (fails closed).
+  const gone = setup();
+  gone.components.splice(0, 1);
+  await gone.hooks.snapshot(now);
+  gone.hooks.screen([scan[0]], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  assert.strictEqual(prop.latestVerdict(gone.home, 'prop_x', 'MNQ'), null);
+
+  // A paper run (no order goes live): a paper component's setup is planned, as a paper run takes any non-disabled policy.
+  const paperRun = setup({ paper: true });
+  paperRun.components[0].status = 'paper';
+  await paperRun.hooks.snapshot(now);
+  const p = paperRun.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }).find(r => r.name === 'prop_x');
+  assert.deepStrictEqual([p.candidate, p.component], [true, 'trendy']);
+  // ... but never a disabled one.
+  const disabled = setup({ paper: true });
+  disabled.components[0].status = 'disabled';
+  await disabled.hooks.snapshot(now);
+  assert.strictEqual(disabled.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }).find(r => r.name === 'prop_x').component, 'other');
 });
 
 test('the prop hooks have no in-trade decision: an open trade is left to the policy strategy\'s exit', () => {

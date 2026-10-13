@@ -444,6 +444,26 @@ function withConfluence(results) {
   } : r));
 }
 
+/**
+ * Why policy strategy `policy` may not trade the setup of its strategy `name`, or null when it may.
+ * A paper strategy stays paper inside a policy: live, a policy trades only its listed strategies
+ * that are valid rules strategies with status active. In a paper run (`paper`: no order goes
+ * live) any non-disabled one counts, as a paper run takes any non-disabled policy. `registry`:
+ * loadStrategies' list; none (or a name not in it) refuses, so a caller can't fail open.
+ * The runner's screen, the order gate (prop-state.js), and the backtester all use it.
+ */
+function componentRefusal(policy, registry, name, { paper = false } = {}) {
+  const owner = policy && policy.name;
+  if (!(policy && Array.isArray(policy.strategies) && policy.strategies.includes(name))) return `${name || 'the setup\'s strategy'} is not one of ${owner || 'the policy'}'s strategies`;
+  if (!Array.isArray(registry)) return `${name}'s status can't be read (no strategy registry), so ${owner} can't trade it`;
+  const c = registry.find(x => x.name === name);
+  if (!c) return `${name} is not a known strategy`;
+  if (!c.valid) return `strategies/${name}/STRATEGY.md is invalid (${(c.errors || [])[0]})`;
+  if (c.signal !== 'rules') return `${name} is signal: ${c.signal}; a policy trades rules strategies only`;
+  if (c.status === 'active' || (paper && c.status !== 'disabled')) return null;
+  return `${name} has status "${c.status}": ${owner} trades only its active strategies${paper ? '' : ' live'} (a ${c.status} strategy stays ${c.status} inside a policy)`;
+}
+
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */
 function checkStrategyForOrder(strategies, name, contractRoot, now, side = null, selection = { symbols: null }) {
   // An unreadable selection: no entries until it names one contract per index (fails closed).
@@ -475,6 +495,7 @@ module.exports = {
   loadStrategies,
   scan,
   checkStrategyForOrder,
+  componentRefusal,
   tradesRoot,
   rootRefusal,
  recentSignals };

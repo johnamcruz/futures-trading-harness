@@ -6,7 +6,7 @@ status: active                # the owner's call: live and replay; the sizing ru
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
 timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works)
 signal: policy                # trades the setups of the strategies below on the account
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first that fires on a bar is the setup
+strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first active one that fires on a bar is the setup (a paper one stays paper)
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 sizing:                       # risk from the headroom above the floor
   cushion_frac: 0.3           # a trade risks at most 30% of the cushion above the floor ...
@@ -42,8 +42,10 @@ skips one the budget can't fund, and its trail exits every trade.
 
 1. On every closed bar of its timeframe (`timeframe: 3m`) the runner scans
    the twelve strategies in the order listed, on each index's bars. The
-   first one with a setup (its own rules and stop) is this strategy's setup
-   on that index. A strategy that doesn't list an index (vwap_reclaim lists
+   first `active` one with a setup (its own rules and stop) is this
+   strategy's setup on that index. A `paper` strategy (value_area today)
+   stays paper inside it: its setup is passed over, and the gate refuses an
+   entry whose verdict names it. A strategy that doesn't list an index (vwap_reclaim lists
    only MNQ and MES) never fires there. The strategies don't trade on their
    own while the attempt runs. `timeframe` is the one setting for the bar
    size; every listed strategy must trade that timeframe (the strategies are

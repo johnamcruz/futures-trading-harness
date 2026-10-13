@@ -31,7 +31,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies, tradesRoot } = require('../trading/strategies');
+const { loadStrategies, tradesRoot, componentRefusal } = require('../trading/strategies');
 const { loadBars, barMinutes, aggregate, auditBars } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
@@ -242,6 +242,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     if (Number.parseInt(p.strategy.timeframe, 10) !== cfg.timeframe) throw new Error(`timeframe: ${cfg.prop} trades ${p.strategy.timeframe} bars, not ${cfg.timeframe}m`);
     prop = p.strategy;
     strategies = p.components;
+    for (const x of p.leftOut) log(`${cfg.prop}: leaves out ${x.name}: ${x.why}`);
     const { familyRoot } = require('../trading/contracts');
     for (const sym of cfg.symbols) {
       if (!prop.instruments.some(r => familyRoot(r) === familyRoot(sym))) throw new Error(`symbols: ${cfg.prop} trades ${prop.instruments.join(', ')}, not ${sym}`);
@@ -326,14 +327,23 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   return { report, runDir };
 }
 
-/** The policy strategy `name`, checked, with its strategies (in its order). */
+/**
+ * The policy strategy `name`, checked, with the strategies it trades (in its order) and the ones
+ * it leaves out with why. As live (strategies.js componentRefusal, the runner's screen and the
+ * gate): an active policy trades only its active strategies; one that isn't active runs only in
+ * a paper run, which takes any non-disabled one.
+ */
 function policyStrategy(root, name, env = process.env) {
   const all = loadStrategies(root, env).strategies;
   const s = all.find(x => x.name === name);
   if (!s) throw new Error(`prop: ${name} is not a strategy (strategies/${name}/STRATEGY.md)`);
   if (s.signal !== 'policy') throw new Error(`prop: ${name} is signal: ${s.signal}; a prop run needs a policy strategy (signal: policy)`);
   if (!s.valid) throw new Error(`prop: ${name} is invalid (${s.errors[0]})`);
-  return { strategy: s, components: s.strategies.map(n => all.find(x => x.name === n)) };
+  const paper = s.status !== 'active';
+  const left = s.strategies.map(n => ({ name: n, why: componentRefusal(s, all, n, { paper }) })).filter(x => x.why);
+  const components = s.strategies.filter(n => !left.some(x => x.name === n)).map(n => all.find(x => x.name === n));
+  if (!components.length) throw new Error(`prop: ${name} trades none of its strategies (${left.map(x => x.why).join('; ')})`);
+  return { strategy: s, components, leftOut: left };
 }
 
 /** Prop challenge attempts: every setup the account's budget sizes, exited by the policy strategy's exit. */
@@ -341,7 +351,7 @@ function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, en
   const account = accountNamed(root, prop.account, env);
   const contracts = prop.contracts || 'auto';
   const e = createEnv({
-    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: prop.strategies, contracts },
+    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: strategies.map(x => x.name), contracts },
     engine: { ...cfg, account: null, prop: null, gateConfig: loadConfig(env) },
   });
   const from = cfg.start ?? e.days[0];
@@ -353,7 +363,7 @@ function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, en
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
   const report = {
     runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: strategies.map(s => s.name),
-    gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
+    leftOut: prop.strategies.filter(n => !strategies.some(s => s.name === n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
   };
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });

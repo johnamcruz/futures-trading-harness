@@ -23,6 +23,7 @@ const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const state = require('../trading/prop-state');
 const { decideSetup } = require('./verdict');
+const { componentRefusal } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
 
@@ -159,7 +160,11 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
      * the first of them that fired (in the policy strategy's order, as the
      * backtester picks) becomes the policy strategy's setup, sized from the
      * attempt's budget (or skipped). The verdict (contract, size, stop) is
-     * recorded for the gate.
+     * recorded for the gate. A paper strategy stays paper inside a policy:
+     * the pick passes over a strategy that isn't active (in a paper run, one
+     * that is disabled; strategies.js componentRefusal, as the gate checks
+     * the verdict's component). With only such setups fired, the policy has
+     * no setup: not a candidate, no verdict, and a note naming them.
      */
     /** The strategies an active policy owns on this contract now: Map(strategy -> policy); empty when none. */
     owners({ symbol, contractId }) {
@@ -173,13 +178,23 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       const policies = activePolicies(symbol, contractId);
       if (!policies.length) return results;
       const owners = this.owners({ symbol, contractId });
+      const registry = strategies();
+      const refusal = (s, n) => componentRefusal(s, registry, n, { paper }); // null: the policy may trade n's setup
       const byName = new Map((results || []).map(r => [r.name, r]));
+      const ownedNote = r => {
+        const owner = owners.get(r.name);
+        const why = refusal(policies.find(p => p.name === owner), r.name);
+        return why ? `not traded through ${owner}: ${why}` : `traded through ${owner}`;
+      };
       const out = (results || []).filter(r => !policies.some(s => s.name === r.name))
-        .map(r => (owners.has(r.name) && r.candidate ? { ...r, candidate: false, note: `traded through ${owners.get(r.name)}` } : r));
+        .map(r => (owners.has(r.name) && r.candidate ? { ...r, candidate: false, note: ownedNote(r) } : r));
       for (const s of policies) {
-        const pick = s.strategies.map(n => byName.get(n)).find(r => r && r.candidate && r.direction && r.stopDistance > 0);
+        const fired = s.strategies.map(n => byName.get(n)).filter(r => r && r.candidate && r.direction && r.stopDistance > 0);
+        const pick = fired.find(r => !refusal(s, r.name));
         if (!pick) {
-          out.push({ name: s.name, status: s.status, signal: 'policy', candidate: false });
+          const passed = fired.map(r => `${r.name} (${refusal(s, r.name)})`).join('; ');
+          if (passed) log(`${symbol}: ${s.name} has no setup: it passed over ${passed}`);
+          out.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, ...(passed ? { note: `no setup: passed over ${passed}` } : {}) });
           continue;
         }
         const account = accounts().find(a => a.name === s.account);

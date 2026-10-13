@@ -61,6 +61,14 @@ it:
   `combine.js start`. A policy strategy still at `paper` (e.g. `prop_flow_1m`)
   stays so until the user activates it, and every verdict entry is refused
   (`[strategy] ... status "paper"`): report it and stand aside.
+- **A policy trades only its active strategies.** A `paper` strategy stays
+  paper inside a policy: the runner passes over its setup (it takes the next
+  active strategy that fired; with none, the policy has no setup that bar),
+  and the gate refuses an entry whose latest verdict names a strategy that
+  isn't active, or none it knows (`[policy] setup:<policy>: the latest
+  verdict's setup is from <name>: <name> has status "paper": ...`; it can't
+  be skipped). Stand aside: activating a strategy is the user's call. Exits
+  and `[protect]` stops always go.
 - **A verdict for the mini** (`NQ` while the bars are MNQ's): use the
   contract name `NQ` as the contractId (the harness translates it to the
   broker's id), and write the plan **and** the order with it; a plan for
@@ -72,7 +80,8 @@ it:
   stepped back: tell the user); a missed close (the user records it with
   `combine.js record-day`: tell them the exact command); a passed or finished attempt; the soft or firm
   daily limit; a size over the budget; any entry that doesn't match the
-  verdict, or whose verdict is not for the last recorded bar; any position already open on the account, or any order working
+  verdict, or whose verdict is not for the last recorded bar, or is for a
+  setup of a strategy that isn't active; any position already open on the account, or any order working
   on it (a resting entry on another market could fill next to it); any entry once another
   went in since the latest account snapshot ("wait for the next bar's
   snapshot"; one whose journal time is unreadable counts as since it: tell

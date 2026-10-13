@@ -12,6 +12,7 @@ const { runBacktest, validateBacktestConfig } = require('../../scripts/lib/backt
 const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
+const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -327,6 +328,39 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   assert.strictEqual(report.withPolicy, undefined);
   assert.strictEqual(report.policy, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(runDir, 'combine.md'), 'utf8'), /Policy/);
+});
+
+test('prop challenge mode trades what live trades: an active policy leaves out a paper component; a paper policy (a paper run) keeps it', () => {
+  const dir = tmpDir();
+  const accounts = path.join(dir, 'accounts');
+  fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(ROOT, 'accounts', 'topstep_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: topstep_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
+  const strategiesDir = path.join(dir, 'strategies');
+  const policy = (name, list, status = 'active') => {
+    fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });
+    fs.writeFileSync(path.join(strategiesDir, name, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+      .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
+      .replace(/^status: active\b/m, `status: ${status}`));
+  };
+  // value_area is paper in the repo; bos is active.
+  assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'paper');
+  policy('prop_mixed', ['value_area', 'bos']);
+  policy('prop_bos_only', ['bos']);
+  policy('prop_mixed_paper', ['value_area', 'bos'], 'paper');
+  policy('prop_all_paper', ['value_area']);
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
+  const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
+  const logs = [];
+  const mixed = run('prop_mixed', logs);
+  assert.deepStrictEqual(mixed.strategies, ['bos']);
+  assert.deepStrictEqual(mixed.leftOut, ['value_area']);
+  assert.ok(logs.some(l => /^prop_mixed: leaves out value_area: value_area has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
+  assert.deepStrictEqual(mixed.baseline, run('prop_bos_only').baseline, 'the paper component takes no setup');
+  const paper = run('prop_mixed_paper');
+  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['value_area', 'bos'], []]);
+  assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(value_area has status "paper"/);
 });
 
 test('engine (default fills): an entry fills at the next bar\'s open plus a tick of slippage; a gap through the stop expires it', () => {
