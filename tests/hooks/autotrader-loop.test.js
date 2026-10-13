@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { FAKE_BROKERS, tmpDir } = require('../helpers');
 const { inMarketHours, zonedParts } = require('../../scripts/lib/trading/clock');
 
@@ -71,8 +71,60 @@ test('a live runner refuses to start when the broker server would refuse its hou
   }
 });
 
-// The runner runs on the real clock: during market hours a fresh bar starts a
-// cycle; outside them it must stay idle.
+/** The actions of every cycle the runner started (its event log, <harness home>/logs/events-<day>.jsonl). */
+function cycleActions(harnessHome) {
+  const dir = path.join(harnessHome, 'logs');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(f => /^events-.*\.jsonl$/.test(f)).sort()
+    .flatMap(f => fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)))
+    .filter(e => e.kind === 'cycle_start').map(e => e.action);
+}
+
+// One pass of the runner at a pinned instant: the replay clock (FTH_REPLAY_NOW with a replay broker, the mock
+// exchange attesting it), the clock the runner already takes; the live loop itself has no injectable clock.
+const MOCK_EXCHANGE = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
+function passAt(at) {
+  const home = tmpDir();
+  const brokers = path.join(home, 'brokers.json');
+  fs.writeFileSync(brokers, JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, MOCK_EXCHANGE], replay: true, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } } }));
+  fs.mkdirSync(path.join(home, 'state'));
+  fs.writeFileSync(path.join(home, 'clock.json'), JSON.stringify({ now: at }));
+  const config = path.join(home, 'auto.json');
+  fs.writeFileSync(config, JSON.stringify({
+    harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3,
+    sessions: ['18:00-15:50@America/New_York'], premarketAt: '', eodAt: '15:50@America/New_York', dataDir: path.join(home, 'bars'),
+  }));
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config, '--once', 'trade'], {
+    encoding: 'utf8', timeout: 60000,
+    env: {
+      PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: brokers, FTH_REPLAY_NOW: at,
+      MOCK_REPLAY: '1', MOCK_STATE_DIR: path.join(home, 'state'), MOCK_CLOCK_FILE: path.join(home, 'clock.json'), MOCK_JOURNAL: path.join(home, 'journal.jsonl'), MOCK_INIT: '{}',
+    },
+  });
+  assert.strictEqual(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  const line = r.stdout.split('\n').find(l => l.startsWith('REPLAY STEP '));
+  assert.ok(line, r.stdout);
+  return { home, step: JSON.parse(line.slice('REPLAY STEP '.length)) };
+}
+
+test('runner at pinned instants: a trade cycle in market hours, only the end-of-day job after eodAt, nothing with the market closed', { timeout: 120000 }, () => {
+  // Wednesday 2026-10-07 (New York = UTC-4): 10:03 ET, 15:53 ET (after the 15:50 eodAt), 16:30 ET (the daily break); Saturday noon.
+  const open = passAt('2026-10-07T14:03:02Z');
+  assert.deepStrictEqual(open.step.ran.map(x => [x.action, x.ok, x.result]), [['trade', true, 'CYCLE RESULT: no-trade - fake harness']]);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(open.home, 'bars', 'MNQ-3m.json'), 'utf8')).contractId, 'MNQ');
+  assert.deepStrictEqual(cycleActions(open.home), ['trade']);
+  const afterEod = passAt('2026-10-07T19:53:02Z');
+  assert.deepStrictEqual(afterEod.step.ran.map(x => x.action), ['eod'], 'after eodAt: the end-of-day job, never a trade cycle');
+  assert.deepStrictEqual(cycleActions(afterEod.home), ['eod']);
+  for (const at of ['2026-10-07T20:30:00Z', '2026-10-10T16:00:00Z']) {
+    const closed = passAt(at);
+    assert.deepStrictEqual(closed.step.ran, [], `${at}: the market is closed, nothing runs`);
+    assert.deepStrictEqual(cycleActions(closed.home), [], at);
+  }
+});
+
+// The live loop runs on the real clock (it has no injectable clock): during market hours a fresh bar starts a
+// cycle; outside them it must stay up and start no trade cycle. The pinned instants are the test above.
 test('runner starts a cycle on a fresh closed bar during market hours, and none outside them', { timeout: 30000 }, async () => {
   // Open = market hours, and before this config's 15:50 ET end of day (its session is the whole market session).
   const etMin = d => { const p = zonedParts(d, 'America/New_York'); return p.hour * 60 + p.minute; };
@@ -103,7 +155,9 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
     if (!open) {
       await new Promise(r => setTimeout(r, 5000));
       assert.ok(runner.exitCode === null, `the runner keeps running:\n${io.out}`);
-      if (closed) assert.ok(!io.out.includes('CYCLE RESULT'), 'no cycle outside market hours');
+      // Past eodAt the end-of-day job runs (and prints its CYCLE RESULT): judged by the action, never a trade cycle.
+      // The instants are pinned in the replay-clock test above; this live-loop test only checks what holds at any time.
+      if (closed) assert.deepStrictEqual(cycleActions(path.join(home, '.futures-trading-harness')).filter(a => a !== 'eod'), [], 'no trade cycle outside market hours or after eodAt');
       return;
     }
     await new Promise((resolve, reject) => {
