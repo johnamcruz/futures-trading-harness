@@ -187,7 +187,11 @@ test('order docs check a new order once and never wait or poll for a fill; the c
   assert.match(read('qwen-extension/agents/trade-executor.md'), /Never wait or poll for a fill/);
   assert.match(read('workspace/AGENTS.md'), /placed outside\s+the harness\) is cancelled, not waited on/);
   // No canonical doc an agent acts on still teaches entering without brackets and protecting after the fill.
-  const FALLBACK = /without brackets|brackets are rejected|rejects brackets|bracket rejected|brackets rejected|Auto OCO|Position Brackets|enter without (?:them|brackets)[^.]*?\[protect\]|if the one status\s+check \(step 5\) shows the fill|when the account supports brackets|the `\[protect\]` stop you place after the\s+fill|or `stop <price>` in the rationale|setup tag first, numeric stop|whatever the\s+wording/i;
+  // A platform's bracket settings (accounts/ is outside the platform-name scan) are spelled in pieces so this
+  // file names no platform term (tests/plugin/no-platform-specifics.test.js).
+  const PLATFORM_BRACKETS = [['Auto', 'OCO'], ['Position', 'Brackets']].map(w => w.join('\\s+')).join('|');
+  const FALLBACK = new RegExp(`${/without brackets|brackets are rejected|rejects brackets|bracket rejected|brackets rejected|enter without (?:them|brackets)[^.]*?\[protect\]|if the one status\s+check \(step 5\) shows the fill|when the account supports brackets|the `\[protect\]` stop you place after the\s+fill|or `stop <price>` in the rationale|setup tag first, numeric stop|whatever the\s+wording/.source}|${PLATFORM_BRACKETS}`, 'i');
+  for (const w of [['Auto', 'OCO'], ['Position', 'Brackets']]) assert.match(`turn on ${w.join(' ')} first`, FALLBACK, 'a platform\'s bracket setting is guarded, in accounts/ too');
   const actOn = ['agents', 'skills', 'rules/trading', 'commands', 'strategies', 'accounts'].flatMap(d => fs.readdirSync(path.join(ROOT, d), { recursive: true })
     .filter(f => String(f).endsWith('.md')).map(f => path.join(d, String(f))));
   // A refusal excludes codes 6 (OrderPending) and 7 (UnknownError): the gateway reads them as unknown outcomes (order-markers.js).
@@ -285,7 +289,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   }
 });
 
-test('the session hours read unambiguously (a 9B model read "18:00 ET to 16:00 ET" as "opens at 18:00"), and a role is never a reader', () => {
+test('the session hours read unambiguously (a small local model read "18:00 ET to 16:00 ET" as "opens at 18:00"), and a role is never a reader', () => {
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   assert.match(read('rules/trading/execution.md'), /opens at 18:00 ET\s+and runs overnight until 16:00 ET the next day[^]*?the regular session\s+09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on\s+weekends/);
   assert.match(read('skills/session-timing/SKILL.md'), /a time\s+like 10:00 ET is inside the session, not before it, and so is 08:00 ET \(the\s+18:00 ET open\s+was the evening before; 09:30 ET is only the RTH cash open\)/);

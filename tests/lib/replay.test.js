@@ -8,7 +8,9 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { tmpDir } = require('../helpers');
+const { tmpDir, shippedBroker } = require('../helpers');
+// The live broker the repo ships (mcp-configs/brokers.json), read, never named.
+const SHIPPED = shippedBroker();
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const { decisionPoints, tradingDays, holidayDates } = require('../../scripts/lib/replay/schedule');
 const { resolveReplay, isolationErrors, replayEnv, brokerErrors, configHash, DISABLED } = require('../../scripts/lib/replay/config');
@@ -109,7 +111,7 @@ function userWorld(over = {}) {
     sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL', env: ['SIM_DATA'] },
     live: { command: [process.execPath, '/opt/live/server.js'], env: ['LIVE_API_KEY'], entryEnv: 'LIVE_ENTRY', journalEnv: 'LIVE_JOURNAL' },
   } }));
-  const env = { PATH: process.env.PATH, FTH_HOME: live, LIVE_API_KEY: 'secret', PROJECTX_API_KEY: 'secret2', SIM_DATA: '/data', FTH_GATE_LOG: '/live/gate.jsonl', FTH_KILL_SWITCH_FILE: '/live/STOP', FTH_BLACKOUTS_FILE: '/live/b.json', FTH_BROKERS_FILE: path.join(live, 'brokers.json'), FTH_PLAN_MAX_AGE_MIN: '60' };
+  const env = { PATH: process.env.PATH, FTH_HOME: live, LIVE_API_KEY: 'secret', [SHIPPED.env[0]]: 'secret2', SIM_DATA: '/data', FTH_GATE_LOG: '/live/gate.jsonl', FTH_KILL_SWITCH_FILE: '/live/STOP', FTH_BLACKOUTS_FILE: '/live/b.json', FTH_BROKERS_FILE: path.join(live, 'brokers.json'), FTH_PLAN_MAX_AGE_MIN: '60' };
   const run = resolveReplay(replayConfig(dir, over), { env, home: dir, root: ROOT });
   return { dir, live, env, run };
 }
@@ -125,12 +127,13 @@ test('replay env: the run home, the replay broker and clock; no path overrides; 
   // A child loads .env files (its own FTH_HOME's and the repo's) without overriding what is set: a repo .env
   // pointing at the live home, or carrying live credentials, changes nothing.
   const repoEnv = path.join(w.dir, 'repo.env');
-  fs.writeFileSync(repoEnv, `FTH_KILL_SWITCH_FILE=${w.live}/STOP\nFTH_GATE_LOG=${w.live}/gate.jsonl\nFTH_BLACKOUTS_FILE=${w.live}/b.json\nFTH_BROKERS_FILE=${w.live}/brokers.json\nFTH_ENV_FILE=${w.live}/.env\nFTH_ORDER_GATE_SKIP=mtf-trend\nFTH_PAPER=1\nLIVE_API_KEY=k\nPROJECTX_MCP_ENTRY=/live/server.js\n`);
+  fs.writeFileSync(repoEnv, `FTH_KILL_SWITCH_FILE=${w.live}/STOP\nFTH_GATE_LOG=${w.live}/gate.jsonl\nFTH_BLACKOUTS_FILE=${w.live}/b.json\nFTH_BROKERS_FILE=${w.live}/brokers.json\nFTH_ENV_FILE=${w.live}/.env\nFTH_ORDER_GATE_SKIP=mtf-trend\nFTH_PAPER=1\nLIVE_API_KEY=k\n${SHIPPED.entryEnv}=/live/server.js\n`);
   const child = { ...env };
   require('../../scripts/lib/env-file').loadEnvFiles({ env: child, files: [repoEnv] });
   assert.deepStrictEqual(child, env, 'nothing filled in');
-  // Live brokers' variables (the user's and the shipped topstepx's) are set to a dead value, so no .env fills them.
-  for (const k of ['LIVE_API_KEY', 'LIVE_ENTRY', 'LIVE_JOURNAL', 'PROJECTX_API_KEY', 'PROJECTX_MCP_ENTRY']) assert.strictEqual(env[k], DISABLED, k);
+  // Live brokers' variables (the user's and the shipped default's) are set to a dead value, so no .env fills them.
+  for (const k of ['LIVE_API_KEY', 'LIVE_ENTRY', 'LIVE_JOURNAL', SHIPPED.entryEnv, SHIPPED.journalEnv, ...SHIPPED.env].filter(Boolean)) assert.strictEqual(env[k], DISABLED, k);
+  assert.ok(SHIPPED.env.length > 0, 'the shipped broker reads variables of its own');
   assert.deepStrictEqual([env.SIM_DATA, env.SIM_CLOCK, env.SIM_STATE, env.SIM_START, env.SIM_JOURNAL], ['/data', w.run.paths.clockFile, w.run.paths.brokerDir, '2026-10-07T13:31:00.000Z', w.run.paths.journal]);
   assert.strictEqual(env.FTH_PLAN_MAX_AGE_MIN, '60', 'the gate\'s settings stay');
   assert.deepStrictEqual(brokerErrors(env, w.run), []);
@@ -767,7 +770,7 @@ test('driver: a run with prop starts that attempt at the window\'s first moment,
   assert.strictEqual(readAttempt(plain.run.paths.runHome, 'topstep_100k'), null);
   assert.throws(() => userWorld({ prop: 'Not A Name' }), /prop: an account profile name/);
   // An unknown profile is refused with the config, before any run state exists.
-  assert.throws(() => userWorld({ prop: 'topstep_7k' }), /prop: unknown account "topstep_7k"/);
+  assert.throws(() => userWorld({ prop: 'test_7k' }), /prop: unknown account "test_7k"/);
 });
 
 test('replay env: a combine replay\'s broker stops the day at the account\'s own daily loss limit; without prop the server keeps its own', () => {

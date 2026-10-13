@@ -13,7 +13,7 @@ const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DATA = path.join(__dirname, '..', 'fixtures', 'data');
@@ -304,8 +304,8 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
   fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
-  const src = fs.readFileSync(path.join(ROOT, 'accounts', 'topstep_50k', 'ACCOUNT.md'), 'utf8')
-    .replace('name: topstep_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 ');
+  const src = fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: test_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 ');
   fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), src);
   const strategiesDir = path.join(dir, 'strategies');
   fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
@@ -334,8 +334,8 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
   fs.mkdirSync(path.join(accounts, 'tiny'), { recursive: true });
-  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(ROOT, 'accounts', 'topstep_50k', 'ACCOUNT.md'), 'utf8')
-    .replace('name: topstep_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
+  fs.writeFileSync(path.join(accounts, 'tiny', 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
+    .replace('name: test_50k', 'name: tiny').replace(/sessions: 30 /, 'sessions: 2 '));
   const strategiesDir = path.join(dir, 'strategies');
   const policy = (name, list, status = 'active') => {
     fs.mkdirSync(path.join(strategiesDir, name), { recursive: true });

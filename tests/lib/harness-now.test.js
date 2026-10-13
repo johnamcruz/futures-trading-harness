@@ -5,7 +5,10 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { harnessNow, recordNow, resolveClock, pinGatewayClock, createGatewayClock, ReplayClockError } = require('../../scripts/lib/trading/harness-now');
-const { tmpDir } = require('../helpers');
+const { tmpDir, shippedBroker } = require('../helpers');
+
+// The live broker the repo ships as the default (mcp-configs/brokers.json), read, never named.
+const LIVE = shippedBroker().name;
 
 const REPLAY = '2026-03-02T15:30:00Z';
 const near = t => Math.abs(t.getTime() - Date.now()) < 60000;
@@ -40,17 +43,17 @@ test('harnessNow: FTH_REPLAY_NOW with a replay broker is that time, in autonomou
 });
 
 test('harnessNow: FTH_REPLAY_NOW with a broker that is not a replay broker is refused (never a fake time live)', () => {
-  // The default broker (TopstepX), with nothing configured.
-  assert.throws(() => harnessNow({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY }), err => err instanceof ReplayClockError && /broker "topstepx" is not a replay broker/.test(err.message));
+  // The default broker (the one mcp-configs/brokers.json names), with nothing configured.
+  assert.throws(() => harnessNow({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY }), err => err instanceof ReplayClockError && err.message.includes(`broker "${LIVE}" is not a replay broker`));
   assert.throws(() => harnessNow({ FTH_HOME: tmpDir(), FTH_REPLAY_NOW: REPLAY, FTH_AUTONOMOUS: '1' }), ReplayClockError);
   // Only "replay": true counts.
   const loose = homeWith({ sim: { command: ['node', 'sim.js'], replay: 'true' } }, 'sim');
   assert.throws(() => harnessNow({ FTH_HOME: loose, FTH_REPLAY_NOW: REPLAY }), /"sim" is not a replay broker/);
   // A replay broker configured but not selected doesn't count.
-  assert.throws(() => harnessNow({ FTH_HOME: homeWith(SIM), FTH_REPLAY_NOW: REPLAY }), /"topstepx"/);
+  assert.throws(() => harnessNow({ FTH_HOME: homeWith(SIM), FTH_REPLAY_NOW: REPLAY }), err => err.message.includes(`"${LIVE}"`));
   // A broker the defaults ship as live can't be relabelled a replay broker by an override.
-  const relabelled = homeWith({ topstepx: { replay: true } });
-  assert.throws(() => harnessNow({ FTH_HOME: relabelled, FTH_REPLAY_NOW: REPLAY }), /"topstepx" is not a replay broker/);
+  const relabelled = homeWith({ [LIVE]: { replay: true } });
+  assert.throws(() => harnessNow({ FTH_HOME: relabelled, FTH_REPLAY_NOW: REPLAY }), err => err.message.includes(`"${LIVE}" is not a replay broker`));
   // An unreadable broker config is refused too.
   assert.throws(() => harnessNow({ FTH_BROKERS_FILE: '/nonexistent/brokers.json', FTH_REPLAY_NOW: REPLAY }), /broker config can't be read/);
   const broken = tmpDir();

@@ -16,14 +16,14 @@ test('env files are refused; templates are fine', () => {
 });
 
 test('credential values are found; placeholders, env lookups, and short test values are not', () => {
-  assert.deepStrictEqual(scanText('PROJECTX_API_KEY=aB3dE5gH7jK9mN1p').map(f => f.reason), ['PROJECTX_API_KEY set to a value (aB…16 chars)']); // check-secrets: allow (fake test value)
-  assert.strictEqual(scanText('"PROJECTX_API_KEY": "aB3dE5gH7jK9mN1p",').length, 1); // check-secrets: allow (fake test value)
+  assert.deepStrictEqual(scanText('BROKER_API_KEY=aB3dE5gH7jK9mN1p').map(f => f.reason), ['BROKER_API_KEY set to a value (aB…16 chars)']); // check-secrets: allow (fake test value)
+  assert.strictEqual(scanText('"BROKER_API_KEY": "aB3dE5gH7jK9mN1p",').length, 1); // check-secrets: allow (fake test value)
   assert.strictEqual(scanText('MY_SERVICE_TOKEN: xY7zW9vU5tS3rQ1p').length, 1); // check-secrets: allow (fake test value)
   assert.strictEqual(scanText('-----BEGIN RSA PRIVATE KEY-----')[0].reason, 'a private key'); // check-secrets: allow (fake test value)
   for (const ok of [
-    'PROJECTX_API_KEY=your-api-key', '"PROJECTX_API_KEY": "your-api-key"', 'PROJECTX_API_KEY=${PROJECTX_API_KEY}', 'PROJECTX_API_KEY=<key>',
-    "const apiKey = String(env.PROJECTX_API_KEY || '');", "PROJECTX_USERNAME: 'u', PROJECTX_API_KEY: 'k'", 'PROJECTX_API_KEY=', 'PASSWORD=changeme',
-    'export PROJECTX_API_KEY=$PROJECTX_API_KEY',
+    'BROKER_API_KEY=your-api-key', '"BROKER_API_KEY": "your-api-key"', 'BROKER_API_KEY=${BROKER_API_KEY}', 'BROKER_API_KEY=<key>',
+    "const apiKey = String(env.BROKER_API_KEY || '');", "BROKER_USERNAME: 'u', BROKER_API_KEY: 'k'", 'BROKER_API_KEY=', 'PASSWORD=changeme',
+    'export BROKER_API_KEY=$BROKER_API_KEY',
   ]) assert.deepStrictEqual(scanText(ok), [], ok);
   assert.deepStrictEqual(scanText('API_KEY=Zq8Wd2Lk9Pm4Rt6Y // check-secrets: allow (fake test value)'), [], 'an explicit, reviewable exception');
   const findings = scanFiles(['.env', 'a.js', 'img.png'], f => (f === 'a.js' ? 'x\nAPI_KEY=Zq8Wd2Lk9Pm4Rt6Y' : 'binary'));
@@ -42,7 +42,7 @@ test('--staged refuses a staged .env (even force-added) and a staged key, naming
   fs.mkdirSync(path.join(repo, 'scripts', 'lib'), { recursive: true });
   for (const f of ['scripts/check-secrets.js', 'scripts/lib/secret-scan.js']) fs.copyFileSync(path.join(ROOT, f), path.join(repo, f));
   fs.writeFileSync(path.join(repo, '.gitignore'), '.env\n');
-  fs.writeFileSync(path.join(repo, '.env'), 'PROJECTX_API_KEY=aB3dE5gH7jK9mN1p\n'); // check-secrets: allow (fake test value)
+  fs.writeFileSync(path.join(repo, '.env'), 'BROKER_API_KEY=aB3dE5gH7jK9mN1p\n'); // check-secrets: allow (fake test value)
   fs.writeFileSync(path.join(repo, 'ok.txt'), 'hello\n');
   const check = () => spawnSync(process.execPath, [path.join(repo, 'scripts', 'check-secrets.js'), '--staged'], { encoding: 'utf8' });
   run(['add', 'ok.txt']);
@@ -52,11 +52,11 @@ test('--staged refuses a staged .env (even force-added) and a staged key, naming
   assert.strictEqual(r.status, 1);
   assert.match(r.stderr, /\.env: an env file/);
   run(['rm', '-q', '--cached', '.env']);
-  fs.writeFileSync(path.join(repo, 'config.json'), '{ "PROJECTX_API_KEY": "aB3dE5gH7jK9mN1p" }\n'); // check-secrets: allow (fake test value)
+  fs.writeFileSync(path.join(repo, 'config.json'), '{ "BROKER_API_KEY": "aB3dE5gH7jK9mN1p" }\n'); // check-secrets: allow (fake test value)
   run(['add', 'config.json']);
   r = check();
   assert.strictEqual(r.status, 1);
-  assert.match(r.stderr, /config\.json:1: PROJECTX_API_KEY set to a value/);
+  assert.match(r.stderr, /config\.json:1: BROKER_API_KEY set to a value/);
   assert.doesNotMatch(r.stderr, /aB3dE5gH7jK9mN1p/);
   // The hook installer adds the check to .git/hooks/pre-commit.
   const inst = spawnSync(process.execPath, [path.join(repo, 'scripts', 'check-secrets.js'), '--install-hook'], { encoding: 'utf8' });

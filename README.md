@@ -4,8 +4,8 @@ An LLM-agnostic agent harness that trades futures through a broker MCP
 server: any broker or prop firm whose server implements one interface
 ([Brokers](#brokers)). It runs on
 **Claude Code, Codex, Qwen Code, or opencode** (any model those harnesses can
-drive, including Qwen through DashScope, vLLM, or Ollama, and local models
-through opencode), and it can trade on its own on a schedule.
+drive, hosted or local; the harness names no model), and it can trade on its
+own on a schedule.
 
 Strategies are Markdown documents: drop a `STRATEGY.md` into `strategies/` and
 the agents can trade it, and the order gate enforces its instruments, sessions,
@@ -120,12 +120,14 @@ real account.
 The harness holds no broker code. Every broker or prop firm runs its own MCP
 server, in its own repo, implementing one interface:
 [docs/BROKER-MCP-INTERFACE.md](docs/BROKER-MCP-INTERFACE.md) (as data:
-`scripts/lib/broker/interface.js`). projectx-mcp (TopstepX) is the default
-and the reference.
+`scripts/lib/broker/interface.js`). The live broker server is the reference;
+a replay broker server serves history through the same interface and
+reproduces the live server's output.
 
-- `mcp-configs/brokers.json` lists the servers and picks the default
-  (`topstepx`): its entry point (`PROJECTX_MCP_ENTRY`), journal, and the
-  variables it reads. `~/.futures-trading-harness/brokers.json` (or
+- `mcp-configs/brokers.json` lists the servers and picks the default (the one
+  it names): each server's entry point (or the variable that holds it),
+  journal, and the variables it reads. It is the one link between the harness
+  and broker servers; swap its entry to swap the broker. `~/.futures-trading-harness/brokers.json` (or
   `FTH_BROKERS_FILE`) overrides or adds brokers; `FTH_BROKER` picks one.
 - Every harness registers it as the MCP server `broker` (tools
   `mcp__broker__<tool>`), always as the gateway alone:
@@ -148,8 +150,10 @@ Check a server against the interface before using it. The check is read-only
 
 ```bash
 node scripts/check-broker-mcp.js [--account <id>] [--symbol MNQ] -- <server command>
-node scripts/check-broker-mcp.js --account 123456 -- node /abs/path/projectx-mcp/dist/index.js
 ```
+
+How to build and run a server, and the variables it reads (credentials, its
+entry path), are documented in your broker server's repo.
 
 ## Adapting to the market regime
 
@@ -269,17 +273,17 @@ Generated files come from the canonical sources: `node scripts/sync-harness.js`
 
 ## Setup
 
-Requires Node.js 22+ and a built broker MCP server. For TopstepX, build
-[projectx-mcp](https://github.com/johnamcruz/projectx-mcp)
-(`npm install && npm run build`; note the path to `dist/index.js`).
+Requires Node.js 22+ and a built broker MCP server: build it as your broker
+server's repo says (`mcp-configs/brokers.json` links the configured ones) and
+note the path to its entry point.
 
 ```bash
 git clone https://github.com/johnamcruz/futures-trading-harness ~/futures-trading-harness
 cd ~/futures-trading-harness
-node scripts/install.js --target qwen,codex,claude --entry /abs/path/projectx-mcp/dist/index.js
+node scripts/install.js --target qwen,codex,claude --entry /abs/path/to/your-broker-server/entry.js
 ```
 
-`--broker <name>` picks a broker other than the default (`topstepx`);
+`--broker <name>` picks a broker other than the default (the one `mcp-configs/brokers.json` names);
 `--entry` is written to `~/.futures-trading-harness/brokers.json`, and
 `--dry-run` shows the plan without writing.
 
@@ -616,7 +620,7 @@ node scripts/orderflow.js export --contract MNQ --from 2026-10-01 --to 2026-10-0
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
 | `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
-| `FTH_BROKER` / `FTH_BROKERS_FILE` | `topstepx` / `~/.futures-trading-harness/brokers.json` | The broker MCP server ([Brokers](#brokers)) |
+| `FTH_BROKER` / `FTH_BROKERS_FILE` | the broker `mcp-configs/brokers.json` names / `~/.futures-trading-harness/brokers.json` | The broker MCP server ([Brokers](#brokers)) |
 
 ### The rationale convention
 

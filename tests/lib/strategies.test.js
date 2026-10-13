@@ -223,7 +223,7 @@ test('tradesRoot: a rules strategy trades the selected leg of a micro/mini famil
   assert.strictEqual(tradesRoot(micro, 'NQ', null), false);
   assert.match(rootRefusal(micro, 'NQ', null), /^does not trade NQ \(instruments: MNQ, MES\); .*select NQ \(the runner's symbols, or FTH_SYMBOLS=NQ\)$/);
   // Nothing outside its families, selected or not.
-  for (const r of ['MYM', 'YM', 'GC', 'MGC', 'CL', 'MCL', '', null, undefined, 'MNQX', 'CON.F.US.ENQ.Z25']) {
+  for (const r of ['MYM', 'YM', 'GC', 'MGC', 'CL', 'MCL', '', null, undefined, 'MNQX', 'fake:ENQ:Z25']) {
     assert.strictEqual(tradesRoot(micro, r, [r ? String(r) : 'GC']), false, String(r));
     assert.strictEqual(tradesRoot(micro, r, null), false, String(r));
   }

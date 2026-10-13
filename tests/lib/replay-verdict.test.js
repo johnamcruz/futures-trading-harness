@@ -165,7 +165,7 @@ test('verdict: a month short of the target is NOT YET, with what is left and the
   assert.match(verdictText(v), /days: 03-02 \+\$399\.26, 03-03 \$0\.00, 03-04 -\$150\.74/);
 });
 
-test('verdict: months are trading days (17:00 CT, Topstep\'s reset); each is a fresh attempt; a carried position is left out; the year summary', () => {
+test('verdict: months are trading days (17:00 CT, the daily reset); each is a fresh attempt; a carried position is left out; the year summary', () => {
   const v = evaluate(run([
     ['2026-03-02', 2500], ['2026-03-03', 2000], ['2026-03-04', 1600], // March: passes
     // 17:30 Chicago on March 31 is April 1's trading day (and it is recorded in the March 31 file).

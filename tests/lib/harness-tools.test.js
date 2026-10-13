@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, writeJournal } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal } = require('../helpers');
 const cli = require('../../scripts/lib/harness-tools/cli');
 const strategies = require('../../scripts/lib/harness-tools/strategies');
 const marketSnapshot = require('../../scripts/lib/harness-tools/market-snapshot');
@@ -190,7 +190,7 @@ test('combine: status only (start, stop, record-day stay the user\'s, in scripts
 
 test('lessons and reconcile read the broker\'s journal and the day\'s decision log', () => {
   const home = tmpDir();
-  const env = { FTH_HOME: home, PROJECTX_JOURNAL_PATH: path.join(home, 'journal.jsonl') };
+  const env = { FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl') };
   assert.match(lessons.lessons({}, { env }).text, /^No instincts yet/);
   assert.throws(() => lessons.lessons({ top: 0 }, { env }), /--top: a positive whole number/);
   assert.deepStrictEqual(lessons.parseArgv(['--top=3', '--json']), { top: 3, json: true });

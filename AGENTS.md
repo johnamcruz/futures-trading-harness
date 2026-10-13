@@ -13,3 +13,7 @@ Before every pull request (hard rule, every agent, every change): the
 regression (`npm run verify`) passes and an adversarial review by a reviewer
 other than the change's author found nothing left to fix. See "Before a pull
 request" in `CLAUDE.md`.
+
+Keep the harness platform-neutral: no platform-, firm- or model-specific code,
+names, env vars, defaults, contract-id formats or paths ("Separation of work"
+in `CLAUDE.md`; `tests/plugin/no-platform-specifics.test.js` enforces it).

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
 const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
@@ -39,7 +39,7 @@ test('stop-defined: every entry carries its stop as stopLossBracket; a stop stat
   assert.match(r.violations[0].message, /every entry carries its stop as stopLossBracket/);
   assert.match(r.violations[0].message, /a stop stated only in the rationale is not one/i);
   assert.match(r.violations[0].message, /refuses the entry: never send it again without one, and report the broker's message to the user/);
-  assert.doesNotMatch(r.violations[0].message, /\[protect\]|TopstepX|OCO/i);
+  assert.doesNotMatch(r.violations[0].message, /\[protect\]|OCO/i);
   // Ticks must be a whole number above 0: zero, negative, a fraction, not a number, or missing are no bracket.
   for (const bad of [{ ticks: 0 }, { ticks: -40 }, { ticks: 2.5 }, { ticks: '2.5' }, { ticks: '' }, { ticks: 'forty' }, { ticks: null }, { ticks: true },
     { ticks: [40] }, { ticks: NaN }, { ticks: Infinity }, { type: 'stop' }, null, 40, 'stop 40']) {
@@ -90,13 +90,13 @@ test('reviews without a result tag or for another contract do not clear the revi
 
 test('an entry under a broker id the translator can\'t name counts on every contract (fails closed)', () => {
   // The server writes order_placed under its own id; with no translator lookups to name it, it still needs its review.
-  const raw = { ...placed(30), contractId: 'CON.F.US.ENQ.Z25' };
+  const raw = { ...placed(30), contractId: 'fake:ENQ:Z25' };
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [raw, plan(5)])), ['review-before-next-entry']);
   assert.deepStrictEqual(checks(evaluate(entryOrder(), [{ ...raw, contractId: '4471923' }, plan(5)])), ['review-before-next-entry'], 'an all-digit id is a broker id too');
   // A standard name on another contract does not count.
   assert.deepStrictEqual(evaluate(entryOrder(), [{ ...placed(30), contractId: 'MES' }, plan(5)]).violations, []);
   // Reviewed under the id journal_read shows: cleared, on any contract.
-  const rev = { ...review(10, 'win'), contractId: 'CON.F.US.ENQ.Z25' };
+  const rev = { ...review(10, 'win'), contractId: 'fake:ENQ:Z25' };
   assert.deepStrictEqual(evaluate(entryOrder(), [raw, rev, plan(5)]).violations, []);
 });
 
@@ -727,7 +727,7 @@ test('policy: only this strategy\'s entries on this index use its verdict', () =
   assert.deepStrictEqual(run([placed(1, 'setup:orb-x long')]), [], 'another strategy\'s tag');
   assert.deepStrictEqual(run([{ ...placed(1, 'setup:orb long'), contractId: 'MES' }]), [], 'another index');
   assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'NQ' }]).map(v => v.message).join(), /already used/, 'the mini of the same index');
-  assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'CON.F.US.ENQ.Z25' }]).map(v => v.message).join(), /already used/, 'a broker id it can\'t name: fails closed');
+  assert.match(run([{ ...placed(1, 'setup:orb long'), contractId: 'fake:ENQ:Z25' }]).map(v => v.message).join(), /already used/, 'a broker id it can\'t name: fails closed');
 });
 
 test('combine: an entry since the account snapshot holds every other entry until the next snapshot (one position across markets)', () => {
@@ -1005,16 +1005,21 @@ test('replay clock: a broker labelled replay that looks live is refused (same se
     assert.deepStrictEqual(r.violations.map(v => v.check), ['replay-clock'], r.message);
     assert.match(r.message, why);
   };
-  withSim({ command: ['node', '/srv/projectx-mcp/dist/index.js'] }, { mylive: { command: ['node', '/srv/projectx-mcp/dist/index.js'] } });
+  // A live broker of the user's (the tests' fake one: its server from FAKE_BROKER_ENTRY).
+  const fake = { fake: JSON.parse(fs.readFileSync(FAKE_BROKERS, 'utf8')).brokers.fake };
+  withSim({ command: ['node', '/srv/broker-mcp/dist/index.js'] }, { mylive: { command: ['node', '/srv/broker-mcp/dist/index.js'] } });
   refused(/looks live: it starts the same server as the live broker "mylive"/);
-  withSim({ command: ['/usr/bin/node', '/srv/projectx-mcp/dist/index.js'] });
-  refused(/looks live: it starts the same server \(.*index\.js\) as the live broker "topstepx"/, { PROJECTX_MCP_ENTRY: '/srv/projectx-mcp/dist/index.js' });
-  withSim({ command: null, entryEnv: 'PROJECTX_MCP_ENTRY' });
-  refused(/takes its server from PROJECTX_MCP_ENTRY, as the live broker "topstepx" does/); // (set, it resolves to the same server: above)
-  withSim({ env: ['SIM_SPEED', 'PROJECTX_API_KEY'] });
-  refused(/reads the live broker "topstepx"'s variables \(PROJECTX_API_KEY\)/);
-  withSim({ journalEnv: 'PROJECTX_JOURNAL_PATH' });
-  refused(/variables \(PROJECTX_JOURNAL_PATH\)/);
+  withSim({ command: ['/usr/bin/node', '/srv/broker-mcp/dist/index.js'] }, fake);
+  refused(/looks live: it starts the same server \(.*index\.js\) as the live broker "fake"/, { FAKE_BROKER_ENTRY: '/srv/broker-mcp/dist/index.js' });
+  withSim({ command: null, entryEnv: 'FAKE_BROKER_ENTRY' }, fake);
+  refused(/takes its server from FAKE_BROKER_ENTRY, as the live broker "fake" does/); // (set, it resolves to the same server: above)
+  // A variable of the live broker the repo ships (read from mcp-configs/brokers.json, never named here).
+  const shipped = shippedBroker();
+  const literal = text => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  withSim({ env: ['SIM_SPEED', shipped.env[0]] });
+  refused(literal(`reads the live broker "${shipped.name}"'s variables (${shipped.env[0]})`));
+  withSim({ journalEnv: shipped.journalEnv });
+  refused(literal(`variables (${shipped.journalEnv})`));
   // Control: a replay broker of its own is honored.
   withSim({ env: ['SIM_SPEED'] });
   assert.deepStrictEqual(checkOrder(ANYTIME, { env: at, pluginRoot: root }).violations, []);
@@ -1069,7 +1074,7 @@ test('contract-specs: an entry with no tick specs from the broker is refused (ha
   recordBrokerSpecs(bare.home, { roots: ['MNQ'] });
   assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: bare }).violations, []);
   // An id nothing names (no root) has no specs either.
-  assert.ok(checks(evaluate(entryOrder({ contractId: 'CON.F.US.ZZZ.Z26' }), [plan()], { config: bare })).includes('contract-specs'));
+  assert.ok(checks(evaluate(entryOrder({ contractId: 'fake:ZZZ:Z26' }), [plan()], { config: bare })).includes('contract-specs'));
 });
 
 test('contract-specs: prices are checked on the broker\'s tick, not the static table\'s', () => {

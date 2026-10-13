@@ -17,13 +17,13 @@
 const fs = require('fs');
 const { TOOLS } = require('../../scripts/lib/broker/interface');
 
-const MNQ = 'CON.F.US.MNQ.Z26';
+const MNQ = 'fake:MNQ:Z26';
 const drop = new Set(String(process.env.FAKE_DROP || '').split(',').filter(Boolean));
 const state = {
   accounts: [{ id: 7, name: 'FAKE-50K', balance: 50000, canTrade: true, mcpTradingAllowed: true }],
   contracts: [
     { id: MNQ, name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
-    { id: 'CON.F.US.MNQ.H27', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: false },
+    { id: 'fake:MNQ:H27', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: false },
   ].map(c => ({ ...c, ...JSON.parse(process.env.FAKE_TICK || '{}') })),
   positions: process.env.FAKE_FLAT ? [] : [{ id: 1, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', type: 1, size: 1, averagePrice: 21500 }],
   orders: process.env.FAKE_FLAT ? [] : [{ id: 9, accountId: 7, contractId: MNQ, status: 1, type: 4, side: 1, size: 1, stopPrice: 21480, limitPrice: null }],

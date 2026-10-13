@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { cycleOutcome, validateConfig, buildCommand, decide, recordRun, prompts, cycleResult, parseAt, childEnv, claudeTools, claudeDenied, claudeOrderToolConflicts, signalDecision } = require('../../scripts/lib/autotrader');
-const { tmpDir } = require('../helpers');
+const { FAKE_BROKERS, shippedBroker, tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const cfg = validateConfig({ harness: 'qwen', sessions: ['09:35-15:00@America/New_York'], premarketAt: '09:00@America/New_York' });
@@ -187,13 +187,19 @@ test('child env locks the gate and paper mode disables trading', () => {
   assert.strictEqual(live.FTH_SYMBOLS, 'MNQ');
   assert.strictEqual(childEnv(validateConfig({ symbols: ['NQ', 'MES'] }), '/r', { FTH_SYMBOLS: 'MNQ' }).FTH_SYMBOLS, 'NQ,MES');
   assert.strictEqual(childEnv(validateConfig({ symbols: ['NQ'], harness: 'opencode' }), '/r', { FTH_SYMBOLS: 'MNQ' }).FTH_SYMBOLS, 'NQ');
-  const paper = childEnv(validateConfig({ paper: true }), '/r', {});
-  assert.deepStrictEqual([paper.FTH_PAPER, paper.PROJECTX_TRADING_ENABLED], ['1', 'false']);
+  const paper = childEnv(validateConfig({ paper: true }), '/r', { FTH_BROKERS_FILE: FAKE_BROKERS });
+  assert.deepStrictEqual([paper.FTH_PAPER, paper.FAKE_BROKER_TRADING_ENABLED], ['1', 'false']);
+  // The shipped default broker (mcp-configs/brokers.json, no FTH_BROKERS_FILE): its own off switch, all of it.
+  const shippedPaper = shippedBroker().paperEnv || {};
+  assert.ok(Object.keys(shippedPaper).length > 0, 'the shipped broker has a paper switch');
+  const shipped = childEnv(validateConfig({ paper: true }), '/r', { FTH_HOME: require('../helpers').tmpDir() });
+  for (const [k, v] of Object.entries(shippedPaper)) assert.strictEqual(shipped[k], v, k);
   // The broker server's own off switch comes from the broker config (paperEnv), whatever the broker.
   const home = require('../helpers').tmpDir();
   require('fs').writeFileSync(require('path').join(home, 'brokers.json'), JSON.stringify({ broker: 'other', brokers: { other: { command: ['x'], paperEnv: { OTHER_LIVE: 'no' } } } }));
   const other = childEnv(validateConfig({ paper: true }), '/r', { FTH_HOME: home });
-  assert.deepStrictEqual([other.OTHER_LIVE, other.PROJECTX_TRADING_ENABLED], ['no', undefined]);
+  assert.deepStrictEqual([other.OTHER_LIVE, other.FAKE_BROKER_TRADING_ENABLED], ['no', undefined]);
+  for (const k of Object.keys(shippedPaper)) assert.strictEqual(other[k], undefined, `${k}: another broker's paper switch never leaks`);
   assert.match(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /Harness root \(FTH_ROOT\): \/r; its operations are the `harness` MCP server's tools, not scripts\./);
   assert.doesNotMatch(prompts(cfg, et(10, 0), '/r').trade('MNQ'), /node \/r\/scripts/);
   assert.match(prompts(cfg, et(16, 0), '/r').eod(), /the reconcile tool with day \d{4}-\d{2}-\d{2} and timeframe \d+/);
@@ -419,7 +425,7 @@ test('CLI start: a harness tools server that does not offer the registry\'s tool
   // The replay broker: the mock exchange as a replay server (its clock starts at 2026-10-07T14:00:00Z).
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'replaymock', brokers: { replaymock: { command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js')], replay: true, journalEnv: 'MOCK_JOURNAL' } } }));
   const replayStop = path.join(home, 'STOP');
-  const replayEnv = { ...env, FTH_HOME: home, FTH_KILL_SWITCH_FILE: replayStop, FTH_REPLAY_NOW: '2026-10-07T14:00:00Z', MOCK_REPLAY: '1', MOCK_STATE_DIR: home, MOCK_JOURNAL: path.join(home, 'journal.jsonl') };
+  const replayEnv = { ...env, FTH_BROKERS_FILE: path.join(home, 'brokers.json'), FTH_HOME: home, FTH_KILL_SWITCH_FILE: replayStop, FTH_REPLAY_NOW: '2026-10-07T14:00:00Z', MOCK_REPLAY: '1', MOCK_STATE_DIR: home, MOCK_JOURNAL: path.join(home, 'journal.jsonl') };
   const step = spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade'], { encoding: 'utf8', env: replayEnv, timeout: 60000 });
   assert.doesNotMatch(step.stderr, /^\[autotrader\] the harness tools server .*does not offer the harness's tools .*update the checkout and re-run the installer\n/m, 'not refused outright');
   assert.match(step.stderr, /trading is off \(kill switch .*\); end of day and housekeeping still run/);
@@ -737,24 +743,25 @@ test('CLI: the runner decides on the harness clock: a replay broker\'s FTH_REPLA
   assert.strictEqual(weekend.status, 0, weekend.stderr);
   assert.notStrictEqual(premarket.stdout, weekend.stdout, 'the action depends on the replayed time');
   assert.match(weekend.stdout, /next action now: none/);
-  const live = at('2026-10-07T12:00:00Z', { FTH_BROKER: 'topstepx' });
+  const LIVE = shippedBroker().name; // the live broker the repo ships (mcp-configs/brokers.json)
+  const live = at('2026-10-07T12:00:00Z', { FTH_BROKER: LIVE });
   assert.strictEqual(live.status, 1);
-  assert.match(live.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  assert.ok(live.stderr.includes(`FTH_REPLAY_NOW is set but the selected broker "${LIVE}" is not a replay broker`), live.stderr);
   // The live loop too: refused before the lock, the broker, or the first cycle.
-  const loop = spawnSync(process.execPath, [cli, '--config', config], { encoding: 'utf8', env: { ...env, FTH_BROKER: 'topstepx', FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, timeout: 20000 });
+  const loop = spawnSync(process.execPath, [cli, '--config', config], { encoding: 'utf8', env: { ...env, FTH_BROKER: LIVE, FTH_REPLAY_NOW: '2026-10-07T12:00:00Z' }, timeout: 20000 });
   assert.strictEqual(loop.status, 1);
-  assert.match(loop.stderr, /FTH_REPLAY_NOW is set but the selected broker "topstepx" is not a replay broker/);
+  assert.ok(loop.stderr.includes(`FTH_REPLAY_NOW is set but the selected broker "${LIVE}" is not a replay broker`), loop.stderr);
   // --once: the prompt is dated by the replayed clock; end of day still runs, at the wall clock, when the override is refused.
   const once = (now, extra = {}) => spawnSync(process.execPath, [cli, '--config', config, '--once', 'eod', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: now, ...extra } });
   const replayedEod = once('2026-03-04T20:30:00Z');
   assert.strictEqual(replayedEod.status, 0, replayedEod.stderr);
   assert.match(replayedEod.stdout, /trading day ending 2026-03-04/);
-  const refusedEod = once('2026-03-04T20:30:00Z', { FTH_BROKER: 'topstepx' });
+  const refusedEod = once('2026-03-04T20:30:00Z', { FTH_BROKER: LIVE });
   assert.strictEqual(refusedEod.status, 0, refusedEod.stderr);
   assert.doesNotMatch(refusedEod.stdout, /2026-03-04/, 'the wall clock\'s day');
   const premarketOnce = spawnSync(process.execPath, [cli, '--config', config, '--once', 'premarket', '--symbol', 'MNQ', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T12:00:00Z' } });
   assert.match(premarketOnce.stdout, /premarket skill for MNQ.*trading day ending 2026-03-04/);
-  assert.strictEqual(spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T20:30:00Z', FTH_BROKER: 'topstepx' } }).status, 1, 'any other run is refused');
+  assert.strictEqual(spawnSync(process.execPath, [cli, '--config', config, '--once', 'trade', '--dry-run'], { encoding: 'utf8', env: { ...env, FTH_REPLAY_NOW: '2026-03-04T20:30:00Z', FTH_BROKER: LIVE } }).status, 1, 'any other run is refused');
   const garbage = at('soon');
   assert.strictEqual(garbage.status, 1);
   assert.match(garbage.stderr, /not an ISO 8601 UTC time/);
@@ -794,7 +801,7 @@ test('opencode: validated, run headless with JSON events in the workspace it nam
   assert.deepStrictEqual(withModel.slice(8), ['--model', 'local/some-model', '--variant', 'high', 'PROMPT']);
   assert.ok(!buildCommand(oc, 'P', '/fth').some(a => /^--(auto|attach)/.test(a)), 'never auto-approve');
   assert.strictEqual(buildCommand(validateConfig({ harness: 'opencode', workdir: '/srv/ws' }), 'P', '/fth')[5], '/srv/ws');
-  assert.throws(() => validateConfig({ harness: 'opencode', model: 'qwen3' }), /<provider>\/<model>/);
+  assert.throws(() => validateConfig({ harness: 'opencode', model: 'local-model' }), /<provider>\/<model>/);
   for (const extraArgs of [['--auto'], ['--auto=true'], ['--yolo'], ['--dangerously-skip-permissions'], ['--attach', 'http://localhost:4096'], ['--dir', '/x'], ['--agent', 'build']]) {
     assert.throws(() => validateConfig({ harness: 'opencode', extraArgs }), /extraArgs: not --/, extraArgs.join(' '));
   }

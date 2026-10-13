@@ -20,7 +20,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { profileSeries } = require('../../scripts/lib/trading/volume-profile');
-const { tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -51,7 +51,7 @@ test('value_area e2e on real bars: POC rejection short -> records -> plan -> the
   const now = new Date(Date.parse(BARS[FIRE].t) + STEP + 30000).toISOString();
   const journal = writeJournal(home, []);
   const env = {
-    FTH_HOME: home, PROJECTX_JOURNAL_PATH: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
+    FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT,
     FTH_STRATEGIES_DIRS: liveCopy(home),

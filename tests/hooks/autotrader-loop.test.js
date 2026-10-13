@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { FAKE_BROKERS, tmpDir } = require('../helpers');
 const { inMarketHours, zonedParts } = require('../../scripts/lib/trading/clock');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -20,7 +20,7 @@ function runAutotrader(config, home, calls = path.join(home, 'calls.txt'), extra
   const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config], {
     env: {
       PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
-      PROJECTX_MCP_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls, ...extraEnv,
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls, ...extraEnv,
     },
   });
   const done = new Promise(r => runner.on('close', r));
@@ -151,7 +151,7 @@ test('live loop: a harness tools server that fails the start check turns trading
   const state = path.join(home, '.futures-trading-harness');
   const start = () => {
     const runner = spawn(process.execPath, [path.join(root, 'scripts', 'autotrader.js'), '--config', config], {
-      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, PROJECTX_MCP_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1' },
+      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1' },
     });
     const io = { out: '' };
     runner.stdout.on('data', c => { io.out += c; });

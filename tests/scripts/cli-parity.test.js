@@ -16,7 +16,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SNAPSHOT = path.join(__dirname, 'cli-parity.snapshot.json');
@@ -112,16 +112,16 @@ const CASES = [
   ['combine status none', 'combine.js', ['status']],
   ['combine status --json none', 'combine.js', ['status', '--json']],
   ['combine accounts', 'combine.js', ['accounts']],
-  ['combine start', 'combine.js', ['start', '--account', 'topstep_50k']],
-  ['combine start again', 'combine.js', ['start', '--account', 'topstep_50k']],
+  ['combine start', 'combine.js', ['start', '--account', 'test_50k']],
+  ['combine start again', 'combine.js', ['start', '--account', 'test_50k']],
   ['combine status', 'combine.js', ['status']],
   ['combine status --json', 'combine.js', ['status', '--json']],
-  ['combine status --account', 'combine.js', ['status', '--account', 'topstep_100k']],
+  ['combine status --account', 'combine.js', ['status', '--account', 'test_100k']],
   ['combine status unknown account', 'combine.js', ['status', '--account', 'nope']],
-  ['combine record-day', 'combine.js', ['record-day', '--account', 'topstep_50k', '--day', '2026-10-07', '--balance', '50250']],
-  ['combine status after day', 'combine.js', ['status', '--account', 'topstep_50k']],
-  ['combine stop', 'combine.js', ['stop', '--account', 'topstep_50k']],
-  ['combine stop again', 'combine.js', ['stop', '--account', 'topstep_50k']],
+  ['combine record-day', 'combine.js', ['record-day', '--account', 'test_50k', '--day', '2026-10-07', '--balance', '50250']],
+  ['combine status after day', 'combine.js', ['status', '--account', 'test_50k']],
+  ['combine stop', 'combine.js', ['stop', '--account', 'test_50k']],
+  ['combine stop again', 'combine.js', ['stop', '--account', 'test_50k']],
   ['combine usage', 'combine.js', ['bogus']],
   ['lessons empty', 'lessons.js', []],
   ['lessons', 'lessons.js', [], { before: home => fs.writeFileSync(path.join(home, 'journal.jsonl'), journal.map(e => JSON.stringify(e)).join('\n') + '\n') }],
@@ -153,7 +153,7 @@ function runAll() {
   const realHome = fs.realpathSync(home);
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: REPLAY, FTH_AUTONOMOUS: '',
-    FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'),
+    FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'), FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS,
   };
   const bars = stdinBars();
   const out = path.join(home, 'bars-scratch', 'cli-parity.json');

@@ -16,13 +16,13 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, shippedBroker } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
 const HARNESS = path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js');
 const CLI = path.join(ROOT, 'scripts', 'replay.js');
-const MNQ_ID = 'CON.F.US.MNQ.Z26';
+const MNQ_ID = 'fake:MNQ:Z26';
 
 function setup() {
   const user = tmpDir();
@@ -139,7 +139,7 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
 test('replay refuses a live broker, and a run home that is the live harness home', { timeout: 60000 }, () => {
   const w = setup();
   const cfg = JSON.parse(fs.readFileSync(w.config, 'utf8'));
-  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, broker: 'topstepx' }));
+  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, broker: shippedBroker().name })); // the live broker the repo ships
   const live = replay(w, ['run', '--config', w.config]);
   assert.strictEqual(live.status, 1);
   assert.match(live.stderr, /not a replay broker/);

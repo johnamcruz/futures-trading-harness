@@ -226,57 +226,57 @@
   },
   "combine accounts": {
     "status": 0,
-    "stdout": "topstep_100k: $100000 start, $6000 target, $3000 max loss (trailing_eod), daily limit $2000, 30 sessions\ntopstep_150k: $150000 start, $9000 target, $4500 max loss (trailing_eod), daily limit $3000, 30 sessions\ntopstep_50k: $50000 start, $3000 target, $2000 max loss (trailing_eod), daily limit $1000, 30 sessions\n",
+    "stdout": "test_100k: $100000 start, $6000 target, $3000 max loss (trailing_eod), daily limit $2000, 30 sessions\ntest_50k: $50000 start, $3000 target, $2000 max loss (trailing_eod), daily limit $1000, 30 sessions\ntopstep_100k: $100000 start, $6000 target, $3000 max loss (trailing_eod), daily limit $2000, 30 sessions\ntopstep_150k: $150000 start, $9000 target, $4500 max loss (trailing_eod), daily limit $3000, 30 sessions\ntopstep_50k: $50000 start, $3000 target, $2000 max loss (trailing_eod), daily limit $1000, 30 sessions\n",
     "stderr": ""
   },
   "combine start": {
     "status": 0,
-    "stdout": "started a topstep_50k attempt: $3000 target, $2000 max loss, 30 sessions. The runner snapshots the balance each bar.\n",
+    "stdout": "started a test_50k attempt: $3000 target, $2000 max loss, 30 sessions. The runner snapshots the balance each bar.\n",
     "stderr": ""
   },
   "combine start again": {
     "status": 1,
     "stdout": "",
-    "stderr": "[combine] a topstep_50k attempt is already running (started 2026-10-07T13:05:30.000Z, 0 closes recorded); --force restarts it from $50000\n"
+    "stderr": "[combine] a test_50k attempt is already running (started 2026-10-07T13:05:30.000Z, 0 closes recorded); --force restarts it from $50000\n"
   },
   "combine status": {
     "status": 0,
-    "stdout": "topstep_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the topstep_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "test_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine status --json": {
     "status": 0,
-    "stdout": "{\n  \"attempts\": [\n    {\n      \"account\": \"topstep_50k\",\n      \"started\": true,\n      \"startedAt\": \"2026-10-07T13:05:30.000Z\",\n      \"days\": 0,\n      \"status\": \"active\",\n      \"balance\": 50000,\n      \"floor\": 48000,\n      \"cushion\": 2000,\n      \"profit\": 0,\n      \"target\": 3000,\n      \"progress\": 0,\n      \"dayPnl\": 0,\n      \"sessionsDone\": 0,\n      \"sessionsLeft\": 30,\n      \"budgets\": [\n        {\n          \"strategy\": null,\n          \"budgetUsd\": 400\n        }\n      ],\n      \"budgetUsd\": 400,\n      \"snapshotAt\": null,\n      \"entryBlock\": \"the topstep_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\"\n    }\n  ],\n  \"verdicts\": []\n}\n",
+    "stdout": "{\n  \"attempts\": [\n    {\n      \"account\": \"test_50k\",\n      \"started\": true,\n      \"startedAt\": \"2026-10-07T13:05:30.000Z\",\n      \"days\": 0,\n      \"status\": \"active\",\n      \"balance\": 50000,\n      \"floor\": 48000,\n      \"cushion\": 2000,\n      \"profit\": 0,\n      \"target\": 3000,\n      \"progress\": 0,\n      \"dayPnl\": 0,\n      \"sessionsDone\": 0,\n      \"sessionsLeft\": 30,\n      \"budgets\": [\n        {\n          \"strategy\": null,\n          \"budgetUsd\": 400\n        }\n      ],\n      \"budgetUsd\": 400,\n      \"snapshotAt\": null,\n      \"entryBlock\": \"the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\"\n    }\n  ],\n  \"verdicts\": []\n}\n",
     "stderr": ""
   },
   "combine status --account": {
     "status": 0,
-    "stdout": "topstep_100k: no attempt started\n",
+    "stdout": "test_100k: no attempt started\n",
     "stderr": ""
   },
   "combine status unknown account": {
     "status": 0,
-    "stdout": "no account profile named nope: every started attempt\ntopstep_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the topstep_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "no account profile named nope: every started attempt\ntest_50k: active, balance $50000 (floor $48000, cushion $2000), profit $0 of $3000, day $0, 0 sessions done, 30 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine record-day": {
     "status": 0,
-    "stdout": "topstep_50k: close of 2026-10-07 recorded at $50250\n",
+    "stdout": "test_50k: close of 2026-10-07 recorded at $50250\n",
     "stderr": ""
   },
   "combine status after day": {
     "status": 0,
-    "stdout": "topstep_50k: active, balance $50250 (floor $48250, cushion $2000), profit $250 of $3000, day $0, 1 sessions done, 29 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the topstep_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
+    "stdout": "test_50k: active, balance $50250 (floor $48250, cushion $2000), profit $250 of $3000, day $0, 1 sessions done, 29 left; size budget $400 (default sizing; no policy strategy trades this account); entries blocked: the test_50k account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar)\n",
     "stderr": ""
   },
   "combine stop": {
     "status": 0,
-    "stdout": "topstep_50k: attempt ended (kept as <home>/combine/topstep_50k.ended-2026-10-07T13-05-30-000Z.json)\n",
+    "stdout": "test_50k: attempt ended (kept as <home>/combine/test_50k.ended-2026-10-07T13-05-30-000Z.json)\n",
     "stderr": ""
   },
   "combine stop again": {
     "status": 0,
-    "stdout": "topstep_50k: no attempt is running\n",
+    "stdout": "test_50k: no attempt is running\n",
     "stderr": ""
   },
   "combine usage": {

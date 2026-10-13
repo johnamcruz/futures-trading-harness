@@ -26,7 +26,7 @@ const recordBar = (home, t) => writeSignals(home, buildSignals([], { symbol: 'MN
 function setup({ specs = true } = {}) {
   const home = tmpDir();
   // The broker's tick specs, as the translator records them (the default broker's, and the mock's of the policy test).
-  if (specs) for (const broker of ['topstepx', 'mock']) recordBrokerSpecs(home, { broker });
+  if (specs) for (const broker of [null, 'mock']) recordBrokerSpecs(home, { broker });
   const bars = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))
     .filter(b => Date.parse(b.t) <= Date.parse(FIRED_BAR)).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
   const file = path.join(home, 'MNQ-3m.json');

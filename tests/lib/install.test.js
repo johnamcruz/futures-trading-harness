@@ -7,11 +7,11 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { upsertBlock, MARK_BEGIN, MARK_END, codexConfigBlock, mergeQwenSettings, qwenWorkspaceSettings, planCodex, planQwen, planClaude, planOpencode, TARGETS, applyPlan, planBrokerEntry } = require('../../scripts/lib/install');
 const { activeBroker } = require('../../scripts/lib/broker/config');
-const { tmpDir } = require('../helpers');
+const { FAKE_BROKERS, tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const ENTRY = '/opt/broker-mcp/dist/index.js';
-const BROKER = activeBroker({ FTH_HOME: tmpDir() });
+const BROKER = activeBroker({ FTH_HOME: tmpDir(), FTH_BROKERS_FILE: FAKE_BROKERS });
 
 test('upsertBlock appends once and replaces in place', () => {
   const once = upsertBlock('model = "x"\n', 'a = 1');
@@ -30,8 +30,8 @@ test('codex block wires the gateway and every agent role', () => {
   // The gateway alone: it starts the server named in the broker config.
   assert.ok(block.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'mcp-gateway.js'))}]`));
   // The broker server's variables (from the broker config) and the harness's are forwarded.
-  assert.match(block, /"PROJECTX_API_KEY"/);
-  assert.match(block, /"PROJECTX_MCP_ENTRY"/);
+  assert.match(block, /"FAKE_BROKER_API_KEY"/);
+  assert.match(block, /"FAKE_BROKER_ENTRY"/);
   assert.match(block, /"FTH_BROKER"/);
   assert.match(block, /\[agents\.trade_executor\]/);
   assert.match(block, /^default_tools_approval_mode = "approve"$/m);
@@ -49,7 +49,7 @@ test('codex block registers the harness tools server, pre-approved, with the clo
   assert.ok(section.includes(`args = [${JSON.stringify(path.join(ROOT, 'scripts', 'harness-tools-mcp.js'))}]`));
   assert.match(section, /^default_tools_approval_mode = "approve"$/m);
   const vars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(section)[1]);
-  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_SYMBOLS', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'PROJECTX_API_KEY', 'FTH_CYCLE_BARS']) {
+  for (const v of ['FTH_ROOT', 'FTH_BARS_DIR', 'FTH_REPLAY_NOW', 'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_HOME', 'FTH_SYMBOLS', 'FTH_BLACKOUTS_FILE', 'FTH_BROKER', 'FAKE_BROKER_API_KEY', 'FTH_CYCLE_BARS']) {
     assert.ok(vars.includes(v), v);
   }
   const brokerVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);

@@ -12,6 +12,27 @@ rules, and hooks, with generated adapters for Claude
 Code, Codex, Qwen Code, and opencode; strategies as `STRATEGY.md` documents; an order gate
 enforced by hooks and by an MCP gateway; and an autonomous runner.
 
+## Separation of work
+
+| Layer | Owns | Never |
+|---|---|---|
+| Harness (futures-trading-harness) | Agents, skills, rules, strategies, accounts (firm rules as documents); the order gate (fails closed); the runner (cycles, clock, end of day); the replay driver (the same runner against a replay broker); session recording, scorecard, the learned-policy loop; generated CLI adapters (Claude Code, Codex, Qwen Code, opencode); the generic broker MCP interface spec; the contract translator; `mcp-configs/brokers.json`, the one link to broker servers | Broker or platform names, ids or APIs; firm rules in code; model names or the model runtime; order-flow math or fields; machine paths |
+| The live broker server (its own repo) | Everything about its platform: API, auth, orders, brackets, protection, flatten, reconcile, rate limits, contracts, live bars, L1/L2, order flow. It is the reference | Being changed to match local data; harness logic |
+| The replay broker server (its own repo) | Serving local historical data through the same interface (bars, store, replay clock, simulated fills); reproducing the live server's output and proving it against the live server's golden files | Its own definitions that differ from live; harness logic |
+| The user's machine (no repo) | `.env` credentials, local config overrides, runner config, the model server and its watchdog, the CLI's config | Anything committed |
+
+Which live and replay broker servers are configured is in `mcp-configs/brokers.json`. From this:
+
+- Swap the `brokers.json` entry to swap the broker; nothing else in the harness changes.
+- Bars are data: fields a broker adds pass through untouched.
+- Parity goes one way: live is the truth. The replay server matches the live one, never the reverse.
+- `tests/plugin/no-platform-specifics.test.js` enforces it: no platform, firm or model names, and no
+  firm times, in the repo outside `accounts/` and `mcp-configs/brokers.json`, except the shrink-only
+  exceptions (plan C; pinned in
+  `tests/plugin/no-platform-specifics.pins.json`, only ever shrinking against the base branch) and the
+  interface's known first-server conventions (`docs/TECH-DEBT.md`), which name no platform, so the scan
+  can't see them.
+
 ## Layout
 
 - `agents/` (canonical roles, Claude format: `name`, `description`, `tools`, `model`, plus
@@ -38,7 +59,8 @@ enforced by hooks and by an MCP gateway; and an autonomous runner.
 - Brokers: no broker code in the harness. Every broker or prop firm runs its own MCP server (own repo)
   implementing one interface, `docs/BROKER-MCP-INTERFACE.md` (as data: `scripts/lib/broker/interface.js`).
   Which server is config (`mcp-configs/brokers.json`, `~/.futures-trading-harness/brokers.json`,
-  `FTH_BROKER`; `scripts/lib/broker/config.js`); TopstepX (projectx-mcp) is the default. It is registered
+  `FTH_BROKER`; `scripts/lib/broker/config.js`); the default broker is whatever `mcp-configs/brokers.json`
+  names. It is registered
   as the MCP server `broker` (gateway in front); harness code reaches it only through
   `scripts/lib/broker/adapter.js`. Check a server with `scripts/check-broker-mcp.js`.
   Contracts have standard names (`MNQ`, `NQ:2026-03`): the contract translator
@@ -82,10 +104,16 @@ against:
   goes into the skill or agent that uses it, synced to every harness.
 - Brokers stay outside: harness code reaches them only through the adapter and
   the broker MCP interface.
+- No platform-, firm- or model-specific code, names, env vars, defaults,
+  contract-id formats or paths: platform specifics live in the broker's MCP
+  server, firm rules in account files, model specifics in the user's local
+  config. `mcp-configs/brokers.json` is the one link.
 
 `tests/plugin/ecc-architecture.test.js` enforces what can be checked in code
 (lib modules unit-tested, CLI and hook size, no runtime dependencies, no
-broker code); its listed exceptions and pinned sizes may only shrink.
+broker code), and `tests/plugin/no-platform-specifics.test.js` the no
+platform-, firm- or model-specific rule; their listed exceptions and pinned
+sizes may only shrink.
 
 ## Before a pull request (hard rule)
 
@@ -102,10 +130,15 @@ request, every time, whatever the size of the change:
    whole diff against the base branch, trying to break it: inputs that make a
    gate fail open, a refusal of a legitimate risk-reducing action, broker
    faults (lost, late, refused or errored replies), races, tests that would
-   pass without the code they claim to cover, and ECC compliance. Every
-   confirmed finding is fixed (or, if not worth its code, answered with the
-   reason), then the regression runs again and the fixes get their own review,
-   until a round confirms nothing new.
+   pass without the code they claim to cover, and ECC compliance (including no
+   platform-, firm- or model-specific code, names, env vars, defaults,
+   contract-id formats or paths). Any change to the platform guard files
+   (`tests/plugin/no-platform-specifics.test.js`, `tests/plugin/platform-scan.js`) or their pins
+   (`tests/plugin/no-platform-specifics.pins.json`), other than lines removed, is a finding by
+   default. Every confirmed finding is fixed (or,
+   if not worth its code, answered with the reason), then the regression
+   runs again and the fixes get their own review, until a round confirms
+   nothing new.
 
    A change to documents only (Markdown under `docs/`, `README.md`,
    `CONTRIBUTING.md`, and nothing else) gets the regression and a review that

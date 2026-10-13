@@ -10,11 +10,11 @@ const { createAdapter, openAdapter, tradingBlocked } = require('../../scripts/li
 const { activeBroker, serverCommand } = require('../../scripts/lib/broker/config');
 const { checkConformance } = require('../../scripts/lib/broker/conformance');
 const { main: checkCli } = require('../../scripts/check-broker-mcp');
-const { tmpDir } = require('../helpers');
+const { FAKE_BROKERS, shippedBroker, tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
-const MNQ = 'CON.F.US.MNQ.Z26';
+const MNQ = 'fake:MNQ:Z26';
 const fake = (env = {}) => createMcpClient({ command: process.execPath, args: [FAKE], env: { ...process.env, ...env } });
 // The fake behind the contract translator, as the harness always runs a server: standard names above it.
 const TRANSLATOR = path.join(ROOT, 'scripts', 'contract-translator.js');
@@ -109,7 +109,7 @@ test('the MCP client: a tool error is thrown with its text; a server that exits 
 
 test('the broker client reads and manages through any conforming server, in standard contract names', async () => {
   const client = createAdapter({ mcp: translated({ FAKE_NEWEST_FIRST: '1' }) });
-  const MNQ = 'MNQ'; // the server's own id (CON.F.US.MNQ.Z26) never reaches the adapter
+  const MNQ = 'MNQ'; // the server's own id (fake:MNQ:Z26) never reaches the adapter
   try {
     assert.deepStrictEqual(await client.activeContract('MNQ'), { id: 'MNQ', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5 });
     const bars = await client.closedBars(MNQ, { minutes: 3, limit: 5, now: new Date('2026-10-07T20:00:00Z') });
@@ -133,7 +133,7 @@ test('the broker client reads and manages through any conforming server, in stan
 
 test('the adapter opens the configured broker: reads straight to it, a stop moved away from the market is refused by the gateway', async () => {
   const home = tmpDir();
-  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, PROJECTX_MCP_ENTRY: FAKE, PROJECTX_JOURNAL_PATH: path.join(home, 'j.jsonl'), FTH_GATE_LOG: path.join(home, 'gate.jsonl') };
+  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE, FAKE_BROKER_JOURNAL: path.join(home, 'j.jsonl'), FTH_GATE_LOG: path.join(home, 'gate.jsonl') };
   const client = openAdapter({ root: ROOT, env });
   try {
     await client.verify();
@@ -145,26 +145,30 @@ test('the adapter opens the configured broker: reads straight to it, a stop move
     client.close();
   }
   assert.throws(() => openAdapter({ root: ROOT, env: { ...env, FTH_BROKER: 'other-broker' } }), /unknown broker "other-broker"/);
-  const { PROJECTX_MCP_ENTRY: _entry, ...noEntry } = env;
-  assert.throws(() => openAdapter({ root: ROOT, env: noEntry }), /broker topstepx: no MCP server configured \(set PROJECTX_MCP_ENTRY/);
+  const { FAKE_BROKER_ENTRY: _entry, ...noEntry } = env;
+  assert.throws(() => openAdapter({ root: ROOT, env: noEntry }), /broker fake: no MCP server configured \(set FAKE_BROKER_ENTRY/);
 });
 
-test('the broker config: topstepx by default; yours adds brokers, picks one, or overrides fields; FTH_BROKER wins', () => {
+test('the broker config: the default is the broker mcp-configs/brokers.json names; yours adds brokers, picks one, or overrides fields; FTH_BROKER wins', () => {
   const home = tmpDir();
+  const shipped = shippedBroker(); // read from the file, never named here
   const t = activeBroker({ FTH_HOME: home });
-  assert.deepStrictEqual([t.name, t.command, t.repo], ['topstepx', null, 'https://github.com/johnamcruz/projectx-mcp']);
-  assert.strictEqual(activeBroker({ FTH_HOME: home, PROJECTX_MCP_ENTRY: '/x/index.js' }).command[1], '/x/index.js');
+  assert.deepStrictEqual([t.name, t.repo], [shipped.name, shipped.repo]);
+  // A server from the broker's entry variable (the tests' fake broker's).
+  assert.strictEqual(activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS }).command, null);
+  assert.strictEqual(activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: '/x/index.js' }).command[1], '/x/index.js');
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({
     broker: 'other',
-    brokers: { other: { repo: 'https://example.com/other-mcp', command: ['other-mcp', '--stdio'], journal: '~/other/j.jsonl', paperEnv: { OTHER_TRADING: 'off' } }, topstepx: { entry: '/y/index.js' } },
+    brokers: { other: { repo: 'https://example.com/other-mcp', command: ['other-mcp', '--stdio'], journal: '~/other/j.jsonl', paperEnv: { OTHER_TRADING: 'off' } }, [shipped.name]: { entry: '/y/index.js' } },
   }));
   const o = activeBroker({ FTH_HOME: home });
   assert.deepStrictEqual([o.name, serverCommand(o), o.journalPath, o.paperEnv], ['other', ['other-mcp', '--stdio'], path.join(require('os').homedir(), 'other', 'j.jsonl'), { OTHER_TRADING: 'off' }]);
-  const back = activeBroker({ FTH_HOME: home, FTH_BROKER: 'topstepx' });
-  assert.deepStrictEqual([back.command[1], back.env.includes('PROJECTX_API_KEY')], ['/y/index.js', true]);
+  // An override changes only the fields it sets: the shipped broker keeps its variables.
+  const back = activeBroker({ FTH_HOME: home, FTH_BROKER: shipped.name });
+  assert.deepStrictEqual([back.command[1], back.env], ['/y/index.js', shipped.env || []]);
   assert.throws(() => activeBroker({ FTH_HOME: home, FTH_BROKER: 'Bad Name' }), /not valid/);
   // Paths resolve against the config file's folder, so the gateway (run from workspace/) and the runner agree.
-  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ brokers: { topstepx: { entry: 'srv/index.js', journal: 'j.jsonl' } } }));
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ brokers: { [shipped.name]: { entry: 'srv/index.js', journal: 'j.jsonl' } } }));
   const rel = activeBroker({ FTH_HOME: home });
   assert.deepStrictEqual([rel.command[1], rel.journalPath], [path.join(home, 'srv', 'index.js'), path.join(home, 'j.jsonl')]);
   assert.throws(() => activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: path.join(home, 'missing.json') }), /FTH_BROKERS_FILE: .*does not exist/);
@@ -269,7 +273,7 @@ test('the contract translator dates its front-month lookups by the harness clock
   const day = async (env) => {
     const home = tmpDir();
     fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], ...env.brokerExtra } } }));
-    const client = createAdapter({ mcp: translated({ FTH_HOME: home, FTH_REPLAY_NOW: env.now }) });
+    const client = createAdapter({ mcp: translated({ FTH_HOME: home, FTH_BROKERS_FILE: path.join(home, 'brokers.json'), FTH_REPLAY_NOW: env.now }) });
     try {
       await client.activeContract('MNQ');
     } finally {

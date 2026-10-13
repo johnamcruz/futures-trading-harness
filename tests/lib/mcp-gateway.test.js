@@ -97,9 +97,9 @@ test('canonicalArgs: the gate sees one name per contract, from the configured br
   const env = { FTH_HOME: home };
   const args = { accountId: 7, contractId: 'MNQ:2026-12', size: 1 };
   assert.deepStrictEqual(canonicalArgs(args, env), args, 'no cache yet: as given');
-  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'CON.F.US.MNQ.Z26': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'CON.F.US.MNQ.Z26', month: '2026-12', day: '2026-10-07' } } }));
+  fs.writeFileSync(path.join(home, 'contracts-fake.json'), JSON.stringify({ ids: { 'fake:MNQ:Z26': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'fake:MNQ:Z26', month: '2026-12', day: '2026-10-07' } } }));
   assert.deepStrictEqual(canonicalArgs(args, env), { ...args, contractId: 'MNQ' });
-  assert.strictEqual(canonicalArgs({ contractId: 'CON.F.US.MNQ.Z26' }, env).contractId, 'MNQ');
+  assert.strictEqual(canonicalArgs({ contractId: 'fake:MNQ:Z26' }, env).contractId, 'MNQ');
   assert.strictEqual(args.contractId, 'MNQ:2026-12', 'the call itself is left as sent');
   assert.deepStrictEqual(canonicalArgs({ orderId: 9 }, env), { orderId: 9 });
   assert.deepStrictEqual(canonicalArgs(args, { FTH_HOME: home, FTH_BROKER: 'nope' }), args, 'no broker config: as given');

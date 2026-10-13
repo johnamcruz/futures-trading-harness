@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { instincts, digest, reviewR, confidenceFor } = require('../../scripts/lib/trading/instincts');
-const { tmpDir, writeJournal } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 let t = Date.parse('2026-09-01T14:00:00Z');
@@ -46,10 +46,10 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
 test('scripts/lessons.js prints the instincts from the journal', () => {
   const dir = tmpDir();
   const journal = Array.from({ length: 3 }, () => review('loss', ['setup:bos', 'regime:range', 'r:-1']));
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'lessons.js')], { encoding: 'utf8', env: { ...process.env, PROJECTX_JOURNAL_PATH: writeJournal(dir, journal) } });
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'lessons.js')], { encoding: 'utf8', env: { ...process.env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, journal) } });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.match(r.stdout, /\[setup\] bos in range: 3 trades, win 0%, E -1R -> avoid/);
-  const empty = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'lessons.js')], { encoding: 'utf8', env: { ...process.env, PROJECTX_JOURNAL_PATH: writeJournal(tmpDir(), []) } });
+  const empty = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'lessons.js')], { encoding: 'utf8', env: { ...process.env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(tmpDir(), []) } });
   assert.match(empty.stdout, /No instincts yet/);
 });
 

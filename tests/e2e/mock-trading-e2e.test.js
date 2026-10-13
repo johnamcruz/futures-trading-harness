@@ -47,7 +47,7 @@ const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
-const MNQ_ID = 'CON.F.US.MNQ.Z26';
+const MNQ_ID = 'fake:MNQ:Z26';
 const STEP = 180000;
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 // The parity bar where bos fired long (tests/e2e/trading-e2e.test.js), and the moment just after it closed.

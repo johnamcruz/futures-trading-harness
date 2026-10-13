@@ -1,0 +1,464 @@
+{
+  "README.md|firm": [
+    "04f8cc16dd6a9046",
+    "ab206e02680d3457",
+    "ae06fc26e502d8d6"
+  ],
+  "README.md|account": [
+    "0c71d61f41eb748c",
+    "6cffedfc55e3624c",
+    "6f7ee655d6fb3f71"
+  ],
+  "README.md|firm-time": [
+    "04f8cc16dd6a9046",
+    "c883d537906eb1a6"
+  ],
+  "commands/trade-review.md|firm-time": [
+    "061ae3d39d8b7546"
+  ],
+  "docs/LEARNED-RULEBOOK.md|account": [
+    "beb5c68835632c81"
+  ],
+  "docs/QUANT-PLAN.md|account": [
+    "77ab53f7cf43006f",
+    "9af1ee2ec4eb691b"
+  ],
+  "docs/REASONING-TRADER-DESIGN.md|account": [
+    "8cbc55fd6bab5686",
+    "f785e500b7311759"
+  ],
+  "docs/REASONING-TRADER-DESIGN.md|firm-time": [
+    "4c3136fa4340390b"
+  ],
+  "mcp-configs/replay.example.json|account": [
+    "4bc3a294d9a6966b"
+  ],
+  "qwen-extension/QWEN.md|firm": [
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "e4ea32fa118a9722"
+  ],
+  "qwen-extension/QWEN.md|firm-time": [
+    "23f801460f59950b",
+    "79e1ba808965e37a",
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "b252a360b79e621f",
+    "e4ea32fa118a9722",
+    "fce7fc24de252e56"
+  ],
+  "qwen-extension/commands/trade-review.md|firm-time": [
+    "47da3c76a4d1cf9c"
+  ],
+  "rules/trading/execution.md|firm": [
+    "955a9d09de4c7ca7",
+    "e4ea32fa118a9722"
+  ],
+  "rules/trading/execution.md|firm-time": [
+    "955a9d09de4c7ca7",
+    "e4ea32fa118a9722"
+  ],
+  "rules/trading/prop-firm.md|firm": [
+    "88454e1e0bb24c3b"
+  ],
+  "rules/trading/prop-firm.md|firm-time": [
+    "79e1ba808965e37a",
+    "88454e1e0bb24c3b",
+    "b252a360b79e621f"
+  ],
+  "rules/trading/risk-management.md|firm-time": [
+    "fce7fc24de252e56"
+  ],
+  "scripts/hooks/trading-session-start.js|firm-time": [
+    "6da0a9681b8428ab",
+    "a94287327e2819b5"
+  ],
+  "scripts/lib/replay/config.js|account": [
+    "521880aaca6b6d70",
+    "d4d524fce4ce7028"
+  ],
+  "scripts/lib/replay/verdict.js|firm": [
+    "af8499b50edf3698",
+    "f4e1dd5f2dc4b92f"
+  ],
+  "scripts/lib/replay/verdict.js|account": [
+    "4c404c3d648bf32c",
+    "df3815517ea858b4"
+  ],
+  "scripts/lib/replay/verdict.js|firm-time": [
+    "353a4696849e47ee",
+    "af8499b50edf3698"
+  ],
+  "scripts/lib/trading/account-gate.js|firm-time": [
+    "96a82f2535f25bc3"
+  ],
+  "scripts/lib/trading/briefing.js|firm": [
+    "2ec42d19e8695f73",
+    "54434ed7851d4878"
+  ],
+  "scripts/lib/trading/briefing.js|firm-time": [
+    "2ec42d19e8695f73",
+    "54434ed7851d4878"
+  ],
+  "scripts/lib/trading/clock.js|firm": [
+    "6c9faf877f891097",
+    "9c1f987a4313a82b",
+    "bce94983974ce5e4",
+    "c04af1542a770f87"
+  ],
+  "scripts/lib/trading/clock.js|firm-time": [
+    "0c50f49afb820838",
+    "62d188c5abade91e",
+    "6c9faf877f891097",
+    "9c1f987a4313a82b",
+    "c04af1542a770f87",
+    "e514031f91dd99cc"
+  ],
+  "scripts/lib/trading/mtf.js|firm": [
+    "dee8ca32b8c66176"
+  ],
+  "scripts/lib/trading/order-gate.js|firm-time": [
+    "2dce884b64dab62b"
+  ],
+  "scripts/lib/trading/reasons.js|account": [
+    "ecc79c8545455175"
+  ],
+  "scripts/lib/trading/report-cache.js|account": [
+    "f1e5d8c2c56574d9"
+  ],
+  "scripts/replay.js|account": [
+    "5769fe1d465676c4"
+  ],
+  "skills/end-of-day/SKILL.md|firm-time": [
+    "2f9c4cbbfcb90ea0"
+  ],
+  "skills/harness-tools/SKILL.md|account": [
+    "ddd2b922314600f6"
+  ],
+  "skills/prop-challenge-pacing/SKILL.md|account": [
+    "07368d1c0d5cb4ac",
+    "f052c330161313b6"
+  ],
+  "skills/replay/SKILL.md|firm": [
+    "c37cddfe2ff5f33d"
+  ],
+  "skills/replay/SKILL.md|account": [
+    "011e6f9022668405",
+    "103538f464e03d58",
+    "51c2d5d664e4da9a",
+    "614560bc8894c9f9",
+    "75375c8d03e5a15a",
+    "7f3069fdbe555e49",
+    "ddd42fa57f89439b"
+  ],
+  "skills/replay/SKILL.md|firm-time": [
+    "06165f7a4af4cd73"
+  ],
+  "skills/session-timing/SKILL.md|firm": [
+    "516b59feaa0b8cff",
+    "5afc77bc3f374761",
+    "7b087da18862a3de",
+    "9469a1eba2f47ce6",
+    "9eb901d3bdf5c580",
+    "a122c8451fe73d07",
+    "f53c0cbac84387ee"
+  ],
+  "skills/session-timing/SKILL.md|firm-time": [
+    "516b59feaa0b8cff",
+    "7b087da18862a3de",
+    "9469a1eba2f47ce6"
+  ],
+  "strategies/README.md|account": [
+    "5eeca293b452b47e"
+  ],
+  "strategies/prop_flow_1m/STRATEGY.md|firm": [
+    "0fc2c0f462d43905"
+  ],
+  "strategies/prop_flow_1m/STRATEGY.md|account": [
+    "0dc8c6e6406f814b",
+    "c4d18d471fd2f5fc"
+  ],
+  "strategies/prop_portfolio/STRATEGY.md|firm": [
+    "315c178753462d53",
+    "6115e0ff362bcac7"
+  ],
+  "strategies/prop_portfolio/STRATEGY.md|account": [
+    "d2c7f0eda29bc67d",
+    "ea7ea432d289ca65"
+  ],
+  "tests/e2e/mock-trading-e2e.test.js|account": [
+    "b58197e5050c3ffa",
+    "b831f8d1817dd0d4"
+  ],
+  "tests/e2e/replay-e2e.test.js|account": [
+    "59cade091d6ecbb2"
+  ],
+  "tests/hooks/trading-hooks.test.js|account": [
+    "036e8ded5f5b9312",
+    "03e87e1e21c85a41",
+    "04d15c269bbbc8de",
+    "04d15c269bbbc8de",
+    "089ddc2dc91a853f",
+    "0e42694a0ef509ae",
+    "0e42694a0ef509ae",
+    "327b5432f57573a9",
+    "33ec804c10f0a81f",
+    "3481cedc8344bef2",
+    "3b284c457f95aeef",
+    "51b105b429977ee1",
+    "54b1d1b7314c5385",
+    "777ed0f7bb404eac",
+    "7f437ca173392df9",
+    "8283fd1244257249",
+    "87e2ab7ce9c588b3",
+    "8c9746f7faa6bd7b",
+    "93ce73ba99ba3d02",
+    "a6d453af6abf54fb",
+    "d60c6b36f00b3b3c",
+    "d88db9291263c553",
+    "da11ea16cc43e117",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e1ee589913aef0d8",
+    "e8a411be0e223114",
+    "f584a3a9d2b91b26"
+  ],
+  "tests/lib/account-gate.test.js|account": [
+    "1c96bf9b37531f58",
+    "3f15153590949f70",
+    "529d439a5b6d98c5",
+    "6397a7c42dce4de7",
+    "dbd88ad11ed39e61",
+    "e75ad9c72499820d",
+    "fa4302b5d3040a70"
+  ],
+  "tests/lib/autotrader.test.js|account": [
+    "1aed6cbbbb37be36",
+    "3ca0c9aa225fab85",
+    "454bf8e6b7062878",
+    "80d188b56e53b80b",
+    "9875330125e90aa1",
+    "e41d5b4468c75361"
+  ],
+  "tests/lib/autotrader.test.js|firm-time": [
+    "1021d34dddb684c8"
+  ],
+  "tests/lib/backtest.test.js|account": [
+    "75cdb5d64d7947ab",
+    "f97171ce1ad04865"
+  ],
+  "tests/lib/clock.test.js|firm-time": [
+    "188313c390374da4",
+    "1b038e51b5bf70eb",
+    "60b1f85b8a0b8684",
+    "836156d4bf171dab",
+    "8880141c4f4821ba",
+    "b6b35ca73ca04dff",
+    "fc13d0ce52e9ab35"
+  ],
+  "tests/lib/combine.test.js|account": [
+    "4adfce15a70e0d9f",
+    "4adfce15a70e0d9f",
+    "e1b34e50afeaf99e",
+    "e78ad30beabf2b48",
+    "ef3a3695a84fc8e4"
+  ],
+  "tests/lib/harness-tools-order-plan.test.js|account": [
+    "85309e2f324cc4cc",
+    "aeeec2e2404f672b",
+    "afa5fa394df9b038",
+    "c72c14120bb0b231",
+    "dbfea8d1396ff950",
+    "dbfea8d1396ff950",
+    "dbfea8d1396ff950",
+    "ee862118603957f3",
+    "fc8ee19ab9059692",
+    "fc8ee19ab9059692"
+  ],
+  "tests/lib/harness-tools-reasons.test.js|account": [
+    "2bc2b0ae40084003",
+    "34d4275fe5632d46",
+    "427bd0419b72050b",
+    "4811e8d3137797c7",
+    "5136d8b02e4e4b5e",
+    "57d4b93612a469e9",
+    "994a814ab4d2734a",
+    "a83f62c6d7ca81c6",
+    "f7789b03569d6eaa"
+  ],
+  "tests/lib/harness-tools.test.js|account": [
+    "a9fabf39137694b4",
+    "ad6078296ad9cc5e",
+    "ed74c61b2dd523c5"
+  ],
+  "tests/lib/order-gate.test.js|firm-time": [
+    "402369269a1d6080"
+  ],
+  "tests/lib/prop-live-runner.test.js|account": [
+    "304052e8f77e3cdd",
+    "424fd87ced076940",
+    "6541c333e37a91cb",
+    "68f82e0912ffddaf",
+    "843ff654848ae73c",
+    "8ec19a86ae968f02",
+    "9d685421883e64bd",
+    "9ff7c458d210420e",
+    "a2df04ec7da255fb",
+    "d1b4dcb37035b44d"
+  ],
+  "tests/lib/reasons.test.js|account": [
+    "22ef62a7266b455f",
+    "3054f07efa9d9424",
+    "4c7e7054b16f7a0a",
+    "71d57916a6c58a82",
+    "c656daaedb165ba6",
+    "dfa2ff16ffe438b7",
+    "e7630c2e69cdc8eb",
+    "e9a32959146f9ed2",
+    "faff28858a223d43"
+  ],
+  "tests/lib/replay-scorecard.test.js|account": [
+    "0690fadc0ddbf543",
+    "43944bc65b4acc80",
+    "4c6e59ce5f5f3f66",
+    "93dd34a53d704523",
+    "d7189f2ce89b1163"
+  ],
+  "tests/lib/replay-scorecard.test.js|firm-time": [
+    "1686b688b2750072"
+  ],
+  "tests/lib/replay-verdict.test.js|account": [
+    "115febf55f60e100",
+    "1a0719e4f4bb7c9c",
+    "24d39a026d53295d",
+    "25a44409881a29dd",
+    "2d4ead46c5d41428",
+    "3221718bb1f2ccea",
+    "45fa3cfedcc4e87e",
+    "89f4afd96544f74b",
+    "957e35b7e85dd458",
+    "a52869d98fba41f2",
+    "a607776a1feaa389",
+    "cb2a30558416e06a",
+    "de02e830a29c8957",
+    "e22dfcc15d3b44d5",
+    "fe4cb5500fa158b7"
+  ],
+  "tests/lib/replay-verdict.test.js|firm-time": [
+    "d5233991473dca76"
+  ],
+  "tests/lib/replay.test.js|account": [
+    "0138f0f950231470",
+    "197bb9f6fcd8e46f",
+    "22ae92c95eab5d5b",
+    "2c967ec0d8dd1918",
+    "4161ec7ee001c336",
+    "60c6f907d3109f6b",
+    "6ea39a008a9e6989",
+    "969f9bf84ec8c0a7",
+    "a98b342e6c80de53",
+    "b76c6a15de672dd5",
+    "febf26b947367d6b"
+  ],
+  "tests/lib/report-cache.test.js|account": [
+    "140a2aef14ab62c2",
+    "39d393ff711473f4",
+    "3b4740a544690c2f",
+    "3d367e2165ba8e16",
+    "4902a3fc2d0997bc",
+    "4eef674883972421",
+    "4fe19f29b491368d",
+    "5aa5ca4ed627a550",
+    "625bceee84f029b7",
+    "6861dd2ebad66bc2",
+    "6d993dcba0ec2025",
+    "84fe78e21d7ecf2c",
+    "ac2873fa7b9dbf01",
+    "b781b2dee52d26b6",
+    "d3f06e91a325486b",
+    "d686e61c6b0cea21",
+    "d72ba0e7f49bdf79",
+    "eea2d883ae4ac902",
+    "f3a8b741c74f7792"
+  ],
+  "tests/lib/strategies.test.js|account": [
+    "4e1b397b70a79876",
+    "5c1568f12c1e14bb",
+    "771c9f32aefce3ba",
+    "b4f56876e04f9aeb"
+  ],
+  "tests/lib/translator.test.js|firm-time": [
+    "a77a771a08308dee"
+  ],
+  "tests/plugin/content.test.js|firm": [
+    "66b4bb294596a08c",
+    "670205a9ea3f75ec",
+    "9937b50129469c78"
+  ],
+  "tests/plugin/content.test.js|firm-time": [
+    "66b4bb294596a08c",
+    "670205a9ea3f75ec"
+  ],
+  "tests/scripts/cli-parity.snapshot.json|firm": [
+    "09d16604044ba913",
+    "5a4d032b84eb2c01"
+  ],
+  "tests/scripts/cli-parity.snapshot.json|account": [
+    "8d5ba008abd9f7d0"
+  ],
+  "tests/scripts/harness-tools-mcp.test.js|account": [
+    "336dd723fbce9217",
+    "e6e768fec330d403"
+  ],
+  "tests/scripts/replay-clock.test.js|account": [
+    "0cc976ee27716c0b",
+    "98dccf11684b6454",
+    "c534026297a6c3b9"
+  ],
+  "workspace/AGENTS.md|firm": [
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "e4ea32fa118a9722"
+  ],
+  "workspace/AGENTS.md|firm-time": [
+    "23f801460f59950b",
+    "79e1ba808965e37a",
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "b252a360b79e621f",
+    "e4ea32fa118a9722",
+    "fce7fc24de252e56"
+  ],
+  "workspace/QWEN.md|firm": [
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "e4ea32fa118a9722"
+  ],
+  "workspace/QWEN.md|firm-time": [
+    "23f801460f59950b",
+    "79e1ba808965e37a",
+    "88454e1e0bb24c3b",
+    "955a9d09de4c7ca7",
+    "b252a360b79e621f",
+    "e4ea32fa118a9722",
+    "fce7fc24de252e56"
+  ],
+  "workspace/opencode.json|firm": [
+    "2414e80792165753",
+    "4f8f7260f323c2ec"
+  ],
+  "workspace/opencode.json|account": [
+    "22275a62b20c06b8",
+    "4f8f7260f323c2ec",
+    "7f8a0e70a7073b62",
+    "ff6ca1f8bd4b8dcd"
+  ],
+  "workspace/opencode.json|firm-time": [
+    "2414e80792165753",
+    "4f8f7260f323c2ec"
+  ]
+}

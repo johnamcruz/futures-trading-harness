@@ -765,7 +765,7 @@ Decided by the owner (2026-10-12):
   short).
 - Order-flow strategies beyond paper (after the pipeline works, on live
   data).
-- Changing the LLM the harness runs (it stays Qwen3.5-9B locally) or adding
+- Changing the LLM the harness runs (it stays a small local model) or adding
   model-specific code to the harness. The optional fine-tuned adapter (R31)
   is the owner's one exception: a training artifact outside the repository
   that the harness never depends on. Not otherwise model-specific
