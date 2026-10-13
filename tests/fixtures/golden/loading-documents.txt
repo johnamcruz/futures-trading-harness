@@ -1,0 +1,1120 @@
+strategies (16): bos, cisd_ote, crt_1h, crt_4h, ema_cross, keltner, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, supertrend, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
+strategy bos: {
+  "body": "2174 chars sha256:4430c8574c0ea170",
+  "compiledRules": "sha256:948e1f063bec2c6e",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Break of structure continuation strategy - a close beyond the last confirmed fractal swing (k=2) on 3-minute futures bars, ported from the original Python bot. Use when price closes through the latest swing high/low in the direction of the higher-timeframe trend.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "bos",
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": "atr:0.5",
+    "min_rr": 1.5
+  },
+  "rules": {
+    "long": [
+      "close crosses_above swing_high",
+      "atr(20) > 0"
+    ],
+    "short": [
+      "close crosses_below swing_low",
+      "atr(20) > 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "original bot, strategies/bos.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy cisd_ote: {
+  "body": "4439 chars sha256:8dcfdfc2eb510a47",
+  "compiledRules": "sha256:65dca0ef09f7abe2",
+  "compiledStop": "sha256:e9af80523b56e6ac",
+  "compiledTarget": null,
+  "description": "ICT-style change in state of delivery (CISD) plus optimal trade entry (OTE) pullback strategy - a displacement on the 12-minute zone timeframe defines a fib zone, limit entry on the pullback into it, pivot-based stop. Ported from the original bot. Use after a liquidity sweep and displacement.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "cisd_ote",
+  "risk": {
+    "stop": "cisd_ote_risk",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "cisd_ote_dir > 0"
+    ],
+    "short": [
+      "cisd_ote_dir < 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "original bot, strategies/cisd_ote.py, cisd_ote_detect.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy crt_1h: {
+  "body": "6979 chars sha256:ba785f158ebb4026",
+  "compiledRules": "sha256:1768503060ac2528",
+  "compiledStop": "sha256:646ca51de6c81afc",
+  "compiledTarget": "sha256:4f720fbc74512798",
+  "description": "Candle Range Theory liquidity sweep on the 1-hour candle - the hour raids the previous hour's high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous hour's range. One setup per hour. Reversal setup for MNQ, MES, MYM, M2K.",
+  "errors": [],
+  "exit": {
+    "target": "crt_target(60)",
+    "max_bars": 40
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "crt_1h",
+  "params": {
+    "crtSweepBars": 10,
+    "crtShiftBars": 5,
+    "crtMaxDepth": 0.5,
+    "crtMinRangeAtr": 3,
+    "crtBufferAtr": 0.25,
+    "crtMinRR": 2
+  },
+  "risk": {
+    "stop": "crt_risk(60)",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "crt_dir(60) > 0"
+    ],
+    "short": [
+      "crt_dir(60) < 0"
+    ]
+  },
+  "sessions": [
+    "08:00-15:30@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "Candle Range Theory (CRT) / turtle-soup raid of the previous candle's high or low, as taught in community CRT material (no published backtest); fixed here as a mechanical detector (scripts/lib/trading/crt.js) so it can be backtested. Parameters are starting values, not fitted on real data.",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 2
+}
+strategy crt_4h: {
+  "body": "6043 chars sha256:2dd59ea6863fc32c",
+  "compiledRules": "sha256:06983aecf794e6f8",
+  "compiledStop": "sha256:dabc8502fe2a2e8e",
+  "compiledTarget": "sha256:c1f256b9635ec579",
+  "description": "Candle Range Theory liquidity sweep on the 4-hour candle - the 06:00 or 10:00 ET candle raids the previous 4-hour high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous 4-hour range. One setup per candle. Reversal setup for MNQ, MES, MYM, M2K.",
+  "errors": [],
+  "exit": {
+    "target": "crt_target(240)",
+    "max_bars": 80
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "crt_4h",
+  "params": {
+    "crtSweepBars": 20,
+    "crtShiftBars": 5,
+    "crtMaxDepth": 0.5,
+    "crtMinRangeAtr": 6,
+    "crtBufferAtr": 0.25,
+    "crtMinRR": 2
+  },
+  "risk": {
+    "stop": "crt_risk(240)",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "crt_dir(240) > 0"
+    ],
+    "short": [
+      "crt_dir(240) < 0"
+    ]
+  },
+  "sessions": [
+    "06:00-14:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "Candle Range Theory (CRT) / turtle-soup raid of the previous 4-hour candle, with the CME 4-hour key times (candles opening 02:00, 06:00, 10:00 ET), as taught in community CRT material (no published backtest); fixed here as a mechanical detector (scripts/lib/trading/crt.js) so it can be backtested. Parameters are starting values, not fitted on real data.",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 2
+}
+strategy ema_cross: {
+  "body": "2043 chars sha256:9d8b5ad8bf4ea0bc",
+  "compiledRules": "sha256:d94948967560b033",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "9/20 EMA crossover trend-continuation strategy gated by ADX >= 18 on 3-minute futures bars, ported from the original Python bot. Use when the fast EMA crosses the slow EMA in a trending regime.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "ema_cross",
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": "atr:0.5",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "ema(9) crosses_above ema(20)",
+      "adx(14) >= 18",
+      "atr(20) > 0"
+    ],
+    "short": [
+      "ema(9) crosses_below ema(20)",
+      "adx(14) >= 18",
+      "atr(20) > 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "original bot, strategies/ema_cross.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy ext_reader: {
+  "body": "965 chars sha256:5de2ee4a1c01e6cd",
+  "compiledRules": "sha256:918e17a16c8a19fb",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "A test fixture strategy that reads a neutral broker bar field with field() - a number now and a bar back (ext.a, ext.a[1]) and a flag (ext.b.flag); fires when price moves the same way. Test use only.",
+  "errors": [],
+  "exit": {
+    "target_r": 2
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "ext_reader",
+  "risk": {
+    "stop": "atr:1",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "field(\"ext.a\") >= 0.5",
+      "field(\"ext.a\")[1] < 0.5",
+      "field(\"ext.b.flag\") >= 1",
+      "close > close[1]"
+    ],
+    "short": [
+      "field(\"ext.a\") <= -0.5",
+      "field(\"ext.a\")[1] > -0.5",
+      "field(\"ext.b.flag\") < 1",
+      "close < close[1]"
+    ]
+  },
+  "signal": "rules",
+  "source": "tests/fixtures/golden-bars.js (the golden regression tests)",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+strategy keltner: {
+  "body": "2141 chars sha256:a4eca311bd37090c",
+  "compiledRules": "sha256:a6a9c0e47c394717",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Keltner channel volatility-expansion breakout strategy (EMA20 +/- 1.5 x ATR20, ADX >= 20) on 3-minute futures bars, ported from the original Python bot. Use when a bar closes outside the Keltner channel in a trending regime.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "keltner",
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": "atr:0.5",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "close crosses_above keltner_upper",
+      "adx(14) >= 20",
+      "atr(20) > 0"
+    ],
+    "short": [
+      "close crosses_below keltner_lower",
+      "adx(14) >= 20",
+      "atr(20) > 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "original bot, strategies/keltner.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy ofi: {
+  "body": "5061 chars sha256:9223da1b9a054ed5",
+  "compiledRules": "sha256:c61c18afa8ad98bf",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Order-flow imbalance continuation on 1-minute futures bars - enter when buying (or selling) dominates over 1, 3 and 5 minutes and price actually moves with it (real flow, not absorption).",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "ofi",
+  "risk": {
+    "stop": "atr:1",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "field(\"flow.ofiTrade\") >= 0.3",
+      "field(\"flow.windows.3.ofiTrade\") >= 0.3",
+      "field(\"flow.windows.5.ofiTrade\") >= 0.3",
+      "close > close[1]",
+      "close > close[3]",
+      "close >= close[5] + 0.5 * atr(20)",
+      "vol_sma(5) >= 1.2 * vol_sma(60)"
+    ],
+    "short": [
+      "field(\"flow.ofiTrade\") <= -0.3",
+      "field(\"flow.windows.3.ofiTrade\") <= -0.3",
+      "field(\"flow.windows.5.ofiTrade\") <= -0.3",
+      "close < close[1]",
+      "close < close[3]",
+      "close + 0.5 * atr(20) <= close[5]",
+      "vol_sma(5) >= 1.2 * vol_sma(60)"
+    ]
+  },
+  "signal": "rules",
+  "source": "harness original (order flow from the broker's 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data",
+  "status": "active",
+  "timeframe": "1m",
+  "valid": true,
+  "version": 1
+}
+strategy ofi_absorption: {
+  "body": "3041 chars sha256:0671b0813b5b1898",
+  "compiledRules": "sha256:05b68d909605fb89",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Absorption reversal on 1-minute futures bars - heavy selling (buying) over 5 minutes that fails to move price, then a 1-minute bar turns; trade against the absorbed side.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "ofi_absorption",
+  "risk": {
+    "stop": "atr:1",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "field(\"flow.windows.5.ofiTrade\") <= -0.25",
+      "vol_sma(5) >= 1.5 * vol_sma(60)",
+      "close + 0.25 * atr(20) >= close[5]",
+      "field(\"flow.ofiTrade\") > 0",
+      "close > close[1]"
+    ],
+    "short": [
+      "field(\"flow.windows.5.ofiTrade\") >= 0.25",
+      "vol_sma(5) >= 1.5 * vol_sma(60)",
+      "close <= close[5] + 0.25 * atr(20)",
+      "field(\"flow.ofiTrade\") < 0",
+      "close < close[1]"
+    ]
+  },
+  "signal": "rules",
+  "source": "harness original (order flow from the broker's 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data",
+  "status": "active",
+  "timeframe": "1m",
+  "valid": true,
+  "version": 1
+}
+strategy orb: {
+  "body": "2662 chars sha256:53d838ec3fbfdc7c",
+  "compiledRules": "sha256:4c86c2b5f24228c4",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from the original Python bot. Use when price closes beyond the opening range or when planning the morning session.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "orb",
+  "params": {
+    "orbMinutes": 15
+  },
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": "atr:0.5",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "close crosses_above or_high",
+      "adx(14) >= 18",
+      "minute_et >= 588",
+      "minute_et < 960",
+      "atr(20) > 0"
+    ],
+    "short": [
+      "close crosses_below or_low",
+      "adx(14) >= 18",
+      "minute_et >= 588",
+      "minute_et < 960",
+      "atr(20) > 0"
+    ]
+  },
+  "sessions": [
+    "ny"
+  ],
+  "signal": "rules",
+  "source": "original bot, strategies/orb.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy prop_flow_1m: {
+  "account": "<name-43f416>",
+  "body": "2294 chars sha256:1d9bee1b9cfa86ae",
+  "compiledRules": null,
+  "compiledStop": null,
+  "compiledTarget": null,
+  "contracts": "auto",
+  "description": "Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - it sizes each flow setup from the attempt's budget in the selected contract (or skips it), and trails every trade, on its account's combine.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "NQ"
+  ],
+  "name": "prop_flow_1m",
+  "risk": {
+    "stop": "strategy",
+    "min_rr": 2
+  },
+  "signal": "policy",
+  "sizing": {
+    "cushion_frac": 0.2,
+    "min_size_guard": 1.5
+  },
+  "source": "harness design (prop_portfolio's counterpart); its strategies read order flow from the broker's 1-minute bars, so backtests need the broker's bars as JSON (backtest.js fetch --out <file.json>)",
+  "status": "active",
+  "strategies": [
+    "ofi",
+    "ofi_absorption"
+  ],
+  "timeframe": "1m",
+  "valid": true,
+  "version": 1
+}
+strategy prop_portfolio: {
+  "account": "<name-43f416>",
+  "body": "4434 chars sha256:3adeac6169d4ba3b",
+  "compiledRules": null,
+  "compiledStop": null,
+  "compiledTarget": null,
+  "contracts": "auto",
+  "description": "Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - it sizes each setup on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade, to pass its account's combine without blowing it.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "NQ",
+    "MES",
+    "ES",
+    "MYM",
+    "YM",
+    "M2K",
+    "RTY"
+  ],
+  "name": "prop_portfolio",
+  "risk": {
+    "stop": "strategy",
+    "min_rr": 2
+  },
+  "signal": "policy",
+  "sizing": {
+    "cushion_frac": 0.3,
+    "cap_usd": 1000,
+    "drawdown_halve_usd": 1500,
+    "min_size_guard": 1.5,
+    "stop_slippage_ticks": 1
+  },
+  "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
+  "status": "active",
+  "strategies": [
+    "ema_cross",
+    "supertrend",
+    "keltner",
+    "bos",
+    "cisd_ote",
+    "orb",
+    "vwap_reclaim",
+    "crt_1h",
+    "crt_4h",
+    "value_area",
+    "value_area_reentry",
+    "value_area_breakout"
+  ],
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+strategy supertrend: {
+  "body": "1911 chars sha256:14749666f7c1f398",
+  "compiledRules": "sha256:8d2df67cec89d5e8",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "SuperTrend(10, 3) direction-flip strategy on 1- or 3-minute futures bars, ported from the original Python bot. Use when SuperTrend flips and higher-timeframe structure supports the new direction.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "supertrend",
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": "atr:0.5",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "supertrend_dir crosses_above 0",
+      "atr(20) > 0"
+    ],
+    "short": [
+      "supertrend_dir crosses_below 0",
+      "atr(20) > 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "original bot, strategies/supertrend.py",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 3
+}
+strategy value_area: {
+  "body": "8259 chars sha256:7e8078530713fed7",
+  "compiledRules": "sha256:253dee0ab600c3cd",
+  "compiledStop": "sha256:29b1123a8f006e5e",
+  "compiledTarget": "sha256:3cca3d3b796915e5",
+  "description": "Volume profile POC reaction on equity index micros - price rejects the prior RTH day's point of control or breaks through it, confirmed by order flow or a range expansion on volume; target the edge of the value area. Trend setup, from the prior day's bar-based volume profile.",
+  "errors": [],
+  "exit": {
+    "target": {
+      "long": "prior_vah - close",
+      "short": "close - prior_val"
+    },
+    "max_bars": 40
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "value_area",
+  "params": {
+    "vpRows": 100,
+    "vpRowSize": 0,
+    "vpValueArea": 70,
+    "vpNodePct": 9,
+    "vpTroughPct": 7,
+    "vpThreshold": 1
+  },
+  "risk": {
+    "stop": {
+      "long": "close - lowest(3) + 0.25 * atr(20)",
+      "short": "highest(3) - close + 0.25 * atr(20)"
+    },
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "minute_et >= 600",
+      "minute_et < 900",
+      {
+        "any": [
+          {
+            "all": [
+              "close[1] > prior_poc",
+              "low <= prior_poc + 0.1 * atr(20)",
+              "close > prior_poc",
+              "2 * close >= high + low",
+              {
+                "any": [
+                  "low[1] > prior_poc + 0.1 * atr(20)",
+                  "2 * close[1] < high[1] + low[1]"
+                ]
+              }
+            ]
+          },
+          {
+            "all": [
+              "close crosses_above prior_poc",
+              "close > open",
+              "close - prior_poc >= 0.25 * atr(20)"
+            ]
+          }
+        ]
+      },
+      {
+        "any": [
+          "field(\"flow.windows.3.ofiTrade\") >= 0.2",
+          {
+            "all": [
+              "high - low >= 1.5 * atr(20)",
+              "volume >= 1.5 * vol_sma(20)"
+            ]
+          }
+        ]
+      },
+      "prior_vah - close >= 2 * close - 2 * lowest(3) + 0.5 * atr(20)"
+    ],
+    "short": [
+      "minute_et >= 600",
+      "minute_et < 900",
+      {
+        "any": [
+          {
+            "all": [
+              "close[1] < prior_poc",
+              "high >= prior_poc - 0.1 * atr(20)",
+              "close < prior_poc",
+              "2 * close <= high + low",
+              {
+                "any": [
+                  "high[1] < prior_poc - 0.1 * atr(20)",
+                  "2 * close[1] > high[1] + low[1]"
+                ]
+              }
+            ]
+          },
+          {
+            "all": [
+              "close crosses_below prior_poc",
+              "close < open",
+              "prior_poc - close >= 0.25 * atr(20)"
+            ]
+          }
+        ]
+      },
+      {
+        "any": [
+          "field(\"flow.windows.3.ofiTrade\") <= -0.2",
+          {
+            "all": [
+              "high - low >= 1.5 * atr(20)",
+              "volume >= 1.5 * vol_sma(20)"
+            ]
+          }
+        ]
+      },
+      "close - prior_val >= 2 * highest(3) - 2 * close + 0.5 * atr(20)"
+    ]
+  },
+  "sessions": [
+    "10:00-15:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); order flow from the broker's bars. Mechanical form and thresholds are starting values, not fitted on real data.",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+strategy value_area_breakout: {
+  "body": "3226 chars sha256:731fa6615d2b6fa7",
+  "compiledRules": "sha256:9c86813656116cd0",
+  "compiledStop": "sha256:3ca6b986bbbda052",
+  "compiledTarget": null,
+  "description": "Volume profile acceptance breakout on equity index micros - two 3-minute closes beyond the prior RTH day's value area on above-average volume, trading with the prevailing trend, trailed like the other trend setups. From the prior day's bar-based volume profile.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "value_area_breakout",
+  "params": {
+    "vpRows": 100,
+    "vpRowSize": 0,
+    "vpValueArea": 70,
+    "vpNodePct": 9,
+    "vpTroughPct": 7,
+    "vpThreshold": 1
+  },
+  "regime_gate": true,
+  "regimes": [
+    "trend",
+    "transition"
+  ],
+  "risk": {
+    "stop": {
+      "long": "close - prior_vah + 0.5 * atr(20)",
+      "short": "prior_val - close + 0.5 * atr(20)"
+    },
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "minute_et >= 600",
+      "minute_et < 900",
+      "close > prior_vah",
+      "close[1] > prior_vah",
+      "close[2] <= prior_vah",
+      "volume > vol_sma(20)"
+    ],
+    "short": [
+      "minute_et >= 600",
+      "minute_et < 900",
+      "close < prior_val",
+      "close[1] < prior_val",
+      "close[2] >= prior_val",
+      "volume > vol_sma(20)"
+    ]
+  },
+  "sessions": [
+    "10:00-15:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "Value area acceptance (Dalton, Mind Over Markets - initiative activity outside value) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented). Mechanical form and parameters are starting values, not fitted on real data.",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+strategy value_area_reentry: {
+  "body": "4908 chars sha256:ee89306d9dab2580",
+  "compiledRules": "sha256:30ca0f93c8cc7aa4",
+  "compiledStop": "sha256:7a8202b7f2760396",
+  "compiledTarget": "sha256:3cca3d3b796915e5",
+  "description": "Volume profile 80 percent rule on equity index micros - the RTH session opens outside the prior day's value area, two 3-minute closes back inside accept it, and the trade targets the far side of value. Reversal setup, from the prior RTH day's bar-based volume profile.",
+  "errors": [],
+  "exit": {
+    "target": {
+      "long": "prior_vah - close",
+      "short": "close - prior_val"
+    },
+    "max_bars": 40
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "value_area_reentry",
+  "params": {
+    "vpRows": 100,
+    "vpRowSize": 0,
+    "vpValueArea": 70,
+    "vpNodePct": 9,
+    "vpTroughPct": 7,
+    "vpThreshold": 1
+  },
+  "risk": {
+    "stop": {
+      "long": "close - rth_low + 0.25 * atr(20)",
+      "short": "rth_high - close + 0.25 * atr(20)"
+    },
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "minute_et >= 573",
+      "minute_et < 900",
+      "rth_open < prior_val",
+      "close > prior_val",
+      "close[1] > prior_val",
+      {
+        "any": [
+          "close[2] <= prior_val",
+          "minute_et <= 573"
+        ]
+      },
+      "close < prior_vah",
+      "prior_vah - close >= 2 * close - 2 * rth_low + 0.5 * atr(20)"
+    ],
+    "short": [
+      "minute_et >= 573",
+      "minute_et < 900",
+      "rth_open > prior_vah",
+      "close < prior_vah",
+      "close[1] < prior_vah",
+      {
+        "any": [
+          "close[2] >= prior_vah",
+          "minute_et <= 573"
+        ]
+      },
+      "close > prior_val",
+      "close - prior_val >= 2 * rth_high - 2 * close + 0.5 * atr(20)"
+    ]
+  },
+  "sessions": [
+    "09:30-15:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "The market-profile \"80% rule\" (Dalton, Mind Over Markets; CBOT Market Profile) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented). Mechanical form and parameters are starting values, not fitted on real data.",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+strategy vwap_reclaim: {
+  "body": "1719 chars sha256:fbae75cd12c91307",
+  "compiledRules": "sha256:02aaf0dacac9a44b",
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "Trend-day VWAP reclaim on equity index micros - a 3-minute close back through RTH VWAP in the direction of the 50 EMA with ADX confirming. Its trigger is written as rules in Markdown, no code.",
+  "errors": [],
+  "filters": {
+    "max_vwap_distance_atr": 1.5
+  },
+  "instruments": [
+    "MNQ",
+    "MES"
+  ],
+  "mtf": "trend",
+  "name": "vwap_reclaim",
+  "regime_gate": true,
+  "regimes": [
+    "trend"
+  ],
+  "risk": {
+    "stop": "atr:1",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "close crosses_above vwap_rth",
+      "close > ema(50)",
+      "adx(14) >= 20"
+    ],
+    "short": [
+      "close crosses_below vwap_rth",
+      "close < ema(50)",
+      "adx(14) >= 20"
+    ]
+  },
+  "sessions": [
+    "10:00-15:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "rules strategy written for this harness (no backtest record yet); activated by the owner for the labelling replays (active means tradeable everywhere, live too), to be reviewed on its labelled trades",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
+}
+accounts (5): test_100k, test_50k, <name-43f416>, <name-aa1519>, <name-45bd4d>
+account test_100k: {
+  "body": "1224 chars sha256:73a8b2f940106b21",
+  "consistency_pct": 50,
+  "daily_loss_limit": 2000,
+  "daily_loss_soft": 1000,
+  "description": "A test firm's $100K combine (a fixture) - reach the profit target without touching the trailing max-loss floor. Test values only.",
+  "errors": [],
+  "fees_per_side": {
+    "MNQ": 0.37,
+    "MES": 0.37,
+    "MYM": 0.37,
+    "M2K": 0.37,
+    "NQ": 1.4,
+    "ES": 1.4,
+    "YM": 1.4,
+    "RTY": 1.4
+  },
+  "firm": "Test Firm",
+  "max_contracts": {
+    "MNQ": 100,
+    "MES": 100,
+    "MYM": 100,
+    "M2K": 100,
+    "NQ": 10,
+    "ES": 10,
+    "YM": 10,
+    "RTY": 10
+  },
+  "max_loss": 3000,
+  "max_loss_mode": "trailing_eod",
+  "name": "test_100k",
+  "profit_target": 6000,
+  "sessions": 30,
+  "starting_balance": 100000,
+  "type": "combine",
+  "valid": true
+}
+account test_50k: {
+  "body": "1212 chars sha256:85a2b7d2201e3d20",
+  "consistency_pct": 50,
+  "daily_loss_limit": 1000,
+  "daily_loss_soft": 500,
+  "description": "A test firm's $50K combine (a fixture) - reach the profit target without touching the trailing max-loss floor. Test values only.",
+  "errors": [],
+  "fees_per_side": {
+    "MNQ": 0.37,
+    "MES": 0.37,
+    "MYM": 0.37,
+    "M2K": 0.37,
+    "NQ": 1.4,
+    "ES": 1.4,
+    "YM": 1.4,
+    "RTY": 1.4
+  },
+  "firm": "Test Firm",
+  "max_contracts": {
+    "MNQ": 50,
+    "MES": 50,
+    "MYM": 50,
+    "M2K": 50,
+    "NQ": 5,
+    "ES": 5,
+    "YM": 5,
+    "RTY": 5
+  },
+  "max_loss": 2000,
+  "max_loss_mode": "trailing_eod",
+  "name": "test_50k",
+  "profit_target": 3000,
+  "sessions": 30,
+  "starting_balance": 50000,
+  "type": "combine",
+  "valid": true
+}
+account <name-43f416>: {
+  "body": "1313 chars sha256:252cf9aafc0e79c8",
+  "consistency_pct": 50,
+  "daily_loss_limit": 2000,
+  "daily_loss_soft": 1000,
+  "description": "<name-a44ad9> $100K Trading Combine on <name-6454df> - reach the profit target without touching the trailing max-loss floor. Verify the numbers against <name-a44ad9>'s current rules before trading.",
+  "errors": [],
+  "fees_per_side": {
+    "MNQ": 0.37,
+    "MES": 0.37,
+    "MYM": 0.37,
+    "M2K": 0.37,
+    "NQ": 1.4,
+    "ES": 1.4,
+    "YM": 1.4,
+    "RTY": 1.4
+  },
+  "firm": "<name-a44ad9>",
+  "max_contracts": {
+    "MNQ": 100,
+    "MES": 100,
+    "MYM": 100,
+    "M2K": 100,
+    "NQ": 10,
+    "ES": 10,
+    "YM": 10,
+    "RTY": 10
+  },
+  "max_loss": 3000,
+  "max_loss_mode": "trailing_eod",
+  "name": "<name-43f416>",
+  "profit_target": 6000,
+  "sessions": 30,
+  "starting_balance": 100000,
+  "type": "combine",
+  "valid": true
+}
+account <name-aa1519>: {
+  "body": "1315 chars sha256:659d4c784c2bc99d",
+  "consistency_pct": 50,
+  "daily_loss_limit": 3000,
+  "daily_loss_soft": 1500,
+  "description": "<name-a44ad9> $150K Trading Combine on <name-6454df> - reach the profit target without touching the trailing max-loss floor. Verify the numbers against <name-a44ad9>'s current rules before trading.",
+  "errors": [],
+  "fees_per_side": {
+    "MNQ": 0.37,
+    "MES": 0.37,
+    "MYM": 0.37,
+    "M2K": 0.37,
+    "NQ": 1.4,
+    "ES": 1.4,
+    "YM": 1.4,
+    "RTY": 1.4
+  },
+  "firm": "<name-a44ad9>",
+  "max_contracts": {
+    "MNQ": 150,
+    "MES": 150,
+    "MYM": 150,
+    "M2K": 150,
+    "NQ": 15,
+    "ES": 15,
+    "YM": 15,
+    "RTY": 15
+  },
+  "max_loss": 4500,
+  "max_loss_mode": "trailing_eod",
+  "name": "<name-aa1519>",
+  "profit_target": 9000,
+  "sessions": 30,
+  "starting_balance": 150000,
+  "type": "combine",
+  "valid": true
+}
+account <name-45bd4d>: {
+  "body": "1301 chars sha256:9db69a3a7dcda899",
+  "consistency_pct": 50,
+  "daily_loss_limit": 1000,
+  "daily_loss_soft": 500,
+  "description": "<name-a44ad9> $50K Trading Combine on <name-6454df> - reach the profit target without touching the trailing max-loss floor. Verify the numbers against <name-a44ad9>'s current rules before trading.",
+  "errors": [],
+  "fees_per_side": {
+    "MNQ": 0.37,
+    "MES": 0.37,
+    "MYM": 0.37,
+    "M2K": 0.37,
+    "NQ": 1.4,
+    "ES": 1.4,
+    "YM": 1.4,
+    "RTY": 1.4
+  },
+  "firm": "<name-a44ad9>",
+  "max_contracts": {
+    "MNQ": 50,
+    "MES": 50,
+    "MYM": 50,
+    "M2K": 50,
+    "NQ": 5,
+    "ES": 5,
+    "YM": 5,
+    "RTY": 5
+  },
+  "max_loss": 2000,
+  "max_loss_mode": "trailing_eod",
+  "name": "<name-45bd4d>",
+  "profit_target": 3000,
+  "sessions": 30,
+  "starting_balance": 50000,
+  "type": "combine",
+  "valid": true
+}
+problems: []

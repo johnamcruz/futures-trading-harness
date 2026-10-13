@@ -1,0 +1,27 @@
+account: an entry while flat (allowed): ALLOWED
+account: an entry while a position is open: REFUSED
+  [position-open] A MNQ position is open (MNQ long 1). Manage it; new entries wait until it is flat. To reduce, use an [exit] order.
+account: an [exit] while flat: REFUSED
+  [exposure] [exit]/[protect] order but there is no open MNQ position; it would open one. Label entries setup:<name>.
+account: an [exit] on the position's side: REFUSED
+  [exposure] [exit]/[protect] order is on the same side as the open MNQ position (net 1); it would add exposure.
+account: an [exit] larger than the position: REFUSED
+  [exposure] [exit]/[protect] size 2 exceeds the open MNQ position (1).
+account: an [exit] that reduces it (allowed): ALLOWED
+account: a second resting [protect] stop: REFUSED
+  [exposure] Resting stop orders plus this one would exceed the open MNQ position (1); they could fill into a new position.
+account: an [exit] with a bracket: REFUSED
+  [exposure] [exit]/[protect] orders take no stopLossBracket/takeProfitBracket: their legs could open a new position once the trade is flat. Send the exit or stop alone.
+account: two losses from real fills: REFUSED
+  [loss-streak] 2 losing closes in a row (from fills). Cooling down for 20 min more.
+cancel: the last protective stop: REFUSED
+  [cancel-protection] Order 11 is the protective stop for the open MNQ position (net 1). Move it with modify_order, or close the position first ([exit]).
+cancel: a target, the stop stays (allowed): ALLOWED
+modify: a stop moved toward the market (allowed): ALLOWED
+modify: a stop moved away from the market: REFUSED
+  [modify-protection] Order 11 protects the open MNQ position (net 1); move it toward the market only (now 21480, asked stopPrice 21470). To take more risk, don't; to get out, use an [exit] order.
+partial close: within the position (allowed): ALLOWED
+partial close: over the position: REFUSED
+  [partial-close] partial_close_position size 5 is over the open MNQ position (1); it would reverse it. Close it with close_position, or reduce by at most 1.
+partial close: no position: REFUSED
+  [partial-close] No open MNQ position to reduce; a partial close would open one.

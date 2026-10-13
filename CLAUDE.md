@@ -135,7 +135,8 @@ request, every time, whatever the size of the change:
    contract-id formats or paths). Any change to the platform guard files
    (`tests/plugin/no-platform-specifics.test.js`, `tests/plugin/platform-scan.js`) or their pins
    (`tests/plugin/no-platform-specifics.pins.json`), other than lines removed, is a finding by
-   default. Every confirmed finding is fixed (or,
+   default. So is a changed golden (`tests/fixtures/golden/`, `tests/scripts/cli-parity.snapshot.json`)
+   that the pull request doesn't explain as intended (CONTRIBUTING.md, "Golden files"). Every confirmed finding is fixed (or,
    if not worth its code, answered with the reason), then the regression
    runs again and the fixes get their own review, until a round confirms
    nothing new.

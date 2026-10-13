@@ -1,0 +1,28 @@
+local: account 1 on the list (allowed): ALLOWED (intent entry)
+local: the broker names no allow-list variable: REFUSED (intent entry)
+  [allowed-accounts] broker "sim" names no allow-list variable ("allowedAccountsEnv" in brokers.json), so live entries are refused: name the server's allowed-accounts variable there and set it to the account(s) this harness may trade. Exits, protective stops, cancels and close_position still go.
+local: no list set: REFUSED (intent entry)
+  [allowed-accounts] SIM_ALLOWED is empty or not a list of account ids (got ""): a live run needs it set to the account(s) this harness may trade (e.g. SIM_ALLOWED=12345), never empty or "any". Exits, protective stops, cancels and close_position still go.
+local: an empty list: REFUSED (intent entry)
+  [allowed-accounts] SIM_ALLOWED is empty or not a list of account ids (got ""): a live run needs it set to the account(s) this harness may trade (e.g. SIM_ALLOWED=12345), never empty or "any". Exits, protective stops, cancels and close_position still go.
+local: "any": REFUSED (intent entry)
+  [allowed-accounts] SIM_ALLOWED is empty or not a list of account ids (got "any"): a live run needs it set to the account(s) this harness may trade (e.g. SIM_ALLOWED=12345), never empty or "any". Exits, protective stops, cancels and close_position still go.
+local: the account not on the list: REFUSED (intent entry)
+  [allowed-accounts] account 1 is not in SIM_ALLOWED (2, 3): add it there to trade it live. Exits, protective stops, cancels and close_position still go.
+local: a paper run, no list (allowed: the server refuses every order): ALLOWED (intent entry)
+local: an exit with no list (allowed): ALLOWED (intent risk-reducing)
+local: a protective stop with no list (allowed): ALLOWED (intent risk-reducing)
+local: a cancel with no list (allowed): ALLOWED (intent cancel)
+local: a partial close with no list (allowed): ALLOWED (intent risk-reducing)
+server: lists the account (allowed): ALLOWED
+server: does not attest (get_server_config fails): REFUSED
+  [allowed-accounts] the broker server's get_server_config could not be read (server down), so the entry can't be checked against its allowed accounts. Exits, protective stops, cancels and close_position still go.
+server: does not attest (no tradingEnabled): REFUSED
+  [allowed-accounts] the broker server's get_server_config could not be read (no tradingEnabled in its answer), so the entry can't be checked against its allowed accounts. Exits, protective stops, cancels and close_position still go.
+server: allows any account: REFUSED
+  [allowed-accounts] the broker server allows any account (get_server_config: allowedAccountIds []): a live entry needs its allowed-accounts setting to list account 1. Exits, protective stops, cancels and close_position still go.
+server: the account not among its allowed accounts: REFUSED
+  [allowed-accounts] account 1 is not among the broker server's allowed accounts (2). Exits, protective stops, cancels and close_position still go.
+server: a paper claim the server contradicts (trading on, no local list): REFUSED
+  [allowed-accounts] SIM_ALLOWED is empty or not a list of account ids (got ""): a live run needs it set to the account(s) this harness may trade (e.g. SIM_ALLOWED=12345), never empty or "any". Exits, protective stops, cancels and close_position still go.
+server: trading off, a paper run it confirms (allowed): ALLOWED

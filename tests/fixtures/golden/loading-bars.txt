@@ -1,0 +1,36 @@
+MNQ 3m normalizeBars: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m normalizeBars get_bars reply: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m loadBars get_bars JSON file: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m readBarsArg JSON array file: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m JSON round trip: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m adapter closedBars: 400 bars 2026-04-27T07:15:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ae4cb384ae5910e8 fields kept
+MNQ 3m adapter history: 1499 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ac8a8a1ceba8421d fields kept
+MNQ 3m bars file (fetchBarsToFile): 400 bars 2026-04-27T07:15:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ae4cb384ae5910e8 fields kept
+MNQ 3m bars file read by loadBars: 400 bars 2026-04-27T07:15:00.000Z .. 2026-04-28T04:12:00.000Z ohlcv ae4cb384ae5910e8 fields kept
+MNQ 3m aggregate 15m (fields dropped): 300 bars 2026-04-22T22:15:00.000Z .. 2026-04-28T04:00:00.000Z ohlcv 5c92ad5003ab9ae9 fields none (built bars)
+MNQ 3m aggregate 1h (fields dropped): 75 bars 2026-04-22T22:00:00.000Z .. 2026-04-28T03:00:00.000Z ohlcv ecc3625a3019dca1 fields none (built bars)
+MNQ 3m aggregate 15m (default): plain 300 bars ohlcv 5c92ad5003ab9ae9; with the broker's fields refused: these bars carry the broker's own fields (ext, flow), which the harness can't combine into longer bars: fetch bars at the timeframe you need from the broker instead (backtest.js fetch --timeframe <minutes>)
+M2K 3m normalizeBars: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m normalizeBars get_bars reply: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m loadBars get_bars JSON file: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m readBarsArg JSON array file: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m JSON round trip: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m adapter closedBars: 400 bars 2025-02-21T10:00:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6f1259fbcf4c8d85 fields kept
+M2K 3m adapter history: 1499 bars 2025-02-19T00:48:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6a3a3eb3e640a342 fields kept
+M2K 3m bars file (fetchBarsToFile): 400 bars 2025-02-21T10:00:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6f1259fbcf4c8d85 fields kept
+M2K 3m bars file read by loadBars: 400 bars 2025-02-21T10:00:00.000Z .. 2025-02-24T06:57:00.000Z ohlcv 6f1259fbcf4c8d85 fields kept
+M2K 3m aggregate 15m (fields dropped): 301 bars 2025-02-19T00:45:00.000Z .. 2025-02-24T06:45:00.000Z ohlcv 1866a50b26813825 fields none (built bars)
+M2K 3m aggregate 1h (fields dropped): 76 bars 2025-02-19T00:00:00.000Z .. 2025-02-24T06:00:00.000Z ohlcv 857d8121e12aa1f6 fields none (built bars)
+M2K 3m aggregate 15m (default): plain 301 bars ohlcv 1866a50b26813825; with the broker's fields refused: these bars carry the broker's own fields (ext, flow), which the harness can't combine into longer bars: fetch bars at the timeframe you need from the broker instead (backtest.js fetch --timeframe <minutes>)
+MNQ 1m normalizeBars: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m normalizeBars get_bars reply: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m loadBars get_bars JSON file: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m readBarsArg JSON array file: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m JSON round trip: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m adapter closedBars: 400 bars 2026-04-27T20:35:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv a311d413ccf8666c fields kept
+MNQ 1m adapter history: 4497 bars 2026-04-22T22:18:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv 58306f2326750fe1 fields kept
+MNQ 1m bars file (fetchBarsToFile): 400 bars 2026-04-27T20:35:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv a311d413ccf8666c fields kept
+MNQ 1m bars file read by loadBars: 400 bars 2026-04-27T20:35:00.000Z .. 2026-04-28T04:14:00.000Z ohlcv a311d413ccf8666c fields kept
+MNQ 1m aggregate 15m (fields dropped): 300 bars 2026-04-22T22:15:00.000Z .. 2026-04-28T04:00:00.000Z ohlcv 5c92ad5003ab9ae9 fields none (built bars)
+MNQ 1m aggregate 1h (fields dropped): 75 bars 2026-04-22T22:00:00.000Z .. 2026-04-28T03:00:00.000Z ohlcv ecc3625a3019dca1 fields none (built bars)
+MNQ 1m aggregate 15m (default): plain 300 bars ohlcv 5c92ad5003ab9ae9; with the broker's fields refused: these bars carry the broker's own fields (ext, flow), which the harness can't combine into longer bars: fetch bars at the timeframe you need from the broker instead (backtest.js fetch --timeframe <minutes>)

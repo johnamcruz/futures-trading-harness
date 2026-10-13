@@ -176,6 +176,9 @@ function runAll() {
 }
 
 test('CLI parity: every operation prints what it printed before the move to scripts/lib/harness-tools', { timeout: 300000 }, () => {
+  // The same rule as the goldens (tests/golden.js): the snapshot is regenerated on purpose, locally, never by CI.
+  const refused = require('../golden').updateRefused();
+  if (refused) assert.fail(refused);
   const results = runAll();
   if (process.env.FTH_UPDATE_SNAPSHOTS === '1') {
     fs.writeFileSync(SNAPSHOT, `${JSON.stringify(results, null, 2)}\n`);
