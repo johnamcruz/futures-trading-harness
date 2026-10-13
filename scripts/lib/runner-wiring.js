@@ -12,7 +12,8 @@
  *   replayUnattested(serverConfig, at)     why a replay server doesn't attest the replayed time, or null
  *   wireRunner({ cfg, root, home, env, client, prop, dataDir, now, runCycle,
  *                loadState, saveState, killSwitchFile, log, event, onBarClosed })   createRunner(...) with every
- *                                         dependency; onBarClosed(symbol, { bar, stale, action }) hears each closed bar the runner polls
+ *                                         dependency; onBarClosed(symbol, { bar, stale, action, contractId, values }) hears each closed bar the runner polls
+ *                                         (barRecorder: its bars archived, the strategies' field values taken)
  *   reportCacheFor(home, cfg)             the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  */
@@ -40,6 +41,8 @@ const RC = require('./trading/report-cache');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
+const { barsArchiver } = require('./session/bars-archive');
+const { fieldValues } = require('./session/record');
 
 /** The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades. */
 async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter, broker = null }) {
@@ -94,6 +97,36 @@ function runnerScan(strategies, cfg, symbol, bars, now) {
 }
 
 /**
+ * The session record's side of the runner's bars (R35). `closed(symbol, info)`: a closed bar the runner polled,
+ * its window archived with every field (session/bars-archive.js), passed on to onBarClosed without the bars.
+ * `scanned(symbol, bars, strategies, results)`: the bar's scan ran; the broker field values of exactly the
+ * strategies it scanned (by name, from its results: a disabled one, one that doesn't trade the symbol, or one
+ * outside the lane is never there) go to onBarClosed as `values` (session/record.js fieldValues), joined to
+ * the bar's entry by the pass tap. Neither ever throws.
+ */
+function barRecorder({ cfg, home, env, now, log, onBarClosed }) {
+  const archive = barsArchiver({ home, env, minutes: cfg.timeframe, now, log });
+  const contracts = new Map();
+  return {
+    closed(symbol, info = {}) {
+      const { bars, ...rest } = info;
+      contracts.set(symbol, info.contractId || null);
+      if (Array.isArray(bars) && bars.length) archive(symbol, { bars, contractId: info.contractId || null });
+      return onBarClosed(symbol, rest);
+    },
+    scanned(symbol, bars, strategies, results) {
+      try {
+        const names = new Set((results || []).map(r => r && r.name));
+        const values = fieldValues(strategies.filter(s => names.has(s.name)), bars);
+        onBarClosed(symbol, { bar: bars[bars.length - 1].t, contractId: contracts.get(symbol) || null, values });
+      } catch (err) {
+        log(`${symbol}: no field values recorded (${err.message})`, 'error');
+      }
+    },
+  };
+}
+
+/**
  * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
  * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
  */
@@ -143,6 +176,7 @@ function reportCacheFor(home, cfg) {
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {} }) {
   const strategies = () => loadStrategies(root, env).strategies;
   const journal = () => readJournal(resolveJournalPath(env));
+  const record = barRecorder({ cfg, home, env, now, log, onBarClosed });
   return createRunner({
     cfg,
     prop,
@@ -186,7 +220,13 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     recordBriefing: briefingRecorder(home, cfg, now, env),
     reportCache: reportCacheFor(home, cfg),
     recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: cfg.timeframe * 60000, now: now() })),
-    scanFor: (symbol, bars) => runnerScan(strategies(), cfg, symbol, bars, now()),
+    // The scan of a closed bar; the session record takes the field values of the strategies it scanned.
+    scanFor: (symbol, bars) => {
+      const list = strategies();
+      const results = runnerScan(list, cfg, symbol, bars, now());
+      record.scanned(symbol, bars, list, results);
+      return results;
+    },
     log,
     // The decision log: every scanned bar, every strategy's verdict and why (logs/scans-<day>.jsonl).
     scanLog: rec => appendJsonl(path.join(home, 'logs', `scans-${dayKey(new Date(rec.at))}.jsonl`), scanRecord(rec)),
@@ -194,9 +234,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     event,
     entryOrders: () => entryOrders(home),
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
-    // A closed bar the runner polled: a decision point of the session record (session/live.js).
-    barClosed: onBarClosed,
+    // A closed bar the runner polled: a decision point of the session record (session/live.js), its bars archived.
+    barClosed: record.closed,
   });
 }
 
-module.exports = { openRunnerBroker, wireRunner, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { openRunnerBroker, wireRunner, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

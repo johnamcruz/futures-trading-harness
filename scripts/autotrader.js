@@ -280,8 +280,8 @@ async function replayStep(cfg, dataDir, opts, asked) {
   try {
     const runner = buildRunner(cfg, dataDir, opts, closedBarsOnly(client, runnerNow), log, tap.event(writeEvent), tap);
     await runner.step();
-    const { ran, events, errors, bars } = tap.summary(runner.symbols);
-    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events, errors, bars, state: runner.state })}\n`);
+    const { ran, events, errors, bars, values } = tap.summary(runner.symbols);
+    process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events, errors, bars, values, state: runner.state })}\n`);
     return noDecision(ran) ? 1 : 0; // no decision made: the replay driver runs this time again
   } finally {
     client.close();

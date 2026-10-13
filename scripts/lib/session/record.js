@@ -8,8 +8,10 @@
  *
  *   passTap()                                   the pass collector: log(fn) and event(fn) wrap the runner's
  *       log and event sinks, bar(symbol, { bar, stale, action }) notes a polled closed bar; begin() starts a
- *       pass, summary(symbols) is { ran, events, errors, bars, closed } (the "REPLAY STEP" fields and the
- *       closed bars), events() the raw events
+ *       pass, summary(symbols) is { ran, events, errors, bars, values, closed } (the "REPLAY STEP" fields and
+ *       the closed bars), events() the raw events
+ *   fieldValues(strategies, bars, i)            { strategy: { path: value | null } }: the broker field values each
+ *                                               strategy reads on bar i (rules.js valuesFor), only those that read one
  *   failedRun(r)                                a ran cycle that counts as a failed run (not a premarket's, as live)
  *   noDecision(ran)                             a cycle in the pass made no decision (replay runs its time again)
  *   decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch, stale, premarketUnavailable,
@@ -18,8 +20,12 @@
  *   killSwitchReason(file)                      the kill switch's latest line ('' when empty), null when off
  *   withEntry(fill, entries, specOf)            an opening fill with the entry the gateway recorded (setup, stop)
  *   fillsBetween(client, account, since, until, { entries, specOf })   the fills in (since, until], with entries
- *   fingerprints(root, { code })                { v, code, harness, strategies, accounts, policy, rulebook } (code:
- *                                               a digest already taken, e.g. at process start)
+ *   brokerFingerprint(env)                      { broker, error, warning }: the active broker's settings, or why they
+ *                                               can't be had; warning names the allowlisted settings dropped as credentials
+ *   fingerprints(root, { code, broker, error }) { v, code, harness, strategies, accounts, policy, rulebook, broker,
+ *                                               fingerprintError? } (code:
+ *                                               a digest already taken, e.g. at process start; broker: the broker's
+ *                                               bar-shaping settings, broker/config.js fingerprintSettings, else null)
  *   noteVersion(manifest, { since, hash, fingerprints })   adds a version when the hash or fingerprints changed
  *   versionAt(manifest, t)                      the version that made the decision at t
  */
@@ -29,6 +35,8 @@ const fs = require('fs');
 const path = require('path');
 const { contractRoot } = require('../trading/journal');
 const { toRefusal } = require('../replay/store');
+const { valuesFor } = require('../trading/rules');
+const { activeBroker, fingerprintSettings, fingerprintNames, CREDENTIAL } = require('../broker/config');
 
 /** Collects what one pass of the runner did, from its log and event sinks (wrapped, never replaced). */
 function passTap() {
@@ -44,7 +52,12 @@ function passTap() {
       events.push(ev);
       return fn(ev);
     },
-    bar: (symbol, info = {}) => closed.add({ symbol, bar: info.bar || null, stale: Boolean(info.stale), action: info.action || null }),
+    // A closed bar; or (with `values`) the field values its scan read, joined to the symbol's bar of this pass.
+    bar: (symbol, info = {}) => {
+      const own = info.values ? [...closed].filter(c => c.symbol === symbol).pop() : null;
+      if (own) Object.assign(own, { contractId: info.contractId || null, values: info.values });
+      else closed.add({ symbol, bar: info.bar || null, stale: Boolean(info.stale), action: info.action || null, ...(info.values ? { contractId: info.contractId || null, values: info.values } : {}) });
+    },
     begin() {
       events = [];
       errors = [];
@@ -56,6 +69,8 @@ function passTap() {
       events: [...new Set(events.map(e => e.kind))],
       errors: errors.slice(),
       bars: symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null })),
+      // The broker field values the strategies read on each closed bar (R35), as the runner's wiring took them.
+      values: [...closed].filter(c => c.values).map(c => ({ symbol: c.symbol, contractId: c.contractId, barT: c.bar, strategies: c.values })),
       closed: [...closed],
     }),
   };
@@ -69,11 +84,24 @@ function passTap() {
 const failedRun = r => Boolean(r) && !r.ok && r.action !== 'premarket';
 const noDecision = ran => (ran || []).some(r => failedRun(r) && !r.agentError);
 
-/** One decision line (replay/store.js appendRecord adds its version `v`). */
+/**
+ * The broker field values each strategy reads on bar i (its rules, stop and target: rules.js valuesFor), a
+ * missing one null; only the strategies that read one.
+ */
+function fieldValues(strategies, bars, i = (bars || []).length - 1) {
+  const out = {};
+  for (const s of strategies || []) {
+    const v = valuesFor([s.rules, s.risk, s.exit], bars || [], i);
+    if (Object.keys(v).length) out[s.name] = v;
+  }
+  return out;
+}
+
+/** One decision line (replay/store.js appendRecord adds its version `v`); `values` the pass's closed bars' (R35). */
 function decisionRecord({ t, day, kind, pass, step, cycles, refusals, trades, since, killSwitch = null, stale = [], premarketUnavailable = null, premarketAvailableAt = null, premarketRetryStarved = 0 }) {
   return {
     t, day, kind, asked: pass.asked, ran: pass.ran || [], events: pass.events || [], step, cycles, refusals,
-    errors: pass.errors || [], bars: pass.bars || [], trades, since,
+    errors: pass.errors || [], bars: pass.bars || [], values: pass.values || [], trades, since,
     ...(killSwitch !== null ? { killSwitch: killSwitch || 'on' } : {}),
     // Live only: the symbols whose bar closed too long ago to start a cycle (a slow previous pass), housekeeping only.
     ...(stale && stale.length ? { stale } : {}),
@@ -139,12 +167,35 @@ function treeDigest(root, dirs) {
 /**
  * The version of the agent (docs/LEARNED-RULEBOOK.md R33), as far as it exists today: `code` hashes
  * scripts/ (the CLIs, hooks and scripts/lib: a superset of R33's code hash), `harness` the documents the cycles read (the replay
- * config hash's tree). R33's canonical strategy, account and policy fingerprints and the rulebook seal
- * are not built yet: null until they are.
+ * config hash's tree), `broker` the settings of the broker's server that shape its bars (its brokers.json
+ * `fingerprintEnv` allowlist, R35; never a credential), each value an HMAC keyed on the harness home's own
+ * salt: two sessions of one home (a live home's days, or a replay run's) can be checked for the same
+ * settings; a live session and a replay run (each run home has its own salt) can't, by these digests.
+ * `fingerprintError` (when the broker's settings couldn't be fingerprinted, e.g. an unreadable salt) marks
+ * a version whose broker settings are unknown: never the same as another's. R33's canonical strategy,
+ * account and policy fingerprints and the rulebook seal are not built yet: null until they are.
  */
-function fingerprints(root, { code } = {}) {
+function fingerprints(root, { code, broker = null, error = null } = {}) {
   const of = dirs => (root ? treeDigest(root, dirs) : null);
-  return { v: 1, code: code === undefined ? of(CODE_DIRS) : code, harness: of(HARNESS_DIRS), strategies: null, accounts: null, policy: null, rulebook: null };
+  return { v: 1, code: code === undefined ? of(CODE_DIRS) : code, harness: of(HARNESS_DIRS), strategies: null, accounts: null, policy: null, rulebook: null, broker, ...(error ? { fingerprintError: error } : {}) };
+}
+
+/**
+ * The active broker's bar-shaping settings for the fingerprints: { broker, error }. No broker configured:
+ * none (both null). Settings that can't be fingerprinted (the salt unreadable or invalid): broker null and
+ * the error, never a silent null.
+ */
+function brokerFingerprint(env = process.env) {
+  let b;
+  try { b = activeBroker(env); } catch (_err) { return { broker: null, error: null, warning: null }; }
+  // The allowlist names dropped as credential-like: said (the names only, never a value), never silently dropped.
+  const dropped = fingerprintNames(b).refused.filter(n => CREDENTIAL.test(n));
+  const warning = dropped.length ? `broker ${b.name}: fingerprintEnv ${dropped.join(', ')} look${dropped.length === 1 ? 's' : ''} like a credential: never recorded` : null;
+  try {
+    return { broker: fingerprintSettings(b, env), error: null, warning };
+  } catch (err) {
+    return { broker: null, error: `broker ${b.name}: its bar settings can't be fingerprinted (${err.message})`, warning };
+  }
 }
 
 /**
@@ -195,4 +246,4 @@ function versionAt(manifest, t) {
   return list.filter(v => Date.parse(v.since) <= ms).pop() || list[0] || null;
 }
 
-module.exports = { failedRun, noDecision, passTap, decisionRecord, killSwitchReason, withEntry, fillsBetween, treeDigest, fingerprints, noteVersion, versionAt, gateReader, HARNESS_DIRS, CODE_DIRS };
+module.exports = { failedRun, noDecision, passTap, fieldValues, decisionRecord, killSwitchReason, withEntry, fillsBetween, treeDigest, fingerprints, brokerFingerprint, noteVersion, versionAt, gateReader, HARNESS_DIRS, CODE_DIRS };

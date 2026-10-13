@@ -27,7 +27,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const DAY = Date.UTC(2026, 9, 7); // Wednesday; New York = UTC-4
 const et = (h, m, s = 0, d = 0) => DAY + d * 86400000 + ((h + 4) * 60 + m) * 60000 + s * 1000;
 const iso = ms => new Date(ms).toISOString();
-const LINE_KEYS = ['v', 't', 'day', 'kind', 'asked', 'ran', 'events', 'step', 'cycles', 'refusals', 'errors', 'bars', 'trades', 'since'];
+const LINE_KEYS = ['v', 't', 'day', 'kind', 'asked', 'ran', 'events', 'step', 'cycles', 'refusals', 'errors', 'bars', 'values', 'trades', 'since'];
 const lines = file => fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
 
 /** A live harness home with a broker whose journal is a file of the home, and a fake market and account. */
@@ -130,7 +130,7 @@ test('session record: one line shape for replay and live (the driver\'s keys, in
   assert.deepStrictEqual(decisionRecord({ pass: {}, stale: ['MNQ'] }).stale, ['MNQ']);
   assert.ok(!('stale' in decisionRecord({ pass: {}, stale: [] })), 'a replay line never carries it');
   tap.begin();
-  assert.deepStrictEqual(tap.summary([]), { ran: [], events: [], errors: [], bars: [], closed: [] }, 'each pass starts empty');
+  assert.deepStrictEqual(tap.summary([]), { ran: [], events: [], errors: [], bars: [], values: [], closed: [] }, 'each pass starts empty');
 });
 
 test('session record: versions of the agent, and which one made a decision', () => {
@@ -138,7 +138,7 @@ test('session record: versions of the agent, and which one made a decision', () 
   assert.match(fp.code, /^[0-9a-f]{64}$/);
   assert.match(fp.harness, /^[0-9a-f]{64}$/);
   // R33's canonical fingerprints and the rulebook seal don't exist yet.
-  assert.deepStrictEqual([fp.strategies, fp.accounts, fp.policy, fp.rulebook], [null, null, null, null]);
+  assert.deepStrictEqual([fp.strategies, fp.accounts, fp.policy, fp.rulebook, fp.broker], [null, null, null, null, null]);
   const m = {};
   assert.strictEqual(noteVersion(m, { since: '2026-10-07T14:00:00.000Z', hash: 'a', fingerprints: fp }), true);
   assert.strictEqual(noteVersion(m, { since: '2026-10-07T14:03:00.000Z', hash: 'a', fingerprints: { ...fp } }), false);
@@ -212,7 +212,8 @@ test('live session: recorded by the runner in the replay layout, source live, wi
   assert.deepStrictEqual([m.runId, m.source, m.broker, m.harness, m.finished, m.daysDone], [day, 'live', 'fakebroker', 'custom', true, [day]]);
   assert.strictEqual(m.fillsPending, undefined);
   assert.match(m.hash, /^[0-9a-f]{64}$/);
-  assert.deepStrictEqual(m.fingerprints, fingerprints(ROOT));
+  // The broker's bar-shaping settings: none on this broker's allowlist.
+  assert.deepStrictEqual(m.fingerprints, fingerprints(ROOT, { broker: { name: 'fakebroker', settings: {}, refused: [] } }));
   assert.strictEqual(m.versions.length, 1);
   assert.strictEqual(m.versions[0].since, recs[0].t);
   assert.strictEqual(m.lastT, recs[recs.length - 1].t);
@@ -478,7 +479,19 @@ test('runner wiring: onBarClosed hears each closed bar the runner polls, with th
   const cfg = validateConfig({ harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3, premarketAt: '', eodAt: '15:50@America/New_York', trigger: 'bar' });
   const runner = wireRunner({ cfg, root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date(t), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {}, onBarClosed: (symbol, info) => heard.push([symbol, info]) });
   await runner.step();
-  assert.deepStrictEqual(heard, [['MNQ', { bar: iso(et(10, 0)), stale: false, action: 'trade' }]]);
+  // First the closed bar (never the bars themselves), then, once the scan ran, the field values it read (R35).
+  assert.strictEqual(heard.length, 2, JSON.stringify(heard).slice(0, 300));
+  assert.deepStrictEqual(heard[0], ['MNQ', { bar: iso(et(10, 0)), stale: false, action: 'trade', contractId: 'MNQ' }], 'never the bars themselves');
+  const [sym, { values, ...rest }] = heard[1];
+  assert.strictEqual(sym, 'MNQ');
+  assert.deepStrictEqual(rest, { bar: iso(et(10, 0)), contractId: 'MNQ' });
+  // The scanned strategies that read a broker field: each path, null where the bar has none.
+  assert.ok(Object.keys(values).length > 0);
+  for (const v of Object.values(values)) for (const x of Object.values(v)) assert.strictEqual(x, null);
+  // The window the runner polled is archived in the day's session, every bar once.
+  const { readArchive, archiveFile } = require('../../scripts/lib/session/bars-archive');
+  const arch = readArchive(archiveFile(path.join(home, 'sessions', tradingDayKey(new Date(t))), tradingDayKey(new Date(t))));
+  assert.deepStrictEqual(arch.map(x => [x.symbol, x.contractId, x.minutes, x.bar.t]), [0, 1, 2].map(k => ['MNQ', 'MNQ', 3, iso(et(10, 0) - (2 - k) * step)]));
 });
 
 test('autotrader: the live loop records each pass through the session and hears closed bars through the pass tap', () => {

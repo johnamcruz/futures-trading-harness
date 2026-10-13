@@ -291,8 +291,9 @@ day), with or without a cycle. What still differs from a replay:
   and the scorecard read each line with the config in force at its time
   (timeframe, paper mode, symbols).
 
-**R35. The flow at each decision** (owner's decision, 2026-10-13; planned,
-two changes built in their own pull requests, none of it exists today).
+**R35. The flow at each decision** (owner's decision, 2026-10-13; built:
+recorded and joined to the labels; the values shown to the model and the
+scorecard's join are their own pull requests).
 Learning must see the broker fields a decision was made on, so:
 
 - **Recorded.** Each decision line, live and replay, records the
@@ -314,10 +315,22 @@ Learning must see the broker fields a decision was made on, so:
   (R11-R13), the LLM-level estimate (R20) and the training loop (R25) see
   the flow at each decision. On the flow-covered LLM windows (section 4)
   the join carries real values; on uncovered months it carries nulls, and
-  those decisions say nothing about flow. Today a decision line names each symbol's last
-  bar time, not its field values, and no session archives its bars: until
-  both changes land, nothing in Phase B may assume a decision's flow is
-  recorded.
+  those decisions say nothing about flow. Built: each decision line, live
+  and replay, carries `values` (per symbol, decision bar, strategy, path and
+  contract); each session archives its bars as `bars-<day>.jsonl.gz` in
+  its record dir (a live home's oldest pruned past `FTH_BARS_ARCHIVE_DAYS`,
+  default 90 trading days, or `FTH_BARS_ARCHIVE_MB`; a replay run's kept);
+  the hash and fingerprints take the `fingerprintEnv` allowlist (each value
+  as an HMAC keyed on the harness home's own salt, so sessions compare
+  within one home, a live home's days or a replay run's, but a live session
+  and a replay can't be checked against each other by these digests; a
+  salt that can't be read is logged and recorded as `fingerprintError`);
+  and each label carries `values` (of the strategies the scan ran),
+  `valuesAbsent`, `valuesError`, `archivedBar`, `archiveError` and
+  `archivePruned` (a
+  failure is never read as "before values existed"). Sessions recorded before this carry no
+  values: their labels mark them absent, and nothing in Phase B may assume
+  their flow is recorded.
 
 **R5. No double-dipping.**
 
@@ -941,14 +954,16 @@ What changes in behaviour:
 Each step is its own pull request and is reviewed as today.
 
 Inputs built in their own pull requests (owner's decision, 2026-10-13),
-none of which exists yet:
+of which only the recorded flow and the fingerprint allowlist exist yet:
 
 - the flow at each decision, recorded and shown (R35): required before the
   labels and the scorecard can join it (steps 2 and 10 use it once it
-  lands);
+  lands); recorded and joined to the labels: built; shown, and the
+  scorecard's join: not yet;
 - the flow-covered LLM replay and label windows (section 4): required
   before the LLM's adherence on flow setups is measured;
-- the fingerprint allowlist (`fingerprintEnv`, R35) on the broker entries;
+- the fingerprint allowlist (`fingerprintEnv`, R35) on the broker entries:
+  built;
 - the trade-side and roll checks against minutes recorded from the live server
   (R36): queued for when a practice account exists, and required before a
   flow threshold is trusted live.
