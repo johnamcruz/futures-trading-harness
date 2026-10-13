@@ -15,6 +15,8 @@
  *   2. The harness tools under a replay clock refuse a bars file with a bar after it (each tool, the
  *      same way), bars_fetch writes only what had closed, a later bar's briefing is not served; live
  *      (no clock) the same calls are unchanged.
+ *   3. The conformance check (scripts/check-broker-mcp.js) dates what it sends at the replay clock and
+ *      fails a replay server whose get_bars leaks bars after it; live it uses the wall clock.
  */
 
 const test = require('node:test');
@@ -216,4 +218,44 @@ test('harness tools under a replay clock: a bars file with a later bar is refuse
     const snap = JSON.parse((await call('market_snapshot', { bars: l.ahead })).text);
     assert.strictEqual(snap.last.t, BARS[cutIdx].t, 'live reads the last bar in the file');
   });
+});
+
+test('check-broker-mcp: against a replay server the dates it sends are the replay clock\'s, and a server leaking bars after it fails; live, the wall clock', { timeout: 120000 }, () => {
+  const run = (env, extra = []) => {
+    const home = tmpDir();
+    const args = path.join(home, 'args.jsonl');
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'check-broker-mcp.js'), '--account', '7', ...extra, '--', process.execPath, FAKE], {
+      encoding: 'utf8', timeout: 60000, env: { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_ENV_FILE: path.join(home, 'none.env'), FAKE_ARGS: args, ...env },
+    });
+    const since = lines(args).filter(c => c.name === 'search_trades' && c.args.startTimestamp).map(c => c.args.startTimestamp);
+    return { ...r, since };
+  };
+  // The server reports replay mode at 2026-03-04 15:00: a week back from then, not from today.
+  const replay = run({ FAKE_REPLAY_NOW: '2026-03-04T15:00:00.000Z' });
+  assert.strictEqual(replay.status, 0, replay.stdout + replay.stderr);
+  assert.match(replay.stdout, /ok {3}replay clock: every date sent is at the replay server's time \(2026-03-04T15:00:00\.000Z\)/);
+  assert.match(replay.stdout, /ok {3}get_bars: no bar closes after the replay clock/);
+  assert.strictEqual(replay.since.length, 1);
+  assert.ok(Date.parse(replay.since[0]) < Date.parse('2026-02-26T00:00:00Z') && Date.parse(replay.since[0]) > Date.parse('2026-02-24T00:00:00Z'), replay.since[0]);
+  // A replay server whose get_bars serves bars after its clock: look-ahead, a failure.
+  const leak = run({ FAKE_REPLAY_NOW: '2026-10-07T13:02:30.000Z', FAKE_REPLAY_LEAK: '1' });
+  assert.strictEqual(leak.status, 1, leak.stdout);
+  assert.match(leak.stdout, /FAIL get_bars: no bar closes after the replay clock \(2026-10-07T13:02:30\.000Z\)\n {7}3 of 5 bar\(s\) close after it \(the first opened 2026-10-07T13:02:00\.000Z\): look-ahead/);
+  // A configured replay clock (FTH_REPLAY_NOW with a replay broker) dates the requests even before the server answers.
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE], replay: true } } }));
+  const configured = run({ FTH_HOME: home, FTH_REPLAY_NOW: '2026-03-04T15:00:00Z', FAKE_REPLAY_NOW: '2026-03-04T15:00:00.000Z' });
+  assert.strictEqual(configured.status, 0, configured.stdout + configured.stderr);
+  assert.match(configured.stdout, /replay clock: every date sent is at the configured replay clock \(2026-03-04T15:00:00\.000Z\)/);
+  assert.strictEqual(configured.since[0], replay.since[0]);
+  // A replay clock that is refused (no replay broker configured) stops the check: nothing is sent.
+  const refused = run({ FTH_REPLAY_NOW: '2026-03-04T15:00:00Z' });
+  assert.strictEqual(refused.status, 2);
+  assert.match(refused.stderr, /not a replay broker/);
+  assert.deepStrictEqual(refused.since, []);
+  // Live: the wall clock, as before.
+  const live = run({});
+  assert.strictEqual(live.status, 0, live.stdout);
+  assert.doesNotMatch(live.stdout, /replay clock/);
+  assert.ok(Math.abs(Date.parse(live.since[0]) - (Date.now() - 7 * 864e5)) < 2 * 864e5, live.since[0]);
 });
