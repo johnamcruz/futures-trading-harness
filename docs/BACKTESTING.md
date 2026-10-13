@@ -31,8 +31,8 @@ node scripts/backtest.js --data data/NQ_3min.parquet --symbol MNQ --start 2025-0
 cp mcp-configs/backtest.example.json backtest.json
 node scripts/backtest.js --config backtest.json
 
-# Optional: download 1-minute bars from the broker (through the broker adapter) to a file first
-node scripts/backtest.js fetch --contract MNQ:2025-03 --from 2025-03-03 --to 2025-03-15 --out data/MNQ-1m.csv
+# Optional: download the broker's bars (through the broker adapter) to a file first, at the strategy's timeframe
+node scripts/backtest.js fetch --contract MNQ --from 2025-03-03 --to 2025-03-15 --timeframe 3 --out data/MNQ-3m.jsonl
 ```
 
 ### Data
@@ -47,6 +47,9 @@ Bars come from files:
   - timestamps in ms, µs, ns, or INT96
 - **Excel** (`.xlsx`, `.xlsm`): the first sheet, or `sheet` in the config.
 - **CSV** and **JSON** (the broker's `get_bars` output).
+- **JSON lines** (`.jsonl`, `.ndjson`): one bar a line, as `backtest.js fetch`
+  writes the broker's bars. Every field is kept, and a file of years of bars
+  is read line by line, never as one huge string.
 
 The Parquet and Excel readers trust the file: they are for your own data,
 through the CLIs (backtests, replay labels). They bound what a file decompresses
@@ -62,35 +65,62 @@ The table needs a header with a time column (`time`, `timestamp`,
 letter case works.
 
 Fields a broker puts on its bars (read by the rules' `field("path")`, such
-as the order flow the `ofi` strategies use) survive in a backtest only on
-bars the broker built at the strategy's own timeframe. `backtest.js fetch`
-fetches 1-minute bars; with a `.json` output it keeps their fields as the
-broker's server returned them (with its own settings for those fields), so
-the 1-minute strategies (`ofi`, `ofi_absorption`) can be backtested on them:
+as the order flow the `ofi` strategies and `value_area` use) survive in a
+backtest only on bars the broker built at the strategy's own timeframe. So to
+backtest a strategy that reads broker fields, fetch its bars from the broker
+at its timeframe:
 
 ```bash
-node scripts/backtest.js fetch --contract MNQ --from 2026-10-01 --to 2026-10-08 --out data/MNQ-1m.json
-node scripts/backtest.js --data data/MNQ-1m.json --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
+# value_area (3 minutes, also inside prop_portfolio) and ofi (1 minute)
+node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 3 --out data/MNQ-3m.jsonl
+node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --timeframe 3 --strategy value_area
+node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --prop prop_portfolio
+node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 1 --out data/MNQ-1m.jsonl
+node scripts/backtest.js --data data/MNQ-1m.jsonl --symbol MNQ --timeframe 1 --strategy ofi,ofi_absorption
 ```
 
-A CSV has no such fields, and neither do bars the backtester builds from
-shorter ones (3-minute bars from 1-minute ones): only the broker knows what
-its fields mean over a longer bar. So a strategy on a longer timeframe that
-reads them (`value_area`'s order-flow branch, on 3-minute bars) never fires
-on them in this fast backtest; test it in a replay (the `replay` skill),
-where the replay broker serves bars at the strategy's timeframe, until the
-fast backtester pulls its bars from the replay broker (a planned follow-up).
-The same holds inside a policy: a `prop_portfolio` run (`--prop`) on CSV or
-built bars leaves out `value_area`'s flow branch (only its range expansion
-confirms), so it can pick a different setup, or none, where live and replay
-would pick `value_area`. The backtester warns when a traded strategy reads a
-`field(...)` path the loaded bars of a market it trades don't carry, naming
-the strategy, the path and the markets: always in its log, and for a plain
-or `--prop` run in the report too (`missingFields` in `report.json` or
-`combine.json`, and a section in `report.md` or `combine.md`); a
-walk-forward run only logs it. In a `--prop` run only the strategies it
-trades are checked: a paper strategy the policy leaves out, which still
-counts toward conflict, is not.
+`fetch` asks the broker's `get_bars` for bars of that size (`--timeframe`:
+minutes, default 1, or a size up to a day such as `1h`), paging through a long
+span (years are fine) 10,000 bars a call. A size in seconds (`30s`) is asked
+for as second bars, which a broker may not serve: it then refuses the fetch,
+and the backtester itself reads only bars on minute boundaries. A call that comes back short (a
+server that caps its replies) is asked again from where it stopped. Exact
+paging relies on the broker server honouring `get_bars`'s `startTime` (the
+window's start in docs/BROKER-MCP-INTERFACE.md); the servers in
+`mcp-configs/brokers.json` do. One that ignores it and keeps the oldest bars is
+refused only when it caps at the interface's 20,000-bar limit; capped below
+that, the bars past its cap are lost without a warning. One that ignores it
+and keeps the newest bars up to `endTime` is refused at the end of its data
+when it holds exactly 20,000 bars there (the safe side). It keeps the bars in
+the span and writes each one as the broker's server
+returned it, every field kept, with its own settings for those fields. Write
+`.jsonl` (best for long spans) or `.json`; a `.csv` holds only time, prices
+and volume, so `fetch` refuses it for bars that carry more.
+
+The harness never builds those fields itself: only the broker knows what they
+mean over a longer bar. So it never combines them when it aggregates finer
+bars into the run's timeframe. When the finer bars carry broker fields and a
+strategy in the run (one that trades the market) reads any, the backtest
+refuses, saying to fetch bars at the run's timeframe instead; when none of
+them reads one, it builds the bars without the fields and says so in its log.
+A CSV carries no such fields either, so a strategy that reads them never
+fires on one: `value_area`'s order-flow branch on CSV bars. The same holds
+inside a policy: a `prop_portfolio` run (`--prop`) on CSV or built bars leaves
+out `value_area`'s flow branch (only its range expansion confirms), so it can
+pick a different setup, or none, where live and replay would pick
+`value_area`.
+
+The backtester reports **field coverage**: for each `field(...)` path a traded
+strategy reads, the share of the bars in range (from `start`) of each market
+it trades that carry a value there (a number or a boolean, as the rules read
+it; a null, as a broker serves past the data it has for a field, counts as
+missing). It always logs each one, and warns for each one under 100%, naming
+the strategy, the path, the markets and their shares. A plain or `--prop` run
+puts it in the report too: `fieldCoverage` (every path) and `missingFields`
+(those under 100%) in `report.json` or `combine.json`, and a coverage table
+and a warnings section in `report.md` or `combine.md`; a walk-forward run only
+logs it. In a `--prop` run only the strategies it trades are checked: a paper
+strategy the policy leaves out, which still counts toward conflict, is not.
 
 - **Times:** ISO 8601, epoch seconds, ms, µs or ns, Parquet timestamps, or
   Excel dates.
@@ -98,7 +128,8 @@ counts toward conflict, is not.
 - **Bar times:** each bar is stamped with its open time.
 
 Use bars at the trading timeframe, or finer bars that divide it (1-minute
-data runs a 3-minute backtest). Micro contracts can use the full contract's
+data runs a 3-minute backtest, unless the bars carry broker fields a strategy
+reads: see above). Micro contracts can use the full contract's
 bars (`MNQ` on `NQ` data), as the original bot does.
 
 ### Each bar

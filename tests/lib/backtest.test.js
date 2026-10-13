@@ -340,15 +340,24 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: dir },
     { root: ROOT, outRoot: dir, log: m => logs.push(m) });
   const [p] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(va);
-  const want = [{ strategy: 'value_area', path: p, symbols: ['MNQ'] }];
+  const n = report.fieldCoverage[0].coverage.MNQ.bars;
+  assert.ok(n > 0);
+  // Coverage: the share of the MNQ bars in range that carry it (none, on a CSV); GC is not a market value_area trades.
+  const want = [{ strategy: 'value_area', path: p, coverage: { MNQ: { bars: n, carried: 0, share: 0 } }, symbols: ['MNQ'] }];
+  assert.deepStrictEqual(report.fieldCoverage, want);
   assert.deepStrictEqual(report.missingFields, want, 'bos reads none; GC is not a market value_area trades');
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8')).missingFields, want);
-  assert.match(fs.readFileSync(path.join(runDir, 'report.md'), 'utf8'), new RegExp(`## Bar fields missing from this data\\n\\n- value_area reads field\\("${p.replace(/\./g, '\\.')}"\\), which no MNQ bar in this data carries:`));
+  const json = JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8'));
+  assert.deepStrictEqual([json.missingFields, json.fieldCoverage], [want, want]);
+  const md = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
+  assert.match(md, new RegExp(`## Bar fields missing from this data\\n\\n- value_area reads field\\("${p.replace(/\./g, '\\.')}"\\), which no MNQ bar in this data carries:`));
+  assert.ok(md.includes(`| value_area | \`${p}\` | MNQ | 0% | 0 / ${n} |`), md);
+  assert.ok(logs.includes(`field coverage: value_area field("${p}") on MNQ: 0% of ${n} bars`), logs.join('\n'));
   assert.deepStrictEqual(logs.filter(l => /reads field\(/.test(l)).length, 1, logs.join('\n'));
   // Only GC: value_area trades none of it, so nothing is said.
   const gcLogs = [];
   const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, log: m => gcLogs.push(m) });
   assert.strictEqual(gc.report.missingFields, undefined);
+  assert.strictEqual(gc.report.fieldCoverage, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
   assert.ok(!gcLogs.some(l => /reads field\(/.test(l)));
 });
@@ -394,7 +403,10 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
   // The CSV carries no broker bar fields: the run says value_area's field() conditions are false here, in its log and report.
   const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area'));
   assert.ok(flowPath, 'value_area reads a broker bar field');
-  assert.deepStrictEqual(va.missingFields, [{ strategy: 'value_area', path: flowPath, symbols: ['MNQ'] }]);
+  assert.deepStrictEqual(va.missingFields.map(x => [x.strategy, x.path, x.symbols, x.coverage.MNQ.carried]), [['value_area', flowPath, ['MNQ'], 0]]);
+  assert.deepStrictEqual(va.fieldCoverage, va.missingFields);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'prop_va', 'combine.json'), 'utf8')).fieldCoverage, va.fieldCoverage);
+  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar field coverage\n[^]*\| value_area \| `[^`]+` \| MNQ \| 0% \|/);
   assert.ok(vaLogs.some(l => l.startsWith(`warning: value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
   assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- value_area reads field/);
   assert.strictEqual(mixed.missingFields, undefined, 'bos reads no bar field');
