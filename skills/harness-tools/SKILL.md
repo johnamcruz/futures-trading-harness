@@ -1,6 +1,6 @@
 ---
 name: harness-tools
-description: The harness's own operations as MCP tools on the `harness` server - strategies, the order arithmetic for a chosen setup, bars, the market snapshot, the multi-timeframe read, news blackouts, prop challenge status, lessons, and reconcile - with their arguments and the command-line script each mirrors. Agents use the tools (autonomous and interactive); people run the scripts. Use whenever a skill or role says to read bars, scan strategies, snapshot indicators, record a read or a blackout, or check the prop attempt.
+description: The harness's own operations as MCP tools on the `harness` server - strategies, the order arithmetic for a chosen setup, bars, the market snapshot, the multi-timeframe read, news blackouts, prop challenge status, lessons, reconcile, and the check of stated reasons - with their arguments and the command-line script each mirrors. Agents use the tools (autonomous and interactive); people run the scripts. Use whenever a skill or role says to read bars, scan strategies, snapshot indicators, record a read or a blackout, or check the prop attempt.
 ---
 
 # Harness Tools
@@ -41,6 +41,7 @@ scripts. None places, changes, or cancels an order.
 | `lessons` | `top`?, `json`? | the instincts the journal's reviews add up to | `lessons.js [--top 10] [--json]` |
 | `reconcile` | `day` (YYYY-MM-DD), `timeframe`?, `json`? | the day's signals against what was traded | `reconcile.js --day <day> [--timeframe 3] [--json]` |
 | `bar_briefing` | `symbol` (a root, or a contract by month), `json`? | the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary (price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, each setup with its facts), times in ET, distances in points and R (1R is a setup's own stop, else the reference stop, 0.5 x ATR(20): `oneR`). `m3`, every bar: price, the bar (OHLC, range in ATR), ET time and the session window with its scope (`windowText`: market open or closed, entries allowed or not, until when; also `windowEntries`, `windowRefusal`, `marketOpen`; from the gate's own clock config), the next news blackout (`news`), regime (tags, metrics), EMA9/20/50/200, ADX, SuperTrend, Keltner, ATR(14), VWAP (which applies, side, distance, crosses), participation, the skip-rule counters (`context`), `referenceStop`, swings and liquidity (equal highs and lows marked taken or not), `lastBreak` (BOS or CHoCH with its age), `sweeps` (key levels first; only levels that existed before), `htfLevels` (the 15m and 1h swings against price, and the last one a 3m close broke), `untested1hSwings`, `nearestLiquidity` (the three nearest levels each side), today so far, the overnight range, the session profile and its nodes, `location`, `candidates` (each with its stop, exit, the first level in its way in R, the room it needs, and its context as `facts`: the trend rule and the multi-timeframe read for its side, room, confluence, VWAP side, window; `null`: the scan failed or the bar wasn't scanned; `blocked` in a no-entry window (named, with its end), a news blackout, or with the news unknown), `trendRule`. `m15`, until the next 15m close: `frame` (EMA20/50, swing pattern, dealing range), `alignment`, `lastBreak` (times are candle opens; `knownAt` is the breaking candle's close), `indicators` (EMA9/20, regime, ADX, SuperTrend, Keltner). `h1`, until the next 1h close: the 1h and 4h frames, `lastBreak`. `day`, until the first bar after 16:00 ET: the prior RTH day and its profile. Each part has a version and changes only on expiry. Reuse it; don't recompute what it holds. When it answers that there is no current briefing, or that it is old, read the bars yourself | `briefing.js --symbol MNQ [--json]` |
+| `reason_check` | `symbol`, `reasons` (your decision line: CYCLE RESULT or VERDICT, at most 2000 characters), `json`? | each reason you stated checked against the facts of the bar you decide (this cycle's bar briefing: the session window and whether it allows entries, the trend rule per side, the candidates, the room in R against `needR`, the multi-timeframe read per side; the policy verdicts on that bar; the started prop attempts): `TRUE`, `FALSE` (with the fact) or `UNCHECKED` per claim, `JUDGMENT` and `UNPARSED` clauses for you to check, and each setup's priority-order steps as the facts answer them. Read-only: it decides nothing; without a current briefing it checks nothing and says so | `reason-check.js --symbol MNQ --reasons "<line>" [--json]` |
 
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`
@@ -102,6 +103,13 @@ order_plan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "daily": "/home/u/.futures-trading-harness/bars-scratch/MNQ-1d.json"}
 blackouts_add {"start": "2026-10-07T12:25:00Z", "end": "2026-10-07T12:40:00Z", "reason": "CPI 08:30 ET"}
 combine_status {}
+reason_check {"symbol": "MNQ", "reasons": "CYCLE RESULT: no-trade - opening print window until 10:00 ET; no prop attempt running"}
+→ Reasons checked against this bar's facts:
+  - FALSE no-entry-window: "opening print window until 10:00 ET" - the opening drive window allows entries (09:57 ET)
+  - FALSE no-attempt: "no prop attempt running" - the topstep_50k attempt is active
+  The priority order, step by step, as the facts answer it:
+  - keltner short: 1 hard stops pass (no hard stop); 2 trend rule pass (the trend rule allows a short); 3 room no-trade (VWAP (rth) at 0.4R before the 1.5R it needs); ...
+  2 reasons FALSE: name each, drop them, and make the decision again from the facts.
 ```
 
 A person does the same at a terminal: `node <root>/scripts/bars.js --symbol

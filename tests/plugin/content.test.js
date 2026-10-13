@@ -321,3 +321,33 @@ test('the priority order is written once, in strategy-library, and every role th
   const oc = JSON.parse(read('workspace/opencode.json'));
   assert.match(oc.agent['risk-manager'].prompt, /### The priority order: the rule for every setup[^]*?7\. \*\*Secondary context\*\*/);
 });
+
+test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
+  // Line breaks fall differently in each document: compare with the whitespace collapsed.
+  const flat = text => text.replace(/\s+/g, ' ');
+  const step = /\*\*Check every reason against the facts\*\* before you [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your (?:VERDICT|CYCLE RESULT) line>"\}` once\. It checks each reason against the bar briefing \(the session window and whether it allows entries, the trend rule per side, the candidates and verdict, the room in R against the room needed, the multi-timeframe read for the side\) and the attempt line, and lists each setup's priority-order steps as the facts answer them: judge each step on its own[^]*?A reason marked FALSE, or one no fact supports: name it, drop it, and decide again from the facts\./;
+  const rm = read('agents/risk-manager.md');
+  assert.match(rm, /^tools: .*mcp__harness__reason_check/m);
+  assert.match(flat(rm), step);
+  // After the checks, before the verdict line; the checks and the gate unchanged.
+  assert.ok(rm.indexOf('8. The analysts\' red flags') < rm.indexOf('**Check every reason') && rm.indexOf('**Check every reason') < rm.indexOf('Output exactly one of:'));
+  assert.match(rm, /\(after\s+the checks above; they and the order gate's checks don't change\)/);
+  const ts = read('skills/trade-session/SKILL.md');
+  assert.match(flat(ts), step);
+  assert.match(ts, /The order gate's checks still come first and don't change\./);
+  // In step 3, before the no-trade note and the plan.
+  assert.ok(ts.indexOf('### 3. Head-trader synthesis') < ts.indexOf('**Check every reason') && ts.indexOf('**Check every reason') < ts.indexOf('unanswered red flag → **no trade**'));
+  assert.match(read('skills/autonomous-trading/SKILL.md'), /Check its reasons against the facts before you write it \(`reason_check`,\s+trade-session step 3\): a reason marked FALSE is dropped and the decision\s+made again\./);
+  assert.match(read('skills/harness-tools/SKILL.md'), /\| `reason_check` \| `symbol`, `reasons` [^\n]*\| `reason-check\.js --symbol MNQ --reasons "<line>" \[--json\]` \|/);
+  // Wired: Codex's and Qwen's risk manager, opencode's risk manager and head trader; no other role holds it.
+  assert.match(read('.codex/agents/risk-manager.toml'), /harness MCP tools you may use: [^\n]*\breason_check\b/);
+  assert.match(read('qwen-extension/agents/risk-manager.md'), /- mcp__harness__reason_check\n/);
+  const oc = JSON.parse(read('workspace/opencode.json'));
+  assert.strictEqual(oc.agent['risk-manager'].permission.harness_reason_check, 'allow');
+  const head = Object.values(oc.agent).find(a => a.permission && a.permission['harness_*'] === 'allow' && a.mode === 'primary');
+  assert.ok(head, 'the head trader holds every harness tool');
+  for (const name of agents.filter(a => a !== 'risk-manager')) assert.notStrictEqual(oc.agent[name].permission.harness_reason_check, 'allow', name);
+  assert.match(oc.agent['risk-manager'].prompt, /\*\*Check every reason against the facts\*\*/);
+  // The head trader reads the skills from their files; the workspace instructions list the tool's skill.
+  assert.match(read('workspace/AGENTS.md'), /`harness-tools` \(skills\/harness-tools\/SKILL\.md\): [^\n]*the check of stated reasons/);
+});

@@ -20,6 +20,7 @@ tools:
   - mcp__broker__get_performance
   - mcp__broker__journal_read
   - mcp__harness__bar_briefing
+  - mcp__harness__reason_check
 approvalMode: default
 background: false
 ---
@@ -139,6 +140,19 @@ its facts; the order decides.
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
 8. The analysts' red flags are addressed in the plan.
+
+**Check every reason against the facts** before you approve or veto (after
+the checks above; they and the order gate's checks don't change). Write
+your verdict line, then call `reason_check {"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>"}`
+once. It checks each reason against the bar briefing (the session window
+and whether it allows entries, the trend rule per side, the candidates and
+verdict, the room in R against the room needed, the multi-timeframe read
+for the side) and the attempt line, and lists each setup's priority-order
+steps as the facts answer them: judge each step on its own, not only the
+final call. A reason marked FALSE, or one no fact supports: name it, drop
+it, and decide again from the facts. Check UNCHECKED and UNPARSED reasons
+yourself against the briefing. Without a current briefing it checks
+nothing: check them against the plan and the reports.
 
 Output exactly one of:
 

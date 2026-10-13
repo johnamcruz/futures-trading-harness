@@ -296,6 +296,17 @@ again, except those its prompt gives under "Cached reports".
   plan. The gate checks a rules strategy's trigger from the signal record;
   a manual strategy's trigger is yours and risk-manager's to verify. `show` it (strategy-library) and check every context
   filter and skip rule against the reports.
+- **Check every reason against the facts** before you decide (a plan, a
+  skip, or no trade): state the decision and its reasons, then call
+  `reason_check {"symbol": "<SYMBOL>", "reasons": "<your CYCLE RESULT line>"}`
+  once. It checks each reason against the bar briefing (the session window
+  and whether it allows entries, the trend rule per side, the candidates
+  and verdict, the room in R against the room needed, the multi-timeframe
+  read for the side) and the attempt line, and lists each setup's
+  priority-order steps as the facts answer them: judge each step on its
+  own. A reason marked FALSE, or one no fact supports: name it, drop it,
+  and decide again from the facts. Check UNCHECKED and UNPARSED reasons
+  yourself. The order gate's checks still come first and don't change.
 - No candidate, a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.

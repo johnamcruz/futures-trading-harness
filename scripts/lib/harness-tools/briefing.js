@@ -78,4 +78,4 @@ function briefedThisCycle(env, symbol) {
   return b && b.asOf === bar ? b : null;
 }
 
-module.exports = { OPS, USAGE, barBriefing, briefedThisCycle, parseArgv };
+module.exports = { OPS, USAGE, barBriefing, briefedThisCycle, cycleBarOf, parseArgv };

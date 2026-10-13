@@ -65,6 +65,9 @@ description: Rules for running the trading harness unattended (headless, schedul
    must be exactly:**
    `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`
    (one outcome word, then ` - ` and the reason, as in the examples below).
+   Check its reasons against the facts before you write it (`reason_check`,
+   trade-session step 3): a reason marked FALSE is dropped and the decision
+   made again.
    `blocked` only when the order gate, the gateway or the broker refused an
    order this cycle; nothing fired, or you stood aside, is `no-trade`.
    The runner reads only that line, from your final message: a summary, a
