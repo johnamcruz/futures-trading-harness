@@ -61,7 +61,10 @@ description: Rules for running the trading harness unattended (headless, schedul
 5. **Kill switch.** When `<FTH_HOME>/STOP` exists the runner starts only
    manage cycles and the gate refuses every entry; you don't need to check
    the file (you can't read it). If an entry is refused with `[kill-switch]`,
-   manage or flatten open positions only, and end.
+   manage or flatten open positions only, and end. `[allowed-accounts]` is
+   the same for you: the account isn't on the broker's allow-list (the user's
+   setup, checked by their preflight, `scripts/preflight.js`). It refuses
+   entries only: manage, protect or flatten, and end the cycle `blocked`.
 6. **Leave a trail.** Every cycle ends with a journal `note` (or plan, review)
    so the next cycle and the human can see what happened. **Your last line
    must be exactly:**

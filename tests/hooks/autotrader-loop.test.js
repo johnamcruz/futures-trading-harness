@@ -16,14 +16,18 @@ const ROOT = path.resolve(__dirname, '..', '..');
 // The broker: a fake MCP server that implements the broker MCP interface, started by the gateway.
 const FAKE_BROKER = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
 
-function runAutotrader(config, home, calls = path.join(home, 'calls.txt'), extraEnv = {}) {
+// A runner that should have refused to start but didn't would run on: it is killed after `limitMs`, so the test
+// fails (exit code null) instead of hanging.
+function runAutotrader(config, home, calls = path.join(home, 'calls.txt'), extraEnv = {}, limitMs = 25000) {
   const runner = spawn(process.execPath, [path.join(ROOT, 'scripts', 'autotrader.js'), '--config', config], {
     env: {
       PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
-      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls, ...extraEnv,
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_CALLS: calls,
+      FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7,8', ...extraEnv,
     },
   });
-  const done = new Promise(r => runner.on('close', r));
+  const limit = setTimeout(() => runner.kill('SIGKILL'), limitMs);
+  const done = new Promise(r => runner.on('close', code => { clearTimeout(limit); r(code); }));
   const io = { out: '' };
   runner.stdout.on('data', c => { io.out += c; });
   runner.stderr.on('data', c => { io.out += c; });
@@ -40,7 +44,7 @@ test('a runner config that trades outside market hours is refused', { timeout: 3
   assert.match(io.out, /market hours|eodAt: required/);
 });
 
-test('a live runner refuses to start when the broker server would refuse its housekeeping', { timeout: 30000 }, async () => {
+test('a live runner refuses to start when the broker server would refuse its housekeeping', { timeout: 60000 }, async () => {
   const live = account => {
     const home = tmpDir();
     const config = path.join(home, 'auto.json');
@@ -51,13 +55,20 @@ test('a live runner refuses to start when the broker server would refuse its hou
     return { config, home };
   };
   const other = live(8);
-  const a = runAutotrader(other.config, other.home);
+  const a = runAutotrader(other.config, other.home, undefined, {}, 10000);
   assert.strictEqual(await a.done, 1);
   assert.match(a.io.out, /broker: can't start \(account 8 is not among the server's allowed accounts \(7\)\)/);
   const off = live(7);
-  const b = runAutotrader(off.config, off.home, undefined, { FAKE_TRADING_OFF: '1' });
+  const b = runAutotrader(off.config, off.home, undefined, { FAKE_TRADING_OFF: '1' }, 10000);
   assert.strictEqual(await b.done, 1);
   assert.match(b.io.out, /broker: can't start \(the broker MCP server has trading disabled/);
+  // The broker's allow-list (allowedAccountsEnv) empty or without the account: a live run never starts.
+  for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['8', /account 7 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(8\)/]]) {
+    const run = live(7);
+    const c = runAutotrader(run.config, run.home, undefined, { FAKE_BROKER_ALLOWED_ACCOUNT_IDS: list }, 10000);
+    assert.strictEqual(await c.done, 1);
+    assert.match(c.io.out, why);
+  }
 });
 
 // The runner runs on the real clock: during market hours a fresh bar starts a
@@ -79,6 +90,7 @@ test('runner starts a cycle on a fresh closed bar during market hours, and none 
     harness: 'custom',
     command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'],
     timeframe: 1,
+    account: '7', // a live run names its account, on the broker's allow-list
     dataDir,
     sessions: ['18:00-15:50@America/New_York'],
     premarketAt: '',
@@ -150,14 +162,14 @@ test('live loop: a harness tools server that fails the start check turns trading
   const home = tmpDir();
   const config = path.join(home, 'auto.json');
   fs.writeFileSync(config, JSON.stringify({
-    harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], timeframe: 1,
+    harness: 'custom', command: [process.execPath, path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js'), '{prompt}'], timeframe: 1, account: '7',
     sessions: ['18:00-15:50@America/New_York'], premarketAt: '', eodAt: '15:50@America/New_York', weekdaysOnly: false,
   }));
   const killSwitch = path.join(home, 'STOP');
   const state = path.join(home, '.futures-trading-harness');
   const start = () => {
     const runner = spawn(process.execPath, [path.join(root, 'scripts', 'autotrader.js'), '--config', config], {
-      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1' },
+      env: { PATH: process.env.PATH, HOME: home, FTH_KILL_SWITCH_FILE: killSwitch, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_BROKER, FAKE_LIVE_BARS: '1', FAKE_FLAT: '1', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7' },
     });
     const io = { out: '' };
     runner.stdout.on('data', c => { io.out += c; });

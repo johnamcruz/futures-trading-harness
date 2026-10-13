@@ -6,8 +6,9 @@
       "entryEnv": "FAKE_BROKER_ENTRY",
       "journal": "~/.fake-broker/journal.jsonl",
       "journalEnv": "FAKE_BROKER_JOURNAL",
+      "allowedAccountsEnv": "FAKE_BROKER_ALLOWED_ACCOUNT_IDS",
       "env": [
-        "FAKE_BROKER_USERNAME", "FAKE_BROKER_API_KEY", "FAKE_BROKER_TRADING_ENABLED", "FAKE_BROKER_JOURNAL", "FAKE_BROKER_ENTRY"
+        "FAKE_BROKER_USERNAME", "FAKE_BROKER_API_KEY", "FAKE_BROKER_TRADING_ENABLED", "FAKE_BROKER_JOURNAL", "FAKE_BROKER_ENTRY", "FAKE_BROKER_ALLOWED_ACCOUNT_IDS"
       ],
       "paperEnv": { "FAKE_BROKER_TRADING_ENABLED": "false" }
     }

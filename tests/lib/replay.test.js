@@ -631,10 +631,24 @@ test('report: month by month, trades from round trips or closing fills, R, stand
 
 test('runner wiring: the broker must trade for a live account; the runner is built from the harness home', async () => {
   const closed = [];
-  const fake = cfgOver => ({ verify: async () => {}, serverConfig: async () => ({ tradingEnabled: cfgOver }), close: () => closed.push(1) });
-  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, open: () => fake(false) }), /trading disabled/);
+  const fake = (cfgOver, extra = {}) => ({ verify: async () => {}, serverConfig: async () => ({ tradingEnabled: cfgOver, allowedAccountIds: [7], ...extra }), close: () => closed.push(1) });
+  const broker = { name: 'live', allowedAccountsEnv: 'LIVE_ALLOWED' };
+  const env = { LIVE_ALLOWED: '7' };
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: () => fake(false) }), /trading disabled/);
   assert.strictEqual(closed.length, 1, 'closed when refused');
-  const client = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, open: () => fake(true) });
+  // Live: the allow-list must name the account, and the server must not take any account.
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: {}, broker, open: () => fake(true) }), /LIVE_ALLOWED is empty/);
+  await assert.rejects(openRunnerBroker({ cfg: { account: '8', paper: false }, root: ROOT, env, broker, open: () => fake(true, { allowedAccountIds: [8] }) }), /account 8 is not in LIVE_ALLOWED/);
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: () => fake(true, { allowedAccountIds: 'any' }) }), /allows any account/);
+  await assert.rejects(openRunnerBroker({ cfg: { account: '', paper: false }, root: ROOT, env, broker, open: () => fake(true) }), /names its account/);
+  assert.strictEqual(closed.length, 5);
+  // Paper and a confirmed replay (the broker config and its server both say replay) need no allow-list.
+  for (const [cfg, b, extra] of [[{ account: '7', paper: true }, broker, {}], [{ account: '7', paper: false }, { ...broker, replay: true }, { replay: true, allowedAccountIds: [] }]]) {
+    (await openRunnerBroker({ cfg, root: ROOT, env: {}, broker: b, open: () => fake(true, extra) })).close();
+  }
+  // A broker labelled replay whose server doesn't say so is live.
+  await assert.rejects(openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env: {}, broker: { ...broker, replay: true }, open: () => fake(true) }), /LIVE_ALLOWED/);
+  const client = await openRunnerBroker({ cfg: { account: '7', paper: false }, root: ROOT, env, broker, open: () => fake(true) });
   assert.ok(client.verify);
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-wire-'));
   const runner = wireRunner({ cfg: cfgOf({}), root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date('2026-10-10T15:00:00Z'), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {} });

@@ -87,7 +87,7 @@ function setup(entries, extraEnv = {}) {
     dir,
     env: {
       FTH_HOME: home,
-      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, entries),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, entries),
       FTH_BLACKOUTS_FILE: path.join(dir, 'blackouts.json'),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
       FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'),
@@ -338,7 +338,7 @@ test('order gate fails closed on malformed input', () => {
 
 test('order gate fails closed when the journal is unreadable', () => {
   const { dir, env } = setup([]);
-  const r = gate(orderPayload(), { ...env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: dir });
+  const r = gate(orderPayload(), { ...env, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: dir });
   assert.strictEqual(r.code, 2);
 });
 
@@ -459,7 +459,7 @@ test('MCP gateway blocks a bad order end to end and forwards everything else', a
     PATH: process.env.PATH,
     HOME: dir,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_STRATEGIES_DIRS: strategiesDir,
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
@@ -499,7 +499,7 @@ test('MCP gateway: rapid-fire [exit] orders cannot flip a position while fills a
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '300',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -523,7 +523,7 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
     const dir = tmpDir();
     const env = {
       PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
-      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
     let out = '';
@@ -547,7 +547,7 @@ test('MCP gateway: with no command it starts the broker server named in the brok
   const dir = tmpDir();
   const brokers = homeBrokers(dir, { fake: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')] } });
   const env = {
-    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_BROKERS_FILE: brokers, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FTH_BROKERS_FILE: brokers, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const run = extra => new Promise(resolve => {
@@ -609,7 +609,7 @@ test('MCP gateway: the configured server sits behind the contract translator: st
 async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}) {
   const { spawn } = require('child_process');
   const env = {
-    PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
@@ -883,7 +883,7 @@ test('MCP gateway: a stop can\'t be moved toward the market right after a close 
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '600', STOP_ORDER: '1',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -912,7 +912,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
   const dir = tmpDir();
   const env = {
     PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '400',
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
   let out = '';
@@ -1250,7 +1250,7 @@ test('MCP gateway: while a prop attempt runs, no entry while any position is ope
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_POSITIONS: JSON.stringify([{ contractId: 'MES', type: 1, size: 1 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -1275,7 +1275,7 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_HOME: home,
     FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'MES', type: 1, side: 0, size: 1, limitPrice: 5000 }]),
-    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+    FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
     FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
   };
@@ -1377,7 +1377,7 @@ function simHome(dir, { replay = true, journalEntries = [] } = {}) {
   const journal = writeJournal(path.join(dir, 'sim'), journalEntries);
   fs.mkdirSync(home, { recursive: true });
   const file = path.join(home, 'brokers.json');
-  fs.writeFileSync(file, JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE_MCP], journal, ...(replay ? { replay: true } : {}) } } }));
+  fs.writeFileSync(file, JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, FAKE_MCP], journal, allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', ...(replay ? { replay: true } : {}) } } }));
   return { home, file, journal };
 }
 
@@ -1386,7 +1386,7 @@ async function gatewayCfg(extraEnv, items, { dir }) {
   const { spawn } = require('child_process');
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '',
-    FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FAKE_CONTRACTS: CONTRACTS, ...extraEnv,
+    FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FAKE_CONTRACTS: CONTRACTS, SIM_ALLOWED_ACCOUNTS: '1,7', ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env });
   let out = '';
@@ -1585,7 +1585,7 @@ test('order gate wiring: the hook refuses an entry over the broker\'s max order 
 
 test('order gate wiring: the gateway refuses a rules entry on the leg not selected (FTH_SYMBOLS); the selected leg and exits on either go', async () => {
   const CROSS = { ...ORDER, rationale: 'setup:crossing long, stop 21480, target 21540' };
-  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5 }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, allowedAccountIds: [1, 7] }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
   const through = async (symbols, input) => {
     const dir = tmpDir();
     const { home } = simHome(dir, { replay: false, journalEntries: [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }] });
@@ -1604,7 +1604,7 @@ test('order gate wiring: the gateway, behind the translator, refuses an entry un
   const dir = tmpDir();
   const { home } = simHome(dir, { replay: false, journalEntries: plan });
   trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
-  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 2 }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 2, allowedAccountIds: [1, 7] }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
   const capped = { ...ORDER, rationale: 'setup:capped long, stop 21480, target 21540' };
   const r = await gatewayCfg(base, [
     call(1, 'search_contracts', { searchText: 'MNQ' }),
@@ -1673,4 +1673,91 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   fs.writeFileSync(transcript, '');
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['any', /never empty or "any"/], ['7', /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/]]) {
+    const r = gate(orderPayload(), { ...env, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: list });
+    assert.strictEqual(r.code, 2, list);
+    assert.match(r.stderr, /\[allowed-accounts\]/);
+    assert.match(r.stderr, why);
+  }
+  const { FAKE_BROKER_ALLOWED_ACCOUNT_IDS: _unset, ...noList } = env;
+  for (const input of [{ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' }]) {
+    const r = gate(orderPayload(input), noList);
+    assert.strictEqual(r.code, 0, r.stderr);
+  }
+  // Paper (the broker's paper settings in force): the server refuses every order, so no list is needed.
+  assert.strictEqual(gate(orderPayload(), { ...noList, FAKE_BROKER_TRADING_ENABLED: 'false' }).code, 0);
+  // Control: listed, the entry goes.
+  assert.strictEqual(gate(orderPayload(), { ...env, FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '5, 1' }).code, 0);
+  // The list in the .env the gateway loads (the hook's own environment lacks it) counts as the server's.
+  fs.writeFileSync(path.join(env.FTH_HOME, '.env'), 'FAKE_BROKER_ALLOWED_ACCOUNT_IDS=1\n', { mode: 0o600 });
+  assert.strictEqual(gate(orderPayload(), noList).code, 0);
+  fs.writeFileSync(path.join(env.FTH_HOME, '.env'), 'FAKE_BROKER_ALLOWED_ACCOUNT_IDS=7\n', { mode: 0o600 });
+  assert.match(gate(orderPayload(), noList).stderr, /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/);
+});
+
+test('MCP gateway: a live entry on an account off the allow-list is refused before the broker sees it; exits and closes still go', async () => {
+  const base = { FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, allowedAccountIds: [1, 7] }), FAKE_PLACE_RESULT: JSON.stringify({ orderId: 5, success: true, errorCode: 0 }) };
+  const through = async (extra, msgs) => {
+    const dir = tmpDir();
+    const { home } = simHome(dir, { replay: false, journalEntries: [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }] });
+    trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
+    return gatewayCfg({ ...base, ...extra }, [call(1, 'search_contracts', { searchText: 'MNQ' }), call(2, 'get_server_config', {}), ...msgs], { dir });
+  };
+  for (const list of ['', 'any', '7']) {
+    const r = await through({ SIM_ALLOWED_ACCOUNTS: list }, [call(3, 'place_order', ORDER)]);
+    assert.match(textOf(r[3]), /\[allowed-accounts\]/, list);
+  }
+  // Risk-reducing calls with no list at all, each in a run of its own.
+  for (const m of [
+    call(3, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
+    call(3, 'close_position', { accountId: 1, contractId: 'MNQ' }),
+    call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
+  ]) {
+    const r = await through({ SIM_ALLOWED_ACCOUNTS: '', FAKE_POSITIONS: LONG1, FAKE_PLACE_RESULT: '' }, [m]);
+    assert.strictEqual(textOf(r[3]), `forwarded:tools/call:${m.params.name}`);
+  }
+  // Control: listed, the entry reaches the broker.
+  assert.match(textOf((await through({ SIM_ALLOWED_ACCOUNTS: '1' }, [call(3, 'place_order', ORDER)]))[3]), /"orderId":\s*5/);
+});
+
+test('MCP gateway: the server attests live entries - an override can\'t spoof a shipped broker\'s paper or allow-list settings, a server that trades overrides a paper claim, its own allowed accounts must list the account, and an unreadable config refuses entries only', async () => {
+  const plan = [{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }];
+  const server = over => JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, allowedAccountIds: [1], ...over });
+  const placed5 = JSON.stringify({ orderId: 5, success: true, errorCode: 0 });
+  const through = async ({ name = 'sim', broker = {}, env = {}, msgs = [call(3, 'place_order', ORDER)] }) => {
+    const dir = tmpDir();
+    const { home, journal } = simHome(dir, { replay: false, journalEntries: plan });
+    fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: name, brokers: { [name]: { command: [process.execPath, FAKE_MCP], journal, ...broker } } }));
+    trendHome(home, { closedAt: '2026-10-07T14:27:00.000Z', specs: false });
+    recordBrokerSpecs(home, { broker: name }); // the tick specs and max order size, recorded earlier (a broken config records none)
+    const r = await gatewayCfg({ FTH_STRATEGIES_DIRS: path.join(ROOT, 'strategies'), FAKE_SERVER_CONFIG: server(), FAKE_PLACE_RESULT: placed5, SIM_ALLOWED_ACCOUNTS: '', ...env },
+      [call(1, 'search_contracts', { searchText: 'MNQ' }), call(2, 'get_server_config', {}), ...msgs], { dir });
+    return textOf(r[3]);
+  };
+  const refused = (text, why) => { assert.match(text, /\[allowed-accounts\]/); assert.match(text, why); };
+  // 1. A user override of the shipped live broker that names its own paper switch and allow-list: both stay the shipped ones.
+  const shipped = shippedBroker();
+  refused(await through({ name: shipped.name, broker: { paperEnv: { SPOOF_PAPER: 'on' }, allowedAccountsEnv: 'SPOOF_LIST' }, env: { SPOOF_PAPER: 'on', SPOOF_LIST: '1' } }),
+    new RegExp(`${shipped.allowedAccountsEnv} is empty`));
+  // 2. A paper claim (the broker's paper settings in force) the server contradicts (trading on) is a live entry.
+  const paperSim = { allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', paperEnv: { SIM_PAPER: 'on' } };
+  refused(await through({ broker: paperSim, env: { SIM_PAPER: 'on' } }), /SIM_ALLOWED_ACCOUNTS is empty/);
+  // ...and the server with trading off confirms it: the entry goes to the server (which refuses it itself).
+  assert.match(await through({ broker: paperSim, env: { SIM_PAPER: 'on', FAKE_SERVER_CONFIG: server({ tradingEnabled: false }) } }), /"orderId":\s*5/);
+  // 3. The local list holds the account, the server's own doesn't (or takes any account): refused.
+  const live = { allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS' };
+  refused(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1', FAKE_SERVER_CONFIG: server({ allowedAccountIds: [7] }) } }), /account 1 is not among the broker server's allowed accounts \(7\)/);
+  refused(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1', FAKE_SERVER_CONFIG: server({ allowedAccountIds: 'any' }) } }), /allows any account/);
+  // 4. A server config that can't be read: entries refused, exits and closes still go.
+  const broken = { FAKE_SERVER_CONFIG: '' }; // the fake server answers with plain text, not JSON
+  refused(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1', ...broken } }), /get_server_config could not be read/);
+  for (const m of [call(3, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), call(3, 'close_position', { accountId: 1, contractId: 'MNQ' })]) {
+    assert.strictEqual(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1', FAKE_POSITIONS: LONG1, FAKE_PLACE_RESULT: '', ...broken }, msgs: [m] }), `forwarded:tools/call:${m.params.name}`);
+  }
+  // Control: both lists hold the account and the server trades: the entry goes.
+  assert.match(await through({ broker: live, env: { SIM_ALLOWED_ACCOUNTS: '1' } }), /"orderId":\s*5/);
 });

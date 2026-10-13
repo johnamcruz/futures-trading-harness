@@ -430,7 +430,18 @@ function regimeViolation(strategy, bars, config) {
   return [{ check: 'regime', message: `setup:${strategy.name} trades only in ${strategy.regimes.join(', ')}; the ${strategy.timeframe} regime is ${now}.` }];
 }
 
+/** The account's positions, working orders and (withTrades) today's fills, read from the server through `caller`. */
+async function accountFacts(args, caller, withTrades = true) {
+  const accountId = args.accountId;
+  const [positions, orders, trades] = await Promise.all([
+    caller.call('list_open_positions', { accountId }).then(r => parseToolJson(r, 'list_open_positions')),
+    caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
+    withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
+  ]);
+  return { positions, orders, trades };
+}
+
 module.exports = {
-  parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
+  accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
   evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
 };

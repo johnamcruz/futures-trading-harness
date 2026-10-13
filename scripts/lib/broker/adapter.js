@@ -26,13 +26,15 @@
  *                                    mcp, order calls on writeMcp
  * openAdapter({ root, env })         for the configured broker
  * withAdapter({ root, env }, fn)     fn(adapter), then close it
- * tradingBlocked(config, accountId)  why the server would refuse orders, or null
+ * tradingBlocked(config, accountId, { live })  why the server would refuse orders (live: or would take any account), or null
+ * liveRunBlocked({ broker, config, env, accountId })  why a live run may not start on this account (allow-list), or null
  */
 
 const path = require('path');
 const { createMcpClient } = require('./mcp-client');
 const { validateTools } = require('./interface');
 const { activeBroker, translatedCommand } = require('./config');
+const { allowListProblem, normId } = require('./allow-list');
 const { signedSize } = require('../trading/positions');
 
 class BrokerError extends Error {}
@@ -121,13 +123,29 @@ const outcome = (res, what) => {
 /**
  * Why the server would refuse the runner's housekeeping (exits, stop moves,
  * cancels) for this account, from its get_server_config answer, or null when
- * it trades: the server's own guardrails apply to every order tool.
+ * it trades: the server's own guardrails apply to every order tool. `live`
+ * (a live run, not paper or a confirmed replay): a server that allows every
+ * account (an empty list or "any") is refused too, never read as "this one".
  */
-function tradingBlocked(config, accountId) {
+function tradingBlocked(config, accountId, { live = false } = {}) {
   if (!config || config.tradingEnabled !== true) return 'the broker MCP server has trading disabled (get_server_config: tradingEnabled is not true; its own setting enables it), so it would refuse the runner\'s exits, stop moves and cancels; halt entries with the STOP file instead';
-  const allowed = Array.isArray(config.allowedAccountIds) ? config.allowedAccountIds.map(Number) : [];
-  if (allowed.length && !allowed.includes(Number(accountId))) return `account ${accountId} is not among the server's allowed accounts (${allowed.join(', ')})`;
+  const allowed = Array.isArray(config.allowedAccountIds) ? config.allowedAccountIds.map(normId) : [];
+  if (allowed.length && !allowed.includes(normId(accountId))) return `account ${accountId} is not among the server's allowed accounts (${allowed.join(', ')})`;
+  if (live && !allowed.length) return `the broker MCP server allows any account (get_server_config: allowedAccountIds ${JSON.stringify(config.allowedAccountIds)}): a live run needs its allowed-accounts setting to list account ${accountId}`;
   return null;
+}
+
+/**
+ * Why a live run (paper: false) may not start on `accountId`, or null: a
+ * confirmed replay (the broker config says replay and so does its server) is
+ * exempt; otherwise the run names its account, the broker's allow-list
+ * (broker/allow-list.js) holds it, and the server trades it, listing it.
+ */
+function liveRunBlocked({ broker, config, env = process.env, accountId }) {
+  const replay = Boolean(broker && broker.replay === true && config && config.replay === true);
+  if (replay) return accountId ? tradingBlocked(config, accountId) : null;
+  if (!accountId) return 'a live run (paper: false) names its account ("account" in the runner config), so the allow-list can be checked';
+  return allowListProblem(broker, env, accountId) || tradingBlocked(config, accountId, { live: true });
 }
 
 function createAdapter({ mcp, writeMcp = mcp }) {
@@ -273,4 +291,4 @@ async function withAdapter(opts, fn) {
   }
 }
 
-module.exports = { createAdapter, openAdapter, withAdapter, tradingBlocked, barSpec, pageHistory, BrokerError };
+module.exports = { createAdapter, openAdapter, withAdapter, tradingBlocked, liveRunBlocked, barSpec, pageHistory, BrokerError };

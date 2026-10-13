@@ -46,6 +46,7 @@ test('process: the hard rule is where every coding agent reads it, and the PR te
   const fullRound = rule.slice(rule.indexOf('they get the full round'), rule.indexOf('Never open a pull request'));
   for (const doc of pointed) assert.ok(fullRound.includes(`\`${doc}\``), `${doc} is pointed to by an instruction file or script: name it in CLAUDE.md as getting the full round`);
   assert.ok(pointed.has('docs/BROKER-MCP-INTERFACE.md'));
+  assert.ok(pointed.has('docs/LIVE-DRY-RUN.md'), 'preflight points to the live runbook');
   // Codex and other agents read AGENTS.md, Qwen Code reads QWEN.md: both point at it.
   for (const f of ['AGENTS.md', 'QWEN.md']) {
     assert.match(read(f), /CLAUDE\.md/, `${f} points to CLAUDE.md`);

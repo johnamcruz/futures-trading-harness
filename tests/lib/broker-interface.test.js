@@ -208,6 +208,10 @@ test('tradingBlocked: the server must trade, on the runner\'s account', () => {
   assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [7] }, '7'), null);
   assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [] }, 7), null);
   assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: 'any' }, 7), null, 'a server may say "any"');
+  // A live run: a server that takes any account is refused, never read as allowing this one.
+  assert.match(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [] }, 7, { live: true }), /allows any account/);
+  assert.match(tradingBlocked({ tradingEnabled: true, allowedAccountIds: 'any' }, 7, { live: true }), /allows any account/);
+  assert.strictEqual(tradingBlocked({ tradingEnabled: true, allowedAccountIds: [7] }, 7, { live: true }), null);
 });
 
 test('the MCP client: a server that never finishes the handshake is stopped and started afresh on the next call', async () => {
