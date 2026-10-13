@@ -102,10 +102,13 @@ test('render, write, read, and the bar_briefing tool', () => {
   assert.match(text, /reuse it, don't recompute/);
   assert.match(B.renderBriefing(b, { now: new Date('2099-01-01T00:00:00Z') }), /EXPIRED/);
   const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt };
-  assert.match(barBriefing({ symbol: 'NQ' }, { env }).text, /^Bar briefing NQ 3m/);
-  assert.deepStrictEqual(JSON.parse(barBriefing({ symbol: 'NQ', json: true }, { env }).text).sections.m3.version, b.sections.m3.version);
-  assert.match(barBriefing({ symbol: 'ES' }, { env }).text, /^No bar briefing for ES: .*Take the market facts from the bars yourself/);
-  assert.throws(() => barBriefing({ symbol: '../x' }, { env }), /--symbol/);
+  // A fixed clock: the suite's shifted clock keeps running from process start, so on a slow run the
+  // briefing (valid one bar) would read as expired. These tests are about the briefing, not the clock.
+  const now = () => new Date(b.closedAt);
+  assert.match(barBriefing({ symbol: 'NQ' }, { env, now }).text, /^Bar briefing NQ 3m/);
+  assert.deepStrictEqual(JSON.parse(barBriefing({ symbol: 'NQ', json: true }, { env, now }).text).sections.m3.version, b.sections.m3.version);
+  assert.match(barBriefing({ symbol: 'ES' }, { env, now }).text, /^No bar briefing for ES: .*Take the market facts from the bars yourself/);
+  assert.throws(() => barBriefing({ symbol: '../x' }, { env, now }), /--symbol/);
   fs.writeFileSync(B.briefingFile(home, 'ES'), '{not json');
   assert.strictEqual(B.readBriefing(home, 'ES'), null);
 });
@@ -477,9 +480,12 @@ test('bar_briefing by month: a note only when the month differs from the briefin
   const b = B.buildBriefing({ symbol: 'NQ', contractId: 'NQ:2026-06', bars: at(1300), minutes: 3 });
   B.writeBriefing(home, b);
   const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt };
-  assert.match(barBriefing({ symbol: 'MNQ:2026-09' }, { env }).text, /^Note: you asked for MNQ:2026-09; this briefing is for NQ:2026-06/);
-  assert.doesNotMatch(barBriefing({ symbol: 'MNQ:2026-06' }, { env }).text, /^Note:/);
-  assert.doesNotMatch(barBriefing({ symbol: 'MNQ' }, { env }).text, /^Note:/);
+  // A fixed clock: the suite's shifted clock keeps running from process start, so on a slow run the
+  // briefing (valid one bar) would read as expired. These tests are about the briefing, not the clock.
+  const now = () => new Date(b.closedAt);
+  assert.match(barBriefing({ symbol: 'MNQ:2026-09' }, { env, now }).text, /^Note: you asked for MNQ:2026-09; this briefing is for NQ:2026-06/);
+  assert.doesNotMatch(barBriefing({ symbol: 'MNQ:2026-06' }, { env, now }).text, /^Note:/);
+  assert.doesNotMatch(barBriefing({ symbol: 'MNQ' }, { env, now }).text, /^Note:/);
 });
 
 test('levels merge within the contract\'s own tick (contracts.js), in the nearest levels too; VWAP rounded; an unknown R spelled out', () => {
