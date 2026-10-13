@@ -17,17 +17,18 @@
  * strategy's full result), recent format 'lines', list json on one line
  * (compact); registry.js maps the tools' detail / name / json to them.
  *
+ * scan judges only the strategies on the bars' timeframe (as the runner does);
+ * name on a strategy of another timeframe is refused, not scanned.
  * scan with record also records which rules strategies fired on the last
- * closed bar (only those on the bars' timeframe), for the order gate's trigger
+ * closed bar, for the order gate's trigger
  * check (trading/signal-state.js); ignored in autonomous runs, where the
  * runner records every bar (the scan is returned with a note saying so).
  */
 
 const fs = require('fs');
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan: scanStrategies, recentSignals } = require('../trading/strategies');
+const { loadStrategies, scan: scanStrategies, recentSignals, barsStepMs, onTimeframe, barsTimeframe } = require('../trading/strategies');
 const { buildSignals, writeSignals } = require('../trading/signal-state');
-const { timeframeMs } = require('../trading/evaluator');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
 const { context, say, ignoredRecord, withText, options } = require('./cli');
@@ -95,11 +96,23 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
   const clock = c.now();
   const now = at ? new Date(at) : clock;
   if (!Number.isFinite(now.getTime())) throw new Error(`--now: not a time (${at})`); // cli-only: the tool takes no time
-  const results = scanStrategies(strategies, bars, { symbol, now, selected: selectedSymbols(c.env) });
-  const text = scanText(results, bars, { view, name, symbol, specOf: liveSpecs(c.env) }); // the broker's tick specs
-  if (!record) return { text };
+  // Only the strategies on the bars' own timeframe can be judged from them (as the runner scans).
+  const stepMs = barsStepMs(bars);
+  const tf = barsTimeframe(stepMs);
+  const tfText = tf || (stepMs > 0 ? `${stepMs / 1000}s` : 'of no known spacing');
+  const asked = name ? strategies.find(s => s.name === name) : null;
+  if (asked && asked.timeframe !== tf) {
+    throw new Error(`${name} trades ${asked.timeframe} bars, and these bars are ${tfText}: not scanned (scan it on ${asked.timeframe} bars)`);
+  }
+  const results = scanStrategies(onTimeframe(strategies, tf), bars, { symbol, now, selected: selectedSymbols(c.env) });
+  // No strategy on these bars' timeframe: say so, not "no candidates" (which reads as no setup).
+  const usable = strategies.filter(s => s.valid && s.status !== 'disabled');
+  const none = onTimeframe(usable, tf).length ? '' : `no strategy trades ${tfText} bars; strategies here trade ${[...new Set(usable.map(s => s.timeframe))].sort().join(', ') || 'none'}: nothing was scanned\n`;
+  const text = none && view === 'summary' ? none : scanText(results, bars, { view, name, symbol, specOf: liveSpecs(c.env) }); // the broker's tick specs
+  const note = none && view !== 'summary' ? `[strategies] ${none}` : '';
+  if (!record) return note ? { text, stderr: note } : { text };
   const ignored = ignoredRecord(c, 'strategies', 'the autonomous runner records every bar itself');
-  if (ignored) return { text, stderr: ignored };
+  if (ignored) return { text, stderr: note + ignored };
   return withText(text, () => {
     const record = say(c, '--record', 'record');
     const pid = liveRunner(c.env);
@@ -108,12 +121,10 @@ function scan({ file, symbol, now: at, record = false, view = 'json', name } = {
     // The record's file is named after it: a contract root only (as mtf and bars take it).
     if (!/^[A-Z0-9]+$/.test(String(symbol).toUpperCase())) throw new Error(say(c, '--record needs --symbol <ROOT>: a contract root, e.g. MNQ', 'record needs symbol: a contract root, e.g. MNQ'));
     const norm = normalizeBars(bars);
-    const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
-    const stepMs = Math.min(...diffs);
-    // Only strategies on the bars' own timeframe can have fired on them.
-    const sameTf = results.filter(r => timeframeMs(r.timeframe) === stepMs);
+    // The rules strategies' results (a policy strategy's result fires nothing): all on the bars' timeframe.
+    const sameTf = onTimeframe(results, tf);
     const out = writeSignals(harnessHome(c.env), buildSignals(sameTf, { symbol, bar: norm[norm.length - 1], stepMs, now, source: file }));
-    return { text, stderr: `[strategies] recorded for the order gate: ${out}\n` };
+    return { text, stderr: `${note}[strategies] recorded for the order gate: ${out}\n` };
   });
 }
 
