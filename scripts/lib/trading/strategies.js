@@ -358,6 +358,32 @@ function rootRefusal(s, root, selected = null) {
 const tradesRoot = (s, root, selected = null) => rootRefusal(s, root, selected) === null;
 
 /**
+ * The bars' timeframe in ms: the smallest gap between the last 50 bars (breaks such as the
+ * overnight one are longer), or null without two bars a positive gap apart.
+ */
+function barsStepMs(bars) {
+  const norm = normalizeBars(bars);
+  const diffs = norm.slice(-50).map((b, i, a) => (i ? Date.parse(b.t) - Date.parse(a[i - 1].t) : Infinity)).filter(d => d > 0 && Number.isFinite(d));
+  return diffs.length ? Math.min(...diffs) : null;
+}
+
+/**
+ * Bars `stepMs` apart as the runner names its timeframe (`${minutes}m`: 3m, 60m), or null when the step is not
+ * a whole number of minutes.
+ */
+function barsTimeframe(stepMs) {
+  return stepMs > 0 && stepMs % 60000 === 0 ? `${stepMs / 60000}m` : null;
+}
+
+/**
+ * The strategies on timeframe `tf` (as the runner names it: `${minutes}m`): only they can be judged from those
+ * bars. The text as written, as everywhere a timeframe is compared (backtest, start-up, preflight, a policy's
+ * strategies, confluence): a 1h strategy is not on 60m bars. The runner's scan, the strategies_scan tool and its
+ * record all filter with this.
+ */
+const onTimeframe = (strategies, tf) => strategies.filter(s => typeof tf === 'string' && tf !== '' && s.timeframe === tf);
+
+/**
  * Evaluate every valid, non-disabled strategy for `symbol` on the last closed
  * bar. Mechanical strategies report fired/not fired with filter results;
  * manual strategies are listed for the LLM to evaluate from their Markdown
@@ -482,4 +508,7 @@ module.exports = {
   componentRefusal,
   tradesRoot,
   rootRefusal,
- recentSignals };
+  barsStepMs,
+  barsTimeframe,
+  onTimeframe,
+  recentSignals };

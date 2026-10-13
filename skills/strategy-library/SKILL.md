@@ -51,10 +51,15 @@ replay broker's replayed time when `FTH_REPLAY_NOW` is set); it takes no time
 of its own (a person replaying a file runs the strategies script's scan with `--now`).
 With `FTH_REPLAY_NOW` set but no real replay broker, or not an ISO 8601 UTC
 time, the scan refuses (tell the user). It reads the
-signal on the file's last closed bar and doesn't know the file's timeframe:
-read results only for strategies whose timeframe is the file's (a 3m strategy
-on 1-minute bars, or the reverse, is not a signal), and only when that last
-bar is fresh (no older than one bar plus a minute).
+signal on the file's last closed bar, and only for the strategies whose
+timeframe is the file's (the bars' spacing), as the runner does: on 3m bars
+the 1m strategies are not in the result at all (a 1m strategy's signal comes
+from 1m bars only). `name` on a strategy of another timeframe is refused,
+naming both timeframes; fetch bars on that strategy's timeframe to scan it.
+On bars no strategy trades (15m, say) the scan says so and lists the
+timeframes the strategies trade: that is not "no setup", it is the wrong bars.
+Read the result only when that last bar is fresh (no older than one bar plus
+a minute).
 
 The scan's summary gives the bar, the higher-timeframe trends, the
 candidates first (side, entry reference, stop distance, min R:R, exit,

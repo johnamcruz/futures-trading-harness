@@ -28,7 +28,7 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./trading/
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan } = require('./trading/strategies');
+const { loadStrategies, scan, onTimeframe } = require('./trading/strategies');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
@@ -88,7 +88,7 @@ function closedBarsOnly(client, now) {
  * trades the selected leg of its family; strategies.js rootRefusal).
  */
 function runnerScan(strategies, cfg, symbol, bars, now) {
-  const sameTf = strategies.filter(s => s.timeframe === `${cfg.timeframe}m`);
+  const sameTf = onTimeframe(strategies, `${cfg.timeframe}m`);
   return scan(sameTf, { bars }, { symbol, now, selected: cfg.symbols });
 }
 

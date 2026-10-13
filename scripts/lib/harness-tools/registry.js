@@ -54,7 +54,7 @@ const TOOLS = [
   },
   {
     name: 'strategies_scan', op: 'strategies_scan', script: 'strategies',
-    description: 'Scan the strategies on a bars file at the harness clock: which setups are candidates on the last closed bar. Returns a summary: the candidates first (side, entry reference, the stop and target in points and in ticks with a contract\'s dollars, min R:R, exit, confluence; order_plan gives the order itself), then one line per strategy (name, status, timeframe, direction, candidate, why not). name: that strategy\'s full result as JSON; detail: every strategy\'s full result as JSON (large). record also records the fired rules strategies for the order gate\'s trigger check.',
+    description: 'Scan the strategies on a bars file at the harness clock: which setups are candidates on the last closed bar, of the strategies on the bars\' timeframe only (a 1m strategy is not scanned on 3m bars; name on one is refused). Returns a summary: the candidates first (side, entry reference, the stop and target in points and in ticks with a contract\'s dollars, min R:R, exit, confluence; order_plan gives the order itself), then one line per strategy (name, status, timeframe, direction, candidate, why not). name: that strategy\'s full result as JSON; detail: every strategy\'s full result as JSON (large). record also records the fired rules strategies for the order gate\'s trigger check.',
     inputSchema: object({
       bars: BARS, symbol: SYMBOL, record: RECORD,
       name: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'One strategy: its full scan result as JSON (rules with ok, detail, mtf, exit).' },
