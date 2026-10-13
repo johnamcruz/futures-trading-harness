@@ -1,0 +1,5 @@
+first pass (FTH_REPLAY_NOW 2026-06-02T14:00:00Z): MNQ -> r-1, lookup search_contracts, front month keyed on 2026-06-02
+same replayed day, later (FTH_REPLAY_NOW 2026-06-02T19:30:00Z): MNQ -> r-1, cache hit, front month keyed on 2026-06-02
+after the 18:00 ET open: the next trading day (FTH_REPLAY_NOW 2026-06-02T22:05:00Z): MNQ -> r-1, lookup search_contracts, front month keyed on 2026-06-03
+the next replayed day (FTH_REPLAY_NOW 2026-06-03T14:00:00Z): MNQ -> r-1, cache hit, front month keyed on 2026-06-03
+the next replayed day, later (FTH_REPLAY_NOW 2026-06-03T19:30:00Z): MNQ -> r-1, cache hit, front month keyed on 2026-06-03

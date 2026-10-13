@@ -1,0 +1,90 @@
+entry: planned, tagged, bracketed (allowed): ALLOWED (intent entry)
+entry: no tag, no bracket, no plan: REFUSED (intent entry)
+  [setup-tag] Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. If this order exits or protects a position, start the rationale with [exit] or [protect].
+  [stop-defined] Entry has no stop bracket: every entry carries its stop as stopLossBracket {ticks, type:"stop"}, ticks a whole number above 0 from the fill and type "stop" (or "trailing_stop"); order_plan gives it. A stop stated only in the rationale is not one. A broker that can't attach the bracket refuses the entry: never send it again without one, and report the broker's message to the user.
+  [plan-required] No journal plan for MNQ in the last 120 min. Write one with journal_add {kind:"plan", contractId, ...} (thesis, trigger, stop, target, size, $ risk) first.
+entry: stop only in the rationale: REFUSED (intent entry)
+  [stop-defined] Entry has no stop bracket: every entry carries its stop as stopLossBracket {ticks, type:"stop"}, ticks a whole number above 0 from the fill and type "stop" (or "trailing_stop"); order_plan gives it. A stop stated only in the rationale is not one. A broker that can't attach the bracket refuses the entry: never send it again without one, and report the broker's message to the user.
+entry: a limit leg as the bracket: REFUSED (intent entry)
+  [stop-defined] Entry has no stop bracket: every entry carries its stop as stopLossBracket {ticks, type:"stop"}, ticks a whole number above 0 from the fill and type "stop" (or "trailing_stop"); order_plan gives it. A stop stated only in the rationale is not one. A broker that can't attach the bracket refuses the entry: never send it again without one, and report the broker's message to the user.
+entry: a stale plan: REFUSED (intent entry)
+  [plan-required] No journal plan for MNQ in the last 120 min. Write one with journal_add {kind:"plan", contractId, ...} (thesis, trigger, stop, target, size, $ risk) first.
+entry: the tag not first: REFUSED (intent entry)
+  [setup-tag] Rationale must start with the strategy as setup:<name> (e.g. "setup:orb long ..."); the tag goes first. If this order exits or protects a position, start the rationale with [exit] or [protect].
+entry: paper mode: REFUSED (intent entry)
+  [paper-mode] Paper mode (FTH_PAPER=1): no live entries. Journal the plan tagged paper instead.
+entry: the journal window truncated: REFUSED (intent entry)
+  [journal-window] The journal is too large to read back to the start of the trading day, so the gate cannot see today's history. Archive old journal entries.
+entry: the opening print: REFUSED (intent entry)
+  [time-window] New entries are not allowed during 09:30-09:35@America/New_York.
+entry: into the close: REFUSED (intent entry)
+  [time-window] New entries are not allowed during 15:45-16:00@America/New_York.
+entry: the market closed: REFUSED (intent entry)
+  [strategy] setup:orb is outside its sessions (ny).
+  [market-hours] New entries only during market hours (the harness's hours inside the <name-a44ad9> trading day (<firm-time-da13ec> reset): from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; <name-a44ad9>'s own flatten is <firm-time-db5024>); no position may be held outside them.
+entry: a news blackout: REFUSED (intent entry)
+  [blackout] News blackout until 2026-10-07T14:10:00.000Z (CPI).
+entry: an unreadable blackouts file: REFUSED (intent entry)
+  [blackout] Blackout file unreadable (invalid JSON); fix or remove it.
+entry: two losses in a row (cooldown): REFUSED (intent entry)
+  [loss-streak] 2 losses in a row. Cooling down for 10 min more; use the time to write a lesson.
+entry: three losing trades today: REFUSED (intent entry)
+  [daily-loss-count] 3 losing trades this trading day (limit 3). Done until <firm-time-da13ec>.
+entry: the last entry not reviewed: REFUSED (intent entry)
+  [review-before-next-entry] 1 earlier entry has no review. Manage or close it, then journal_add {kind:"review", tags:["result:win|loss|scratch|nofill", "setup:<name>"]}.
+entry: the kill switch on: REFUSED (intent entry)
+  [kill-switch] Kill switch is on (<tmp>/<dir>/STOP). No new entries until the user removes it.
+entry: an unknown strategy: REFUSED (intent entry)
+  [strategy] setup:nope is not a known strategy. Add strategies/nope/STRATEGY.md or use an existing setup tag.
+entry: the side named is not the order side: REFUSED (intent entry)
+  [order-consistency] The order doesn't agree with itself: the rationale says short but the order side is buy. Fix the order or the rationale so both say the same trade.
+entry: stop on the wrong side of a limit entry: REFUSED (intent entry)
+  [order-consistency] The order doesn't agree with itself: the stop 21510 is on the wrong side of the buy entry 21500. Fix the order or the rationale so both say the same trade.
+entry: against the prevailing trend: REFUSED (intent entry)
+  [mtf-trend] setup:orb long is against the prevailing 4h down trend: only a reversal strategy (mtf: reversal) may fade it (4h down, 1h down, 15m down, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+entry: its trigger did not fire: REFUSED (intent entry)
+  [trigger-fired] setup:orb long did not fire on the last closed MNQ bar (closed 2026-10-07T13:57:00.000Z; fired: nothing). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.
+entry: no tick specs from the broker: REFUSED (intent entry)
+  [contract-specs] no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first (the harness records the broker's tick size and value), then try again.
+  [max-order-size] the broker server's max order size is not recorded yet: call get_server_config (the harness records its maxOrderSize), then try again.
+entry: over the broker's max order size: REFUSED (intent entry)
+  [max-order-size] size 51 over the broker's max order size 50 (get_server_config maxOrderSize): reduce the size to 50 or less. Never split an entry into several orders to get under it.
+exit: flatten (allowed, never gated): ALLOWED (intent risk-reducing)
+exit: with the kill switch on (allowed): ALLOWED (intent risk-reducing)
+exit: market closed, paper, truncated journal (allowed): ALLOWED (intent risk-reducing)
+protect: a protective stop (allowed): ALLOWED (intent risk-reducing)
+protect: with no tick specs (allowed): ALLOWED (intent risk-reducing)
+protect: with a bracket (allowed by this gate; the gateway refuses it): ALLOWED (intent risk-reducing)
+modify: a size change without a reason: REFUSED (intent modify)
+  [modify-size] modify_order may change prices only, unless the reason starts with [exit] or [protect] (cutting a protective order after a partial exit; the gateway checks it is a decrease). To add size, place a new order.
+modify: a size change with a [protect] reason (allowed): ALLOWED (intent modify)
+modify: a stop move (allowed): ALLOWED (intent modify)
+prop: no attempt started: REFUSED (intent entry)
+  [combine] mini: no mini attempt is started (starting one is the user's: node scripts/combine.js start --account mini).
+  [policy] setup:orb: no verdict for MNQ (the runner records one at each setup of ema_cross).
+prop: no account snapshot: REFUSED (intent entry)
+  [combine] mini: the mini account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar).
+prop: a stale snapshot: REFUSED (intent entry)
+  [combine] mini: the mini account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar).
+  [policy] setup:orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
+prop: within the size budget (allowed): ALLOWED (intent entry)
+prop: over the size budget: REFUSED (intent entry)
+  [combine] mini: 19 MNQ is not within the account's size budget for a 40-tick stop (18 MNQ at $21.24 risk each; contracts: micro).
+prop: past the soft daily limit: REFUSED (intent entry)
+  [combine] mini: down $600 today, at the soft daily limit ($500): no new entries until the next session.
+policy: no verdict: REFUSED (intent entry)
+  [policy] setup:orb: no verdict for MNQ (the runner records one at each setup of ema_cross).
+policy: within its verdict (allowed): ALLOWED (intent entry)
+policy: over the verdict's size: REFUSED (intent entry)
+  [policy] setup:orb: size 4 is over the verdict's 3 MNQ (full).
+policy: another stop than the verdict's: REFUSED (intent entry)
+  [policy] setup:orb: the stop is 60 ticks; the verdict was sized for 40.
+policy: the other side: REFUSED (intent entry)
+  [mtf-trend] setup:ema_cross short is against the prevailing 4h up trend: only a reversal strategy (mtf: reversal) may fade it (4h up, 1h up, 15m up, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+  [policy] setup:orb: the verdict is for a long entry, not sell.
+  [order-consistency] The order doesn't agree with itself: a short needs the target below the stop (stop 21480, target 21540). Fix the order or the rationale so both say the same trade.
+policy: an expired verdict: REFUSED (intent entry)
+  [policy] setup:orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
+policy: a skipped setup: REFUSED (intent entry)
+  [policy] setup:orb: the setup was skipped (cushion).
+prop: an exit during an attempt (allowed): ALLOWED (intent risk-reducing)

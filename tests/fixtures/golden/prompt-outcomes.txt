@@ -1,0 +1,10 @@
+template: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>
+outcomes: no-trade, planned, executed, managed, flattened, blocked, error
+"CYCLE RESULT: no-trade - nothing fired" -> no-trade
+"CYCLE RESULT: *managed* - stop held" -> managed
+"CYCLE RESULT: Blocked: the gate refused" -> blocked
+"CYCLE RESULT: error - a tool failed" -> error
+"CYCLE RESULT: no-trades - x" -> null
+"CYCLE RESULT: done - x" -> null
+"CYCLE RESULT: (none reported)" -> null
+"no result line" -> null

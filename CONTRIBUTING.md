@@ -44,6 +44,28 @@ npm install
 npm run verify    # test (unit, wiring, e2e), lint, sync check, strategies, secrets: what CI runs
 ```
 
+## Golden files
+
+Some regression tests compare what the harness produces with a pinned copy:
+`tests/fixtures/golden/` (loading, every strategy's decision on fixture
+bars, the compact scan, snapshot and bar briefing the model reads, the cycle
+prompts, the order gate's verdicts, and the cache keys and hits;
+`tests/golden.js` compares them) and `tests/scripts/cli-parity.snapshot.json`
+(the scripts' output). Any difference fails `npm run verify` with the changed
+lines. A missing golden fails too: a test run never creates one.
+
+When a change is meant to change that output, regenerate on purpose, then
+review the diff:
+
+```bash
+FTH_UPDATE_SNAPSHOTS=1 node --test tests/lib/golden-decisions.test.js   # the test file whose golden changed
+git diff tests/fixtures/golden/
+```
+
+The flag is refused when `CI` or `GITHUB_ACTIONS` is set (for the CLI snapshot too). Every changed golden line is explained
+in the pull request (what changed and why it is intended); a golden diff with
+no reason is a review finding.
+
 ## Before a pull request (hard rule)
 
 For everyone, people and coding agents alike, on every pull request: the

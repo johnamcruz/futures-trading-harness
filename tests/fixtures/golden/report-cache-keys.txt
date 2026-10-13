@@ -1,0 +1,58 @@
+Recorded after the cycle at bar 1245 (keys):
+{
+  "symbols": [
+    [
+      "MNQ",
+      "MNQ"
+    ]
+  ],
+  "analysts": {
+    "market-structure-analyst": {
+      "m15": "m15@2026-04-27T14:36:00.000Z",
+      "h1": "h1@2026-04-27T14:36:00.000Z",
+      "day": "day@2026-04-27T14:36:00.000Z"
+    },
+    "trend-momentum-analyst": {
+      "m15": "m15@2026-04-27T14:36:00.000Z",
+      "h1": "h1@2026-04-27T14:36:00.000Z",
+      "day": "day@2026-04-27T14:36:00.000Z"
+    },
+    "volume-liquidity-analyst": {
+      "m15": "m15@2026-04-27T14:36:00.000Z",
+      "h1": "h1@2026-04-27T14:36:00.000Z",
+      "day": "day@2026-04-27T14:36:00.000Z"
+    }
+  },
+  "phase1": {
+    "account": "{\"id\":7,\"balance\":50000,\"positions\":[],\"workingOrders\":0,\"orders\":[],\"attempts\":[[\"mini\",\"active\",50000,48000,0,0,null]]}",
+    "day": "2026-04-27"
+  }
+}
+Served on the next bar when one input changes:
+  the next bar, nothing changed (all hit): market-structure, trend-momentum, volume-liquidity, phase1
+  the m15 version: phase1
+  the h1 version: phase1
+  the day version: phase1
+  a later bar in the next 15m candle: phase1
+  a briefing of another bar than the cycle's: phase1
+  no briefing: phase1
+  another contract (a roll): none
+  another symbol set (two symbols): none
+  the balance: market-structure, trend-momentum, volume-liquidity
+  a position: market-structure, trend-momentum, volume-liquidity
+  the position and orders the cache was recorded with (all hit): market-structure, trend-momentum, volume-liquidity, phase1
+  only the position's average price: market-structure, trend-momentum, volume-liquidity
+  only the position's size: market-structure, trend-momentum, volume-liquidity
+  only the stop order's stop price: market-structure, trend-momentum, volume-liquidity
+  only the target order's limit price: market-structure, trend-momentum, volume-liquidity
+  only an order's size: market-structure, trend-momentum, volume-liquidity
+  a working order: market-structure, trend-momentum, volume-liquidity
+  the working-order count: market-structure, trend-momentum, volume-liquidity
+  the account id: market-structure, trend-momentum, volume-liquidity
+  the attempt's day P&L: market-structure, trend-momentum, volume-liquidity
+  the attempt's entry block: market-structure, trend-momentum, volume-liquidity
+  an account not read: market-structure, trend-momentum, volume-liquidity
+  the trading day: market-structure, trend-momentum, volume-liquidity
+  phase 1 at 29 minutes old: market-structure, trend-momentum, volume-liquidity, phase1
+  phase 1 at 30 minutes old: market-structure, trend-momentum, volume-liquidity
+  no clock: market-structure, trend-momentum, volume-liquidity
