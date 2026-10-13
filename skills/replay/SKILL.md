@@ -96,8 +96,17 @@ broker.
    account, else `topstep_100k`; the output says which and why. Report the verdict
    as replayed, never as a guarantee of a live result.
 
-8. **Stops.** The run stops, saying why, after `maxConsecutiveErrors` failed
-   cycles in a row, when a step can't run, and while the run's kill switch
+8. **Stops.** A cycle that made no decision (an infrastructure failure: no
+   `CYCLE RESULT` line, a harness that failed or timed out) is recorded as
+   an attempt (`retried`, folded into the time's line as `retries`), and its
+   decision time runs again: counted once in the report, never skipped,
+   except that a crash during the retry records the time as interrupted
+   (never run twice). The agent's own `CYCLE RESULT: error` is a decision:
+   recorded as live records it, a failed cycle, and the run goes on with no
+   retry. A premarket run's failure is never a failed cycle (as live: the
+   runner retries it). The run stops, saying why, after `maxConsecutiveErrors` failed
+   cycles in a row (a time still due, in the manifest's `cycleRetry`, runs
+   first on resume), when a step can't run, and while the run's kill switch
    (`<run home>/STOP`) is on: the runner sets it when a cycle changed the
    workspace's operator files or settings (the file's latest line says
    why). As live, the day under way still runs with no trade cycle, its

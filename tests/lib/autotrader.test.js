@@ -900,9 +900,9 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
 });
 
 test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {
-  const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\n', stdout: '{"a":1}\n' };
+  const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\nCYCLE RESULT: no-trade - x\n', stdout: '{"a":1}\nCYCLE RESULT: no-trade - x\n' };
   assert.deepStrictEqual(cycleOutcome(res, { result: 'CYCLE RESULT: no-trade - x', intact: true, action: 'trade' }),
-    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\n' });
+    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\nCYCLE RESULT: no-trade - x\n' });
   assert.strictEqual(cycleOutcome({ ...res, stdout: undefined }, { intact: true, action: 'trade' }).transcript, '');
   // The workspace guard tripped: a trade cycle failed, an end of day that ran still did its job.
   assert.strictEqual(cycleOutcome(res, { intact: false, action: 'trade' }).ok, false);
@@ -929,4 +929,68 @@ test('deniedRoles: the analysts served from the cache, and in a trade or manage 
   // A premarket run may launch every role.
   const pre = JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, { action: 'premarket' }).OPENCODE_CONFIG_CONTENT);
   for (const r of ['market-structure-analyst', 'strategy-researcher']) assert.strictEqual(pre.permission.task[r], 'allow', r);
+});
+
+test('cycleOutcome: a premarket or trade run that exits 0 without a parseable CYCLE RESULT line, or that reports an error, failed; an end of day is judged by its exit alone', () => {
+  for (const output of ['', 'Error: provider returned 500', 'CYCLE RESULT: <no-trade | planned> - <reason>', '{"type":"result","result":"Decision: NO TRADE"}', 'CYCLE RESULT: error - broker down', '**CYCLE RESULT: Error - the tools failed**']) {
+    for (const action of ['trade', 'manage', 'premarket']) {
+      assert.strictEqual(cycleOutcome({ ok: true, timedOut: false, code: 0, output, stdout: output }, { intact: true, action }).ok, false, `${action}: ${output}`);
+    }
+    // End of day, live and in replay alike (the replay step reports this ok): its job is the flatten, not the line.
+    assert.strictEqual(cycleOutcome({ ok: true, timedOut: false, code: 0, output, stdout: output }, { intact: true, action: 'eod' }).ok, true, `eod: ${output}`);
+  }
+  // Every other outcome is a result.
+  for (const word of ['no-trade', 'planned', 'executed', 'managed', 'flattened', 'blocked']) {
+    assert.strictEqual(cycleOutcome({ ok: true, output: `CYCLE RESULT: ${word} - x` }, { intact: true, action: 'trade' }).ok, true, word);
+  }
+  // "error" only as the outcome word: a reason that mentions an error is not one.
+  assert.strictEqual(cycleOutcome({ ok: true, output: 'CYCLE RESULT: no-trade - the scan had an error-free read' }, { intact: true, action: 'trade' }).ok, true);
+  // A word the prompt doesn't define is no result either (and no agent error): a failed cycle.
+  const odd = cycleOutcome({ ok: true, output: 'CYCLE RESULT: errored-out - x' }, { intact: true, action: 'trade' });
+  assert.deepStrictEqual([odd.ok, odd.agentError], [false, undefined]);
+});
+
+test('cycleOutcome: only an outcome the prompt defines is a result, from the final result line of the agent\'s standard output alone', () => {
+  const { CYCLE_OUTCOMES, outcomeOf } = require('../../scripts/lib/autotrader');
+  const run = (stdout, output = stdout) => cycleOutcome({ ok: true, timedOut: false, code: 0, output, stdout }, { intact: true, action: 'trade' });
+  for (const bad of ['CYCLE RESULT: failed - x', 'CYCLE RESULT: ??? - x', 'CYCLE RESULT: - x', 'CYCLE RESULT: errors - x', 'CYCLE RESULT: no-trades - x', 'CYCLE RESULT: done']) {
+    const o = run(`${bad}\n`);
+    assert.deepStrictEqual([o.ok, o.agentError], [false, undefined], bad);
+  }
+  for (const word of CYCLE_OUTCOMES.filter(w => w !== 'error')) assert.strictEqual(run(`CYCLE RESULT: ${word} - x\n`).ok, true, word);
+  // The prompt writes the words lower case; a result in another letter case is the same word (the set is closed).
+  assert.match(prompts(validateConfig({ harness: 'custom', command: ['a', '{prompt}'], symbols: ['MNQ'] }), new Date('2026-10-07T14:00:00Z'), '/r').premarket('MNQ'), /Your last line must be exactly: CYCLE RESULT: <no-trade \| planned \| executed \| managed \| flattened \| blocked \| error> - <reason>/);
+  assert.strictEqual(run('CYCLE RESULT: Managed - x\n').ok, true, 'any letter case');
+  assert.strictEqual(run('CYCLE RESULT: NO-TRADE - x\n').ok, true);
+  assert.deepStrictEqual([run('CYCLE RESULT: ERROR - x\n').ok, run('CYCLE RESULT: ERROR - x\n').agentError], [false, true], 'an error in any case is the agent\'s');
+  for (const bad of ['CYCLE RESULT: MANAGED2 - x', 'CYCLE RESULT: Errors - x', 'CYCLE RESULT: No-Trades - x']) assert.strictEqual(run(`${bad}\n`).ok, false, bad);
+  // Formatting around the word and punctuation after it are tolerated, in plain text and in a transcript's result.
+  for (const fine of ['CYCLE RESULT: *no-trade* - reason', 'CYCLE RESULT: _blocked_ - reason', 'CYCLE RESULT: `managed` - reason', '**CYCLE RESULT: executed - reason**', 'CYCLE RESULT: no-trade: reason', 'CYCLE RESULT: no-trade, nothing fired', 'CYCLE RESULT: no-trade.']) {
+    assert.strictEqual(run(`${fine}\n`).ok, true, fine);
+  }
+  const json = `${JSON.stringify({ type: 'result', result: 'Done.\nCYCLE RESULT: _blocked_ - [loss-streak] cooldown' })}\n`;
+  assert.strictEqual(run(json).ok, true, 'inside a stream-json result event');
+  // Still refused: a longer word, a near miss, a word with a digit.
+  for (const bad of ['CYCLE RESULT: no-trades - x', 'CYCLE RESULT: errors - x', 'CYCLE RESULT: blocked2 - x', 'CYCLE RESULT: *no-trades* - x', 'CYCLE RESULT: no_trade - x']) {
+    assert.strictEqual(run(`${bad}\n`).ok, false, bad);
+  }
+  assert.strictEqual(run('CYCLE RESULT: no-trade\n').ok, true, 'the word alone');
+  // On stderr only (the combined output has it, the standard output doesn't): no result.
+  assert.strictEqual(run('the work, then nothing\n', 'the work\nCYCLE RESULT: no-trade - x\n').ok, false);
+  // The final line decides: an echoed example before it never does, and a malformed final line fails.
+  assert.strictEqual(run('e.g. CYCLE RESULT: ??? - echoed\nCYCLE RESULT: no-trade - x\n').ok, true);
+  assert.strictEqual(run('CYCLE RESULT: no-trade - an early draft\nCYCLE RESULT: failed - x\n').ok, false);
+  assert.deepStrictEqual([outcomeOf('CYCLE RESULT: blocked - y'), outcomeOf('CYCLE RESULT: nope'), outcomeOf(null)], ['blocked', null, null]);
+  // On a raw line too (a mark right before the word): the marks are dropped, the word kept.
+  assert.deepStrictEqual(['CYCLE RESULT: *no-trade* - x', 'CYCLE RESULT: `Managed` - x', 'CYCLE RESULT: _blocked_, x', 'CYCLE RESULT: *no-trades*'].map(outcomeOf), ['no-trade', 'managed', 'blocked', null], 'returned lower case');
+});
+
+test('the result line\'s outcomes: the prompt and the autonomous-trading skill list exactly CYCLE_OUTCOMES', () => {
+  const { RESULT_TEMPLATE, CYCLE_OUTCOMES } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(RESULT_TEMPLATE, `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason>`);
+  const skill = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'skills', 'autonomous-trading', 'SKILL.md'), 'utf8');
+  const listed = skill.match(/`CYCLE RESULT: <([^>]+)> - <reason>`/);
+  assert.ok(listed, 'the skill lists the outcomes');
+  assert.deepStrictEqual(listed[1].split('|').map(w => w.trim()), CYCLE_OUTCOMES);
+  assert.ok(prompts(validateConfig({ harness: 'custom', command: ['a', '{prompt}'], symbols: ['MNQ'] }), new Date('2026-10-07T14:00:00Z'), '/r').premarket('MNQ').includes(RESULT_TEMPLATE));
 });

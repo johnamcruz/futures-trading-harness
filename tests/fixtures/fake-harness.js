@@ -99,7 +99,13 @@ if (prompt.includes('FTH-HEADLESS-PROBE')) {
 } else {
   (process.env.FAKE_HARNESS_ORDERS === '1' ? orders() : Promise.resolve()).then(() => {
     // FAKE_HARNESS_NO_RESULT=<text>: a prompt with that text gets a summary instead of the result line.
-    const noResult = process.env.FAKE_HARNESS_NO_RESULT && prompt.includes(process.env.FAKE_HARNESS_NO_RESULT);
+    // With FAKE_HARNESS_NO_RESULT_ONCE=<file>, only the first such prompt (the file marks it done).
+    let noResult = process.env.FAKE_HARNESS_NO_RESULT && prompt.includes(process.env.FAKE_HARNESS_NO_RESULT);
+    const once = process.env.FAKE_HARNESS_NO_RESULT_ONCE;
+    if (noResult && once) {
+      if (fs.existsSync(once)) noResult = false;
+      else fs.writeFileSync(once, '1');
+    }
     process.stdout.write(noResult ? '**Cycle Complete:** Decision: NO TRADE (stand aside)\n' : 'CYCLE RESULT: no-trade - fake harness\n');
   }, err => {
     process.stdout.write(`fake harness: ${err.message}\n`);

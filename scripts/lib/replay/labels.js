@@ -565,6 +565,8 @@ function configsOf(dir, manifest) {
 function unfinishedWhy(manifest, days) {
   const open = Object.keys(days).filter(d => !(manifest.daysDone || []).includes(d));
   if (manifest.pending) return `a step at ${manifest.pending.t} was interrupted`;
+  // A decision time whose cycle failed, still to run again (replay/driver.js).
+  if (manifest.cycleRetry) return `the cycle at ${manifest.cycleRetry.t} failed and that time is still to run again`;
   // A live session whose end-of-day fills read failed (session/live.js): the runner retries it.
   if (manifest.fillsPending) return `the day's fills are not recorded yet (the broker's read at ${manifest.fillsPending.t} failed; the runner retries it)`;
   if (open.length) return `day ${open[0]} is not done`;
@@ -695,7 +697,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     const famsInLine = syms.map(s => familyOfId(s));
     for (const symbol of syms) {
       const fam = familyOfId(symbol);
-      const cyc = tradeCycles.find(x => !x.symbols || !symbol || x.symbols.includes(symbol)) || null;
+      // A failed attempt's cycle that sent orders (store.js foldAttempts) is the one that acted at this time.
+      const forSym = x => !x.symbols || !symbol || x.symbols.includes(symbol);
+      const cyc = tradeCycles.find(x => forSym(x) && x.c && x.c.attempt && x.orders.length) || tradeCycles.find(x => forSym(x) && !(x.c && x.c.attempt)) || tradeCycles.find(forSym) || null;
       const ctxSym = cyc && cyc.ctx && Array.isArray(cyc.ctx.symbols) ? cyc.ctx.symbols.find(s => s.symbol === symbol) : null;
       const barRec = (rec.bars || []).find(b => b && b.symbol === symbol);
       const barT = (ctxSym && ctxSym.bar && ctxSym.bar.t) || (barRec && barRec.lastBarT) || null;
@@ -902,6 +906,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
     else if (d.decision === 'kill-switch') reasons.push('kill switch on');
     else reasons.push('not a trade decision');
     if (rec.interrupted) reasons.push('interrupted');
+    if (rec.failedAttemptOrders || (d.cyc && d.cyc.c && d.cyc.c.attempt && d.cyc.orders.length)) reasons.push('orders from a failed attempt');
     const cyc = d.cyc && d.cyc.c;
     const promptHash = cyc ? cyc.promptHash || null : null;
     labels.push({

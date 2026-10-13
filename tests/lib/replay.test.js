@@ -811,3 +811,196 @@ test('config hash: a run\'s daily loss setting is part of it unless the replay s
   const combine = world({ prop: 'topstep_100k' });
   assert.strictEqual(combine('500'), combine('0'), 'prop: the account sets it');
 });
+
+test('driver: a step whose cycle made no decision (exit 1: no result line, a failed or timed-out harness) is an attempt: its time runs again, never skipped; the error limit stops the run with it due, and a resume runs it first', async () => {
+  const w = userWorld({ end: '2026-10-07T19:47:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const calls = [];
+  let failNext = 0;
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) {
+      calls.push(point.t.toISOString().slice(11, 19));
+      const failed = failNext > 0;
+      if (failed) failNext -= 1;
+      const ran = [{ action: 'trade', ok: !failed, result: failed ? 'CYCLE RESULT: (none reported)' : 'CYCLE RESULT: no-trade - x' }];
+      return { code: failed ? 1 : 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran })}\n` };
+    },
+    async trades(env, account, since, until) { return [{ id: calls.length, creationTimestamp: until.toISOString(), since: since.toISOString() }]; },
+  };
+  // Two failures, then the same time succeeds: one decision, after two attempts.
+  failNext = 2;
+  const first = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.strictEqual(first.done, true);
+  assert.deepStrictEqual(calls, ['19:42:02', '19:42:02', '19:42:02', '19:45:02']);
+  const day = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(day.map(l => [l.t.slice(11, 19), (l.retries || []).length, l.ran[0].ok]), [['19:42:02', 2, true], ['19:45:02', 0, true]], 'one line per time; the attempts folded in');
+  assert.strictEqual(day[0].since.slice(11, 19), '19:40:00', 'the retry reads the same fills window: no fill is lost or counted twice');
+  // The error limit: three failed attempts in a row stop the run, the time still due (the manifest says so).
+  const v = userWorld({ end: '2026-10-07T19:47:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(v.run, { root: ROOT, userEnv: v.env });
+  calls.length = 0;
+  failNext = 3;
+  const stopped = await runReplay({ run: v.run, baseEnv: v.env, root: ROOT, deps });
+  assert.match(stopped.stopped, /3 failed cycles in a row at 2026-10-07T19:42:02.000Z \(it runs again on resume\)/);
+  assert.strictEqual(stopped.done, false);
+  const man = store.readRun(v.run.paths.runDir).manifest;
+  assert.deepStrictEqual(man.cycleRetry, { t: '2026-10-07T19:42:02.000Z', day: '2026-10-07', kind: 'trade', tries: 3 });
+  assert.strictEqual(man.lastT, null, 'no decision done');
+  // Labels and the scorecard wait for it: the run isn't finished while a time is due.
+  const { unfinishedWhy } = require('../../scripts/lib/replay/labels');
+  assert.match(unfinishedWhy(man, store.readRun(v.run.paths.runDir).days), /the cycle at 2026-10-07T19:42:02.000Z failed and that time is still to run again/);
+  assert.deepStrictEqual(man.daysDone, []);
+  assert.deepStrictEqual(store.readRun(v.run.paths.runDir).days['2026-10-07'], [], 'attempts alone are no decision');
+  assert.strictEqual(store.recordedTimes(v.run.paths.runDir).size, 0);
+  const second = await runReplay({ run: v.run, baseEnv: v.env, root: ROOT, deps });
+  assert.strictEqual(second.done, true);
+  assert.deepStrictEqual(calls, ['19:42:02', '19:42:02', '19:42:02', '19:42:02', '19:45:02'], 'the resume runs the due time first');
+  const after = store.readRun(v.run.paths.runDir);
+  assert.strictEqual(after.manifest.cycleRetry, undefined);
+  assert.deepStrictEqual(after.days['2026-10-07'].map(l => (l.retries || []).length), [3, 0]);
+  // The report counts each time once and every failed attempt's cycle.
+  const total = summarize(after.days).total;
+  assert.deepStrictEqual([total.points, total.cycles, total.failed], [2, 5, 3]);
+});
+
+test('driver: an end of day whose review fails to the error limit keeps its retry state as it was; the resume runs it again, the clock never going back', async () => {
+  const w = userWorld({ end: '2026-10-07T19:53:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const clocks = [];
+  let eodFails = 3;
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) {
+      clocks.push([point.kind, JSON.parse(fs.readFileSync(w.run.paths.clockFile, 'utf8')).now]);
+      if (point.kind === 'trade') return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: 'trade', ran: [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }] })}\n` };
+      const failed = eodFails > 0;
+      if (failed) eodFails -= 1;
+      else fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      return { code: failed ? 1 : 0, output: `REPLAY STEP ${JSON.stringify({ asked: 'eod', ran: [{ action: 'eod', ok: !failed, result: failed ? 'CYCLE RESULT: error - exit 1' : 'CYCLE RESULT: flattened - day done' }] })}\n` };
+    },
+    trades: async () => [],
+  };
+  const first = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.match(first.stopped, /3 failed cycles in a row at 2026-10-07T19:50:00.000Z/);
+  const man = store.readRun(w.run.paths.runDir).manifest;
+  assert.strictEqual(man.eodRetry, undefined, 'no end-of-day retry queued by the failed tries: the end of day itself is due');
+  assert.deepStrictEqual(man.cycleRetry, { t: '2026-10-07T19:50:00.000Z', day: '2026-10-07', kind: 'eod', tries: 3 });
+  const second = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.strictEqual(second.done, true);
+  assert.deepStrictEqual(clocks.map(c => `${c[0]}@${c[1].slice(11, 19)}`), ['trade@19:42:02', 'trade@19:45:02', 'trade@19:48:02', 'eod@19:50:00', 'eod@19:50:00', 'eod@19:50:00', 'eod@19:50:00']);
+  for (let i = 1; i < clocks.length; i += 1) assert.ok(clocks[i][1] >= clocks[i - 1][1], `the clock went back at ${i}`);
+});
+
+test('store: setTrades sets the fills of a time\'s line, never of a failed attempt at that time', () => {
+  const dir = tmpDir();
+  const paths = { runDir: dir, manifest: path.join(dir, 'manifest.json') };
+  const m = { lastT: null, daysDone: [] };
+  const t = '2026-10-07T14:00:02.000Z';
+  store.appendAttempt(paths, m, { t, day: '2026-10-07', kind: 'trade', ran: [{ action: 'trade', ok: false }], trades: [], since: 'a' }, 1);
+  store.appendRecord(paths, m, { t, day: '2026-10-07', kind: 'trade', ran: [{ action: 'trade', ok: true }], trades: [], since: 'a' });
+  assert.strictEqual(store.setTrades(paths, '2026-10-07', t, [{ id: 1 }], 'b'), true);
+  const raw = fs.readFileSync(path.join(dir, '2026-10-07.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(raw.map(r => [Boolean(r.retried), r.trades, r.since]), [[true, [], 'a'], [false, [{ id: 1 }], 'b']]);
+});
+
+test('driver: the agent\'s own CYCLE RESULT: error is a decision - recorded as live records it and never retried; three in a row stop the run as live trips its kill switch', async () => {
+  const { cycleOutcome, runResult } = require('../../scripts/lib/autotrader');
+  const { passTap } = require('../../scripts/lib/session/record');
+  // What a replay step reports for it: the runner's cycle_end through the session tap (as live records it).
+  const res = { ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: error - the account read failed\n', stdout: 'CYCLE RESULT: error - the account read failed\n' };
+  const out = cycleOutcome(res, { result: runResult(res), intact: true, action: 'trade' });
+  assert.deepStrictEqual([out.ok, out.agentError], [false, true]);
+  const tap = passTap();
+  tap.event(() => {})({ kind: 'cycle_end', action: 'trade', ok: out.ok, timedOut: false, result: out.result, agentError: out.agentError });
+  const ran = tap.summary([]).ran;
+  assert.deepStrictEqual(ran, [{ action: 'trade', ok: false, timedOut: false, result: 'CYCLE RESULT: error - the account read failed', symbols: null, agentError: true }]);
+  const w = userWorld({ end: '2026-10-07T19:53:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const calls = [];
+  const deps = {
+    serverCheck: async () => null,
+    // The step exits 0 for it (autotrader.js replayStep: only a cycle with no decision exits 1).
+    // (Judged by what ran, not the exit: a step that exits 1 with only an agent's error still made its decision.)
+    async step(point) { calls.push(point.t.toISOString().slice(11, 19)); return { code: calls.length === 2 ? 1 : 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran })}\n` }; },
+    trades: async () => [],
+  };
+  const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.match(r.stopped, /3 failed cycles in a row at 2026-10-07T19:48:02.000Z/);
+  assert.deepStrictEqual(calls, ['19:42:02', '19:45:02', '19:48:02'], 'each time once: no retry');
+  const raw = fs.readFileSync(path.join(w.run.paths.runDir, '2026-10-07.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(raw.map(l => [Boolean(l.retried), l.ran[0].agentError, l.ran[0].ok]), [[false, true, false], [false, true, false], [false, true, false]]);
+  const man = store.readRun(w.run.paths.runDir).manifest;
+  assert.deepStrictEqual([man.cycleRetry, man.lastT], [undefined, '2026-10-07T19:48:02.000Z']);
+});
+
+test('driver: a decision with no premarket plan (the day\'s premarket failed until the session opened) says so on its line', async () => {
+  const w = userWorld({ end: '2026-10-07T19:47:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const missing = { at: '2026-10-07T13:30:00.000Z', tries: 4 };
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) { return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }], state: { day: point.day, premarketUnavailable: missing, premarketRetryStarved: 3 } })}\n` }; },
+    trades: async () => [],
+  };
+  await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  const day = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.ok(day.length && day.every(l => JSON.stringify(l.premarketUnavailable) === JSON.stringify(missing)));
+  assert.ok(day.every(l => l.premarketRetryStarved === 3), 'the starved retries counted on the line');
+});
+
+test('noDecision: only a cycle with no decision runs its time again - never the agent\'s error result or a premarket\'s failure', () => {
+  const { noDecision } = require('../../scripts/lib/session/record');
+  assert.strictEqual(noDecision([{ action: 'trade', ok: false }]), true);
+  assert.strictEqual(noDecision([{ action: 'trade', ok: true }, { action: 'premarket', ok: false, timedOut: true }]), false, 'a premarket\'s failure never, as live');
+  assert.strictEqual(noDecision([{ action: 'manage', ok: false, timedOut: true }]), true);
+  assert.strictEqual(noDecision([{ action: 'trade', ok: false, agentError: true }]), false);
+  assert.strictEqual(noDecision([{ action: 'trade', ok: true }, { action: 'premarket', ok: false, premarketRetry: true }]), false);
+  assert.strictEqual(noDecision([]), false);
+});
+
+test('driver: a premarket retry that fails after a pass\'s trade cycle is no failed cycle - recorded, never retried, never toward the error limit', async () => {
+  const w = userWorld({ end: '2026-10-07T19:53:00Z', start: '2026-10-07T19:40:00Z' });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const calls = [];
+  const ran = [{ action: 'trade', ok: true, result: 'CYCLE RESULT: no-trade - x' }, { action: 'premarket', ok: false, result: 'CYCLE RESULT: (none reported)', premarketRetry: true }];
+  const deps = {
+    serverCheck: async () => null,
+    async step(point) {
+      calls.push(point.kind);
+      if (point.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: point.kind === 'trade' ? ran : [] })}\n` };
+    },
+    trades: async () => [],
+  };
+  const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.deepStrictEqual([r.done, r.stopped], [true, null], 'three such passes in a row stop nothing');
+  assert.deepStrictEqual(calls, ['trade', 'trade', 'trade', 'eod']);
+  assert.ok(store.readRun(w.run.paths.runDir).days['2026-10-07'].every(l => !l.retries));
+});
+
+test('driver: a failing premarket (no result line, or the agent\'s own error) is no failed cycle, as live - never stops the run, never runs its time again', async () => {
+  const { failedRun } = require('../../scripts/lib/session/record');
+  for (const pre of [{ action: 'premarket', ok: false, result: 'CYCLE RESULT: (none reported)' }, { action: 'premarket', ok: false, result: 'CYCLE RESULT: error - no calendar', agentError: true }]) {
+    assert.strictEqual(failedRun(pre), false);
+    const w = userWorld({ end: '2026-10-07T19:53:00Z', start: '2026-10-07T19:40:00Z' });
+    seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+    const calls = [];
+    const deps = {
+      serverCheck: async () => null,
+      async step(point) {
+        calls.push(point.kind);
+        if (point.kind !== 'trade') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+        // Each pass ran a failing premarket (the first try, or the agent's error), alone: the step exits 0 for it.
+        return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: point.kind === 'trade' ? [pre] : [] })}\n` };
+      },
+      trades: async () => [],
+    };
+    const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+    assert.deepStrictEqual([r.done, r.stopped], [true, null], pre.result);
+    assert.deepStrictEqual(calls, ['trade', 'trade', 'trade', 'eod'], 'each time once');
+    assert.strictEqual(summarize(store.readRun(w.run.paths.runDir).days).total.failed, 3, 'the report still counts the failed runs');
+  }
+  const { noDecision } = require('../../scripts/lib/session/record');
+  assert.strictEqual(noDecision([{ action: 'premarket', ok: false }]), false, 'the step exits 0 for it');
+});

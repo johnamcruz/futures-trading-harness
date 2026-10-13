@@ -268,6 +268,9 @@ function createLiveSession({ cfg, root, home, env = process.env, client, now, lo
       cycles: store.cycleLogsSince(home, startedMs).map(store.cycleSummary), refusals: gate.refusalsSince(startedMs),
       trades: fills ? fills.trades : null, since: fills ? dayBounds(day).start.toISOString() : null, killSwitch: killed,
       stale: kind === 'trade' ? bars.filter(c => c.stale).map(c => c.symbol) : [],
+      premarketUnavailable: state.day === day ? state.premarketUnavailable || null : null,
+      premarketAvailableAt: state.day === day ? state.premarketAvailableAt || null : null,
+      premarketRetryStarved: state.day === day ? state.premarketRetryStarved || 0 : 0,
     });
     version(s, rec.t);
     store.appendRecord(s.paths, s.manifest, rec);

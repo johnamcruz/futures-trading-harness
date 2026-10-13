@@ -223,7 +223,9 @@ Local, never in the repository: `<run home>/replay/<runId>/`:
   window, decision points, broker, harness command and the gate's `FTH_*`
   settings), the harness and model, the window, the last decision time done
   and the days done;
-- `<trading day>.jsonl`, one line per decision time: the time, its kind,
+- `<trading day>.jsonl`, one line per decision time, plus a line for each
+  failed attempt at a time (`retried: true`; read folded into the time's
+  line as `retries`, its cycles with the line's): the time, its kind,
   what the runner ran (action, ok, result line, symbols), the cycle log's
   summary (prompt hash, tool calls, skills loaded, orders sent, skills an
   entry lacked, the cycle file), the gate's refusals in that step, and the
@@ -238,7 +240,12 @@ transcript (what the model saw and did), for stage 2's features.
 continues after its last recorded time (the broker's clock only moves
 forward). A time whose step started but whose line was never written (the
 driver stopped mid-step) is recorded as interrupted from what its process
-logged and never run twice. A changed config, harness, model, broker setting,
+logged and never run twice. A time whose cycle made no decision (an
+infrastructure failure: no `CYCLE RESULT` line, a harness that failed or
+timed out) is an attempt and runs again at once; while it is due the
+manifest says so (`cycleRetry`), it never counts as done, and a resume runs
+it first. The agent's own `CYCLE RESULT: error` is a decision, recorded as
+live records it, never retried. A changed config, harness, model, broker setting,
 gate setting, or strategy, account, model, skill, agent or rule file is a new
 run id; the driver refuses to mix them.
 

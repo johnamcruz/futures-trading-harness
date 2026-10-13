@@ -680,3 +680,20 @@ test('labels and scorecard with one-minute --bars on a 3m-then-5m session: each 
   assert.ok(late.length, JSON.stringify(records.map(r => [r.t, r.barT])));
   assert.ok(late.every(r => r.facts.timeframe === 5 && r.facts.rebuilt === true), JSON.stringify(late.map(r => [r.t, r.barT, r.facts.rebuilt])));
 });
+
+test('live session: a decision made with no premarket plan says so on its line, and one after the plan came says when it came', { timeout: 120000 }, async () => {
+  const day = '2026-10-07';
+  const missing = { at: iso(et(9, 30)), tries: 3 };
+  const base = { day, premarketDone: true, eodDone: false, cycles: 0, lastCycleAt: null, premarketTries: 3 };
+  const w = liveHome();
+  // The next retry is not due in this window: every decision is without the plan.
+  await runLive(w, { from: et(10, 0), to: et(10, 10), state: { ...base, premarketUnavailable: missing, premarketRetryAt: iso(et(12, 0)), premarketRetryStarved: 2 } });
+  const recs = lines(path.join(sessionPaths(w.home, day).runDir, `${day}.jsonl`)).filter(r => r.kind === 'trade');
+  assert.ok(recs.length >= 3);
+  for (const r of recs) assert.deepStrictEqual([r.premarketUnavailable, r.premarketAvailableAt, r.premarketRetryStarved], [missing, undefined, 2]);
+  const v = liveHome();
+  await runLive(v, { from: et(10, 0), to: et(10, 10), state: { ...base, premarketTries: 0, premarketUnavailable: null, premarketAvailableAt: iso(et(9, 48)) } });
+  const after = lines(path.join(sessionPaths(v.home, day).runDir, `${day}.jsonl`)).filter(r => r.kind === 'trade');
+  assert.ok(after.length >= 3);
+  for (const r of after) assert.deepStrictEqual([r.premarketUnavailable, r.premarketAvailableAt, r.premarketRetryStarved], [undefined, iso(et(9, 48)), undefined]);
+});

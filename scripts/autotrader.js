@@ -60,7 +60,7 @@ const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
 const { writeCycleLog } = require('./lib/cycle-log');
 const { lockHolderAlive } = require('./lib/runner-lock');
-const { passTap } = require('./lib/session/record');
+const { passTap, noDecision } = require('./lib/session/record');
 const { createLiveSession } = require('./lib/session/live');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -283,7 +283,7 @@ async function replayStep(cfg, dataDir, opts, asked) {
     await runner.step();
     const { ran, events, errors, bars } = tap.summary(runner.symbols);
     process.stdout.write(`REPLAY STEP ${JSON.stringify({ asked, at: runnerNow().toISOString(), ran, events, errors, bars, state: runner.state })}\n`);
-    return 0;
+    return noDecision(ran) ? 1 : 0; // no decision made: the replay driver runs this time again
   } finally {
     client.close();
   }

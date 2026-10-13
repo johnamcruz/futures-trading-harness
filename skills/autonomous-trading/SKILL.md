@@ -44,7 +44,12 @@ description: Rules for running the trading harness unattended (headless, schedul
    attempt line (e.g. it says no attempt is running and the prompt lists an
    active one), the prompt's facts win, and you say the earlier result was
    wrong. It carries today's premarket
-   plan, the news blackouts (in force, or the next one), the day so far (the
+   plan (when today's premarket run failed, the "Context unavailable" line
+   says "premarket plan unavailable": there is no plan yet, so trade from
+   the bars and your skills; the runner retries the premarket between
+   cycles, and once one succeeds the next cycles carry the plan; on very
+   short bars, such as 1-minute, a retry rarely fits between cycles, so a
+   failed premarket usually means trading the session without one), the news blackouts (in force, or the next one), the day so far (the
    "day:" line; outside RTH the "overnight" line), each fired strategy's track
    record (a `paper` one is marked: plan it only), and each open trade's state
    (setup, initial risk, stop, target, R now, best and worst): the
@@ -66,15 +71,21 @@ description: Rules for running the trading harness unattended (headless, schedul
    so the next cycle and the human can see what happened. **Your last line
    must be exactly:**
    `CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>`
-   (one outcome word, then ` - ` and the reason, as in the examples below).
+   (one outcome word, then ` - ` and the reason, as in the examples below;
+   any other word is no result, a failed cycle).
    Check its reasons against the facts before you write it (`reason_check`,
    trade-session step 3): a reason marked FALSE is dropped and the decision
    made again.
    `blocked` only when the order gate, the gateway or the broker refused an
    order this cycle; nothing fired, or you stood aside, is `no-trade`.
+   `error` only when the cycle could not do its work (tools failing, facts
+   you couldn't read): the runner counts it as a failed cycle.
    The runner reads only that line, from your final message: a summary, a
-   table, or "Decision: NO TRADE" in its place is logged as "none reported",
-   even when the cycle did its work. Write it last, after every tool call,
+   table, or "Decision: NO TRADE" in its place is logged as "none reported"
+   and counts as a failed cycle too, even when the cycle did its work.
+   `maxConsecutiveErrors` failed cycles in a row turn on the kill switch
+   (the runner still trails, protects and flattens open positions, and runs
+   end of day). Write it last, after every tool call,
    as plain text in your final message: never as a tool call or a tool's
    arguments.
 7. **Budget.** Keep the cycle short: reuse bar files fetched this cycle, at most

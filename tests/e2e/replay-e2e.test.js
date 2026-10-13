@@ -160,8 +160,9 @@ test('replay every Nth bar with Qwen: a cycle at each decision time; the $versio
   const { command: _c, ...autotrader } = cfg.autotrader;
   fs.writeFileSync(w.config, JSON.stringify({ ...cfg, end: '2026-10-07T13:50:00Z', everyNthBar: 2, autotrader: { ...autotrader, harness: 'qwen' } }));
   const { FAKE_HARNESS_ORDERS: _o, ...env } = w.env;
-  // The first cycle ends with a summary instead of its result line: logged as none reported, and the run goes on.
-  w.env = { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_QWEN_SETTINGS_VERSION: '4', FAKE_HARNESS_NO_RESULT: '(2026-10-07T13:36:02.000Z)' };
+  // The first cycle ends with a summary instead of its result line: logged as none reported, a failed cycle (one
+  // toward maxConsecutiveErrors), recorded as an attempt, and its decision time runs again (then with its result).
+  w.env = { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_QWEN_SETTINGS_VERSION: '4', FAKE_HARNESS_NO_RESULT: '(2026-10-07T13:36:02.000Z)', FAKE_HARNESS_NO_RESULT_ONCE: path.join(w.user, 'no-result-once') };
 
   const pts = replay(w, ['points', '--config', w.config]);
   assert.strictEqual(pts.status, 0, pts.stderr);
@@ -169,14 +170,23 @@ test('replay every Nth bar with Qwen: a cycle at each decision time; the $versio
   const run = replay(w, ['run', '--config', w.config]);
   assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
   assert.doesNotMatch(run.stdout, /no cycle/);
-  const recs = lines(path.join(w.runDir, '2026-10-07.jsonl'));
-  // Every second 3-minute bar of the session (09:30, 09:36, 09:42, 09:48 ET), inside the window.
-  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:36:02.000Z', '2026-10-07T13:42:02.000Z', '2026-10-07T13:48:02.000Z']);
-  assert.deepStrictEqual(recs.map(r => r.ran.map(x => [x.action, x.ok, x.result])), [
-    [['trade', true, 'CYCLE RESULT: (none reported)']],
-    [['trade', true, 'CYCLE RESULT: no-trade - fake harness']],
-    [['trade', true, 'CYCLE RESULT: no-trade - fake harness']],
+  // The day file: the failed attempt (retried), then the same time run again, then the others.
+  const raw = lines(path.join(w.runDir, '2026-10-07.jsonl'));
+  assert.deepStrictEqual(raw.map(r => [r.t, Boolean(r.retried), r.ran.map(x => [x.ok, x.result])]), [
+    ['2026-10-07T13:36:02.000Z', true, [[false, 'CYCLE RESULT: (none reported)']]],
+    ['2026-10-07T13:36:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
+    ['2026-10-07T13:42:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
+    ['2026-10-07T13:48:02.000Z', false, [[true, 'CYCLE RESULT: no-trade - fake harness']]],
   ]);
+  assert.strictEqual(raw[0].step.code, 1, 'the step whose cycle failed exits 1');
+  const manifest = JSON.parse(fs.readFileSync(path.join(w.runDir, 'manifest.json'), 'utf8'));
+  assert.deepStrictEqual([manifest.finished, manifest.cycleRetry], [true, undefined], 'nothing left to run again');
+  // Read as a run: every second 3-minute bar of the session (09:30, 09:36, 09:42, 09:48 ET), inside the window, one
+  // decision each; the failed attempt is folded into its time's line.
+  const recs = require('../../scripts/lib/replay/store').readRun(w.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-07T13:36:02.000Z', '2026-10-07T13:42:02.000Z', '2026-10-07T13:48:02.000Z']);
+  assert.deepStrictEqual(recs.map(r => (r.retries || []).length), [1, 0, 0]);
+  assert.match(run.stdout, /13:36:02\.000Z trade: trade CYCLE RESULT: \(none reported\): a failed cycle \(try 1\); this time runs again/);
   for (const r of recs) {
     // The repository's paper prop policy names an account with no attempt started in the run home: a warning each pass, never a stop.
     assert.ok(r.errors.some(e => /topstep_100k: no attempt is started/.test(e)), JSON.stringify(r.errors));

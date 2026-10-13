@@ -19,7 +19,12 @@
  * End of day is retried a minute later (up to 5 times, before 16:00 ET) while
  * the runner hasn't verified the account flat (the retry is saved in the
  * manifest before each end-of-day step, so no stop or crash loses it); a day is done after its last
- * time. The run stops after cfg.maxConsecutiveErrors failed cycles in a row,
+ * time. A step whose cycle made no decision (an infrastructure failure: no CYCLE RESULT line, a failed or
+ * timed-out harness; the step exits 1 with its REPLAY STEP line) is recorded as an attempt (store.js
+ * appendAttempt) and its decision time runs again, never skipped (a crash during it: interrupted, as any
+ * step); each attempt is a failed cycle. The agent's own "CYCLE RESULT: error" is a decision: recorded as
+ * live records it (a failed cycle), never retried. The run stops after cfg.maxConsecutiveErrors failed cycles in a row
+ * (the time still due, in the manifest's cycleRetry: a resume runs it first),
  * before a new trading day while the run's kill switch (<run home>/STOP) is on
  * (the day under way still runs: as live, no trade cycle, but housekeeping and
  * end of day; the reason is the file's latest line),
@@ -44,7 +49,7 @@ const { liveRunner } = require('../runner-lock');
 const { decisionPoints } = require('./schedule');
 const { replayEnv, brokerErrors, configHash, harnessCommand } = require('./config');
 const store = require('./store');
-const { decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, noteVersion } = require('../session/record');
+const { failedRun, noDecision, decisionRecord, killSwitchReason, withEntry, fillsBetween, fingerprints, noteVersion } = require('../session/record');
 const { readAttempt, startAttempt } = require('../trading/prop-state');
 const { accountNamed } = require('../trading/accounts');
 
@@ -271,7 +276,13 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     writeJsonAtomic(paths.manifest, manifest);
     const res = await deps.step(point, env, timeoutMs);
     const step = store.parseStep(res.output);
-    if (res.code !== 0 || !step) {
+    // The pass ran and a cycle in it failed: recorded as an attempt below, and the time runs again.
+    // Only an infrastructure failure (no decision: a failed or timed-out harness, no CYCLE RESULT line); the
+    // agent's own error result is a decision, recorded as live records it, and the run goes on.
+    const cycleFailed = res.code !== 0 && Boolean(step) && noDecision(step.ran);
+    // A step that exits non-zero with a failed cycle in its line ran (an attempt, or the agent's own error, a
+    // decision); otherwise it could not run.
+    if (!step || (res.code !== 0 && !(step.ran || []).some(r => !r.ok))) {
       // Nothing ran (no cycle, no order): the time can run again once the cause is fixed.
       if (!store.touchedSince(paths.runHome, started)) {
         delete manifest.pending;
@@ -293,9 +304,27 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       t: point.t.toISOString(), day: point.day, kind: point.kind, pass: step, step: { code: res.code, timedOut: Boolean(res.timedOut) },
       cycles: store.cycleLogsSince(paths.runHome, started).map(store.cycleSummary), refusals: store.refusalsSince(paths.runHome, started),
       trades, since: since.toISOString(), killSwitch: killed,
+      premarketUnavailable: step.state && step.state.day === point.day ? step.state.premarketUnavailable || null : null,
+      premarketAvailableAt: step.state && step.state.day === point.day ? step.state.premarketAvailableAt || null : null,
+      premarketRetryStarved: step.state && step.state.day === point.day ? step.state.premarketRetryStarved || 0 : 0,
     });
     // The version of the agent that made this decision (each step is a fresh process on the tree as it is now).
     noteVersion(manifest, { since: rec.t, hash, fingerprints: fingerprints(root || run.root) });
+    if (cycleFailed) {
+      // Never a decision done: no progress, no fills window moved (the retry reads them again), the end-of-day
+      // retry as it was before this try. The attempt's line and the manifest's cycleRetry say it is due.
+      delete manifest.pending;
+      if (savedBefore) manifest.eodRetry = savedBefore;
+      else delete manifest.eodRetry;
+      const tries = (manifest.cycleRetry && manifest.cycleRetry.t === rec.t ? manifest.cycleRetry.tries : 0) + 1;
+      store.appendAttempt(paths, manifest, rec, tries);
+      cycles += 1;
+      failures += 1;
+      log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ')}: a failed cycle (try ${tries}); this time runs again`);
+      if (failures >= cfg.maxConsecutiveErrors) return { cycles, stopped: `${failures} failed cycles in a row at ${rec.t} (it runs again on resume); see ${paths.stepsLog}`, done: false };
+      queue.unshift(point);
+      continue;
+    }
     // A failed read is retried from the same time on the next one (also after a resume).
     if (!(trades && trades.error)) since = point.t;
     manifest.tradesSince = since.toISOString();
@@ -307,7 +336,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     // A failed cycle, or a bar's pass that ran none and read no bar for a symbol while logging errors (the
     // broker's bars or contract failing): a failure, so a broken broker never reads as a quiet trader.
     const unread = (step.bars || []).some(b => !b.lastBarT);
-    const failed = rec.ran.some(r => !r.ok) || (point.kind === 'trade' && !rec.ran.length && unread && rec.errors.length > 0);
+    // A premarket run's failure (the first or a retry) is never a failed run, live or here.
+    const failed = rec.ran.some(failedRun) || (point.kind === 'trade' && !rec.ran.length && unread && rec.errors.length > 0);
     failures = failed ? failures + 1 : rec.ran.length ? 0 : failures;
     log(`${rec.t} ${point.kind}: ${rec.ran.map(r => `${r.action} ${r.result || (r.ok ? 'ok' : 'failed')}`).join('; ') || (killed !== null ? 'no cycle (kill switch on)' : 'no cycle')}${rec.refusals.length ? `; ${rec.refusals.length} gate refusal(s)` : ''}${Array.isArray(trades) && trades.length ? `; ${trades.length} fill(s)` : ''}`);
     // End of day not verified flat: once more a minute later, as the live runner retries, before the close
