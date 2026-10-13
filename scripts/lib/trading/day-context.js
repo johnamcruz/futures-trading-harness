@@ -164,7 +164,7 @@ function describeDay(d, { symbol = '', round = x => Math.round(x * 100) / 100 } 
   if (p) parts.push(`prior day ${r(p.low)}-${r(p.high)}, close ${r(p.close)}${p.vah !== undefined ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}`);
   if (d.overnight) parts.push(`overnight ${r(d.overnight.low)}-${r(d.overnight.high)}`);
   // What isn't known yet says when it will be.
-  parts.push(d.openType ? `opening type ${d.openType}` : 'opening type due 10:00 ET');
+  parts.push(d.openType ? `opening type ${d.openType}` : 'opening type due 10:00 ET (a read of the open, not an entry window)');
   parts.push(d.ibRange !== null ? `initial balance ${r(d.ibLow)}-${r(d.ibHigh)} (${r(d.ibRange)} points${adr(d.ibRange)}), extended ${r(d.extUp)} up and ${r(d.extDown)} down: ${d.dayType}` : 'initial balance due 10:30 ET');
   parts.push(`range so far ${r(d.range)}${d.adr ? ` of a ${d.adrDays}-day average ${r(d.adr)} (${Math.round((d.range / d.adr) * 100)}% used)` : ` (no ${d.adrDays}-day average: fewer days in the data)`}`);
   return `${symbol ? `${symbol} day: ` : ''}${parts.join('; ')}.`;
@@ -207,9 +207,12 @@ function describeOvernight(bars, { symbol = '', round = x => Math.round(x * 100)
   const r = round;
   // From the bar's close (this cycle runs then), not its open.
   const close = (minute + stepMinutes(bars)) % (24 * 60);
-  const toOpen = close >= GLOBEX_OPEN ? 24 * 60 - close + RTH_OPEN : Math.max(0, RTH_OPEN - close);
+  // After the 16:00 ET close the harness's market is closed until the 18:00 ET open (the daily break).
+  const closed = close >= RTH_CLOSE && close < GLOBEX_OPEN;
+  const toOpen = close >= RTH_CLOSE ? 24 * 60 - close + RTH_OPEN : Math.max(0, RTH_OPEN - close);
   const where = !p ? '' : last.c > p.vah ? ': price above the prior value area' : last.c < p.val ? ': price below the prior value area' : ': price inside the prior value area';
-  return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}${where}; ${toOpen === 0 ? 'RTH opens now (09:30 ET)' : `RTH opens in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min`}.`;
+  // The session's state stated with it: the market has been open since 18:00 ET; 09:30 ET is only the RTH (cash) open.
+  return `${symbol ? `${symbol} ` : ''}overnight (Globex since 18:00 ET; ${closed ? 'market closed now, daily break until 18:00 ET' : 'market open now'}): range ${r(lo)}-${r(hi)} so far, last ${r(last.c)}; prior RTH day ${r(prior.low)}-${r(prior.high)}, close ${r(prior.close)}${p ? `, value area ${r(p.val)}-${r(p.vah)} (POC ${r(p.poc)})` : ''}${where}; ${toOpen === 0 ? 'RTH opens now (09:30 ET)' : `RTH (the 09:30 ET cash open, not the market open) in ${Math.floor(toOpen / 60)} h ${toOpen % 60} min`}.`;
 }
 
 module.exports = { DEFAULTS, openingType, dayType, dayContextSeries, describeDay, describeOvernight, stepMinutes };

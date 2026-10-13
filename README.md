@@ -77,7 +77,7 @@ account document, and its workflows are skills.
 
 ## Trading hours
 
-Trading follows the CME Globex session: **18:00 ET to 16:00 ET
+Trading follows the Topstep trading day (its 17:00 CT reset), not CME's, and stops before Topstep's 16:10 ET flatten: **18:00 ET to 16:00 ET
 the next day, Sunday evening to Friday afternoon** (about 22 hours a day).
 Nothing is traded from 16:00 to 18:00 ET or over the weekend, and every
 position is flat by end of day (`eodAt`, default 15:50 ET, never later than

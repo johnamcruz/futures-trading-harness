@@ -139,15 +139,38 @@ function inWindow(now, window) {
 }
 
 /**
- * Hard trading hours: the CME Globex session of the futures, 18:00 ET to 16:00
- * ET the next day (22 hours), Sunday evening to Friday afternoon. Closed
+ * The clock windows the order gate applies to a new entry (its `time-window` check): FTH_ENTRY_HOURS (entries only
+ * inside them; empty = any time) and FTH_NO_ENTRY_WINDOWS (no entries inside them), as loadConfig reads them. Parsed
+ * once; returns `now => why a new entry is refused now, or null`. The gate and the bar briefing both use it, so what
+ * the briefing says about entries is what the gate does.
+ */
+function entryClock({ entryHours = '', noEntryWindows = '' } = {}) {
+  const hours = parseWindows(entryHours || '');
+  const none = parseWindows(noEntryWindows || '');
+  return now => {
+    if (hours.errors.length > 0) return `FTH_ENTRY_HOURS has invalid entries (${hours.errors.join(', ')}); fix the config.`;
+    if (hours.windows.length && !hours.windows.some(w => inWindow(now, w))) {
+      return `New entries only during ${hours.windows.map(w => w.label).join(', ')} (FTH_ENTRY_HOURS).`;
+    }
+    if (none.errors.length > 0) return `FTH_NO_ENTRY_WINDOWS has invalid entries (${none.errors.join(', ')}); fix the config.`;
+    const hit = none.windows.find(w => inWindow(now, w));
+    return hit ? `New entries are not allowed during ${hit.label}.` : null;
+  };
+}
+
+/**
+ * Hard trading hours: the harness's own hours inside the Topstep trading day
+ * (which starts at Topstep's 17:00 CT / 18:00 ET reset): from 18:00 ET until
+ * 16:00 ET the next day (22 hours), Sunday evening to Friday afternoon. Closed
  * 16:00-18:00 ET and over the weekend: no entry then, and every position is
- * flat by 16:00 ET. Strategies narrow it with `sessions` (e.g. [ny]).
+ * flat by 16:00 ET, before Topstep's own 16:10 ET flatten deadline (CME's Globex
+ * trades on to 17:00 ET, background only). Strategies
+ * narrow it with `sessions` (e.g. [ny]).
  */
 const MARKET_TZ = 'America/New_York';
 const MARKET_OPEN_MIN = 18 * 60; // the session opens the evening before
 const MARKET_CLOSE_MIN = 16 * 60;
-const MARKET_HOURS_LABEL = 'the CME Globex session: from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends';
+const MARKET_HOURS_LABEL = 'the harness\'s hours inside the Topstep trading day (17:00 CT reset): from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; Topstep\'s own flatten is 16:10 ET';
 
 /**
  * Named sessions inside the trading day, in New York time:
@@ -203,6 +226,7 @@ function inMarketHours(now, { until = MARKET_CLOSE_MIN } = {}) {
 }
 
 module.exports = {
+  entryClock,
   MARKET_TZ,
   MARKET_OPEN_MIN,
   MARKET_CLOSE_MIN,

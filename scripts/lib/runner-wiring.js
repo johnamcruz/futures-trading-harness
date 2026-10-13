@@ -99,7 +99,11 @@ function briefingRecorder(home, cfg, now, env = process.env) {
       // The news blackouts (premarket records them): the briefing says which is in force or next.
       let blackouts = null;
       try { blackouts = readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { blackouts = { items: [], error: err.message }; }
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, now: now() }));
+      // The gate's entry clock (FTH_ENTRY_HOURS, FTH_NO_ENTRY_WINDOWS): the briefing says what the gate will do.
+      // A config that can't be read: entries unknown, so none (the gate fails closed on it too).
+      let clock;
+      try { const c = loadConfig(env); clock = { entryHours: c.entryHours, noEntryWindows: c.noEntryWindows }; } catch (err) { clock = { error: err.message }; }
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, now: now() }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       throw err;

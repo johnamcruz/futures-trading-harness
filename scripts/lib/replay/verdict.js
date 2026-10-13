@@ -25,8 +25,8 @@
  *
  * Money: every fill the replay broker reported, its realized P&L minus its
  * fees, as the account balance moves (prop-state closeBefore): fees are paid
- * on the opening fill too. Days: the CME trading day of each fill (17:00
- * Chicago, clock.js tradingDayKey) and every day the run replayed; months are
+ * on the opening fill too. Days: the trading day of each fill (17:00 CT,
+ * Topstep's daily reset; clock.js tradingDayKey) and every day the run replayed; months are
  * the trading day's calendar month.
  *
  * What the replay doesn't record, approximated (said in the output):
@@ -399,7 +399,7 @@ function headLine(v) {
 }
 
 const NOTES = [
-  'Fresh each month: every calendar month (by CME trading day, 17:00 Chicago) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
+  'Fresh each month: every calendar month (by trading day, 17:00 CT, Topstep\'s daily reset) starts a new attempt at the starting balance, so one month\'s result never carries into the next.',
   'Money: each fill\'s realized P&L less its fees, as the balance moves. Rules: combine.js, the same as the backtester and the live gate.',
   'Approximation: intraday equity is a round trip\'s MAE less its closing fee, set against the account when it happened (its maeTime, on its own day) or, without one, at every point the position was held, each on that point\'s balance, floor and daily room, the worst counting, an earlier day\'s point against its floor only (trades open together are not added up; a trade without MAE is seen only at its close). An MAE is judged after the fills at its instant, and also right after its own position\'s fill there (a partial exit or add at its price); other fills at one instant are read in the order the broker lists them.',
   'Left out: at the daily loss limit the account is flattened (the breaching trade counts as the limit; the rest of any open position is left out), positions opened after it that day (the firm would refuse them), and positions carried in from the month before (until flat, so a reversal of one is left out too).',

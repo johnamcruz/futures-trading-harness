@@ -12,14 +12,23 @@ description: Futures session clock for CME equity index, metals, and energy - Gl
 
 ## How It Works
 
-All times America/New_York (ET) unless marked CT. The harness trades the
-CME Globex session, which opens at 18:00 ET and runs overnight until 16:00 ET
-the next day, Sunday evening to Friday afternoon (a hard rule in the order
-gate). The market is open that whole time, 09:30-16:00 ET included: a time
-like 10:00 ET is inside the session, not before it. Nothing from 16:00 to
-18:00 ET or on weekends, and every position flat by end of day (`eodAt`, by 16:00 ET).
+All times America/New_York (ET) unless marked CT. The harness follows the
+Topstep trading day, not CME's: it starts at 18:00 ET (17:00 CT, Topstep's
+daily reset), and the harness trades it until 16:00 ET the next day, Sunday
+evening to Friday afternoon (a hard rule in the order gate), stopping before
+Topstep's own 16:10 ET flatten. The market is open that whole time,
+09:30-16:00 ET included: a time
+like 10:00 ET is inside the session, not before it, and so is 08:00 ET (the
+18:00 ET open was the evening before; 09:30 ET is only the RTH cash open).
+16:00 to 18:00 ET is treated as closed (no entries, no positions), and so
+are weekends. Every position is flat by the runner's end of day (`eodAt`,
+15:50 ET by default), well before Topstep's own 16:10 ET flatten deadline.
+(Background only: CME's Globex keeps trading until 17:00 ET; the harness
+never trades 16:00-18:00 ET.) Bar data still comes from the Globex session,
+so the session VWAP, session volume profile and overnight range start at
+18:00 ET.
 Named sessions for strategies: `asia` 18:00–03:00, `london` 03:00–09:30,
-`ny` 09:30–16:00. One trading day runs from the 18:00 ET open to the 16:00 ET
+`ny` 09:30–16:00. One (Topstep) trading day runs from the 18:00 ET open to the 16:00 ET
 close and is named by the date it ends on (Sunday evening and Monday are
 Monday's day); midnight changes nothing. Everything counted by the day uses
 it: losses and entries for the gate, end of day, the prop attempt's closes,
@@ -27,20 +36,39 @@ the journal's day, and the holiday calendar. Equity index futures (NQ/ES/YM/RTY 
 
 | Window (ET) | Character | Harness |
 |---|---|---|
-| 18:00 (Sun–Thu) | Globex open; trading day starts (17:00 CT) | Session opens; daily counters reset |
+| 18:00 (Sun–Thu) | Topstep's trading day starts (17:00 CT, its daily reset); Globex open | Session opens; daily counters reset |
 | 18:00–03:00 | Asia (`asia`), thinner | Trade only strategies built for it |
 | 03:00–09:30 | London (`london`); often sets the overnight range | Mark ONH/ONL |
 | 08:30 | US data (CPI, NFP, PPI, retail sales, claims) | Blackout 08:25–08:40 |
-| 09:30–09:35 | Opening print, widest spreads | No entries (gate) |
-| 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Primary window for ORB |
+| 09:30–09:35 | Opening print, widest spreads; five minutes only | No entries (gate) until 09:35 |
+| 09:35–11:00 | Opening drive; best trend and ORB window (`ny` from 09:30) | Entries allowed; primary window for ORB |
 | 10:00 | ISM, JOLTS, consumer confidence | Blackout 09:55–10:10 |
 | 11:00–11:30 | Late morning; the drive fades | Trade only a clean setup |
 | 11:30–13:30 | Lunch lull; low volume, false breaks | Reduce or stand aside |
 | 13:30–15:45 | Afternoon; entries allowed until 15:45 | Normal rules |
 | 14:00 | FOMC statement (8×/yr), 14:30 presser | Blackout 13:55–15:00 |
 | 15:45–16:00 | Into the close | No entries (gate); end of day flattens at 15:50 |
-| 16:00–18:00 | Daily break | Closed: no entries, no positions (hard rule) |
-| 16:10 ET / 15:10 CT | A typical prop firm's own flatten | The harness is flat by 16:00 ET |
+| 16:00–18:00 | Daily break (the harness's day is over; Topstep flattens by 16:10) | Closed: no entries, no positions (hard rule) |
+| 16:10 ET / 15:10 CT | Topstep's own flatten deadline | The harness is flat by 15:50 ET (runner), 16:00 ET at the latest |
+
+By default only three windows forbid entries by the clock: the opening
+print (09:30-09:35), into the close (15:45-16:00), and the daily break
+(16:00-18:00, the market closed). The opening drive is not the opening
+print: from 09:35 entries are allowed. The gate's configured windows apply
+in their place (`FTH_NO_ENTRY_WINDOWS`, and `FTH_ENTRY_HOURS`, entries only
+inside its windows), and the bar briefing reads the same config, so it says
+what the gate will do. It states the window with its scope, never just its
+name: `m3` `window` (the name), `windowUntil`, `windowEntries` (`allowed` or
+`none`), `windowRefusal` (the gate's reason, when none), `marketOpen`, and
+`windowText`, which the summary's `Session:` line shows, e.g. "opening drive
+(market open, entries allowed) until 11:00 ET" or "opening print (market
+open, no entries) until 09:35 ET"; its end is when that answer changes. Take
+a window's end from it; never infer one (the opening type due at 10:00 ET
+and the initial balance at 10:30 ET are reads of the open, not entry
+windows). A window that allows entries doesn't lift the gate's other
+refusals: the briefing states news blackouts on its own `News` line, and
+the gate states holidays and early closes when it refuses an entry (the
+briefing's window doesn't know them).
 
 **Holidays and early closes.** The harness treats every exchange holiday
 as closed (New Year's Day, MLK Day, Presidents Day, Good Friday, Memorial

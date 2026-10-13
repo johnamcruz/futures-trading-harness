@@ -3,8 +3,8 @@
 Firm rules end accounts. Check the current rules for the account type with the
 user; numbers here are the harness defaults, not any firm's official limits.
 
-- **Trading day:** 17:00 → 17:00 America/Chicago. Daily loss and P&L reset at
-  17:00 CT.
+- **Trading day:** Topstep's, 17:00 → 17:00 America/Chicago. Daily loss and P&L reset at
+  17:00 CT; trading stops at 16:00 ET (15:00 CT).
 - **Daily loss limit:** stop well before it. The broker MCP server's daily
   loss guardrail (`get_server_config`: `maxDailyLoss`) should sit below the
   firm's limit.

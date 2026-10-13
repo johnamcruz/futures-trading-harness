@@ -49,9 +49,13 @@ test('overnight line: outside RTH, the session so far against the prior day; not
   const at = t => nq.findIndex(b => b.t === t);
   // 2026-04-27 23:00 ET is 03:00Z the next day: Globex since 18:00 ET.
   const line = describeOvernight(nq.slice(0, at('2026-04-27T03:00:00.000Z') + 1), { symbol: 'MNQ' });
-  assert.match(line, /^MNQ overnight \(Globex since 18:00 ET\): range [0-9.]+-[0-9.]+ so far, last [0-9.]+; prior RTH day 27130\.25-27462\.5, close 27434, value area 27246\.54-27455\.86 \(POC 27414\.32\): price (above|inside|below) the prior value area; RTH opens in 10 h 27 min\.$/, 'from the 23:00 bar\'s close, 23:03 ET');
+  assert.match(line, /^MNQ overnight \(Globex since 18:00 ET; market open now\): range [0-9.]+-[0-9.]+ so far, last [0-9.]+; prior RTH day 27130\.25-27462\.5, close 27434, value area 27246\.54-27455\.86 \(POC 27414\.32\): price (above|inside|below) the prior value area; RTH \(the 09:30 ET cash open, not the market open\) in 10 h 27 min\.$/, 'from the 23:00 bar\'s close, 23:03 ET');
   // The 09:27 bar closes at 09:30: the open is now, not 3 minutes away.
   assert.match(describeOvernight(nq.slice(0, at('2026-04-27T13:27:00.000Z') + 1)), /RTH opens now \(09:30 ET\)\.$/);
+  // 08:00 ET (seen in replays read as "before the 18:00 ET session open"): the market is open; 09:30 is the RTH open only.
+  assert.match(describeOvernight(nq.slice(0, at('2026-04-27T11:57:00.000Z') + 1)), /^overnight \(Globex since 18:00 ET; market open now\): .*; RTH \(the 09:30 ET cash open, not the market open\) in 1 h 30 min\.$/);
+  // After the 16:00 ET close (the 16:30 bar closes 16:33): the daily break, the market closed until 18:00 ET.
+  assert.match(describeOvernight(nq.slice(0, at('2026-04-24T20:30:00.000Z') + 1)) || '', /^overnight \(Globex since 18:00 ET; market closed now, daily break until 18:00 ET\): .*; RTH \(the 09:30 ET cash open, not the market open\) in 16 h 57 min\.$/);
   assert.strictEqual(describeOvernight(nq.slice(0, at('2026-04-27T17:15:00.000Z') + 1)), null, 'in RTH the day line applies');
   assert.strictEqual(describeOvernight(nq.slice(0, 20)), null, 'no whole prior RTH day in the data');
   assert.strictEqual(describeOvernight([]), null);

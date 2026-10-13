@@ -41,11 +41,11 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 
 ## Execution
 
-- **Hard rule: trade only in the CME Globex session, which opens at 18:00 ET
+- **Hard rule: trade only in the harness's hours inside the Topstep trading day (its 17:00 CT reset): the day opens at 18:00 ET
   and runs overnight until 16:00 ET the next day (Sunday evening to Friday
   afternoon). The market is open all of that time, the regular session
   09:30-16:00 ET included; it is closed only from 16:00 to 18:00 ET and on
-  weekends. Never carry a position past the 16:00 ET close.** Every position is
+  weekends (the harness stops at 16:00 ET, before Topstep's 16:10 ET flatten; CME's Globex trades on to 17:00 ET, background only). Never carry a position past the 16:00 ET close.** Every position is
   flat by end of day (`eodAt`, no later than 16:00 ET). The order gate
   refuses entries outside the session whatever the configuration says, and
   the runner closes any position it finds outside it. Exits are always
@@ -93,8 +93,8 @@ formats matter.
 Firm rules end accounts. Check the current rules for the account type with the
 user; numbers here are the harness defaults, not any firm's official limits.
 
-- **Trading day:** 17:00 → 17:00 America/Chicago. Daily loss and P&L reset at
-  17:00 CT.
+- **Trading day:** Topstep's, 17:00 → 17:00 America/Chicago. Daily loss and P&L reset at
+  17:00 CT; trading stops at 16:00 ET (15:00 CT).
 - **Daily loss limit:** stop well before it. The broker MCP server's daily
   loss guardrail (`get_server_config`: `maxDailyLoss`) should sit below the
   firm's limit.
