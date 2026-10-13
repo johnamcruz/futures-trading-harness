@@ -180,6 +180,18 @@ const TOOLS = [
     args: i => ({ symbol: i.symbol, json: i.json === true }),
     narrow: 'call it without json',
   },
+  {
+    name: 'reason_check', op: 'reason_check', script: 'reason-check',
+    description: 'Check the reasons you state for a decision (your CYCLE RESULT or VERDICT line, or the reasons alone) against the facts of the bar you decide: the bar briefing (the session window and whether it allows entries, the trend rule per side, the candidates, the room in R against the room needed, the multi-timeframe read per side), the policy verdicts on that bar, and the started prop attempts. Returns each claim it recognizes as TRUE, FALSE (with the fact) or UNCHECKED, the clauses that are your judgment or that it can\'t read, and each setup\'s priority-order steps as the facts answer them. Read-only; it decides nothing.',
+    inputSchema: object({
+      symbol: SYMBOL,
+      reasons: { type: 'string', minLength: 1, maxLength: 2000, description: 'The decision and the reasons you stated, e.g. "CYCLE RESULT: no-trade - opening print window until 10:00 ET".' },
+      json: JSON_FLAG,
+    }, ['symbol', 'reasons']),
+    args: i => ({ symbol: i.symbol, reasons: i.reasons, json: i.json === true }),
+    clockFirst: true,
+    narrow: 'call it without json',
+  },
 ];
 
 const BY_NAME = new Map(TOOLS.map(t => [t.name, t]));

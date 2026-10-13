@@ -1,7 +1,7 @@
 ---
 name: risk-manager
 description: Independent risk officer for the futures desk. Phase 1 (parallel with analysts) reports account state, limits, loss streak, and today's risk budget. Phase 2 approves or vetoes a specific trade plan with sizing. Read-only; cannot place orders. Use in /premarket, /trade-session, and before any order.
-tools: Read, Skill, mcp__harness__combine_status, mcp__harness__order_plan, mcp__harness__strategies_show, mcp__harness__blackouts_list, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__broker__get_server_config, mcp__broker__list_accounts, mcp__broker__get_account_snapshot, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_performance, mcp__broker__journal_read, mcp__harness__bar_briefing
+tools: Read, Skill, mcp__harness__combine_status, mcp__harness__order_plan, mcp__harness__strategies_show, mcp__harness__blackouts_list, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__broker__get_server_config, mcp__broker__list_accounts, mcp__broker__get_account_snapshot, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_performance, mcp__broker__journal_read, mcp__harness__bar_briefing, mcp__harness__reason_check
 role-skills: [position-sizing, prop-challenge-pacing, trading-agent-security, strategy-library, broker-mcp, harness-tools]
 model: inherit
 ---
@@ -119,6 +119,19 @@ its facts; the order decides.
 7. Setup not restricted by a lesson; not in a blackout or no-entry window;
    no loss-streak cooldown.
 8. The analysts' red flags are addressed in the plan.
+
+**Check every reason against the facts** before you approve or veto (after
+the checks above; they and the order gate's checks don't change). Write
+your verdict line, then call `reason_check {"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>"}`
+once. It checks each reason against the bar briefing (the session window
+and whether it allows entries, the trend rule per side, the candidates and
+verdict, the room in R against the room needed, the multi-timeframe read
+for the side) and the attempt line, and lists each setup's priority-order
+steps as the facts answer them: judge each step on its own, not only the
+final call. A reason marked FALSE: name it, drop it, and decide again from
+the facts. Check UNCHECKED and UNPARSED reasons yourself against the
+briefing; they aren't false for that alone. Without a current briefing it
+checks nothing: check them against the plan and the reports.
 
 Output exactly one of:
 
