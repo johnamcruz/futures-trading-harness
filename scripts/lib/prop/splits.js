@@ -32,9 +32,14 @@
  * The LLM role (months from LLM_FROM, after the model's training cutoff) is
  * orthogonal: a flag on a month, never a mechanical role of its own.
  *
- * Dates here are trading-session dates (the day a session counts for), not
- * bar timestamps; every block starts on the first of a month.
+ * A date string ('YYYY-MM[-DD]') is a trading-session date (the day a
+ * session counts for); a Date or a millisecond timestamp (a bar's time) is
+ * converted to its session first (18:00 ET rollover, clock.tradingDayKey),
+ * so an evening bar belongs to the next session's block. Every block starts
+ * on the first of a month.
  */
+
+const { tradingDayKey } = require('../trading/clock');
 
 const SPLITS = Object.freeze({
   train: Object.freeze(['2021-01-01', '2023-07-01']),
@@ -83,8 +88,16 @@ function parse(date) {
     if (!m) throw new Error(`not an ISO date: "${date}"`);
     ms = Date.parse(`${m[1]}-${m[2]}-${m[3] || '01'}T00:00:00Z`);
     if (Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) !== `${m[1]}-${m[2]}-${m[3] || '01'}`) ms = NaN;
-  } else if (date instanceof Date) ms = date.getTime();
-  else if (typeof date === 'number') ms = date;
+  } else if (date instanceof Date || typeof date === 'number') {
+    // A timestamp (a bar's time) belongs to its trading session, which opens at 18:00 ET the evening before:
+    // read as a UTC calendar date, an evening bar would land in the previous block or quarter (a held-out bar
+    // labelled tuning). Converted to the session's date first.
+    const t = date instanceof Date ? date.getTime() : date;
+    if (Number.isFinite(t)) {
+      const key = tradingDayKey(new Date(t));
+      ms = Date.parse(`${key}T00:00:00Z`);
+    }
+  }
   if (!Number.isFinite(ms)) throw new Error(`not a date: ${String(date)}`);
   const d = new Date(ms);
   return { month: d.getUTCFullYear() * 12 + d.getUTCMonth(), ms };

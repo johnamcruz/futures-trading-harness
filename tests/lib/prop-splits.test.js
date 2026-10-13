@@ -193,3 +193,21 @@ test('schedule: the reserve forms out-of-sample windows of at least 12 months, R
     for (const name of w.blocks) assert.ok(['recent', 'reserve'].includes(blockByName(name).role), `${name} reserved`);
   }
 });
+
+test('a bar timestamp belongs to its trading session: an evening bar after the 18:00 ET open is in the next session\'s block or quarter', () => {
+  const { roleOf, unitContaining } = require('../../scripts/lib/prop/splits');
+  const at = iso => new Date(iso);
+  // 18:00 ET (EDT) on Sep 30 opens the Oct 1 session: held-out, never tuning (R17).
+  assert.deepStrictEqual([roleOf(at('2026-09-30T22:00:00Z')).block, roleOf(at('2026-09-30T22:00:00Z')).part], ['2026-H2', 'held-out']);
+  assert.strictEqual(roleOf(at('2026-09-30T19:00:00Z')).part, 'tuning', 'the afternoon is still Sep 30');
+  assert.strictEqual(roleOf(Date.parse('2026-09-30T22:00:00Z')).part, 'held-out', 'a millisecond timestamp too');
+  // 18:30 ET on Jun 30 opens the Jul 1 session: walk-forward, not Recent.
+  assert.strictEqual(roleOf(at('2026-06-30T22:30:00Z')).role, 'walk-forward');
+  // 18:30 ET (EST) on Dec 31 opens the Jan 1 session: 2027-H1 reserve, not 2026-H2 held-out.
+  assert.strictEqual(roleOf(at('2026-12-31T23:30:00Z')).block, '2027-H1');
+  // An attempt built from bar timestamps, first bar at the Jul 1 session's evening open, inside 2026-H2 tuning.
+  const unit = unitContaining(Date.parse('2026-06-30T22:00:00Z'), Date.parse('2026-07-29T21:00:00Z'));
+  assert.ok(unit && unit.block === '2026-H2' && unit.part === 'tuning', JSON.stringify(unit));
+  // Session-date strings are taken as they are.
+  assert.strictEqual(roleOf('2026-09-30').part, 'tuning');
+});
