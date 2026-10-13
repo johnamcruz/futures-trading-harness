@@ -104,6 +104,21 @@ function parse(date) {
 }
 
 const monthOf = iso => parse(iso).month;
+
+/**
+ * An exclusive range end, as the midnight after the last session in the range. A session-date string is that
+ * midnight already. A timestamp is read through its last included instant (to - 1 ms): its session ends the range,
+ * so a range ending inside a session holds that session (never cut back to its midnight, which would let a range
+ * reaching into the next unit pass as inside this one).
+ */
+function parseEnd(to) {
+  if (!(to instanceof Date) && typeof to !== 'number') return parse(to);
+  const t = to instanceof Date ? to.getTime() : to;
+  if (!Number.isFinite(t)) throw new Error(`not a date: ${String(to)}`);
+  const ms = parse(t - 1).ms + 86400000;
+  const d = new Date(ms);
+  return { month: d.getUTCFullYear() * 12 + d.getUTCMonth(), ms };
+}
 const isoOfMonth = m => `${String(Math.floor(m / 12)).padStart(4, '0')}-${String((m % 12) + 1).padStart(2, '0')}-01`;
 
 const START = monthOf(SCHEDULE_START);
@@ -178,7 +193,7 @@ function blockByName(name) {
 /** The blocks overlapping [from, to), in time order, each whole (not clipped). */
 function blocksBetween(from, to) {
   const a = parse(from);
-  const b = parse(to);
+  const b = parseEnd(to);
   if (!(a.ms < b.ms)) return [];
   const out = [];
   // The last month touched by [from, to): to's month only if to is past its first instant.
@@ -198,7 +213,7 @@ function blocksBetween(from, to) {
  */
 function unitContaining(from, to) {
   const a = parse(from);
-  const b = parse(to);
+  const b = parseEnd(to);
   if (!(a.ms < b.ms)) return null;
   const unit = roleOf(a.ms);
   return b.ms <= Date.parse(`${unit.to}T00:00:00Z`) ? unit : null;

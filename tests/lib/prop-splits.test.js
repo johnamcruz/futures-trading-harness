@@ -211,3 +211,19 @@ test('a bar timestamp belongs to its trading session: an evening bar after the 1
   // Session-date strings are taken as they are.
   assert.strictEqual(roleOf('2026-09-30').part, 'tuning');
 });
+
+test('a timestamp range end holds its own session: a range reaching into the next unit never passes as inside this one', () => {
+  const { unitContaining, blocksBetween } = require('../../scripts/lib/prop/splits');
+  const t = iso => Date.parse(iso);
+  // Ends inside the Oct 1 session (held-out): not a tuning attempt (R17).
+  assert.strictEqual(unitContaining(t('2026-07-01T13:00:00Z'), t('2026-10-01T20:59:00Z')), null);
+  assert.strictEqual(unitContaining('2026-07-01', t('2026-10-01T15:00:00Z')), null, 'a session-date start too');
+  // Ends exactly at the Oct 1 session's first instant (18:00 ET Sep 30): exclusive, so still inside tuning.
+  assert.strictEqual(unitContaining(t('2026-07-01T13:00:00Z'), t('2026-09-30T22:00:00Z')).part, 'tuning');
+  // blocksBetween includes the block its end session falls in.
+  assert.deepStrictEqual(blocksBetween(t('2026-06-01T13:00:00Z'), t('2026-07-01T15:00:00Z')).map(b => b.block), ['recent', '2026-H2']);
+  assert.deepStrictEqual(blocksBetween(t('2026-06-01T13:00:00Z'), t('2026-06-30T21:00:00Z')).map(b => b.block), ['recent']);
+  // Session-date strings keep their exclusive meaning.
+  assert.strictEqual(unitContaining('2026-07-01', '2026-10-01').part, 'tuning');
+  assert.deepStrictEqual(blocksBetween('2026-06-01', '2026-07-01').map(b => b.block), ['recent']);
+});
