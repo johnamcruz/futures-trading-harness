@@ -508,3 +508,53 @@ test('scoreRun: an entry\'s expectation is the setup it traded, though another s
   const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
   assert.deepStrictEqual([records[0].expected.setup, records[0].expected.ceiling, records[0].category], ['ema_cross', null, 'right']);
 });
+
+// ------------------------------------------------------------------------------------------------
+// Review round 2
+
+test('a skip is judged against a clean take when the bar has one, whatever the scan order', () => {
+  const keltner = setup({ name: 'keltner', component: null, policy: false, verdict: null, alignment: 'mixed' }); // unknown size, halved: couldSkip [4]
+  const orb = setup({ name: 'orb', component: null, policy: false, verdict: null }); // a clean take
+  for (const setups of [[keltner, orb], [orb, keltner]]) {
+    const f = facts({ setups });
+    const e = expectedDecision(f);
+    assert.deepStrictEqual([e.setup, e.couldSkip], ['orb', []]);
+    assert.strictEqual(classify(label(), f, e, checkReasons('CYCLE RESULT: no-trade', f)).category, 'excessive abstention');
+  }
+  // Every take can be turned down: the skip is unchecked, in either order.
+  const keltner2 = setup({ name: 'orb', component: null, policy: false, verdict: null, alignment: 'pullback' });
+  for (const setups of [[keltner, keltner2], [keltner2, keltner]]) {
+    const f = facts({ setups });
+    assert.strictEqual(classify(label(), f, expectedDecision(f), checkReasons('CYCLE RESULT: no-trade', f)).category, 'unchecked');
+  }
+});
+
+test('a true claim excuses a skip only when it bears on the setup the order says take', () => {
+  const keltner = setup({ name: 'keltner', component: null, policy: false, verdict: null });
+  // True but incidental: the trend rule blocks longs; the take is short.
+  const f = facts({ setups: [keltner] });
+  const longs = checkReasons('CYCLE RESULT: no-trade - 15m down trend blocks longs', f);
+  assert.deepStrictEqual(longs.claims.map(c => [c.check, c.incidental]), [[true, true]]);
+  assert.strictEqual(classify(label(), f, expectedDecision(f), longs).category, 'excessive abstention');
+  // True, about another setup: orb short has no room; keltner short has.
+  const g = facts({ setups: [keltner, setup({ name: 'orb', component: null, policy: false, verdict: null, room: { inTheWay: { name: 'prior VAL', R: 0.4 }, needR: 2 } })] });
+  const other = checkReasons('CYCLE RESULT: no-trade - orb short has insufficient room', g);
+  assert.deepStrictEqual(other.claims.map(c => [c.kind, c.check, c.about]), [['no-room', true, 'orb']]);
+  assert.strictEqual(classify(label(), g, expectedDecision(g), other).category, 'excessive abstention');
+  // True and not incidental (a long setup is on the bar, its verdict skip), but about the other side: no ground.
+  const sides = facts({ setups: [keltner, setup({ name: 'orb', component: null, policy: false, candidate: false, direction: 'long', verdict: { action: 'skip', maxSize: 0 } })] });
+  const blocks = checkReasons('CYCLE RESULT: no-trade - 15m down trend blocks longs', sides);
+  assert.deepStrictEqual(blocks.claims.map(c => [c.check, c.incidental]), [[true, false]]);
+  assert.strictEqual(classify(label(), sides, expectedDecision(sides), blocks).category, 'excessive abstention');
+  // About the setup itself, or its side: a ground (the facts missed it: unchecked).
+  const own = facts({ setups: [setup({ name: 'keltner', component: null, policy: false, verdict: null, trendAllows: true })], trendRule: { prevailing: '15m up', long: true, short: false } });
+  assert.strictEqual(classify(label(), own, expectedDecision(own), checkReasons('CYCLE RESULT: no-trade - 15m up trend blocks shorts', own)).category, 'unchecked');
+  // keltner's own room, stated short while its record says enough: a false reason, not a ground.
+  assert.strictEqual(classify(label(), g, expectedDecision(g), checkReasons('CYCLE RESULT: no-trade - keltner insufficient room', g)).category, 'excessive abstention');
+});
+
+test('"no room concerns" is not a room shortage', () => {
+  const f = facts({ setups: [setup()] });
+  for (const text of ['no room concerns', 'no room issue', 'no room problems']) assert.deepStrictEqual(checkReasons(`CYCLE RESULT: executed - short, ${text}`, f).claims, [], text);
+  assert.strictEqual(checkReasons('CYCLE RESULT: no-trade - no room to the level', f).claims[0].kind, 'no-room');
+});

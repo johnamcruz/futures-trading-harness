@@ -143,9 +143,10 @@ function expectedDecision(facts) {
   if (!facts.scanned) return { decision: 'unchecked', ceiling: null, decidedBy: 'no scan', ...NONE };
   if (!facts.setups.length) return { decision: 'no-trade', ceiling: 0, decidedBy: 'no setup', ...NONE };
   const each = facts.setups.map(s => setupExpectation(s, facts));
-  // The setup the order lets go furthest: a take, else an unchecked, else the first no-trade.
-  const rank = { take: 0, unchecked: 1, 'no-trade': 2 };
-  return [...each].sort((a, b) => rank[a.decision] - rank[b.decision])[0];
+  // The setup the order lets go furthest: a clean take (no judgment step can turn it down), else a take a judgment
+  // step can turn down, else an unchecked, else the first no-trade. A couldSkip excuses a skip only when every take has one.
+  const rank = e => (e.decision === 'take' ? (e.couldSkip.length ? 1 : 0) : e.decision === 'unchecked' ? 2 : 3);
+  return [...each].sort((a, b) => rank(a) - rank(b))[0];
 }
 
 /**
@@ -174,7 +175,7 @@ const CLAIMS = [
   ['no-verdict', /no (?:active )?(?:policy )?(?:strategy )?verdict|has no verdict/i],
   ['nothing-fired', /\bno (?:valid )?(?:strategy |strategies |candidate |rules? )*(?:candidates?|strateg(?:y|ies)(?! verdict)|signals?|setups?)\b|\b0 candidates\b|candidates: \[\]|\bnone fired\b|\bno rules fired\b|trigger(?:s)? (?:not (?:fired|met)|conditions (?:are )?not met)|no valid entry trigger/i],
   // Room: "not enough" only in negative words; numbers ("first level 0.35R", "3R vs 2R needed") are read for what they say.
-  ['no-room', /insufficient room|not enough room|\bno room\b|limited (?:upside |downside )?room(?! to work)|room requirement|fails? (?:the )?room|lacks? room/i],
+  ['no-room', /insufficient room|not enough room|\bno room\b(?! (?:concerns?|issues?|problems?|worries|constraints?|for concern))|limited (?:upside |downside )?room(?! to work)|room requirement|fails? (?:the )?room|lacks? room/i],
   ['room', /first level (?:is )?(?:at )?\d|\d+(?:\.\d+)?R (?:away|vs)|need(?:s)? \d+(?:\.\d+)?R|\d+(?:\.\d+)?R (?:needed|required)|room (?:of |to )?\d/i],
   ['mixed', /mixed (?:alignment|read|multi-timeframe|timeframe)/i],
   ['counter', /counter(?:-trend)? (?:read|alignment)/i],
@@ -221,14 +222,15 @@ function checkClaim(kind, clause, facts) {
   }
   if (kind === 'trend-blocks') {
     const named = setupNamed(clause, facts);
+    const tag = res => ({ ...res, named: named ? named.name : null });
     const sides = sidesIn(clause);
     const rule = named && named.trendAllows !== null && named.trendAllows !== undefined ? { [named.direction]: named.trendAllows } : facts.trendRule;
     const asked = sides.length ? sides : named ? [named.direction] : ['long', 'short'];
-    if (named && named.style === 'reversal') return ok(false, `${named.component || named.name} is a reversal strategy: the trend rule allows it`);
-    if (asked.some(x => rule[x] === null || rule[x] === undefined)) return ok('unchecked', 'the trend rule for that side is not recorded');
+    if (named && named.style === 'reversal') return tag(ok(false, `${named.component || named.name} is a reversal strategy: the trend rule allows it`));
+    if (asked.some(x => rule[x] === null || rule[x] === undefined)) return tag({ ...ok('unchecked', 'the trend rule for that side is not recorded'), sides: asked });
     const allowed = asked.filter(x => rule[x] === true);
     const res = allowed.length ? ok(false, `the trend rule (${facts.trendRule.prevailing || 'no prevailing trend'}) allows ${allowed.join(' and ')}`) : ok(true, `${facts.trendRule.prevailing}: ${asked.join(' and ')} blocked`);
-    return { ...res, sides: asked };
+    return tag({ ...res, sides: asked });
   }
   if (kind === 'no-attempt') {
     if (!facts.attempt) return ok('unchecked', 'no attempt state recorded');
@@ -244,10 +246,12 @@ function checkClaim(kind, clause, facts) {
   }
   const s = setupNamed(clause, facts) || mainSetup(facts);
   if (!s) return ok('unchecked', 'no setup on the bar to check it against');
-  if (kind === 'room' || kind === 'no-room') return roomClaim(kind, clause, s, ok);
+  // Which setup the claim was checked against (named in the clause, else the bar's main one).
+  const about = { about: s.name };
+  if (kind === 'room' || kind === 'no-room') return { ...roomClaim(kind, clause, s, ok), ...about };
   if (kind === 'mixed' || kind === 'counter') {
-    if (!s.alignment || s.alignment === 'unknown') return ok('unchecked', 'the read is unknown');
-    return ok(s.alignment === kind, `${s.name} ${s.direction}: ${s.alignment}`);
+    if (!s.alignment || s.alignment === 'unknown') return { ...ok('unchecked', 'the read is unknown'), ...about };
+    return { ...ok(s.alignment === kind, `${s.name} ${s.direction}: ${s.alignment}`), ...about };
   }
   // no-confluence: a fact check only; none "changes nothing alone" (step 6), so it is never a ground to skip.
   if (!s.confluence) return ok('unchecked', 'confluence not recorded');
@@ -365,7 +369,16 @@ function classify(label, facts, expected, reasons) {
     why.push(`step ${expected.couldSkip.join(', ')} is judgment that can say no trade`);
     return out(falseReason ? 'wrong stated reason' : 'unchecked', null);
   }
-  const grounds = reasons.claims.filter(x => x.check === true && GROUNDS.has(x.kind));
+  // A true claim excuses the skip only when it bears on the setup the order says take: not incidental, and about
+  // that setup (a named one, or the setup it was checked against) or its side; the bar-wide ones (window, nothing
+  // fired, attempt, verdict, entry block) always do.
+  // (An incidental claim is about a side or setup the bar didn't have, so it never matches.)
+  const bears = c => {
+    if (c.kind === 'trend-blocks') return c.named ? c.named === expected.setup : (c.sides || []).includes(expected.direction);
+    if (c.about !== undefined) return c.about === expected.setup;
+    return true;
+  };
+  const grounds = reasons.claims.filter(x => x.check === true && GROUNDS.has(x.kind) && bears(x));
   const judged = reasons.judgment.length > 0 || reasons.claims.some(x => x.check === 'unchecked');
   if (grounds.length) return why.push(`a true ground the facts missed: ${grounds.map(x => x.kind).join(', ')}`), out('unchecked', null);
   if (judged) return why.push('skipped on judgment (steps 5 and 7 are the model\'s)'), out('unchecked', null);
