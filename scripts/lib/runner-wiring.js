@@ -21,7 +21,8 @@ const fs = require('fs');
 const path = require('path');
 const { createRunner } = require('./runner');
 const { SERVER_TIME_TOLERANCE_MS } = require('./trading/harness-now');
-const { openAdapter, tradingBlocked } = require('./broker/adapter');
+const { openAdapter, liveRunBlocked } = require('./broker/adapter');
+const { activeBroker } = require('./broker/config');
 const { dayKey } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
@@ -40,12 +41,13 @@ const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
 
 /** The broker adapter for the runner: every interface tool, and (live, with an account) a server that trades. */
-async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter }) {
+async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter, broker = null }) {
   const client = open({ root, env });
   try {
     await client.verify();
-    // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those.
-    const why = !cfg.paper && cfg.account ? tradingBlocked(await client.serverConfig(), cfg.account) : null;
+    // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those,
+    // and trades only an account on the broker's allow-list (a confirmed replay is exempt).
+    const why = !cfg.paper ? liveRunBlocked({ broker: broker || activeBroker(env), config: await client.serverConfig(), env, accountId: cfg.account }) : null;
     if (why) throw new Error(why);
     return client;
   } catch (err) {

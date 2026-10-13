@@ -27,29 +27,20 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
 const { handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
-const { parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { accountFacts, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
 const { loadConfig } = require('./lib/trading/config');
 const { runningAttempts } = require('./lib/trading/prop-state');
 const { activeBroker, translatedCommand } = require('./lib/broker/config');
+const { createServerAttestation } = require('./lib/broker/allow-list');
 const { recordEntryOrder, graceFor, createOrderTracker } = require('./lib/trading/order-tracker');
 
 const ROOT = path.resolve(__dirname, '..');
 const LANE_TIMEOUT_MS = Number(process.env.FTH_LANE_TIMEOUT_MS) > 0 ? Number(process.env.FTH_LANE_TIMEOUT_MS) : 30000;
 const LEDGER_TTL_MS = 30000;
 const GRACE_MS = graceFor(process.env, LANE_TIMEOUT_MS);
-
-async function accountFacts(args, caller, withTrades = true) {
-  const accountId = args.accountId;
-  const [positions, orders, trades] = await Promise.all([
-    caller.call('list_open_positions', { accountId }).then(r => parseToolJson(r, 'list_open_positions')),
-    caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
-    withTrades ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : Promise.resolve([]),
-  ]);
-  return { positions, orders, trades };
-}
 
 async function accountViolations(args, caller, now, ledger, extraOrders = []) {
   const facts = await accountFacts(args, caller);
@@ -102,6 +93,7 @@ function main(argv) {
   const toChild = line => { if (child.stdin.writable) child.stdin.write(`${line}\n`); };
   const caller = childCaller(toChild);
   const clock = createGatewayClock(process.env, { broker, fromArgv: !broker, call: (n, a) => caller.call(n, a) }); // pinned once (harness-now.js)
+  const attest = createServerAttestation({ env: process.env, broker, call: (n, a) => caller.call(n, a) }); // live entries vs get_server_config
   // Market orders let through recently, until the account reflects them (see pendingNet).
   let ledger = [];
   const sentNet = new Map(); // request id -> { args, observedNet } for allowed place_order calls
@@ -150,6 +142,7 @@ function main(argv) {
     const violations = [...base.violations, ...extra.violations];
     if (!entry) tracker.annotateExposure(violations, unknown, now);
     if (entry && unknown.length) violations.push(tracker.pendingViolation(unknown, now, lookupFailed));
+    if (entry) violations.push(...await attest.violations(args, (await clock.ready()).replay === true, violations));
     // The account reads take time: an entry checked just before the close
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(clock.now(), loadConfig(process.env));

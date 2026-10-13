@@ -353,10 +353,16 @@ Autonomous:
 
 ```bash
 cp mcp-configs/autotrader.example.json autotrader.json   # pick harness, symbols, paper, schedule
+node scripts/preflight.js --config autotrader.json                 # read-only readiness check (exit 1: fix the FAIL lines)
 node scripts/autotrader.js --config autotrader.json --dry-run      # show the next action and command
 node scripts/autotrader.js --config autotrader.json                # run the schedule
 touch ~/.futures-trading-harness/STOP                              # kill switch: no new entries
 ```
+
+A live run (`"paper": false`) needs its account on the broker's allow-list (the
+variable `allowedAccountsEnv` names in `mcp-configs/brokers.json`): the runner
+won't start and the gate refuses live entries without it (exits and closes always
+go). The first live sessions step by step: `docs/LIVE-DRY-RUN.md`.
 
 The runner trades the session from the 18:00 ET open to end of day (15:50
 ET), runs a premarket briefing at 18:05 ET (the start of the trading day,

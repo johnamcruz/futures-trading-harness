@@ -13,7 +13,8 @@
  * (get_server_config reports trading disabled), FAKE_TICK (JSON merged into the
  * MNQ contracts: another tickSize or tickValue), FAKE_BARS (a JSON file of bars that
  * get_bars serves as they are, the server's own extra fields included, as a server whose
- * settings add fields to its bars; with FAKE_BARS_FROM_START, only those from startTime on).
+ * settings add fields to its bars; with FAKE_BARS_FROM_START, only those from startTime on), FAKE_BALANCE (the
+ * account's balance, default 50000).
  */
 
 const fs = require('fs');
@@ -22,7 +23,7 @@ const { TOOLS } = require('../../scripts/lib/broker/interface');
 const MNQ = 'fake:MNQ:Z26';
 const drop = new Set(String(process.env.FAKE_DROP || '').split(',').filter(Boolean));
 const state = {
-  accounts: [{ id: 7, name: 'FAKE-50K', balance: 50000, canTrade: true, mcpTradingAllowed: true }],
+  accounts: [{ id: 7, name: 'FAKE-50K', balance: Number(process.env.FAKE_BALANCE || 50000), canTrade: true, mcpTradingAllowed: true }],
   contracts: [
     { id: MNQ, name: 'MNQZ6', description: 'Micro E-mini Nasdaq-100', tickSize: 0.25, tickValue: 0.5, activeContract: true },
     { id: 'fake:MNQ:H27', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: false },

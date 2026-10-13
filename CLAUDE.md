@@ -150,8 +150,9 @@ request, every time, whatever the size of the change:
    that a skill, agent, command, rule, strategy, account, hook, or script
    points to. Today those are `docs/BACKTESTING.md`,
    `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement),
-   and `docs/LEARNED-RULEBOOK.md` (the learned-policy design the prop code is
-   built from).
+   `docs/LEARNED-RULEBOOK.md` (the learned-policy design the prop code is
+   built from), and `docs/LIVE-DRY-RUN.md` (the runbook for live-money setup
+   that preflight points to).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what

@@ -925,10 +925,10 @@ function replaySetup({ replay = true, journalAt = '2026-10-07T14:25:00.000Z' } =
   ].join('\n'));
   const home = trendHome(undefined, { closedAt: '2026-10-07T14:27:00.000Z' });
   const journal = require('../helpers').writeJournal(home, [{ ts: journalAt, kind: 'plan', contractId: CONTRACT, text: 'plan' }]);
-  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, ...(replay ? { replay: true } : {}) } } }));
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'sim.js'], journal, allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', ...(replay ? { replay: true } : {}) } } }));
   recordBrokerSpecs(home, { broker: 'sim' }); // the replay broker's tick specs, as its translator records them
   const env = {
-    FTH_HOME: home, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '',
+    FTH_HOME: home, NODE_ENV: 'test', FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', SIM_ALLOWED_ACCOUNTS: '1',
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
   };
   return { root, env };
@@ -989,6 +989,54 @@ test('replay clock: a refused FTH_REPLAY_NOW (no replay broker, unparseable) ref
   }
   // Control: the same entry without the override is judged normally.
   assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...live.env, FTH_TEST_NOW: wall }, pluginRoot: live.root }).violations, []);
+});
+
+test('allowed accounts: a live entry needs the broker\'s allow-list holding its account (unskippable, also autonomous); paper, a confirmed replay and every risk-reducing action are exempt', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const live = replaySetup({ replay: false });
+  const wall = '2026-10-07T14:30:00.000Z';
+  const at = extra => ({ ...live.env, FTH_TEST_NOW: wall, ...extra });
+  const refused = (env, why, input = ANYTIME) => {
+    const r = checkOrder(input, { env, pluginRoot: live.root });
+    assert.deepStrictEqual(r.violations.map(v => v.check), ['allowed-accounts'], r.message);
+    assert.match(r.message, why);
+    assert.match(r.message, /close_position still go/);
+  };
+  refused(at({ SIM_ALLOWED_ACCOUNTS: '' }), /SIM_ALLOWED_ACCOUNTS is empty/);
+  refused(at({ SIM_ALLOWED_ACCOUNTS: 'any' }), /never empty or "any"/);
+  refused(at({ SIM_ALLOWED_ACCOUNTS: '2,3' }), /account 1 is not in SIM_ALLOWED_ACCOUNTS \(2, 3\)/);
+  refused(at({}), /names no valid accountId/, { ...ANYTIME, accountId: undefined });
+  // Not skippable, autonomous or not (an autonomous run adds its own checks; this one is among them).
+  for (const extra of [{ FTH_ORDER_GATE_SKIP: 'allowed-accounts' }, { FTH_AUTONOMOUS: '1', FTH_ORDER_GATE_SKIP: 'allowed-accounts' }]) {
+    assert.ok(checkOrder(ANYTIME, { env: at({ SIM_ALLOWED_ACCOUNTS: '', ...extra }), pluginRoot: live.root }).violations.some(v => v.check === 'allowed-accounts'), JSON.stringify(extra));
+  }
+  // Every risk-reducing action goes with no allow-list at all.
+  for (const [tool, input] of [
+    ['place_order', { ...entryOrder({ rationale: '[exit] flatten' }), side: 'sell' }],
+    ['place_order', { ...entryOrder({ rationale: '[protect] stop for the long at 21480' }), side: 'sell', type: 'stop', stopPrice: 21480 }],
+    ['modify_order', { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }],
+    ['cancel_order', { accountId: 1, orderId: 9 }],
+    ['partial_close_position', { accountId: 1, contractId: CONTRACT, size: 1 }],
+  ]) assert.deepStrictEqual(checkOrder(input, { env: at({ SIM_ALLOWED_ACCOUNTS: '' }), pluginRoot: live.root, tool }).violations, [], tool);
+  // A broker that names no allow-list variable: live entries refused.
+  const file = path.join(live.env.FTH_HOME, 'brokers.json');
+  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const { allowedAccountsEnv: _a, ...bare } = cfg.brokers.sim;
+  fs.writeFileSync(file, JSON.stringify({ ...cfg, brokers: { sim: { ...bare, paperEnv: { SIM_TRADING: 'off' } } } }));
+  refused(at({}), /names no allow-list variable/);
+  // A paper run (the broker's paper settings in force: the server refuses every order anyway).
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: at({ SIM_TRADING: 'off' }), pluginRoot: live.root }).violations, []);
+  // A confirmed replay (a replay broker on its replayed clock) needs none.
+  const sim = replaySetup();
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: { ...sim.env, SIM_ALLOWED_ACCOUNTS: '', FTH_TEST_NOW: '2026-10-10T15:00:00Z', FTH_REPLAY_NOW: wall }, pluginRoot: sim.root }).violations, []);
+  // ...but the replay broker without its clock is judged as live.
+  const r = checkOrder(ANYTIME, { env: { ...sim.env, SIM_ALLOWED_ACCOUNTS: '', FTH_TEST_NOW: wall }, pluginRoot: sim.root });
+  assert.deepStrictEqual(r.violations.map(v => v.check), ['allowed-accounts']);
+  // Control: listed, the entry goes.
+  fs.writeFileSync(file, JSON.stringify(cfg));
+  assert.deepStrictEqual(checkOrder(ANYTIME, { env: at({ SIM_ALLOWED_ACCOUNTS: '9, 1' }), pluginRoot: live.root }).violations, []);
 });
 
 test('replay clock: a broker labelled replay that looks live is refused (same server, entry variable, or a live broker\'s variables)', () => {
@@ -1325,4 +1373,77 @@ test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED
   assert.match(refused({ ...base, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }).message, /risk-manager phase 2/);
   // A name the cache can't hold (phase 2, the executor, anything else) counts for nothing.
   assert.ok(refused({ ...base, FTH_CYCLE_CACHED: 'risk-manager phase 2,trade-executor,whatever' }));
+});
+
+test('allowed accounts: an override can\'t change a shipped broker\'s paper settings or allow-list variable (the gate trusts them); a broker of the user\'s own keeps its own', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { activeBroker } = require('../../scripts/lib/broker/config');
+  const home = tmpDir();
+  const shipped = shippedBroker();
+  const file = path.join(home, 'brokers.json');
+  fs.writeFileSync(file, JSON.stringify({ broker: shipped.name, brokers: {
+    [shipped.name]: { paperEnv: { SPOOF_PAPER: 'on' }, allowedAccountsEnv: 'SPOOF_LIST' },
+    mine: { command: ['mine'], paperEnv: { MINE_PAPER: 'on' }, allowedAccountsEnv: 'MINE_LIST' },
+  } }));
+  const b = activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: file });
+  assert.deepStrictEqual([b.paperEnv, b.allowedAccountsEnv], [shipped.paperEnv, shipped.allowedAccountsEnv]);
+  const { liveEntryRefusal } = require('../../scripts/lib/broker/allow-list');
+  assert.match(liveEntryRefusal({ broker: b, env: { SPOOF_PAPER: 'on', SPOOF_LIST: '1' }, accountId: 1 }), new RegExp(`${shipped.allowedAccountsEnv} is empty`));
+  // Nor ADD them to a shipped broker that lacks them: checked on defaults (read from DEFAULTS_FILE) without them.
+  const { DEFAULTS_FILE } = require('../../scripts/lib/broker/config');
+  const { loadBrokers } = require('../../scripts/lib/broker/config');
+  const realRead = fs.readFileSync;
+  fs.readFileSync = (f, ...a) => (path.resolve(String(f)) === DEFAULTS_FILE
+    ? JSON.stringify({ broker: shipped.name, brokers: { [shipped.name]: { command: ['x'] } } }) : realRead(f, ...a));
+  try {
+    fs.writeFileSync(file, JSON.stringify({ broker: shipped.name, brokers: { [shipped.name]: { paperEnv: { SPOOF_PAPER: 'on' }, allowedAccountsEnv: 'SPOOF_LIST' } } }));
+    const added = loadBrokers({ FTH_HOME: home, FTH_BROKERS_FILE: file }).brokers[shipped.name];
+    assert.deepStrictEqual(['paperEnv' in added, 'allowedAccountsEnv' in added], [false, false]);
+  } finally {
+    fs.readFileSync = realRead;
+  }
+  fs.writeFileSync(file, JSON.stringify({ broker: shipped.name, brokers: {
+    [shipped.name]: { paperEnv: { SPOOF_PAPER: 'on' }, allowedAccountsEnv: 'SPOOF_LIST' },
+    mine: { command: ['mine'], paperEnv: { MINE_PAPER: 'on' }, allowedAccountsEnv: 'MINE_LIST' },
+  } }));
+  const mine = activeBroker({ FTH_HOME: home, FTH_BROKERS_FILE: file, FTH_BROKER: 'mine' });
+  assert.deepStrictEqual([mine.paperEnv, mine.allowedAccountsEnv], [{ MINE_PAPER: 'on' }, 'MINE_LIST']);
+});
+
+test('allowed accounts: the gateway\'s server check - paper only when the server has trading off, the server\'s list must hold the account as well as the local one, an unreadable config refuses, a confirmed replay is exempt', async () => {
+  const { serverEntryRefusal, createServerAttestation } = require('../../scripts/lib/broker/allow-list');
+  const broker = { name: 'live', allowedAccountsEnv: 'L', paperEnv: { P: 'on' } };
+  const ok = { tradingEnabled: true, allowedAccountIds: [1] };
+  const check = (server, env = { L: '1' }, extra = {}) => serverEntryRefusal({ broker, env, accountId: 1, server, ...extra });
+  assert.strictEqual(check(ok), null);
+  assert.strictEqual(check({ tradingEnabled: false }, { P: 'on' }), null, 'the server confirms paper');
+  assert.strictEqual(check({ tradingEnabled: false }, {}), null, 'the server refuses every order itself');
+  assert.match(check(ok, { P: 'on' }), /L is empty/, 'a paper claim the server contradicts is live');
+  assert.match(check({ ...ok, allowedAccountIds: [7] }), /account 1 is not among the broker server's allowed accounts \(7\)/);
+  for (const ids of [[], 'any', undefined, [1, 'x']]) assert.match(check({ ...ok, allowedAccountIds: ids }), /allows any account/, JSON.stringify(ids));
+  assert.match(check(ok, {}), /L is empty/, 'the local list too');
+  for (const bad of [null, undefined, 'text', [], { error: 'timeout' }, { tradingEnabled: 'yes' }]) assert.match(check(bad), /get_server_config could not be read/, JSON.stringify(bad));
+  assert.strictEqual(check(null, {}, { replay: true }), null);
+  // Read once per gateway (kept only when readable); an error refuses and is read again; an entry already refused isn't asked about.
+  let calls = 0;
+  let answer = { isError: true, content: [{ text: 'down' }] };
+  const attest = createServerAttestation({ env: { L: '1' }, broker, call: async () => { calls += 1; return answer; } });
+  assert.match((await attest.violations({ accountId: 1 }, false))[0].message, /could not be read \(down\)[\s\S]*close_position still go/);
+  answer = { content: [{ text: JSON.stringify(ok) }] };
+  assert.deepStrictEqual(await attest.violations({ accountId: 1 }, false), []);
+  assert.deepStrictEqual(await attest.violations({ accountId: 1 }, false), []);
+  assert.strictEqual(calls, 2, 'cached once readable');
+  assert.deepStrictEqual(await attest.violations({ accountId: 2 }, false, [{ check: 'plan-required' }]), []);
+  assert.strictEqual((await attest.violations({ accountId: 2 }, false))[0].check, 'allowed-accounts');
+  // A reply that parses but has no boolean tradingEnabled ({}) refuses and isn't kept: the next, valid one is read.
+  const replies = [{ content: [{ text: '{}' }] }, { content: [{ text: JSON.stringify(ok) }] }];
+  const odd = createServerAttestation({ env: { L: '1' }, broker, call: async () => replies.shift() });
+  assert.match((await odd.violations({ accountId: 1 }, false))[0].message, /could not be read/);
+  assert.deepStrictEqual(await odd.violations({ accountId: 1 }, false), []);
+  const replayed = createServerAttestation({ env: {}, broker, call: async () => assert.fail('a confirmed replay asks nothing') });
+  assert.deepStrictEqual(await replayed.violations({ accountId: 1 }, true), []);
+  // No configured broker the gateway knows, and none readable: refused.
+  const none = createServerAttestation({ env: { FTH_BROKER: 'nope', FTH_HOME: tmpDir() }, call: async () => answer });
+  assert.match((await none.violations({ accountId: 1 }, false))[0].message, /unknown broker "nope"/);
 });

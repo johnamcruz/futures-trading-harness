@@ -7,6 +7,7 @@
       "entryEnv": "PROJECTX_MCP_ENTRY",
       "journal": "~/.projectx-mcp/journal.jsonl",
       "journalEnv": "PROJECTX_JOURNAL_PATH",
+      "allowedAccountsEnv": "PROJECTX_ALLOWED_ACCOUNT_IDS",
       "env": [
         "PROJECTX_USERNAME", "PROJECTX_API_KEY", "PROJECTX_TRADING_ENABLED", "PROJECTX_ALLOWED_ACCOUNT_IDS",
         "PROJECTX_ALLOWED_SYMBOLS", "PROJECTX_MAX_ORDER_SIZE", "PROJECTX_MAX_POSITION_SIZE", "PROJECTX_MAX_DAILY_LOSS",
@@ -22,6 +23,7 @@
       "entryEnv": "BACKTESTER_MCP_ENTRY",
       "journal": "~/.backtester-mcp/runs/default/journal.jsonl",
       "journalEnv": "BACKTESTER_JOURNAL_PATH",
+      "allowedAccountsEnv": "BACKTESTER_ALLOWED_ACCOUNT_IDS",
       "env": [
         "BACKTESTER_DATA_DIR", "BACKTESTER_CLOCK_FILE", "BACKTESTER_NOW", "BACKTESTER_START", "BACKTESTER_END",
         "BACKTESTER_RUN_ID", "BACKTESTER_STATE_DIR", "BACKTESTER_ACCOUNT_ID", "BACKTESTER_ACCOUNT_NAME",

@@ -33,7 +33,8 @@ harness (agents, skills, order gate, runner, CLIs)
         "entryEnv": "<NAME>_MCP_ENTRY",
         "journal": "~/.<name>-mcp/journal.jsonl", "journalEnv": "<NAME>_JOURNAL_PATH",
         "env": ["<NAME>_USERNAME", "<NAME>_API_KEY", "..."],
-        "paperEnv": { "<NAME>_TRADING_ENABLED": "false" }
+        "paperEnv": { "<NAME>_TRADING_ENABLED": "false" },
+        "allowedAccountsEnv": "<NAME>_ALLOWED_ACCOUNT_IDS"
       }
     }
   }
@@ -46,6 +47,7 @@ harness (agents, skills, order gate, runner, CLIs)
   | `journal` / `journalEnv` | The journal file it writes (the variable wins) |
   | `env` | The variables it reads (credentials, guardrails), forwarded by harnesses |
   | `paperEnv` | What a paper run sets so the server refuses every order |
+  | `allowedAccountsEnv` | The variable (one of `env`) holding the server's allowed account ids, comma separated. A live run needs it to list the run's account: the runner won't start and the order gate refuses live entries (never exits or closes) while it is empty, `any`, or lacks the account. Paper runs and confirmed replays don't need it. The gateway also asks the server (`get_server_config`, once per process): a run is paper only when the server says `tradingEnabled: false`, and a live entry needs the server's own `allowedAccountIds` to list the account; an unreadable answer refuses entries, never exits or closes. An override can't change a shipped broker's `paperEnv` or `allowedAccountsEnv` |
   | `replay` | `true` only for a simulated broker that replays history: the harness may then take its clock from `FTH_REPLAY_NOW`, if the broker shares no server or variables with a live one and its server's `get_server_config` confirms `replay: true` (see [HARNESS-DESIGN.md](HARNESS-DESIGN.md), Replay clock). A broker the defaults ship without it stays live whatever an override says |
 
   Switching brokers is a config change. Its settings go in
@@ -56,7 +58,10 @@ harness (agents, skills, order gate, runner, CLIs)
 - **One adapter.** Harness code reaches the broker only through
   `scripts/lib/broker/adapter.js`: reads straight to the server, order calls
   through the gateway. A live runner checks at startup that the server lists
-  every interface tool, has trading enabled, and allows its account.
+  every interface tool, has trading enabled, and allows its account; a live
+  run also that the server lists its accounts (never "any") and that the
+  `allowedAccountsEnv` list holds its account. `scripts/preflight.js` runs
+  these checks, and more, read-only before a session.
 
 ## Transport
 

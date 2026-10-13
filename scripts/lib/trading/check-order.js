@@ -17,6 +17,9 @@ const { evaluateOrder, evaluateModify, formatBlock, isRiskReducing } = require('
 const { loadStrategies } = require('./strategies');
 const { loadAccounts } = require('./accounts');
 const { resolveClock, createGatewayClock } = require('./harness-now');
+const { activeBroker } = require('../broker/config');
+const { liveEntryRefusal } = require('../broker/allow-list');
+const { loadEnvFiles } = require('../env-file');
 
 function readBlackouts(file) {
   let text;
@@ -78,6 +81,15 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
     accounts: loadAccounts(pluginRoot, env).accounts,
     transcriptPath,
   });
+  // A live entry needs the broker's allow-list (broker/allow-list.js) holding its account: never "any account".
+  // Paper runs and confirmed replays are exempt; exits, protective stops and closes never reach this. The broker's
+  // settings as its server gets them: the environment, then the .env files the gateway loads (env-file.js).
+  if (result.intent !== 'risk-reducing') {
+    const serverEnv = { ...env };
+    loadEnvFiles({ env: serverEnv });
+    const why = liveEntryRefusal({ broker: activeBroker(env), env: serverEnv, accountId: (input || {}).accountId, replay: c.replay === true });
+    if (why) result.violations.push({ check: 'allowed-accounts', message: `${why}. Exits, protective stops, cancels and close_position still go.` });
+  }
   const allowed = result.violations.length === 0;
   return { allowed, intent: result.intent, violations: result.violations, message: allowed ? '' : formatBlock(result.violations), now };
 }

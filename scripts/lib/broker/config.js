@@ -14,7 +14,8 @@
  * env, paperEnv, replay }. `replay: true` marks a simulated broker that replays
  * history: only then may FTH_REPLAY_NOW set the harness's clock
  * (trading/harness-now.js). A broker the defaults define without it stays live
- * whatever an override says. `env` lists the variables its server reads (credentials,
+ * whatever an override says, and keeps its shipped `paperEnv` and
+ * `allowedAccountsEnv` (the order gate trusts them). `env` lists the variables its server reads (credentials,
  * guardrails), which harnesses must forward to it; `paperEnv` is what a paper
  * run sets so the server refuses every order.
  * `command` is the server's argv; else `entry` (a .js file run with node), or
@@ -38,6 +39,8 @@ const ROOT = path.resolve(__dirname, '..', '..', '..');
 const DEFAULTS_FILE = path.join(ROOT, 'mcp-configs', 'brokers.json');
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const SERVER_NAME = 'broker';
+// Settings of a shipped broker an override can't change (the gate's paper and allow-list checks read them).
+const LOCKED = ['paperEnv', 'allowedAccountsEnv'];
 
 class BrokerConfigError extends Error {}
 
@@ -72,6 +75,9 @@ function loadBrokers(env = process.env) {
     brokers[name] = { ...(brokers[name] || {}), ...resolvePaths(b, path.dirname(userFile)) };
     // A broker the defaults ship as live can't be made a replay broker by an override (harness-now.js).
     if (b && typeof b === 'object' && 'replay' in b && defaults.brokers && defaults.brokers[name] && defaults.brokers[name].replay !== true) brokers[name].replay = false;
+    // Nor can it change what makes a run paper or which variable holds the allow-list: the order gate trusts them.
+    const shipped = defaults.brokers && defaults.brokers[name];
+    if (shipped) for (const k of LOCKED) { if (k in shipped) brokers[name][k] = shipped[k]; else delete brokers[name][k]; }
   }
   return { broker: (user && user.broker) || defaults.broker, brokers, file: userFile };
 }

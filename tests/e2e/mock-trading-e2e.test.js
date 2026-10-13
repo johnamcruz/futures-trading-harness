@@ -63,10 +63,10 @@ function world(at, over = {}, { specs = true } = {}) {
   const state = path.join(home, 'exchange.json');
   const journal = path.join(home, 'journal.jsonl');
   fs.writeFileSync(journal, '');
-  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, SERVER], journal } } }));
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, SERVER], journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS' } } }));
   exchange.initState(state, { nowMs: Date.parse(at), ...over });
   const env = {
-    PATH: process.env.PATH, HOME: home, FTH_HOME: home, MOCK_STATE: state, MOCK_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: at,
+    PATH: process.env.PATH, HOME: home, FTH_HOME: home, MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_ALLOWED_ACCOUNTS: '7', NODE_ENV: 'test', FTH_TEST_NOW: at,
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
   };
