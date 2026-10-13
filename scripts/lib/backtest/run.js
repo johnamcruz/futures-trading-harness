@@ -236,12 +236,15 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
   const cfg = validateBacktestConfig(raw, baseDir);
   let strategies;
   let prop = null;
+  let traded = null; // a prop run: the strategies its setups are picked from
   if (cfg.prop) {
     // A policy strategy: its strategies, account, sizing, contracts, and exit come from its STRATEGY.md.
     const p = policyStrategy(root, cfg.prop, env);
     if (Number.parseInt(p.strategy.timeframe, 10) !== cfg.timeframe) throw new Error(`timeframe: ${cfg.prop} trades ${p.strategy.timeframe} bars, not ${cfg.timeframe}m`);
     prop = p.strategy;
-    strategies = p.components;
+    // Every strategy that fires in the live scan (confluence, conflict); the setup is picked only from the traded ones.
+    strategies = p.counted;
+    traded = p.components.map(c => c.name);
     for (const x of p.leftOut) log(`${cfg.prop}: leaves out ${x.name}: ${x.why}`);
     const { familyRoot } = require('../trading/contracts');
     for (const sym of cfg.symbols) {
@@ -282,7 +285,7 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
     }
   }
   if (cfg.debug && !strategies.some(s => s.name === cfg.debug)) throw new Error(`debug: ${cfg.debug} is not among the strategies this run trades (${strategies.map(s => s.name).join(', ')})`);
-  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log });
+  if (prop) return runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded });
   if (cfg.walkForward) return runWalk(cfg, strategies[0], markets, { baseDir, outRoot, env, runId, log });
   const { trades, skipped, expired } = runEngine(markets, strategies, { ...cfg, account: null, gateConfig: loadConfig(env) });
   for (const m of markets) {
@@ -328,10 +331,12 @@ function runBacktest(raw, { root, baseDir = process.cwd(), outRoot, env = proces
 }
 
 /**
- * The policy strategy `name`, checked, with the strategies it trades (in its order) and the ones
- * it leaves out with why. As live (strategies.js componentRefusal, the runner's screen and the
- * gate): an active policy trades only its active strategies; one that isn't active runs only in
- * a paper run, which takes any non-disabled one.
+ * The policy strategy `name`, checked, with the strategies it trades (in its order), the ones
+ * it leaves out with why, and the ones that count toward confluence and conflict. As live
+ * (strategies.js componentRefusal, the runner's screen and the gate): an active policy trades
+ * only its active strategies; one that isn't active runs only in a paper run, which takes any
+ * non-disabled one. A left-out paper strategy still fires in the scan, so it still counts
+ * (`counted`: every listed one a paper run could trade); only the pick skips it.
  */
 function policyStrategy(root, name, env = process.env) {
   const all = loadStrategies(root, env).strategies;
@@ -343,27 +348,28 @@ function policyStrategy(root, name, env = process.env) {
   const left = s.strategies.map(n => ({ name: n, why: componentRefusal(s, all, n, { paper }) })).filter(x => x.why);
   const components = s.strategies.filter(n => !left.some(x => x.name === n)).map(n => all.find(x => x.name === n));
   if (!components.length) throw new Error(`prop: ${name} trades none of its strategies (${left.map(x => x.why).join('; ')})`);
-  return { strategy: s, components, leftOut: left };
+  const counted = s.strategies.filter(n => !componentRefusal(s, all, n, { paper: true })).map(n => all.find(x => x.name === n));
+  return { strategy: s, components, counted, leftOut: left };
 }
 
 /** Prop challenge attempts: every setup the account's budget sizes, exited by the policy strategy's exit. */
-function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log }) {
+function runCombine(cfg, prop, strategies, markets, { root, baseDir, outRoot, env, runId, log, traded }) {
   const account = accountNamed(root, prop.account, env);
   const contracts = prop.contracts || 'auto';
   const e = createEnv({
-    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: strategies.map(x => x.name), contracts },
+    markets, strategies, account, sizing: prop.sizing || null, prop: { strategy: prop, components: traded, contracts },
     engine: { ...cfg, account: null, prop: null, gateConfig: loadConfig(env) },
   });
   const from = cfg.start ?? e.days[0];
   const to = cfg.end ?? Infinity;
   const starts = e.starts(from, to, { every: cfg.every });
   if (!starts.length) throw new Error(`no ${account.sessions}-session attempt fits in the data${cfg.start !== null || cfg.end !== null ? ' between start and end' : ''}`);
-  log(`${prop.name}: ${starts.length} ${account.name} attempts (${account.sessions} sessions each), every ${cfg.every} trading day(s); ${strategies.map(s => s.name).join(', ')}; contracts ${contracts}`);
+  log(`${prop.name}: ${starts.length} ${account.name} attempts (${account.sessions} sessions each), every ${cfg.every} trading day(s); ${traded.join(', ')}${strategies.length > traded.length ? ` (counting ${strategies.filter(x => !traded.includes(x.name)).map(x => x.name).join(', ')} toward conflict only)` : ''}; contracts ${contracts}`);
   const baseline = evaluate(e, starts, to);
   const id = runId || new Date().toISOString().replace(/[:.]/g, '-');
   const report = {
-    runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: strategies.map(s => s.name),
-    leftOut: prop.strategies.filter(n => !strategies.some(s => s.name === n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
+    runId: id, prop: prop.name, account: account.name, symbols: cfg.symbols, timeframe: cfg.timeframe, strategies: traded,
+    leftOut: prop.strategies.filter(n => !traded.includes(n)), gate: cfg.gate, sizing: { ...combineDefaults, ...(prop.sizing || {}) }, contracts, every: cfg.every, baseline,
   };
   const runDir = cfg.outDir ? path.resolve(baseDir, cfg.outDir) : path.join(outRoot, id);
   fs.mkdirSync(runDir, { recursive: true });

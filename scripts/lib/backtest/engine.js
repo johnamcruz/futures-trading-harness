@@ -85,7 +85,7 @@ const DEFAULTS = {
   window: 500,
   account: null, // an account profile: run as a prop challenge (combine.js)
   sizing: null, // combine sizing (combine.DEFAULT_SIZING keys)
-  prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (its strategies' names), contracts (micro | mini | auto) }
+  prop: null, // a policy strategy's run: { strategy (its STRATEGY.md: exit), components (the names of the strategies it trades: the only ones a setup is picked from), contracts (micro | mini | auto) }
   prepared: null, // from prepare(): reuse the evaluator across runs
 };
 
@@ -133,7 +133,10 @@ function prepare(markets, strategies, opts = {}) {
     const ev = createEvaluator(bars, { window: o.window });
     const memo = new Map();
     // The first candidate on bar i, in strategy order (the scan at the bar's close), with its
-    // confluence: how many strategies fired its side and how many the other.
+    // confluence: how many strategies fired its side and how many the other. A policy run picks
+    // only from the strategies it trades (prop.components: its active ones, as live), while every
+    // strategy given counts toward confluence and conflict (a paper one too, as in the live scan).
+    const traded = o.prop && Array.isArray(o.prop.components) ? new Set(o.prop.components) : null;
     const setupAt = i => {
       if (!memo.has(i)) {
         const fired = [];
@@ -141,7 +144,7 @@ function prepare(markets, strategies, opts = {}) {
           const r = ev.at(s, i, { describe: false });
           if (r.candidate && r.direction) fired.push({ s, r });
         }
-        let pick = fired.find(f => f.r.stopDistance > 0) || null;
+        let pick = fired.find(f => f.r.stopDistance > 0 && (!traded || traded.has(f.s.name))) || null;
         if (pick) {
           const withIt = fired.filter(f => f.r.direction === pick.r.direction).length;
           const against = fired.length - withIt;

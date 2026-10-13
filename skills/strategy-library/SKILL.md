@@ -162,7 +162,8 @@ A policy trades only its `active` strategies: a `paper` one stays paper
 inside it (the runner passes over its setup, and the gate refuses an entry
 whose verdict names a strategy that isn't active or that it doesn't know,
 `[policy] ... has status "paper"`); the backtester's prop runs leave it out
-the same way.
+the same way, while still counting its signal as agreement or disagreement,
+as the live scan does.
 The trend rule is a hard gate check (`mtf-trend`): a trend strategy's entry
 against the recorded prevailing trend, or without a fresh record, is refused.
 
