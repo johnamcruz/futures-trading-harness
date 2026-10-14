@@ -264,16 +264,15 @@ function timingReport(cycles) {
 function runTiming({ res, cfg, context, home, env, startedMs, endedMs, now, result }) {
   try {
     const runEnv = (res && res.env) || env || {};
-    const { resolveClock } = require('./trading/harness-now');
     const { gateLogPath } = require('./trading/check-order');
-    let clock = { replay: false };
-    try { clock = resolveClock(runEnv, { testClock: false }); } catch (_err) { /* the wall clock */ }
-    const cycleAtMs = clock.replay ? clock.at.getTime() : now.getTime();
+    // The cycle's own time as the cycle log files it (cycle-log.js cycleClock: the replay clock's in a replay).
+    const clock = require('./cycle-log').cycleClock(runEnv, now);
+    const cycleAtMs = clock.cycleAt.getTime();
     const lineTimes = Array.isArray(res.lineTimes) ? res.lineTimes : null;
     const gate = gateOrders(gateLogPath({ FTH_GATE_LOG: runEnv.FTH_GATE_LOG || '', FTH_HOME: home }), startedMs, endedMs + 1000);
     return cycleTiming({
       text: lineTimes ? res.stdout : res.output, lineTimes, context, minutes: cfg && cfg.timeframe, startedMs, endedMs, cycleAtMs,
-      replay: Boolean(clock.replay), gate, ok: res.ok, timedOut: res.timedOut, result,
+      replay: clock.replay, gate, ok: res.ok, timedOut: res.timedOut, result,
     });
   } catch (_err) {
     return null;

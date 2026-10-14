@@ -135,15 +135,16 @@ test('writeCycleLog: a replayed cycle is filed and judged at the replay clock\'s
   assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).cycleAt, '2026-04-28T04:12:02.000Z', 'the first record intact');
   const lines = fs.readFileSync(path.join(home, 'logs', 'cycles-2026-04-28.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.deepStrictEqual(lines.map(l => [l.at, l.cycleAt]), Array(3).fill([wall.toISOString(), '2026-04-28T04:12:02.000Z']));
+  assert.deepStrictEqual([cycleClock(env, wall).cycleAt.toISOString(), cycleClock(env, wall).replay], ['2026-04-28T04:12:02.000Z', true]);
   // A live broker: the replay clock is refused (the gate refuses entries), the record keeps the wall clock.
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'lv', brokers: { lv: { command: ['node', path.join(home, 'live-server.js')] } } }));
-  assert.strictEqual(cycleClock(env, wall).cycleAt, wall);
+  assert.deepStrictEqual([cycleClock(env, wall).cycleAt, cycleClock(env, wall).replay], [wall, false]);
   assert.strictEqual(cycleClock({ HOME: home, FTH_HOME: home }, wall).cycleAt, wall, 'live: the wall clock');
   // The cycle's lanes, read as the gate reads FTH_CYCLE_LANE_BARS: unset {}, a lane by family root, unreadable null.
   assert.deepStrictEqual(cycleClock({}, wall).laneBars, {});
   assert.deepStrictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"2026-04-28T04:11:00Z"}}' }, wall).laneBars, { MNQ: { 1: '2026-04-28T04:11:00Z' } });
   assert.strictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{bad' }, wall).laneBars, null);
-  assert.deepStrictEqual(cycleClock(null, wall), { cycleAt: wall, laneBars: {} });
+  assert.deepStrictEqual(cycleClock(null, wall), { cycleAt: wall, laneBars: {}, replay: false });
 });
 
 test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unreadable lanes: every situational lookup required)', () => {

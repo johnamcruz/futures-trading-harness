@@ -199,16 +199,17 @@ function gateOrders(env, fromMs, toMs) {
  * autotrader.js childEnv) as the order gate reads them there: the replay clock's time when one is in force
  * (FTH_REPLAY_NOW, trading/harness-now.js; unset or refused: `at`, the wall clock), and the lanes whose bar closed
  * (FTH_CYCLE_LANE_BARS, trading/config.js; set but unreadable: null, so every situational lookup is required, as the
- * gate). No env (a caller that gives none): `at` and one lane, as before.
+ * gate). No env (a caller that gives none): `at` and one lane, as before. `replay`: the replay clock was in force.
  */
 function cycleClock(env, at) {
-  if (!env) return { cycleAt: at, laneBars: {} };
+  if (!env) return { cycleAt: at, laneBars: {}, replay: false };
   let cycleAt = at;
+  let replay = false;
   try {
     const c = resolveClock(env, { testClock: false });
-    if (c.replay) cycleAt = c.now();
+    if (c.replay) [cycleAt, replay] = [c.now(), true];
   } catch (_err) { /* the wall clock */ }
-  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS) };
+  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS), replay };
 }
 
 /**
