@@ -39,6 +39,9 @@ function setup() {
     .replace(/^account: .*$/m, 'account: eval_acct')
     .replace(/^contracts: .*$/m, 'contracts: micro');
   fs.writeFileSync(path.join(strat, 'STRATEGY.md'), policy);
+  // The same policy on orb alone: the fixtures' trades are what the full one has beyond it.
+  fs.mkdirSync(path.join(home, 'strategies', 'eval_orb'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'strategies', 'eval_orb', 'STRATEGY.md'), policy.replace(/^name: eval_fixture$/m, 'name: eval_orb').replace(/^strategies: .*$/m, 'strategies: [orb]'));
   const acct = path.join(home, 'accounts', 'eval_acct');
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
@@ -63,6 +66,12 @@ test('e2e: the evaluator scores a policy on the CSV fixture through both layers;
   assert.strictEqual(r.look, null);
   assert.strictEqual(r.account, 'eval_acct');
   assert.ok(r.trades > 0, `trades ${r.trades}: ${a.stderr}`);
+  assert.deepStrictEqual(r.strategies, ['fx_cross', 'fx_break', 'orb']);
+  // fx_cross and fx_break fire on this CSV: the policy over them and orb trades more than orb alone does.
+  const orbOnly = run(args.map(x => (x === 'eval_fixture' ? 'eval_orb' : x)), env);
+  assert.strictEqual(orbOnly.status, 0, orbOnly.stderr);
+  const orbTrades = JSON.parse(orbOnly.stdout).trades;
+  assert.ok(r.trades > orbTrades, `the fixtures add trades: ${r.trades} vs orb alone ${orbTrades}`);
   assert.strictEqual(r.factsErrors, 0, 'every trade has its facts from the live scan and briefing');
   assert.ok(r.real.attempts >= 1 && r.real.attempts === r.attempts);
   assert.strictEqual(r.real.passed + r.real.blown + r.real.timeout + r.real.unfinished, r.real.attempts);
