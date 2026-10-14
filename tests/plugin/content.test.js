@@ -307,7 +307,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/risk-manager.md'), /`confluence\.against`\):\s+its step 6\./);
   assert.match(read('skills/trade-session/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
-  for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/harness-tools/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
+  for (const f of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/multi-timeframe-analysis/SKILL.md', 'skills/tool-arguments/SKILL.md', 'skills/strategy-tools/SKILL.md', 'skills/bar-briefing/SKILL.md', 'skills/strategy-library/SKILL.md', 'skills/order-plan/SKILL.md', 'skills/reason-check/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');
   assert.match(rm, /the priority order's step 2 \(the gate refuses a trend\s+strategy against it anyway\)/);
   assert.match(rm, /within the verdict for a policy strategy; the priority order's size\./);
@@ -327,8 +327,11 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ts, /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
   assert.match(read('skills/multi-timeframe-analysis/SKILL.md'), /In an autonomous cycle the bar briefing \(`bar_briefing`[^]*?run `mtf_read` only without a current briefing\. The alignment and the\s+trend rule in a trade plan are the briefing's \(intraday frames\); a daily\s+read, if you have one \(premarket's\), is context only, never a second\s+alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
-  const ht = read('skills/harness-tools/SKILL.md');
-  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the next swing targets, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
+  const ht = read('skills/bar-briefing/SKILL.md');
+  // The briefing's m3 cisd (briefing.js cisdBlock), after the trend rule as m3 builds it; a frame points to it.
+  assert.match(ht, /`location`, `candidates` \(each with[^]*?\), `trendRule`, `cisd` \(the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles:[^)]*; a read, not a signal\), `candles` \(per timeframe,[^]*?`swingTargets` \([^)]*\)\. `m15`/);
+  assert.match(ht, /with a pointer to the runner's `candles`, `swingTargets` and `cisd`/);
+  assert.match(ht, /\| `bar_briefing` \| `symbol` \(a root, or a contract by month\), `json`\? \| the bar briefing the autonomous runner built for the bar this cycle decides, opening with a plain-language summary \(price and 1R, trend rule, alignment, regime, VWAP, news, the room above and below, a line per timeframe for its last completed candle, the next swing targets, the latest CISD per timeframe, each setup with its facts\), times in ET, distances in points and R \(1R is a setup's own stop, else the reference stop, 0\.5 x ATR\(20\)/);
   assert.match(ht, /`candidates` \(each with its stop, exit, the first level in its way in R, the room it needs, and its context as `facts`[^;]*; `null`: the scan failed or the bar wasn't scanned/);
   assert.match(ht, /`day`, until the first bar after 16:00 ET: the prior RTH day and its profile\. Each part has a version and changes only on expiry/);
   assert.match(ht, /When it answers that there is no current briefing, or that it is old, read the bars yourself/);
@@ -337,7 +340,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('agents/volume-liquidity-analyst.md'), /recent sweeps \(the briefing's `m3` `sweeps`/);
   // Codex can't take Read away (its sandbox reads files): a role without Read is told not to read files.
   // Its core skills, then its index (role-index), all readable.
-  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/market-structure\/SKILL\.md, [^)]*skills\/harness-tools\/SKILL\.md[^)]* under the harness root\): take bars and market data only through the tools above\./);
+  assert.match(read('.codex/agents/market-structure-analyst.toml'), /Do not read files \(no shell reads either\), except your skills \(skills\/market-structure\/SKILL\.md, [^)]*skills\/tool-arguments\/SKILL\.md[^)]* under the harness root\): take bars and market data only through the tools above\./);
   assert.match(read('.codex/agents/trade-executor.toml'), /except your skills \(skills\/broker-mcp\/SKILL\.md, skills\/order-types\/SKILL\.md, skills\/order-mechanics\/SKILL\.md, skills\/order-failures\/SKILL\.md, skills\/order-rationale\/SKILL\.md, skills\/trade-journal\/SKILL\.md, skills\/gate-refusals\/SKILL\.md, skills\/gate-refusals-positions\/SKILL\.md, skills\/broker-refusals\/SKILL\.md under the harness root\)/, 'the executor can still load its skills');
   assert.doesNotMatch(read('.codex/agents/risk-manager.toml'), /Do not read files/, 'a role that has Read may');
   // The analysts read bars only through the harness tools: no raw file reads, no raw get_bars dumps.
@@ -444,7 +447,13 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   for (const doc of ['agents/risk-manager.md', 'skills/trade-session/SKILL.md', 'skills/autonomous-trading/SKILL.md']) assert.doesNotMatch(flat(read(doc)), /no fact supports/, doc);
   const rm = read('agents/risk-manager.md');
   assert.match(rm, /^tools: .*mcp__harness__reason_check/m);
-  assert.match(flat(rm), step);
+  // The risk manager states the call and its FACTS line; what reason_check checks and what to do with each result are the
+  // reason-check skill's (in its core): one copy, not two.
+  assert.match(flat(rm), /\*\*Check every reason against the facts\*\* before you approve or veto [^]*?`reason_check \{"symbol": "<SYMBOL>", "reasons": "<your VERDICT line>\\n<your FACTS line>"\}` once \(what it checks, and what to do with each result: the `reason-check` skill\); judge each priority-order step it lists on its own, not only the final call\./);
+  assert.match(flat(rm), /it checks each FACTS claim as the order gate will, and a FACTS claim marked FALSE is a reason marked FALSE\./);
+  assert.doesNotMatch(flat(rm), /Check UNCHECKED and UNPARSED|A reason marked FALSE: name it/, 'the handling is reason-check\'s, once');
+  assert.match(read('agents/risk-manager.md'), /^role-skills: \[[^\]]*\breason-check\b/m);
+  assert.match(flat(read('skills/reason-check/SKILL.md')), /A reason marked FALSE: name it, drop it, and decide again from the facts\. Check UNCHECKED and UNPARSED reasons yourself against the briefing; they aren't false for that alone\. Without a current briefing, check them against the plan and the reports\. In an autonomous cycle the order gate checks phase 2's FACTS line itself \(`\[phase2-facts\]`\)\./);
   // After the checks, before the verdict line; the checks and the gate unchanged.
   assert.ok(rm.indexOf('8. The analysts\' red flags') < rm.indexOf('**Check every reason') && rm.indexOf('**Check every reason') < rm.indexOf('Output exactly one of:'));
   assert.match(rm, /\(after\s+the checks above; they and the order gate's checks don't change\)/);
@@ -454,7 +463,7 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   // In step 3, before the no-trade note and the plan.
   assert.ok(ts.indexOf('### 3. Head-trader synthesis') < ts.indexOf('**Check every reason') && ts.indexOf('**Check every reason') < ts.indexOf('unanswered red flag → **no trade**'));
   assert.match(read('skills/autonomous-trading/SKILL.md'), /Check its reasons against the facts before you write it \(`reason_check`,\s+trade-session step 3\): a reason marked FALSE is dropped and the decision\s+made again\./);
-  assert.match(read('skills/harness-tools/SKILL.md'), /\| `reason_check` \| `symbol`, `reasons` [^\n]*\| `reason-check\.js --symbol MNQ --reasons "<line>" \[--json\]` \|/);
+  assert.match(read('skills/reason-check/SKILL.md'), /\| `reason_check` \| `symbol`, `reasons` [^\n]*\| `reason-check\.js --symbol MNQ --reasons "<line>" \[--json\]` \|/);
   // Wired: Codex's and Qwen's risk manager, opencode's risk manager and head trader; no other role holds it.
   assert.match(read('.codex/agents/risk-manager.toml'), /harness MCP tools you may use: [^\n]*\breason_check\b/);
   assert.match(read('qwen-extension/agents/risk-manager.md'), /- mcp__harness__reason_check\n/);
@@ -465,7 +474,7 @@ test('fact-checked reasons: the risk manager and the head trader check every rea
   for (const name of agents.filter(a => a !== 'risk-manager')) assert.notStrictEqual(oc.agent[name].permission.harness_reason_check, 'allow', name);
   assert.match(oc.agent['risk-manager'].prompt, /\*\*Check every reason against the facts\*\*/);
   // The head trader reads the skills from their files; the workspace instructions list the tool's skill.
-  assert.match(read('workspace/AGENTS.md'), /`harness-tools` \(skills\/harness-tools\/SKILL\.md\): [^\n]*the check of stated reasons/);
+  assert.match(read('workspace/AGENTS.md'), /`reason-check` \(skills\/reason-check\/SKILL\.md\): Use when checking stated reasons vs the facts\./);
 });
 
 test('fact-checked reasons: phase 2 states its FACTS in the forms the code checks (fact-claims.js), in every adapter', () => {
@@ -495,8 +504,8 @@ test('fact-checked reasons: phase 2 states its FACTS in the forms the code check
   assert.match(read('skills/gate-refusals-cycle/SKILL.md'), /\| `\[phase2-facts\] Risk-manager phase 2 approved on a fact the bar briefing contradicts: <fact>` \|/);
 });
 
-test('the reasons check example in harness-tools has the form the check prints ("the <account> attempt is active")', () => {
-  const line = read('skills/harness-tools/SKILL.md').split('\n').find(l => l.includes('FALSE no-attempt'));
+test('the reasons check example in reason-check has the form the check prints ("the <account> attempt is active")', () => {
+  const line = read('skills/reason-check/SKILL.md').split('\n').find(l => l.includes('FALSE no-attempt'));
   const m = /- the (\S+) attempt is active$/.exec(line || '');
   assert.ok(m, line);
   // reasons.js prints `the ${account} attempt is active`: the example names an account the same way.

@@ -180,7 +180,7 @@ const POINTERS = [
 // Prompt text, not refusals: the runner's cycle prompts (autotrader.js) and a generated role's tool line (harness-sync.js).
 const PROMPT_TEXT = [
   ...['trader-process', 'autonomous-trading', 'premarket', 'trade-session', 'prop-challenge-pacing', 'end-of-day'].map(skill => ({ file: 'scripts/lib/autotrader.js', skill })),
-  { file: 'scripts/lib/harness-sync.js', skill: 'harness-tools' },
+  { file: 'scripts/lib/harness-sync.js', skill: 'tool-arguments' },
 ];
 const GATE_CODE = () => fs.readdirSync(path.join(ROOT, 'scripts'), { recursive: true }).map(String).filter(f => f.endsWith('.js')).map(f => `scripts/${f.split(path.sep).join('/')}`);
 const SKILL_NAMES = new Set(fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md'))));

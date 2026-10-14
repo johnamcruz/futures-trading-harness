@@ -1,0 +1,10 @@
+8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
+   verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
+   for the strategy and side you chose and shows it: the stop in points and
+   whole ticks, the risk per contract, the size and where it came from (1 for
+   a rules strategy, the size-1 rule; the verdict's, within the attempt's
+   budget, for a policy strategy), and the dollar risk. Use its numbers
+   instead of computing them by hand. The budget (step 3) and the caps are
+   still your judgement: a budget below its risk is a skip, and a size you
+   are allowed to raise (30+ reviewed trades) changes only `size`, with the
+   risk scaling by it.
