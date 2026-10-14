@@ -272,9 +272,11 @@ test('the new skills answer one question in a short index line; the topic skills
     const d = parseFrontmatter(skill(s)).data.description;
     assert.ok(d.length <= 80, `${s}: description ${d.length} chars, over 80 (each is a line of the head trader's catalog)`);
   }
-  for (const s of ['liquidity-concepts', 'vwap-volume-profile', 'market-structure', 'trend-momentum-indicators', 'market-snapshot']) {
-    assert.match(skill(s), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/, s);
-  }
+  assert.match(skill('vwap-volume-profile'), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/);
+  // liquidity-concepts and market-structure are retired (tests/plugin/skill-retire.test.js); trend-momentum-indicators
+  // starts from the briefing's fields, and market-snapshot is the fallback without a briefing.
+  assert.match(skill('trend-momentum-indicators'), /The bar briefing holds these values \(`m3` `trend`, `context`, `regime`;\s+`m15` `indicators`\); without one, `market-snapshot`\./);
+  assert.match(skill('market-snapshot'), /The bar briefing says there is no current briefing, or that it is old\./);
   // The multi-timeframe read's briefing fields: timeframe-sources (split from multi-timeframe-analysis) points there.
   assert.match(skill('timeframe-sources'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`/);
 });
@@ -339,8 +341,10 @@ function skillRefs(rel, text, quotesOld = false) {
 
 // trade-session step 4 as main had it (at 0b1a2f79): the head trader's own procedure, read every cycle, stays as it
 // was, byte for byte (order-plan is referenced from the risk manager's step 5, not added to the head trader's reading).
+// One edit since, same length: the structure role's report is "(market structure)", not the retired skill's name
+// (tests/plugin/skill-retire.test.js).
 const STEP4 = 'tests/fixtures/skill-split/trade-session-step4.before.txt';
-const STEP4_SHA256 = '7fc1e45612ccb7a7569bca0119c44d5a48a9d849c5694f25407e033d5ea06228';
+const STEP4_SHA256 = '392cb9fcf88ec97ef5a747e08c6770c01db8029d363671f01ce4eb968b4749b7';
 
 test('trade-session step 4 is main\'s, byte for byte; the head trader\'s load list is unchanged', () => {
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');

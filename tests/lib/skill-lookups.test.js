@@ -44,7 +44,7 @@ test('triggers: each one fires on its briefing fact and not otherwise; the vocab
 
 test('skillsInTranscript: a whole-skill skill_lookup in the session\'s transcript counts as a load', () => {
   const ev = (tool, input, status = 'completed') => JSON.stringify({ type: 'tool_use', part: { tool, state: { status, input } } });
-  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'liquidity-concepts' }), ev('harness_skill_lookup', { skill: 'x' }, 'error')].join('\n'))], ['liquidity-concepts']);
+  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'fair-value-gaps' }), ev('harness_skill_lookup', { skill: 'x' }, 'error')].join('\n'))], ['fair-value-gaps']);
 });
 
 test('recordLookup / readLookups: only in a runner\'s cycle and with a role; bad lines skipped', () => {
@@ -128,7 +128,7 @@ test('the cycle log records the cycle\'s lookups and removes the run\'s lookups 
   const { writeCycleLog } = require('../../scripts/lib/cycle-log');
   const home = tmpDir();
   const transcript = path.join(home, 'cycle-transcript.jsonl');
-  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'liquidity-concepts' }, T);
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }, T);
   const { summary } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
   assert.deepStrictEqual(summary.skillLookups, { mode: 'index', lookups: 1, byRole: { 'volume-liquidity-analyst': 1 }, requiredCalls: 0, met: 0 });
   assert.ok(!fs.existsSync(L.lookupsFile(transcript)));

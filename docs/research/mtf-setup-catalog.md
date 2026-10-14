@@ -5,6 +5,12 @@ A research catalog: setups shaped the way a trader reads the market top-down
 lower-timeframe **trigger**), built only from concepts the harness's skills
 already teach, written as exact rules, and measured once on Train.
 
+(History: the skills quoted below as market-structure and
+liquidity-concepts were retired since; their content now lives in
+`bos-vs-choch`, `pullback-vs-reversal`, `levels-and-reactions`,
+`breakout-vs-fakeout` and `fair-value-gaps`. The quotes are kept as they
+were when the catalog was written.)
+
 This section (everything above **Results**) was written and committed
 before any of these rules was evaluated on data. The only data touched
 before the commit was a four-day plumbing check of the fetch (MNQ, 3-minute
@@ -92,7 +98,7 @@ Common pieces:
   `close crosses_above highest(3)[1]` (or `highest(5)[1]` where stated).
 - **Structural stop**: the distance from the signal close to the
   structure that invalidates the idea, plus 0.25 x ATR(20)
-  (market-structure step 5: "beyond that swing plus a buffer"). Rules keep
+  (market-structure's step 5: "beyond that swing plus a buffer"). Rules keep
   it between 0.5 and 3 ATR (`<dist> >= 0.25 * atr(20)` and
   `<dist> <= 2.75 * atr(20)`), so a one-tick stop never makes an outsized R.
 - **Room**: where a family targets a level, a rule requires the level to
@@ -239,7 +245,7 @@ longer compile. The census (Results) ran them before that.)
 
 ### F5. 4h bias with a 1h OTE or discount pullback (rank 8)
 
-- **Rationale.** market-structure step 4: "Within a trend, buy pullbacks
+- **Rationale.** market-structure's step 4: "Within a trend, buy pullbacks
   into discount (below 50% of the dealing range)"; `cisd_ote`'s optimal
   trade entry: a retrace into the 0.62-0.79 zone of the leg. The dealing
   range is the last 160 3m bars (8 hours: an hourly-scale leg).

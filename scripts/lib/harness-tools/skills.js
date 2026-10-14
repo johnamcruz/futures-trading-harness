@@ -21,7 +21,7 @@ const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** The skill's SKILL.md inside <root>/skills (no symlink out of it), or throws. */
 function skillFile(root, skill) {
-  if (!NAME.test(String(skill || ''))) throw new Error(`--skill: a skill's name, e.g. liquidity-concepts (${USAGE})`);
+  if (!NAME.test(String(skill || ''))) throw new Error(`--skill: a skill's name, e.g. fair-value-gaps (${USAGE})`);
   const dir = fs.realpathSync(path.join(root, 'skills'));
   const want = path.join(dir, skill, 'SKILL.md');
   let real;

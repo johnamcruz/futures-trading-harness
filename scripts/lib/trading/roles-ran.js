@@ -5,7 +5,7 @@
  * skill's full cycle runs the analysts (market structure, trend and momentum,
  * volume and liquidity) and risk-manager phase 1, then risk-manager phase 2 on
  * the plan; a lean cycle runs risk-manager phase 1, then phase 2. Each analyst
- * carries skills (market-structure, liquidity-concepts, vwap-volume-profile,
+ * carries skills (bos-vs-choch, levels-and-reactions, vwap-volume-profile,
  * session-timing, trend-momentum-indicators, ...), and the risk-manager
  * carries position-sizing and prop-challenge-pacing, so a cycle that skips a
  * role decides without them. The gate refuses such an entry.

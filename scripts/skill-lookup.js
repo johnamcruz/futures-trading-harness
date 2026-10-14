@@ -3,7 +3,7 @@
  * A whole skill by name, as a role's skill index points to it
  * (scripts/lib/role-skills.js).
  *
- *   node scripts/skill-lookup.js --skill liquidity-concepts [--role volume-liquidity-analyst]
+ *   node scripts/skill-lookup.js --skill fair-value-gaps [--role volume-liquidity-analyst]
  *
  * The operation lives in scripts/lib/harness-tools/skills.js.
  */
