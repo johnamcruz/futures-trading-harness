@@ -2484,7 +2484,7 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, breakout/);
-  assert.match(r.stderr, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.doesNotMatch(r.stderr, /risk-manager reported without/, "the risk manager embeds its situational skills");
   // Without the lane in the environment, the 3m briefing alone: nothing required.
   const { FTH_CYCLE_LANE_BARS: _lanes, ...oneLane } = env;
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, oneLane).stderr, /roles-ran/);
@@ -2496,4 +2496,32 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   look('risk-manager', 'confluence-counting', 31);
   look('risk-manager', 'invalidation', 31);
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
+});
+
+test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cached report counts on a bar requiring lookups only with its own call\'s lookups (FTH_CYCLE_CACHED_LOOKUPS); none, unreadable or another role\'s: refused; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
+  writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
+  const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
+  const T = 1.8e12;
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  // Only phase 2 ran this cycle: every other report came from the cache.
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
+    ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
+  const met = { 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] };
+  const run = extra => gate({ ...orderPayload(), transcript_path: transcript }, { ...env, ...extra });
+  const none = run({});
+  assert.strictEqual(none.code, 2);
+  assert.match(none.stderr, /\[roles-ran\][^\n]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
+  for (const raw of ['not json', JSON.stringify({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'] }), JSON.stringify({ ...met, 'market-structure-analyst': ['rejection'] })]) {
+    const r = run({ FTH_CYCLE_CACHED_LOOKUPS: raw });
+    assert.strictEqual(r.code, 2, raw);
+    assert.match(r.stderr, /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal/, raw);
+  }
+  // Not cached this cycle (FTH_CYCLE_CACHED without it): its lookups are ignored.
+  assert.strictEqual(run({ FTH_CYCLE_CACHED: 'trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).code, 2);
+  assert.doesNotMatch(run({ FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).stderr, /roles-ran/);
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
 });

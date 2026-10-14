@@ -43,8 +43,13 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:39:02.000Z trade 3m ===
 Autonomous cycle.
@@ -80,7 +85,7 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 10:37 ET) ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -107,8 +112,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:42:02.000Z trade 3m ===
 Autonomous cycle.
@@ -136,15 +155,15 @@ Autonomous cycle.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- market-structure-analyst report (from 10:40 ET) ---
-Data: bar_briefing m3@2026-04-27T14:39:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- market-structure-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of market-structure-analyst report ---
---- trend-momentum-analyst report (from 10:40 ET) ---
-Data: bar_briefing m3@2026-04-27T14:39:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- trend-momentum-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 10:40 ET) ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -171,8 +190,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:37 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:45:02.000Z trade 3m ===
 Autonomous cycle.
@@ -199,7 +232,7 @@ Autonomous cycle.
   Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- risk-manager phase 1 report (from 10:43 ET) ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -226,8 +259,13 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:48:02.000Z trade 3m ===
 Autonomous cycle.
@@ -263,7 +301,7 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 10:46 ET) ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -290,8 +328,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:51:02.000Z trade 3m ===
 Autonomous cycle.
@@ -319,12 +371,12 @@ Autonomous cycle.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- market-structure-analyst report (from 10:49 ET) ---
-Data: bar_briefing m3@2026-04-27T14:48:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of market-structure-analyst report ---
---- trend-momentum-analyst report (from 10:49 ET) ---
-Data: bar_briefing m3@2026-04-27T14:48:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -351,8 +403,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:54:02.000Z trade 3m ===
 Autonomous cycle.
@@ -380,15 +446,15 @@ Autonomous cycle.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- market-structure-analyst report (from 10:52 ET) ---
-Data: bar_briefing m3@2026-04-27T14:51:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of market-structure-analyst report ---
---- trend-momentum-analyst report (from 10:52 ET) ---
-Data: bar_briefing m3@2026-04-27T14:51:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 10:52 ET) ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -415,8 +481,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:57:02.000Z trade 3m ===
 Autonomous cycle.
@@ -444,15 +524,15 @@ Autonomous cycle.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- market-structure-analyst report (from 10:55 ET) ---
-Data: bar_briefing m3@2026-04-27T14:54:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of market-structure-analyst report ---
---- trend-momentum-analyst report (from 10:55 ET) ---
-Data: bar_briefing m3@2026-04-27T14:54:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 10:55 ET) ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -479,8 +559,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 10:46 ET) ---
+Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:00:02.000Z trade 3m ===
 Autonomous cycle.
@@ -507,7 +601,7 @@ Autonomous cycle.
   Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- risk-manager phase 1 report (from 10:58 ET) ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -534,8 +628,13 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:03:02.000Z trade 3m ===
 Autonomous cycle.
@@ -571,7 +670,7 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
---- risk-manager phase 1 report (from 11:01 ET) ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -598,8 +697,22 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  End with the cycle result as plain text in your final message, never as a tool call.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  An analyst's 15m-and-up view holds until 11:15 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 11:01 ET) ---
+Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
+--- trend-momentum-analyst report (from 11:01 ET) ---
+Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T15:06:02.000Z trade 3m ===
 Autonomous cycle.
@@ -623,13 +736,16 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: market-structure-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:15 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- trend-momentum-analyst report (from 11:04 ET) ---
-Data: bar_briefing m3@2026-04-27T15:03:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
+--- trend-momentum-analyst report (from 11:01 ET) ---
+Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

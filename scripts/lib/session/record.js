@@ -68,7 +68,7 @@ function passTap() {
     },
     events: () => events.slice(),
     summary: symbols => ({
-      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null, ...(Array.isArray(e.history) ? { history: e.history } : {}), ...(e.agentError ? { agentError: true } : {}), ...(e.premarketRetry ? { premarketRetry: true } : {}) })),
+      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, ...(e.reportedResult ? { reportedResult: e.reportedResult } : {}), symbols: e.symbols || null, ...(Array.isArray(e.history) ? { history: e.history } : {}), ...(e.agentError ? { agentError: true } : {}), ...(e.premarketRetry ? { premarketRetry: true } : {}) })),
       events: [...new Set(events.map(e => e.kind))],
       errors: errors.slice(),
       bars: symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null })),

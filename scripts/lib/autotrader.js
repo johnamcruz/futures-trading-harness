@@ -554,15 +554,20 @@ const ROLES_CHECKED = new Set([...STREAMED_TRANSCRIPT, 'qwen']);
 const OFF_DESK = ['strategy-researcher'];
 
 /**
- * The roles a cycle may not launch, which the harness enforces where it can (opencode: per-run permissions): the
- * analysts whose report the runner served from its cache (their report is in the prompt; risk-manager stays, for
- * phase 2), and in a trade or manage cycle the roles outside the trading desk.
+ * The roles a cycle may not launch, which the harness enforces where it can (opencode: the roles off the desk by
+ * the run's task permission, the cached ones by the runner's plugin, so the head trader's prompt doesn't change with
+ * the cache: opencode.js runConfig): the analysts whose report the runner served from its cache (their report is in
+ * the prompt; risk-manager stays, for phase 2), and in a trade or manage cycle the roles outside the trading desk
+ * (offDeskRoles).
  */
 function deniedRoles(context) {
   const c = context || {};
   const cached = (c.cachedRoles || []).filter(r => typeof r === 'string' && r !== 'risk-manager');
-  return [...cached, ...(['trade', 'manage'].includes(c.action) ? OFF_DESK : [])];
+  return [...cached, ...offDeskRoles(context)];
 }
+
+/** The roles every trade or manage cycle denies (the same each such cycle): those outside the trading desk. */
+const offDeskRoles = context => (['trade', 'manage'].includes((context || {}).action) ? [...OFF_DESK] : []);
 
 /** Environment for a harness run: root, autonomous lock-down, the bar directory, and paper mode. */
 function childEnv(cfg, root, base = process.env, context = null) {
@@ -604,6 +609,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
+  // Index mode: the skills each cached role's report looked up in its own call, which the gate counts for that role.
+  const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, s]) => cachedRoles.includes(r) && Array.isArray(s) && s.length) : [];
+  if (looked.length) env.FTH_CYCLE_CACHED_LOOKUPS = JSON.stringify(Object.fromEntries(looked));
+  else delete env.FTH_CYCLE_CACHED_LOOKUPS;
   // How the roles' prompts carry their skills (role-skills.js), which the gate reads (index mode enforces the lookups):
   // only opencode embeds skills in its roles (its mode, index by default, below); every other harness's roles load
   // all their skills as their body says, which is full.
@@ -627,7 +636,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
     // that file again. A prompt that embeds none (a full-mode file, none at all): no attestation, the transcript decides.
     const att = headAttestation(cfg, root, { ...base, FTH_ROLE_SKILLS: env.FTH_ROLE_SKILLS });
     if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir, deniedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir, deniedRoles: offDeskRoles(context), refusedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
   }
   return env;
 }
@@ -818,13 +827,41 @@ function cycleResult(output) {
  * An end-of-day run is judged by its exit alone, live and in replay alike: the day is judged by the runner's own
  * flatten (verified flat), never by the agents' result line or the workspace guard (its verdict is in the kill switch).
  */
-function cycleOutcome(res, { result, intact, action }) {
+function cycleOutcome(res, { result, intact, action, lookups = [] }) {
   const line = cycleResult(agentOutput(res));
   const word = outcomeOf(line);
   const reported = word !== null && word !== 'error';
   // The agent's own error result: a decision (counted as live counts it), not an infrastructure failure.
   const agentError = Boolean(res.ok && word === 'error');
-  return { ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result, code: res.code ?? null, transcript: res.stdout || '', ...(agentError ? { agentError: true } : {}) };
+  // A trade cycle's `blocked` with no order call in it: scored as no-trade, the line it wrote kept (scoredResult).
+  const scored = res.ok && (action === 'trade' || action === 'manage') ? scoredResult(result, agentOutput(res)) : null;
+  return {
+    ok: res.ok && (action === 'eod' || (reported && intact)), timedOut: res.timedOut, result: scored ? scored.result : result, code: res.code ?? null, transcript: res.stdout || '',
+    ...(scored ? { reportedResult: result, resultNote: scored.note } : {}), ...(agentError ? { agentError: true } : {}), lookups: Array.isArray(lookups) ? lookups : [],
+  };
+}
+
+// The order tools (the broker interface's names, any server prefix) and the subagent that sends entries.
+const ORDER_CALL = /(?:^|__|_)(?:place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
+const TASK_CALL = new Set(['task', 'Task', 'Agent']);
+
+/**
+ * A `CYCLE RESULT: blocked` line from a cycle with no order call in it, rewritten as no-trade for scoring: `blocked` is
+ * only for an order the gate, the gateway or the broker refused this cycle (the autonomous-trading skill); standing
+ * aside is no-trade. { result, note } or null (kept as written): another outcome; a transcript showing no tool call
+ * (unreadable, so unknown); any order tool call or trade-executor launch, refused or not (its refusal may be inside
+ * the executor's own calls, which the transcript doesn't show). A refusal's words in a loaded skill or a report are
+ * no refused call: the calls decide.
+ */
+function scoredResult(result, output) {
+  if (outcomeOf(result) !== 'blocked') return null;
+  const text = String(output || '');
+  const calls = require('./cycle-log').toolCalls(text);
+  if (!calls.length) return null;
+  if (calls.some(c => ORDER_CALL.test(c.name) || (TASK_CALL.has(c.name) && /trade-executor/.test(String(c.input.subagent_type || ''))))) return null;
+  const m = /^CYCLE RESULT:[\s*_`]*blocked[*_`]*\s*[:,.]?\s*(?:-\s*)?(.*)$/i.exec(String(result).replace(/^[\s*_`]+/, '').replace(/\s+/g, ' ').trim());
+  const reason = m && m[1] ? m[1] : 'no order was refused';
+  return { result: `CYCLE RESULT: no-trade - ${reason}`, note: 'reported blocked with no order call this cycle (blocked is a refused order): scored as no-trade' };
 }
 
 /** What the agent said: its standard output alone when the run kept it apart (never stderr), else its output. */
@@ -899,7 +936,9 @@ module.exports = {
   outcomeOf,
   runnerArgv,
   deniedRoles,
+  offDeskRoles,
   cycleOutcome,
+  scoredResult,
   accountText,
   historyText,
   historyShownLines,

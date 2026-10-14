@@ -78,6 +78,24 @@ function cycleLaneBarsOf(raw) {
   }
 }
 
+/**
+ * FTH_CYCLE_CACHED_LOOKUPS ({"market-structure-analyst": ["breakout"]}, set by the runner): for each role served from
+ * the report cache, the skills its cached report's own call looked up (report-cache.js). Only roles in `cached` and
+ * skill names; anything else, or an unreadable value, is none (every required lookup stays required: fails closed).
+ */
+function cycleCachedLookupsOf(raw, cached = []) {
+  if (raw === undefined || String(raw).trim() === '') return {};
+  let o;
+  try { o = JSON.parse(raw); } catch (_err) { return {}; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+  const out = {};
+  for (const role of cached) {
+    const list = Object.prototype.hasOwnProperty.call(o, role) ? o[role] : null;
+    if (Array.isArray(list)) out[role] = list.filter(s => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(s));
+  }
+  return out;
+}
+
 function intEnv(env, name, fallback, { min = 0 } = {}) {
   const raw = env[name];
   if (raw === undefined || String(raw).trim() === '') return fallback;
@@ -148,6 +166,9 @@ function loadConfig(env = process.env) {
     // The roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js): roles-ran
     // counts them as returned. Only role names the cache can hold; anything else is ignored.
     cycleCached: String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x)),
+    // Index mode: the skills each cached role's report looked up in the call that produced it (FTH_CYCLE_CACHED_LOOKUPS,
+    // set by the runner from the cache): they count as this cycle's lookups for that role (skill-lookups.js lookupRule).
+    cycleCachedLookups: cycleCachedLookupsOf(env.FTH_CYCLE_CACHED_LOOKUPS, String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x))),
     // The bar each symbol's cycle decides (FTH_CYCLE_BARS, set by the runner: {"MNQ": "<bar open time>"}), keyed by
     // family root: phase 2's facts are checked against that bar's briefing (fact-claims.js). Unreadable: none.
     cycleBars: cycleBarsOf(env.FTH_CYCLE_BARS),

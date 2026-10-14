@@ -140,14 +140,16 @@ test('the runner\'s report cache (runner-wiring reportCacheFor): opencode and Cl
   rc.record({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), output, served: [] });
   B.writeBriefing(home, b);
   assert.deepStrictEqual(rc.serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager']);
-  // Index mode (opencode only): a role a lookup is required of on this bar (a reversal candidate) is never served.
+  // Index mode (opencode only): a role a lookup is required of on this bar (a reversal candidate) is not served when its
+  // cached report made no lookup (these calls carry no wall-clock times); the risk manager, which embeds its
+  // situational skills, is.
   const rev = JSON.parse(JSON.stringify(b));
   rev.sections.m3.data.candidates = [{ name: 'x', direction: 'long', trendRule: 'reversal' }];
   B.writeBriefing(home, rev);
   const index = { FTH_ROLE_SKILLS: 'index' };
   assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], { FTH_ROLE_SKILLS: 'full' }).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager'], 'full mode: as before');
-  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], index).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, []);
-  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], {}).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [], 'index is the default');
+  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], index).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, ['risk-manager']);
+  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], {}).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, ['risk-manager'], 'index is the default');
   assert.deepStrictEqual(reportCacheFor(home, { harness: 'claude', cycle: 'full' }, [], index).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager'], 'not an opencode run: no index mode');
   B.writeBriefing(home, b);
   const lean = reportCacheFor(home, { harness: 'claude', cycle: 'lean' });

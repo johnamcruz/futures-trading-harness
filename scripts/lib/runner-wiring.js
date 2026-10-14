@@ -311,17 +311,19 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
  * The report cache over the harness home: the briefings the runner recorded for this bar decide which analyst
  * reports still hold, the account decides phase 1's. Claude and opencode stream their cycle's tool results (each
  * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts. In index
- * mode (opencode, the default, FTH_ROLE_SKILLS not full) a role a lookup is required of on the bar is never served (lookupRoles).
+ * mode (opencode, the default, FTH_ROLE_SKILLS not full) a role a lookup is required of on the bar is served only when
+ * its cached report's own call looked up every skill required (lookupNeeds; the gate counts the same lookups).
  */
 /**
- * Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). Several
- * lanes (`laneBars`, { ROOT: { minutes: "<bar open>" } }: the other lanes whose bar closed this cycle): their
- * candidates count too, read as the gate reads them (trading/skill-lookups.js cycleFacts), so the cache and the gate agree.
+ * Index mode: the skills a situational lookup is required of each role on these briefings' bars, { role: [skill] }
+ * (none in full mode). Several lanes (`laneBars`, { ROOT: { minutes: "<bar open>" } }: the other lanes whose bar closed
+ * this cycle): their candidates count too, read as the gate reads them (trading/skill-lookups.js cycleFacts), so the
+ * cache and the gate agree.
  */
-function lookupRoles(briefingsBySymbol, now, env = process.env, { home = null, laneBars = {} } = {}) {
+function lookupNeeds(briefingsBySymbol, now, env = process.env, { home = null, laneBars = {} } = {}) {
   let mode;
   try { mode = require('./role-skills').modeOf(env); } catch (_err) { mode = 'index'; }
-  if (mode !== 'index') return [];
+  if (mode !== 'index') return {};
   const { requiredFor, needed, cycleFacts, lanesFor } = require('./trading/skill-lookups');
   const { readSignals } = require('./trading/signal-state');
   const required = requiredFor(path.resolve(__dirname, '..', '..'));
@@ -329,8 +331,16 @@ function lookupRoles(briefingsBySymbol, now, env = process.env, { home = null, l
     first: b, now, lanes: lanesFor(laneBars, symbol),
     readFrame: m => (home ? readFrameBriefing(home, symbol, m) : null), readSignal: m => (home ? readSignals(home, symbol, `${m}m`) : null),
   }));
-  return [...required.keys()].filter(role => (facts.length ? facts : [null]).some(m3 => needed(role, required, m3).length));
+  const out = {};
+  for (const role of required.keys()) {
+    const skills = [...new Set((facts.length ? facts : [null]).flatMap(m3 => needed(role, required, m3).map(r => r.skill)))];
+    if (skills.length) out[role] = skills;
+  }
+  return out;
 }
+
+/** Index mode: the roles a situational lookup is required of on these briefings' bars (lookupNeeds' roles). */
+const lookupRoles = (briefingsBySymbol, now, env = process.env, opts = {}) => Object.keys(lookupNeeds(briefingsBySymbol, now, env, opts));
 
 function reportCacheFor(home, cfg, frames = [], env = process.env) {
   if (!['claude', 'opencode'].includes(cfg.harness)) return null;
@@ -344,16 +354,19 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
     serve: ({ symbols, account, now, laneBars = {} }) => {
       const b = briefings(symbols);
       const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
-      // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar runs (the gate counts its report
-      // only with that lookup made this cycle: trading/skill-lookups.js).
+      // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar is served only when
+      // the call that produced its cached report looked up every skill required; else it runs (the gate counts those
+      // lookups of a cached report, and no others: trading/skill-lookups.js lookupRule).
       // Only opencode runs index their roles (autotrader.js childEnv gives every other harness full).
-      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env, { home, laneBars }) : [];
-      const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(r => !lookups.includes(r.role));
+      const needs = cfg.harness === 'opencode' ? lookupNeeds(b, now, env, { home, laneBars }) : {};
+      const met = r => (needs[r.role] || []).every(skill => (r.lookups || []).includes(skill));
+      const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(met);
       return { roles: reports.map(r => r.role), reports };
     },
-    record: ({ symbols, account, now, output, served }) => {
+    // `lookups`: the cycle's skill_lookup records (skill-lookups.js), so each cached report keeps its own call's.
+    record: ({ symbols, account, now, output, served, lookups = [] }) => {
       try {
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now, ...own(symbols) }));
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, briefings: briefings(symbols), symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;
@@ -472,4 +485,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { laneSignals, lookupRoles, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

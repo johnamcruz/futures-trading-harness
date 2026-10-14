@@ -91,9 +91,14 @@ are not in the session's transcript. With several lanes, the candidates of
 each other lane whose bar closed this cycle count too (that lane's briefing on
 its bar, else its signal record on its bar, whose setups carry their trend
 rule; neither, or an unreadable list of the cycle's lanes: every lookup is
-required). The cycle prompt shows each lane setup's trend rule. Such a role is never served from the
-report cache on that bar, and with no current briefing every situational
-lookup of its index is required (fails closed). Exits are never held. Permissions follow opencode's rule (the last matching rule wins;
+required). The cycle prompt shows each lane setup's trend rule. Such a role is served from the
+report cache on that bar only when the call that produced its cached report
+looked up every skill the bar requires (the cache entry keeps that call's
+lookups; the gate counts them, and no others, through
+`FTH_CYCLE_CACHED_LOOKUPS`), and with no current briefing every situational
+lookup of its index is required (fails closed). A role whose core embeds a
+situational skill (the risk manager's `confluence-counting` and `invalidation`)
+is never asked to look it up. Exits are never held. Permissions follow opencode's rule (the last matching rule wins;
 headless, anything not allowed is refused): the session denies everything,
 then allows the broker and harness tools (orders through the gateway), skills,
 the harness's roles by name (`task`), reading (never a `.env`), and web
@@ -147,6 +152,15 @@ hook's transcript, another harness, a missing, malformed or forged
 attestation, a changed file or skill) nothing embedded counts: the transcript
 decides, as before. A `skill_lookup` the head trader makes naming a role is
 its own, never that role's (`sessionLookups`).
+
+The roles a cycle may not launch: those off the desk by the run's `task`
+permission (the same every trade cycle), and the analysts the report cache
+served by the runner's plugin (`scripts/opencode-plugin.js`, loaded by every
+run's config), which refuses a `task` call naming a role in
+`FTH_DENIED_ROLES`. A role denied by permission drops out of the `task` tool's
+agent list, which a chat template may render ahead of the system prompt, so a
+per-cycle permission broke the model server's prompt cache whenever the cached
+roles changed; the list now stays the same every cycle.
 
 The runner passes per run (`OPENCODE_CONFIG_CONTENT`, merged last) every
 permission again (the session's, the head trader's, each role's), so a run is

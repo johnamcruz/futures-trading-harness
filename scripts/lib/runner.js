@@ -212,7 +212,9 @@ function createRunner(deps) {
     emit('cycle_start', { action, timeoutMs: limits.timeoutMs, ...info });
     const r = await runCycle(action, prompt, limits);
     // agentError: the agent's own "CYCLE RESULT: error", a decision (replay records it as live and goes on).
-    emit('cycle_end', { action, ms: clock.now().getTime() - t0, ok: Boolean(r && r.ok), timedOut: Boolean(r && r.timedOut), result: (r && r.result) || null, ...(r && r.agentError ? { agentError: true } : {}), ...info });
+    // reportedResult: the line the agent wrote when the runner scores it otherwise (autotrader.js scoredResult), kept.
+    emit('cycle_end', { action, ms: clock.now().getTime() - t0, ok: Boolean(r && r.ok), timedOut: Boolean(r && r.timedOut), result: (r && r.result) || null, ...(r && r.reportedResult ? { reportedResult: r.reportedResult } : {}), ...(r && r.agentError ? { agentError: true } : {}), ...info });
+    if (r && r.reportedResult) log(`${action}: the agent wrote "${r.reportedResult}"; ${r.resultNote || 'scored otherwise'}`);
     if (r && r.result) log(`${action}: ${r.result}`);
     return r;
   }
@@ -1370,6 +1372,8 @@ function createRunner(deps) {
             news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             action: again.action, cachedRoles: served ? served.roles : [],
+            // Index mode: each cached report's own lookups, which the gate counts for that role (FTH_CYCLE_CACHED_LOOKUPS).
+            cachedLookups: served ? Object.fromEntries(served.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length).map(x => [x.role, x.lookups])) : {},
             // Several lanes: the lanes that closed, and the setups skipped for a higher-priority policy (labels see them).
             ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`), skipped } : {}),
             // Several lanes: the bar each symbol's bar briefing is on (the first lane's), which the cycle's roles read
@@ -1383,7 +1387,7 @@ function createRunner(deps) {
           const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [] }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [], lookups: Array.isArray(r.lookups) ? r.lookups : [] }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).

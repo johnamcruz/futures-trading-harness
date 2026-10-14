@@ -1011,7 +1011,7 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
 test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {
   const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\nCYCLE RESULT: no-trade - x\n', stdout: '{"a":1}\nCYCLE RESULT: no-trade - x\n' };
   assert.deepStrictEqual(cycleOutcome(res, { result: 'CYCLE RESULT: no-trade - x', intact: true, action: 'trade' }),
-    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\nCYCLE RESULT: no-trade - x\n' });
+    { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - x', code: 0, transcript: '{"a":1}\nCYCLE RESULT: no-trade - x\n', lookups: [] });
   assert.strictEqual(cycleOutcome({ ...res, stdout: undefined }, { intact: true, action: 'trade' }).transcript, '');
   // The workspace guard tripped: a trade cycle failed, an end of day that ran still did its job.
   assert.strictEqual(cycleOutcome(res, { intact: false, action: 'trade' }).ok, false);
@@ -1026,18 +1026,91 @@ test('deniedRoles: the analysts served from the cache, and in a trade or manage 
   assert.deepStrictEqual(deniedRoles({ action: 'manage', cachedRoles: [] }), ['strategy-researcher']);
   assert.deepStrictEqual(deniedRoles({ action: 'premarket' }), []);
   assert.deepStrictEqual(deniedRoles(null), []);
-  // The per-run opencode config: the session and the head trader may not launch them; the others stay allowed.
+  // The per-run opencode config: the session and the head trader may not launch the roles off the desk (the task
+  // permission, the same every trade cycle); the cached ones are refused by the runner's plugin (FTH_DENIED_ROLES), so
+  // the task permission, and the head trader's prompt with it, doesn't change with the cache.
+  const root = path.resolve(__dirname, '..', '..');
   const ctx = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z' } }], cachedRoles: cached };
-  const env = childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, ctx);
+  const env = childEnv(validateConfig({ harness: 'opencode' }), root, { FTH_HOME: '/srv/fth', FTH_DENIED_ROLES: 'trade-executor' }, ctx);
   const conf = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
   for (const task of [conf.permission.task, conf.agent['fth-head-trader'].permission.task]) {
     assert.strictEqual(task['*'], 'deny');
-    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.ok(task[r] !== 'allow', r);
-    for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(task[r], 'allow', r);
+    assert.strictEqual(task['strategy-researcher'], 'deny');
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor', 'trade-reviewer', 'news-calendar-analyst']) assert.strictEqual(task[r], 'allow', r);
   }
-  // A premarket run may launch every role.
-  const pre = JSON.parse(childEnv(validateConfig({ harness: 'opencode' }), path.resolve(__dirname, '..', '..'), { FTH_HOME: '/srv/fth' }, { action: 'premarket' }).OPENCODE_CONFIG_CONTENT);
+  assert.deepStrictEqual(env.FTH_DENIED_ROLES.split(',').sort(), ['market-structure-analyst', 'strategy-researcher', 'trend-momentum-analyst'], 'the run\'s own list, never an inherited one');
+  const { deniedTaskRefusal } = require('../../scripts/lib/opencode');
+  for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'strategy-researcher']) assert.match(deniedTaskRefusal('task', { subagent_type: r }, env), /\[denied-role\]/, r);
+  for (const r of ['volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(deniedTaskRefusal('task', { subagent_type: r }, env), null, r);
+  // Another cycle with another cache: the same config (the head trader's tools and prompt), only the plugin's list differs.
+  const other = childEnv(validateConfig({ harness: 'opencode' }), root, { FTH_HOME: '/srv/fth' }, { ...ctx, cachedRoles: [] });
+  assert.strictEqual(other.OPENCODE_CONFIG_CONTENT, env.OPENCODE_CONFIG_CONTENT);
+  assert.strictEqual(other.FTH_DENIED_ROLES, 'strategy-researcher');
+  // A premarket run may launch every role: nothing denied, nothing refused.
+  const preEnv = childEnv(validateConfig({ harness: 'opencode' }), root, { FTH_HOME: '/srv/fth', FTH_DENIED_ROLES: 'market-structure-analyst' }, { action: 'premarket' });
+  const pre = JSON.parse(preEnv.OPENCODE_CONFIG_CONTENT);
   for (const r of ['market-structure-analyst', 'strategy-researcher']) assert.strictEqual(pre.permission.task[r], 'allow', r);
+  assert.strictEqual(preEnv.FTH_DENIED_ROLES, undefined);
+  assert.deepStrictEqual(require('../../scripts/lib/autotrader').offDeskRoles({ action: 'premarket' }), []);
+});
+
+test('scoredResult: a trade cycle\'s `blocked` with no order call in its transcript is scored as no-trade (the line it wrote kept); any order call or executor launch, another outcome, or an unreadable transcript: as written', () => {
+  const { scoredResult } = require('../../scripts/lib/autotrader');
+  const ev = (tool, input, status = 'completed') => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status, input, output: 'ok' } } });
+  const quiet = [ev('harness_bar_briefing', { symbol: 'MNQ' }), ev('task', { subagent_type: 'risk-manager' })].join('\n');
+  const line = 'CYCLE RESULT: blocked - the trend rule blocks longs';
+  assert.deepStrictEqual(scoredResult(line, quiet), { result: 'CYCLE RESULT: no-trade - the trend rule blocks longs', note: 'reported blocked with no order call this cycle (blocked is a refused order): scored as no-trade' });
+  assert.strictEqual(scoredResult('**CYCLE RESULT: Blocked** - x', quiet).result, 'CYCLE RESULT: no-trade - x');
+  assert.strictEqual(scoredResult('CYCLE RESULT: blocked', quiet).result, 'CYCLE RESULT: no-trade - no order was refused');
+  for (const kept of [
+    [ev('task', { subagent_type: 'trade-executor' }, 'error')], // a refused executor launch
+    [ev('task', { subagent_type: 'trade-executor' })], // its order may have been refused inside it
+    [ev('broker_place_order', { side: 'buy' }, 'error')],
+    [ev('broker_close_position', {})],
+    [ev('broker_modify_order', {})],
+    [ev('broker_cancel_order', {})],
+    [ev('broker_partial_close_position', {})],
+  ]) assert.strictEqual(scoredResult(line, [...kept, quiet].join('\n')), null, kept[0]);
+  assert.strictEqual(scoredResult(line, 'plain text, no tool calls'), null, 'unreadable: kept');
+  // A skill's text quoting a refusal is no refused call.
+  assert.ok(scoredResult(line, [ev('skill', { name: 'order-mechanics' }), quiet].join('\n').replace('"output":"ok"', '"output":"a `Blocked by ...` refusal"')));
+  assert.strictEqual(scoredResult(line, ''), null);
+  assert.strictEqual(scoredResult('CYCLE RESULT: no-trade - x', quiet), null);
+  assert.strictEqual(scoredResult('CYCLE RESULT: blockedx - x', quiet), null);
+  // Through cycleOutcome: a trade or manage cycle only; the agent's line kept as reportedResult.
+  const out = `${quiet}\n${JSON.stringify({ type: 'text', timestamp: 2, sessionID: 's', part: { type: 'text', text: line } })}`;
+  const res = { ok: true, timedOut: false, code: 0, output: out, stdout: out };
+  const r = cycleOutcome(res, { result: line, intact: true, action: 'trade' });
+  assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - the trend rule blocks longs');
+  assert.strictEqual(r.reportedResult, line);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(cycleOutcome(res, { result: line, intact: true, action: 'premarket' }).result, line);
+  assert.strictEqual(cycleOutcome({ ...res, ok: false }, { result: line, intact: true, action: 'trade' }).reportedResult, undefined);
+});
+
+test('the runner\'s opencode plugin: loaded by every run config from the harness root, as opencode 1.x takes a CommonJS plugin ({ id, server }); it refuses a task call naming a denied role and nothing else', async () => {
+  const root = path.resolve(__dirname, '..', '..');
+  const oc = require('../../scripts/lib/opencode');
+  const conf = oc.runConfig({ root, dataDir: '/d', stateDir: '/s', agents: [] });
+  assert.deepStrictEqual(conf.plugin, [require('url').pathToFileURL(path.join(root, 'scripts', 'opencode-plugin.js')).href]);
+  const plugin = require('../../scripts/opencode-plugin');
+  assert.deepStrictEqual(Object.keys(plugin).sort(), ['id', 'server']);
+  assert.strictEqual(typeof plugin.id, 'string');
+  const hooks = await plugin.server({}, {});
+  const before = hooks['tool.execute.before'];
+  const saved = process.env.FTH_DENIED_ROLES;
+  process.env.FTH_DENIED_ROLES = 'market-structure-analyst,strategy-researcher';
+  try {
+    await assert.rejects(before({ tool: 'task' }, { args: { subagent_type: 'market-structure-analyst' } }), /\[denied-role\] market-structure-analyst/);
+    await assert.rejects(before({ tool: 'task' }, { args: { subagent_type: ' strategy-researcher ' } }), /\[denied-role\]/);
+    for (const [input, output] of [[{ tool: 'task' }, { args: { subagent_type: 'risk-manager' } }], [{ tool: 'task' }, { args: {} }], [{ tool: 'task' }, {}], [{ tool: 'read' }, { args: { subagent_type: 'market-structure-analyst' } }], [null, null]]) {
+      await assert.doesNotReject(before(input, output), JSON.stringify(input));
+    }
+    delete process.env.FTH_DENIED_ROLES;
+    await assert.doesNotReject(before({ tool: 'task' }, { args: { subagent_type: 'market-structure-analyst' } }), 'no list: nothing refused by it');
+  } finally {
+    if (saved === undefined) delete process.env.FTH_DENIED_ROLES; else process.env.FTH_DENIED_ROLES = saved;
+  }
 });
 
 test('cycleOutcome: a premarket or trade run that exits 0 without a parseable CYCLE RESULT line, or that reports an error, failed; an end of day is judged by its exit alone', () => {

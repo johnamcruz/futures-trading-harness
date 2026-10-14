@@ -501,6 +501,19 @@ test('the decision log gets one record per scanned bar, and every bar\'s cycle d
   assert.ok(quiet.logs.some(l => /MNQ bar \S+ close 21500: no cycle \(/.test(l)));
 });
 
+test('a result the runner scores otherwise (autotrader.js scoredResult): cycle_end carries the scored line and the one the agent wrote, the log says so, the decision history takes the scored one', async () => {
+  const r = await trailSim({ tape: {}, startFlat: true, until: et(10, 4), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - stood aside', reportedResult: 'CYCLE RESULT: blocked - stood aside', resultNote: 'reported blocked with no order call this cycle' }) });
+  const end = r.events.find(e => e.kind === 'cycle_end' && e.action === 'trade');
+  assert.ok(end, r.events.map(e => e.kind).join(','));
+  assert.strictEqual(end.result, 'CYCLE RESULT: no-trade - stood aside');
+  assert.strictEqual(end.reportedResult, 'CYCLE RESULT: blocked - stood aside');
+  assert.ok(r.logs.some(l => /trade: the agent wrote "CYCLE RESULT: blocked - stood aside"; reported blocked with no order call this cycle/.test(l)), r.logs.join('\n'));
+  assert.ok((r.runner.state.history || []).every(h => !/blocked/.test(h.result || '')), JSON.stringify(r.runner.state.history));
+  // A result scored as written: no reportedResult.
+  const plain = await trailSim({ tape: {}, startFlat: true, until: et(10, 4) });
+  assert.ok(plain.events.filter(e => e.kind === 'cycle_end').every(e => !('reportedResult' in e)));
+});
+
 test('the event log records cycles, account reads, managed positions, stops moved, closes, flattens, and end of day', async () => {
   const kinds = r => r.events.map(e => e.kind);
   // A trailed trade: the stop is moved from +2R, then the trade is closed when a bar goes through it.

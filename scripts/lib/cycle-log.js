@@ -133,7 +133,8 @@ function summarize(output, embedded = []) {
 }
 
 /**
- * Write the cycle record and its summary line. Returns { file, summary }.
+ * Write the cycle record and its summary line. Returns { file, summary, lookups } (lookups: the cycle's skill_lookup
+ * records, read before the run's lookups file is removed, for the report cache: report-cache.js recordReports).
  * Never throws (logging must not stop trading).
  */
 function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
@@ -141,6 +142,8 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
   const att = headPrompt ? require('./head-prompt').parseAttestation(headPrompt) : null;
   const summary = summarize(output, att ? att.skills : []);
+  let lookups = [];
+  try { if (transcript) lookups = require('./trading/skill-lookups').readLookups(transcript); } catch (_err) { /* none */ }
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
   if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at });
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded
@@ -163,7 +166,7 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   } catch (_err) {
     // best effort
   }
-  return { file, summary };
+  return { file, summary, lookups };
 }
 
 /** The cycle's skill lookups and their compliance (index mode: the bar's requirements, first symbol's briefing). */

@@ -13,9 +13,10 @@
  * doesn't count (fails closed). With no trigger firing, nothing is required; with no current bar briefing for the
  * order's root, every situational skill of the role's index is (fails closed). Several lanes: the candidates of every
  * other lane whose bar closed this cycle count too (cycleFacts: that lane's briefing on its bar, else its signal record
- * on its bar; neither: fails closed). A role served from the report cache
- * made no lookup this cycle: the runner doesn't serve it when a lookup is required of it (runner-wiring.js), and the
- * gate doesn't count it either. Exits never reach this check
+ * on its bar; neither: fails closed). A role served from the report cache made no lookup this cycle: its report
+ * carries the skills the call that produced it looked up (report-cache.js, lookupsInCall), and only those count for it
+ * (the runner serves it only when they cover what the bar requires: runner-wiring.js; the gate reads them from
+ * FTH_CYCLE_CACHED_LOOKUPS; none recorded: every one still required). Exits never reach this check
  * (order-gate.js evaluates entries only).
  *
  * What it can't tell: which session called the tool (an MCP server isn't told), so a lookup is attributed
@@ -29,7 +30,8 @@
  *   unmetLookups(call, { records, required, m3, calls })   the required skills its role didn't look up in its calls
  *   sessionLookups(transcript)                  the lookups the session made itself in a role's name
  *   rolesOwn(records, transcript)               the records but the session's own
- *   lookupRule({ root, home, transcript, contractId, now, laneBars })   (call) -> unmet skills, for checkRolesRan (the session's own lookups left out)
+ *   lookupRule({ root, home, transcript, contractId, now, laneBars, cachedLookups })   (call) -> unmet skills, for checkRolesRan (the session's own lookups left out)
+ *   lookupsInCall(records, role, call)          the skills the role looked up inside the call's times, sorted
  *   lookupStats({ calls, records, required, m3 })   per cycle: lookups, by role, calls with a requirement, met
  */
 
@@ -196,15 +198,26 @@ function requiredFor(root) {
 
 /**
  * The gate's rule for checkRolesRan: (call, calls) -> the skills it should have looked up and didn't; `needs(role)`:
- * the skills required of a role on this bar (a report served from the cache made no lookup this cycle).
+ * the skills required of a role served from the report cache on this bar that its cached report's own call didn't
+ * look up (`cachedLookups`: role -> skills, the runner's FTH_CYCLE_CACHED_LOOKUPS; none recorded: every one required).
  */
-function lookupRule({ root = PLUGIN_ROOT, home, transcript, contractId, now = new Date(), laneBars = {} }) {
+function lookupRule({ root = PLUGIN_ROOT, home, transcript, contractId, now = new Date(), laneBars = {}, cachedLookups = {} }) {
   const required = requiredFor(root);
   const records = rolesOwn(readLookups(transcript), transcript);
   const m3 = briefingFacts(home, contractRoot(contractId || ''), now, laneBars);
   const rule = (call, calls) => unmetLookups(call, { records, required, m3, calls });
-  rule.needs = role => needed(role, required, m3).map(r => r.skill);
+  const looked = role => (cachedLookups && Object.prototype.hasOwnProperty.call(cachedLookups, role) && Array.isArray(cachedLookups[role]) ? cachedLookups[role] : []);
+  rule.needs = role => needed(role, required, m3).map(r => r.skill).filter(s => !looked(role).includes(s));
   return rule;
+}
+
+/**
+ * The skills `role` looked up during `call` (records inside its wall-clock window: a call without times shows none,
+ * fails closed), sorted: what a report recorded in the cache carries (report-cache.js recordReports).
+ */
+function lookupsInCall(records, role, call) {
+  if (!call || !timed(call)) return [];
+  return [...new Set((records || []).filter(x => x && x.role === role && Number.isFinite(x.at) && x.at >= call.start && x.at <= call.end).map(x => x.skill))].sort();
 }
 
 /** One cycle's lookups for its log: how many, by role, and how many role calls a requirement applied to and met. */
@@ -221,4 +234,4 @@ function lookupStats({ calls = [], records = [], required = new Map(), m3 = null
   return { lookups: records.length, byRole, requiredCalls, met };
 }
 
-module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, needed, unmetLookups, requiredFor, lookupRule, lookupStats };
+module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };

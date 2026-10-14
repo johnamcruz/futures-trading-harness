@@ -147,8 +147,6 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   const look = (role, skill) => L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + 1.5);
   look('market-structure-analyst', 'pullback-vs-reversal');
   look('market-structure-analyst', 'rejection');
-  look('risk-manager', 'confluence-counting');
-  look('risk-manager', 'invalidation');
   assert.match(checkRolesRan(file, 'full', [], rule()), /not returned yet: trend-momentum-analyst \(trend-momentum-analyst reported without looking up pullback-vs-reversal/);
   assert.strictEqual(checkRolesRan(file, 'full', []), null, 'without the rule (full mode)');
   look('trend-momentum-analyst', 'pullback-vs-reversal');
@@ -156,17 +154,40 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   // An old briefing (expired at the order's time): every situational skill of each index is required (fails closed).
   const stale = L.lookupRule({ home, transcript: file, contractId: 'MNQ', now: new Date('2026-10-07T15:00:00Z') });
   assert.match(checkRolesRan(file, 'full', [], stale), /market-structure-analyst reported without looking up breakout-vs-fakeout, breakout(?![\w-])/);
-  assert.deepStrictEqual(stale.needs('risk-manager'), ['confluence-counting', 'invalidation']);
+  // The risk manager carries its situational skills in its core: nothing is required of it, even without a briefing.
+  assert.deepStrictEqual(stale.needs('risk-manager'), []);
+  assert.deepStrictEqual(stale.needs('market-structure-analyst').sort(), ['breakout', 'breakout-vs-fakeout', 'pullback-vs-reversal', 'rejection']);
   assert.strictEqual(L.briefingFacts(home, 'MES', now), null, 'another root has no briefing');
-  // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
+  // A role served from the report cache made no lookup this cycle: not counted where one is required of it, unless the
+  // call that produced its cached report made the lookups (cachedLookups, the runner's FTH_CYCLE_CACHED_LOOKUPS).
   const fresh = rule();
   assert.deepStrictEqual(fresh.needs('volume-liquidity-analyst'), []);
   const onlyP2 = path.join(dir, 'p2.jsonl');
   fs.writeFileSync(onlyP2, task('risk-manager', 3, 4));
   const cached = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
-  assert.match(checkRolesRan(onlyP2, 'full', cached, L.lookupRule({ home, transcript: onlyP2, contractId: 'MNQ', now })),
+  const p2Rule = cachedLookups => L.lookupRule({ home, transcript: onlyP2, contractId: 'MNQ', now, cachedLookups });
+  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule()),
     /not returned yet: market-structure-analyst, trend-momentum-analyst[^]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
   assert.strictEqual(checkRolesRan(onlyP2, 'full', cached), null, 'full mode: the cache counts as before');
+  // The cached reports' own lookups: counted for that role only, and only the skills it looked up.
+  const both = { 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] };
+  assert.strictEqual(checkRolesRan(onlyP2, 'full', cached, p2Rule(both)), null);
+  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule({ ...both, 'market-structure-analyst': ['pullback-vs-reversal'] })),
+    /not returned yet: market-structure-analyst \(market-structure-analyst was served from the report cache, which made no lookup of rejection/);
+  assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule({ 'volume-liquidity-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] })),
+    /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/, 'another role\'s lookups never count');
+  for (const bad of [null, [], 'x', { 'market-structure-analyst': 'rejection' }]) {
+    assert.match(checkRolesRan(onlyP2, 'full', cached, p2Rule(bad)) || '', /market-structure-analyst was served from the report cache/, JSON.stringify(bad));
+  }
+});
+
+test('lookupsInCall: the role\'s own lookups inside the call\'s wall-clock times, sorted; another role, outside the times or an untimed call: none', () => {
+  const call = { start: T + 10, end: T + 20 };
+  const records = [{ at: T + 12, role: 'a', skill: 'z' }, { at: T + 15, role: 'a', skill: 'b' }, { at: T + 15, role: 'a', skill: 'b' }, { at: T + 25, role: 'a', skill: 'late' }, { at: T + 15, role: 'x', skill: 'other' }];
+  assert.deepStrictEqual(L.lookupsInCall(records, 'a', call), ['b', 'z']);
+  assert.deepStrictEqual(L.lookupsInCall(records, 'a', { start: 10, end: 20 }), [], 'line positions, not times: fails closed');
+  assert.deepStrictEqual(L.lookupsInCall(records, 'a', null), []);
+  assert.deepStrictEqual(L.lookupsInCall(null, 'a', call), []);
 });
 
 test('lookupRule: a lookup the session made itself in a role\'s name (the head trader holds skill_lookup in index mode) is never the role\'s', () => {
@@ -224,10 +245,13 @@ test('the cycle log records the cycle\'s lookups and removes the run\'s lookups 
   const home = tmpDir();
   const transcript = path.join(home, 'cycle-transcript.jsonl');
   L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }, T);
-  const { summary } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
+  const { summary, lookups } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
+  // The records themselves, read before the file goes, for the report cache (each cached report keeps its own call's).
+  assert.deepStrictEqual(lookups, [{ at: T, role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }]);
   assert.deepStrictEqual(summary.skillLookups, { mode: 'index', lookups: 1, byRole: { 'volume-liquidity-analyst': 1 }, requiredCalls: 0, met: 0 });
   assert.ok(!fs.existsSync(L.lookupsFile(transcript)));
   assert.strictEqual(writeCycleLog(home, { action: 'trade', harness: 'claude', prompt: 'p', output: '' }).summary.skillLookups, undefined, 'no transcript, no lookups');
+  assert.deepStrictEqual(writeCycleLog(home, { action: 'trade', harness: 'claude', prompt: 'p', output: '' }).lookups, []);
 });
 
 test('the runner\'s report cache: in index mode a role a lookup is required of on this bar runs, not served from the cache', () => {
@@ -236,11 +260,63 @@ test('the runner\'s report cache: in index mode a role a lookup is required of o
   const b = data => ({ MNQ: { symbol: 'MNQ', sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data } } } });
   const index = { FTH_ROLE_SKILLS: 'index' };
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, { FTH_ROLE_SKILLS: 'full' }), [], 'full mode: the cache as before');
-  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst'], 'index is the default');
-  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
-  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'allows' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager']);
+  // The risk manager embeds its situational skills (no lookup of it): never among them.
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}).sort(), ['market-structure-analyst', 'trend-momentum-analyst'], 'index is the default');
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, index).sort(), ['market-structure-analyst', 'trend-momentum-analyst']);
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'allows' }])), now, index).sort(), ['market-structure-analyst']);
   assert.deepStrictEqual(lookupRoles(b(m3([])), now, index), [], 'no candidate: the cache serves every role');
-  assert.deepStrictEqual(lookupRoles({ MNQ: null }, now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst'], 'no briefing: every role with a situational index runs');
+  assert.deepStrictEqual(lookupRoles({ MNQ: null }, now, index).sort(), ['market-structure-analyst', 'trend-momentum-analyst'], 'no briefing: every role with a situational index runs');
+  // lookupNeeds: the skills, per role.
+  const { lookupNeeds } = require('../../scripts/lib/runner-wiring');
+  assert.deepStrictEqual(lookupNeeds(b(m3([{ trendRule: 'reversal' }])), now, index), { 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] });
+  assert.deepStrictEqual(lookupNeeds(b(m3([{ trendRule: 'reversal' }])), now, { FTH_ROLE_SKILLS: 'full' }), {});
+});
+
+test('the runner\'s report cache in index mode: a cached report is served on a bar requiring lookups only when its own call made them; the cycle\'s env names them for the gate', () => {
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const { writeBriefing: write } = require('../../scripts/lib/trading/briefing');
+  const RC = require('../../scripts/lib/trading/report-cache');
+  const home = tmpDir();
+  const now = new Date('2026-10-07T14:00:00Z');
+  const versions = { m3: 'm3@2026-10-07T13:57:00.000Z', m15: 'm15@2026-10-07T13:45:00.000Z', h1: 'h1@2026-10-07T13:00:00.000Z', day: 'day@2026-10-07T13:00:00.000Z' };
+  const sec = (v, data = {}) => ({ version: v, validUntil: '2026-10-07T14:15:00.000Z', data });
+  const brief = cands => ({ symbol: 'MNQ', asOf: '2026-10-07T13:57:00.000Z', minutes: 3, sections: { m3: sec(versions.m3, m3(cands)), m15: sec(versions.m15), h1: sec(versions.h1), day: sec(versions.day) } });
+  const symbols = [{ symbol: 'MNQ', bar: '2026-10-07T13:57:00.000Z', contractId: 'MNQ' }];
+  const data = `Data: bar_briefing ${Object.values(versions).join(', ')}`;
+  const ms = 'market-structure-analyst';
+  const tm = 'trend-momentum-analyst';
+  const ev = (role, s, e) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: `${data}\nBias: long`, time: { start: T + s, end: T + e } } } });
+  const cfg = { harness: 'opencode', cycle: 'full' };
+  const rc = reportCacheFor(home, cfg, [], {});
+  write(home, brief([{ trendRule: 'reversal' }]));
+  // Recorded with the structure analyst's own lookups in its call (and one after it, which doesn't count); the trend
+  // analyst looked nothing up.
+  rc.record({ symbols, account: null, now, output: [ev(ms, 10, 20), ev(tm, 10, 20)].join('\n'), served: [], lookups: [{ at: T + 15, role: ms, skill: 'pullback-vs-reversal' }, { at: T + 15, role: ms, skill: 'rejection' }, { at: T + 30, role: tm, skill: 'pullback-vs-reversal' }] });
+  assert.deepStrictEqual(RC.readCache(home).analysts[ms].lookups, ['pullback-vs-reversal', 'rejection']);
+  assert.deepStrictEqual(RC.readCache(home).analysts[tm].lookups, []);
+  const served = rc.serve({ symbols, account: null, now });
+  assert.deepStrictEqual(served.roles, [ms], 'the trend analyst runs: its report made no lookup');
+  // The gate's env for the cycle: the cached role's lookups (autotrader childEnv), and the gate config reads them back.
+  const { childEnv, validateConfig } = require('../../scripts/lib/autotrader');
+  const ctx = { action: 'trade', cachedRoles: served.roles, cachedLookups: Object.fromEntries(served.reports.map(r => [r.role, r.lookups])) };
+  const env = childEnv(validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' }), '/r', { FTH_CYCLE_CACHED_LOOKUPS: 'stale' }, ctx);
+  assert.deepStrictEqual(JSON.parse(env.FTH_CYCLE_CACHED_LOOKUPS), { [ms]: ['pullback-vs-reversal', 'rejection'] });
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  assert.deepStrictEqual(loadConfig(env).cycleCachedLookups, { [ms]: ['pullback-vs-reversal', 'rejection'] });
+  assert.strictEqual(childEnv(validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7' }), '/r', { FTH_CYCLE_CACHED_LOOKUPS: 'stale' }, { action: 'trade' }).FTH_CYCLE_CACHED_LOOKUPS, undefined, 'none cached: never inherited');
+  // The gate config: only cached roles, only skill names; unreadable: none.
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ [ms]: ['a', 'B c', 7], [tm]: ['x'] }) }).cycleCachedLookups, { [ms]: ['a'] });
+  for (const raw of ['{', '[]', '"x"', 'null']) assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: ms, FTH_CYCLE_CACHED_LOOKUPS: raw }).cycleCachedLookups, {}, raw);
+  // On a bar with no candidate both are served (nothing required); in full mode too.
+  write(home, brief([]));
+  assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles.sort(), [ms, tm]);
+  write(home, brief([{ trendRule: 'reversal' }]));
+  assert.deepStrictEqual(reportCacheFor(home, cfg, [], { FTH_ROLE_SKILLS: 'full' }).serve({ symbols, account: null, now }).roles.sort(), [ms, tm]);
+  // A cache entry recorded before lookups were kept (no lookups field): not served where a lookup is required.
+  const c = RC.readCache(home);
+  delete c.analysts[ms].lookups;
+  RC.writeCache(home, c);
+  assert.deepStrictEqual(rc.serve({ symbols, account: null, now }).roles, []);
 });
 
 test('the head trader holds no skill_lookup: a lookup counts for the role it names, and only roles hold it', () => {
@@ -288,13 +364,13 @@ test('the runner\'s report cache and the gate agree on a lane\'s candidates: loo
   assert.deepStrictEqual(lookupRoles(b, now, {}, { home }), [], 'no lane, no candidate: the cache serves every role');
   // The 1m lane closed with a with-trend candidate (its briefing on the bar): those roles run.
   writeFrameBriefing(home, { symbol: 'MNQ', minutes: 1, asOf: t, sections: { bar: { data: { candidates: [{ name: 'x', trendRule: 'allows' }] } } } });
-  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 1: t } } }).sort(), ['market-structure-analyst', 'risk-manager']);
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 1: t } } }).sort(), ['market-structure-analyst']);
   assert.deepStrictEqual(lookupRoles(b, now, { FTH_ROLE_SKILLS: 'full' }, { home, laneBars: { MNQ: { 1: t } } }), [], 'full mode');
   // No briefing on the lane's bar, its record shows nothing fired: nothing required; no record on the bar: every role.
   const later = '2026-10-07T14:00:00.000Z';
   writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: later, closedAt: '2026-10-07T14:01:00.000Z', candidates: [] });
   assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 1: later } } }), []);
-  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 5: later } } }).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 5: later } } }).sort(), ['market-structure-analyst', 'trend-momentum-analyst']);
 });
 
 test('cycleFacts: a lane\'s signal record gives its setups with their recorded trend rules; only an older record without them counts every trend rule', () => {
