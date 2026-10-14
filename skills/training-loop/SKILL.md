@@ -86,11 +86,18 @@ proposer runs with its kill switch on and every live broker disabled.
 **Never run `npm run verify` or any tests while the loop or a replay
 runs**: the local model server runs out of memory. Run them after.
 
-**Stubs until their steps land.** The scorecard is section 10 step 2's
-(`replay/scorecard.js`, adapted in `scripts/lib/train/loop.js`); the
-evaluator (step 9) is a stub that reports itself unavailable. Either can be
-plugged in with `--steps steps.js` (a module exporting `scorecard` and/or
-`evaluator`).
+**The evaluator** (section 10 step 9) verifies every change mechanically
+when the config names one (`"evaluator": { "prop", "data": { "MNQ":
+"<bar file>" }, ... }`, any `scripts/evaluate.js` setting): the champion
+and the candidate on the same bar files and seed; a blow, a gate failure
+the champion lacks or a lower pass-rate bound rejects. Without one, a
+strategy or rulebook change stays `blocked`. On held-out windows it scores
+the candidate alone, and each scoring is a judging look in the ledger.
+
+**Stub until its step lands.** The scorecard is section 10 step 2's
+(`replay/scorecard.js`, adapted in `scripts/lib/train/loop.js`). Either
+step can be replaced with `--steps steps.js` (a module exporting
+`scorecard` and/or `evaluator`).
 
 ## Examples
 

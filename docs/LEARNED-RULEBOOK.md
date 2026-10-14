@@ -1188,12 +1188,18 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     held-out judging a separate step that spends the budget, each held-out
     month once, in one ledger whatever the harness home; a kept change
     written as a local branch and a pull request body draft, never pushed.
+    The evaluator (step 9) is the mechanical verifier
+    (`scripts/lib/train/evaluator.js`): on the tuning windows the
+    champion's tree and the candidate's are scored on the same bar files
+    and seed, and the candidate fails on a blow, a gate failure the
+    champion lacks, or a lower pass-rate bound; on held-out windows the
+    candidate alone, each scoring a judging look; with no `evaluator` in
+    the loop config a strategy or rulebook change stays `blocked`.
     Not yet: Optuna over the agent's design (R30's categorical search; the
-    loop judges each proposal on its own), the evaluator as a verifier (step
-    9: until then a strategy or rulebook change is `blocked`, never kept),
-    the scorecard's step 2 refinements (the loop reads today's
-    `replay/scorecard.js` through an adapter), and the LLM-level estimate
-    (R20) as a verifier.
+    loop judges each proposal on its own), the scorecard's step 2
+    refinements (the loop reads today's `replay/scorecard.js` through an
+    adapter, behind the same interface), and the LLM-level estimate (R20)
+    as a verifier.
 15. Walk-forward re-learning (R17), run through the training loop.
 16. Strategy-change re-learning (R33): the fingerprint, staleness in code,
     the trigger, and paper until re-verified (enforced by the gate).

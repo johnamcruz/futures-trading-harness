@@ -20,5 +20,6 @@
   "maxFlagged": 12,
   "controlPoints": 12,
   "maxProposals": 2,
+  "evaluator": { "prop": "prop_portfolio", "data": { "MNQ": "~/fth-data/MNQ-3m.parquet" }, "paths": 2000 },
   "limits": { "maxIterations": 1, "maxModelCalls": 400, "maxWallMinutes": 720 }
 }

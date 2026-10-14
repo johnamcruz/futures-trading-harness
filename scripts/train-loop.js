@@ -71,6 +71,7 @@ function plan(loop) {
     say(`held-out ${w.from}..${w.to}: judge only with --held-out-look; ${v.ok ? `budget left ${v.units.map(u => (u.budgeted ? u.remaining : 'none needed')).join(', ')}` : `REFUSED: ${v.refusals.join('; ')}`}`);
   }
   say(`per iteration: up to ${loop.maxFlagged} flagged + ${loop.controlPoints} control decisions, ${loop.repeats} repeat(s), up to ${loop.maxProposals} proposal(s), seed ${loop.seed}`);
+  say(`evaluator: ${loop.evaluator ? `${loop.evaluator.prop} on ${Object.keys(loop.evaluator.data).join(', ')}, champion and candidate on one seed` : 'none (a strategy or rulebook change stays blocked)'}`);
   say(`proposer: harness ${loop.proposer.harness}${loop.proposer.model ? ` (${loop.proposer.model})` : ''}; limits ${JSON.stringify(loop.limits)}; decision rule ${JSON.stringify(loop.rule)}`);
   return 0;
 }

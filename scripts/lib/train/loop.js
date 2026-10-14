@@ -19,8 +19,9 @@
  *   archive    (g) every proposal and its verdict (archive.js); a kept one gets a PR body draft and, unless
  *              dry-run, a local branch. Nothing is pushed, merged or opened: promotion is a reviewed PR.
  *
- * Steps are pluggable (`steps`): the scorecard and the evaluator are adapters, so step 2's scorecard and step 9's
- * evaluator plug in when they land; today the evaluator is a stub that says it is unavailable, so a strategy or
+ * Steps are pluggable (`steps`): the scorecard and the evaluator are adapters. The evaluator is step 9's
+ * (train/evaluator.js: the champion's and the candidate's trees scored on the same windows and seed); without an
+ * `evaluator` in the loop config it says it is unavailable, so a strategy or
  * rulebook change is `blocked`, never kept. Resumable and idempotent: each phase's output is a file and the phase
  * is marked done in state.json after it (state.js). Limits (iterations, model calls, wall time) stop the loop
  * between calls, resumable. It never runs `npm run verify` or any test: no tests while replays run (memory).
@@ -49,6 +50,7 @@ const D = require('./decision-points');
 const { pairUp, judge } = require('./paired');
 const A = require('./archive');
 const proposer = require('./proposer');
+const E = require('./evaluator');
 const { replayFor } = require('./config');
 const { unitContaining, RECORDED_LOOKS } = require('../prop/splits');
 
@@ -90,8 +92,8 @@ function defaultSteps({ root, env = process.env }) {
     runReplay: opts => driver.runReplay(opts),
     // Step 2's scorecard (replay/scorecard.js) as decisions; a run still open is scored as it stands.
     scorecard: ({ runDir, tree }) => scorecardDecisions(scoreRun(runDir, { strategies: loadStrategies(tree, env).strategies, accounts: loadAccounts(tree, env).accounts, unfinished: true }).records),
-    // Step 9 (the two-layer evaluator) is not built: a stub that says so. Its adapter returns { available, blows, failures }.
-    evaluator: async () => ({ available: false, why: 'the two-layer evaluator (section 10 step 9) is not built yet' }),
+    // Step 9's two-layer evaluator (train/evaluator.js): { available, blows, failures, windows }.
+    evaluator: opts => E.evaluate({ ...opts, env }),
     propose: opts => proposer.propose(opts),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };
@@ -321,7 +323,8 @@ async function iteration(ctx, n, { champion, champ }) {
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs }) };
     });
     const v = await phase(ctx, `${n}:verdict:${x.id}`, path.join(dir, `verdict-${x.id}.json`), async () => {
-      const evaluator = await ctx.steps.evaluator({ tree: cand.tree, proposal: x.proposal, windows: ctx.loop.tuningWindows });
+      // Paired: the champion's tree and the candidate's, the same windows, bar files and seed.
+      const evaluator = await ctx.steps.evaluator({ cfg: ctx.loop.evaluator, champion: champion.dir, candidate: cand.tree, proposal: x.proposal, windows: ctx.loop.tuningWindows, seed: ctx.loop.seed, look: { candidate: `${ctx.loop.loopId}/iter-${n}/${x.id}`, purpose: 'tuning' }, ledger: ctx.paths.ledger, log: ctx.log });
       return { ...judge({ pairs: pairUp(baseline, cand.decisions), targets: x.proposal.targets, failures: P.FAILURES, rule: ctx.loop.rule, mechanical: P.isMechanical(x.proposal), evaluator }), evaluator };
     });
     verdicts.push({ x, cand, v });
@@ -431,7 +434,8 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
       const tree = await candidateTree(ctx, { dir: work, id: proposalId, proposal: entry.proposal, champion });
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: proposalId, dir: work, tree: tree.dir, panel, runs: champ.runs }) };
     });
-    const evaluator = await ctx.steps.evaluator({ tree: cand.tree, proposal: entry.proposal, windows: loop.heldOutWindows });
+    // The candidate alone, a judging look the evaluator logs before it reads a bar (each scoring is a look).
+    const evaluator = await ctx.steps.evaluator({ cfg: loop.evaluator, champion: null, candidate: cand.tree, proposal: entry.proposal, windows: loop.heldOutWindows, seed: loop.seed, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging' }, ledger: ctx.paths.ledger, log: ctx.log });
     const v = judge({ pairs: pairUp(baseline, cand.decisions), targets: entry.proposal.targets, failures: P.FAILURES, rule: loop.rule, mechanical: P.isMechanical(entry.proposal), evaluator });
     A.appendEntry(ctx.paths.archive, { phase: 'held-out', iteration: entry.iteration, proposalId, windows: loop.heldOutWindows, seed: loop.seed, repeats: loop.repeats, baseCommit: champion.baseCommit, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator });
     return v;

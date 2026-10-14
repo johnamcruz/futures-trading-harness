@@ -196,6 +196,20 @@ test('a strategy change is blocked until the evaluator screens it; a duplicate i
   assert.match(state.stopped, /nothing flagged left/);
 });
 
+test('the evaluator verifies on equal terms: the champion\'s and the candidate\'s trees, the tuning windows, one seed; its failure rejects', async () => {
+  for (const failures of [[], ['2022-03-09..2022-03-10: the pass-rate lower bound fell from 0.3 to 0.2']]) {
+    const w = world({ proposals: [fix], loop: { evaluator: { prop: 'p', data: { MNQ: '/bars.csv' } } } });
+    const seen = [];
+    w.steps.evaluator = async opts => { seen.push(opts); return { available: true, blows: 0, failures }; };
+    await run(w, { dryRun: true });
+    const [o] = seen;
+    assert.deepStrictEqual([o.cfg.prop, o.champion, path.basename(o.candidate), o.windows, o.seed, o.look.purpose, o.ledger], ['p', path.join(w.loop.workDir, 'trees', 'champion'), readArchive(w.paths.archive)[0].proposalId, w.loop.tuningWindows, 3, 'tuning', w.paths.ledger]);
+    const [e] = readArchive(w.paths.archive);
+    assert.strictEqual(e.verdict, failures.length ? 'rejected' : 'kept');
+    if (failures.length) assert.match(e.reasons[0], /^evaluator: .*lower bound fell/);
+  }
+});
+
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {
   const w = world({ proposals: [fix], loop: { maxFlagged: 2, limits: { maxIterations: 2, maxModelCalls: 1000, maxWallMinutes: 30 } } });
   await run(w, { dryRun: true });

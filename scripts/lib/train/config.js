@@ -17,6 +17,8 @@
  *   maxProposals    proposals per iteration (1-5, default 2)
  *   limits          { maxIterations (default 1), maxModelCalls (default 200), maxWallMinutes (default 240) }
  *   decision        tighter settings of the frozen decision rule (paired.js ruleFrom); never looser
+ *   evaluator       the mechanical verifier (train/evaluator.js): { prop, data: { SYMBOL: bar file }, ...settings };
+ *                   none: a strategy or rulebook change stays blocked
  *
  *   resolveLoop(raw, { baseDir, env, root })   the resolved config, with `hash` (limits left out: they may be raised on resume)
  *   windowRange(w)                             { start, end } Dates: session `from`'s start to session `to`'s start
@@ -30,6 +32,7 @@ const { expandHome } = require('../paths');
 const { validateConfig } = require('../autotrader');
 const { tradingDayStart } = require('../trading/clock');
 const { ruleFrom } = require('./paired');
+const { resolveEvaluator } = require('./evaluator');
 
 const LOOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -75,6 +78,8 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   const lim = r.limits && typeof r.limits === 'object' ? r.limits : {};
   for (const k of Object.keys(lim)) if (!(k in LIMITS)) errors.push(`limits.${k}: not a limit (${Object.keys(LIMITS).join(', ')})`);
   const limits = Object.fromEntries(Object.entries(LIMITS).map(([k, spec]) => [k, int(lim[k], spec, `limits.${k}`, errors)]));
+  let evaluator = null;
+  try { evaluator = resolveEvaluator(r.evaluator, baseDir); } catch (err) { errors.push(err.message); }
   let rule = null;
   try { rule = ruleFrom(r.decision); } catch (err) { errors.push(err.message); }
   if (errors.length) throw new Error(`invalid training-loop config:\n- ${errors.join('\n- ')}`);
@@ -82,7 +87,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   if (typeof replay.autotrader === 'string') replay = { ...replay, autotrader: readSpec(replay.autotrader, baseDir, 'replay.autotrader') };
   const loop = {
     loopId: r.loopId, replay, proposer, tuningWindows: r.tuningWindows, heldOutWindows: r.heldOutWindows || null,
-    repeats, seed, maxFlagged, controlPoints, maxProposals, limits, rule,
+    repeats, seed, maxFlagged, controlPoints, maxProposals, limits, rule, evaluator,
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
   };
   const { limits: _l, ...identity } = loop;
