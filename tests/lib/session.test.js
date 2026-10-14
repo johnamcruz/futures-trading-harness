@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_GOLDEN } = require('../helpers');
 const { createRunner } = require('../../scripts/lib/runner');
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const { writeCycleLog } = require('../../scripts/lib/cycle-log');
@@ -477,7 +477,8 @@ test('runner wiring: onBarClosed hears each closed bar the runner polls, with th
   };
   const heard = [];
   const cfg = validateConfig({ harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3, premarketAt: '', eodAt: '15:50@America/New_York', trigger: 'bar' });
-  const runner = wireRunner({ cfg, root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: path.join(home, 'bars'), now: () => new Date(t), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {}, onBarClosed: (symbol, info) => heard.push([symbol, info]) });
+  // The fixture strategies holding the retired rules (FX_GOLDEN): some read a broker field (none ships since 2026-10-14).
+  const runner = wireRunner({ cfg, root: ROOT, home, env: { FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_GOLDEN }, client, dataDir: path.join(home, 'bars'), now: () => new Date(t), runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {}, onBarClosed: (symbol, info) => heard.push([symbol, info]) });
   await runner.step();
   // First the closed bar (never the bars themselves), then, once the scan ran, the field values it read (R35).
   assert.strictEqual(heard.length, 2, JSON.stringify(heard).slice(0, 300));
@@ -599,21 +600,21 @@ test('labels: a day started in paper mode and restarted live is labelled with th
   const w = liveHome();
   const day = '2026-10-07';
   // A paper strategy fires on every bar: a candidate only while the session runs in paper mode.
-  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'paper', signal: 'rules' }];
+  const scan = [{ name: 'fx_orb', candidate: true, direction: 'long', status: 'paper', signal: 'rules' }];
   await runLive(w, { from: et(10, 0), to: et(10, 10), cfg: { paper: true }, scan });
   await runLive(w, { from: et(10, 20), to: et(10, 30), scan });
   const dir = sessionPaths(w.home, day).runDir;
   const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   assert.deepStrictEqual(m.versions.map(v => Boolean(JSON.parse(fs.readFileSync(path.join(dir, v.config), 'utf8')).paper)), [true, false]);
   // The strategy's status from the strategies the labels are given (the scan log keeps its name and verdict).
-  const { labels } = labelRun(dir, { unfinished: true, strategies: [{ name: 'orb', status: 'paper' }] });
+  const { labels } = labelRun(dir, { unfinished: true, strategies: [{ name: 'fx_orb', status: 'paper' }] });
   const flat = labels.filter(l => l.decision === 'flat');
   const paperHalf = flat.filter(l => Date.parse(l.t) < et(10, 15));
   const liveHalf = flat.filter(l => Date.parse(l.t) > et(10, 15));
   assert.ok(paperHalf.length >= 2 && liveHalf.length >= 2, JSON.stringify(labels.map(l => [l.t, l.decision])));
   assert.ok(paperHalf.every(l => l.clone.reasons.includes('paper mode')), 'the paper half: no skip');
   assert.ok(liveHalf.every(l => !l.clone.reasons.includes('paper mode')), 'the live half: its decisions count');
-  assert.ok(paperHalf.every(l => l.candidates.some(c => c.name === 'orb')), 'paper mode: the paper strategy\'s setup is a candidate');
+  assert.ok(paperHalf.every(l => l.candidates.some(c => c.name === 'fx_orb')), 'paper mode: the paper strategy\'s setup is a candidate');
   assert.ok(liveHalf.every(l => !l.candidates.length), 'live: a paper strategy is no candidate');
   // A run without versions (a replay) reads its one config.
   const { configsOf } = require('../../scripts/lib/replay/labels');
@@ -651,10 +652,11 @@ test('scorecard and --bars: a session restarted on another timeframe and bar cou
 test('labels and scorecard with one-minute --bars on a 3m-then-5m session: each line walks and rebuilds at its own timeframe', { timeout: 120000 }, async () => {
   const w = liveHome();
   const day = '2026-10-07';
-  const { strategies } = require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, {});
-  const orb = strategies.find(s => s.name === 'orb');
+  // fx_orb: the fixture holding the retired orb rules (no rules strategy ships since 2026-10-14).
+  const { strategies } = require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN });
+  const orb = strategies.find(s => s.name === 'fx_orb');
   // A setup fires on every bar and the trader stands aside: each line gets the setup's counterfactual.
-  const scan = [{ name: 'orb', candidate: true, direction: 'long', status: 'active', signal: orb.signal, stopDistance: 5, targetDistance: 2 }];
+  const scan = [{ name: 'fx_orb', candidate: true, direction: 'long', status: 'active', signal: orb.signal, stopDistance: 5, targetDistance: 2 }];
   await runLive(w, { from: et(10, 0), to: et(10, 10), scan });
   await runLive(w, { from: et(10, 30), to: et(10, 45), cfg: { timeframe: 5 }, scan });
   const dir = sessionPaths(w.home, day).runDir;
@@ -668,7 +670,7 @@ test('labels and scorecard with one-minute --bars on a 3m-then-5m session: each 
   const { outcomeBarsFor, labelRun: run } = require('../../scripts/lib/replay/labels');
   const outcomeBars = outcomeBarsFor(dir, { MNQ: csv });
   const { labels } = run(dir, { unfinished: true, strategies, outcomeBars });
-  const cf = l => (l.counterfactuals || []).find(c => c.strategy === 'orb' && c.simulated && c.exitTime);
+  const cf = l => (l.counterfactuals || []).find(c => c.strategy === 'fx_orb' && c.simulated && c.exitTime);
   const at = (from, to) => labels.filter(l => l.decision === 'flat' && Date.parse(l.t) >= from && Date.parse(l.t) < to && cf(l));
   const three = at(et(10, 0), et(10, 15));
   const five = at(et(10, 30), et(11, 0));

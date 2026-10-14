@@ -16,7 +16,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, FX_GOLDEN } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SNAPSHOT = path.join(__dirname, 'cli-parity.snapshot.json');
@@ -70,6 +70,7 @@ const CASES = [
   ['strategies list --json', 'strategies.js', ['list', '--json']],
   ['strategies list --bogus', 'strategies.js', ['list', '--bogus']],
   ['strategies show orb', 'strategies.js', ['show', 'orb']],
+  ['strategies show fx_orb', 'strategies.js', ['show', 'fx_orb']],
   ['strategies show unknown', 'strategies.js', ['show', 'nope']],
   ['strategies validate', 'strategies.js', ['validate']],
   ['strategies scan (replay clock)', 'strategies.js', ['scan', CSV, '--symbol', 'MNQ']],
@@ -154,6 +155,8 @@ function runAll() {
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: REPLAY, FTH_AUTONOMOUS: '',
     FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'), FTH_ACCOUNTS_DIRS: TEST_ACCOUNTS,
+    // The retired rules strategies' rules as fixtures (tests/fixtures/strategies-golden): no rules strategy ships.
+    FTH_STRATEGIES_DIRS: FX_GOLDEN,
   };
   const bars = stdinBars();
   const out = path.join(home, 'bars-scratch', 'cli-parity.json');

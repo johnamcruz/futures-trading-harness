@@ -3,8 +3,9 @@
 // No look-ahead in what a decision reads (part of the no-look-ahead suite, tests/e2e/no-look-ahead.test.js):
 //   - every rules series (each name and function, and field() at every look-back) at bar t is the
 //     same whether or not bars after t exist: the real ones that followed, or an adversarial one;
-//   - every shipped strategy's evaluation at bar t (direction, filters, stop, target, the trend rule,
-//     regime, detail) is unchanged by bars after t;
+//   - every rules strategy's evaluation at bar t (direction, filters, stop, target, the trend rule,
+//     regime, detail) is unchanged by bars after t (the shipped tree has none since 2026-10-14: the
+//     fixtures that hold the retired strategies' rules, tests/fixtures/strategies-*);
 //   - the backtest engine (fill: next-open, the default) fills an entry decided at bar t at bar t+1's
 //     open plus its slippage, never sooner, and the entries it makes through bar T are the same
 //     with or without the bars after T;
@@ -23,9 +24,12 @@ const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
 const { atrAt } = require('../../scripts/lib/replay/labels');
 const { simulate } = require('../../scripts/lib/replay/counterfactual');
-const { FX_STRATEGIES } = require('../helpers');
+const { FX_STRATEGIES, FX_PARITY, FX_GOLDEN } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+// Every fixture rules strategy: the rules of the retired strategies (opening range, CISD, CRT, volume profile, VWAP,
+// the broker's flow, swing breaks, EMA crosses, Keltner, SuperTrend), so every detector and series a rule reads is judged.
+const FX_ALL = { FTH_STRATEGIES_DIRS: [FX_STRATEGIES, FX_PARITY, FX_GOLDEN].join(',') };
 // Broker fields on every bar (as an order-flow server puts them), deterministic, so field() has values to read.
 const withFields = bars => bars.map((b, i) => ({ ...b, flow: { x: Math.sin(i / 3), windows: { 3: { x: Math.cos(i / 5) }, 5: { x: Math.sin(i / 7) } } } }));
 const BARS = withFields(normalizeBars(readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))));
@@ -102,10 +106,10 @@ test('field() at every look-back reads bar t - n, never a later bar, and a missi
   }
 });
 
-test('every shipped strategy\'s evaluation at bar t is unchanged by the bars after t', () => {
-  const { strategies } = loadStrategies(ROOT, {});
+test('every rules strategy\'s evaluation at bar t is unchanged by the bars after t', () => {
+  const { strategies } = loadStrategies(ROOT, FX_ALL);
   const judged = strategies.filter(s => s.valid && s.signal !== 'policy');
-  assert.ok(judged.length >= 10 && judged.some(s => s.name === 'ofi'), `the shipped rules strategies: ${judged.map(s => s.name)}`);
+  assert.ok(judged.length >= 14 && ['fx_ofi', 'fx_crt_1h', 'fx_cisd_ote', 'fx_value_area', 'fx_orb'].every(n => judged.some(s => s.name === n)), `the rules strategies: ${judged.map(s => s.name)}`);
   let fired = 0;
   for (const t of CUTS) {
     // Fresh evaluators judging in the same order: a detector one strategy ran is in the next one's detail on both.
@@ -124,7 +128,7 @@ test('every shipped strategy\'s evaluation at bar t is unchanged by the bars aft
 const market = bars => [{ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }];
 
 test('the backtest engine fills an entry decided at bar t at bar t+1\'s open plus slippage (fill: next-open, the default), never sooner', () => {
-  const { strategies } = loadStrategies(ROOT, {});
+  const { strategies } = loadStrategies(ROOT, FX_ALL);
   const rulesStrategies = strategies.filter(s => s.valid && s.signal === 'rules' && s.timeframe === '3m');
   const { trades } = runEngine(market(BARS), rulesStrategies, { timeframe: 3, gate: false });
   assert.ok(trades.length >= 3, `trades to check: ${trades.length}`);
@@ -141,9 +145,9 @@ test('the backtest engine fills an entry decided at bar t at bar t+1\'s open plu
 });
 
 test('the backtest engine\'s entries through bar T are the same with or without the bars after T', () => {
-  // The shipped 3m rules strategies (cisd_ote, paper, included), and the fixture ones (fx_break, fx_cross), so the file
-  // has entries before each cut whichever strategies fire in it.
-  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES });
+  // Every fixture 3m rules strategy (fx_cisd_ote, paper, included), so the file has entries before each cut whichever
+  // strategies fire in it.
+  const { strategies } = loadStrategies(ROOT, FX_ALL);
   const rulesStrategies = strategies.filter(s => s.valid && s.signal === 'rules' && s.timeframe === '3m');
   const entries = (bars, last) => runEngine(market(bars), rulesStrategies, { timeframe: 3, gate: false }).trades
     .filter(tr => Date.parse(tr.entryTime) <= Date.parse(last))
@@ -173,7 +177,7 @@ test('labels: the stop\'s ATR at a decision reads only bars closed by it; the co
   // The counterfactual's entry: the next bar's open after the signal bar, plus a tick.
   const i = 700;
   const bars0 = bars.map(b => ({ ...b }));
-  const strategy = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'orb');
+  const strategy = loadStrategies(ROOT, FX_ALL).strategies.find(s => s.name === 'fx_orb');
   const r = simulate({ bars: bars0, tfMs: STEP, signalMs: bars0[i].ms, signalClose: bars0[i].c, direction: 'long', stopDistance: 20, targetDistance: null, strategy, spec: { tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }, eodMs: Infinity });
   assert.strictEqual(r.simulated, true, JSON.stringify(r));
   assert.strictEqual(r.entry, Math.round((bars0[i + 1].o + 0.25) / 0.25) * 0.25, JSON.stringify(r));

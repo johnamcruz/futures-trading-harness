@@ -20,7 +20,7 @@ entry: the opening print: REFUSED (intent entry)
 entry: into the close: REFUSED (intent entry)
   [time-window] New entries are not allowed during 15:45-16:00@America/New_York.
 entry: the market closed: REFUSED (intent entry)
-  [strategy] setup:orb is outside its sessions (ny).
+  [strategy] setup:fx_orb is outside its sessions (ny).
   [market-hours] New entries only during market hours (the harness's hours inside the <name-a44ad9> trading day (<firm-time-da13ec> reset): from 18:00 ET until 16:00 ET the next day, Sunday evening to Friday afternoon, 09:30-16:00 ET included; closed only 16:00-18:00 ET and weekends; <name-a44ad9>'s own flatten is <firm-time-db5024>); no position may be held outside them.
 entry: a news blackout: REFUSED (intent entry)
   [blackout] News blackout until 2026-10-07T14:10:00.000Z (CPI).
@@ -36,14 +36,20 @@ entry: the kill switch on: REFUSED (intent entry)
   [kill-switch] Kill switch is on (<tmp>/<dir>/STOP). No new entries until the user removes it.
 entry: an unknown strategy: REFUSED (intent entry)
   [strategy] setup:nope is not a known strategy. Add strategies/nope/STRATEGY.md or use an existing setup tag.
+entry: a retired strategy (orb, 2026-10-14): REFUSED (intent entry)
+  [strategy] setup:orb is not a known strategy (retired on 2026-10-14: strategies/README.md, "Retired strategies"): no new entries from it. A position it opened is still exited and protected with [exit] or [protect].
+entry: the shipped prop_portfolio, which lists no strategies (an attempt running): REFUSED (intent entry)
+  [combine] <name-43f416>: 1 MNQ is not within the account's size budget for a 40-tick stop (4 NQ at $207.80 risk each; contracts: auto).
+  [policy] setup:prop_portfolio: no verdict for MNQ (it lists no strategies, so it has no setups and no verdicts: no entry).
+exit: under the shipped prop_portfolio, an attempt running (allowed): ALLOWED (intent risk-reducing)
 entry: the side named is not the order side: REFUSED (intent entry)
   [order-consistency] The order doesn't agree with itself: the rationale says short but the order side is buy. Fix the order or the rationale so both say the same trade.
 entry: stop on the wrong side of a limit entry: REFUSED (intent entry)
   [order-consistency] The order doesn't agree with itself: the stop 21510 is on the wrong side of the buy entry 21500. Fix the order or the rationale so both say the same trade.
 entry: against the prevailing trend: REFUSED (intent entry)
-  [mtf-trend] setup:orb long is against the prevailing 4h down trend: only a reversal strategy (mtf: reversal) may fade it (4h down, 1h down, 15m down, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+  [mtf-trend] setup:fx_orb long is against the prevailing 4h down trend: only a reversal strategy (mtf: reversal) may fade it (4h down, 1h down, 15m down, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
 entry: its trigger did not fire: REFUSED (intent entry)
-  [trigger-fired] setup:orb long did not fire on the last closed MNQ bar (closed 2026-10-07T13:57:00.000Z; fired: nothing). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.
+  [trigger-fired] setup:fx_orb long did not fire on the last closed MNQ bar (closed 2026-10-07T13:57:00.000Z; fired: nothing). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.
 entry: no tick specs from the broker: REFUSED (intent entry)
   [contract-specs] no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first (the harness records the broker's tick size and value), then try again.
   [max-order-size] the broker server's max order size is not recorded yet: call get_server_config (the harness records its maxOrderSize), then try again.
@@ -61,30 +67,30 @@ modify: a size change with a [protect] reason (allowed): ALLOWED (intent modify)
 modify: a stop move (allowed): ALLOWED (intent modify)
 prop: no attempt started: REFUSED (intent entry)
   [combine] mini: no mini attempt is started (starting one is the user's: node scripts/combine.js start --account mini).
-  [policy] setup:orb: no verdict for MNQ (the runner records one at each setup of ema_cross).
+  [policy] setup:fx_orb: no verdict for MNQ (the runner records one at each setup of fx_cross).
 prop: no account snapshot: REFUSED (intent entry)
   [combine] mini: the mini account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar).
 prop: a stale snapshot: REFUSED (intent entry)
   [combine] mini: the mini account snapshot is missing or older than 10 minutes, or dated in the future (the runner updates it each bar).
-  [policy] setup:orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
+  [policy] setup:fx_orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
 prop: within the size budget (allowed): ALLOWED (intent entry)
 prop: over the size budget: REFUSED (intent entry)
   [combine] mini: 19 MNQ is not within the account's size budget for a 40-tick stop (18 MNQ at $21.24 risk each; contracts: micro).
 prop: past the soft daily limit: REFUSED (intent entry)
   [combine] mini: down $600 today, at the soft daily limit ($500): no new entries until the next session.
 policy: no verdict: REFUSED (intent entry)
-  [policy] setup:orb: no verdict for MNQ (the runner records one at each setup of ema_cross).
+  [policy] setup:fx_orb: no verdict for MNQ (the runner records one at each setup of fx_cross).
 policy: within its verdict (allowed): ALLOWED (intent entry)
 policy: over the verdict's size: REFUSED (intent entry)
-  [policy] setup:orb: size 4 is over the verdict's 3 MNQ (full).
+  [policy] setup:fx_orb: size 4 is over the verdict's 3 MNQ (full).
 policy: another stop than the verdict's: REFUSED (intent entry)
-  [policy] setup:orb: the stop is 60 ticks; the verdict was sized for 40.
+  [policy] setup:fx_orb: the stop is 60 ticks; the verdict was sized for 40.
 policy: the other side: REFUSED (intent entry)
-  [mtf-trend] setup:ema_cross short is against the prevailing 4h up trend: only a reversal strategy (mtf: reversal) may fade it (4h up, 1h up, 15m up, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
-  [policy] setup:orb: the verdict is for a long entry, not sell.
+  [mtf-trend] setup:fx_cross short is against the prevailing 4h up trend: only a reversal strategy (mtf: reversal) may fade it (4h up, 1h up, 15m up, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+  [policy] setup:fx_orb: the verdict is for a long entry, not sell.
   [order-consistency] The order doesn't agree with itself: a short needs the target below the stop (stop 21480, target 21540). Fix the order or the rationale so both say the same trade.
 policy: an expired verdict: REFUSED (intent entry)
-  [policy] setup:orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
+  [policy] setup:fx_orb: the latest verdict (2026-10-07T13:57:00Z) expired at 2026-10-07T14:02:00.000Z.
 policy: a skipped setup: REFUSED (intent entry)
-  [policy] setup:orb: the setup was skipped (cushion).
+  [policy] setup:fx_orb: the setup was skipped (cushion).
 prop: an exit during an attempt (allowed): ALLOWED (intent risk-reducing)

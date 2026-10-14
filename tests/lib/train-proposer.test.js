@@ -10,7 +10,7 @@ const P = require('../../scripts/lib/train/proposer');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const HARNESS = path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js');
-const flagged = [{ day: '2022-03-09', et: '09:40', symbol: 'MNQ', category: 'wrong stated reason', expected: { decision: 'take', setup: 'orb' }, actual: { action: 'none' }, why: ['skipped citing the opening window'], falseReasons: ['"opening window until 10:00": entries allowed from 09:35'], stated: 'CYCLE RESULT: no-trade - opening window until 10:00' }];
+const flagged = [{ day: '2022-03-09', et: '09:40', symbol: 'MNQ', category: 'wrong stated reason', expected: { decision: 'take', setup: 'fx_break' }, actual: { action: 'none' }, why: ['skipped citing the opening window'], falseReasons: ['"opening window until 10:00": entries allowed from 09:35'], stated: 'CYCLE RESULT: no-trade - opening window until 10:00' }];
 
 test('the prompt template: the skill\'s text block, with every placeholder; short enough for a small local model', () => {
   const t = P.readTemplate(ROOT);
@@ -19,9 +19,9 @@ test('the prompt template: the skill\'s text block, with every placeholder; shor
   assert.match(t, /You propose\. Code tests your edit/);
   const prompt = P.selfReviewPrompt({ template: t, flagged, files: P.editableFiles(ROOT), maxProposals: 2 });
   assert.ok(prompt.startsWith(`${P.MARKER}\n`));
-  assert.match(prompt, /1\. 2022-03-09 09:40 MNQ: wrong stated reason\. Expected: take orb\. You did: none\. Why flagged: skipped citing the opening window\. False reasons: "opening window until 10:00"/);
+  assert.match(prompt, /1\. 2022-03-09 09:40 MNQ: wrong stated reason\. Expected: take fx_break\. You did: none\. Why flagged: skipped citing the opening window\. False reasons: "opening window until 10:00"/);
   assert.match(prompt, /skills\/session-timing\/SKILL\.md/);
-  assert.match(prompt, /strategies\/orb\/STRATEGY\.md/);
+  assert.match(prompt, /strategies\/prop_portfolio\/STRATEGY\.md/);
   assert.doesNotMatch(prompt, /skills\/training-loop\/SKILL\.md|skills\/training-verdict\/SKILL\.md|skills\/design-self-review\/SKILL\.md/, 'never the loop\'s own skills');
   assert.doesNotMatch(prompt, /\{\{/);
   const dir = tmpDir();

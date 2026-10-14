@@ -43,7 +43,7 @@ const { createPropHooks } = require('../../scripts/lib/prop/live-runner');
 const prop = require('../../scripts/lib/trading/prop-state');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { plan: orderPlan } = require('../../scripts/lib/harness-tools/order-plan');
-const { tmpDir, recordBrokerSpecs, FX_STRATEGIES } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_STRATEGIES, fxPolicyRoot } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'mock-exchange-server.js');
@@ -278,7 +278,7 @@ test('mock trading: no entry on an exchange holiday, after an early close, or pa
     fs.appendFileSync(w.journal, `${JSON.stringify({ ts: at, kind: 'plan', contractId: 'MNQ', text: 'plan' })}\n`);
     const gw = gatewayClient(w);
     try {
-      const r = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MES', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:orb long, stop 5790.00' });
+      const r = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MES', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:fx_break long, stop 5790.00' });
       assert.ok(!r.ok, label);
       // The whole decision is in the gate's log (the reply is cut short).
       const v = lastBlock(w).find(x => x.check === 'market-hours');
@@ -314,10 +314,14 @@ async function runDay(w, { from, until, cfg = {}, before = () => {}, withProp = 
   const stateFile = path.join(w.home, 'runner-state.json');
   const client = openAdapter({ root: ROOT, env: w.env, timeoutMs: 20000 });
   const log = (msg, level) => logs.push(`${level === 'error' ? 'ERROR' : 'INFO'} ${msg}`);
+  // The policy as it trades, with components: the shipped one lists none since they retired, so the fixture root's
+  // copy of it, trading fx_break and fx_cross (tests/helpers.js fxPolicyRoot).
+  const propRoot = withProp ? fxPolicyRoot(tmpDir()) : null;
   const hooks = withProp ? createPropHooks({
     root: ROOT, env: w.env, home: w.home, client, accountId: '7', log,
-    strategies: () => loadStrategies(ROOT, {}).strategies.filter(s => s.name === PROP_STRATEGY),
+    strategies: () => loadStrategies(propRoot, {}).strategies.filter(s => s.name === PROP_STRATEGY),
   }) : null;
+  if (withProp) assert.deepStrictEqual(loadStrategies(propRoot, {}).strategies.find(s => s.name === PROP_STRATEGY).strategies, ['fx_break', 'fx_cross']);
   const runner = createRunner({
     cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], ...cfg }), root: ROOT, client, prop: hooks,
     clock: { now: () => new Date(clockRef.t) },

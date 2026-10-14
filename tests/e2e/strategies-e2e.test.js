@@ -1,11 +1,13 @@
 'use strict';
 
 /**
- * Every active strategy, end to end, through the entry points an LLM uses
+ * Every active rules strategy, end to end, through the entry points an LLM uses
  * (separate processes, as in a session): on real NQ bars cut at a bar where
  * the strategy fired, `mtf.js --record` and `strategies.js scan --record`
  * write the gate's records, the plan goes in the journal, and the order goes
  * through the order-gate hook exactly as Claude Code / Codex / Qwen run it.
+ * No rules strategy ships since 2026-10-14: the strategies driven are the fixtures holding the retired ones'
+ * rules unchanged (tests/fixtures/strategies-golden, loaded with FTH_STRATEGIES_DIRS).
  * Each must be allowed, with the stop sized from the scan; each strategy's
  * scan result must carry its context (regime, session, the trend rule, rule
  * results, stop, exit, confluence); and a paper strategy's entry is refused.
@@ -19,20 +21,20 @@ const { spawnSync } = require('child_process');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { FAKE_BROKERS, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, FX_GOLDEN, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const STEP = 180000;
 const CONTRACT = 'MNQ:2026-06';
-const ALL = loadStrategies(ROOT, {}).strategies;
+const ALL = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
 const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ'));
 // Active strategies whose setup the 6-day NQ fixture never produces (checked below: they load, validate and scan);
 // the rest are driven end to end. A fixture where these fire would drive them too.
 const NOT_ON_FIXTURE = {
-  vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
-  value_area_breakout: 'its two closes above the prior value area on volume all come outside 10:00-15:00 ET here, none below it (value-area-strategies.test.js fires it on constructed sessions)',
-  value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
+  fx_vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
+  fx_value_area_breakout: 'its two closes above the prior value area on volume all come outside 10:00-15:00 ET here, none below it (value-area-strategies.test.js fires it on constructed sessions)',
+  fx_value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
 };
 const ACTIVE = ACTIVE_ALL.filter(s => !NOT_ON_FIXTURE[s.name]);
 
@@ -49,10 +51,9 @@ function firstFire(s) {
 }
 
 test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
-  // value_area is active (the owner's decision after order flow moved to the broker servers): on this fixture, which
-  // carries no flow, it fires on its range-expansion confirmation.
-  // cisd_ote is paper since its textbook rewrite (version 4): it is not driven here until the owner promotes it.
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['crt_1h', 'crt_4h', 'orb', 'value_area']);
+  // fx_value_area (value_area's rules, active): on this fixture, which carries no flow, it fires on its range-expansion
+  // confirmation. fx_cisd_ote is paper (cisd_ote was, since its textbook rewrite): it is not driven here.
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['fx_crt_1h', 'fx_crt_4h', 'fx_orb', 'fx_value_area']);
   assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
   // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
   const ev = createEvaluator(BARS);
@@ -82,6 +83,7 @@ for (const s of ACTIVE) {
       FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: journal, NODE_ENV: 'test', FTH_TEST_NOW: now, FTH_AUTONOMOUS: '',
       FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
       FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_GATE_LOG: path.join(home, 'gate.jsonl'), CLAUDE_PLUGIN_ROOT: ROOT,
+      FTH_STRATEGIES_DIRS: FX_GOLDEN,
     };
 
     // 1. The multi-timeframe read, recorded for the gate.
@@ -136,13 +138,13 @@ test('every strategy with rules provides its context on every scanned bar; a pap
       assert.ok(['trend', 'reversal'].includes(r.mtf.style), s.name);
     }
   }
-  // A paper strategy (a paper copy of value_area in the user's strategies folder, one that fires on this fixture): the
-  // gate refuses a live entry.
+  // A paper strategy (a paper copy of fx_value_area, value_area's rules, in the user's strategies folder, one that
+  // fires on this fixture): the gate refuses a live entry.
   const home = tmpDir();
   const dir = path.join(home, 'strategies', 'value_area_paper');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: value_area$/m, 'name: value_area_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  fs.writeFileSync(path.join(dir, 'STRATEGY.md'), fs.readFileSync(path.join(FX_GOLDEN, 'fx_value_area', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: fx_value_area$/m, 'name: value_area_paper').replace(/^status: active\b.*$/m, 'status: paper'));
   const paper = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: path.dirname(dir) }).strategies.find(s => s.name === 'value_area_paper');
   assert.strictEqual(paper.status, 'paper');
   recordBrokerSpecs(home); // the broker's tick specs, as the translator records them at the contract lookup

@@ -13,10 +13,12 @@ const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
 
 /** The fixture rules strategies fx_break and fx_cross (tests/fixtures/strategies-fx), loaded beside the shipped ones. */
 const FX = { FTH_STRATEGIES_DIRS: FX_STRATEGIES };
+/** With them, the rules of the strategies retired on 2026-10-14 (tests/fixtures/strategies-golden: fx_cisd_ote, fx_value_area, ...). */
+const GOLD = { FTH_STRATEGIES_DIRS: `${FX_STRATEGIES},${FX_GOLDEN}` };
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DATA = path.join(__dirname, '..', 'fixtures', 'data');
@@ -266,13 +268,13 @@ test('market hours are a hard rule in backtests too: no entries outside them, no
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, sessions: ['00:00-23:59@America/New_York'] }, ROOT), /market session/);
 });
 
-test('strategies whose stop is an expression (cisd_ote: cisd_risk(15)) are backtested', () => {
-  // cisd_ote is paper; the backtester runs any strategy that isn't disabled.
+test('strategies whose stop is an expression (fx_cisd_ote: cisd_risk(15)) are backtested', () => {
+  // fx_cisd_ote (the retired cisd_ote's rules) is paper; the backtester runs any strategy that isn't disabled.
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['cisd_ote'], outDir: dir, gate: false };
-  const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: {} });
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_cisd_ote'], outDir: dir, gate: false };
+  const { report } = runBacktest(base, { root: ROOT, outRoot: dir, env: GOLD });
   assert.deepStrictEqual(report.skipped || {}, {});
-  assert.ok(report.summary.trades > 0, 'cisd_ote trades');
+  assert.ok(report.summary.trades > 0, 'fx_cisd_ote trades');
 });
 
 test('a stop expression with no positive distance makes no candidate', () => {
@@ -366,32 +368,32 @@ test('prop challenge mode sizes from the account\'s rulebook and folds its multi
   assert.strictEqual(gated.baseline.trades, 0, 'a multiplier item without its fact skips every setup (fails closed)');
 });
 
-test('a plain backtest on a CSV says, in its log, report.json and report.md, that value_area reads a bar field the data lacks; a market it doesn\'t list is not named', () => {
+test('a plain backtest on a CSV says, in its log, report.json and report.md, that fx_value_area reads a bar field the data lacks; a market it doesn\'t list is not named', () => {
   const dir = tmpDir();
   const csv = path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv');
   const logs = [];
-  // GC: the same prices under a root value_area doesn't list (it trades the equity index micros).
-  const va = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area');
+  // GC: the same prices under a root fx_value_area doesn't list (it trades the equity index micros).
+  const va = loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area');
   assert.ok(!va.instruments.includes('GC') && !va.instruments.includes('MGC'));
-  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['value_area', 'fx_break'], gate: false, outDir: dir },
-    { root: ROOT, outRoot: dir, env: FX, log: m => logs.push(m) });
+  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: dir },
+    { root: ROOT, outRoot: dir, env: GOLD, log: m => logs.push(m) });
   const [p] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(va);
   const n = report.fieldCoverage[0].coverage.MNQ.bars;
   assert.ok(n > 0);
-  // Coverage: the share of the MNQ bars in range that carry it (none, on a CSV); GC is not a market value_area trades.
-  const want = [{ strategy: 'value_area', path: p, coverage: { MNQ: { bars: n, carried: 0, share: 0 } }, symbols: ['MNQ'] }];
+  // Coverage: the share of the MNQ bars in range that carry it (none, on a CSV); GC is not a market fx_value_area trades.
+  const want = [{ strategy: 'fx_value_area', path: p, coverage: { MNQ: { bars: n, carried: 0, share: 0 } }, symbols: ['MNQ'] }];
   assert.deepStrictEqual(report.fieldCoverage, want);
-  assert.deepStrictEqual(report.missingFields, want, 'fx_break reads none; GC is not a market value_area trades');
+  assert.deepStrictEqual(report.missingFields, want, 'fx_break reads none; GC is not a market fx_value_area trades');
   const json = JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8'));
   assert.deepStrictEqual([json.missingFields, json.fieldCoverage], [want, want]);
   const md = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
-  assert.match(md, new RegExp(`## Bar fields missing from this data\\n\\n- value_area reads field\\("${p.replace(/\./g, '\\.')}"\\), which no MNQ bar in this data carries:`));
-  assert.ok(md.includes(`| value_area | \`${p}\` | MNQ | 0% | 0 / ${n} |`), md);
-  assert.ok(logs.includes(`field coverage: value_area field("${p}") on MNQ: 0% of ${n} bars`), logs.join('\n'));
+  assert.match(md, new RegExp(`## Bar fields missing from this data\\n\\n- fx_value_area reads field\\("${p.replace(/\./g, '\\.')}"\\), which no MNQ bar in this data carries:`));
+  assert.ok(md.includes(`| fx_value_area | \`${p}\` | MNQ | 0% | 0 / ${n} |`), md);
+  assert.ok(logs.includes(`field coverage: fx_value_area field("${p}") on MNQ: 0% of ${n} bars`), logs.join('\n'));
   assert.deepStrictEqual(logs.filter(l => /reads field\(/.test(l)).length, 1, logs.join('\n'));
-  // Only GC: value_area trades none of it, so nothing is said.
+  // Only GC: fx_value_area trades none of it, so nothing is said.
   const gcLogs = [];
-  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['value_area', 'fx_break'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, env: FX, log: m => gcLogs.push(m) });
+  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['fx_value_area', 'fx_break'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, env: GOLD, log: m => gcLogs.push(m) });
   assert.strictEqual(gc.report.missingFields, undefined);
   assert.strictEqual(gc.report.fieldCoverage, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
@@ -410,17 +412,17 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
       .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
       .replace(/^status: active\b/m, `status: ${status}`));
   };
-  // va_paper: a paper copy of value_area (the repo's own value_area is active, the owner's decision); the fixture fx_break is active.
+  // va_paper: a paper copy of the fixture fx_value_area (which is active, as value_area was when retired); the fixture fx_break is active.
   fs.mkdirSync(path.join(strategiesDir, 'va_paper'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
+  fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(FX_GOLDEN, 'fx_value_area', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: fx_value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
   policy('prop_mixed', ['va_paper', 'fx_break']);
   policy('prop_mixed_paper', ['va_paper', 'fx_break'], 'paper');
   policy('prop_all_paper', ['va_paper']);
-  // The repo's value_area is active: an active policy trades it, as prop_portfolio does live.
-  assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'active');
-  policy('prop_va', ['value_area', 'fx_break']);
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
+  // fx_value_area is active: an active policy trades it, as a live policy would.
+  assert.strictEqual(loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area').status, 'active');
+  policy('prop_va', ['fx_value_area', 'fx_break']);
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES},${FX_GOLDEN}` };
   const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
   const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
   const logs = [];
@@ -434,16 +436,16 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
   assert.deepStrictEqual([paper.strategies, paper.leftOut], [['va_paper', 'fx_break'], []]);
   const vaLogs = [];
   const va = run('prop_va', vaLogs);
-  assert.deepStrictEqual([va.strategies, va.leftOut], [['value_area', 'fx_break'], []], 'value_area is active: traded, not left out');
-  // The CSV carries no broker bar fields: the run says value_area's field() conditions are false here, in its log and report.
-  const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area'));
-  assert.ok(flowPath, 'value_area reads a broker bar field');
-  assert.deepStrictEqual(va.missingFields.map(x => [x.strategy, x.path, x.symbols, x.coverage.MNQ.carried]), [['value_area', flowPath, ['MNQ'], 0]]);
+  assert.deepStrictEqual([va.strategies, va.leftOut], [['fx_value_area', 'fx_break'], []], 'fx_value_area is active: traded, not left out');
+  // The CSV carries no broker bar fields: the run says fx_value_area's field() conditions are false here, in its log and report.
+  const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, GOLD).strategies.find(x => x.name === 'fx_value_area'));
+  assert.ok(flowPath, 'fx_value_area reads a broker bar field');
+  assert.deepStrictEqual(va.missingFields.map(x => [x.strategy, x.path, x.symbols, x.coverage.MNQ.carried]), [['fx_value_area', flowPath, ['MNQ'], 0]]);
   assert.deepStrictEqual(va.fieldCoverage, va.missingFields);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'prop_va', 'combine.json'), 'utf8')).fieldCoverage, va.fieldCoverage);
-  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar field coverage\n[^]*\| value_area \| `[^`]+` \| MNQ \| 0% \|/);
-  assert.ok(vaLogs.some(l => l.startsWith(`warning: value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
-  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- value_area reads field/);
+  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar field coverage\n[^]*\| fx_value_area \| `[^`]+` \| MNQ \| 0% \|/);
+  assert.ok(vaLogs.some(l => l.startsWith(`warning: fx_value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
+  assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- fx_value_area reads field/);
   assert.strictEqual(mixed.missingFields, undefined, 'fx_break reads no bar field');
   // A paper component that fires on this data (fx_cross on paper, first in the list): never picked by the active policy.
   fs.mkdirSync(path.join(strategiesDir, 'ema_paper'), { recursive: true });

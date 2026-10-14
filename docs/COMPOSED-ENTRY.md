@@ -3,6 +3,34 @@
 Status: a design for the owner's OK. Nothing in it is built. Every claim
 about today's code names its file and line on `main` at the time of writing.
 
+**The owner's decisions of 2026-10-14** (they supersede the text below where
+it differs):
+
+- **The one strategy is `trade_lifecycle`** (`strategies/trade_lifecycle`,
+  `setup:trade_lifecycle`): the composed entry of this design, named for
+  the whole trade process. The model combines its skills to read, set up,
+  enter, size, manage and exit. "Composed" below is that strategy.
+- **`prop_portfolio` stays, as the account layer over it**: the account,
+  contracts, the rulebook's `policies.prop_portfolio` (sizing, exit,
+  multipliers, numbers unchanged), the verdicts, the trail, micro or mini.
+  Its one component will be `trade_lifecycle` (section 3.7). Until then it
+  lists none and stays `active`: with no component it has no setup, so the
+  gate refuses every entry; exits and protective stops go.
+- **Every other strategy is deleted**, not phased out and not turned into
+  skills or documents (done: the ten rules strategies and
+  `prop_flow_1m`, with its rulebook entry; strategies/README.md, "Retired
+  strategies"). Named setups like CRT are facts in the briefing only; CRT is
+  a rejection concept (the `rejection` skill), not a setup of its own.
+- **Sizing is a step the model states**, from the sizing skills, under the
+  enforced ceiling: `prop_portfolio`'s verdict (the rulebook's budget and
+  multiplier), which the gate holds; the model may only state less.
+- **Skills stay as they are.** Section 7's rewrites of existing skills are
+  not made; new skills are added only where this design needs one (one
+  for the composed entry), and the new one for take-profit targets (in
+  flight) owns targets (section 3.4).
+- **The code stays** until its own PRs (section 9's table): dead code is
+  kept and tested through fixtures meanwhile.
+
 ## 1. Thesis
 
 **The model learns, from the market, which skills to combine.** Owner,
@@ -51,7 +79,7 @@ Three things follow.
 strategies like crt, cisd, vwap, OFI to avoid confusion. This is the only
 strategy and it learns from the market which skills to combine to trade the
 current market", and "it combines all the concepts from the others". The
-composed entry is packaged as one strategy document, `strategies/composed`,
+composed entry is packaged as one strategy document, `strategies/trade_lifecycle`,
 so it rides the existing strategy plumbing (the gate's strategy checks,
 sizing, the prop verdict, the records); it hardcodes no combination. Every
 other strategy document is deleted (section 9), after each concept it
@@ -269,7 +297,8 @@ decide whether to trade.
   time in force (`broker/interface.js:74-76`), so the runner cancels a
   working composed limit at the record's `expiresAt`.
 - **Target.** A real level on the winning side: a swing target
-  (`m3.swingTargets`) or a named key level, floored toward the entry.
+  (`m3.swingTargets`) or a named key level, floored toward the entry. The new
+  skill for take-profit targets (in flight) teaches how the model picks it.
 - **Checks.** R:R at least the composed document's `risk.min_rr`; the first
   level in the way and its R are recorded and are what a phase-2 room fact
   is checked against (section 3.6).
@@ -281,7 +310,7 @@ buffer the stop is 21512.50: 111 ticks, $55.50 per contract, 2.08R.
 
 ### 3.5 order_plan and sizing
 
-`order_plan {"strategy": "composed", "symbol", "side"}` plans from the
+`order_plan {"strategy": "trade_lifecycle", "symbol", "side"}` plans from the
 latest `ok` record for the root and side instead of a scan candidate. The
 stop and target ticks are the record's. Size: outside an attempt,
 `position-sizing` and the composed document's `risk.max_risk_usd`; inside
@@ -294,16 +323,16 @@ schema refuses a composed document without it.
 
 ### 3.6 The gate
 
-The order's rationale opens `setup:composed long ...`. The side must follow
+The order's rationale opens `setup:trade_lifecycle long ...`. The side must follow
 the tag (`order-gate.js:49`), so a signature, if written, comes after it.
 
 | Check | Composed entry |
 |---|---|
-| `setup-tag`, `strategy` | Unchanged. `composed` resolves to `strategies/composed/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
+| `setup-tag`, `strategy` | Unchanged. `trade_lifecycle` resolves to `strategies/trade_lifecycle/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
 | `trigger-fired` | Replaced, for `setup:composed`, by a new hard check `composed-reads`, keyed on the tag and run outside the skippable checks, so it runs even when the composed document is missing or invalid (not behind `named.valid !== false`, `order-gate.js:280-284`). It loads the latest record for the root and **re-runs the pure reads checker** on the record's reads against `briefingFor(home, root, { cycleBar })`: it never trusts the record's `ok` flag. The reads must be true and side-agreeing, the record for this bar (unexpired) and the order's side; the plan is recomputed and the bracket ticks must equal it; the size at most `maxSize`; the order `type: limit` at the record's reference or better (section 3.4); the record not yet used for an entry; an exploratory record only in replay practice (D18); and, once required (D15), an `experience_lookup` on the record recorded this cycle |
 | `mtf-trend` | Unchanged; the style is `trend` unless D2's verified reversal applies |
 | `phase2-facts` | Unchanged forms and minimum; `factsOrder` (`order-gate.js:64-72`) gives the composed record, so a room fact is checked against the record's first level in the way instead of `m3.candidates` |
-| `review-before-next-entry` | Unchanged (`order-gate.js:373`): a composed entry on a root whose earlier entry has no review is refused; the review tags `setup:composed` |
+| `review-before-next-entry` | Unchanged (`order-gate.js:373`): a composed entry on a root whose earlier entry has no review is refused; the review tags `setup:trade_lifecycle` |
 | `max-risk`, `contract-specs`, `max-order-size`, `stop-defined`, `order-consistency`, `plan-required`, `market-hours`, `time-window`, `blackout`, loss and entry limits, every gateway-only check | Unchanged |
 | `paper-mode` and the `strategy` status | A `paper` composed entry may enter only when the broker and the run config are both replay, as the account lock exempts a replay run (`account-lock.js:199-203`, `lockExemption`); anywhere else a `paper` status refuses as today (`strategies.js:568`) (D10) |
 | `combine`, `policy` | Section 3.7 |
@@ -319,7 +348,7 @@ no fill in replay: replay runs with `FTH_PAPER=0` (`replay/config.js:67`), so
 the status check refuses it, and paper mode would refuse it too
 (`order-gate.js:262`), whose refusal says to journal the plan instead.
 The learning loop needs real replay fills, so the exemption is what lets
-practice score outcomes while `composed` is still `paper`; only the owner
+practice score outcomes while `trade_lifecycle` is still `paper`; only the owner
 promotes it to `active`.
 
 **The runner.** On the composed lane the runner cycles every bar (trigger
@@ -328,18 +357,22 @@ start a cycle (`autotrader.js:711-716`).
 
 ### 3.7 Inside a prop attempt
 
-With the old policy strategies deleted (section 9), `composed` is the
-account's policy itself: its document carries `account` and `contracts`,
-and the account's rulebook lists `composed` under `policies` with its
-`sizing`, `exit` and `multipliers`, as it lists `prop_portfolio` today.
-Code changes this needs:
+`prop_portfolio` stays the account's policy (the owner, 2026-10-14) and
+`trade_lifecycle` becomes its one component: `prop_portfolio` lists
+`strategies: [trade_lifecycle]`, and the rulebook's `policies.prop_portfolio`
+(its `sizing`, `exit` and `multipliers`) sizes and trails every
+`trade_lifecycle` trade, as it did the rules strategies'. Its numbers are
+unchanged: `accounts/<account>/RULEBOOK.md` holds them, the one place (R1).
+Today `prop_portfolio` lists no strategies (`strategies: []`, allowed
+since 2026-10-14: no component, no setup, no verdict, so every entry is
+refused). The model states its size in the record from the sizing skills;
+the verdict is the ceiling and the gate holds the order to it. Code changes
+this needs:
 
-- `strategies.js:368-380` and `componentRefusal` (`strategies.js:545`): a
-  policy lists only rules components; `signal: composed` becomes its own
-  policy, with no component list.
-- `withRulebook` (`strategies.js:285-286`) returns early unless the signal
-  is `policy`, so it must also load the rulebook entry for
-  `signal: composed`.
+- `strategies.js` (the policy component check after the load) and
+  `componentRefusal`: a policy lists only rules components; it must also
+  accept a `signal: composed` component (`trade_lifecycle`), on its
+  timeframe and instruments.
 - The verdict: `compose_check` asks for it, the same `decideSetup`
   (`prop/verdict.js:50`) with the record's direction and stop distance in
   place of a scan's, so the budget (`combine.js:143`, a share of the cushion
@@ -641,7 +674,7 @@ shown until an owner-approved rebuild (section 4.7).
   index rebuilt between practice sessions is a challenger, never the
   champion.
 - **Paper and replay first.** No live entry until the owner promotes
-  `composed` from `paper` (D9).
+  `trade_lifecycle` from `paper` (D9).
 
 ### 4.8 How we know it learned
 
@@ -702,7 +735,7 @@ and the promotion gate passed; then the owner decides.
 |---|---|
 | The composed record (3.3) | New: the reads, each check, the plan, the signatures, the context; append-only |
 | The journal plan | The plan text names the record (`composed <bar> <signature>`); `journal_add` has no data field (`broker/interface.js:90-93`), and the broker interface doesn't change |
-| Decision history (`decision-history.js:107`) | `setup: composed`, the signature, and the record's stop and target; a pass with an `ok` record is `skipped`, so its +1R/-1R counterfactual is kept |
+| Decision history (`decision-history.js:107`) | `setup: trade_lifecycle`, the signature, and the record's stop and target; a pass with an `ok` record is `skipped`, so its +1R/-1R counterfactual is kept |
 | Cycle log (`cycle-log.js`) | Each `compose_check` and `experience_lookup` call, its record and refusal, and the pinned index's hash, beside `factCheck` |
 | Labels (`replay/labels.js`) | The reads and signatures; the record's target counts as the plan's own exit, and a limit entry as the plan's own order type: neither is a clone reason (limit entries are one today, `replay/labels.js:30`) |
 | Scorecard (`replay/scorecard.js`, `trading/reasons.js:89`) | The expected decision comes from the reads: a bar with an `ok` record is not "no setup"; a composed entry is judged by its record (every read verified and side-agreeing, the gate's answer), each step's `why` (right or wrong reason) and its outcome in R; a pass whose counterfactual lost is a good pass |
@@ -741,7 +774,7 @@ the read form section 3.2's checker gains.
 | `ofi`, `ofi_absorption` | Volume surge against a longer average | `momentum-and-volume` | `m3.participation.relVolLast3VsPrior20` (`market-snapshot.js:163`), other windows | `<tf> volume above average` | partial |
 | `orb`, `vwap_reclaim`, `value_area_breakout` | Trade only in some regimes (`regimes: [trend, transition]` or `[trend]`; `regime_gate: true`: the gate refused other regimes) | `trend-vs-range` | `m3.regime.primary` (`briefing.js:365`) | `regime trend\|transition\|range` | present (fact); form new. The gate no longer enforces a regime: which regime suits which combination is what the record learns |
 | `crt_1h`, `crt_4h` | Context filters (`strategies/crt_1h/STRATEGY.md:66-125`): the draw on liquidity, premium or discount half of the range, an outside candle voids the hour, skip on a trend day | `daily-bias`, `levels-and-reactions`, `candle-reading`, `trend-vs-range` | `m3.liquidity` and swing targets; today's high and low (`briefing.js:398`, no half); `pattern: outside` on 3m-60m (`candle-facts.js:41`), not 4h; `m3.today.dayType` | `in premium\|discount`, `<tf> pattern outside`, `day type <name>` | partial |
-| All (policies' rulebook `exit`) | The trail: hold the setup's stop until a profit in R, then trail behind the best price (the values are the account's RULEBOOK.md `exit`) | `manage-position` | the rulebook's `exit` per policy | none: the exit stays code; the runner's exit plan (`runner.js:405-407`, `exitPlan`) and the counterfactual need it for `composed` | partial |
+| All (policies' rulebook `exit`) | The trail: hold the setup's stop until a profit in R, then trail behind the best price (the values are the account's RULEBOOK.md `exit`) | `manage-position` | the rulebook's `exit` per policy | none: the exit stays code; the runner's exit plan (`runner.js:405-407`, `exitPlan`) and the counterfactual need it for `trade_lifecycle` | partial |
 | `prop_portfolio`, `prop_flow_1m` | Sizing and the priority order of their components | `position-sizing` | the account's rulebook | none: sizing stays code (section 3.7) | n/a |
 
 **Parameters worth keeping as skill guidance:** momentum is a bar read: a
@@ -776,11 +809,16 @@ concept, not a tuned number.
 6. CRT's context: the premium or discount half of the range, the outside
    candle on 4h, the trend day as a read; the regime as a read.
 7. The exit: the trail stated in `manage-position` as guidance now; the
-   rulebook's trail for `composed`, in the runner's exit plan and the
+   rulebook's trail for `trade_lifecycle`, in the runner's exit plan and the
    counterfactual, is built with composed (PR 14).
 8. The read forms for all of the above, in the reads checker.
 
 ## 7. Skill text changes
+
+*Superseded for existing skills by the owner's decision of 2026-10-14
+("all our current skills are good"): they stay as they are. The table below
+is kept as the record of what was proposed; only new skills (one for the
+composed entry, one for take-profit targets) are added.*
 
 The doctrine "no setup without a fired strategy" becomes **"no entry
 without verified reads"**. The trader-process skill is embedded in every
@@ -799,7 +837,7 @@ goes into skills read with `skill_lookup`.
 | `setup-judgment` | Judges each fired strategy's setup | Composes from the skills, calls `compose_check`, then `experience_lookup` (section 4.4) |
 | `agents/risk-manager.md:84-91` (step 0) | Candidate or veto | An `ok` composed record for this bar (and, in an attempt, its verdict); else veto |
 | `momentum-and-volume:56-57` | "Momentum: closes at the side's extreme, ranges at or above ATR, participation 1 or more, ADX rising" | The bar read of D4 (close in the far third, range at least 1 ATR, volume at least the 20-bar average); "ADX rising" leaves the momentum read, since the trend is its own read |
-| `trade-plan` | `order_plan` with a strategy | Unchanged rule; the example uses `strategy: "composed"` |
+| `trade-plan` | `order_plan` with a strategy | Unchanged rule; the example uses `strategy: "trade_lifecycle"` |
 | `trading/skills-loaded.js:44` (`REQUIRED_FOR_ENTRY`) | Names `strategy-library`, `strategy-scan`, `strategy-gate-checks` | Names the new skill, composed-entry, instead (section 9 deletes the three) |
 | A new skill, composed-entry (index only) | | The read forms, side agreement, the stop and target rules, how to use the record (section 4.5), one worked example per scenario |
 | The concept gaps (section 6) | | A new skill teaching order flow; CRT, acceptance and the 80% rule in the existing skills; the kept parameters as guidance |
@@ -831,7 +869,7 @@ and after, so phase A doesn't grow the prompt unnoticed.
 
 The owner: "We can delete all the old strategies ... This is the only
 strategy." No gradual demotion: every strategy document goes, and
-`strategies/composed` is the only one. The harness places no entries
+`strategies/trade_lifecycle` is the only one. The harness places no entries
 between the deletion and composed's proof ("we won't trade until this is
 done and perfected"); the gate refuses any entry naming a deleted strategy
 (`strategies.js:562-566`), which is failing closed. Exits and protection
@@ -842,9 +880,12 @@ throughout; the runner's exit management (`runner.js:405-424`,
 **Deleted documents.** Every folder under `strategies/`: `cisd_ote`,
 `crt_1h`, `crt_4h`, `ofi`, `ofi_absorption`, `orb`, `prop_flow_1m`,
 `prop_portfolio`, `value_area`, `value_area_breakout`, `value_area_reentry`,
-`vwap_reclaim`. `_template` and `README.md` are rewritten for
-`signal: composed`. The account rulebooks' `policies` entries for the two
-policies go; `composed` is added when D5 says so.
+`vwap_reclaim`, except `prop_portfolio`, which stays as the account layer
+with no components (the owner, 2026-10-14; section 3.7). Done on
+2026-10-14: the ten rules strategies and `prop_flow_1m` are deleted and
+named in `RETIRED` (an entry or config naming one is refused, saying so),
+and `prop_flow_1m`'s rulebook entry went with it. `_template` and
+`README.md` are rewritten for `signal: composed` with `trade_lifecycle`.
 
 **Kept as facts** (they feed the briefing, the candle facts or the
 snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
@@ -860,7 +901,7 @@ snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
 |---|---|---|
 | `trading/rules.js` | The rule compiler and evaluator | `readField`, `causalLevels`, `sideValuesText` (the briefing uses them, `briefing.js:92`) |
 | `trading/crt.js` | Its rule-only parts | The detector, now a fact |
-| `trading/strategies.js` | `scan` (`:471`), `recentSignals` (`:500`), `withConfluence` (`:526`), `RETIRED`, the policy component check (`:368-391`), `componentRefusal` (`:545`) | The loader, the validator, `withRulebook` (`:285`) for `composed` |
+| `trading/strategies.js` | `scan` (`:471`), `recentSignals` (`:500`), `withConfluence` (`:526`), `RETIRED`, the policy component check (`:368-391`), `componentRefusal` (`:545`) | The loader, the validator, `withRulebook` (`:285`) for `prop_portfolio` |
 | `trading/signal-state.js` | The trigger and retired-lane logic, the candidates in the record | The per-bar record the runner writes every bar and `lastRecordedBar` (`signal-state.js:202-209`), which `verdictBarProblem` needs (`prop-state.js:403-404`); bar timing (`sameBar`, `barMs`, `prop-state.js:21`) |
 | `trading/skills-loaded.js:66-76` (`SITUATIONAL`), `trading/skill-lookups.js:96-102, 119` | Triggers on `m3.candidates` and the signal record's setups | Rekeyed on the composed record's reads and skills (a `rejected` setup read requires `rejection`, any `ok` record `confluence-counting` and `invalidation`), in phase C. Until then no entry is possible, so no lookup is required |
 | `prop/trade-stream.js:35` (`scan`), `prop/evaluate-run.js:17` (`backtest/run.js`) | Building combine attempts from strategy scans | A trade stream from replay fills into `prop/attempts.js`, built before `scan` and `run.js` go, since the promotion gate (D9) evaluates on it |
@@ -868,9 +909,9 @@ snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
 | `trading/evaluator.js` | Rule evaluation | `exitPlan`, `timeframeMs` |
 | `backtest/run.js`, `walk-forward.js`, `report.js` | All, once `roundHalfEven` moves out of `engine.js` (used by `prop/verdict.js:17`) | `data.js`, `sim-broker.js` (the counterfactual), `engine.js` math |
 | `autotrader.js:711-716`, `lanes.js` | Trigger `signal` (`lanes.js:61`, `signalLaneErrors` `:153`) and the per-lane strategy lists | Trigger `bar` |
-| `runner.js`, `runner-wiring.js` | The per-bar scan, `laneSignals`, `scanLog`, `trackRecord` | Exit management; `exit-memory.js` keyed `composed` |
+| `runner.js`, `runner-wiring.js` | The per-bar scan, `laneSignals`, `scanLog`, `trackRecord` | Exit management; `exit-memory.js` keyed `trade_lifecycle` |
 | `briefing.js` | `m3.candidates` and the Setups line | Every fact |
-| `order-gate.js` | `trigger-fired` (`:300`), the policy-component and retired-lane checks | `setup-tag`, `strategy` (for `composed`), every risk check |
+| `order-gate.js` | `trigger-fired` (`:300`), the policy-component and retired-lane checks | `setup-tag`, `strategy` (for `trade_lifecycle`), every risk check |
 | `fact-claims.js:257-269` | The room fact against `m3.candidates` | The room fact against the composed record |
 | `harness-tools/order-plan.js` | The candidate path (`candidateOf`, `:53`) | `order_plan` from the record |
 | `harness-tools/registry.js:35-76` | `strategies_scan`, `strategies_recent` | `strategies_list`, `show`, `validate` |
@@ -944,7 +985,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 **Phase C: composed.**
 
 - **PR 11.** **`compose_check` and the record.** The tool, the record file, the stop
-  and target rules, the minimum stop; `strategies/composed`
+  and target rules, the minimum stop; `strategies/trade_lifecycle`
   (`signal: composed`, `status: paper`, `risk.max_risk_usd` required).
 - **PR 12.** **Gate.** `composed-reads` (re-runs the checker, keyed on the tag,
   requires the limit entry), side agreement, the replay exemption (D10),
@@ -954,7 +995,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 - **PR 13.** **order_plan, the limit entry and the prop verdict** (section 3.7).
 - **PR 14.** **Runner:** every bar on the composed lane (D11); cancel a
   working composed limit at `expiresAt`; the exit plan and trail for
-  `composed`; the journal instincts off for composed runs.
+  `trade_lifecycle`; the journal instincts off for composed runs.
 - **PR 15.** **Skills and the risk manager:** section 7's text, the new skill
   composed-entry, synced.
 - **PR 16.** **Records:** section 5.
@@ -1015,9 +1056,10 @@ Each has a proposed default; the owner may change any of them.
   20-bar average (the bar part of `cisd_ote` version 5). The trend
   (ADX(14) at least 20, EMA20 beyond EMA50) is its own read, so the model
   chooses whether to pair them.*
-- **D5.** `composed` as the account's policy (the rulebook lists it;
-  section 3.7's code changes). *Proposed default: not in a prop attempt
-  until replay proves it.*
+- **D5.** `trade_lifecycle` in a prop attempt. *Decided 2026-10-14:
+  `prop_portfolio` stays the account's policy and lists `trade_lifecycle`
+  as its one component (section 3.7); it enters an attempt only once replay
+  proves it.*
 - **D6.** `compose_check` calls per bar. *Proposed default: about 3; a hard
   limit inside an attempt.*
 - **D7.** Required steps. *Proposed default: all six steps stated, each with
@@ -1027,7 +1069,7 @@ Each has a proposed default; the owner may change any of them.
 - **D8.** Scenario 2's facts. *Proposed default: 4h candle facts and 4h
   swing targets first, then FVGs per timeframe, then 5m structure from 1m
   bars (no 5m lane).*
-- **D9.** What moves `composed` from `paper` to `active`. *Proposed default:
+- **D9.** What moves `trade_lifecycle` from `paper` to `active`. *Proposed default:
   the frozen promotion gate (`prop/promotion.js:12`) on the paired replay,
   then the owner's approval.*
 - **D10.** How a `paper` composed entry trades in replay. *Proposed default:

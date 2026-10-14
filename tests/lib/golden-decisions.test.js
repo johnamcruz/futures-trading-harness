@@ -2,12 +2,14 @@
 
 // Golden regression: trade decisions. On fixed multi-day bars as a broker serves them (two symbols on 3m and one
 // on 1m, with the broker's nested flow fields and a neutral field), every rules strategy the runner scans on that
+// (no rules strategy ships since 2026-10-14: the fixtures in tests/fixtures/strategies-golden hold the retired ones'
+// rules unchanged under fx_ names, so their decisions stay pinned)
 // timeframe (runner-wiring.js runnerScan decides which) has its decision on every bar pinned: the bars where it
 // fires (side, candidate or not, stop, regime, session, the rules that held, the filters that failed) in full, and
 // a digest of its whole result on every bar. At fixed bars the text the model reads is pinned too: the runner's
 // compact scan, the market snapshot, and the bar briefing. Without the broker's fields, every strategy that reads
-// none decides the same, and no condition on a field holds for the ones that read them (ofi, ofi_absorption,
-// value_area's flow branch, the fixture ext_reader).
+// none decides the same, and no condition on a field holds for the ones that read them (fx_ofi, fx_ofi_absorption,
+// fx_value_area's flow branch, the fixture ext_reader).
 // Goldens: tests/fixtures/golden/ (tests/golden.js says how to update them on purpose).
 
 const test = require('node:test');
@@ -25,10 +27,12 @@ const { buildBriefing, renderBriefing } = require('../../scripts/lib/trading/bri
 const { defaultRoundSteps } = require('../../scripts/lib/trading/round-numbers');
 const { specFor } = require('../../scripts/lib/trading/contracts');
 
-const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
-// The shipped strategies with the fixtures fx_break and fx_cross (tests/fixtures/strategies-fx): setups with confluence.
-const WITH_FX = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: require('../helpers').FX_STRATEGIES }).strategies;
-const ALL = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: G.EXT_STRATEGIES }).strategies;
+const { FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
+// The shipped strategies (prop_portfolio, with no components) and the retired rules strategies as fixtures.
+const SHIPPED = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
+// With the fixtures fx_break and fx_cross (tests/fixtures/strategies-fx): setups with confluence.
+const WITH_FX = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: [FX_GOLDEN, FX_STRATEGIES].join(',') }).strategies;
+const ALL = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: [FX_GOLDEN, G.EXT_STRATEGIES].join(',') }).strategies;
 const FIRST = 100; // the first bar decided
 // The goldens, by series, named in full (tests/plugin/golden.test.js maps every golden file to a name here).
 // The field values (decisions-values.txt) are pinned apart from the decisions they never change.
@@ -103,7 +107,7 @@ for (const s of SERIES) {
     const broker = decided(s, 'broker');
     for (const st of scanned(ALL, s)) {
       if (!readsFields(st)) assert.deepStrictEqual(broker[st.name], plain[st.name], `${s.label} ${st.name}: the same on every bar`);
-      // No field, no condition on one holds (a composite such as value_area's any(flow | price) may hold on its price branch).
+      // No field, no condition on one holds (a composite such as fx_value_area's any(flow | price) may hold on its price branch).
       else assert.ok(plain[st.name].every(r => !held(r, r.direction || 'long').some(x => x.startsWith('field(')) && !held(r, 'short').some(x => x.startsWith('field('))), `${s.label} ${st.name}: a field condition held without the field`);
     }
   });
@@ -149,13 +153,13 @@ test('without describe (a backtest) no field values are computed; with it, the s
   assert.ok(shown > 0, 'describe computes them');
 });
 
-test('the broker\'s fields fire every strategy that reads them: ofi and ofi_absorption (1m, deep paths), value_area\'s flow branch, ext_reader (a look-back and a flag)', () => {
+test('the broker\'s fields fire every strategy that reads them: fx_ofi and fx_ofi_absorption (1m, deep paths), fx_value_area\'s flow branch, ext_reader (a look-back and a flag)', () => {
   const fired = (label, name, which = 'broker') => decided(SERIES.find(x => x.label === label), which)[name].filter(r => r.direction).length;
-  assert.ok(fired('MNQ 1m', 'ofi') > 0, 'ofi');
-  assert.ok(fired('MNQ 1m', 'ofi_absorption') > 0, 'ofi_absorption');
-  // value_area's setup holds without flow (its price branch) or with it: the broker's flow adds bars.
-  const va = ['MNQ 3m', 'M2K 3m'].reduce((n, l) => n + fired(l, 'value_area') - fired(l, 'value_area', 'plain'), 0);
-  assert.ok(va > 0, 'value_area fires on its flow branch');
+  assert.ok(fired('MNQ 1m', 'fx_ofi') > 0, 'fx_ofi');
+  assert.ok(fired('MNQ 1m', 'fx_ofi_absorption') > 0, 'fx_ofi_absorption');
+  // fx_value_area's setup holds without flow (its price branch) or with it: the broker's flow adds bars.
+  const va = ['MNQ 3m', 'M2K 3m'].reduce((n, l) => n + fired(l, 'fx_value_area') - fired(l, 'fx_value_area', 'plain'), 0);
+  assert.ok(va > 0, 'fx_value_area fires on its flow branch');
   for (const label of ['MNQ 3m', 'M2K 3m']) {
     const s = SERIES.find(x => x.label === label);
     const list = decided(s, 'broker').ext_reader;
@@ -172,7 +176,7 @@ test('the broker\'s fields fire every strategy that reads them: ofi and ofi_abso
 });
 
 // Bars (by index in the series) where the scan, snapshot and briefing text is pinned: candidates of several
-// strategies, session-bound ones (orb, a value area, crt), a quiet bar; on 1m, flow setups.
+// strategies, session-bound ones (fx_orb, a value area, crt), a quiet bar; on 1m, flow setups.
 const VIEWS = { 'MNQ 3m': [589, 1244, 1299, 1400], 'M2K 3m': [671, 791, 1195, 1200], 'MNQ 1m': [] };
 const specOf = root => specFor(root);
 
@@ -194,11 +198,11 @@ function viewAt(s, bars, i, strategies = SHIPPED) {
   ].join('\n');
 }
 
-/** On 1m: the first bars where ofi and ofi_absorption fire, and where neither does. */
+/** On 1m: the first bars where fx_ofi and fx_ofi_absorption fire, and where neither does. */
 function minuteViews(s) {
   const d = decided(s, 'broker');
   const at = name => FIRST + d[name].findIndex(r => r.candidate || r.direction);
-  return [at('ofi'), at('ofi_absorption'), 3000];
+  return [at('fx_ofi'), at('fx_ofi_absorption'), 3000];
 }
 
 for (const s of SERIES) {
@@ -212,12 +216,12 @@ for (const s of SERIES) {
 
 // Confluence as the model reads it (a candidate's "with:" list, the briefing's "confluence: with ..."): no shipped
 // pair fires together at a pinned bar since the 2026-10-13 retirement, so the fixtures stand in. MNQ 3m bar 589:
-// fx_break and fx_cross long together; bar 1244: fx_break and orb short together.
+// fx_break and fx_cross long together; bar 1244: fx_break and fx_orb short together.
 test('MNQ 3m with the fx fixtures: the compact scan, snapshot and briefing of setups with confluence are pinned', () => {
   const s = SERIES.find(x => x.label === 'MNQ 3m');
   const text = [589, 1244].map(i => viewAt(s, s.broker, i, WITH_FX)).join('\n');
   assert.match(text, /fx_break long \| .*\| with: fx_cross; against: none/);
-  assert.match(text, /orb short \| .*\| with: fx_break; against: none/);
+  assert.match(text, /fx_orb short \| .*\| with: fx_break; against: none/);
   assert.match(text, /confluence: with fx_cross/);
   assertGolden('views-confluence.txt', text);
 });

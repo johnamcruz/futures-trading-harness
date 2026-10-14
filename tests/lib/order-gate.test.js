@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluateOrder, isRiskReducing, formatBlock } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs } = require('../helpers');
+const { FAKE_BROKERS, shippedBroker, NOW, CONTRACT, minutesAgo, plan, placed, review, entryOrder, trendHome, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
 
 // Every home has an up-trend record (the trend rule's read); the age limit is off so tests at any clock see it.
 // Role skills full (FTH_ROLE_SKILLS=full, as the runner sets for every harness but opencode): index mode's lookup rule,
@@ -199,23 +199,28 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
 test('retired-lane is a hard rule: FTH_ORDER_GATE_SKIP=retired-lane does not skip it', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
-  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  // fx_orb: the fixture holding the retired orb rules (3m), a known strategy whose lane can be marked.
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
   const home = trendHome();
-  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW, retiredLane: ['bos'] }));
-  const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
-  assert.ok(skipping.skipChecks.has('retired-lane'), 'the skip is asked for');
-  const r = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: skipping, strategies });
-  assert.ok(r.violations.some(v => v.check === 'retired-lane'), JSON.stringify(r.violations));
+  for (const retired of [['bos'], ['orb']]) {
+    writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW, retiredLane: retired }));
+    const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+    assert.ok(skipping.skipChecks.has('retired-lane'), 'the skip is asked for');
+    const r = evaluateOrder({ input: entryOrder({ rationale: 'setup:fx_orb long, stop 21480' }), entries: [plan()], now: NOW, config: skipping, strategies });
+    assert.ok(r.violations.some(v => v.check === 'retired-lane'), `${retired}: ${JSON.stringify(r.violations)}`);
+  }
 });
 
 test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
-  for (const name of ['bos', 'keltner', 'ema_cross', 'supertrend']) {
+  const retired = [...['bos', 'keltner', 'ema_cross', 'supertrend'].map(n => [n, '2026-10-13']),
+    ...['cisd_ote', 'crt_1h', 'crt_4h', 'ofi', 'ofi_absorption', 'orb', 'prop_flow_1m', 'value_area', 'value_area_breakout', 'value_area_reentry', 'vwap_reclaim'].map(n => [n, '2026-10-14'])];
+  for (const [name, date] of retired) {
     const r = evaluateOrder({ input: entryOrder({ rationale: `setup:${name} long, stop 21480` }), entries: [plan(1)], now: NOW, config, strategies });
     const v = r.violations.find(x => x.check === 'strategy');
     assert.ok(v, name);
-    assert.match(v.message, new RegExp(`setup:${name} is not a known strategy \\(retired on 2026-10-13: strategies/README\\.md, "Retired strategies"\\): no new entries from it`));
+    assert.match(v.message, new RegExp(`setup:${name} is not a known strategy \\(retired on ${date}: strategies/README\\.md, "Retired strategies"\\): no new entries from it`));
     const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: `[exit] close the ${name} long`, stopLossBracket: undefined }), entries: [], now: NOW, config, strategies });
     assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
   }
@@ -223,22 +228,25 @@ test('strategy check: an entry tagged with a retired strategy is refused, saying
 
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  // The bundled orb has no session gate (as in the original bot); give it one here.
-  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies
-    .map(s => (s.name === 'orb' ? { ...s, sessions: ['09:45-11:30@America/New_York'] } : s));
+  // fx_orb: the fixture holding the retired orb rules (sessions [ny]); give it a narrower session here. Its trigger fired
+  // long on the trend home's last 3m bar.
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies
+    .map(s => (s.name === 'fx_orb' ? { ...s, sessions: ['09:45-11:30@America/New_York'] } : s));
+  const fxConfig = { ...config, home: trendHome(undefined, { fired: [{ name: 'fx_orb', direction: 'long' }] }) };
+  const fxOrder = (extra = {}) => entryOrder({ rationale: 'setup:fx_orb break above OR high 21500, stop 21480, target 21540, risk $40', ...extra });
   const at = iso => evaluate(entryOrder(), [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], { now: new Date(iso) });
-  const withReg = (input, iso) => evaluateOrder({ input, entries: [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], now: new Date(iso), config, strategies });
-  // 10:00 ET Wednesday: inside orb's 09:45-11:30 session
-  assert.deepStrictEqual(withReg(entryOrder(), '2026-10-07T14:00:00Z').violations, []);
+  const withReg = (input, iso) => evaluateOrder({ input, entries: [plan(1, { ts: new Date(Date.parse(iso) - 60000).toISOString() })], now: new Date(iso), config: fxConfig, strategies });
+  // 10:00 ET Wednesday: inside fx_orb's 09:45-11:30 session
+  assert.deepStrictEqual(withReg(fxOrder(), '2026-10-07T14:00:00Z').violations, []);
   assert.deepStrictEqual(at('2026-10-07T14:00:00Z').violations, []);
   // 12:00 ET: outside the session
-  assert.deepStrictEqual(checks(withReg(entryOrder(), '2026-10-07T16:00:00Z')), ['strategy']);
+  assert.deepStrictEqual(checks(withReg(fxOrder(), '2026-10-07T16:00:00Z')), ['strategy']);
   // unknown strategy and instrument not traded
-  assert.match(withReg(entryOrder({ rationale: 'setup:mystery long stop 1' }), '2026-10-07T14:00:00Z').violations[0].message, /not a known strategy/);
-  assert.match(withReg(entryOrder({ contractId: 'MCL' }), '2026-10-07T14:00:00Z').violations.map(v => v.message).join(), /does not trade MCL/);
+  assert.match(withReg(fxOrder({ rationale: 'setup:mystery long stop 1' }), '2026-10-07T14:00:00Z').violations[0].message, /not a known strategy/);
+  assert.match(withReg(fxOrder({ contractId: 'MCL' }), '2026-10-07T14:00:00Z').violations.map(v => v.message).join(), /does not trade MCL/);
   // paper strategies cannot place live entries
-  const paper = strategies.map(s => (s.name === 'orb' ? { ...s, status: 'paper' } : s));
-  const r = evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config, strategies: paper });
+  const paper = strategies.map(s => (s.name === 'fx_orb' ? { ...s, status: 'paper' } : s));
+  const r = evaluateOrder({ input: fxOrder(), entries: [plan(1)], now: NOW, config: fxConfig, strategies: paper });
   assert.match(r.violations[0].message, /status "paper"/);
 });
 

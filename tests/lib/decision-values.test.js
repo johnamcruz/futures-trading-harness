@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_GOLDEN } = require('../helpers');
 const { valuesFor, compileRules } = require('../../scripts/lib/trading/rules');
 const { passTap, fieldValues, decisionRecord, brokerFingerprint } = require('../../scripts/lib/session/record');
 const { createLiveSession, liveHash } = require('../../scripts/lib/session/live');
@@ -65,9 +65,15 @@ test('fieldValues: per strategy, only those that read a field; the tap carries t
   assert.deepStrictEqual(decisionRecord({ pass: {} }).values, [], 'a line with no closed bar records none');
 });
 
-/** The 3m strategies of the repo that read a broker field, and bars carrying every path they read (k: a number per bar). */
+/**
+ * The strategies the runner loads in these passes: the repo's, and the fixtures holding the retired strategies' rules
+ * (tests/fixtures/strategies-golden), among them 3m ones that read a broker field (the repo ships none since 2026-10-14).
+ */
+const FIELD_ENV = Object.freeze({ FTH_STRATEGIES_DIRS: FX_GOLDEN });
+
+/** The 3m strategies loaded (FIELD_ENV) that read a broker field, and bars carrying every path they read (k: a number per bar). */
 function fieldWorld() {
-  const strategies = loadStrategies(ROOT, {}).strategies.filter(s => s.valid && s.timeframe === '3m');
+  const strategies = loadStrategies(ROOT, { ...FIELD_ENV }).strategies.filter(s => s.valid && s.timeframe === '3m');
   const paths = [...new Set(Object.values(fieldValues(strategies, [{}])).flatMap(v => Object.keys(v)).map(p => p.replace(/\[\d+\]$/, '')))];
   assert.ok(paths.length > 0, 'a 3m strategy reads a broker field');
   const put = (bar, p, v) => {
@@ -83,7 +89,8 @@ function fieldWorld() {
 }
 
 /** One pass of the wired runner at et(10, 3, 2), as autotrader.js wires it (the tap's bar sink). */
-async function wiredPass({ home, env, bars, live, log: sessionLog = () => {}, passes = 1 }) {
+async function wiredPass({ home, env: given, bars, live, log: sessionLog = () => {}, passes = 1 }) {
+  const env = { ...FIELD_ENV, ...given }; // the strategies fieldWorld read
   let t = et(10, 3, 2);
   const served = bars.slice();
   const now = () => new Date(t);

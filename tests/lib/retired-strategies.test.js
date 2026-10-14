@@ -1,7 +1,7 @@
 'use strict';
 
-// The strategies retired on 2026-10-13 (bos, keltner, ema_cross, supertrend; strategies/README.md, "Retired
-// strategies"): old records, configs and verdicts that still name them never crash anything. An entry naming one
+// The strategies retired on 2026-10-13 (bos, keltner, ema_cross, supertrend) and on 2026-10-14 (every other rules
+// strategy, and prop_flow_1m; strategies/README.md, "Retired strategies"): old records, configs and verdicts that still name them never crash anything. An entry naming one
 // is refused, saying it was retired; an exit or a protective stop for a position one opened still goes, and the
 // runner still manages that position from its remembered exit plan.
 
@@ -22,31 +22,45 @@ const { loadAgents } = require('../../scripts/lib/harness-sync');
 const { laneChecks } = require('../../scripts/lib/preflight');
 const { liveRecord, readRecord, describeRecord } = require('../../scripts/lib/trading/track-record');
 const { runBacktest } = require('../../scripts/lib/backtest/run');
-const { tmpDir, trendHome, rootWithPolicies, NOW, CONTRACT, plan, entryOrder } = require('../helpers');
+const { tmpDir, trendHome, rootWithPolicies, NOW, CONTRACT, plan, entryOrder, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const NAMES = ['bos', 'keltner', 'ema_cross', 'supertrend'];
+const OLD = ['bos', 'keltner', 'ema_cross', 'supertrend'];
+// The eleven of 2026-10-14: the ten rules strategies and prop_flow_1m, the policy over the two order-flow ones.
+const RULES14 = ['cisd_ote', 'crt_1h', 'crt_4h', 'ofi', 'ofi_absorption', 'orb', 'value_area', 'value_area_breakout', 'value_area_reentry', 'vwap_reclaim'];
+const NEW = [...RULES14, 'prop_flow_1m'];
+const NAMES = [...OLD, ...NEW];
+const DATE = name => (OLD.includes(name) ? '2026-10-13' : '2026-10-14');
 const SHIPPED = loadStrategies(ROOT, {}).strategies;
-const RETIRED_RE = name => new RegExp(`${name} .*retired on 2026-10-13: strategies/README\\.md, "Retired strategies"`);
+// The shipped tree with the fixture rules strategies (fx_break, fx_cross; fx_orb, fx_ofi, ...): live stand-ins where a
+// test needs a strategy that is not retired (none ships since 2026-10-14).
+const FX_ENV = { FTH_STRATEGIES_DIRS: [FX_STRATEGIES, FX_GOLDEN].join(',') };
+const FX = loadStrategies(ROOT, FX_ENV).strategies;
+const RETIRED_RE = name => new RegExp(`${name} .*retired on ${DATE(name)}: strategies/README\\.md, "Retired strategies"`);
 
-test('the four are retired: no folder ships them, the policies list none, and each is named with its date', () => {
+test('the fifteen are retired: no folder ships them, the policies list none, and each is named with its date', () => {
   assert.deepStrictEqual(Object.keys(RETIRED).sort(), [...NAMES].sort());
   for (const n of NAMES) {
     assert.ok(!fs.existsSync(path.join(ROOT, 'strategies', n)), `strategies/${n} is gone`);
     assert.ok(!SHIPPED.some(s => s.name === n), n);
-    assert.match(retiredNote(n), /retired on 2026-10-13/);
+    assert.match(retiredNote(n), new RegExp(`retired on ${DATE(n)}`), n);
+    assert.strictEqual(RETIRED[n], DATE(n), n);
   }
-  assert.strictEqual(retiredNote('orb'), '', 'a shipped strategy is not retired');
+  // Only prop_portfolio ships: active, valid, and listing no strategy.
+  assert.deepStrictEqual(SHIPPED.map(s => s.name), ['prop_portfolio']);
+  assert.strictEqual(retiredNote('prop_portfolio'), '', 'a shipped strategy is not retired');
+  assert.strictEqual(retiredNote('fx_orb'), '', 'a fixture under another name is not retired');
   assert.strictEqual(retiredNote('toString'), '', 'no prototype name');
   for (const p of SHIPPED.filter(s => s.signal === 'policy')) {
     assert.ok(p.valid, `${p.name}: ${p.errors}`);
-    assert.deepStrictEqual(p.strategies.filter(n => NAMES.includes(n)), [], p.name);
+    assert.strictEqual(p.status, 'active', p.name);
+    assert.deepStrictEqual(p.strategies, [], p.name);
   }
   // The README's table names each with the date (the gate's message points there).
   const readme = fs.readFileSync(path.join(ROOT, 'strategies', 'README.md'), 'utf8');
   const section = readme.split('## Retired strategies')[1];
   assert.ok(section, 'strategies/README.md has a "Retired strategies" section');
-  for (const n of NAMES) assert.match(section, new RegExp(`\\| \`${n}\` \\|.*2026-10-13`), n);
+  for (const n of NAMES) assert.match(section, new RegExp(`\\| \`${n}\` \\|.*${DATE(n)}`), n);
   // The table names exactly the code's list: one source each way.
   const rows = [...section.matchAll(/^\| `([a-z0-9_-]+)` \|/gm)].map(m => m[1]);
   assert.deepStrictEqual(rows.sort(), Object.keys(RETIRED).sort());
@@ -75,35 +89,40 @@ test('an old policy verdict whose setup came from a retired strategy is refused 
   const policy = SHIPPED.find(s => s.name === 'prop_portfolio');
   for (const n of NAMES) assert.match(componentRefusal(policy, SHIPPED, n), new RegExp(`${n} is not one of prop_portfolio's strategies`));
   // A user policy that still lists one: its component is refused as retired, never traded.
-  const old = { ...policy, strategies: ['bos', ...policy.strategies] };
-  assert.match(componentRefusal(old, SHIPPED, 'bos'), RETIRED_RE('bos'));
+  for (const n of NAMES) {
+    const old = { ...policy, strategies: [n, ...policy.strategies] };
+    assert.match(componentRefusal(old, SHIPPED, n), RETIRED_RE(n), n);
+  }
   // Through the gate: a fresh verdict on file (from before the retirement) naming bos as its component.
   const account = { name: 'mini', valid: true, errors: [], starting_balance: 50000, profit_target: 3000, max_loss: 2000, max_loss_mode: 'trailing_eod',
     daily_loss_limit: 1000, daily_loss_soft: 500, consistency_pct: 0, sessions: 30, max_contracts: { MNQ: 50 }, fees_per_side: { MNQ: 0.37 } };
   const home = trendHome();
   prop.startAttempt(home, account, new Date(NOW.getTime() - 86400000));
   prop.snapshot(home, account, 50000, new Date(NOW.getTime() - 60000));
-  prop.appendVerdict(home, {
-    strategy: 'prop_portfolio', component: 'bos', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
-    maxSize: 3, bar: '2026-10-07T13:57:00Z', at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(),
-  });
   const registry = SHIPPED.map(s => (s.name === 'prop_portfolio' ? { ...s, account: 'mini' } : s));
   const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
-  const r = evaluateOrder({ input: entryOrder({ size: 3, rationale: 'setup:prop_portfolio bos long, stop 40 ticks' }), entries: [plan()], now: NOW, config, strategies: registry, accounts: [account] });
-  assert.ok(r.violations.some(v => /the latest verdict's setup is from bos: bos is not one of prop_portfolio's strategies; no live entry from it/.test(v.message)), JSON.stringify(r.violations));
+  // One of each retirement: bos (2026-10-13), orb and ofi_absorption (2026-10-14), each the latest verdict in turn.
+  for (const n of ['bos', 'orb', 'ofi_absorption']) {
+    prop.appendVerdict(home, {
+      strategy: 'prop_portfolio', component: n, contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+      maxSize: 3, bar: '2026-10-07T13:57:00Z', at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(),
+    });
+    const r = evaluateOrder({ input: entryOrder({ size: 3, rationale: `setup:prop_portfolio ${n} long, stop 40 ticks` }), entries: [plan()], now: NOW, config, strategies: registry, accounts: [account] });
+    assert.ok(r.violations.some(v => new RegExp(`the latest verdict's setup is from ${n}: ${n} is not one of prop_portfolio's strategies; no live entry from it`).test(v.message)), `${n}: ${JSON.stringify(r.violations)}`);
+  }
 });
 
 test('configs and documents naming a retired strategy are refused with the reason, never thrown at load', () => {
   // A user's policy strategy that still lists one: invalid (not traded), saying why.
   const dir = tmpDir();
   const doc = fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: prop_portfolio$/m, 'name: prop_old').replace(/^strategies: \[/m, 'strategies: [keltner, ');
+    .replace(/^name: prop_portfolio$/m, 'name: prop_old').replace(/^strategies: \[[^\]\n]*\]/m, `strategies: [${NAMES.join(', ')}]`);
   fs.mkdirSync(path.join(dir, 'prop_old'));
   fs.writeFileSync(path.join(dir, 'prop_old', 'STRATEGY.md'), doc);
   // Listed in its account's rulebook (a plugin root with the accounts copied), so only its list can make it invalid.
   const loaded = loadStrategies(rootWithPolicies({ prop_old: SHIPPED.find(s => s.name === 'prop_portfolio').account }), { FTH_STRATEGIES_DIRS: dir }).strategies.find(s => s.name === 'prop_old');
   assert.strictEqual(loaded.valid, false);
-  assert.ok(loaded.errors.some(e => /strategies: keltner is not a strategy \(retired on 2026-10-13/.test(e)), loaded.errors.join('; '));
+  for (const n of NAMES) assert.ok(loaded.errors.some(e => new RegExp(`strategies: ${n} is not a strategy \\(retired on ${DATE(n)}`).test(e)), `${n}: ${loaded.errors.join('; ')}`);
   // A private copy under a retired name in the user's own folder is the user's strategy: it loads and is checked
   // as any other (the README says so), never mistaken for the retired one.
   const own = tmpDir();
@@ -115,11 +134,13 @@ test('configs and documents naming a retired strategy are refused with the reaso
   // An old detector signal: the hint points at the history, not a document that is gone.
   for (const n of NAMES) {
     const errs = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: n, risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
-    assert.ok(errs.some(e => new RegExp(`the ${n} strategy was retired on 2026-10-13`).test(e)), errs.join('; '));
+    assert.ok(errs.some(e => new RegExp(`the ${n} strategy was retired on ${DATE(n)}`).test(e)), errs.join('; '));
   }
   // A backtest asked for one: refused, saying it was retired.
-  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['supertrend'], gate: false, outDir: dir }, { root: ROOT, outRoot: dir }),
-    /unknown strategy "supertrend" \(retired on 2026-10-13/);
+  for (const n of NAMES) {
+    assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: [n], gate: false, outDir: dir }, { root: ROOT, outRoot: dir }),
+      new RegExp(`unknown strategy "${n}" \\(retired on ${DATE(n)}`), n);
+  }
 });
 
 test('old journals, track records and exit plans naming a retired strategy still read; its open position keeps its trail', () => {
@@ -149,19 +170,31 @@ const cfgWith = lanes => validateConfig({ harness: 'qwen', premarketAt: '', eodA
 
 test('a lanes config naming a retired strategy: the runner starts, the lane enters nothing, and it is said loudly', () => {
   const agents = loadAgents(ROOT);
-  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'orb'] }, { timeframe: 1, trigger: 'signal', strategies: ['ofi'] }]);
-  assert.deepStrictEqual(startErrors(cfg, SHIPPED, agents), [], 'no refusal at start');
+  // A fixture strategy (fx_orb, fx_ofi) stands in for one still live beside it.
+  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'fx_orb'] }, { timeframe: 1, trigger: 'signal', strategies: ['fx_ofi'] }]);
+  assert.deepStrictEqual(startErrors(cfg, FX, agents), [], 'no refusal at start');
   assert.deepStrictEqual(cfg.lanes[0].retired, ['bos']);
   assert.strictEqual(cfg.lanes[1].retired, undefined, 'the other lane trades as before');
-  // The lane scans nothing (not even orb, listed beside it): no setup fires, no policy verdict.
-  assert.deepStrictEqual(laneStrategies(SHIPPED, cfg.lanes[0]), []);
-  assert.ok(laneStrategies(SHIPPED, cfg.lanes[1]).some(x => x.name === 'ofi'));
-  assert.deepStrictEqual(laneStrategyErrors(cfg.lanes, SHIPPED), []);
-  assert.match(describeLane(cfg.lanes[0], SHIPPED), /lists bos \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\): this lane enters nothing .*open position's management go on/);
+  // The lane scans nothing (not even fx_orb, listed beside it): no setup fires, no policy verdict.
+  assert.deepStrictEqual(laneStrategies(FX, cfg.lanes[0]), []);
+  assert.ok(laneStrategies(FX, cfg.lanes[1]).some(x => x.name === 'fx_ofi'));
+  assert.deepStrictEqual(laneStrategyErrors(cfg.lanes, FX), []);
+  assert.match(describeLane(cfg.lanes[0], FX), /lists bos \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\): this lane enters nothing .*open position's management go on/);
+  // Each name retired on 2026-10-14 retires its lane the same way, said with its date.
+  for (const n of NEW) {
+    const one = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: [n, 'fx_orb'] }]);
+    assert.deepStrictEqual(startErrors(one, FX, agents), [], n);
+    assert.deepStrictEqual(one.lanes[0].retired, [n]);
+    assert.deepStrictEqual(laneStrategies(FX, one.lanes[0]), [], n);
+    assert.match(describeLane(one.lanes[0], FX), new RegExp(`lists ${n} \\(retired on 2026-10-14: strategies/README\\.md, "Retired strategies"\\): this lane enters nothing`), n);
+  }
   // A retired policy-only signal lane is no refusal either (it cycles only to manage).
-  const sig = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', strategies: ['supertrend'] }]);
-  assert.deepStrictEqual(startErrors(sig, SHIPPED, agents), []);
-  assert.deepStrictEqual(signalLaneErrors(sig.lanes, SHIPPED), []);
+  for (const n of ['supertrend', 'ofi', 'prop_flow_1m']) {
+    const sig = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', strategies: [n] }]);
+    assert.deepStrictEqual(startErrors(sig, SHIPPED, agents), [], n);
+    assert.deepStrictEqual(signalLaneErrors(sig.lanes, SHIPPED), [], n);
+    assert.deepStrictEqual(sig.lanes[1].retired, [n]);
+  }
   // A name that never existed still fails closed at start, retired lane or not.
   const unknown = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'nope'] }]);
   assert.deepStrictEqual(startErrors(unknown, SHIPPED, agents), ['lanes[0].strategies: no strategy named nope']);
@@ -172,10 +205,13 @@ test('a lanes config naming a retired strategy: the runner starts, the lane ente
   assert.deepStrictEqual(retireLanes(own, mine), []);
   assert.strictEqual(own.lanes[0].retired, undefined);
   // Preflight shows it as a failure, naming the lane and the strategy.
-  const pre = laneChecks(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['keltner', 'orb'] }]), SHIPPED);
+  const pre = laneChecks(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['keltner', 'fx_orb'] }]), FX);
   const row = pre.find(x => x.check === 'retired strategies in lanes');
   assert.ok(row && row.status === 'fail', JSON.stringify(pre));
   assert.match(row.detail, /lanes\[0\] \(3m\) lists keltner \(retired on 2026-10-13/);
+  const pre14 = laneChecks(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['orb', 'vwap_reclaim'] }]), FX).find(x => x.check === 'retired strategies in lanes');
+  assert.ok(pre14 && pre14.status === 'fail');
+  assert.match(pre14.detail, /lanes\[0\] \(3m\) lists orb \(retired on 2026-10-14: .*\), vwap_reclaim \(retired on 2026-10-14: /);
 });
 
 test('an open position from a retired lane keeps trailing after an upgrade with the old config; nothing new is entered', async () => {
@@ -247,7 +283,7 @@ async function runLane({ lanes, account = '7', positions = [] }) {
   const iso = ms => new Date(ms).toISOString();
   const clockRef = { t: et(9, 59, 50) };
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', account, symbols: ['MNQ'], lanes });
-  assert.deepStrictEqual(startErrors(cfg, SHIPPED, loadAgents(ROOT)), []);
+  assert.deepStrictEqual(startErrors(cfg, FX, loadAgents(ROOT)), []);
   const cycles = [];
   const logs = [];
   const client = {
@@ -268,7 +304,7 @@ async function runLane({ lanes, account = '7', positions = [] }) {
     cfg, root: '/r', client, clock: { now: () => new Date(clockRef.t) },
     runCycle: async action => { cycles.push(action); return { ok: true, timedOut: false }; },
     isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {}, writeBars: () => '/b.json',
-    scanFor: (symbol, bars, lane) => runnerScan(SHIPPED, cfg, symbol, bars, new Date(clockRef.t), lane || undefined),
+    scanFor: (symbol, bars, lane) => runnerScan(FX, cfg, symbol, bars, new Date(clockRef.t), lane || undefined),
     entryOrders: () => [], strategyNamed: () => null, event: () => {}, log: (m, level) => logs.push({ m, level }),
   });
   while (clockRef.t < et(10, 12)) clockRef.t += await runner.step();
@@ -276,16 +312,18 @@ async function runLane({ lanes, account = '7', positions = [] }) {
 }
 
 test('a retired lane runs no cycle per bar while flat (it enters nothing); the same lane without the retired name does', async () => {
-  const retired = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'orb'] }] });
-  assert.strictEqual(retired.cycles.length, 0, 'flat: nothing to manage, nothing to enter');
-  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }] });
+  for (const n of ['bos', 'orb']) {
+    const retired = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: [n, 'fx_orb'] }] });
+    assert.strictEqual(retired.cycles.length, 0, `${n}: flat: nothing to manage, nothing to enter`);
+  }
+  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['fx_orb'] }] });
   assert.ok(plain.cycles.length >= 3, `a bar lane cycles every bar: ${plain.cycles.length}`);
 });
 
 test('an open position on a retired lane with no account configured gets a manage cycle every bar, said as such', async () => {
   const pos = [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: '2026-10-07T13:59:55.000Z' }];
   const r = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }], account: '', positions: pos });
-  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }], account: '', positions: pos });
+  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['fx_orb'] }], account: '', positions: pos });
   assert.ok(r.cycles.length >= 3 && r.cycles.length === plain.cycles.length, `retired ${r.cycles.length} vs plain ${plain.cycles.length}`);
   assert.ok(r.logs.some(l => /cycle \(manage only: this lane lists a retired strategy and enters nothing; no account is configured to see positions, so every bar\)/.test(l.m)), JSON.stringify(r.logs.map(l => l.m).slice(0, 8)));
   assert.ok(!r.logs.some(l => /cap reached/.test(l.m)), 'no misleading reason');
@@ -293,13 +331,19 @@ test('an open position on a retired lane with no account configured gets a manag
 
 test('a retired lane listing policies is no refusal even where the policies list leaves out one with a running attempt', () => {
   const agents = loadAgents(ROOT);
-  // A 1m lane listing only a retired name under policies: prop_flow_1m (1m, running attempt) is left out of it.
-  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: ['bos'] }]);
-  assert.deepStrictEqual(startErrors(cfg, SHIPPED, agents, () => true), []);
-  // The omission check itself still holds for a lane that isn't retired (its policies list leaving prop_flow_1m out).
+  // A user's 1m policy (no 1m policy ships since prop_flow_1m retired) over the fixture fx_ofi, with a running attempt.
+  const flow = { name: 'fx_flow', valid: true, errors: [], signal: 'policy', status: 'active', timeframe: '1m', instruments: ['MNQ'], account: 'mini', strategies: ['fx_ofi'] };
+  const registry = [...FX, flow];
   const { omittedPolicyErrors } = require('../../scripts/lib/lanes');
-  const plain = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: ['bos'] }]);
-  assert.match(omittedPolicyErrors(plain, SHIPPED, () => true).join(), /lanes\[1\]\.policies: leaves out prop_flow_1m/, 'before retireLanes marks it');
+  // A 1m lane listing only a retired name under policies (bos; prop_flow_1m itself): fx_flow is left out of it.
+  for (const n of ['bos', 'prop_flow_1m']) {
+    const cfg = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: [n] }]);
+    assert.deepStrictEqual(startErrors(cfg, registry, agents, () => true), [], n);
+    assert.deepStrictEqual(cfg.lanes[1].retired, [n]);
+    // The omission check itself still holds for a lane that isn't retired (its policies list leaving fx_flow out).
+    const plain = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: [n] }]);
+    assert.match(omittedPolicyErrors(plain, registry, () => true).join(), /lanes\[1\]\.policies: leaves out fx_flow/, `${n}: before retireLanes marks it`);
+  }
 });
 
 test('the gate refuses any entry, of any strategy kind, on a timeframe whose runner lane is retired; exits still go', () => {
@@ -308,21 +352,23 @@ test('the gate refuses any entry, of any strategy kind, on a timeframe whose run
   const home = trendHome();
   const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
   const manual = { name: 'disc', valid: true, errors: [], status: 'active', signal: 'manual', instruments: ['MNQ'], timeframe: '3m', sessions: [], compiledRules: null };
-  const registry = [...SHIPPED, manual];
+  const registry = [...FX, manual];
   const entry = tag => evaluateOrder({ input: entryOrder({ rationale: `setup:${tag} long, stop 21480` }), entries: [plan()], now: NOW, config, strategies: registry });
   const bar = { t: '2026-10-07T13:57:00.000Z' };
   // The runner's record of a retired lane's bar carries the mark (laneSignals: the wiring's record).
-  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }]);
-  retireLanes(cfg, SHIPPED);
-  const rec = laneSignals(cfg, { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW);
-  assert.deepStrictEqual(rec.retiredLane, ['bos']);
-  assert.strictEqual(laneSignals(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }]), { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW).retiredLane, undefined);
+  assert.strictEqual(laneSignals(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['fx_orb'] }]), { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW).retiredLane, undefined);
   assert.ok(!entry('disc').violations.some(x => x.check === 'retired-lane'), 'no mark yet: a manual entry is not refused for it');
-  writeSignals(home, rec);
-  for (const tag of ['disc', 'orb', 'prop_portfolio']) {
-    const v = entry(tag).violations.find(x => x.check === 'retired-lane');
-    assert.ok(v, `${tag}: ${JSON.stringify(entry(tag).violations)}`);
-    assert.match(v.message, /the runner's 3m lane lists bos \(retired on 2026-10-13.*that lane enters nothing, under any setup tag/);
+  for (const n of ['bos', 'orb']) {
+    const cfg = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: [n] }]);
+    retireLanes(cfg, registry);
+    const rec = laneSignals(cfg, { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW);
+    assert.deepStrictEqual(rec.retiredLane, [n]);
+    writeSignals(home, rec);
+    for (const tag of ['disc', 'fx_orb', 'prop_portfolio']) {
+      const v = entry(tag).violations.find(x => x.check === 'retired-lane');
+      assert.ok(v, `${n} ${tag}: ${JSON.stringify(entry(tag).violations)}`);
+      assert.match(v.message, new RegExp(`the runner's 3m lane lists ${n} \\(retired on ${DATE(n)}.*that lane enters nothing, under any setup tag`));
+    }
   }
   const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies: registry });
   assert.deepStrictEqual(exit.violations, []);
@@ -355,7 +401,7 @@ test('a user\'s own strategy under a retired name is named at the runner\'s star
 function startRunner(home, lanes) {
   const { wireRunner } = require('../../scripts/lib/runner-wiring');
   const logs = [];
-  wireRunner({ cfg: cfgWith(lanes), root: ROOT, home, env: { FTH_HOME: home }, client: {}, dataDir: path.join(home, 'bars'), now: () => NOW,
+  wireRunner({ cfg: cfgWith(lanes), root: ROOT, home, env: { ...FX_ENV, FTH_HOME: home }, client: {}, dataDir: path.join(home, 'bars'), now: () => NOW,
     runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: (m, level) => logs.push({ m, level }), event: () => {} });
   return logs;
 }
@@ -364,11 +410,11 @@ test('at the runner\'s start, before any cycle, a retired lane\'s timeframe is m
   const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/trading/signal-state');
   const home = trendHome();
   const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
-  // The record from before the upgrade: orb fired long on the last 3m bar, no mark.
-  writeSignals(home, buildSignals([{ name: 'orb', direction: 'long', candidate: true, signal: 'rules', stopDistance: 5 }], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW }));
-  const orb = () => evaluateOrder({ input: entryOrder({ rationale: 'setup:orb long, stop 21480' }), entries: [plan()], now: NOW, config, strategies: SHIPPED }).violations;
+  // The record from before the upgrade: fx_orb fired long on the last 3m bar, no mark.
+  writeSignals(home, buildSignals([{ name: 'fx_orb', direction: 'long', candidate: true, signal: 'rules', stopDistance: 5 }], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW }));
+  const orb = () => evaluateOrder({ input: entryOrder({ rationale: 'setup:fx_orb long, stop 21480' }), entries: [plan()], now: NOW, config, strategies: FX }).violations;
   assert.ok(!orb().some(v => v.check === 'retired-lane'), 'no mark before the start');
-  const logs = startRunner(home, [{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'orb'] }]);
+  const logs = startRunner(home, [{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'fx_orb'] }]);
   const rec = readSignals(home, 'MNQ', '3m');
   assert.deepStrictEqual([rec.retiredLane, rec.candidates], [['bos'], []]);
   const v = orb().find(x => x.check === 'retired-lane');
@@ -407,4 +453,54 @@ test('a mark left by a lane since deleted or fixed is cleared at the runner\'s s
   const bad = startRunner(broken, [{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }]);
   assert.ok(bad.some(l => l.level === 'error' && /retired-lane signal marks could not be written .*kill switch on/.test(l.m)), JSON.stringify(bad));
   assert.match(fs.readFileSync(path.join(broken, 'STOP'), 'utf8'), /retired-lane signal marks not written/);
+});
+
+test('order_plan refuses each retired name, saying it was retired; a fixture under another name still plans', () => {
+  const { plan: orderPlan } = require('../../scripts/lib/harness-tools/order-plan');
+  const home = tmpDir();
+  const ctx = { root: ROOT, env: { ...FX_ENV, FTH_HOME: home }, now: () => NOW, tool: true };
+  for (const n of NAMES) {
+    assert.throws(() => orderPlan({ file: path.join(home, 'none.json'), symbol: 'MNQ', strategy: n, side: 'long' }, ctx), new RegExp(`unknown strategy "${n}" \\(retired on ${DATE(n)}: strategies/README\\.md, "Retired strategies"\\)`), n);
+  }
+  // fx_orb (the orb rules under a fixture name) is a known strategy: refused only for the bars (none here), not as retired.
+  assert.throws(() => orderPlan({ file: path.join(home, 'none.json'), symbol: 'MNQ', strategy: 'fx_orb', side: 'long' }, ctx), err => !/retired|unknown strategy/.test(err.message));
+});
+
+test('the shipped prop_portfolio is active with no components: the gate refuses its entry (no verdict, no setup); its exit and stop still go', () => {
+  const policy = SHIPPED.find(s => s.name === 'prop_portfolio');
+  assert.deepStrictEqual([policy.valid, policy.status, policy.signal, policy.strategies], [true, 'active', 'policy', []]);
+  const { accounts } = require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {});
+  const account = accounts.find(a => a.name === policy.account);
+  assert.ok(account && account.valid, `its account loads: ${policy.account}`);
+  const home = trendHome();
+  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  const order = rationale => evaluateOrder({ input: entryOrder({ rationale }), entries: [plan()], now: NOW, config, strategies: SHIPPED, accounts });
+  const noVerdict = /setup:prop_portfolio: no verdict for MNQ \(it lists no strategies, so it has no setups and no verdicts: no entry\)/;
+  const check = label => {
+    const r = order('setup:prop_portfolio long, stop 40 ticks');
+    assert.strictEqual(r.intent, 'entry');
+    const v = r.violations.find(x => x.check === 'policy');
+    assert.ok(v, `${label}: ${JSON.stringify(r.violations)}`);
+    assert.match(v.message, noVerdict, label);
+    // Naming a component in the rationale changes nothing: still no verdict.
+    const named = order('setup:prop_portfolio fx_break long, stop 40 ticks');
+    assert.ok(named.violations.some(x => x.check === 'policy' && noVerdict.test(x.message)), `${label}: ${JSON.stringify(named.violations)}`);
+    // Risk-reducing orders go: the [exit] and the [protect] stop of a position it holds.
+    const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the prop_portfolio long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies: SHIPPED, accounts });
+    assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []], label);
+    const stop = evaluateOrder({ input: entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the prop_portfolio long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies: SHIPPED, accounts });
+    assert.deepStrictEqual(stop.violations, [], label);
+  };
+  check('no attempt');
+  // With its attempt running and the budget known: still refused for no verdict (it fails closed, never sizes a guess).
+  prop.startAttempt(home, account, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(home, account, account.starting_balance, new Date(NOW.getTime() - 60000));
+  check('attempt running');
+  // A stale verdict on file from before the retirement (its component retired) is refused as well.
+  prop.appendVerdict(home, {
+    strategy: 'prop_portfolio', component: 'orb', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+    maxSize: 1, bar: '2026-10-07T13:57:00Z', at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(),
+  });
+  const stale = order('setup:prop_portfolio orb long, stop 40 ticks');
+  assert.ok(stale.violations.some(v => /the latest verdict's setup is from orb: orb is not one of prop_portfolio's strategies/.test(v.message)), JSON.stringify(stale.violations));
 });

@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { FAKE_BROKERS, tmpDir, writeJournal } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, writeJournal, FX_GOLDEN } = require('../helpers');
 const cli = require('../../scripts/lib/harness-tools/cli');
 const strategies = require('../../scripts/lib/harness-tools/strategies');
 const marketSnapshot = require('../../scripts/lib/harness-tools/market-snapshot');
@@ -56,13 +56,17 @@ test('cli: context defaults, options, and an OpError keeps the output before the
 });
 
 test('strategies: list, show, validate, scan, recent as operations', () => {
-  const ctx = { env: {}, now: clock() };
+  // The shipped tree lists prop_portfolio only (every rules strategy retired); the fixture strategies (FX_GOLDEN:
+  // the retired rules under fx_ names) give the scans something to fire.
+  assert.deepStrictEqual(JSON.parse(strategies.list({ json: true }, { env: {}, now: clock() }).text).map(r => r.name), ['prop_portfolio']);
+  const ctx = { env: { FTH_STRATEGIES_DIRS: FX_GOLDEN }, now: clock() };
   const rows = JSON.parse(strategies.list({ json: true }, ctx).text);
-  assert.ok(rows.some(r => r.name === 'orb'));
-  assert.match(strategies.list({}, ctx).text, /^orb +active/m);
-  assert.match(strategies.show({ name: 'orb' }, ctx).text, /^---\nname: orb/);
+  assert.ok(rows.some(r => r.name === 'fx_orb'));
+  assert.match(strategies.list({}, ctx).text, /^fx_orb +active/m);
+  assert.match(strategies.show({ name: 'fx_orb' }, ctx).text, /^---\nname: fx_orb/);
   assert.throws(() => strategies.show({ name: 'nope' }, ctx), /unknown strategy "nope" \(known:/);
   assert.throws(() => strategies.show({ name: 'keltner' }, ctx), /unknown strategy "keltner" \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\)/);
+  assert.throws(() => strategies.show({ name: 'orb' }, ctx), /unknown strategy "orb" \(retired on 2026-10-14: strategies\/README\.md, "Retired strategies"\)/);
   assert.strictEqual(strategies.validate({}, ctx).code, 0);
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, 'broken'));
@@ -72,9 +76,10 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   assert.match(bad.text, /FAIL broken/);
   // scan reads the clock even with an explicit time (a refused clock refuses it), and scans at that time.
   const now = clock(new Date('2020-01-01T00:00:00Z'));
-  const at = JSON.parse(strategies.scan({ file: CSV, symbol: 'MNQ', now: AT.toISOString() }, { env: {}, now }).text);
+  const at = JSON.parse(strategies.scan({ file: CSV, symbol: 'MNQ', now: AT.toISOString() }, { env: ctx.env, now }).text);
   assert.strictEqual(now.calls, 1);
   const byClock = JSON.parse(strategies.scan({ file: CSV, symbol: 'MNQ' }, ctx).text);
+  assert.ok(byClock.length > 0, 'the fixtures scanned');
   assert.deepStrictEqual(at, byClock);
   assert.throws(() => strategies.scan({ file: CSV }, { env: {}, now: () => { throw new Error('clock refused'); } }), /clock refused/);
   assert.throws(() => strategies.scan({}, ctx), /scan needs a bars file/);
@@ -83,7 +88,7 @@ test('strategies: list, show, validate, scan, recent as operations', () => {
   assert.throws(() => strategies.scan({ file: CSV, record: true }, ctx), e => e instanceof cli.OpError && /--record needs --symbol/.test(e.message) && e.text.startsWith('[\n'));
   // In an autonomous run record is ignored, not refused: the scan comes back with a note, and nothing is recorded.
   const autoHome = tmpDir();
-  const auto = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { FTH_HOME: autoHome, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }, now: clock() });
+  const auto = strategies.scan({ file: CSV, symbol: 'MNQ', record: true }, { env: { ...ctx.env, FTH_HOME: autoHome, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' }, now: clock() });
   assert.deepStrictEqual(JSON.parse(auto.text), byClock);
   assert.strictEqual(auto.stderr, '[strategies] note: --record ignored - the autonomous runner records every bar itself\n');
   assert.strictEqual(auto.code, undefined);

@@ -8,7 +8,18 @@ const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, tradesRoot, rootRefusal, recentSignals } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { run } = require('../../scripts/strategies');
-const { tmpDir, shippedPolicy, rootWithPolicies, FX_STRATEGIES } = require('../helpers');
+const { tmpDir, shippedPolicy, rootWithPolicies, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
+
+test('the retired list is data (strategies/retired.json), validated at load: a malformed list throws (fails closed)', () => {
+  const S = require('../../scripts/lib/trading/strategies');
+  const file = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'strategies', 'retired.json'), 'utf8'));
+  assert.deepStrictEqual({ ...S.RETIRED }, file);
+  assert.ok(Object.isFrozen(S.RETIRED));
+  for (const n of ['orb', 'cisd_ote', 'vwap_reclaim', 'crt_1h', 'crt_4h', 'value_area', 'value_area_reentry', 'value_area_breakout', 'prop_flow_1m']) assert.strictEqual(S.RETIRED[n], '2026-10-14', n);
+  assert.strictEqual(S.RETIRED.prop_portfolio, undefined, 'prop_portfolio stays');
+  for (const bad of [null, [], {}, 'x', { x: 'yesterday' }, { x: 20261014 }, { 'Bad Name': '2026-10-14' }]) assert.throws(() => S.parseRetired(bad), /retired\.json/, JSON.stringify(bad));
+  assert.deepStrictEqual({ ...S.parseRetired({ x_y: '2026-10-14' }) }, { x_y: '2026-10-14' });
+});
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BODY = '## When to Use\n## How It Works\n## Examples\n';
@@ -23,24 +34,46 @@ const VALID = [
   'status: paper', 'instruments: [MES]', 'timeframe: 5m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1.5',
 ].join('\n');
 
-test('bundled strategies are all valid Markdown rules, the ported ones included', () => {
+test('the shipped strategies: prop_portfolio alone, valid; an old detector signal is refused with a hint', () => {
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
-  // Every strategy is rules, except the policy strategies, which trade the rules strategies' setups.
-  for (const s of strategies.filter(x => x.signal !== 'policy')) assert.strictEqual(s.signal, 'rules', `${s.name} is written as rules`);
+  // Every rules strategy and prop_flow_1m retired on 2026-10-14: the policy strategy is all that ships.
+  assert.deepStrictEqual(strategies.map(s => s.name), ['prop_portfolio']);
   const portfolio = strategies.find(s => s.name === 'prop_portfolio');
-  const threeMinute = strategies.filter(s => s.signal === 'rules' && s.timeframe === '3m').map(s => s.name).sort();
-  assert.deepStrictEqual([...portfolio.strategies].sort(), threeMinute, 'prop_portfolio trades every 3-minute rules strategy');
-  assert.deepStrictEqual(strategies.find(s => s.name === 'prop_flow_1m').strategies.sort(), strategies.filter(s => s.signal === 'rules' && s.timeframe === '1m').map(s => s.name).sort());
   assert.strictEqual(portfolio.account, 'topstep_100k');
-  for (const port of ['orb', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
-  const old = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'orb', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
-  assert.ok(old.some(e => /no longer a code detector; write the trigger as rules \(copy the rules block from strategies\/orb\/STRATEGY\.md\)/.test(e)), old.join('; '));
-  // A retired port's signal: the hint never points at a strategy document that is gone.
-  const retired = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'bos', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
-  assert.ok(retired.some(e => /signal: bos is no longer a code detector; .*the bos strategy was retired/.test(e)), retired.join('; '));
-  assert.ok(!retired.some(e => /strategies\/bos\/STRATEGY\.md/.test(e)));
+  // A detector signal that is now rules: the hint never points at a strategy document that is gone.
+  for (const signal of ['orb', 'cisd_ote', 'bos']) {
+    const retired = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal, risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
+    assert.ok(retired.some(e => new RegExp(`signal: ${signal} is no longer a code detector; .*the ${signal} strategy was retired`).test(e)), retired.join('; '));
+    assert.ok(!retired.some(e => /strategies\/\w+\/STRATEGY\.md/.test(e)), retired.join('; '));
+  }
+});
+
+test('prop_portfolio ships active with no strategies and is valid; a policy listing none has no setups', () => {
+  const portfolio = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
+  assert.strictEqual(portfolio.valid, true, portfolio.errors.join('; '));
+  assert.strictEqual(portfolio.status, 'active');
+  assert.strictEqual(portfolio.signal, 'policy');
+  assert.deepStrictEqual(portfolio.strategies, []);
+  // Validation alone: an empty list is valid (no setups yet); a missing, duplicated or malformed one is not.
+  const base = { name: 'p', description: 'x'.repeat(40), status: 'active', instruments: ['MNQ', 'NQ', 'MES', 'ES'], timeframe: '3m', signal: 'policy', strategies: [], account: 'acct', exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, risk: { stop: 'strategy', min_rr: 2 } };
+  const body = '## When to Use\n## How It Works\n## Examples';
+  assert.deepStrictEqual(validateStrategy(base, body, 'p'), []);
+  for (const bad of [undefined, ['a', 'a'], ['Bad Name'], 'fx_break']) {
+    assert.ok(validateStrategy({ ...base, strategies: bad }, body, 'p').some(e => /^strategies: /.test(e)), JSON.stringify(bad));
+  }
+  // Its scan: listed on every index it trades, never a candidate, and says it has no setups.
+  const t = i => new Date(Date.UTC(2026, 9, 7, 14) + i * 180000).toISOString();
+  const bars = Array.from({ length: 30 }, (_, k) => ({ t: t(k), o: 100 + k, h: 101 + k, l: 99 + k, c: 100.5 + k, v: 10 }));
+  for (const symbol of ['MNQ', 'ES']) {
+    const [r, ...rest] = scan([portfolio], bars, { symbol });
+    assert.deepStrictEqual(rest, [], symbol);
+    assert.strictEqual(r.signal, 'policy');
+    assert.strictEqual(r.candidate, false);
+    assert.match(r.note, /no strategies listed: no setups/);
+  }
+  assert.deepStrictEqual(recentSignals([portfolio], bars, { symbol: 'MNQ', count: 3 }).map(x => x.fired), [[], [], []]);
 });
 
 test('the template parses and only fails on its placeholder name', () => {
@@ -63,13 +96,13 @@ test('validation reports every schema problem', () => {
 test('extra strategy directories load, cannot shadow bundled names, and templates are skipped', () => {
   const dir = tmpDir();
   writeStrategy(dir, 'extra', VALID);
-  writeStrategy(dir, 'orb', VALID.replace('name: extra', 'name: orb'));
+  writeStrategy(dir, 'prop_portfolio', VALID.replace('name: extra', 'name: prop_portfolio'));
   writeStrategy(dir, '_draft', VALID.replace('name: extra', 'name: _draft'));
   writeStrategy(dir, 'broken', 'name: broken\nthis is not yaml');
   const { strategies, problems } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir });
   assert.ok(strategies.find(s => s.name === 'extra').valid);
-  assert.strictEqual(strategies.find(s => s.name === 'orb').file, path.join(ROOT, 'strategies', 'orb', 'STRATEGY.md'));
-  assert.ok(problems.some(p => /duplicate strategy "orb"/.test(p.error)));
+  assert.strictEqual(strategies.find(s => s.name === 'prop_portfolio').file, path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'));
+  assert.ok(problems.some(p => /duplicate strategy "prop_portfolio"/.test(p.error)));
   assert.ok(!strategies.some(s => s.name === '_draft'));
   assert.strictEqual(strategies.find(s => s.name === 'broken').valid, false);
   assert.deepStrictEqual(strategyDirs('/p', { FTH_STRATEGIES_DIRS: ' /a , /b ' }), [path.join('/p', 'strategies'), '/a', '/b']);
@@ -83,21 +116,24 @@ test('scan reports mechanical candidates with filters and sessions, and lists ma
   for (let i = 0; i < 5; i += 1) push(100, 101, 99, 100);
   push(100, 101.2, 99.9, 100.8);
   push(100.8, 102, 100.7, 101.9); // closes above the 101 OR high at 09:48 ET
-  const { strategies } = loadStrategies(ROOT, {});
+  // The fixture fx_orb (the retired orb's rules: session-bound, ADX-gated) and a manual strategy on MNQ.
+  const dir = tmpDir();
+  writeStrategy(dir, 'by_hand', VALID.replace('name: extra', 'name: by_hand').replace('instruments: [MES]', 'instruments: [MNQ]').replace('timeframe: 5m', 'timeframe: 3m'));
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: `${FX_GOLDEN},${dir}` });
   // Without its ADX rule (flat data has no trend).
   const noAdx = r => r.filter(x => !/^adx/.test(x));
   const looseRules = s => compileRules({ long: noAdx(s.rules.long), short: noAdx(s.rules.short) }).compiled;
-  const loose = strategies.map(s => (s.name === 'orb' ? { ...s, filters: {}, compiledRules: looseRules(s), regimes: undefined } : s));
+  const loose = strategies.map(s => (s.name === 'fx_orb' ? { ...s, filters: {}, compiledRules: looseRules(s), regimes: undefined } : s));
   const results = scan(loose, { bars }, { symbol: 'MNQ' });
-  const orb = results.find(r => r.name === 'orb');
+  const orb = results.find(r => r.name === 'fx_orb');
   assert.strictEqual(orb.direction, 'long');
   assert.strictEqual(orb.inSession, true);
   assert.strictEqual(orb.candidate, true);
   assert.ok(orb.stopDistance > 0);
-  assert.strictEqual(results.find(r => r.name === 'cisd_ote').signal, 'rules');
-  assert.strictEqual(results.find(r => r.name === 'cisd_ote').direction, null);
+  assert.strictEqual(results.find(r => r.name === 'by_hand').signal, 'manual');
+  assert.strictEqual(results.find(r => r.name === 'by_hand').direction ?? null, null);
   assert.deepStrictEqual(scan(loose, { bars }, { symbol: 'MCL' }), []);
-  const strict = scan(strategies, { bars }, { symbol: 'MNQ' }).find(r => r.name === 'orb');
+  const strict = scan(strategies, { bars }, { symbol: 'MNQ' }).find(r => r.name === 'fx_orb');
   assert.strictEqual(strict.candidate, false); // ADX gate fails on flat data
 });
 
@@ -105,10 +141,13 @@ test('CLI list, show, validate, and errors', () => {
   let out = '';
   const capture = s => { out += s; };
   assert.strictEqual(run(['list', '--json'], { env: {}, out: capture }), 0);
-  assert.ok(JSON.parse(out).some(s => s.name === 'orb'));
+  assert.ok(JSON.parse(out).some(s => s.name === 'prop_portfolio'));
   out = '';
-  run(['show', 'orb'], { env: {}, out: capture });
-  assert.match(out, /^---\nname: orb/);
+  run(['show', 'prop_portfolio'], { env: {}, out: capture });
+  assert.match(out, /^---\nname: prop_portfolio/);
+  out = '';
+  // A retired name: unknown, as any name no strategy folder defines.
+  assert.throws(() => run(['show', 'orb'], { env: {}, out: capture }), /unknown strategy/);
   out = '';
   assert.strictEqual(run(['validate'], { env: {}, out: capture }), 0);
   const dir = tmpDir();
@@ -147,16 +186,16 @@ test('a rules strategy written only in Markdown validates and fires in scan', ()
 });
 
 test('scan marks strategies out of regime and never makes them candidates', () => {
-  const regimes = { orb: ['trend'], cisd_ote: ['range', 'transition'] };
-  const strategies = loadStrategies(ROOT, {}).strategies.map(s => (regimes[s.name] ? { ...s, regimes: regimes[s.name] } : s));
+  const regimes = { fx_break: ['trend'], fx_cross: ['range', 'transition'] };
+  const strategies = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES }).strategies.map(s => (regimes[s.name] ? { ...s, regimes: regimes[s.name] } : s));
   const t = i => new Date(Date.UTC(2026, 9, 7, 13, 30) + i * 180000).toISOString();
   const ranging = Array.from({ length: 160 }, (_, k) => { const c = 100 + Math.sin(k / 2) * 2; return { t: t(k), o: c, h: c + 1, l: c - 1, c, v: 1 }; });
   const results = scan(strategies, { bars: ranging }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 9, 7, 15, 0)) });
-  const orb = results.find(r => r.name === 'orb');
-  assert.strictEqual(orb.regime, 'range');
-  assert.strictEqual(orb.inRegime, false);
-  assert.strictEqual(orb.candidate, false);
-  assert.strictEqual(results.find(r => r.name === 'cisd_ote').inRegime, true);
+  const out = results.find(r => r.name === 'fx_break');
+  assert.strictEqual(out.regime, 'range');
+  assert.strictEqual(out.inRegime, false);
+  assert.strictEqual(out.candidate, false);
+  assert.strictEqual(results.find(r => r.name === 'fx_cross').inRegime, true);
 });
 
 test('unknown keys, risk keys, and out-of-range params are rejected with hints', () => {
@@ -355,25 +394,33 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   };
   const head = n => [`name: ${n}`, `description: ${'x'.repeat(40)}`, 'status: paper', 'instruments: [MNQ, NQ]', 'signal: policy', 'account: topstep_100k',
     'risk:', '  stop: strategy', '  min_rr: 2'];
-  write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [orb, cisd_ote]'].join('\n'));
-  write('p_tf', [...head('p_tf'), 'timeframe: 3m', 'strategies: [ofi]'].join('\n'));
+  const rulesDoc = (n, extra = {}) => [`name: ${n}`, `description: ${'x'.repeat(40)}`, `status: ${extra.status || 'active'}`, `instruments: [${extra.instruments || 'MNQ'}]`,
+    `timeframe: ${extra.timeframe || '3m'}`, 'signal: rules', 'rules:', '  long:', '    - close > 1', 'risk:', '  stop: atr:1', '  min_rr: 2'].join('\n');
+  write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [fx_break, fx_cross]'].join('\n'));
+  write('p_empty', [...head('p_empty'), 'timeframe: 3m', 'strategies: []'].join('\n'));
+  write('one_min', rulesDoc('one_min', { timeframe: '1m' }));
+  write('p_tf', [...head('p_tf'), 'timeframe: 3m', 'strategies: [one_min]'].join('\n'));
   write('p_none', [...head('p_none'), 'timeframe: 3m', 'strategies: [nope]'].join('\n'));
-  write('p_es', [...head('p_es'), 'timeframe: 3m', 'strategies: [vwap_reclaim]'].join('\n').replace('instruments: [MNQ, NQ]', 'instruments: [MYM, YM]'));
-  write('off_rules', ['name: off_rules', `description: ${'x'.repeat(40)}`, 'status: disabled', 'instruments: [MNQ]', 'timeframe: 3m', 'signal: rules', 'rules:', '  long:', '    - close > 1', 'risk:', '  stop: atr:1', '  min_rr: 2'].join('\n'));
+  write('p_retired', [...head('p_retired'), 'timeframe: 3m', 'strategies: [orb]'].join('\n'));
+  write('nq_only', rulesDoc('nq_only'));
+  write('p_es', [...head('p_es'), 'timeframe: 3m', 'strategies: [nq_only]'].join('\n').replace('instruments: [MNQ, NQ]', 'instruments: [MYM, YM]'));
+  write('off_rules', rulesDoc('off_rules', { status: 'disabled' }));
   write('p_off', [...head('p_off'), 'timeframe: 3m', 'strategies: [off_rules]'].join('\n'));
   // Each listed in its account's rulebook, which sizes and exits it (a policy states neither itself).
   const account = shippedPolicy().account;
-  const root = rootWithPolicies(Object.fromEntries(['p_ok', 'p_tf', 'p_none', 'p_es', 'p_off'].map(n => [n, account])));
-  const { strategies } = loadStrategies(root, { FTH_STRATEGIES_DIRS: dir });
+  const root = rootWithPolicies(Object.fromEntries(['p_ok', 'p_empty', 'p_tf', 'p_none', 'p_retired', 'p_es', 'p_off'].map(n => [n, account])));
+  const { strategies } = loadStrategies(root, { FTH_STRATEGIES_DIRS: `${dir},${FX_STRATEGIES}` });
   const by = n => strategies.find(s => s.name === n);
   assert.strictEqual(by('p_ok').valid, true, by('p_ok').errors.join());
-  assert.match(by('p_tf').errors.join(), /ofi trades 1m bars, not 3m/);
+  assert.strictEqual(by('p_empty').valid, true, by('p_empty').errors.join());
+  assert.match(by('p_tf').errors.join(), /one_min trades 1m bars, not 3m/);
   assert.match(by('p_none').errors.join(), /nope is not a strategy/);
+  assert.match(by('p_retired').errors.join(), /orb is not a strategy \(retired on 2026-10-14/);
   assert.match(by('p_es').errors.join(), /none of its strategies trades MYM's index/);
   assert.match(by('p_off').errors.join(), /off_rules is disabled/);
 });
 
-test('mtf: trend (the default) or reversal; a policy strategy takes it from its setups; the reversal ports say so', () => {
+test('mtf: trend (the default) or reversal; a policy strategy takes it from its setups', () => {
   const base = ['name: x', 'description: A test strategy long enough to pass the description rule.', 'status: active', 'instruments: [MNQ]',
     'timeframe: 3m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1'];
   const errs = extra => validateStrategy(parseFrontmatter(`---\n${[...base, ...extra].join('\n')}\n---\n${BODY}`).data, BODY, 'x');
@@ -382,9 +429,6 @@ test('mtf: trend (the default) or reversal; a policy strategy takes it from its 
   assert.match(errs(['mtf: sideways']).join(), /mtf: trend \| reversal/);
   const { strategies } = loadStrategies(ROOT, {});
   const byName = Object.fromEntries(strategies.map(s => [s.name, s]));
-  for (const n of ['crt_1h', 'crt_4h', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
-  // cisd_ote since version 4: a trend strategy (a CISD with the HTF trend on a pullback, or in a range).
-  for (const n of ['orb', 'vwap_reclaim', 'ofi', 'value_area_breakout', 'cisd_ote']) assert.strictEqual(byName[n].mtf, 'trend', n);
   assert.strictEqual(byName.prop_portfolio.mtf, undefined);
 });
 
@@ -414,7 +458,7 @@ test('scan: a trend strategy that fires against the prevailing trend is not a ca
 
 test('CLI scan reads CSV bars as well as get_bars JSON', () => {
   const out = [];
-  run(['scan', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--now', '2026-04-28T14:00:00Z'], { out: s => out.push(s) });
+  run(['scan', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--now', '2026-04-28T14:00:00Z'], { env: { FTH_STRATEGIES_DIRS: `${FX_STRATEGIES},${FX_GOLDEN}` }, out: s => out.push(s) });
   const results = JSON.parse(out.join(''));
   assert.ok(results.length > 3 && results.every(x => x.name));
   assert.ok(results.some(x => x.mtf && x.mtf.ready), 'scan results carry the trend rule');

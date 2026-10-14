@@ -9,13 +9,16 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
 const G = require('../fixtures/golden-bars');
 const T = require('../../scripts/lib/trading/strategies');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
 const tool = require('../../scripts/lib/harness-tools/strategies');
 
-const STRATEGIES = T.loadStrategies(G.ROOT, {}).strategies;
+// No rules strategy ships since 2026-10-14: the fixtures (fx_break, fx_cross, and the retired strategies' rules
+// under fx_ names, 1m and 3m) give the scan strategies on each timeframe.
+const DIRS = `${FX_STRATEGIES},${FX_GOLDEN}`;
+const STRATEGIES = T.loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: DIRS }).strategies;
 const N = 160; // bars per file
 const byTf = tf => STRATEGIES.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === tf);
 
@@ -27,7 +30,7 @@ function barsFile(label) {
   fs.writeFileSync(file, JSON.stringify(G.served(G.broker(plain))));
   return { s, plain, file, now: new Date(plain[plain.length - 1].ms + s.minutes * 60000) };
 }
-const ctxAt = (now, symbol) => ({ env: { FTH_SYMBOLS: symbol }, now: () => new Date(now.getTime()) });
+const ctxAt = (now, symbol) => ({ env: { FTH_SYMBOLS: symbol, FTH_STRATEGIES_DIRS: DIRS }, now: () => new Date(now.getTime()) });
 const json = text => JSON.parse(text);
 
 const MIN = 60000;
@@ -98,7 +101,8 @@ test('strategies_scan on bars no strategy trades: says so and lists the timefram
   assert.doesNotMatch(tool.scan({ file: f3, symbol: 'MNQ', view: 'summary' }, ctxAt(now, 'MNQ')).text, /no strategy trades/);
 });
 
-test('the shipped strategies are on both timeframes (else the tests below prove nothing)', () => {
+test('the strategies under test are on both timeframes (else the tests below prove nothing)', () => {
+  assert.ok(STRATEGIES.every(s => s.valid), STRATEGIES.filter(s => !s.valid).map(s => `${s.name}: ${s.errors.join('; ')}`).join(' | '));
   assert.ok(byTf('1m').some(s => s.signal === 'rules' && s.instruments.includes('MNQ')), 'a 1m rules strategy trading MNQ');
   assert.ok(byTf('3m').some(s => s.signal === 'rules' && s.instruments.includes('MNQ')), 'a 3m rules strategy trading MNQ');
 });

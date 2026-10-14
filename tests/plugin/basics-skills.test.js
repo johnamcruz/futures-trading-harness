@@ -13,6 +13,18 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+const { RETIRED } = require('../../scripts/lib/trading/strategies');
+
+/**
+ * A strategy a skill names: active, or one of those retired on 2026-10-14. The skills were written when those
+ * strategies shipped, and are kept as they are by the owner's decision (the retirement edits no skill), so a name
+ * retired that day is accepted; any other name must be an active strategy in strategies/.
+ */
+function namedStrategyOk(name) {
+  const doc = `strategies/${name}/STRATEGY.md`;
+  if (fs.existsSync(path.join(ROOT, doc))) return parseFrontmatter(read(doc)).data.status === 'active';
+  return RETIRED[name] === '2026-10-14';
+}
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -383,15 +395,13 @@ test('basics skills: confluence-counting\'s examples count six items', () => {
   assert.strictEqual(Number(tp[1]) + Number(tp[2]) + Number(tp[3]), 6);
 });
 
-test('basics skills: examples name existing active strategies, and never the retired trend four as strategies', () => {
-  const names = fs.readdirSync(path.join(ROOT, 'strategies')).filter(d => fs.existsSync(path.join(ROOT, 'strategies', d, 'STRATEGY.md')));
+test('basics skills: examples name existing active strategies (or ones retired on 2026-10-14), and never the retired trend four as strategies', () => {
   for (const s of SKILLS) {
     const text = read(file(s));
     // As strategies: a briefing field named for the indicator (`m3.trend.supertrend`) is data.
     assert.doesNotMatch(text.replace(/bos-vs-choch/g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
     for (const m of text.split('## Examples')[1].matchAll(/\b([a-z]+_[a-z0-9_]+|orb)\b (?:long|short)/g)) {
-      assert.ok(names.includes(m[1]), `${s}: ${m[1]}`);
-      assert.strictEqual(parseFrontmatter(read(`strategies/${m[1]}/STRATEGY.md`)).data.status, 'active', m[1]);
+      assert.ok(namedStrategyOk(m[1]), `${s}: ${m[1]}`);
     }
     // Census families cited exist in the catalog.
     const cat = read('docs/research/mtf-setup-catalog.md');
@@ -420,10 +430,10 @@ test('basics skills: the two setups, on any timeframe, follow the PLAN steps, on
       at = k;
     }
     assert.ok(t.includes('Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).'), s);
-    // The strategies it names exist and are active.
+    // The strategies it names exist and are active (or retired on 2026-10-14: the skills are kept as they are).
     const names = [...t.slice(0, t.indexOf('A read, never a veto')).matchAll(/`([a-z0-9_]+)`/g)].map(m => m[1]);
     assert.ok(names.length >= 3, s);
-    for (const n of names) assert.strictEqual(parseFrontmatter(read(`strategies/${n}/STRATEGY.md`)).data.status, 'active', `${s}: ${n}`);
+    for (const n of names) assert.ok(namedStrategyOk(n), `${s}: ${n}`);
     // Generic: the setup is defined on any completed candle, not on one timeframe; its timeframe table has three rows.
     assert.doesNotMatch(t, /\*\*4 Setup\*\*: a completed (?:3m|5m|15m|60m)/, s);
     for (const row of ['| 3m, 5m |', '| 15m |', '| 60m |']) assert.ok(t.includes(row), `${s}: ${row}`);
@@ -558,7 +568,7 @@ test('bos-vs-choch: the timeframes are read top-down, the same logic in the setu
   }
 });
 
-test('basics skills: the fib numbers have one home: fib-retracement states the code\'s, cisd and cisd_ote restate none', () => {
+test('basics skills: the fib numbers have one home: fib-retracement states the code\'s, cisd restates none', () => {
   const { LEVELS, OTE } = require('../../scripts/lib/trading/fib');
   const cisd = require('../../scripts/lib/trading/cisd');
   const text = read(file('fib-retracement'));
@@ -570,15 +580,10 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   for (const m of text.split('## Examples')[0].matchAll(/\b0\.\d+\b/g)) assert.ok(known.has(m[0]), `fib-retracement names ${m[0]}, not a code ratio`);
   // A changed ratio in the code (or the skill) fails.
   assert.ok(!flat(text.replaceAll('0.705', '0.71')).includes(`mid ${OTE.mid}`));
-  // cisd and cisd_ote point to them, restating no ratio (as 0.62 or 62%).
+  // cisd points to them, restating no ratio (as 0.62 or 62%). (The cisd_ote strategy, checked here too, retired on 2026-10-14.)
   const RATIO = /\b0?\.(?:5|618|62|705|79)\b|\b(?:50|61\.8|62|70\.5|79)%/;
   assert.doesNotMatch(read(file('cisd')), RATIO);
   assert.match(read(file('cisd')), /`fib-retracement`/);
-  const strategy = read('strategies/cisd_ote/STRATEGY.md');
-  assert.doesNotMatch(strategy.split('## What changed from version 3')[0], RATIO, 'cisd_ote names fib.OTE, not its numbers');
-  assert.match(strategy, /`fib\.OTE`/);
-  assert.match(strategy, /`cisd` skill/);
-  assert.match(strategy, /`fib-retracement` skill/);
   // The CISD skill's run and wait are the code's defaults.
   const c = flat(read(file('cisd')));
   assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));

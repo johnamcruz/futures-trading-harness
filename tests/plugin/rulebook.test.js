@@ -16,7 +16,7 @@ const combine = require('../../scripts/lib/trading/combine');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { loadStrategies, exitPlan } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FLOW_POLICY, FX_STRATEGIES, FX_GOLDEN, withComponents } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -62,9 +62,14 @@ test('R1: every shipped policy strategy is in its account\'s rulebook, states no
   }
 });
 
-/** Every rulebook value as [where, key, value]: the account's soft stop and each policy's sizing and exit numbers. */
+/**
+ * Every rulebook value as [where, key, value]: the account's soft stop and each policy's sizing and exit numbers, and
+ * the retired prop_flow_1m's entry (FLOW_POLICY, tests/helpers.js): its rulebook entry is gone, but nothing outside a
+ * rulebook may restate its numbers either (a document or code keeping them would be a second place).
+ */
 function values() {
   const out = [];
+  for (const group of ['sizing', 'exit']) for (const [k, v] of Object.entries(FLOW_POLICY[group])) out.push([`tests/helpers.js FLOW_POLICY (the retired prop_flow_1m).${group}`, k, v]);
   for (const { file, book } of BOOKS) {
     if (book.daily_loss_soft !== undefined) out.push([file, 'daily_loss_soft', book.daily_loss_soft]);
     for (const [name, p] of Object.entries(book.policies || {})) {
@@ -172,14 +177,25 @@ test('R1: the scan catches each way a value can be restated (it would fail witho
 
 const CLASSES = BOOKS.map(b => ({ ...b, enforced: b.book.enforced, taught: b.book.taught }));
 
-/** A plugin root with copies of the shipped accounts (rulebooks included) and the shipped strategies. */
+const POLICY = POLICIES.find(p => p.name === 'prop_portfolio') || POLICIES[0];
+/**
+ * A plugin root with copies of the shipped accounts (rulebooks included) and the shipped strategies (linked), but the
+ * policy given the fixture components fx_break and fx_cross (tests/fixtures/strategies-fx, copied in): the shipped one
+ * lists none since its components retired, and a probe of its verdict needs a component.
+ */
 function rootCopy() {
   const root = tmpDir();
   fs.cpSync(path.join(ROOT, 'accounts'), path.join(root, 'accounts'), { recursive: true });
-  fs.symlinkSync(path.join(ROOT, 'strategies'), path.join(root, 'strategies'));
+  fs.mkdirSync(path.join(root, 'strategies'));
+  for (const d of fs.readdirSync(path.join(ROOT, 'strategies'))) if (d !== POLICY.name) fs.symlinkSync(path.join(ROOT, 'strategies', d), path.join(root, 'strategies', d));
+  fs.mkdirSync(path.join(root, 'strategies', POLICY.name));
+  fs.writeFileSync(path.join(root, 'strategies', POLICY.name, 'STRATEGY.md'), withComponents(read(`strategies/${POLICY.name}/STRATEGY.md`)));
+  for (const d of ['fx_break', 'fx_cross']) fs.cpSync(path.join(FX_STRATEGIES, d), path.join(root, 'strategies', d), { recursive: true });
   return root;
 }
-const POLICY = POLICIES.find(p => p.name === 'prop_portfolio') || POLICIES[0];
+/** The gate probes' strategies: the shipped ones and fx_orb (the retired orb's rules, tests/fixtures/strategies-golden). */
+const GATE_STRATEGIES = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
+const fxOrb = H => ({ order: H.entryOrder({ rationale: 'setup:fx_orb break above OR high 21500, stop 21480, target 21540, risk $40' }), fired: [{ name: 'fx_orb', direction: 'long' }] });
 const bookOf = root => path.join(root, 'accounts', POLICY.account, RB.FILE);
 const edit = (root, fn) => fs.writeFileSync(bookOf(root), fn(fs.readFileSync(bookOf(root), 'utf8')));
 const account = root => loadAccounts(root, {}).accounts.find(a => a.name === POLICY.account);
@@ -221,6 +237,7 @@ const ENFORCED = {
     edit(root, t => t.replace(new RegExp(`(\\n  ${POLICY.name}:\\n[^]*?)\\n    multipliers: \\[\\][^\\n]*\\n`), `$1${item}`));
     const p = policy(root);
     assert.strictEqual(p.multipliers.length, 1, p.errors.join());
+    assert.ok(p.strategies[0], 'the policy has a component');
     const bars = Array.from({ length: 50 }, (_, k) => ({ t: new Date(Date.parse('2026-10-07T13:00:00Z') + k * 180000).toISOString(), o: 21500, h: 21502, l: 21498, c: 21500, v: 100 }));
     const args = facts => ({ account: account(root), cs: combine.start(account(root)), strategy: p, component: p.strategies[0], symbol: 'MNQ', contractId: 'MNQ', rawBars: bars, spec: { tickSize: 0.25, tickValue: 0.5 }, scan: { direction: 'long', stopDistance: 10 }, now: new Date('2026-10-07T15:30:00Z'), facts });
     assert.strictEqual(decideSetup(args({})).action, 'skip');
@@ -247,17 +264,19 @@ const ENFORCED = {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
     const { loadConfig } = require('../../scripts/lib/trading/config');
     const H = require('../helpers');
-    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+    const { order, fired } = fxOrb(H);
+    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
     const blackouts = { items: [{ start: H.minutesAgo(5), end: H.minutesAgo(-10), reason: 'CPI' }] };
-    const r = evaluateOrder({ input: H.entryOrder(), entries: [H.plan()], now: H.NOW, config, blackouts, strategies: STRATEGIES });
+    const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, blackouts, strategies: GATE_STRATEGIES });
     assert.ok(r.violations.some(v => v.check === 'blackout'), JSON.stringify(r.violations));
   },
   trend_rule: () => {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
     const { loadConfig } = require('../../scripts/lib/trading/config');
     const H = require('../helpers');
-    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: -1 } }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
-    const r = evaluateOrder({ input: H.entryOrder(), entries: [H.plan()], now: H.NOW, config, strategies: STRATEGIES });
+    const { order, fired } = fxOrb(H);
+    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: -1 }, fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+    const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, strategies: GATE_STRATEGIES });
     assert.ok(r.violations.some(v => /prevailing/.test(v.message)), JSON.stringify(r.violations));
   },
 };

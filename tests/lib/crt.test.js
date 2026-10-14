@@ -8,12 +8,17 @@ const { htfCandles, normalizeBars } = require('../../scripts/lib/trading/indicat
 const { compileCondition, compileExpression, evaluateRules, seriesSource } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_GOLDEN } = require('../helpers');
 const { crtSeries } = require('../../scripts/lib/trading/crt');
 const { runEngine } = require('../../scripts/lib/backtest/engine');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+// The retired crt_1h strategy's rules, as a test fixture (fx_crt_1h, tests/fixtures/strategies-golden): a CRT setup
+// with a level target and a time stop.
+const FX_ENV = { FTH_STRATEGIES_DIRS: FX_GOLDEN };
+const CRT_1H = 'fx_crt_1h';
+const fixture = name => loadStrategies(ROOT, FX_ENV).strategies.find(x => x.name === name);
 // 2026-10-07 is EDT (UTC-4): 09:00 ET = 13:00 UTC.
 const et = (h, m = 0) => Date.UTC(2026, 9, 7, h + 4, m);
 const mk = rows => normalizeBars(rows.map(([t, o, h, l, c]) => ({ t: new Date(t).toISOString(), o, h, l, c, v: 100 })));
@@ -90,7 +95,7 @@ test('a per-side stop: a map of long and short distance expressions', () => {
 });
 
 /**
- * The crt_1h example: C1, the 10:00 hour, ranges 21480-21540; at 11:12 C2 (the
+ * The crt_1h example (the retired strategy, now the fixture fx_crt_1h): C1, the 10:00 hour, ranges 21480-21540; at 11:12 C2 (the
  * 11:00 hour) sweeps to 21472.25, and the 11:18 bar closes at 21486.50, back
  * inside and above the five bars before it.
  */
@@ -154,8 +159,8 @@ test('CRT detector: a raid of the previous high is the mirror image (short)', ()
   assert.deepStrictEqual(fires(mirror), [{ at: new Date(et(11, 18)).toISOString(), dir: -1, risk: 16.25, target: 53.5, depth: 7.75 }]);
 });
 
-test('crt_1h: the strategy fires on the raid with crt_risk as its stop and the far side of C1 as its target', () => {
-  const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
+test('a CRT rules strategy (fx_crt_1h) fires on the raid with crt_risk as its stop and the far side of C1 as its target', () => {
+  const s = fixture(CRT_1H);
   assert.ok(s && s.valid, s && s.errors.join('; '));
   const b = crtSweep();
   const i = b.length - 1;
@@ -167,20 +172,20 @@ test('crt_1h: the strategy fires on the raid with crt_risk as its stop and the f
   assert.strictEqual(r.targetDistance, 53.5);
   assert.deepStrictEqual([r.exit.targetR, r.exit.target, r.exit.maxBars], [null, 'crt_target(60)', 40]);
   assert.strictEqual(createEvaluator(b).at(s, i - 1).direction, null);
-  const four = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_4h');
+  const four = fixture('fx_crt_4h');
   assert.ok(four.valid, four.errors.join('; '));
   assert.strictEqual(createEvaluator(b).at(four, i).direction, null, 'no complete previous 4-hour candle in the data');
 });
 
 test('backtest: a CRT trade exits at the far side of the range (exit.target is a level), or by its time stop', () => {
-  const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
+  const s = fixture(CRT_1H);
   const warm = [];
   for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
   const up = [];
   for (let k = 1; k <= 8; k += 1) up.push([et(11, 18) + k * 180000, 21486 + 7 * (k - 1), 21486 + 7 * k, 21485 + 7 * (k - 1), 21486 + 7 * k]);
   const run = rows => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2, ...rows]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 1 }).trades;
   const [t] = run(up);
-  assert.strictEqual(t.strategy, 'crt_1h');
+  assert.strictEqual(t.strategy, CRT_1H);
   assert.strictEqual(t.entry, 21486.75, 'the close plus one tick of slippage');
   assert.strictEqual(t.reason, 'target');
   assert.strictEqual(t.exit, 21540, 'C1\'s high, not entry + R');
@@ -207,9 +212,9 @@ test('exit.target validation: a distance expression or a long/short map, never w
 });
 
 test('backtest CLI: an unknown flag is an error, not a silent run of every strategy', () => {
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', 'none.csv', '--symbol', 'MNQ', '--strategies', 'crt_1h'], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', 'none.csv', '--symbol', 'MNQ', '--strategies', 'fx_break'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 1);
-  assert.match(r.stderr, /unknown arguments: --strategies crt_1h/);
+  assert.match(r.stderr, /unknown arguments: --strategies fx_break/);
 });
 
 test('CRT detector explains every bar: the state and why it did or didn\'t fire', () => {
@@ -266,7 +271,7 @@ test('a policy strategy refuses exit.target (its trades exit by its trail)', () 
 });
 
 test('backtest: a fill already at or past the target level is not taken', () => {
-  const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'crt_1h');
+  const s = fixture(CRT_1H);
   const warm = [];
   for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
   const trades = slip => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: slip }).trades;
@@ -279,14 +284,15 @@ test('backtest --debug writes the strategy\'s verdict on every bar, and trades.j
   const { runBacktest } = require('../../scripts/lib/backtest/run');
   const dir = tmpDir();
   const data = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
-  const { runDir } = runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: ['crt_1h'], gate: false, window: 200, debug: 'crt_1h', outDir: dir }, { root: ROOT, outRoot: dir });
-  const lines = fs.readFileSync(path.join(runDir, 'decisions-crt_1h.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const env = { ...process.env, ...FX_ENV };
+  const { runDir } = runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: [CRT_1H], gate: false, window: 200, debug: CRT_1H, outDir: dir }, { root: ROOT, outRoot: dir, env });
+  const lines = fs.readFileSync(path.join(runDir, `decisions-${CRT_1H}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
   assert.strictEqual(lines.length, 1499);
-  assert.ok(lines.every(l => l.name === 'crt_1h' && l.t && l.detail && l.detail['crt(60)'].reason));
+  assert.ok(lines.every(l => l.name === CRT_1H && l.t && l.detail && l.detail['crt(60)'].reason));
   assert.ok(lines.slice(0, 199).every(l => /trades from bar 199/.test(l.warmup)) && !lines[199].warmup, 'bars before the window are marked');
   const fired = lines.filter(l => l.detail['crt(60)'].reason === 'fired');
   assert.ok(fired.length >= 1);
   const trades = fs.readFileSync(path.join(runDir, 'trades.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
   assert.ok(trades.length >= 1 && trades.every(t => t.setup && t.setup.detail['crt(60)'].reason === 'fired' && t.target !== null));
-  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: ['crt_1h'], gate: false, debug: 'orb', outDir: dir }, { root: ROOT, outRoot: dir }), /debug: orb is not among the strategies/);
+  assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: data }, strategies: [CRT_1H], gate: false, debug: 'fx_crt_4h', outDir: dir }, { root: ROOT, outRoot: dir, env }), /debug: fx_crt_4h is not among the strategies/);
 });

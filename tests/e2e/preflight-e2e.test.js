@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { FAKE_BROKERS, tmpDir } = require('../helpers');
+const { FAKE_BROKERS, tmpDir, FX_GOLDEN } = require('../helpers');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { startAttempt } = require('../../scripts/lib/trading/prop-state');
@@ -16,7 +16,10 @@ const { fieldPaths, propProfiles } = require('../../scripts/lib/preflight');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
-const TIMEFRAME = 1;
+// 3m: the shipped prop_portfolio's bars (its prop profile), and fx_value_area's, a fixture holding a retired strategy's
+// rules that read a broker field (FX_GOLDEN; no rules strategy ships since 2026-10-14).
+const TIMEFRAME = 3;
+const FX_ENV = { FTH_STRATEGIES_DIRS: FX_GOLDEN };
 
 function world() {
   const home = tmpDir();
@@ -27,11 +30,12 @@ function world() {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: SERVER,
     FAKE_BROKER_JOURNAL: path.join(home, 'journal.jsonl'), FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '7', FAKE_ARGS: args,
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_ENV_FILE: path.join(home, 'none.env'),
-    FTH_LOCK_DIR: path.join(home, 'locks'), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test',
+    FTH_LOCK_DIR: path.join(home, 'locks'), FTH_TEST_LOCKS: '1', FAKE_BROKER_API_URL: 'https://api.fake-broker.test', ...FX_ENV,
   };
   // The prop profile the repo's policy strategies trade, and its size as the account's balance.
-  const profiles = propProfiles(loadStrategies(ROOT, {}).strategies, loadAccounts(ROOT, {}).accounts, { symbols: ['MNQ'], timeframe: TIMEFRAME });
-  env.FAKE_BALANCE = String(profiles.length ? profiles[0].starting_balance : 50000);
+  const profiles = propProfiles(loadStrategies(ROOT, FX_ENV).strategies, loadAccounts(ROOT, {}).accounts, { symbols: ['MNQ'], timeframe: TIMEFRAME });
+  assert.ok(profiles.length > 0, 'prop_portfolio trades a prop profile on these bars');
+  env.FAKE_BALANCE = String(profiles[0].starting_balance);
   return { home, config, env, args, profiles };
 }
 
@@ -45,8 +49,9 @@ const toolsCalled = w => (fs.existsSync(w.args) ? fs.readFileSync(w.args, 'utf8'
 test('preflight e2e: ready (allow-list, broker through the translator, account, prop attempt, bar fields) exits 0; nothing is ordered', () => {
   const w = world();
   for (const p of w.profiles) startAttempt(w.home, p);
-  // Bars carrying every field() path the 1-minute rules strategies read, so their check passes.
-  const paths = loadStrategies(ROOT, {}).strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && s.timeframe === `${TIMEFRAME}m`).flatMap(fieldPaths);
+  // Bars carrying every field() path the lane's rules strategies read, so their check passes.
+  const paths = loadStrategies(ROOT, FX_ENV).strategies.filter(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && s.timeframe === `${TIMEFRAME}m`).flatMap(fieldPaths);
+  assert.ok(paths.length > 0, 'a rules strategy on these bars reads a broker field');
   const set = (o, p) => { const keys = p.split('.'); let at = o; keys.slice(0, -1).forEach(k => { at = at[k] = at[k] || {}; }); at[keys[keys.length - 1]] = 0.5; return o; };
   const bars = Array.from({ length: 5 }, (_, k) => paths.reduce(set, { t: new Date(Date.now() - (6 - k) * 60000).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 10 }));
   fs.writeFileSync(path.join(w.home, 'bars.json'), JSON.stringify(bars));
@@ -57,7 +62,7 @@ test('preflight e2e: ready (allow-list, broker through the translator, account, 
     assert.match(line(r.out, check), /^ok {3}/, `${check}\n${r.out}`);
   }
   assert.match(r.out, /ok {3}broker: tools\/list/);
-  if (paths.length) assert.match(r.out, /ok {3}bar fields/);
+  assert.match(r.out, /ok {3}bar fields \(fx_value_area, MNQ\)/);
   for (const p of w.profiles) assert.match(line(r.out, `prop attempt (${p.name})`), /^ok/);
   const called = toolsCalled(w);
   assert.ok(called.includes('get_server_config') && called.includes('get_bars'), called.join(','));
@@ -78,8 +83,7 @@ test('preflight e2e: an empty allow-list, the kill switch, a missing attempt and
     assert.match(line(r.out, `prop attempt (${p.name})`), /^FAIL/);
     assert.match(line(r.out, `account size (${p.name})`), /^FAIL/);
   }
-  const fields = loadStrategies(ROOT, {}).strategies.some(s => s.valid && s.status !== 'disabled' && s.signal === 'rules' && s.timeframe === `${TIMEFRAME}m` && fieldPaths(s).length);
-  if (fields) assert.match(r.out, /warn bar fields .*carry no/);
+  assert.match(r.out, /warn bar fields \(fx_value_area, MNQ\).*carry no/);
   assert.match(r.out, /preflight FAILED/);
   // A paper run needs no allow-list.
   const paper = run({ ...w, config: (() => { const f = path.join(w.home, 'paper.json'); fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(w.config, 'utf8')), paper: true })); return f; })() }, { FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '' }, ['--no-version']);

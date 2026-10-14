@@ -3,7 +3,7 @@
 /**
  * The no-look-ahead suite: replay equals live, and a replayed decision sees only what existed at its
  * decision time. With the unit tests it names (tests/lib/look-ahead.test.js: the cut and the refusal;
- * tests/lib/no-look-ahead-rules.test.js: every rules series, field() look-back and shipped strategy,
+ * tests/lib/no-look-ahead-rules.test.js: every rules series, field() look-back and fixture rules strategy,
  * the backtest engine's fills, the labels' inputs), it proves:
  *
  *   1. The replay driver, against a replay broker that leaks the future (its get_bars serves bars after
@@ -25,7 +25,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { historyLines } = require('../../scripts/lib/trading/decision-history');
 const { createMcpClient } = require('../../scripts/lib/broker/mcp-client');
@@ -79,7 +79,7 @@ function replaySetup() {
   }));
   // The account is flat, the market is the shifted parity bars, and the server leaks every bar after its clock.
   const init = { nowMs: Date.parse('2026-10-05T13:00:00Z'), prices: { [MNQ_ID]: BARS.at(-1).c, 'fake:MNQ:H27': BARS.at(-1).c, 'fake:MES:Z26': 5800 }, bars: { [MNQ_ID]: BARS.slice(-1400) } };
-  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init), MOCK_LEAK_BARS: '1', FAKE_HARNESS_LOOKAHEAD: '1' };
+  const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init), MOCK_LEAK_BARS: '1', FAKE_HARNESS_LOOKAHEAD: '1', FTH_STRATEGIES_DIRS: FX_GOLDEN };
   return { user, live, config, env, runHome: path.join(user, 'replays', 'nla'), runDir: path.join(user, 'replays', 'nla', 'replay', 'nla') };
 }
 
@@ -150,7 +150,9 @@ function toolsHome({ replay }) {
 }
 
 const toolsEnv = (home, extra = {}) => ({
-  PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_AUTONOMOUS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'), ...extra,
+  PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_AUTONOMOUS: '', FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_ENV_FILE: path.join(home, 'none.env'),
+  // fx_orb (tests/fixtures/strategies-golden, the retired orb's rules): the strategy order_plan plans with.
+  FTH_STRATEGIES_DIRS: FX_GOLDEN, ...extra,
 });
 
 async function withTools(env, fn) {
@@ -187,7 +189,7 @@ test('harness tools under a replay clock: a bars file with a later bar is refuse
       ['strategies_recent', { symbol: 'MNQ' }],
       ['market_snapshot', {}],
       ['mtf_read', { json: true }],
-      ['order_plan', { symbol: 'MNQ', strategy: 'orb', side: 'long' }],
+      ['order_plan', { symbol: 'MNQ', strategy: 'fx_orb', side: 'long' }],
     ] };
   };
   const r = cases(replayHome);

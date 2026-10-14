@@ -3,7 +3,7 @@
 /**
  * The two-layer evaluator end to end (docs/LEARNED-RULEBOOK.md R6-R9) on the repo's real NQ 3-minute CSV
  * fixture (tests/fixtures/parity/NQ-3m.csv, five sessions of April 2026), moved 260 weeks back so its
- * sessions fall in Train (the weekdays kept): scripts/evaluate.js runs a fixture policy strategy over shipped
+ * sessions fall in Train (the weekdays kept): scripts/evaluate.js runs a fixture policy strategy over fixture
  * rules strategies on a fixture account with 2-session attempts, through both layers, and prints a result the
  * promotion gate reads. The same run is deterministic under its seed. A held-out window is refused without a
  * look, and with one the look reaches the ledger before any bar is read.
@@ -17,7 +17,7 @@ const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { gateFailures } = require('../../scripts/lib/prop/promotion');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
-const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES, FX_GOLDEN, withComponents } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -29,27 +29,27 @@ function setup() {
   const lines = ['datetime,open,high,low,close,volume', ...bars.map(b => `${new Date(Date.parse(b.t) - SHIFT).toISOString()},${b.o},${b.h},${b.l},${b.c},${b.v}`)];
   const data = path.join(home, 'NQ-3m-train.csv');
   fs.writeFileSync(data, `${lines.join('\n')}\n`);
-  // Its components: orb and the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV.
+  // Its components: the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV, and
+  // fx_orb (tests/fixtures/strategies-golden: the retired orb's rules).
   const strat = path.join(home, 'strategies', 'eval_fixture');
   fs.mkdirSync(strat, { recursive: true });
-  const policy = fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+  const policy = withComponents(fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8'), ['fx_cross', 'fx_break', 'fx_orb'])
     .replace(/^name: prop_portfolio$/m, 'name: eval_fixture')
     .replace(/^instruments: .*$/m, 'instruments: [MNQ, NQ]')
-    .replace(/^strategies: .*$/m, 'strategies: [fx_cross, fx_break, orb]')
     .replace(/^account: .*$/m, 'account: eval_acct')
     .replace(/^contracts: .*$/m, 'contracts: micro');
   fs.writeFileSync(path.join(strat, 'STRATEGY.md'), policy);
-  // The same policy on orb alone: the fixtures' trades are what the full one has beyond it.
-  fs.mkdirSync(path.join(home, 'strategies', 'eval_orb'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'strategies', 'eval_orb', 'STRATEGY.md'), policy.replace(/^name: eval_fixture$/m, 'name: eval_orb').replace(/^strategies: .*$/m, 'strategies: [orb]'));
+  // The same policy on fx_orb alone: the other fixtures' trades are what the full one has beyond it.
+  fs.mkdirSync(path.join(home, 'strategies', 'eval_fxorb'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'strategies', 'eval_fxorb', 'STRATEGY.md'), withComponents(policy.replace(/^name: eval_fixture$/m, 'name: eval_fxorb'), ['fx_orb']));
   const acct = path.join(home, 'accounts', 'eval_acct');
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
     .replace(/^name: test_50k$/m, 'name: eval_acct').replace(/^sessions: 30\b/m, 'sessions: 2').replace(/^profit_target: 3000\b/m, 'profit_target: 300'));
   // Its rulebook (the fixture's, renamed), listing the policy with prop_portfolio's numbers: one place.
   fs.writeFileSync(path.join(acct, 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace(/^name: test_50k$/m, 'name: eval_acct'));
-  listPolicies(acct, ['eval_fixture', 'eval_orb']);
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || '', FTH_HOME: home, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_STRATEGIES}`, FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
+  listPolicies(acct, ['eval_fixture', 'eval_fxorb']);
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || '', FTH_HOME: home, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_STRATEGIES},${FX_GOLDEN}`, FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   return { home, data, env, sessions };
 }
@@ -69,12 +69,12 @@ test('e2e: the evaluator scores a policy on the CSV fixture through both layers;
   assert.strictEqual(r.look, null);
   assert.strictEqual(r.account, 'eval_acct');
   assert.ok(r.trades > 0, `trades ${r.trades}: ${a.stderr}`);
-  assert.deepStrictEqual(r.strategies, ['fx_cross', 'fx_break', 'orb']);
-  // fx_cross and fx_break fire on this CSV: the policy over them and orb trades more than orb alone does.
-  const orbOnly = run(args.map(x => (x === 'eval_fixture' ? 'eval_orb' : x)), env);
+  assert.deepStrictEqual(r.strategies, ['fx_cross', 'fx_break', 'fx_orb']);
+  // fx_cross and fx_break fire on this CSV: the policy over them and fx_orb trades more than fx_orb alone does.
+  const orbOnly = run(args.map(x => (x === 'eval_fixture' ? 'eval_fxorb' : x)), env);
   assert.strictEqual(orbOnly.status, 0, orbOnly.stderr);
   const orbTrades = JSON.parse(orbOnly.stdout).trades;
-  assert.ok(r.trades > orbTrades, `the fixtures add trades: ${r.trades} vs orb alone ${orbTrades}`);
+  assert.ok(r.trades > orbTrades, `the fixtures add trades: ${r.trades} vs fx_orb alone ${orbTrades}`);
   assert.strictEqual(r.factsErrors, 0, 'every trade has its facts from the live scan and briefing');
   assert.ok(r.real.attempts >= 1 && r.real.attempts === r.attempts);
   assert.strictEqual(r.real.passed + r.real.blown + r.real.timeout + r.real.unfinished, r.real.attempts);

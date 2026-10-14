@@ -17,19 +17,6 @@ policies:                       # each policy strategy that trades this account 
       trail_activate_r: 2       # hold the setup's own stop until this many R ...
       trail_giveback_r: 0.5     # ... then trail this many R behind the best price
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
-  prop_flow_1m:
-    sizing:
-      cushion_frac: 0.2
-      min_size_guard: 1.5
-      cap_usd: off              # off: no dollar cap
-      drawdown_halve_usd: off   # off: no drawdown halving
-      stop_slippage_ticks: 1
-      clock_k: off
-      r_per_session: 0.3
-    exit:
-      trail_activate_r: 2
-      trail_giveback_r: 0.5
-    multipliers: []
 enforced: [daily_loss_soft, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
 taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
@@ -78,15 +65,18 @@ one with its evidence.
 | `daily_loss_soft` | this account's profile | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
 | `policies.prop_portfolio.exit` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
-| `policies.prop_flow_1m.sizing` | `prop_flow_1m`'s STRATEGY.md | not measured | not measured | not learned |
-| `policies.prop_flow_1m.exit` | `prop_flow_1m`'s STRATEGY.md | not measured | not measured | not learned |
+
+`prop_portfolio` lists no strategies since 2026-10-14 (every rules strategy
+retired, strategies/README.md): it has no setups, so it sizes nothing until
+its one component, `trade_lifecycle`, is built (docs/COMPOSED-ENTRY.md).
+Its numbers here are unchanged. The retired `prop_flow_1m`'s entry went with
+it.
 
 Every sizing key is stated for every policy: the loader refuses an entry
 that leaves one out, since the code's default (`combine.js`
 `DEFAULT_SIZING`) is off for the cap, the drawdown halving and the clock
 and would loosen risk unseen. A limit is turned off only by the word `off`
-(`prop_flow_1m` has no cap, no drawdown halving and no clock, as before):
-0, an empty value, a negative number or text is refused, never read as
+(as `clock_k` is here): 0, an empty value, a negative number or text is refused, never read as
 off. Each policy is sized only from here: a policy on this account that
 isn't listed is refused, and so is the account when this file is missing,
 malformed, or names another account.
@@ -98,7 +88,7 @@ node scripts/combine.js status
   prop_portfolio size budget: cushion_frac x the cushion, at most cap_usd,
   halved while the balance is drawdown_halve_usd or more below its peak.
 
-A verdict: prop_portfolio long setup from orb: full, multiplier 1,
+A verdict: prop_portfolio long setup from its component: full, multiplier 1,
   at most 4 NQ with a 40-tick stop. A multiplier item whose fact is missing
   would make it a skip.
 ```

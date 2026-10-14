@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
-const { FAKE_BROKERS, tmpDir } = require('../helpers');
+const { FAKE_BROKERS, FX_GOLDEN, tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FAKE_SERVER = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
@@ -81,7 +81,7 @@ function run(withField) {
   const args = path.join(home, 'args.jsonl');
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_SERVER,
-    FAKE_BARS: file, FAKE_BARS_FROM_START: '1', FAKE_ARGS: args, FTH_STRATEGIES_DIRS: path.join(home, 'strategies'),
+    FAKE_BARS: file, FAKE_BARS_FROM_START: '1', FAKE_ARGS: args, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_GOLDEN}`,
   };
   const node = argv => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), ...argv], { cwd: ROOT, env, encoding: 'utf8', timeout: 120000 });
   const out = path.join(home, 'MNQ-3m.jsonl');
@@ -94,7 +94,7 @@ function run(withField) {
     assert.strictEqual(r.status, 0, r.stderr + r.stdout);
     return { log: r.stdout, report: JSON.parse(fs.readFileSync(path.join(home, dir, 'report.json'), 'utf8')), md: fs.readFileSync(path.join(home, dir, 'report.md'), 'utf8') };
   };
-  return { fetched, calls, bars, probe: backtest('field_probe', 'probe'), va: backtest('value_area', 'va') };
+  return { fetched, calls, bars, probe: backtest('field_probe', 'probe'), va: backtest('fx_value_area', 'va') };
 }
 
 test('fetch --timeframe 3 -> JSON lines -> backtest: the broker\'s nested field survives, field() fires on it, coverage is reported', () => {
@@ -118,9 +118,10 @@ test('fetch --timeframe 3 -> JSON lines -> backtest: the broker\'s nested field 
   assert.ok(r.probe.log.includes(`field coverage: field_probe field("ext.deep.signal") on MNQ: ${share} of ${n} bars`), r.probe.log);
   assert.ok(r.probe.log.includes(`warning: field_probe reads field("ext.deep.signal"), which only ${share} of the MNQ bars (${n - NULL_TAIL} of ${n}) in this data carry`), r.probe.log);
   assert.ok(r.probe.md.includes(`| field_probe | \`ext.deep.signal\` | MNQ | ${share} | ${n - NULL_TAIL} / ${n} |`), r.probe.md);
-  // value_area (3m) reads the broker's flow from the same fetched bars: its coverage is counted the same way.
+  // fx_value_area (3m, a fixture holding the retired value_area's rules) reads the broker's flow from the same fetched
+  // bars: its coverage is counted the same way.
   const va = r.va.report.fieldCoverage;
-  assert.ok(va.length === 1 && va[0].strategy === 'value_area' && va[0].coverage.MNQ.carried === n - NULL_TAIL, JSON.stringify(va));
+  assert.ok(va.length === 1 && va[0].strategy === 'fx_value_area' && va[0].coverage.MNQ.carried === n - NULL_TAIL, JSON.stringify(va));
 });
 
 test('the same prices without the broker\'s field: fetched as plain bars, no trade, and 0% coverage said', () => {

@@ -1,146 +1,4 @@
-strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
-strategy cisd_ote: {
-  "body": "9046 chars sha256:379522650b4a03a9",
-  "compiledRules": "sha256:22c22c3f06d68e2e",
-  "compiledStop": "sha256:c5497faa7f3507dd",
-  "compiledTarget": null,
-  "description": "Textbook CISD + OTE displacement and pullback - a strong completed 15-minute or 60-minute candle closes through the open of the run before it (a change in state of delivery); enter on the 3-minute bounce from the displacement leg's OTE zone, stop beyond the leg's origin. A prior key-level sweep is confluence, never required. Paper until a census and the owner promote it.",
-  "errors": [],
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "trend",
-  "name": "cisd_ote",
-  "params": {
-    "cisdMinRun": 2,
-    "cisdMaxWait": 6,
-    "cisdExpiry": 12,
-    "cisdVoidTol": 0.05,
-    "cisdBufferAtr": 0.1,
-    "cisdMinBody": 0.6,
-    "cisdMinRangeAtr": 1,
-    "cisdHigherMinutes": 60
-  },
-  "risk": {
-    "stop": "cisd_risk(15)",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "cisd_entry(15) > 0"
-    ],
-    "short": [
-      "cisd_entry(15) < 0"
-    ]
-  },
-  "signal": "rules",
-  "source": "the owner's CISD definition (change in state of delivery; the cisd skill) and the OTE golden zone (the fib-retracement skill), rewritten from the version 3 port of the original bot (strategies/cisd_ote.py, cisd_ote_detect.py); detector in scripts/lib/trading/cisd.js, fib levels in scripts/lib/trading/fib.js",
-  "status": "paper",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 4
-}
-strategy crt_1h: {
-  "body": "6989 chars sha256:7978f994ff460e05",
-  "compiledRules": "sha256:1768503060ac2528",
-  "compiledStop": "sha256:646ca51de6c81afc",
-  "compiledTarget": "sha256:4f720fbc74512798",
-  "description": "Candle Range Theory liquidity sweep on the 1-hour candle - the hour raids the previous hour's high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous hour's range. One setup per hour. Reversal setup for MNQ, MES, MYM, M2K.",
-  "errors": [],
-  "exit": {
-    "target": "crt_target(60)",
-    "max_bars": 40
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "reversal",
-  "name": "crt_1h",
-  "params": {
-    "crtSweepBars": 10,
-    "crtShiftBars": 5,
-    "crtMaxDepth": 0.5,
-    "crtMinRangeAtr": 3,
-    "crtBufferAtr": 0.25,
-    "crtMinRR": 2
-  },
-  "risk": {
-    "stop": "crt_risk(60)",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "crt_dir(60) > 0"
-    ],
-    "short": [
-      "crt_dir(60) < 0"
-    ]
-  },
-  "sessions": [
-    "08:00-15:30@America/New_York"
-  ],
-  "signal": "rules",
-  "source": "Candle Range Theory (CRT) / turtle-soup raid of the previous candle's high or low, as taught in community CRT material (no published backtest); fixed here as a mechanical detector (scripts/lib/trading/crt.js) so it can be backtested. Parameters are starting values, not fitted on real data.",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 2
-}
-strategy crt_4h: {
-  "body": "6053 chars sha256:5eba451dc537e295",
-  "compiledRules": "sha256:06983aecf794e6f8",
-  "compiledStop": "sha256:dabc8502fe2a2e8e",
-  "compiledTarget": "sha256:c1f256b9635ec579",
-  "description": "Candle Range Theory liquidity sweep on the 4-hour candle - the 06:00 or 10:00 ET candle raids the previous 4-hour high or low, reclaims the range, and a 3-minute structure shift confirms; target the far side of the previous 4-hour range. One setup per candle. Reversal setup for MNQ, MES, MYM, M2K.",
-  "errors": [],
-  "exit": {
-    "target": "crt_target(240)",
-    "max_bars": 80
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "reversal",
-  "name": "crt_4h",
-  "params": {
-    "crtSweepBars": 20,
-    "crtShiftBars": 5,
-    "crtMaxDepth": 0.5,
-    "crtMinRangeAtr": 6,
-    "crtBufferAtr": 0.25,
-    "crtMinRR": 2
-  },
-  "risk": {
-    "stop": "crt_risk(240)",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "crt_dir(240) > 0"
-    ],
-    "short": [
-      "crt_dir(240) < 0"
-    ]
-  },
-  "sessions": [
-    "06:00-14:00@America/New_York"
-  ],
-  "signal": "rules",
-  "source": "Candle Range Theory (CRT) / turtle-soup raid of the previous 4-hour candle, with the CME 4-hour key times (candles opening 02:00, 06:00, 10:00 ET), as taught in community CRT material (no published backtest); fixed here as a mechanical detector (scripts/lib/trading/crt.js) so it can be backtested. Parameters are starting values, not fitted on real data.",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 2
-}
+strategies (1): prop_portfolio
 strategy ext_reader: {
   "body": "965 chars sha256:5de2ee4a1c01e6cd",
   "compiledRules": "sha256:918e17a16c8a19fb",
@@ -184,12 +42,154 @@ strategy ext_reader: {
   "valid": true,
   "version": 1
 }
-strategy ofi: {
-  "body": "5061 chars sha256:9223da1b9a054ed5",
+strategy fx_cisd_ote: {
+  "body": "533 chars sha256:b3aed3885a9fe708",
+  "compiledRules": "sha256:22c22c3f06d68e2e",
+  "compiledStop": "sha256:c5497faa7f3507dd",
+  "compiledTarget": null,
+  "description": "A test fixture strategy - the rules of the retired cisd_ote strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
+  "errors": [],
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "fx_cisd_ote",
+  "params": {
+    "cisdMinRun": 2,
+    "cisdMaxWait": 6,
+    "cisdExpiry": 12,
+    "cisdVoidTol": 0.05,
+    "cisdBufferAtr": 0.1,
+    "cisdMinBody": 0.6,
+    "cisdMinRangeAtr": 1,
+    "cisdHigherMinutes": 60
+  },
+  "risk": {
+    "stop": "cisd_risk(15)",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "cisd_entry(15) > 0"
+    ],
+    "short": [
+      "cisd_entry(15) < 0"
+    ]
+  },
+  "signal": "rules",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
+  "status": "paper",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 4
+}
+strategy fx_crt_1h: {
+  "body": "523 chars sha256:a92083b646250464",
+  "compiledRules": "sha256:1768503060ac2528",
+  "compiledStop": "sha256:646ca51de6c81afc",
+  "compiledTarget": "sha256:4f720fbc74512798",
+  "description": "A test fixture strategy - the rules of the retired crt_1h strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
+  "errors": [],
+  "exit": {
+    "target": "crt_target(60)",
+    "max_bars": 40
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "fx_crt_1h",
+  "params": {
+    "crtSweepBars": 10,
+    "crtShiftBars": 5,
+    "crtMaxDepth": 0.5,
+    "crtMinRangeAtr": 3,
+    "crtBufferAtr": 0.25,
+    "crtMinRR": 2
+  },
+  "risk": {
+    "stop": "crt_risk(60)",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "crt_dir(60) > 0"
+    ],
+    "short": [
+      "crt_dir(60) < 0"
+    ]
+  },
+  "sessions": [
+    "08:00-15:30@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 2
+}
+strategy fx_crt_4h: {
+  "body": "523 chars sha256:cc8133ea50aef908",
+  "compiledRules": "sha256:06983aecf794e6f8",
+  "compiledStop": "sha256:dabc8502fe2a2e8e",
+  "compiledTarget": "sha256:c1f256b9635ec579",
+  "description": "A test fixture strategy - the rules of the retired crt_4h strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
+  "errors": [],
+  "exit": {
+    "target": "crt_target(240)",
+    "max_bars": 80
+  },
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "reversal",
+  "name": "fx_crt_4h",
+  "params": {
+    "crtSweepBars": 20,
+    "crtShiftBars": 5,
+    "crtMaxDepth": 0.5,
+    "crtMinRangeAtr": 6,
+    "crtBufferAtr": 0.25,
+    "crtMinRR": 2
+  },
+  "risk": {
+    "stop": "crt_risk(240)",
+    "min_rr": 2
+  },
+  "rules": {
+    "long": [
+      "crt_dir(240) > 0"
+    ],
+    "short": [
+      "crt_dir(240) < 0"
+    ]
+  },
+  "sessions": [
+    "06:00-14:00@America/New_York"
+  ],
+  "signal": "rules",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 2
+}
+strategy fx_ofi: {
+  "body": "508 chars sha256:99aa5780bd3059a9",
   "compiledRules": "sha256:c61c18afa8ad98bf",
   "compiledStop": null,
   "compiledTarget": null,
-  "description": "Order-flow imbalance continuation on 1-minute futures bars - enter when buying (or selling) dominates over 1, 3 and 5 minutes and price actually moves with it (real flow, not absorption).",
+  "description": "A test fixture strategy - the rules of the retired ofi strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "exit": {
     "trail_activate_r": 2,
@@ -202,7 +202,7 @@ strategy ofi: {
     "M2K"
   ],
   "mtf": "trend",
-  "name": "ofi",
+  "name": "fx_ofi",
   "risk": {
     "stop": "atr:1",
     "min_rr": 2
@@ -228,18 +228,18 @@ strategy ofi: {
     ]
   },
   "signal": "rules",
-  "source": "harness original (order flow from the broker's 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "1m",
   "valid": true,
   "version": 1
 }
-strategy ofi_absorption: {
-  "body": "3041 chars sha256:0671b0813b5b1898",
+strategy fx_ofi_absorption: {
+  "body": "563 chars sha256:ffbe1be568e29850",
   "compiledRules": "sha256:05b68d909605fb89",
   "compiledStop": null,
   "compiledTarget": null,
-  "description": "Absorption reversal on 1-minute futures bars - heavy selling (buying) over 5 minutes that fails to move price, then a 1-minute bar turns; trade against the absorbed side.",
+  "description": "A test fixture strategy - the rules of the retired ofi_absorption strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "exit": {
     "trail_activate_r": 2,
@@ -252,7 +252,7 @@ strategy ofi_absorption: {
     "M2K"
   ],
   "mtf": "reversal",
-  "name": "ofi_absorption",
+  "name": "fx_ofi_absorption",
   "risk": {
     "stop": "atr:1",
     "min_rr": 2
@@ -274,18 +274,18 @@ strategy ofi_absorption: {
     ]
   },
   "signal": "rules",
-  "source": "harness original (order flow from the broker's 1-minute bars); thresholds are starting values, not yet backtested on 1-minute data",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "1m",
   "valid": true,
   "version": 1
 }
-strategy orb: {
-  "body": "2662 chars sha256:53d838ec3fbfdc7c",
+strategy fx_orb: {
+  "body": "784 chars sha256:b76886fce635f1a5",
   "compiledRules": "sha256:4c86c2b5f24228c4",
   "compiledStop": null,
   "compiledTarget": null,
-  "description": "Opening range breakout strategy for equity index futures (15-minute range from 09:30 ET, ADX-gated, 3-minute trigger), ported from the original Python bot. Use when price closes beyond the opening range or when planning the morning session.",
+  "description": "A test fixture strategy - a close beyond the 15-minute opening range from 09:30 ET with ADX(14) >= 18 on 3-minute bars, the rules of the orb port retired on 2026-10-14, kept for the parity test against the original bot's output and as a session-bound rules strategy. Test use only.",
   "errors": [],
   "exit": {
     "trail_activate_r": 2,
@@ -298,7 +298,7 @@ strategy orb: {
     "M2K"
   ],
   "mtf": "trend",
-  "name": "orb",
+  "name": "fx_orb",
   "params": {
     "orbMinutes": 15
   },
@@ -331,116 +331,18 @@ strategy orb: {
     "ny"
   ],
   "signal": "rules",
-  "source": "original bot, strategies/orb.py",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 3
-}
-strategy prop_flow_1m: {
-  "account": "<name-43f416>",
-  "body": "2384 chars sha256:0438c07e7e9a3ef9",
-  "compiledRules": null,
-  "compiledStop": null,
-  "compiledTarget": null,
-  "contracts": "auto",
-  "description": "Prop-challenge policy strategy over the 1-minute order-flow strategies (ofi, ofi_absorption) - it sizes each flow setup from the attempt's budget in the selected contract (or skips it), and trails every trade, on its account's combine.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "NQ"
-  ],
-  "multipliers": [],
-  "name": "prop_flow_1m",
-  "risk": {
-    "stop": "strategy",
-    "min_rr": 2
-  },
-  "signal": "policy",
-  "sizing": {
-    "cushion_frac": 0.2,
-    "min_size_guard": 1.5,
-    "cap_usd": 0,
-    "drawdown_halve_usd": 0,
-    "stop_slippage_ticks": 1,
-    "clock_k": 0,
-    "r_per_session": 0.3
-  },
-  "source": "harness design (prop_portfolio's counterpart); its strategies read order flow from the broker's 1-minute bars, so backtests need the broker's bars as JSON (backtest.js fetch --out <file.json>)",
-  "status": "active",
-  "strategies": [
-    "ofi",
-    "ofi_absorption"
-  ],
-  "timeframe": "1m",
-  "valid": true,
-  "version": 1
-}
-strategy prop_portfolio: {
-  "account": "<name-43f416>",
-  "body": "4847 chars sha256:ba321cc576daf954",
-  "compiledRules": null,
-  "compiledStop": null,
-  "compiledTarget": null,
-  "contracts": "auto",
-  "description": "Prop-challenge policy strategy over every rules strategy on its timeframe (3 minutes) - it sizes each setup on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade, to pass its account's combine without blowing it.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "NQ",
-    "MES",
-    "ES",
-    "MYM",
-    "YM",
-    "M2K",
-    "RTY"
-  ],
-  "multipliers": [],
-  "name": "prop_portfolio",
-  "risk": {
-    "stop": "strategy",
-    "min_rr": 2
-  },
-  "signal": "policy",
-  "sizing": {
-    "cushion_frac": 0.3,
-    "cap_usd": 1000,
-    "drawdown_halve_usd": 1500,
-    "min_size_guard": 1.5,
-    "stop_slippage_ticks": 1,
-    "clock_k": 0,
-    "r_per_session": 0.3
-  },
-  "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
-  "status": "active",
-  "strategies": [
-    "cisd_ote",
-    "orb",
-    "vwap_reclaim",
-    "crt_1h",
-    "crt_4h",
-    "value_area",
-    "value_area_reentry",
-    "value_area_breakout"
-  ],
   "timeframe": "3m",
   "valid": true,
   "version": 1
 }
-strategy value_area: {
-  "body": "8269 chars sha256:1e8d5fac1445587d",
+strategy fx_value_area: {
+  "body": "543 chars sha256:ea4fd126670eb16e",
   "compiledRules": "sha256:253dee0ab600c3cd",
   "compiledStop": "sha256:29b1123a8f006e5e",
   "compiledTarget": "sha256:3cca3d3b796915e5",
-  "description": "Volume profile POC reaction on equity index micros - price rejects the prior RTH day's point of control or breaks through it, confirmed by order flow or a range expansion on volume; target the edge of the value area. Trend setup, from the prior day's bar-based volume profile.",
+  "description": "A test fixture strategy - the rules of the retired value_area strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "exit": {
     "target": {
@@ -456,7 +358,7 @@ strategy value_area: {
     "M2K"
   ],
   "mtf": "trend",
-  "name": "value_area",
+  "name": "fx_value_area",
   "params": {
     "vpRows": 100,
     "vpRowSize": 0,
@@ -560,18 +462,18 @@ strategy value_area: {
     "10:00-15:00@America/New_York"
   ],
   "signal": "rules",
-  "source": "Market profile POC (Dalton, Mind Over Markets - the POC as the fairest price, where auctions turn or pass through) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented); order flow from the broker's bars. Mechanical form and thresholds are starting values, not fitted on real data.",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
   "version": 1
 }
-strategy value_area_breakout: {
-  "body": "3226 chars sha256:731fa6615d2b6fa7",
+strategy fx_value_area_breakout: {
+  "body": "588 chars sha256:0971e22a2fe88838",
   "compiledRules": "sha256:9c86813656116cd0",
   "compiledStop": "sha256:3ca6b986bbbda052",
   "compiledTarget": null,
-  "description": "Volume profile acceptance breakout on equity index micros - two 3-minute closes beyond the prior RTH day's value area on above-average volume, trading with the prevailing trend, trailed like the other trend setups. From the prior day's bar-based volume profile.",
+  "description": "A test fixture strategy - the rules of the retired value_area_breakout strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "exit": {
     "trail_activate_r": 2,
@@ -584,7 +486,7 @@ strategy value_area_breakout: {
     "M2K"
   ],
   "mtf": "trend",
-  "name": "value_area_breakout",
+  "name": "fx_value_area_breakout",
   "params": {
     "vpRows": 100,
     "vpRowSize": 0,
@@ -627,18 +529,18 @@ strategy value_area_breakout: {
     "10:00-15:00@America/New_York"
   ],
   "signal": "rules",
-  "source": "Value area acceptance (Dalton, Mind Over Markets - initiative activity outside value) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented). Mechanical form and parameters are starting values, not fitted on real data.",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
   "version": 1
 }
-strategy value_area_reentry: {
-  "body": "4918 chars sha256:2ab0923118515bbb",
+strategy fx_value_area_reentry: {
+  "body": "583 chars sha256:535ebc0f24c4ee73",
   "compiledRules": "sha256:30ca0f93c8cc7aa4",
   "compiledStop": "sha256:7a8202b7f2760396",
   "compiledTarget": "sha256:3cca3d3b796915e5",
-  "description": "Volume profile 80 percent rule on equity index micros - the RTH session opens outside the prior day's value area, two 3-minute closes back inside accept it, and the trade targets the far side of value. Reversal setup, from the prior RTH day's bar-based volume profile.",
+  "description": "A test fixture strategy - the rules of the retired value_area_reentry strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "exit": {
     "target": {
@@ -654,7 +556,7 @@ strategy value_area_reentry: {
     "M2K"
   ],
   "mtf": "reversal",
-  "name": "value_area_reentry",
+  "name": "fx_value_area_reentry",
   "params": {
     "vpRows": 100,
     "vpRowSize": 0,
@@ -706,18 +608,18 @@ strategy value_area_reentry: {
     "09:30-15:00@America/New_York"
   ],
   "signal": "rules",
-  "source": "The market-profile \"80% rule\" (Dalton, Mind Over Markets; CBOT Market Profile) on a bar-based volume profile (scripts/lib/trading/volume-profile.js, the method of LuxAlgo's Volume Profile with Node Detection, re-implemented). Mechanical form and parameters are starting values, not fitted on real data.",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
   "version": 1
 }
-strategy vwap_reclaim: {
-  "body": "1719 chars sha256:fbae75cd12c91307",
+strategy fx_vwap_reclaim: {
+  "body": "553 chars sha256:f030c1d2cfa5943c",
   "compiledRules": "sha256:02aaf0dacac9a44b",
   "compiledStop": null,
   "compiledTarget": null,
-  "description": "Trend-day VWAP reclaim on equity index micros - a 3-minute close back through RTH VWAP in the direction of the 50 EMA with ADX confirming. Its trigger is written as rules in Markdown, no code.",
+  "description": "A test fixture strategy - the rules of the retired vwap_reclaim strategy (2026-10-14), kept so the decision goldens and the code it exercises (the rules language, bar fields, detectors) stay pinned. Test use only.",
   "errors": [],
   "filters": {
     "max_vwap_distance_atr": 1.5
@@ -727,7 +629,7 @@ strategy vwap_reclaim: {
     "MES"
   ],
   "mtf": "trend",
-  "name": "vwap_reclaim",
+  "name": "fx_vwap_reclaim",
   "regime_gate": true,
   "regimes": [
     "trend"
@@ -752,11 +654,57 @@ strategy vwap_reclaim: {
     "10:00-15:00@America/New_York"
   ],
   "signal": "rules",
-  "source": "rules strategy written for this harness (no backtest record yet); activated by the owner for the labelling replays (active means tradeable everywhere, live too), to be reviewed on its labelled trades",
+  "source": "tests/fixtures/strategies-golden (test fixture; loaded with FTH_STRATEGIES_DIRS)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
   "version": 1
+}
+strategy prop_portfolio: {
+  "account": "<name-43f416>",
+  "body": "3927 chars sha256:5ec04543caf9db43",
+  "compiledRules": null,
+  "compiledStop": null,
+  "compiledTarget": null,
+  "contracts": "auto",
+  "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and trails every trade. It lists none today; its one component will be trade_lifecycle.",
+  "errors": [],
+  "exit": {
+    "trail_activate_r": 2,
+    "trail_giveback_r": 0.5
+  },
+  "instruments": [
+    "MNQ",
+    "NQ",
+    "MES",
+    "ES",
+    "MYM",
+    "YM",
+    "M2K",
+    "RTY"
+  ],
+  "multipliers": [],
+  "name": "prop_portfolio",
+  "risk": {
+    "stop": "strategy",
+    "min_rr": 2
+  },
+  "signal": "policy",
+  "sizing": {
+    "cushion_frac": 0.3,
+    "cap_usd": 1000,
+    "drawdown_halve_usd": 1500,
+    "min_size_guard": 1.5,
+    "stop_slippage_ticks": 1,
+    "clock_k": 0,
+    "r_per_session": 0.3
+  },
+  "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
+  "status": "active",
+  "strategies": [],
+  "timeframe": "3m",
+  "valid": true,
+  "version": 2
 }
 accounts (5): test_100k, test_50k, <name-43f416>, <name-aa1519>, <name-45bd4d>
 account test_100k: {

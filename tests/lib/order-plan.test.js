@@ -9,7 +9,7 @@ const { stopTicks, targetTicks, ticksText, distanceText, targetFor, buildPlan } 
 const { specFor } = require('../../scripts/lib/trading/contracts');
 const { checkConsistency, evaluateOrder } = require('../../scripts/lib/trading/order-gate');
 const { loadConfig } = require('../../scripts/lib/trading/config');
-const { NOW, plan: planEntry, trendHome } = require('../helpers');
+const { NOW, plan: planEntry, trendHome, FX_GOLDEN } = require('../helpers');
 
 const MNQ = specFor('MNQ');
 const MES = specFor('MES');
@@ -118,17 +118,18 @@ test('buildPlan: its place_order arguments pass the order gate\'s consistency ch
   }
 });
 
-test('buildPlan: a planned orb entry passes every gate check (tag, trigger, trend, stop, consistency)', () => {
+test('buildPlan: a planned fx_orb entry passes every gate check (tag, trigger, trend, stop, consistency)', () => {
   const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  // fx_orb: the fixture holding the retired orb rules (no rules strategy ships since 2026-10-14).
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
   for (const [side, bias] of [['long', 1], ['short', -1]]) {
-    const home = trendHome(undefined, { biases: { 240: bias, 60: bias, 15: bias }, fired: [{ name: 'orb', direction: side }] });
-    const { args } = buildPlan(base({ name: 'orb', side, accountId: 7, entryRef: 21503.25, stop: 21, stopDistance: 5.25, exit: { targetR: 1.5 } }));
+    const home = trendHome(undefined, { biases: { 240: bias, 60: bias, 15: bias }, fired: [{ name: 'fx_orb', direction: side }] });
+    const { args } = buildPlan(base({ name: 'fx_orb', side, accountId: 7, entryRef: 21503.25, stop: 21, stopDistance: 5.25, exit: { targetR: 1.5 } }));
     const r = evaluateOrder({ input: args, entries: [planEntry()], now: NOW, config: { ...config, home }, strategies });
     assert.deepStrictEqual(r.violations, [], side);
     // The same order on the other side than the one that fired is refused: the plan's side matters.
-    const other = buildPlan(base({ name: 'orb', side: side === 'long' ? 'short' : 'long', accountId: 7, entryRef: 21503.25, stop: 21, exit: { targetR: 1.5 } })).args;
+    const other = buildPlan(base({ name: 'fx_orb', side: side === 'long' ? 'short' : 'long', accountId: 7, entryRef: 21503.25, stop: 21, exit: { targetR: 1.5 } })).args;
     assert.ok(evaluateOrder({ input: other, entries: [planEntry()], now: NOW, config: { ...config, home }, strategies }).violations.length > 0);
   }
 });

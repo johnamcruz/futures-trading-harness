@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, rootWithPolicies } = require('../helpers');
+const { tmpDir, rootWithPolicies, FX_STRATEGIES, FX_GOLDEN } = require('../helpers');
 const L =require('../../scripts/lib/lanes');
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
@@ -68,8 +68,9 @@ test('one lane equals the legacy config: the same config but the lanes key, and 
   assert.match(invalid({ ...BASE, trigger: 'signal', lanes: [{ timeframe: 3 }] }), /trigger: with lanes, the first lane's trigger \(bar\)/);
 });
 
-test('the scan is the same with one lane as with the legacy timeframe, on the shipped strategies and real bars', () => {
-  const all = loadStrategies(ROOT, {}).strategies;
+test('the scan is the same with one lane as with the legacy timeframe, on the fixture strategies and real bars', () => {
+  // The shipped tree and the fixture rules strategies (none ships since 2026-10-14; FX_GOLDEN holds their rules, 3m and 1m).
+  const all = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: [FX_STRATEGIES, FX_GOLDEN].join(',') }).strategies;
   for (const s of G.SERIES) {
     const bars = G.load(s).slice(0, 1300);
     const now = new Date(Date.parse(bars.at(-1).t) + s.minutes * 60000);
@@ -85,8 +86,8 @@ test('the scan is the same with one lane as with the legacy timeframe, on the sh
   const bars = G.load(s).slice(0, 1300);
   const now = new Date(Date.parse(bars.at(-1).t) + 180000);
   const rulesOnly = all.filter(x => x.signal !== 'policy');
-  const narrowed = validateConfig({ ...BASE, lanes: [{ timeframe: 3, strategies: ['cisd_ote', 'orb'] }] });
-  assert.deepStrictEqual(runnerScan(rulesOnly, narrowed, s.symbol, bars, now).map(r => r.name).sort(), ['cisd_ote', 'orb']);
+  const narrowed = validateConfig({ ...BASE, lanes: [{ timeframe: 3, strategies: ['fx_cisd_ote', 'fx_orb'] }] });
+  assert.deepStrictEqual(runnerScan(rulesOnly, narrowed, s.symbol, bars, now).map(r => r.name).sort(), ['fx_cisd_ote', 'fx_orb']);
 });
 
 test('lanes are checked: timeframe 1 to 60 and once each, known keys, trigger bar or signal, name lists', () => {
@@ -197,7 +198,7 @@ test('preflight reports each lane and fails a listing off its lane; prop profile
 
 test('CLI start: a lane listing off its timeframe is refused before anything runs; one lane and several lanes start', () => {
   const dir = tmpDir();
-  const env = { ...process.env, HOME: dir, FTH_HOME: path.join(dir, '.futures-trading-harness'), FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP') };
+  const env = { ...process.env, HOME: dir, FTH_HOME: path.join(dir, '.futures-trading-harness'), FTH_KILL_SWITCH_FILE: path.join(dir, 'STOP'), FTH_STRATEGIES_DIRS: FX_GOLDEN };
   delete env.FTH_REPLAY_NOW;
   const cli = path.join(ROOT, 'scripts', 'autotrader.js');
   const start = (raw, k) => {
@@ -209,9 +210,10 @@ test('CLI start: a lane listing off its timeframe is refused before anything run
     const multi = start({ account: '7', lanes: [{ timeframe: 3 }, { timeframe: 1, trigger: 'signal' }] }, 'multi');
     assert.strictEqual(multi.status, 0, multi.stderr);
     assert.match(multi.stdout, /next action now:/);
-    const off = start({ lanes: [{ timeframe: 3, policies: ['prop_flow_1m'] }] }, 'off');
+    // fx_ofi (a fixture holding the retired ofi rules) trades 1m bars.
+    const off = start({ lanes: [{ timeframe: 3, strategies: ['fx_ofi'] }] }, 'off');
     assert.strictEqual(off.status, 1);
-    assert.match(off.stderr, /lanes\[0\]\.policies: prop_flow_1m trades 1m bars, not the 3m lane's/);
+    assert.match(off.stderr, /lanes\[0\]\.strategies: fx_ofi trades 1m bars, not the 3m lane's/);
     const one = start({ lanes: [{ timeframe: 3, trigger: 'bar', policies: ['prop_portfolio'] }] }, 'one');
     assert.strictEqual(one.status, 0, one.stderr);
     assert.match(one.stdout, /next action now:/);

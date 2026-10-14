@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_GOLDEN } = require('../helpers');
 const fsy = require('../../scripts/lib/field-study');
 const fcf = require('../../scripts/lib/field-confluence');
 const { compileRules } = require('../../scripts/lib/trading/rules');
@@ -135,12 +135,13 @@ test('no look-ahead: events and the field at t never change when only later bars
   assert.ok(full.some(Boolean));
   assert.deepStrictEqual(Array.from(mutated.subarray(0, cut + 1)), Array.from(full.subarray(0, cut + 1)));
   assert.deepStrictEqual(Array.from(truncated), Array.from(full.subarray(0, cut + 1)));
-  // A shipped strategy too (its own series, evaluated causally).
-  const shipped = loadStrategies(ROOT, {}).strategies.filter(x => x.valid && x.signal === 'rules' && x.timeframe === '3m').slice(0, 3);
-  const bars3 = synthBars({ days: 10, plant: false, step: 3 });
+  // Fixture strategies too (the retired strategies' rules, tests/fixtures/strategies-golden: their own series, evaluated causally).
+  const fixtures = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies.filter(x => x.valid && x.signal === 'rules' && x.timeframe === '3m').slice(0, 3);
+  assert.strictEqual(fixtures.length, 3);
+  const bars3 =synthBars({ days: 10, plant: false, step: 3 });
   const cut3 = 1200;
-  const ev3 = shipped.map(x => ({ spec: `strategy:${x.name}`, kind: 'strategy', name: x.name }));
-  const o3 = { strategies: shipped, fields: FIELDS.slice(0, 1), timeframeMin: 3 };
+  const ev3 = fixtures.map(x => ({ spec: `strategy:${x.name}`, kind: 'strategy', name: x.name }));
+  const o3 = { strategies: fixtures, fields: FIELDS.slice(0, 1), timeframeMin: 3 };
   const f3 = fcf.chunkStrategyEvents(bars3, ev3, o3);
   const t3 = fcf.chunkStrategyEvents(bars3.slice(0, cut3 + 1), ev3, o3);
   f3.forEach((e, j) => assert.deepStrictEqual(Array.from(t3[j].perField[0].dir), Array.from(e.perField[0].dir.subarray(0, cut3 + 1)), e.spec));
@@ -325,7 +326,8 @@ test('the CLI: --event runs the confluence study, writes Markdown and JSON, and 
   const line = b => JSON.stringify({ ...b, ms: undefined });
   fs.writeFileSync(path.join(dir, 'a.jsonl'), bars.slice(0, 2160).map(line).join('\n'));
   fs.writeFileSync(path.join(dir, 'b.jsonl'), bars.slice(2160).map(line).join('\n'));
-  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'field-study.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir } });
+  // The fixture strategies (the retired strategies' rules): strategy:all finds fx_ofi and fx_ofi_absorption (1m).
+  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'field-study.js'), ...args], { encoding: 'utf8', env: { ...process.env, FTH_HOME: dir, FTH_STRATEGIES_DIRS: FX_GOLDEN } });
   const out = path.join(dir, 'out');
   const r = run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', 'expansion:1.5,breakout:20,strategy:all', '--horizons', '1,5', '--by', 'session', '--r', 'atr', '--reps', '50', '--out', out]);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -341,8 +343,8 @@ test('the CLI: --event runs the confluence study, writes Markdown and JSON, and 
   fs.copyFileSync(path.join(out, 'field-confluence.json'), path.join(dir, 'field-confluence.json'));
   assert.strictEqual(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', 'expansion:2', '--reps', '20']).status, 0);
   // A strategy on another timeframe, a bad event, a bad R: refused.
-  const shipped3m = loadStrategies(ROOT, {}).strategies.find(x => x.valid && x.signal === 'rules' && x.timeframe === '3m');
-  assert.match(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', `strategy:${shipped3m.name}`]).stderr, /trades 3m bars/);
+  const fixture3m = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies.find(x => x.valid && x.signal === 'rules' && x.timeframe === '3m');
+  assert.match(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', `strategy:${fixture3m.name}`]).stderr, /trades 3m bars/);
   assert.match(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', 'gap:3']).stderr, /--event/);
   assert.match(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--event', 'expansion:2', '--r', 'range']).stderr, /--r: bar or atr/);
   assert.match(run(['--data', dir, '--symbol', 'MNQ', '--fields', 'x.f', '--r', 'atr']).stderr, /--r is for the confluence study/);

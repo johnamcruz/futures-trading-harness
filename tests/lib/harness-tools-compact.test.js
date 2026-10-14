@@ -7,6 +7,7 @@ const { scanSummary, whyNot, recentLines } = require('../../scripts/lib/harness-
 const strategies = require('../../scripts/lib/harness-tools/strategies');
 const marketSnapshot = require('../../scripts/lib/harness-tools/market-snapshot');
 const { specFor } = require('../../scripts/lib/trading/contracts');
+const { FX_GOLDEN } = require('../helpers');
 // The broker's tick specs (as the translator records them); here, the values the broker reports for each root.
 const specOf = specFor;
 
@@ -104,9 +105,11 @@ test('recentLines: one line per bar, oldest first, none where nothing fired', ()
 });
 
 test('the operations: the scripts\' full forms by default, the tools\' compact forms on request', () => {
-  const ctx = { root: ROOT, env: {}, now: () => new Date('2026-10-07T14:03:30Z') };
+  // The fixture strategies holding the retired rules (FX_GOLDEN): no rules strategy ships since 2026-10-14.
+  const ctx = { root: ROOT, env: { FTH_STRATEGIES_DIRS: FX_GOLDEN }, now: () => new Date('2026-10-07T14:03:30Z') };
   const full = strategies.scan({ file: CSV, symbol: 'MNQ' }, ctx).text;
   const results = JSON.parse(full);
+  assert.ok(results.some(r => r.signal === 'rules'), 'the fixtures scanned');
   assert.ok(full.startsWith('[\n  {'), 'the script prints the pretty JSON');
   const summary = strategies.scan({ file: CSV, symbol: 'mnq', view: 'summary' }, ctx).text;
   assert.ok(summary.startsWith('Scan of MNQ on the last closed bar (opened '), summary.slice(0, 80));
@@ -114,7 +117,7 @@ test('the operations: the scripts\' full forms by default, the tools\' compact f
   for (const r of results) assert.ok(summary.includes(`\n  ${r.name} | `), r.name);
   const name = results.find(r => r.signal === 'rules').name;
   assert.deepStrictEqual(JSON.parse(strategies.scan({ file: CSV, symbol: 'MNQ', view: 'one', name }, ctx).text), results.find(r => r.name === name));
-  assert.throws(() => strategies.scan({ file: CSV, symbol: 'MNQ', view: 'one', name: 'nope' }, ctx), /no scan result for "nope" \(scanned: .*orb/);
+  assert.throws(() => strategies.scan({ file: CSV, symbol: 'MNQ', view: 'one', name: 'nope' }, ctx), /no scan result for "nope" \(scanned: .*fx_orb/);
   // recent: JSON by default (the script), lines on request.
   const rows = JSON.parse(strategies.recent({ file: CSV, symbol: 'MNQ', count: 3 }, ctx).text);
   assert.strictEqual(strategies.recent({ file: CSV, symbol: 'mnq', count: 3, format: 'lines' }, ctx).text, recentLines(rows, { symbol: 'MNQ' }));

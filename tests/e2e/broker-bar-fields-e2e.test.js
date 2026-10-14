@@ -4,8 +4,8 @@
  * End to end: a broker MCP server that adds its own fields to its bars (the tests' fake server, its
  * FAKE_BARS setting standing in for a real server's order-flow setting) -> the broker adapter and the
  * contract translator (scripts/bars.js) -> the bars file -> the strategy scan (scripts/strategies.js),
- * where ofi_absorption reads the broker's flow fields with field(). The same prices without the fields
- * give no signal.
+ * where fx_ofi_absorption (a test fixture holding the retired ofi_absorption's rules, tests/fixtures/strategies-golden)
+ * reads the broker's flow fields with field(). The same prices without the fields give no signal.
  */
 
 const test = require('node:test');
@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { FAKE_BROKERS, tmpDir } = require('../helpers');
+const { FAKE_BROKERS, FX_GOLDEN, tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const FAKE_SERVER = path.join(ROOT, 'tests', 'fixtures', 'broker-mcp-server.js');
@@ -41,14 +41,14 @@ function scanThroughBroker(withFlow) {
   const home = tmpDir();
   const served = path.join(home, 'served.json');
   fs.writeFileSync(served, JSON.stringify(absorbed(withFlow)));
-  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_SERVER, FAKE_BARS: served };
+  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_ENTRY: FAKE_SERVER, FAKE_BARS: served, FTH_STRATEGIES_DIRS: FX_GOLDEN };
   const fetched = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'bars.js'), '--symbol', 'MNQ', '--timeframe', '1', '--count', '205'], { cwd: ROOT, env, encoding: 'utf8', timeout: 60000 });
   assert.strictEqual(fetched.status, 0, fetched.stderr);
   const file = path.join(home, 'bars-scratch', 'MNQ-1m.json');
   const bars = JSON.parse(fs.readFileSync(file, 'utf8')).bars;
   const scan = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'strategies.js'), 'scan', file, '--symbol', 'MNQ'], { cwd: ROOT, env, encoding: 'utf8', timeout: 60000 });
   assert.strictEqual(scan.status, 0, scan.stderr);
-  const row = JSON.parse(scan.stdout).find(r => r.name === 'ofi_absorption');
+  const row = JSON.parse(scan.stdout).find(r => r.name === 'fx_ofi_absorption');
   return { bars, row };
 }
 
@@ -56,7 +56,7 @@ test('a broker\'s own bar fields reach the bars file untouched and fire the stra
   const { bars, row } = scanThroughBroker(true);
   assert.strictEqual(bars.length, 205);
   assert.deepStrictEqual(bars.at(-1).flow, absorbed(true).at(-1).flow, 'the broker\'s fields, as it served them');
-  assert.ok(row, 'ofi_absorption is scanned');
+  assert.ok(row, 'fx_ofi_absorption is scanned');
   assert.strictEqual(row.direction, 'long', JSON.stringify(row));
 });
 

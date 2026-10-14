@@ -97,8 +97,8 @@ hours with `sessions`, using named sessions or explicit windows:
 | `london` | 03:00-09:30 |
 | `ny` | 09:30-16:00 |
 
-A strategy without `sessions` trades the whole session; `orb` trades only
-`ny`, since its range forms at the 09:30 ET open.
+A strategy without `sessions` trades the whole session; one listing `ny` trades
+only the New York session (an opening range breakout's range forms at the 09:30 ET open).
 
 ## Layers of protection
 
@@ -172,32 +172,24 @@ strategy loses, add one where it works.
 
 ```text
 strategies/
-  orb/STRATEGY.md            opening range breakout
-  cisd_ote/STRATEGY.md       CISD + OTE bounce (paper)
-  vwap_reclaim/STRATEGY.md   VWAP reclaim, active
-  ofi/STRATEGY.md            1m order-flow imbalance, active
-  ofi_absorption/STRATEGY.md 1m absorption reversal, active
-  crt_1h/STRATEGY.md         1-hour CRT liquidity sweep, active
-  crt_4h/STRATEGY.md         4-hour CRT liquidity sweep, active
-  value_area/STRATEGY.md     POC rejection or breakout, flow/expansion confirmed, active
-  value_area_reentry/        volume profile 80% rule, active
-  value_area_breakout/       acceptance beyond the value area, active
+  prop_portfolio/STRATEGY.md the prop account layer (sizing, trail); no components yet
   _template/STRATEGY.md      copy this to add a strategy
 ```
 
-Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The ported `orb` reproduces its signals bar for bar
-(`tests/lib/parity.test.js`); `cisd_ote`, a port until version 4, is now the
-textbook CISD + OTE (paper; docs/research/cisd-ote-textbook.md). Four
-strategies (`bos`, `keltner`, `ema_cross`, `supertrend`) were retired on
-2026-10-13 (`strategies/README.md`, "Retired strategies"); the indicators
-and structure breaks they read stay in the briefing as confluence.
+Every rules strategy was retired (four on 2026-10-13, the rest and
+`prop_flow_1m` on 2026-10-14: `strategies/README.md`, "Retired
+strategies"). The one strategy to come is `trade_lifecycle`: the model
+composes the whole trade from its skills (docs/COMPOSED-ENTRY.md), as
+`prop_portfolio`'s one component. Until then the order gate refuses every
+entry; exits and protective stops still go. The indicators, levels and
+structure the old strategies read stay in the briefing as facts, and the
+rules language below still works for a strategy of your own.
 
 Each file has code-checked frontmatter and a body the agents follow:
 
 ```yaml
 ---
-name: orb
+name: my_orb
 description: Opening range breakout for equity index futures ...
 status: active                     # paper | active | disabled
 regimes: [trend, transition, high-vol]   # regimes the strategy fits
@@ -248,9 +240,7 @@ rules:
 To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
-`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. One bundled
-strategy (`orb`) is ported from an earlier Python trading bot; `cisd_ote` was,
-until its textbook rewrite.
+`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`.
 
 ## What's inside
 
@@ -627,7 +617,7 @@ skipped), and its trail exits every trade
 signal: policy
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account, one position at a time
 timeframe: 3m                # the one bar-size setting: every listed strategy trades it
-strategies: [cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
+strategies: []               # none since 2026-10-14; its one component will be trade_lifecycle
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 # sizing, exit, multipliers: in the account's rulebook (accounts/<account>/RULEBOOK.md, policies.prop_portfolio), the one place for them
 contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode

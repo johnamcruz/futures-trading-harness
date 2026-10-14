@@ -45,9 +45,24 @@ const TIMEFRAME = /^[1-9]\d*(m|h|d)$/;
 const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual|strategy)$/;
 // Strategies removed from the repository (strategies/README.md, "Retired strategies"): a name here that no strategy
 // folder defines is refused as retired, saying so, wherever an old record, config or document still names it.
-const RETIRED = { bos: '2026-10-13', keltner: '2026-10-13', ema_cross: '2026-10-13', supertrend: '2026-10-13' };
+// The list is data beside the README (strategies/retired.json: name -> the date it was retired), so the code names no
+// strategy; on 2026-10-14 every rules strategy and prop_flow_1m went (the owner's decision), prop_portfolio stays with
+// no components until trade_lifecycle (docs/COMPOSED-ENTRY.md). A missing or malformed file fails the load (closed).
+/** The retired list as data ({ name: 'YYYY-MM-DD' }), frozen; throws on anything else (fails closed). */
+function parseRetired(data) {
+  const ok = data && typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length > 0
+    && Object.entries(data).every(([k, v]) => NAME.test(k) && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v));
+  if (!ok) throw new Error('strategies/retired.json: a map of retired strategy name -> YYYY-MM-DD');
+  return Object.freeze({ ...data });
+}
+const RETIRED = parseRetired(require('../../../strategies/retired.json'));
 /** " (retired on <date>: strategies/README.md, \"Retired strategies\")" for a retired name, else "". */
 const retiredNote = name => (Object.hasOwn(RETIRED, name) ? ` (retired on ${RETIRED[name]}: strategies/README.md, "Retired strategies")` : '');
+/** Where a policy strategy's verdicts come from: its components' setups, or none when it lists no strategies. */
+const componentsNote = policy => {
+  const list = (policy && Array.isArray(policy.strategies) && policy.strategies) || [];
+  return list.length ? `the runner records one at each setup of ${list.join(', ')}` : 'it lists no strategies, so it has no setups and no verdicts: no entry';
+};
 /**
  * The loaded strategies under a retired name: a user's own copy (no shipped folder holds one). It loads and trades
  * as their strategy; preflight and the runner's start name each with its file, so a stale copy is noticed.
@@ -173,8 +188,9 @@ function validateStrategy(data, body, folderName) {
   // skipped), and exits every trade by its own trail.
   if (data.signal === 'policy') {
     const list = data.strategies;
-    req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
-      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [orb, cisd_ote])');
+    // An empty list is a policy with no setups yet (prop_portfolio since its components retired, 2026-10-14): it enters nothing.
+    req(Array.isArray(list) && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
+      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [fx_break, fx_cross]; [] for none yet)');
     req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md)');
     if (data.sizing !== undefined) {
       const z = data.sizing;
@@ -379,7 +395,8 @@ function loadStrategies(pluginRoot, env = process.env) {
     }
     // Every index the policy strategy trades must be scanned by at least one of its strategies (on the micro's bars).
     const { familyRoot } = require('./contracts');
-    for (const r of s.instruments) {
+    // With no strategies listed it has no setups at all, on any index: nothing to check.
+    for (const r of s.strategies.length ? s.instruments : []) {
       const ok = s.strategies.some(n => byName.get(n) && (byName.get(n).instruments || []).some(x => familyRoot(x) === familyRoot(r)));
       if (!ok) errs.push(`instruments: none of its strategies trades ${r}'s index (list its micro or mini in their instruments)`);
     }
@@ -478,7 +495,7 @@ function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
     if (!s.valid || s.status === 'disabled') continue;
     if (root && !tradesRoot(s, root, selected)) continue;
     if (s.signal === 'policy') {
-      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` });
+      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` : 'a policy strategy with no strategies listed: no setups' });
       continue;
     }
     try {
@@ -581,6 +598,8 @@ module.exports = {
   RETIRED,
   retiredNote,
   retiredCopies,
+  componentsNote,
+  parseRetired,
   exitPlan,
   exitErrors,
   STATUSES,

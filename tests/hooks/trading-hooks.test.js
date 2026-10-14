@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { rootWithPolicies, FAKE_BROKERS, homeBrokers, shippedBroker, tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder, recordBrokerSpecs } = require('../helpers');
+const { rootWithPolicies, FAKE_BROKERS, homeBrokers, shippedBroker, tmpDir, trendHome, writeJournal, minutesAgo, placed, entryOrder, recordBrokerSpecs, FX_GOLDEN } = require('../helpers');
 
 // The gate's clock for these end-to-end runs: a Wednesday at 10:30 ET, inside
 // market hours whenever the tests run (FTH_TEST_NOW is ignored in autonomous runs).
@@ -1037,32 +1037,34 @@ test('MCP gateway wiring, live: a late, errored or lost broker reply on the firs
   assert.deepStrictEqual(lost.sent, ['close_position sim-H7']);
 });
 
-test('MCP gateway: an entry for a regime-gated strategy (vwap_reclaim) fetches its bars: no regime refusal in a trend, a regime refusal in a range, and a refusal when the bars can\'t be read', async () => {
-  const gated = { ...ORDER, rationale: 'setup:vwap_reclaim long, stop 21480, target 21540, risk $40' };
+test('MCP gateway: an entry for a regime-gated strategy (fx_orb) fetches its bars: no regime refusal in a trend, a regime refusal in a range, and a refusal when the bars can\'t be read', async () => {
+  // fx_orb: the fixture holding the retired orb rules (regime_gate, trend and transition), loaded from FX_GOLDEN.
+  const FX = { FTH_STRATEGIES_DIRS: FX_GOLDEN };
+  const gated = { ...ORDER, rationale: 'setup:fx_orb long, stop 21480, target 21540, risk $40' };
   const bars = fn => JSON.stringify({ bars: Array.from({ length: 160 }, (_, k) => {
     const c = fn(k);
     return { t: new Date(Date.parse(TEST_NOW) - (160 - k) * 180000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 100 };
   }) });
   const text = r => r.result.content[0].text;
-  const REGIME = /\[regime\] setup:vwap_reclaim trades only in trend; the 3m regime is/;
+  const REGIME = /\[regime\] setup:fx_orb trades only in trend, transition; the 3m regime is/;
   // (Other checks refuse this bare order too, e.g. no plan or signal recorded: only the regime line is under test.)
   // A steady climb: trend-up, so no regime refusal; the gateway asked the broker for the strategy's 500 3m bars.
   const argsFile = path.join(tmpDir(), 'args.jsonl');
-  const trend = await gatewayRun({ FAKE_BARS: bars(k => 21000 + k * 0.8), FAKE_ARGS: argsFile }, [call(1, 'place_order', gated)]);
+  const trend = await gatewayRun({ ...FX, FAKE_BARS: bars(k => 21000 + k * 0.8), FAKE_ARGS: argsFile }, [call(1, 'place_order', gated)]);
   assert.doesNotMatch(text(trend.byId[1]), REGIME);
   const req = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).find(c => c.name === 'get_bars');
   assert.deepStrictEqual(req.args, { contractId: gated.contractId, unit: 'minute', unitNumber: 3, limit: 500, includePartialBar: false });
   // Chop through VWAP: range, refused.
-  const chop = await gatewayRun({ FAKE_BARS: bars(k => 21000 + Math.sin(k / 2) * 2) }, [call(2, 'place_order', gated)]);
+  const chop = await gatewayRun({ ...FX, FAKE_BARS: bars(k => 21000 + Math.sin(k / 2) * 2) }, [call(2, 'place_order', gated)]);
   assert.match(text(chop.byId[2]), REGIME);
   assert.notStrictEqual(text(chop.byId[2]), 'forwarded:tools/call:place_order');
   // Bars that can't be read: the check can't run, so the entry is refused (fail closed).
-  const broken = await gatewayRun({ FAKE_BARS: 'not json' }, [call(3, 'place_order', gated)]);
+  const broken = await gatewayRun({ ...FX, FAKE_BARS: 'not json' }, [call(3, 'place_order', gated)]);
   assert.ok(broken.byId[3].result.isError, text(broken.byId[3]));
   assert.match(text(broken.byId[3]), /could not run \(get_bars returned non-JSON content\)/, 'refused because the bars could not be read');
   assert.notStrictEqual(text(broken.byId[3]), 'forwarded:tools/call:place_order');
   // An exit naming the strategy is never regime-checked.
-  const exit = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_BARS: 'not json' }, [call(4, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten setup:vwap_reclaim' })]);
+  const exit = await gatewayRun({ ...FX, FAKE_POSITIONS: LONG1, FAKE_BARS: 'not json' }, [call(4, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten setup:fx_orb' })]);
   assert.strictEqual(text(exit.byId[4]), 'forwarded:tools/call:place_order');
 });
 
