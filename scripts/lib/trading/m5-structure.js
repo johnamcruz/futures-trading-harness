@@ -64,7 +64,7 @@ function structureLine(s, et = x => x) {
   const b = s.lastBreak && s.lastBreak.last;
   if (!b || b.barsAgo > RECENT) return null;
   const swings = [s.swingHigh ? `swing high ${s.swingHigh.price}` : null, s.swingLow ? `swing low ${s.swingLow.price}` : null].filter(Boolean).join(', ');
-  return `- 5m structure: ${b.kind} ${b.direction} through ${b.level} (known ${et(b.knownAt)}, ${b.barsAgo} candles ago)${swings ? `; ${swings}` : ''}.`;
+  return `- 5m structure: ${b.kind} ${b.direction} through ${b.level} (known ${et(b.knownAt)}, ${b.barsAgo} candle${b.barsAgo === 1 ? '' : 's'} ago)${swings ? `; ${swings}` : ''}.`;
 }
 
 module.exports = { RECENT, structure5m, structureLine };
