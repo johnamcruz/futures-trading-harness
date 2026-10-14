@@ -3,25 +3,63 @@
 Status: a design for the owner's OK. Nothing in it is built. Every claim
 about today's code names its file and line on `main` at the time of writing.
 
-## 1. Goal
+## 1. Thesis
 
-The reasoning model trades on its own. At each bar it combines its skills in
-the order bias, location, setup, entry, stop, target, and either places that
-combination or passes. Strategies stay as worked examples and as a baseline
-to compare against. No sweep, TPE or strategy-combo search picks the
-combination: the model does.
+**The model learns, from the market, which skills to combine.** Owner,
+2026-10-14: "The whole idea is the model learns what skills to combine based
+on what it learns from the market." The composed entry exists for that: at
+each bar the model puts its skills together (bias, location, setup, entry,
+stop, target) or passes; code checks every read and records the decision
+and its outcome in R; and the model consults that record, on demand, the
+next time it faces a similar market. Over replay practice, and later live,
+it learns which combination works in which context. Section 4, the learning
+loop, is the heart of the design; the other sections exist to serve it, and
+each is tested against it: does it let the model choose freely, check what
+it claims, and learn from what happened?
 
-Two things are mechanical and stay mechanical. Every part of a combination
-must be a fact that code checks before the order goes ("verified reads").
-Risk is code: the gate fails closed and never holds an exit, sizing is a
-share of the account's cushion above its MLL floor, and the zero-blow goal
-stays.
+**The trader process is how the model thinks.** Owner: "The whole purpose
+of using a reasoning model is that it will learn to think like a trader and
+use the trading process with all the skills." Each bar the model reasons
+through bias, location, setup, entry, stop and target, with whichever
+skills fit, and says why at each step; it is not a checklist to fill.
+The record keeps that short reason beside each verified read, so the
+lessons, `experience_lookup` and the scorecard see how it thought, and the
+loop improves the thinking, not only which combination it picks.
 
-This design covers the foundation only: how a composed entry is stated,
-checked, sized, gated and recorded. The learning loop (practice in replay,
-score each combination, an append-only log, an index, an
-`experience_lookup` tool) is sketched in section 5 so the foundation doesn't
-block it. It is built later, in its own design.
+**Think like a pro trader.** A pro reads context before setups (the
+higher-timeframe bias and the day's levels first), waits at levels for
+price to come to them, takes only setups where the reads line up and the
+room to the target pays for the risk, and passes by default: a pass is a
+good decision and is scored as one. Invalidation is defined before entry,
+every trade is managed and reviewed, and size comes from risk, never
+conviction. The learning loop rewards that discipline (good passes, honest
+reasons), never the number of trades.
+
+Three things follow.
+
+- **The model chooses; code verifies.** The trader-process steps are the
+  frame. Which skill the model uses at each step, and which read, is its
+  choice and is what it learns. The gate checks that each claimed read is
+  true and agrees with the order's side; it never prescribes a skill.
+- **No search picks the combination.** No sweep, TPE or strategy-combo
+  search: "a sweep defeats the purpose of a reasoning model".
+- **Risk is code.** The gate fails closed and never holds an exit; sizing is
+  a share of the account's cushion above its MLL floor; the zero-blow goal
+  stays.
+
+**The only strategy.** Owner, 2026-10-14: "We can delete all the old
+strategies like crt, cisd, vwap, OFI to avoid confusion. This is the only
+strategy and it learns from the market which skills to combine to trade the
+current market", and "it combines all the concepts from the others". The
+composed entry is packaged as one strategy document, `strategies/composed`,
+so it rides the existing strategy plumbing (the gate's strategy checks,
+sizing, the prop verdict, the records); it hardcodes no combination. Every
+other strategy document is deleted (section 9), after each concept it
+encodes is a skill, a briefing fact and a read the checker verifies
+(section 6), so no knowledge is lost. Nothing on the composed path depends
+on another strategy having fired. The harness places no entries while this
+is built (owner: "we won't trade until this is done and perfected"); exits
+and protection keep working throughout.
 
 ### The two acceptance trades
 
@@ -37,7 +75,7 @@ target the next 60m swing, 21598.00.
 | Location: prior VAH | `vwap-volume-profile` | `day.priorProfile.vah` (`briefing.js:449`); the candle's meeting of it in `m3.candles.<tf>.levels` | `value inside\|above\|below` only (price against the area, not a touch) |
 | Setup: 15m rejection | `rejection`, `candle-reading` | `m3.candles.15m.levels["prior VAH"]`, `pattern` (`candle-facts.js:438-447`) | None |
 | Entry: 3m bullish close, momentum | `candle-reading`, `momentum-and-volume` | `m3.candles.3m.closeLocation`, `pattern`, `rangeAtr`, `volRatio` | None. No shared momentum read exists |
-| Stop: below 21512.75 | `invalidation` | a candle low, `m3.swings`, `m3.liquidity.swingLows` | None. Stops come only from a strategy's scan (`order-plan.js:54-69`) |
+| Stop: below 21512.75 | `invalidation` | a candle low, `m3.swings`, `m3.liquidity.swingLows` | None. Stops come only from a strategy's scan (`harness-tools/order-plan.js:54-69`) |
 | Target: 60m swing 21598.00 | `top-down-entry` | `m3.swingTargets.above[frame=60m]` (`briefing.js:419`) | None. Targets come only from a strategy's exit |
 
 Every fact scenario 1 needs is already in the briefing. What is missing is
@@ -55,9 +93,12 @@ retest; target the 4h high.
 | Stop | `invalidation` | the 5m swing low of the shift | Missing with the 5m structure |
 | Target: the 4h high | `top-down-entry` | none: swing targets are on the base bars, 15m and 60m (`briefing.js:419`) | Missing fact |
 
-Scenario 2 needs new facts first (section 7).
+Scenario 2 needs new facts first (section 8).
 
 ## 2. What blocks a model-originated entry today
+
+Each row is something section 3 replaces for the composed path, or section 9
+deletes with the old strategies.
 
 | Where | What it does |
 |---|---|
@@ -65,6 +106,9 @@ Scenario 2 needs new facts first (section 7).
 | `order-gate.js:276-278`, `strategies.js:558-578` | `strategy`: the name is a strategy document that is valid, `active`, trades the contract and is in its sessions |
 | `order-gate.js:299-302` | `trigger-fired`: a rules strategy's own trigger fired on the side, on a recent bar (hard) |
 | `order-gate.js:320-325` | `combine`: while a prop attempt runs, only a policy strategy may enter, and its entry needs a runner verdict recorded at a scan candidate (`prop-state.js:465-496`) |
+| `strategies.js:368-380`, `strategies.js:545` | A policy may list only rules strategies (`componentRefusal` refuses any other component) |
+| `strategies.js:568`, `order-gate.js:262`, `replay/config.js:67` | A strategy whose status isn't `active` may not enter; paper mode (`FTH_PAPER=1`) refuses every entry (`paper-mode`) and only journals the plan; a replay run pins `FTH_PAPER=0`. So a `paper` strategy gets no fills, and no outcome in R, in replay today |
+| `autotrader.js:711-716`, `skills/runner-lanes/SKILL.md:22-24` | In trigger `signal` mode, and on a 1m lane, the runner starts a cycle only when a mechanical strategy is a candidate or a position or order is open: with nothing fired, the model never sees the bar |
 | `agents/risk-manager.md:84-91` | Step 0 vetoes any plan the scan doesn't list as a candidate (a manual strategy aside) |
 | `agents/risk-manager.md:111-127`, `harness-tools/order-plan.js:58, 64` | `order_plan` plans only a rules candidate or a policy verdict; the risk manager vetoes on its refusal |
 | `skills/trade-plan/SKILL.md:57-60` | The numbers come from `order_plan`, never the model's arithmetic |
@@ -72,7 +116,8 @@ Scenario 2 needs new facts first (section 7).
 | `trading/reasons.js:89`, `replay/scorecard.js:34, 135` | No setup on the bar means the expected decision is no trade; an entry there scores `bad size` |
 | `replay/labels.js:31, 888-909` | A target other than the strategy's own exit is a clone reason |
 | `decision-history.js:60, 97-104` | The history names the setup from the order's tag and the scan; a composed entry has no scan setup |
-| `skills/trader-process/SKILL.md:19, 37, 44` and `rejection:16-19`, `breakout:16-19`, `top-down-entry:30`, `absorption:48`, `fib-retracement:65`, `cisd:53` | Doctrine: no setup without a fired strategy |
+| `trading/skills-loaded.js:44` | The skills required for an entry name `strategy-library`, `strategy-scan` and `strategy-gate-checks` |
+| `skills/trader-process/SKILL.md:19, 37, 44` and `rejection:16-19`, `breakout:16-19`, `top-down-entry:30`, `absorption:48`, `fib-retracement:65`, `cisd:53`, `fair-value-gaps:42`; the descriptions of `rejection` and `breakout` (line 3: "Use when a strategy fired") and their line 10 | Doctrine: no setup without a fired strategy |
 
 A `signal: manual` strategy is the nearest thing today (`strategies.js:34`),
 and no strategy uses it. It is not the answer: the gate never checks a
@@ -85,14 +130,15 @@ a manual strategy whose trigger code verifies.
 
 ### 3.1 How the model states it
 
-The model calls one new harness tool, `compose_check`, with its combination
-as a list of reads, one per step:
+The head trader (the main session) calls one new harness tool,
+`compose_check`, in setup-judgment, with its combination as a list of reads:
 
 ```json
 {
   "symbol": "MNQ", "side": "long",
   "reads": [
-    { "step": "bias",     "skill": "bos-vs-choch",       "read": "1h bos up" },
+    { "step": "bias",     "skill": "bos-vs-choch",       "read": "1h bos up",
+      "why": "60m broke the last swing high: buyers in control" },
     { "step": "bias",     "skill": "daily-bias",         "read": "above prior RTH high" },
     { "step": "location", "skill": "vwap-volume-profile","read": "at prior VAH" },
     { "step": "setup",    "skill": "rejection",          "read": "15m rejected prior VAH up" },
@@ -104,11 +150,22 @@ as a list of reads, one per step:
 }
 ```
 
+Each read carries `why`: the model's reason for that step in a sentence
+(at most 160 characters), as it thought it. Code never checks a `why`; it
+records it (only the first read is shown with one above, for space).
+
 Each `read` is one closed form, parsed the way `fact-claims.js` parses FACTS
-items today (no negations, no brackets, ASCII only; `fact-claims.js:92-94`).
+items today (no negations, no brackets, ASCII only; `fact-claims.js:90-92`).
 Code maps the form to its briefing field; the model never names the field.
 `skill` is recorded, not checked against the form, except that it must be a
-skill folder that exists.
+skill folder that exists: which skill the model reached for is what the
+learning loop scores (section 4), so the gate never prescribes it.
+
+The risk manager reads the result through `order_plan` (section 3.5); no
+other role holds `compose_check`. Its schema joins the cached head of the
+head trader's prompt once (an estimated 1.2-1.8 KB, as `order_plan`'s
+1,774 bytes of name, description and schema today), and changes nothing per
+cycle.
 
 ### 3.2 The read vocabulary
 
@@ -121,9 +178,9 @@ and one comparison.
 | bias | `<tf> bos\|choch up\|down` (60m is written 1h) | `<section>.lastBreak.last` (3m, 15m, 1h) | Field exists; form new |
 | bias | `above\|below\|inside prior RTH range` | `m3.location.priorRthRange` | Field exists; form new |
 | bias | `trend <side> allowed`, `read <side> <label>` | `m3.trendRule`, `m15.alignment` | Exists |
-| location | `at <level name>` | the level within the trigger candle's range, or in `m3.candles.<tf>.levels` | Fields exist; form new |
+| location | `at <level name>` | the level within the trigger candle's range, or a structured relation of a completed candle (below) | Fields exist; form new |
 | location | `vwap above\|below\|at`, `value inside\|above\|below` | `m3.vwap.side`, `m3.location.priorValue` | Exists |
-| setup | `<tf> rejected\|broke <level name> up\|down` | `m3.candles.<tf>.levels[<level>]` | Field exists as text (`candle-facts.js:336`); a structured `rel`/`dir` is a small add |
+| setup | `<tf> rejected\|broke <level name> up\|down` | a completed candle's relation to the level | The briefing's text keeps only four per candle (`candle-facts.js:330, 444-445`); the checker needs every relation, structured (`rel`, `dir`, level) |
 | setup | `<tf> pattern <name>` | `m3.candles.<tf>.pattern(s)` | Field exists; form new |
 | setup | `<tf> cisd up\|down`, `in ote` | `m3.cisd` (`briefing.js:415`) | Field exists; form new |
 | setup | `swept <level name>` | `m3.sweeps` (`structure-events.js:71`) | Field exists; form new |
@@ -133,27 +190,54 @@ and one comparison.
 | stop | `stop <source> <price>` | the source's price (section 3.4) | Fields exist; form new |
 | target | `target <source> <price>` | the source's price (section 3.4) | Fields exist; form new |
 
-A read is true, false or unchecked, as FACTS claims are
-(`fact-claims.js:26`). The combination stands only when every read is
-true, at least one read covers each of the six steps, and the stop and target
-reads are present. Any false or unchecked read refuses it, naming the read.
+Section 6 adds the forms for every concept the deleted strategies knew.
+
+**The checker reads every relation.** The candle levels the prompt shows are
+capped at four per candle, strongest first (`MAX_LEVELS`,
+`candle-facts.js:330`; `moreLevels` counts the rest, `:445`). The checker
+reads the full, structured list that candle-facts computes before the cap,
+so a true relation the text left out still verifies, and a level name is
+matched exactly, never against the text.
+
+**Side agreement.** Every read with a direction must agree with the order's
+side: `up`, `bos up`, `choch up`, `rejected ... up`, `cisd up`, `momentum
+up`, `close top`, `above prior RTH range` for a long; their mirrors for a
+short. A long with `1h bos down` is refused, even though the read is true.
+A read with no direction (`at prior VAH`, `in ote`, `value inside`) agrees
+with either side. The only exception is the verified reversal of owner
+decision D2: an against-trend read is allowed when the combination also has
+a higher-timeframe CHoCH the order's way.
+
+**When it stands.** A read is true, false or unchecked, as FACTS claims are
+(`fact-claims.js:26`). The combination stands only when every read is true
+and agrees with the side, the required steps are covered (D7), and the stop
+and target reads are present. Any false, unchecked or disagreeing read
+refuses it, naming the read.
 
 ### 3.3 The composed record
 
-`compose_check` checks the reads against the cycle bar's briefing (the same
-`briefingFor` the gate uses, `fact-claims.js:325`), then works out the
-plan in code and appends a record to `<FTH_HOME>/composed/<ROOT>.jsonl`,
-the way the runner records policy verdicts (`prop-state.js:526`):
+`compose_check` checks the reads against the cycle bar's briefing, with
+`briefingFor(home, root, { cycleBar })` (`fact-claims.js:47, 325`): the
+runner passes the cycle bar; without it `briefingFor` would return the
+briefing current at the wall clock, so the tool refuses rather than guess.
+It then works out the plan in code and appends a record to
+`<FTH_HOME>/composed/<ROOT>.jsonl`, the way the runner records policy
+verdicts (`prop-state.js:526`):
 
 - the root, contract, side, bar (the briefing's `asOf`), `at`, `expiresAt`
-  (the next base-bar close);
-- each read with its form, skill, field, the briefing's value, and its check;
-- the signature (section 5);
+  (the next base-bar close), the run id and the lane;
+- the context: `m3.regime` (primary and volatility), `m3.window`, the trend
+  rule for the side, `m15.alignment` for the side, `m3.today.dayType`
+  (section 4.2);
+- each read with its form, skill, field, the briefing's value, its check,
+  its side agreement and the model's `why` for that step;
+- the skill and read signatures (section 3.8);
 - the plan: the entry reference (the last close), the stop and target prices
   and their ticks, the R:R, the first level in the way and its R, and
   `maxSize`;
-- `ok` (every read true and every plan check passed) or the reasons it is
-  not.
+- `exploratory` (section 4.5);
+- `ok` (every read true and agreeing, every plan check passed) or the
+  reasons it is not.
 
 It returns the same record as text so the model and phase 2 see each check.
 The tool is a calculator and a checker, never a second opinion: it doesn't
@@ -165,8 +249,16 @@ decide whether to trade.
   losing side of the entry, within one tick: a completed candle's low or
   high on a named timeframe (`m3.candles.<tf>.l|h`), a confirmed swing
   (`m3.swings`, `m3.liquidity.swingLows|swingHighs`), or a named key level.
-  A buffer beyond it of N ticks is owner decision D3. Stop ticks =
+  The stop is placed a buffer beyond it (D3). Stop ticks =
   ceil(|entry reference - stop| / tick), as `trade-plan` rounds today.
+- **Minimum stop.** The stop is at least a floor (D13), so a stop at the
+  nearest candle low isn't inside one bar's noise.
+- **The fill and the level.** The bracket is in ticks from the fill, and a
+  market order fills away from the last close, so the stop could land short
+  of the level. The gate reads only local state (no quote), so it can't
+  measure that at send time. The entry is therefore a limit order at the
+  entry reference, valid until the record expires (D13): it fills at the
+  reference or better, so the stop lands at the level or beyond it.
 - **Target.** A real level on the winning side: a swing target
   (`m3.swingTargets`) or a named key level, floored toward the entry.
 - **Checks.** R:R at least the composed document's `risk.min_rr`; the first
@@ -175,16 +267,21 @@ decide whether to trade.
 
 Scenario 1, tick-checked (MNQ, 0.25 tick, $0.50 a tick): entry reference
 21540.25, stop 21512.75 = 27.50 points = 110 ticks = $55.00 per contract;
-target 21598.00 = 57.75 points = 231 ticks = 2.1R.
+target 21598.00 = 57.75 points = 231 ticks = 2.1R. With D3's 1-tick
+buffer the stop is 21512.50: 111 ticks, $55.50 per contract, 2.08R.
 
 ### 3.5 order_plan and sizing
 
 `order_plan {"strategy": "composed", "symbol", "side"}` plans from the
 latest `ok` record for the root and side instead of a scan candidate. The
-stop and target ticks are the record's. Size is unchanged: outside an
-attempt, `position-sizing` and the composed document's `risk.max_risk_usd`;
-inside one, the prop verdict (section 3.7). `trade-plan`'s rule stays true:
-the numbers come from `order_plan`, never from the model's own arithmetic.
+stop and target ticks are the record's. Size: outside an attempt,
+`position-sizing` and the composed document's `risk.max_risk_usd`; inside
+one, the prop verdict (section 3.7). `trade-plan`'s rule stays true: the
+numbers come from `order_plan`, never from the model's own arithmetic.
+
+`risk.max_risk_usd` is required for `signal: composed`: the gate's risk cap
+is skipped when a strategy doesn't state it (`order-limits.js:79`), so the
+schema refuses a composed document without it.
 
 ### 3.6 The gate
 
@@ -193,150 +290,692 @@ the tag (`order-gate.js:49`), so a signature, if written, comes after it.
 
 | Check | Composed entry |
 |---|---|
-| `setup-tag`, `strategy` | Unchanged. `composed` resolves to `strategies/composed/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd`; no rules |
-| `trigger-fired` | Replaced, for `signal: composed` only, by a new hard check `composed-reads`: the latest record for the root is `ok`, for this bar (unexpired), on the order's side; the stop and target bracket ticks equal the record's; the size is at most its `maxSize`; it hasn't been used for an entry |
-| `mtf-trend` | Unchanged; the style is `trend` unless owner decision D2 allows a verified reversal |
+| `setup-tag`, `strategy` | Unchanged. `composed` resolves to `strategies/composed/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
+| `trigger-fired` | Replaced, for `signal: composed`, by a new hard check `composed-reads`. It loads the latest record for the root and **re-runs the pure reads checker** on the record's reads against `briefingFor(home, root, { cycleBar })`: it never trusts the record's `ok` flag. The reads must be true and side-agreeing, the record for this bar (unexpired) and the order's side; the plan is recomputed and the bracket ticks must equal it; the size at most `maxSize`; the record not yet used for an entry; an exploratory record only in replay practice (D18); and, once required (D15), an `experience_lookup` on the record recorded this cycle |
+| `mtf-trend` | Unchanged; the style is `trend` unless D2's verified reversal applies |
 | `phase2-facts` | Unchanged forms and minimum; `factsOrder` (`order-gate.js:64-72`) gives the composed record, so a room fact is checked against the record's first level in the way instead of `m3.candidates` |
+| `review-before-next-entry` | Unchanged (`order-gate.js:373`): a composed entry on a root whose earlier entry has no review is refused; the review tags `setup:composed` |
 | `max-risk`, `contract-specs`, `max-order-size`, `stop-defined`, `order-consistency`, `plan-required`, `market-hours`, `time-window`, `blackout`, loss and entry limits, every gateway-only check | Unchanged |
-| `combine`, `policy` | Unchanged, with `composed` as a component a policy may list (section 3.7) |
+| `paper-mode` and the `strategy` status | A `paper` composed entry may enter only when the broker and the run config are both replay, as the account lock exempts a replay run (`account-lock.js:199-203`, `lockExemption`); anywhere else a `paper` status refuses as today (`strategies.js:568`) (D10) |
+| `combine`, `policy` | Section 3.7 |
 
-It fails closed: a missing, unreadable, expired, used or not-`ok` record,
-a briefing that isn't the cycle bar's, or a check that throws, refuses the
-entry. Exits and protective orders return before every entry check
-(`order-gate.js:247`), so nothing here can hold one.
+It fails closed: a missing, unreadable, expired, used or not-`ok` record, a
+read that is false or disagrees on re-check, a briefing that isn't the
+cycle bar's, or a check that throws, refuses the entry. Exits and protective
+orders return before every entry check (`order-gate.js:247`), so nothing
+here can hold one.
 
-Strategies work as today: their path through the gate doesn't change.
-`composed` starts `status: paper`, so the gate refuses its live entries
-(`strategies.js:568`) while replays and paper runs record them; only the
-owner promotes it.
+**Paper in replay.** Without the D10 exemption a `paper` composed entry gets
+no fill in replay: replay runs with `FTH_PAPER=0` (`replay/config.js:67`), so
+the status check refuses it, and paper mode would refuse it too
+(`order-gate.js:262`) and only journal the plan (`replay/labels.js:736-737`).
+The learning loop needs real replay fills, so the exemption is what lets
+practice score outcomes while `composed` is still `paper`; only the owner
+promotes it to `active`.
+
+**The runner.** On the composed lane the runner cycles every bar (trigger
+`bar`, D11), since nothing fires for it: in trigger `signal` it would never
+start a cycle (`autotrader.js:711-716`).
 
 ### 3.7 Inside a prop attempt
 
-While an attempt runs, only a policy strategy may enter
-(`order-gate.js:320-325`), and each entry needs a runner verdict recorded at
-a component's scan candidate (`prop-state.js:465-496`). For a composed entry,
-`compose_check` asks for the verdict itself: the same `decideSetup`
-(`prop/verdict.js:50`) with the record's direction and stop distance in
-place of a scan's, so the budget (`combine.js:143`, a share of the cushion
-above the floor), the rulebook's multiplier and the one-entry-per-verdict
-rule apply unchanged. The policy must list `composed` as a component, which
-is the owner's call (D5).
+With the old policy strategies deleted (section 9), `composed` is the
+account's policy itself: its document carries `account` and `contracts`,
+and the account's rulebook lists `composed` under `policies` with its
+`sizing`, `exit` and `multipliers`, as it lists `prop_portfolio` today.
+Code changes this needs:
 
-## 4. Records for the learning loop
+- `strategies.js:368-380` and `componentRefusal` (`strategies.js:545`): a
+  policy lists only rules components; `signal: composed` becomes its own
+  policy, with no component list.
+- The verdict: `compose_check` asks for it, the same `decideSetup`
+  (`prop/verdict.js:50`) with the record's direction and stop distance in
+  place of a scan's, so the budget (`combine.js:143`, a share of the cushion
+  above the floor), the rulebook's multiplier and the one-entry-per-verdict
+  rule apply unchanged. It is recorded at the record's bar, so
+  `verdictBarProblem` (`prop-state.js:403`) ties it to the cycle bar, and
+  `openEntryVerdicts` (`prop-state.js:515`, the latest verdict per policy
+  and index family, unexpired and unused) sees it as the open setup, as it
+  sees a policy's today; with one policy, lane priority has nothing to
+  settle.
+- A model-callable tool now creates prop verdicts, so D6's per-bar call
+  limit is a hard rule inside an attempt: past it, `compose_check` records
+  the call and returns no verdict.
 
-| Record | Adds |
-|---|---|
-| The composed record (3.3) | The reads, each check, the plan, the signature; append-only |
-| The journal plan | The plan text names the record (`composed <bar> <signature>`); `journal_add` has no data field (`broker/interface.js:90-93`), and the broker interface doesn't change |
-| Decision history (`decision-history.js:107`) | `setup: composed`, the signature, and the record's stop and target; a pass with an `ok` record is `skipped`, so its +1R/-1R counterfactual is kept as for strategies |
-| Cycle log (`cycle-log.js`) | Each `compose_check` call's record and refusal, beside `factCheck` |
-| Labels (`replay/labels.js`) | The reads and signature; the record's target counts as the plan's own exit, not a clone reason |
-| Scorecard (`replay/scorecard.js`, `trading/reasons.js:89`) | A composed entry is judged by its record (every read verified, the gate's answer) and its outcome in R, not as "no setup" |
-| Counterfactual (`replay/counterfactual.js`) | The record's stop and target distances simulate a pass, as for a skipped candidate |
+### 3.8 The signature
 
-**The signature** is the reads in step order without prices, e.g.
+The **read signature** is the reads in step order, sorted within a step by
+skill then form, without prices, e.g.
 `bias:1h-bos-up+bias:above-prior-rth-range+location:at-prior-vah+setup:15m-rejected-prior-vah-up+entry:3m-close-top+entry:3m-momentum-up+stop:15m-low+target:60m-swing`.
-Same combination, same signature, so outcomes pool across days.
+The **skill signature** is the same without the reads: which skill at each
+step. Same combination, same signature, so outcomes pool across days
+(section 4.2).
 
-**What the loop builds on it later** (not in this design's PRs): replay
-practice writes the records; code scores each decision (signature, context:
-regime, bias, session, outcome in R, passes with their counterfactuals) into
-an append-only log; an index by signature and context with sample sizes;
-an `experience_lookup` tool, like `skill_lookup`, so nothing is added to
-the prompt. Nothing in sections 3-4 has to change for it.
+## 4. How the model learns what to pick
 
-## 5. Skill text changes
+This is the heart of the design. Section 3's tool and gate exist so that
+every decision is a set of checked reads with a real outcome; this section
+turns those decisions into a record the model consults, so that over many
+practice days it learns **which skills to combine in which market
+context**.
 
-The trader-process skill is embedded in every mapped role and has a byte
-budget of 4800 (`tests/plugin/trader-process.test.js:22`); it is at 4791.
-So every change replaces text; the detail goes into a skill read with
-`skill_lookup`.
+### 4.1 The loop
+
+1. **Practice.** The runner replays Train months (section 4.7). At each bar
+   the model composes a candidate from its skills and either enters it or
+   passes. Nothing about the choice is fixed: the steps are the frame, the
+   skill and the read at each step are the model's.
+2. **Record.** Code writes every decision, composed or passed, to an
+   append-only experience log with its signature, its context and, once the
+   session is over, its outcome in R (section 4.2).
+3. **Index.** Between sessions, code builds an index of the log: per
+   signature and context, how many, how often it won, its mean R with a
+   confidence interval (section 4.3). The model never writes the log or the
+   index.
+4. **Consult.** In the next session, when it has a candidate, the model
+   calls `experience_lookup` and gets its own record for that combination in
+   this context (section 4.4). Nothing is embedded in the prompt.
+5. **Review.** After a session the reviewer writes lessons; code attaches the
+   real statistics to each (section 4.6). The model proposes, code measures,
+   and the model never judges its own lessons (`docs/LEARNED-RULEBOOK.md`
+   section 7a: "The proposer never judges").
+6. **Judge.** Whether it learned is measured on held-out months by a paired
+   replay, with and without the record (section 4.8).
+
+There is no sweep, TPE or combination search anywhere in the loop: the only
+thing that chooses a combination is the model, and the only thing the record
+does is tell it what happened when it chose that way before.
+
+### 4.2 The experience log
+
+**One record per decision.** A decision is a cycle bar on which the model
+had an `ok` composed record (it called `compose_check` and every read was
+true), whether it entered or passed. A bar with no `ok` record is logged as
+a plain pass with no signature (it counts how often the model found
+nothing). Each record holds:
+
+- the run id, lane, root, contract, bar, side, and the decision (`entered`,
+  `passed`, `refused` with the gate's check);
+- the composed record's reads, plan and `exploratory` flag (section 4.5);
+- the two signatures below;
+- the context (below);
+- the outcome, written after the session's end of day by code: for an
+  entry, the real R from its fills; for a pass, the counterfactual R of the
+  record's own stop and target on the bars after the decision;
+- each step's read and the model's `why` for it, so a lesson or a lookup
+  shows how it thought;
+- the decision's grade: an entry by its R; a pass by its counterfactual
+  (a pass whose counterfactual lost is a **good pass** and is scored as a
+  good decision); and the scorecard's reason grade (right reason, wrong
+  reason: a `why` the briefing contradicts or a reason that doesn't match
+  its read);
+- the split role of the bar's date (`prop/splits.js:190`, `roleOf`): train,
+  select, oos or recent.
+
+**Two signatures.** Each answers a different question.
+
+| Signature | Built from | Answers | Example (scenario 1) |
+|---|---|---|---|
+| Skill signature | step -> skill, steps in the fixed order, skills sorted within a step | Which skills, combined, work in which context | `bias:bos-vs-choch,daily-bias+location:vwap-volume-profile+setup:rejection+entry:candle-reading,momentum-and-volume+stop:invalidation+target:top-down-entry` |
+| Read signature | step -> skill -> read kind, values bucketed | Which specific reads, combined, work | section 3.8's signature |
+
+Within a step, reads sort by skill then form, so the same combination always
+has the same signature whatever order the model wrote it in. Values are
+bucketed so that similar setups group: prices are dropped (a stop is its
+source, `15m-low`, not 21512.75); timeframes stay; a target's R is bucketed
+(under 1.5R, 1.5-2.5R, over 2.5R); a level name stays (`prior-vah`).
+
+**Context keys.** Code reads them from the cycle bar's briefing; the model
+never states them.
+
+| Key | Field | Buckets |
+|---|---|---|
+| Regime | `m3.regime.primary` (`briefing.js:365`) | as the briefing names it |
+| Volatility | `m3.regime.volatility` (`briefing.js:365`) | as the briefing names it |
+| Session | `m3.window` (`briefing.js:360`) | the session-timing windows |
+| Trend side | `m3.trendRule` for the order's side | with, against |
+| Timeframe alignment | `m15.alignment` for the side (`briefing.js:426`) | as the briefing names it |
+| Day type | `m3.today.dayType` (`briefing.js:398`) | as the briefing names it |
+
+**What feeds it.** The log is a new file built from records that already
+exist or that section 3 adds; it re-derives nothing the harness already
+computes.
+
+| Source | Gives the log |
+|---|---|
+| The composed record (`<FTH_HOME>/composed/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
+| Cycle log (`cycle-log.js`: `<FTH_HOME>/logs/cycles-<day>.jsonl`) | The cycle's result, its `compose_check` and `experience_lookup` calls, the gate's refusals |
+| Decision history (`decision-history.js`) | The action words (entered, skipped, no-trade) and its fill matching for an entered trade's real R (`closedTrade`, `decision-history.js:326`). The history itself is not the log: the runner keeps only the last ten (`runner.js:1410`) |
+| Counterfactual (`replay/counterfactual.js:70`, `simulate`) | A pass's R from the record's stop and target distances, with the backtester's slippage |
+| Scorecard (`replay/scorecard.js`) | Each decision's adherence verdict (reads verified, the gate's answer, the stated reasons checked) |
+| The run directory (`replay/driver.js:68`, `paths.runDir`) | The run id and the replayed bars the outcome is read from |
+
+**Where it lives.** `<run home>/experience/decisions.jsonl`, one file per
+run, written at the run's end of day by a code step (a CLI, under 200
+lines, with the logic in `scripts/lib/`). Never in the repo, and never read
+in the session that wrote it.
+
+### 4.3 The index
+
+**Built by code, from the log.** A CLI builds an index file from a list of
+runs: `<FTH_HOME>/experience/index-<hash>.json`, with a manifest naming every
+run it read and each run's split role. For each skill signature and for each
+read signature, overall and per context key (one key at a time, and the
+full context):
+
+- `n`, the decisions; entries and passes counted apart;
+- the win rate with a 90% Wilson interval (`prop/stats.js:74`);
+- the mean R with a 90% block-bootstrap interval by trading day
+  (`prop/stats.js:50`), so one day's cluster counts once;
+- the first and last date seen, and the split by regime and by year;
+- per step, the mean R grouped by the skill chosen at that step with the
+  other steps' skills held, so "does the location step add anything" is
+  answerable from the record (owner decision D7).
+
+**Minimum sample.** A cell with fewer than `MIN_N` decisions (D16) shows
+`n too small (n=7)` and no rate or mean; its count still shows.
+
+**No leakage.** An index is built only from records whose split role is
+`train` (Train, 2021-05 to 2023-06; `splits.js:51`). Records from Select,
+Out-of-sample and Recent replays are kept in their run's log but never
+indexed: those months judge, they don't teach (`docs/LEARNED-RULEBOOK.md`
+section 4; `prop/looks.js`). A Recent replay is a reasoning-fix look whose
+scorecard hides every outcome (`replay/scorecard.js:412, 460`), so it has no
+outcome to index anyway. A live or paper-live session's records are indexed
+only by an owner-approved rebuild (section 4.7).
+
+**Frozen during a session.** The runner pins one index file at start; every
+lookup in the session reads it, and the cycle log records its hash. It is
+rebuilt only between sessions, by the CLI, never by the runner.
+
+### 4.4 `experience_lookup`
+
+A read-only harness tool, modelled on `skill_lookup`
+(`harness-tools/skills.js`, registered in `harness-tools/registry.js:200-210`):
+
+```json
+{ "symbol": "MNQ",
+  "alternative": [ { "step": "setup", "skill": "breakout-vs-fakeout" } ] }
+```
+
+- **Input.** The symbol: the tool reads the latest `ok` composed record for
+  the root on the cycle bar, so the candidate and its context are the ones
+  code checked, never restated by the model. `alternative` (optional, at most
+  two) swaps one step's skill to ask how a nearby combination did. `role`
+  (optional, as in `skill_lookup`) records who asked.
+- **Output.** Plain text, capped at 4 KB (far under the protocol's 256 KB
+  cap, `harness-tools/protocol.js:40`): the record's skill and read
+  signatures and context; the closest matching cells with `n`, win rate and
+  mean R with their intervals, last seen and the regime split, the exact
+  cell first, then the cell with one context key dropped, then the skill
+  signature alone; up to three similar past decisions (same skill signature,
+  closest context) with their reads and `why` per step, decision, outcome in
+  R and any lesson
+  (section 4.6) with the statistics code attached to it; and the index's
+  hash and its months. With no index or no match it says so. It never says
+  what to do.
+- **Who calls it.** The head trader (the main session), in setup-judgment,
+  and only after a `compose_check` returned `ok`: with no candidate there is
+  nothing to look up. The risk manager may call it in phase 2 to see the
+  same record; it is not required of it.
+- **Budget.** At most two calls per cycle bar (D22); a third is refused.
+- **Prompt stays stable.** The tool's schema joins the cached head of the
+  roles that hold it (about 0.8-1 KB, as `skill_lookup`'s 737 bytes); its
+  output is a tool result, not prompt text, so no statistic is embedded and
+  the prompt prefix doesn't change from cycle to cycle. Today's journal
+  instincts, which are embedded (`runner.js:126`, `trading/instincts.js`),
+  are unchanged by this design.
+- **Recorded.** Each call appends `{ at, role, record, index }` next to the
+  cycle's transcript, as `skill_lookup` records its lookups
+  (`trading/skill-lookups.js:48`). The gate can then require a lookup on the
+  record before a composed entry (D15): recorded from the first PR,
+  required once the pinned index holds data for the root.
+
+### 4.5 Practice and exploration
+
+**Practice runs.** Replays over Train months only, the composed document
+in `paper` traded under the replay exemption (D10), the runner cycling
+every bar on the composed lane (D11). At each bar the model composes or
+passes; the gate checks every read; fills are the replay broker's.
+
+**Exploration.** A candidate whose cell in the pinned index is `n too small`
+is exploratory: `compose_check` marks the record `exploratory: true`, and
+the size is the minimum (one micro) whatever the budget allows. Exploration
+happens only in replay practice: in any other run an exploratory entry
+is refused by the gate (D18). So the record grows where it is thin without
+risking more than a micro on an untested combination.
+
+**How picking uses the record.** Taught in the new skill, composed-entry (index
+only), not enforced by the gate (D19):
+
+- prefer a combination whose cell's mean-R interval lies above zero in this
+  context;
+- pass on one whose interval lies below zero, and say so in the reasons;
+- with `n too small`: in practice, explore at the minimum; elsewhere, pass
+  unless the skill signature alone (any context) has a positive interval;
+- never treat a win rate without its `n` as evidence; a lesson counts only
+  with the statistics code attached to it.
+
+Whether the model followed its own record is measured, not enforced: the
+scorecard compares each decision with the cell it looked up.
+
+### 4.6 Lessons
+
+After a practice session the trade-reviewer writes lessons as today
+(`agents/trade-reviewer.md`), each naming a skill or read signature
+(`signature:<sig>` tag) and a context, and say what the thinking got
+right or wrong at which step (the `why` beside each read is there to read). Code, not the reviewer, then attaches
+to the lesson the cell's statistics at that moment (`n`, win rate, mean R
+and intervals, the index hash). The lookup shows a lesson only beside those
+statistics, and marks it `contradicted` when the cell's interval now lies on
+the other side of zero from what the lesson claims. A lesson never changes a
+statistic, and no LLM decides whether a lesson is right.
+
+### 4.7 Discipline: splits, looks and the champion
+
+- **Teaching months.** Practice and indexing use Train only. Select and
+  Out-of-sample judge (section 4.8), each look logged in the ledger
+  (`prop/looks.js`; Out-of-sample under its look budget). Recent takes only
+  reasoning-fix looks, whose scorecard hides P&L (`replay/scorecard.js:412`).
+- **Live never edits the running agent.** A live or paper-live session reads
+  its pinned index; its own decisions are logged but enter an index only at
+  a rebuild between sessions, and that rebuild is a change to the champion.
+- **The champion.** The agent that trades (its skills, the composed document
+  and its pinned index) changes only with the owner's approval, after the
+  paired replay (section 4.8) and the frozen promotion gate. A practice
+  index rebuilt between Train practice sessions is a challenger, never the
+  champion.
+- **Paper and replay first.** No live entry until the owner promotes
+  `composed` from `paper` (D9).
+
+### 4.8 How we know it learned
+
+A **paired replay** on held-out months (Select first; Out-of-sample for the
+promotion gate, under its budget): the same bars, the same skills and the
+same composed document, run twice.
+
+| Arm | `experience_lookup` |
+|---|---|
+| With experience | reads the index built from Train practice |
+| Without experience | returns "no record" every time |
+| Shuffled (recommended) | reads the same index with its statistics permuted across cells |
+
+The shuffled arm separates "the record taught it which combination works"
+from "being shown any numbers makes it cautious".
+
+Measured per arm, from the scorecard and the experience log:
+
+- adherence: reads verified, gate refusals, false stated reasons, lookups
+  made when required;
+- mean R per entry and per decision (passes counted at their
+  counterfactual), each with a block-bootstrap interval, and the paired
+  difference by day;
+- how often it entered a cell with a positive interval and passed one with a
+  negative interval; good passes; right-reason against wrong-reason
+  decisions. Trade count is reported, never rewarded;
+- blows, and the combine attempts through the frozen promotion gate
+  (`prop/promotion.js:12`: zero blows in every out-of-sample month, at least
+  40% passes over at least 20 independent attempts and two months).
+
+It learned when the with-experience arm beats both other arms on mean R
+with the paired interval above zero, with adherence no worse, zero blows,
+and the promotion gate passed; then the owner decides.
+
+**Guards against fooling ourselves.**
+
+- *Outcome noise:* intervals, not point values; `MIN_N`; day-block
+  bootstrap so a day's cluster counts once.
+- *Self-confirmation:* the model's choices decide what gets entered, so
+  passes are logged with their counterfactual R: a combination the model
+  avoids still accumulates outcomes, and a bad record can recover.
+- *Regime shift:* the regime split and last-seen date in every cell; a cell
+  whose last year has the opposite sign of its whole is flagged `shifted`.
+- *Old records:* no hidden decay weight (D21): the per-year split and
+  last-seen show age openly.
+- *Leakage:* Train-only indexing (section 4.3); every held-out look logged.
+- *Fishing:* `compose_check` is limited per bar (D6) and every call is
+  logged, so the record covers what was tried, not only what passed.
+
+## 5. Changes to today's records
+
+| Record | Change |
+|---|---|
+| The composed record (3.3) | New: the reads, each check, the plan, the signatures, the context; append-only |
+| The journal plan | The plan text names the record (`composed <bar> <signature>`); `journal_add` has no data field (`broker/interface.js:90-93`), and the broker interface doesn't change |
+| Decision history (`decision-history.js:107`) | `setup: composed`, the signature, and the record's stop and target; a pass with an `ok` record is `skipped`, so its +1R/-1R counterfactual is kept |
+| Cycle log (`cycle-log.js`) | Each `compose_check` and `experience_lookup` call, its record and refusal, and the pinned index's hash, beside `factCheck` |
+| Labels (`replay/labels.js`) | The reads and signatures; the record's target counts as the plan's own exit, not a clone reason |
+| Scorecard (`replay/scorecard.js`, `trading/reasons.js:89`) | The expected decision comes from the reads: a bar with an `ok` record is not "no setup"; a composed entry is judged by its record (every read verified and side-agreeing, the gate's answer), each step's `why` (right or wrong reason) and its outcome in R; a pass whose counterfactual lost is a good pass |
+| Counterfactual (`replay/counterfactual.js:70`) | The record's stop and target distances simulate a pass |
+| Experience log (section 4.2) | New, built from the rows above at each run's end of day |
+
+## 6. Concept inventory: what the old strategies knew
+
+Owner: composed "combines all the concepts from the others". Before any
+strategy is deleted, every concept it encodes must be (a) taught by a skill,
+(b) readable from a briefing fact and (c) verifiable by a read form. Status
+is for the briefing fact today; no setup concept has a verifier today (the
+FACTS kinds check window, entries, news, trend, read, vwap side, value
+location and room only, `fact-claims.js:64-69, 171-176`), so column (c) is
+the read form section 3.2's checker gains.
+
+| Strategy | Concept | (a) Skill | (b) Briefing fact today | (c) Read form | Status |
+|---|---|---|---|---|---|
+| `cisd_ote` | CISD: a displacement through the run's open | `cisd` | `m3.cisd.<tf>` dir, level, displacement (`briefing.js:189-200, 415`; 3m, 5m, 15m, 60m) | `<tf> cisd up\|down` | present |
+| `cisd_ote` | Sweep before the CISD | `cisd` | `m3.cisd.<tf>.sweep`, `m3.sweeps` (`briefing.js:384`) | `swept <level>` | present |
+| `cisd_ote` | OTE zone, price in it, a bounce closing back the trade's way | `fib-retracement` | `m3.cisd.<tf>.ote`, `priceInOte` (`briefing.js:199`); no bounce flag | `in ote`, `<tf> ote bounce up\|down` | partial |
+| `cisd_ote` | Momentum (version 5, unmerged branch `feat/cisd-ote-momentum`) | `momentum-and-volume`, `trend-momentum-indicators` | 15m ADX and EMAs (`briefing.js:167, 429`), `m3.bar.rangeAtr` (`:358`); no bar close third or 1-bar volume against the 20-bar average | `<tf> momentum up\|down` (D4) | partial |
+| `crt_1h`, `crt_4h` | The prior 1h or 4h candle's range swept and closed back inside | `candle-reading`, `rejection`, `breakout` | `m3.candles.<tf>.levels["CRT 1h\|4h range high\|low"]` (`candle-facts.js:425-430`); the detector `crt.js` feeds only the rules (`rules.js:142`) | `<tf> rejected CRT <tf> range low\|high` | partial |
+| `crt_1h`, `crt_4h` | A 3m structure shift after the sweep | `bos-vs-choch` | `m3.lastBreak` (`briefing.js:383`), not tied to the sweep | `crt <tf> shift up\|down` | partial |
+| `crt_1h`, `crt_4h` | The range's far side as the target | `top-down-entry` | none | `target crt <tf> far side <price>` | missing |
+| `orb` | Opening range, a close beyond it | `breakout`, `breakout-vs-fakeout`, `session-timing` | `m3.today.openingRange` (`briefing.js:398`); the 3m candle's "broke" relation | `3m broke opening range high\|low up\|down` | partial (no break-this-bar flag) |
+| `orb`, `vwap_reclaim` | ADX floor, EMA side | `trend-momentum-indicators` | `m3.trend.adx`, `ema50` (`briefing.js:366`) | `<tf> adx above <n>`, `<tf> ema50 above\|below` | present (fact); form new |
+| `vwap_reclaim` | A close back through RTH VWAP; not chasing far from it | `vwap-volume-profile`, `levels-and-reactions` | `m3.vwap` rth, side, crosses (`briefing.js:369-371`); no reclaim-this-bar flag | `3m reclaimed vwap up\|down` | partial |
+| `value_area` (all three) | Prior POC, VAH, VAL | `vwap-volume-profile` | `day.priorProfile` (`briefing.js:449`) | `at prior VAH\|VAL\|POC` | present |
+| `value_area` | Rejection or break of the POC | `rejection`, `levels-and-reactions` | candle relations to "prior POC" | `<tf> rejected\|broke prior POC up\|down` | present (fact); form new |
+| `value_area_breakout` | Acceptance: two closes outside value | `breakout`, `vwap-volume-profile` | `m3.location.priorValue` (`briefing.js:403-404`); no close count | `accepted above\|below value` | partial |
+| `value_area_reentry` | The 80% rule: open outside value, two closes back inside | `vwap-volume-profile` | `m3.today.openVs` (`briefing.js:398`), `priorValue`; no close count | `reentered value up\|down` | partial |
+| `value_area`, `ofi` | Order-flow imbalance over 1, 3 and 5 bars | none | none: the bars carry the broker's flow fields (`indicators.js:26-29`), the briefing's bar keeps only OHLCV (`briefing.js:358`) | `<tf> flow up\|down` | missing |
+| `ofi_absorption` | Absorption: heavy flow without progress, then a turn | `absorption` (bar volume only) | `m3.participation` (`briefing.js:372`); no flow | `<tf> absorbed up\|down` | partial |
+| `ofi`, `ofi_absorption` | Volume surge against a longer average | `momentum-and-volume` | `m3.participation.relVolLast3VsPrior20` (`market-snapshot.js:163`), other windows | `<tf> volume above average` | partial |
+| `prop_portfolio`, `prop_flow_1m` | Sizing and the priority order of their components | `position-sizing` | the account's rulebook | none: sizing stays code (section 3.7) | n/a |
+
+**Parameters worth keeping as skill guidance:** the version-5 momentum rule
+(15m ADX(14) at least 20, EMA20 beyond EMA50 and moving the trade's way over
+3 candles, bar range at least 1 ATR(14), close in the far third, volume at
+least the 20-bar average); a strong CISD candle (body at least 0.6 of its
+range, close in its extreme third, range at least 1 ATR); a CRT sweep is
+shallow (at most half the range beyond it), and the far side should be at
+least 2R away; acceptance is two closes; don't chase VWAP past 1.5 ATR;
+breakouts want an ADX floor; flow must agree across windows, and flow
+without price progress is absorption. **Tuned quirks, not kept:** the
+minute-of-day windows (09:48, 10:00-15:00, 573/600/900), CRT key times,
+`cisdMaxWait`, `cisdExpiry`, `cisdVoidTol`, ATR buffers of 0.1-0.5, the
+range-ATR floors of 3 and 6 for CRT, and the flow thresholds of 0.25 and
+0.3 (the flow strategies were never backtested). Which concepts work, in
+which context, is what the learning loop finds; the skills state each
+concept, not a tuned number.
+
+**The gaps,** each a PR in phase A (section 10) before anything is deleted:
+
+1. CRT as a fact: the sweep, the shift after it and the far side, from
+   `crt.js` moved into the briefing (it feeds only the rules today).
+2. "This bar" flags: the VWAP reclaim, the opening-range break, two-close
+   acceptance outside value, the 80% re-entry, the OTE bounce.
+3. The momentum read (D4) and the 1-bar volume ratio against the 20-bar
+   average; the bar's close third.
+4. Order flow: the flow fields per bar in the briefing (a fact, read-only),
+   a new skill teaching order-flow imbalance, and absorption with flow.
+5. Section 8's scenario-2 facts.
+6. The read forms for all of the above, in the reads checker.
+
+## 7. Skill text changes
+
+The doctrine "no setup without a fired strategy" becomes **"no entry
+without verified reads"**. The trader-process skill is embedded in every
+mapped role and has a byte budget of 4800
+(`tests/plugin/trader-process.test.js:22`), at 4791 today, and its PLAN
+block a budget of 760 (`:23`); every change replaces text, and the detail
+goes into skills read with `skill_lookup`.
 
 | Skill | Today | Becomes |
 |---|---|---|
-| `trader-process:19-21` | "No setup without a fired strategy. ... never make a trade on their own." | "No setup without verified reads: a fired strategy, or a combination `compose_check` verifies (composed-entry)." |
-| `trader-process:37, 44` (steps 4, 6) and the PLAN block (`:83, 85-86`) | The setup is a fired strategy; the trigger fired | The setup is a fired strategy or the record's setup read; line 4 may say `composed <signature>` |
-| `rejection:16-19`, `breakout:16-19` | "never a reason to enter without a fired strategy" | "a setup read for a strategy or a composed entry, never an entry alone" |
-| `top-down-entry:30` | "A fired strategy is the entry." | "A fired strategy, or a verified composed entry, is the entry." |
-| `absorption:48`, `fib-retracement:65`, `cisd:53` | "No setup without a fired strategy" | Same replacement |
-| `risk-manager.md:84-91` (step 0) | Candidate or veto | Candidate, policy verdict, or an `ok` composed record for this bar; else veto |
-| `trade-plan` | `order_plan` with a strategy | Unchanged rule; one example with `strategy: "composed"` |
-| A new skill, composed-entry (index only) | | The read forms, the stop and target rules, one worked example per scenario |
+| `trader-process:19-21` | "No setup without a fired strategy. ... never make a trade on their own." | "No entry without verified reads: a combination `compose_check` verifies." |
+| `trader-process:37, 44` (steps 4, 6) and the PLAN block (`:83, 85-86`) | The setup is a fired strategy; the trigger fired | The setup is the record's setup read; line 4 says `composed <signature>` |
+| `rejection`, `breakout`: description (line 3, "Use when a strategy fired") and lines 10, 16-19 | "never a reason to enter without a fired strategy" | "a setup read in a composed entry, never an entry alone" |
+| `top-down-entry:30` | "A fired strategy is the entry." | "A verified composed entry is the entry." |
+| `absorption:48`, `fib-retracement:65`, `cisd:53`, `fair-value-gaps:42` | "No setup without a fired strategy" / "and a fired strategy" | "No entry without verified reads" |
+| `setup-judgment` | Judges each fired strategy's setup | Composes from the skills, calls `compose_check`, then `experience_lookup` (section 4.4) |
+| `agents/risk-manager.md:84-91` (step 0) | Candidate or veto | An `ok` composed record for this bar (and, in an attempt, its verdict); else veto |
+| `trade-plan` | `order_plan` with a strategy | Unchanged rule; the example uses `strategy: "composed"` |
+| `trading/skills-loaded.js:44` (`REQUIRED_FOR_ENTRY`) | Names `strategy-library`, `strategy-scan`, `strategy-gate-checks` | Names the new skill, composed-entry, instead (section 9 deletes the three) |
+| A new skill, composed-entry (index only) | | The read forms, side agreement, the stop and target rules, how to use the record (section 4.5), one worked example per scenario |
+| The concept gaps (section 6) | | A new skill teaching order flow; CRT, acceptance and the 80% rule in the existing skills; the kept parameters as guidance |
 
 Each change is synced to every harness by `node scripts/sync-harness.js`.
 
-## 6. Order of facts for scenario 2
+## 8. Facts for scenario 2
 
 1. **4h candle facts:** add 240 to the candle timeframes
    (`candle-facts.js:74`), so a 4h candle's sweep of the prior 4h low is a
    `rejected` relation like any other.
 2. **4h swing targets:** add 240 to the target frames (`briefing.js:419`).
-3. **5m structure:** `lastBreak` on 5m candles, from the base bars when
-   they divide 5m, else a 1m lane's bars (as 5m candle facts are built
-   today, `candle-facts.js:380`); never approximated.
-4. **FVGs per timeframe:** open FVGs on 5m, 15m and 60m, each with whether
+3. **FVGs per timeframe:** open FVGs on 5m, 15m and 60m, each with whether
    the last completed candle retested it.
+4. **5m structure:** `lastBreak` on 5m candles, from the base bars when
+   they divide 5m, else a 1m lane's bars (as 5m candle facts are built
+   today, `candle-facts.js:380`); never approximated. No 5m lane.
 5. **Prior-candle levels per timeframe** are already met as "previous
    <tf> high/low" (`candle-facts.js:430`); nothing to add.
-6. **A shared momentum read** per timeframe, once its definition is decided
-   (D4).
+6. **The shared momentum read** per timeframe (D4).
 
 Each is a briefing fact first (with tests and no look-ahead), then a read
-form. A 5m lane is not required if the 1m bars are there.
+form.
 
-## 7. PR sequence
+## 9. Composed as the only strategy
+
+The owner: "We can delete all the old strategies ... This is the only
+strategy." No gradual demotion: every strategy document goes, and
+`strategies/composed` is the only one. The harness places no entries
+between the deletion and composed's proof ("we won't trade until this is
+done and perfected"); the gate refuses any entry naming a deleted strategy
+(`strategies.js:562-566`), which is failing closed. Exits and protection
+return before every entry check (`order-gate.js:247`) and keep working
+throughout; the runner's exit management (`runner.js:405-424`,
+`exitPlan`) keeps a position's exit until it closes.
+
+**Deleted documents.** Every folder under `strategies/`: `cisd_ote`,
+`crt_1h`, `crt_4h`, `ofi`, `ofi_absorption`, `orb`, `prop_flow_1m`,
+`prop_portfolio`, `value_area`, `value_area_breakout`, `value_area_reentry`,
+`vwap_reclaim`. `_template` and `README.md` are rewritten for
+`signal: composed`. The account rulebooks' `policies` entries for the two
+policies go; `composed` is added when D5 says so.
+
+**Kept as facts** (they feed the briefing, the candle facts or the
+snapshot): `cisd.js` and `fib.js` (`briefing.js:93`, `market-snapshot.js:15`),
+`candle-facts.js`, `structure-events.js`, `volume-profile.js`,
+`day-context.js`, `regime.js`, `mtf.js`, `mtf-state.js`, `indicators.js`,
+`round-numbers.js`, `market-snapshot.js`, `trading/order-plan.js`
+(`sideTarget`, `briefing.js:89`). `crt.js` moves into the facts first
+(section 6, gap 1).
+
+**Strategy-only code, removed in its own PRs after the documents:**
+
+| Code | What goes | What stays |
+|---|---|---|
+| `trading/rules.js` | The rule compiler and evaluator | `readField`, `causalLevels`, `sideValuesText` (the briefing uses them, `briefing.js:92`) |
+| `trading/crt.js` | Its rule-only parts | The detector, now a fact |
+| `trading/strategies.js` | `scan` (`:471`), `recentSignals` (`:500`), `withConfluence` (`:526`), `RETIRED`, the policy component check (`:368-391`), `componentRefusal` (`:545`) | The loader, the validator, `withRulebook` (`:285`) for `composed` |
+| `trading/signal-state.js` | The trigger and retired-lane records | Bar timing (`sameBar`, `barMs`, used by `prop-state.js:21`) |
+| `trading/scan-log.js`, `trading/track-record.js` | All | |
+| `trading/evaluator.js` | Rule evaluation | `exitPlan`, `timeframeMs` |
+| `backtest/run.js`, `walk-forward.js`, `report.js` | All, once `roundHalfEven` moves out of `engine.js` (used by `prop/verdict.js:17`) | `data.js`, `sim-broker.js` (the counterfactual), `engine.js` math |
+| `autotrader.js:711-716`, `lanes.js` | Trigger `signal` (`lanes.js:61`, `signalLaneErrors` `:153`) and the per-lane strategy lists | Trigger `bar` |
+| `runner.js`, `runner-wiring.js` | The per-bar scan, `laneSignals`, `scanLog`, `trackRecord` | Exit management; `exit-memory.js` keyed `composed` |
+| `briefing.js` | `m3.candidates` and the Setups line | Every fact |
+| `order-gate.js` | `trigger-fired` (`:300`), the policy-component and retired-lane checks | `setup-tag`, `strategy` (for `composed`), every risk check |
+| `fact-claims.js:257-269` | The room fact against `m3.candidates` | The room fact against the composed record |
+| `harness-tools/order-plan.js` | The candidate path (`candidateOf`, `:53`) | `order_plan` from the record |
+| `harness-tools/registry.js:35-76` | `strategies_scan`, `strategies_recent` | `strategies_list`, `show`, `validate` |
+| `replay/labels.js`, `scorecard.js`, `failures.js`, `trading/reasons.js` | What fired (`scans-<day>.jsonl`), labels keyed on a strategy, the strategy clone reason | Labels and scores keyed on the record |
+| `prop/live-runner.js` | Picking among component scans | The verdict from the record |
+
+**Skills, agents, commands.** Deleted: `strategy-library`, `strategy-scan`,
+`strategy-rules`, `strategy-tools`, `strategy-authoring`,
+`strategy-backtest`, `strategy-gate-checks`; `setup-expectancy` is rewritten
+around the experience record; the `strategy-researcher` agent goes; the
+commands `new-strategy` and `setup-scorecard` go or are rewritten. About 46
+skill, agent and command files name a specific strategy and are rewritten
+(heaviest: `prop-challenge-pacing`, `gate-refusals-limits`,
+`setup-judgment`, `rejection`, `breakout`, `cisd`).
+
+**Tests and goldens.** About 95 test files and 35 fixtures name a strategy.
+Module tests leave with their code; gate, runner and replay tests that use a
+real strategy switch to the fixture registries
+(`tests/fixtures/strategies-fx`, `strategies-ext`, `strategies-fx-parity`)
+so the plumbing composed keeps stays covered; the e2e tests
+(`tests/e2e/mock-trading-e2e.test.js` uses `prop_portfolio` at line 305 and
+`setup:orb` at 281) move to fixtures, then to composed. The 15 goldens in
+`tests/fixtures/golden/` and `tests/scripts/cli-parity.snapshot.json` that
+name a strategy are regenerated, each change explained in its PR.
+
+**Docs.** `docs/research/mtf-setup-catalog.md` and
+`docs/research/cisd-ote-textbook.md` stay as history (the skills that cite
+them are rewritten to cite this inventory); `docs/LEARNED-RULEBOOK.md`,
+`docs/BACKTESTING.md`, `docs/ORDER-FLOW.md`, `docs/QUANT-PLAN.md` and
+`CLAUDE.md` (its policy-strategy paragraph and the strategies commands)
+are updated in the PR that changes what they describe.
+
+**Order, so the regression is never red:** phase A (section 6's gaps
+filled: facts, skills, read forms) -> phase B (delete the documents,
+rewrite their tests against fixtures, then remove the dead code, a few
+PRs) -> phase C (build composed on the clean base) -> phase D (the
+learning loop). Every PR passes `npm run verify`.
+
+## 10. PR sequence
 
 Each PR is small, runs `npm run verify`, and gets the adversarial review.
 
-1. **Reads checker.** `scripts/lib/trading/composed-reads.js`: parse and
-   check reads against a briefing (scenario 1's forms), with unit tests.
-   No tool, no gate change.
-2. **`compose_check` and the record.** The harness tool, the record file,
-   the stop and target rules, the signature; `strategies/composed`
-   (`signal: composed`, `status: paper`) and its schema.
-3. **Gate.** `composed-reads` check, `factsOrder` for room facts, gate and
-   wiring tests (`tests/lib/order-gate.test.js`,
-   `tests/hooks/trading-hooks.test.js`).
-4. **order_plan and the prop verdict.** `strategy: "composed"`, and a
-   verdict from the record inside an attempt.
-5. **Skills and the risk manager.** Section 5's text, the new
-   skill, composed-entry, synced.
-6. **Records.** Decision history, cycle log, labels, scorecard,
-   counterfactual.
-7. **Scenario 1 end to end.** An e2e test on real bars: the model's reads,
-   the record, the gate allowing it in paper and refusing a false read.
-8. **Scenario 2 facts,** in section 6's order, one PR each, then their read
-   forms and an e2e test.
+**Phase A: nothing the old strategies knew is lost.**
 
-## 8. Risks
+- **PR 1.** **CRT as a fact** (section 6, gap 1).
+- **PR 2.** **"This bar" flags** (gap 2).
+- **PR 3.** **Momentum and volume reads** (gap 3; D4).
+- **PR 4.** **Order-flow facts and a new skill teaching order flow** (gap 4).
+- **PR 5.** **Scenario 2's facts**, in section 8's order, one PR each (D8).
+- **PR 6.** **Reads checker.** `scripts/lib/trading/composed-reads.js`: parse and
+  check reads against a briefing, side agreement, the full structured
+  candle relations, every form of sections 3.2 and 6, the signatures; pure,
+  with unit tests. No tool, no gate change.
+- **PR 7.** **Skills** for the concepts (section 6's guidance), synced.
+
+**Phase B: delete the old strategies (D14).**
+
+- **PR 8.** **Documents and their tests.** Delete every strategy folder and the
+  rulebook policies; move gate, runner and replay tests to fixture
+  strategies; regenerate and explain goldens; delete the strategy skills,
+  agent and commands; `REQUIRED_FOR_ENTRY` names no deleted skill.
+- **PR 9.** **Dead code,** one PR per area of section 9's table (runner and lanes;
+  gate and fact claims; replay; backtest; tools).
+
+**Phase C: composed.**
+
+- **PR 10.** **`compose_check` and the record.** The tool, the record file, the stop
+  and target rules, the minimum stop; `strategies/composed`
+  (`signal: composed`, `status: paper`, `risk.max_risk_usd` required).
+- **PR 11.** **Gate.** `composed-reads` (re-runs the checker), side agreement, the
+  replay exemption (D10), `factsOrder` for room facts; gate and wiring
+  tests (`tests/lib/order-gate.test.js`,
+  `tests/hooks/trading-hooks.test.js`).
+- **PR 12.** **order_plan, the limit entry and the prop verdict** (section 3.7).
+- **PR 13.** **Runner:** every bar on the composed lane (D11).
+- **PR 14.** **Skills and the risk manager:** section 7's text, the new skill
+  composed-entry, synced.
+- **PR 15.** **Records:** section 5.
+- **PR 16.** **Scenario 1 and 2 end to end:** e2e tests on real bars, the model's
+  reads, the record, the gate allowing a paper entry in replay and
+  refusing a false or disagreeing read.
+
+**Phase D: the learning loop.**
+
+- **PR 17.** **Experience log:** the end-of-day step and its module (section 4.2).
+- **PR 18.** **Index:** the CLI and module, Train-only, `MIN_N`, the intervals, the
+  pinned hash (section 4.3).
+- **PR 19.** **`experience_lookup`:** the tool, its recording, and the gate's lookup
+  requirement behind D15 (section 4.4).
+- **PR 20.** **Exploration and lessons:** the `exploratory` flag and its gate rule,
+  the lesson statistics (sections 4.5, 4.6).
+- **PR 21.** **Paired replay:** the three arms, the scorecard's adherence-to-record
+  measure, the ledger entries (section 4.8).
+
+Then practice on Train, the paired replay on held-out months, the frozen
+promotion gate, and the owner's decision.
+
+## 11. Risks
 
 - **Fishing for true reads.** The model can call `compose_check` until a
-  combination passes. Every call is recorded; the loop scores what was
-  tried, not just what passed. A per-bar call limit is D6.
+  combination passes. Every call is recorded; the log scores what was
+  tried, not just what passed. The per-bar limit is D6.
 - **Reads that are true but meaningless.** Verification proves the facts,
-  not the edge. Paper and replay first; the outcome log decides later.
-- **Stops at noise.** A stop at the nearest candle low can be tight; the
-  `risk.min_rr`, the budget and the zero-blow rules still bound the loss.
-- **A small local model writing closed forms.** Malformed reads refuse; the cycle
-  log counts them, so the forms can be simplified from evidence.
-- **Prompt size.** The new skill is index-only; the embedded text only
-  swaps sentences.
+  not the edge. That is what the learning loop measures (section 4).
+- **Stops at noise.** The minimum stop (D13), `risk.min_rr`, the budget and
+  the zero-blow rules bound the loss.
+- **A small local model writing closed forms.** Malformed reads refuse; the
+  cycle log counts them, so the forms can be simplified from evidence.
+- **Cycle cost.** Cycling every bar (D11) runs the full role round on bars
+  where nothing is worth composing; the report cache and the lookup budget
+  bound it, and the cycle log measures it.
+- **Learning noise.** Small samples and regime shifts can teach the wrong
+  lesson; section 4.8's guards and the paired replay answer it.
+- **No trading during the rebuild.** Accepted by the owner; exits keep
+  working.
+- **Prompt size.** The new skills are index-only; the embedded text only
+  swaps sentences; the two tools add their schemas once to the cached head.
 
-## 9. Open decisions for the owner
+## 12. Owner decisions
 
-- **D1.** Approve the design: a `signal: composed` strategy document with
-  status `paper` plus a `compose_check` tool, rather than another route.
-- **D2.** Trend rule: composed entries are trend-only, or a verified
-  reversal (a sweep plus a CHoCH against the trend) may fade it.
-- **D3.** Stop buffer beyond the invalidation level: 0, 1 tick, or a share
-  of ATR.
-- **D4.** Momentum read definition (e.g. a displacement or a top-third
-  close with range at least 1 ATR and volume at least the average).
-- **D5.** Whether `prop_portfolio` lists `composed` as a component once
-  replays support it.
-- **D6.** A limit on `compose_check` calls per bar.
-- **D7.** Required steps: all six, or bias, setup, stop and target only.
-- **D8.** Scenario 2's facts: confirm the order in section 6 and whether a
-  5m lane is wanted or 1m bars suffice.
-- **D9.** Promotion: what replay evidence moves `composed` from `paper` to
-  `active`.
+Each has a proposed default; the owner may change any of them.
+
+- **D1.** Approve the design: one `signal: composed` strategy document plus
+  `compose_check` and the learning loop. *Proposed default: yes.*
+- **D2.** Trend rule. *Proposed default: follow today's trend rule;
+  against the trend only with a code-verified reversal (a higher-timeframe
+  CHoCH the order's way).*
+- **D3.** Stop buffer beyond the invalidation level. *Proposed default:
+  1 tick.*
+- **D4.** The momentum read. *Proposed default: the `cisd_ote` version-5
+  rule: 15m ADX(14) at least 20 and EMA20 beyond EMA50 the trade's way;
+  the bar's range at least 1 ATR, a close in its far third, volume at least
+  the 20-bar average.*
+- **D5.** `composed` as the account's policy (the rulebook lists it;
+  section 3.7's code changes). *Proposed default: not in a prop attempt
+  until replay proves it.*
+- **D6.** `compose_check` calls per bar. *Proposed default: about 3; a hard
+  limit inside an attempt.*
+- **D7.** Required steps. *Proposed default: all six steps stated, each with
+  the model's own read; the skill at each step is free. A step becomes
+  optional only if the per-step record (section 4.3) shows it adds nothing,
+  and only by the owner's decision.*
+- **D8.** Scenario 2's facts. *Proposed default: 4h candle facts and 4h
+  swing targets first, then FVGs per timeframe, then 5m structure from 1m
+  bars (no 5m lane).*
+- **D9.** What moves `composed` from `paper` to `active`. *Proposed default:
+  the frozen promotion gate (`prop/promotion.js:12`) on the paired replay,
+  then the owner's approval.*
+- **D10.** How a `paper` composed entry trades in replay. *Proposed default:
+  only when the broker and the run config are both replay, as
+  `lockExemption` (`account-lock.js:199-203`); refused everywhere else.*
+- **D11.** The runner's trigger for composed. *Proposed default: every bar
+  (trigger `bar`) on the composed lane in replay practice; trigger `signal`
+  is removed with the strategies.*
+- **D12.** Side agreement. *Proposed default: required and code-enforced
+  (section 3.2).*
+- **D13.** Minimum stop and the entry order. *Proposed default: a stop of at
+  least the larger of 8 ticks and 0.25 x ATR(20) of the base bars (half the
+  briefing's 0.5 x ATR(20) reference stop, `briefing.js:38`; 8 ticks is
+  2.00 points, $4.00 a micro contract on MNQ); the entry a limit at the
+  entry reference, valid until the record expires.*
+- **D14.** When the old strategies are deleted. *Proposed default: right
+  after phase A, when every concept in section 6 is present as a skill, a
+  fact and a read form; before composed is built. No trading until composed
+  passes D9.*
+- **D15.** Whether the gate requires an `experience_lookup` before a
+  composed entry. *Proposed default: recorded from the first PR; required
+  once the pinned index holds data for the root.*
+- **D16.** Minimum sample before a statistic is shown. *Proposed default:
+  20 decisions per cell; 90% intervals.*
+- **D17.** The context keys. *Proposed default: the six of section 4.2,
+  bucketed as the briefing names them.*
+- **D18.** Exploration. *Proposed default: replay practice only, at the
+  minimum size, flagged; refused elsewhere.*
+- **D19.** Whether the record binds. *Proposed default: advice, taught in
+  the new skill, composed-entry, not enforced by the gate; adherence to it is
+  measured.*
+- **D20.** Adopting a new index into the champion. *Proposed default: only
+  after the paired replay and the promotion gate, with the owner's
+  approval; practice indexes rebuild freely between Train practice
+  sessions.*
+- **D21.** Old records. *Proposed default: no decay weight; the per-year
+  split, last-seen date and `shifted` flag show age.*
+- **D22.** The lookup's budget. *Proposed default: at most 2 calls per
+  cycle bar, output at most 4 KB.*
