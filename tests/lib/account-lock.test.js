@@ -21,10 +21,11 @@ const AUTOTRADER_ARG = '/x/scripts/autotrader.js'; // a child that reads as an a
 /** A child process that runs `code` (with L, the module, and the lock env) and reads as an autotrader. */
 function child(code, env) {
   const p = spawn(process.execPath, ['-e', `const L = require(${JSON.stringify(MODULE)});\n${code}`, AUTOTRADER_ARG], { env: { PATH: process.env.PATH, TMPDIR: os.tmpdir(), ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
-  const io = { out: '' };
+  const io = { out: '', signal: null };
   p.stdout.on('data', c => { io.out += c; });
   p.stderr.on('data', c => { io.out += c; });
-  return { p, io, done: new Promise(r => p.on('close', code2 => r(code2))) };
+  // 'close': the process has exited and its output is all read. Resolves to the exit code; a signal it died of is io.signal.
+  return { p, io, done: new Promise(r => p.on('close', (code2, signal) => { io.signal = signal; r(code2); })) };
 }
 
 const waitFor = (what, ms, cond) => new Promise((resolve, reject) => {
@@ -213,10 +214,13 @@ test('a stale lock replaced by a live runner while it was being judged is put ba
   assert.deepStrictEqual(fs.readdirSync(env.FTH_LOCK_DIR), []);
 });
 
-// Two runners starting together: each child waits for the same instant, then acquires and holds.
+// Two runners starting together: each child waits for the same instant, then acquires. A winner holds until every
+// child has answered (the parent then writes the release file), so a child that starts late under load still meets
+// a held lock: a second WON is two holders at once, never one after the other.
 async function race({ n = 2, seedStale = false } = {}) {
   const env = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
   const file = L.lockFileFor({ env, server: SERVER, accountId: '7' });
+  const releaseFile = path.join(tmpDir(), 'release');
   if (seedStale) {
     fs.mkdirSync(env.FTH_LOCK_DIR, { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ pid: await deadPid(), host: os.hostname(), home: '/homes/old' }));
@@ -224,9 +228,18 @@ async function race({ n = 2, seedStale = false } = {}) {
   const at = Date.now() + 400;
   const kids = Array.from({ length: n }, (_, i) => child(`
     while (Date.now() < ${at}) {}
-    try { const h = L.acquireAccountLock({ env: process.env, broker: { name: 'live' }, accountId: '7', home: '/homes/${i}' }); console.log('WON'); setTimeout(() => h.release(), 300); }
-    catch (err) { console.log('REFUSED ' + err.message); }
+    try {
+      const h = L.acquireAccountLock({ env: process.env, broker: { name: 'live' }, accountId: '7', home: '/homes/${i}' });
+      console.log('WON');
+      const until = Date.now() + 30000; // never outlive a parent that failed
+      const poll = setInterval(() => { if (require('fs').existsSync(${JSON.stringify(releaseFile)}) || Date.now() > until) { clearInterval(poll); h.release(); } }, 20);
+    } catch (err) { console.log('REFUSED ' + err.message); }
   `, env));
+  try {
+    await waitFor('every child\'s answer', 30000, () => kids.every(k => k.io.out.includes('\n')));
+  } finally {
+    fs.writeFileSync(releaseFile, '');
+  }
   await Promise.all(kids.map(k => k.done));
   const outs = kids.map(k => k.io.out.trim());
   assert.ok(!fs.existsSync(file), 'released after');
@@ -252,12 +265,14 @@ test('no lock leak: released on SIGTERM (the runner exits on it) and on a crash;
   const env = { FTH_LOCK_DIR: tmpDir(), FTH_TEST_LOCKS: '1' };
   const file = L.lockFileFor({ env, server: SERVER, accountId: '7' });
   const hold = `const h = L.acquireAccountLock({ env: process.env, broker: { name: 'live' }, accountId: '7' }); console.log('HELD');`;
-  // The runner's own signal handling: stop, then exit (scripts/autotrader.js holdLock).
-  const term = child(`${hold} process.on('SIGTERM', () => process.exit(130)); setInterval(() => {}, 1000);`, env);
+  // The runner's own signal handling: stop, then exit (scripts/autotrader.js holdLock). Installed before the lock is
+  // taken, as the runner does (holdLock runs before the account lock): HELD then means the handler is in place, so the
+  // SIGTERM below can't land in the default action (killed, exit code null) before it.
+  const term = child(`process.on('SIGTERM', () => process.exit(130)); ${hold} setInterval(() => {}, 1000);`, env);
   await waitFor('the lock', 10000, () => term.io.out.includes('HELD'));
   assert.ok(fs.existsSync(file));
   term.p.kill('SIGTERM');
-  assert.strictEqual(await term.done, 130);
+  assert.strictEqual(await term.done, 130, `exit on SIGTERM (signal ${term.io.signal}): ${term.io.out}`);
   assert.ok(!fs.existsSync(file), 'released on SIGTERM');
   const crash = child(`${hold} setTimeout(() => { throw new Error('boom'); }, 50);`, env);
   assert.strictEqual(await crash.done, 1);
