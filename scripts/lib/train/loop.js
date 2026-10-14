@@ -189,18 +189,19 @@ async function championTree(ctx) {
 
 /**
  * A window run's learning gate: the run's window and `"learning"` flag (the loop's replay config), the loop's
- * `learning` settings (validate, reasoningFix, ledger) and, outside practice-train, its evaluation id, required
+ * `learning` settings (validate, reasoningFix) and, outside practice-train, its evaluation id (the loop's, one per window:
+ * <evaluation>.<label>), required
  * there as replay.js run requires --evaluation; the candidate is the loop's look's.
  */
-function learningGate(ctx, run, look) {
+function learningGate(ctx, run, look, label) {
   const l = ctx.loop.learning || {};
   let practice = false;
   try { practice = rolesBetween(run.start, run.end).every(r => r === 'practice-train'); } catch (_err) { /* the gate names it */ }
   const looked = run.learning !== false && !practice;
   return {
     from: run.start, to: run.end, runId: run.runId, learning: run.learning,
-    candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked ? l.evaluation || null : null,
-    validate: looked && l.validate === true, reasoningFix: looked && l.reasoningFix === true, ledgerFile: looked ? l.ledger || null : null, env: ctx.env,
+    candidate: looked && l.evaluation ? look.candidate : null, evaluation: looked && l.evaluation ? `${l.evaluation}.${label}` : null,
+    validate: looked && l.validate === true, reasoningFix: looked && l.reasoningFix === true, endOfDay: run.endOfDay, runDir: run.paths.runDir, env: ctx.env,
   };
 }
 
@@ -221,7 +222,7 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
     // The learning gate (learning/run-gate.js), as replay.js run applies it: checked before the run home is seeded,
     // its look taken before the first cycle, its decision checked again on resume. The point runs start from this
     // run's checkpoints (decision-points.js runPoint copies its home), so they inherit what it was allowed.
-    const gate = learningGate(ctx, run, look);
+    const gate = learningGate(ctx, run, look, label);
     checkLearningRun(gate);
     ctx.steps.seedRunHome(run, { root: tree, userEnv: ctx.env });
     startLearningRun(run.paths.runHome, gate);

@@ -38,9 +38,10 @@ const HARNESS = path.join(ROOT, 'tests', 'fixtures', 'fake-harness.js');
 const TOOLS_SERVER = path.join(ROOT, 'scripts', 'harness-tools-mcp.js');
 const MNQ_ID = 'fake:MNQ:Z26';
 const STEP = 180000;
-// The parity bars moved 23 weeks on (same weekday, same ET times: both dates are in daylight time):
-// Wednesday 2026-09-30 evening to Tuesday 2026-10-06 early morning; the replay window is Monday's open.
-const SHIFT = 161 * 864e5;
+// The parity bars moved 23 weeks and 52 more on (same weekday, same ET times: both dates are in daylight time), past
+// the learning split (a replay there is not a learning run):
+// Wednesday 2027-09-29 evening to Tuesday 2027-10-05 early morning; the replay window is Monday's open.
+const SHIFT = (161 + 364) * 864e5;
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'))
   .map(b => ({ t: new Date(Date.parse(b.t) + SHIFT).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
 const closeOf = t => Date.parse(t) + STEP;
@@ -51,13 +52,13 @@ test('the replay wiring: the broker\'s clock file moves its clock; a conforming 
   const state = path.join(dir, 'state.json');
   const clock = path.join(dir, 'clock.json');
   exchange.initState(state, { bars: { [MNQ_ID]: BARS } });
-  const at = '2026-10-05T13:36:02.000Z';
+  const at = '2027-10-04T13:36:02.000Z';
   fs.writeFileSync(clock, JSON.stringify({ now: at }));
   const ask = env => exchange.handle(state, 'get_bars', { contractId: MNQ_ID, unit: 'minute', unitNumber: 3, limit: 20000 }, { MOCK_CLOCK_FILE: clock, ...env }).bars;
   const cut = ask({});
   assert.ok(cut.length > 1000);
   assert.ok(cut.every(b => closeOf(b.t) <= Date.parse(at)), 'every bar closed by the clock file\'s time');
-  assert.strictEqual(cut.at(-1).t, '2026-10-05T13:33:00.000Z', 'the bar that closed at 13:36');
+  assert.strictEqual(cut.at(-1).t, '2027-10-04T13:33:00.000Z', 'the bar that closed at 13:36');
   // The leaking server the suite replays against: it serves the rest of the file too.
   const leaked = ask({ MOCK_LEAK_BARS: '1' });
   assert.ok(leaked.filter(b => closeOf(b.t) > Date.parse(at)).length > 100, 'bars after the clock: the test below is not vacuous');
@@ -73,12 +74,12 @@ function replaySetup() {
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
     runId: 'nla', workDir: path.join(user, 'replays'), broker: 'replaymock', learning: false,
-    start: '2026-10-05T13:31:00Z', end: '2026-10-05T13:40:00Z', premarket: false,
+    start: '2027-10-04T13:31:00Z', end: '2027-10-04T13:40:00Z', premarket: false,
     autotrader: { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
   }));
   // The account is flat, the market is the shifted parity bars, and the server leaks every bar after its clock.
-  const init = { nowMs: Date.parse('2026-10-05T13:00:00Z'), prices: { [MNQ_ID]: BARS.at(-1).c, 'fake:MNQ:H27': BARS.at(-1).c, 'fake:MES:Z26': 5800 }, bars: { [MNQ_ID]: BARS.slice(-1400) } };
+  const init = { nowMs: Date.parse('2027-10-04T13:00:00Z'), prices: { [MNQ_ID]: BARS.at(-1).c, 'fake:MNQ:H27': BARS.at(-1).c, 'fake:MES:Z26': 5800 }, bars: { [MNQ_ID]: BARS.slice(-1400) } };
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init), MOCK_LEAK_BARS: '1', FAKE_HARNESS_LOOKAHEAD: '1', FTH_STRATEGIES_DIRS: FX_GOLDEN };
   return { user, live, config, env, runHome: path.join(user, 'replays', 'nla'), runDir: path.join(user, 'replays', 'nla', 'replay', 'nla') };
 }
@@ -87,8 +88,8 @@ test('replay: at each decision time, nothing the runner, the scan, the briefing,
   const w = replaySetup();
   const run = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'replay.js'), 'run', '--config', w.config], { encoding: 'utf8', env: w.env, timeout: 280000 });
   assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
-  const recs = lines(path.join(w.runDir, '2026-10-05.jsonl'));
-  assert.deepStrictEqual(recs.map(r => r.t), ['2026-10-05T13:33:02.000Z', '2026-10-05T13:36:02.000Z', '2026-10-05T13:39:02.000Z']);
+  const recs = lines(path.join(w.runDir, '2027-10-04.jsonl'));
+  assert.deepStrictEqual(recs.map(r => r.t), ['2027-10-04T13:33:02.000Z', '2027-10-04T13:36:02.000Z', '2027-10-04T13:39:02.000Z']);
   for (const r of recs) {
     const at = Date.parse(r.t);
     assert.strictEqual(r.cycles.length, 1, JSON.stringify(r));
@@ -127,7 +128,7 @@ test('replay: at each decision time, nothing the runner, the scan, the briefing,
     }
   }
   // Every bar the runner scanned and logged closed by the time it was scanned.
-  const scans = lines(path.join(w.runHome, 'logs', 'scans-2026-10-05.jsonl'));
+  const scans = lines(path.join(w.runHome, 'logs', 'scans-2027-10-04.jsonl'));
   assert.ok(scans.length >= 3);
   for (const s of scans) assert.ok(closeOf(s.bar.t) <= Date.parse(s.at), JSON.stringify(s).slice(0, 200));
   // The records the order gate reads: the last decision's bar, not a later one.
@@ -169,7 +170,7 @@ async function withTools(env, fn) {
 }
 
 test('harness tools under a replay clock: a bars file with a later bar is refused by every tool; bars_fetch cuts; live is unchanged', { timeout: 180000 }, async () => {
-  const clock = '2026-10-05T13:36:02Z';
+  const clock = '2027-10-04T13:36:02Z';
   const at = Date.parse(clock);
   const cutIdx = BARS.findIndex(b => closeOf(b.t) > at);
   const write = (home, name, bars) => {
@@ -183,7 +184,7 @@ test('harness tools under a replay clock: a bars file with a later bar is refuse
   const cases = home => {
     const cut = write(home, 'MNQ-3m-cut.json', BARS.slice(0, cutIdx));
     const ahead = write(home, 'MNQ-3m-ahead.json', BARS.slice(0, cutIdx + 1));
-    const daily = write(home, 'MNQ-1d.json', Array.from({ length: 30 }, (_, k) => ({ t: new Date(Date.parse('2026-09-06T00:00:00Z') + k * 864e5).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 })));
+    const daily = write(home, 'MNQ-1d.json', Array.from({ length: 30 }, (_, k) => ({ t: new Date(Date.parse('2027-09-05T00:00:00Z') + k * 864e5).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 })));
     return { cut, ahead, daily, calls: [
       ['strategies_scan', { symbol: 'MNQ', detail: true }],
       ['strategies_recent', { symbol: 'MNQ' }],
@@ -200,11 +201,11 @@ test('harness tools under a replay clock: a bars file with a later bar is refuse
     for (const [name, args] of r.calls) {
       const ahead = await call(name, { ...args, bars: r.ahead });
       assert.strictEqual(ahead.isError, true, `${name}: ${ahead.text}`);
-      assert.match(ahead.text, new RegExp(`the bars file ${r.ahead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: 1 bar\\(s\\) close after the replay clock \\(2026-10-05T13:36:02\\.000Z\\), the first at 2026-10-05T13:39:00\\.000Z`), name);
+      assert.match(ahead.text, new RegExp(`the bars file ${r.ahead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: 1 bar\\(s\\) close after the replay clock \\(2027-10-04T13:36:02\\.000Z\\), the first at 2027-10-04T13:39:00\\.000Z`), name);
       const cut = await call(name, { ...args, bars: r.cut });
       assert.ok(!/after the replay clock/.test(cut.text), `${name} on the cut file: ${cut.text.slice(0, 300)}`);
     }
-    // The daily file of mtf_read: today's daily bar (opened 2026-10-05) has not closed at 13:36.
+    // The daily file of mtf_read: today's daily bar (opened 2027-10-04) has not closed at 13:36.
     const daily = await call('mtf_read', { bars: r.cut, daily: r.daily });
     assert.strictEqual(daily.isError, true);
     assert.match(daily.text, /the daily bars file .*MNQ-1d\.json: 1 bar\(s\) close after the replay clock/);
@@ -218,10 +219,10 @@ test('harness tools under a replay clock: a bars file with a later bar is refuse
     assert.strictEqual(got.at(-1).t, BARS[cutIdx - 1].t, 'the last bar is the one that closed at 13:36');
     // A briefing whose bar closed after the clock is not served, nor checked against.
     fs.mkdirSync(path.join(replayHome, 'briefing'));
-    fs.writeFileSync(path.join(replayHome, 'briefing', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', minutes: 3, asOf: '2026-10-05T13:36:00.000Z', closedAt: '2026-10-05T13:39:00.000Z', sections: { m3: { validUntil: '2026-10-05T13:42:00.000Z', data: {} } } }));
+    fs.writeFileSync(path.join(replayHome, 'briefing', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', minutes: 3, asOf: '2027-10-04T13:36:00.000Z', closedAt: '2027-10-04T13:39:00.000Z', sections: { m3: { validUntil: '2027-10-04T13:42:00.000Z', data: {} } } }));
     const b = await call('bar_briefing', { symbol: 'MNQ' });
     assert.strictEqual(b.isError, false);
-    assert.match(b.text, /^The bar briefing for MNQ is not served: its bar closed 2026-10-05T13:39:00\.000Z, after the replay clock \(2026-10-05T13:36:02\.000Z\)/);
+    assert.match(b.text, /^The bar briefing for MNQ is not served: its bar closed 2027-10-04T13:39:00\.000Z, after the replay clock \(2027-10-04T13:36:02\.000Z\)/);
   });
   // Live (no replay clock): the same calls on the same files read every bar, as before.
   const l = cases(liveHome);

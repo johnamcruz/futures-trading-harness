@@ -15,6 +15,9 @@
  *   practice-validate    purpose validate: no budget, but every run is logged and counted
  *   practice-train       no look: practice
  *
+ * An evaluation id belongs to its first look: another candidate, purpose or window under it is refused, and it holds
+ * at most MAX_ARMS runs.
+ *
  * A ledger line is a look { kind: 'look', evaluation, candidate, purpose, runId, from, to, role, at } or a result
  * { kind: 'result', evaluation, candidate, role: 'test', result: 'pass' | 'fail', at }.
  *
@@ -33,6 +36,8 @@ const { rolesBetween, sessionDate, SEALED } = require('./splits');
 
 const LOOK_BUDGETS = Object.freeze({ test: 3, final: 1 });
 const FINAL_NEEDS_TEST_PASS = true;
+/** Runs one evaluation may hold: its arms (with experience, without, shuffled). */
+const MAX_ARMS = 3;
 const PURPOSES = Object.freeze(['judging', 'reasoning-fix', 'validate']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** Looks taken before the ledger existed, so it starts true. */
@@ -73,6 +78,17 @@ function checkLook(look, ledger, { budgets = LOOK_BUDGETS } = {}) {
   if (SEALED.includes(role) && l.purpose === 'validate') refusals.push(`${role} is sealed: a judging or reasoning-fix look, not validate`);
   const atRole = looksOf(ledger).filter(e => roleOfLook(e) === role);
   const repeat = atRole.some(e => e.evaluation === l.evaluation && e.runId === l.runId && e.purpose === l.purpose);
+  // An evaluation is its first look's: the same candidate, purpose and window, at most MAX_ARMS runs (its arms).
+  const first = looksOf(ledger).find(e => e.evaluation === l.evaluation);
+  if (first && refusals.length === 0) {
+    let span = null;
+    try { span = [sessionDate(l.from), sessionDate(l.to)]; } catch (_err) { /* refused above */ }
+    if (first.candidate !== l.candidate || first.purpose !== l.purpose || roleOfLook(first) !== role || !span || first.from !== span[0] || first.to !== span[1]) {
+      refusals.push(`evaluation ${l.evaluation} is ${first.candidate}'s ${first.purpose} look at ${first.from}..${first.to}: another candidate, purpose or window takes an evaluation id of its own`);
+    }
+    const arms = new Set(looksOf(ledger).filter(e => e.evaluation === l.evaluation).map(e => e.runId));
+    if (!arms.has(l.runId) && arms.size >= MAX_ARMS) refusals.push(`evaluation ${l.evaluation} has its ${MAX_ARMS} arms (${[...arms].join(', ')})`);
+  }
   const judged = new Set(atRole.filter(e => e.purpose === 'judging').map(e => e.evaluation));
   const shared = l.purpose === 'judging' && judged.has(l.evaluation);
   const budget = SEALED.includes(role) ? budgets[role] : null;
@@ -139,4 +155,4 @@ function lookUsage(ledger) {
 
 const ledgerPath = (env = process.env) => path.join(harnessHome(env), 'learning', 'looks.jsonl');
 
-module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, PURPOSES, RECORDED_LOOKS, checkLook, recordLook, recordResult, lookUsage, ledgerPath };
+module.exports = { LOOK_BUDGETS, FINAL_NEEDS_TEST_PASS, MAX_ARMS, PURPOSES, RECORDED_LOOKS, checkLook, recordLook, recordResult, lookUsage, ledgerPath };

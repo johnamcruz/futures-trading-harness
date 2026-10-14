@@ -26,6 +26,7 @@
  *   roleOf(date)                      'practice-train' | 'practice-validate' | 'test' | 'final' (throws outside)
  *   rolesBetween(from, to)            the roles [from, to) touches, in order
  *   assertUse(use, from, to)          throws unless every day of [from, to) is a role the use allows (USES)
+ *   touchesSealed(from, to)           whether any day of [from, to) is a test or final day
  *   sessionDate(date)                 the session date 'YYYY-MM-DD'
  */
 
@@ -102,4 +103,11 @@ function assertUse(use, from, to) {
   return roles;
 }
 
-module.exports = { WINDOWS, ROLES, SEALED, USES, roleOf, rolesBetween, assertUse, sessionDate };
+/** Whether any day of [from, to) is a test or final day (a range reaching outside the split included). */
+function touchesSealed(from, to) {
+  const a = sessionDate(from);
+  const b = lastDay(to);
+  return a < WINDOWS.final[1] && b >= WINDOWS.test[0];
+}
+
+module.exports = { WINDOWS, ROLES, SEALED, USES, roleOf, rolesBetween, assertUse, touchesSealed, sessionDate };

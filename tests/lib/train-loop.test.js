@@ -474,10 +474,12 @@ test('the learning gate: each window run checks it as replay.js run does, before
   await run(evald);
   assert.strictEqual(evald.calls.replay, 1);
   const looks = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.deepStrictEqual(looks.slice(-1).map(l => [l.role, l.evaluation, l.candidate, l.runId]), [['final', 'ev1', 'l1/champion', 'l1-champion-t0']]);
-  // A replay declared not learning runs, and never teaches.
+  assert.deepStrictEqual(looks.slice(-1).map(l => [l.role, l.evaluation, l.candidate, l.runId]), [['final', 'ev1.champion-t0', 'l1/champion', 'l1-champion-t0']]);
+  // On a test or final day a replay cannot declare itself not learning.
   const fresh = world().loop.replay;
-  const off = world({ proposals: [], loop: { tuningWindows: Q3, replay: { ...fresh, learning: false } } });
+  await assert.rejects(run(world({ proposals: [], loop: { tuningWindows: Q3, replay: { ...fresh, learning: false } } })), /"learning": false on a test or final day/);
+  // After the split (2027-H2's tuning quarter), a replay declared not learning runs, and never teaches.
+  const off = world({ proposals: [], loop: { tuningWindows: [{ from: '2027-07-06', to: '2027-07-07' }], replay: { ...fresh, learning: false } } });
   await run(off);
   assert.strictEqual(off.calls.replay, 1);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(off.loop.workDir, 'runs', 'l1-champion-t0', 'learning-run.json'), 'utf8')).learning, false);

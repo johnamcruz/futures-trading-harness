@@ -9,7 +9,8 @@
  *   node scripts/replay.js run --config replay.json [--max-cycles N]   run (or resume) a replay; a learning run (the
  *       default; "learning": false in the config declares one that is not) lies in one window of the learning split
  *       and takes its look first (learning/run-gate.js): --validate for practice-validate months, --candidate and
- *       --evaluation (the arms of one evaluation share it) for test or final, --reasoning-fix (outcomes hidden), --ledger
+ *       --evaluation (the arms of one evaluation share it) for test or final, --reasoning-fix (outcomes hidden); every
+ *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl;
  *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
  *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>]   month by month, with each
  *       month's combine verdict (a fresh attempt each month; account: --account, the runner config's, the prop
@@ -53,7 +54,7 @@ const { checkLearningRun, startLearningRun, readLearningRun } = require('./lib/l
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] [--ledger file] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--validate | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> | report --config <replay.json> [--account <name>] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -113,7 +114,7 @@ function barsArgs(argv) {
 // The adherence scorecard (scripts/lib/replay/scorecard.js), written in the run's folder or --out, never the repository.
 // A learning run on a reasoning-fix look (learning/run-gate.js) hides its outcomes: no report or labels, a reasoning-fix scorecard.
 function outcomesShown(dir, what) {
-  const l = readLearningRun(path.resolve(dir, '..', '..'));
+  const l = readLearningRun(path.resolve(dir)) || readLearningRun(path.resolve(dir, '..', '..'));
   if (l && l.hideOutcomes) throw new Error(`${what} refused: this learning run is a reasoning-fix look, its outcomes hidden (the scorecard with --purpose reasoning-fix shows the rest)`);
 }
 
@@ -148,7 +149,7 @@ async function run(argv) {
   const max = arg(argv, '--max-cycles') !== undefined ? Number(arg(argv, '--max-cycles')) : Infinity;
   if (!(max === Infinity || (Number.isInteger(max) && max > 0))) throw new Error('--max-cycles: a positive whole number');
   // The learning gate (learning/run-gate.js): checked before the run home is seeded, its look taken before the first cycle.
-  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), ledgerFile: arg(argv, '--ledger') || null };
+  const gate = { from: r.start, to: r.end, runId: r.runId, learning: r.learning, candidate: arg(argv, '--candidate') || null, evaluation: arg(argv, '--evaluation') || null, validate: argv.includes('--validate'), reasoningFix: argv.includes('--reasoning-fix'), endOfDay: r.endOfDay, runDir: r.paths.runDir };
   checkLearningRun(gate);
   const fresh = seedRunHome(r, { root: ROOT, userEnv: process.env });
   const learned = startLearningRun(r.paths.runHome, gate);

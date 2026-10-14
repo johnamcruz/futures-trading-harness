@@ -55,22 +55,70 @@ test('validate needs its flag and is counted; sealed windows need a candidate an
   // Final: refused before anything is written without a test pass.
   const fin = { from: D('2026-03-02T00:00:00Z'), to: D('2026-03-07T00:00:00Z'), runId: 'f2', env, candidate: 'champ', evaluation: 'fin' };
   assert.throws(() => G.checkLearningRun(fin), /no test pass/);
-  // A ledger named on purpose must exist.
-  assert.throws(() => G.checkLearningRun({ ...sealed, candidate: 'c', evaluation: 'e', ledgerFile: path.join(tmp(), 'typo.jsonl') }), /no ledger/);
 });
 
-test('scripts/replay.js run: a sealed run without a candidate is refused before its run home is seeded', () => {
+test('no way around the sealed windows: "learning": false on a test or final day, a learning run without its end of day', () => {
+  const env = { FTH_HOME: tmp() };
+  for (const [from, to] of [['2025-03-03', '2025-03-08'], ['2026-06-01', '2026-06-02'], ['2024-12-30', '2025-01-03'], ['2026-12-28', '2027-01-08']]) {
+    assert.throws(() => G.checkLearningRun({ from: D(`${from}T00:00:00Z`), to: D(`${to}T00:00:00Z`), runId: 'x', learning: false, env }), /"learning": false on a test or final day/, from);
+  }
+  assert.strictEqual(G.checkLearningRun({ from: D('2027-02-01T00:00:00Z'), to: D('2027-02-10T00:00:00Z'), runId: 'x', learning: false, env }).learning, false);
+  assert.strictEqual(G.checkLearningRun({ from: D('2019-02-01T00:00:00Z'), to: D('2019-02-10T00:00:00Z'), runId: 'x', learning: false, env }).learning, false);
+  assert.throws(() => G.checkLearningRun({ from: D('2022-03-01T00:00:00Z'), to: D('2022-04-01T00:00:00Z'), runId: 'p', endOfDay: false, env }), /keeps its end of day/);
+});
+
+test('one ledger: the run keeps its ledger\'s path, and a resume under another FTH_HOME is refused; the decision is kept with the run record', () => {
+  const home = tmp();
+  const runDir = path.join(home, 'replay', 't1');
+  const sealed = { from: D('2025-03-03T00:00:00Z'), to: D('2025-03-08T00:00:00Z'), runId: 't1', candidate: 'champ', evaluation: 'ev1', runDir };
+  const env = { FTH_HOME: tmp() };
+  G.startLearningRun(home, { ...sealed, env });
+  assert.strictEqual(G.readLearningRun(runDir).ledger, path.join(env.FTH_HOME, 'learning', 'looks.jsonl'));
+  assert.deepStrictEqual(G.readLearningRun(home), G.readLearningRun(runDir), 'the run home keeps a copy for the cycle\'s tools');
+  assert.throws(() => G.startLearningRun(home, { ...sealed, env: { FTH_HOME: tmp() } }), /one ledger \(the same FTH_HOME\)/);
+  // The run record decides, even when the home's copy is gone.
+  fs.rmSync(path.join(home, 'learning-run.json'));
+  assert.throws(() => G.startLearningRun(home, { ...sealed, evaluation: 'ev2', env }), /a resume keeps it/);
+});
+
+/** scripts/replay.js run on a config for [start, end), with flags: { status, stdout, stderr, user, live }. */
+function replayRun(start, end, flags = [], over = {}) {
   const user = tmp();
   const config = path.join(user, 'replay.json');
   fs.writeFileSync(config, JSON.stringify({
-    runId: 'sealed', workDir: path.join(user, 'replays'), broker: 'replaymock', start: '2025-03-03T14:30:00Z', end: '2025-03-03T15:00:00Z', premarket: false,
-    autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 },
+    runId: 'r', workDir: path.join(user, 'replays'), broker: 'replaymock', start, end, premarket: false,
+    autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3 }, ...over,
   }));
   const live = path.join(user, 'live');
   fs.mkdirSync(live);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { replaymock: { command: ['true'], replay: true } } }));
-  const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'replay.js'), 'run', '--config', config], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live } });
-  assert.strictEqual(r.status, 1, r.stdout);
-  assert.match(r.stderr, /learning run refused: test is sealed/);
-  assert.ok(!fs.existsSync(path.join(user, 'replays', 'sealed')), 'nothing seeded');
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'replay.js'), 'run', '--config', config, ...flags], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: user, FTH_HOME: live }, timeout: 60000 });
+  return { ...r, user, live };
+}
+
+test('scripts/replay.js run: the gate decides before the run home is seeded', () => {
+  const seeded = r => fs.existsSync(path.join(r.user, 'replays', 'r'));
+  const cases = [
+    ['2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', [], {}, /learning run refused: test is sealed: name the candidate/],
+    ['2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', ['--candidate', 'champ'], {}, /--evaluation/],
+    ['2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', [], {}, /practice-validate months need the validate flag/],
+    ['2025-03-03T14:30:00Z', '2025-03-03T15:00:00Z', [], { learning: false }, /"learning": false on a test or final day/],
+    ['2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z', [], { endOfDay: false }, /keeps its end of day/],
+    ['2026-03-02T14:30:00Z', '2026-03-02T15:00:00Z', ['--candidate', 'champ', '--evaluation', 'fin'], {}, /look refused: final: candidate champ has no test pass/],
+  ];
+  for (const [start, end, flags, over, why] of cases) {
+    const r = replayRun(start, end, flags, over);
+    assert.strictEqual(r.status, 1, `${start} ${flags.join(' ')}: ${r.stdout}`);
+    assert.match(r.stderr, why);
+    assert.ok(!seeded(r), `${start}: nothing seeded`);
+  }
+  // A practice-train run passes the gate: its decision kept with the run record before the first cycle.
+  const ok = replayRun('2022-03-09T14:30:00Z', '2022-03-09T15:00:00Z');
+  assert.match(ok.stdout, /learning: practice-train/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ok.user, 'replays', 'r', 'replay', 'r', 'learning-run.json'), 'utf8')).role, 'practice-train');
+  // A validate run with its flag: logged and counted in the one ledger.
+  const val = replayRun('2024-08-05T14:30:00Z', '2024-08-05T15:00:00Z', ['--validate']);
+  assert.match(val.stdout, /learning: practice-validate, validate look r/);
+  assert.strictEqual(fs.readFileSync(path.join(val.live, 'learning', 'looks.jsonl'), 'utf8').trim().split('\n').length, 1);
 });
+

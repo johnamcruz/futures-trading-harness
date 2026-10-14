@@ -84,3 +84,16 @@ test('recordLook and recordResult: the file under its lock; a missing ledger onl
   assert.deepStrictEqual(lines.map(l => [l.kind, l.role]), [['look', 'test'], ['result', 'test'], ['look', 'final']]);
   assert.strictEqual(K.ledgerPath({ FTH_HOME: '/h' }), path.join('/h', 'learning', 'looks.jsonl'));
 });
+
+test('an evaluation id is its first look\'s: another candidate, purpose or window is refused; at most three arms', () => {
+  const ledger = [{ kind: 'look', ...look(...TEST, { runId: 'a1' }), role: 'test' }];
+  assert.ok(K.checkLook(look(...TEST, { runId: 'a2' }), ledger).ok, 'another arm');
+  assert.match(K.checkLook(look(...TEST, { runId: 'b', candidate: 'other' }), ledger).refusals.join(), /evaluation ev1 is champ's judging look at 2025-02-03\.\.2025-03-01/);
+  assert.match(K.checkLook(look('2025-04-01', '2025-05-01', { runId: 'b' }), ledger).refusals.join(), /another candidate, purpose or window/);
+  assert.match(K.checkLook(look(...TEST, { runId: 'b', purpose: 'reasoning-fix' }), ledger).refusals.join(), /another candidate, purpose or window/);
+  assert.match(K.checkLook(look(...FINAL, { runId: 'b' }), [...ledger, { kind: 'result', evaluation: 'ev1', candidate: 'champ', role: 'test', result: 'pass' }]).refusals.join(), /another candidate, purpose or window/);
+  const three = [...ledger, ...['a2', 'a3'].map(runId => ({ kind: 'look', ...look(...TEST, { runId }), role: 'test' }))];
+  assert.match(K.checkLook(look(...TEST, { runId: 'a4' }), three).refusals.join(), /evaluation ev1 has its 3 arms \(a1, a2, a3\)/);
+  assert.ok(K.checkLook(look(...TEST, { runId: 'a3' }), three).repeat, 'a resume of an arm');
+  assert.strictEqual(K.MAX_ARMS, 3);
+});
