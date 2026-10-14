@@ -12,40 +12,30 @@ description: Identify futures liquidity - prior day/overnight highs and lows, eq
 
 ## How It Works
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
-skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
-ATR, VWAP, participation, the skip-rule counters in `context`, swings and
-liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
-and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
-doesn't hold.
-The sweeps (`m3` `sweeps`) are computed there, by the definition below:
-never call one by eye.
+In an autonomous cycle the bar briefing (`bar_briefing`, the
+`harness-tools` skill) holds this bar's liquidity (`m3` `liquidity`,
+`sweeps`, `htfLevels`, `nearestLiquidity`): use it, and compute only what
+it doesn't hold. The sweeps are computed there: never call one by eye.
 
-1. **Map resting liquidity** (stops cluster just beyond obvious levels):
-   - Prior RTH high/low/close and overnight high/low (market-snapshot `levels`).
-   - Equal highs/lows: 2+ swing points within ~2 ticks of each other.
-   - Opening range high/low, weekly high/low, round numbers (MNQ: every
-     100 points; MES: every 25).
-2. **Sweep vs break.**
-   - **Sweep:** price trades through the level and closes back inside within
-     1–3 bars on the trigger timeframe. Stops were taken; often reverses.
-   - **Break:** a candle *closes* beyond the level and the next pullback holds
-     it (old resistance becomes support). Continuation.
-   - No call until the close. Wicks are information, not signals.
+1. **Resting liquidity** (stops cluster just beyond obvious levels): the
+   levels and their fields are the `levels-and-reactions` skill's. Equal
+   highs/lows: 2+ swing points within ~2 ticks of each other (`taken` once
+   traded through).
+2. **Sweep vs break**: the `breakout-vs-fakeout` skill. No call until the
+   close; wicks are information, not signals.
 3. **Fair value gap (FVG):** a 3-bar pattern where bar 1's high is below bar 3's
    low (bullish) or bar 1's low is above bar 3's high (bearish). Price often
-   revisits the gap; a gap that holds on retest supports continuation.
-4. **Use.**
-   - Targets: the next untested liquidity pool in the trade's direction.
-   - Skip: don't buy just under prior-day high or sell just above
-     prior-day low unless the strategy is a breakout of that level.
-   - Reversal setups (cisd_ote strategy) need a sweep first; continuation
-     setups (bos strategy) need a break.
+   revisits the gap; a gap that holds on retest supports continuation
+   (`m3` `liquidity.openFvgs`).
+4. **Use.** Targets: the next untested liquidity pool in the trade's
+   direction. Room: the first level in a setup's way (`inTheWay`) is the
+   priority order's step 3 (strategy-library). Reversal setups (cisd_ote)
+   follow a sweep; continuation setups follow a break.
 
 ## Examples
 
 ```text
 Overnight high 21614.75 and prior-day high 21615.00 (equal highs, one tick
-apart). The 09:39 ET 3m bar wicks to 21624.00 and closes 21606.00. → sweep of a double liquidity pool. Long ideas
-paused; watch for a bearish CISD / BOS down for a short with stop above 21624.
+apart). The 09:39 ET 3m bar wicks to 21624.00 and closes 21606.00. → sweep of a double liquidity pool
+(m3.sweeps lists it). A short idea is wrong above 21624.00 (the invalidation skill).
 ```

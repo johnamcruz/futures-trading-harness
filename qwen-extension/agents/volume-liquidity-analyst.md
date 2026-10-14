@@ -63,7 +63,9 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `vwap-volume-profile`, `liquidity-concepts`,
-   `session-timing`, `market-snapshot`, and `harness-tools`.
+   `session-timing`, `market-snapshot`, `harness-tools`,
+   `levels-and-reactions`, `momentum-and-volume`, `absorption`, and
+   `candle-reading`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
    Always, once: `get_quote` for the live bid/ask/last.

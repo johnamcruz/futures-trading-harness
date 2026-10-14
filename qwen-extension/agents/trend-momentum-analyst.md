@@ -65,7 +65,8 @@ replaces, and says when the last bar closed; the `harness-tools` skill);
 never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `trend-momentum-indicators`, `market-snapshot`,
-   `strategy-library`, and `harness-tools`.
+   `strategy-library`, `harness-tools`, `trend-vs-range`,
+   `momentum-and-volume`, and `pullback-vs-reversal`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
    `market_snapshot` on each, and `mtf_read` on the 3m file (its
    `Trend rule:` line is enforced by the scan and the gate).

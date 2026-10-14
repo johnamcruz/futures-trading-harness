@@ -13,11 +13,9 @@ description: Interpret EMA, ADX, ATR, SuperTrend, and Keltner channel readings f
 
 ## How It Works
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
-skill) already holds this bar's values: `m3` (EMAs, ADX, SuperTrend, Keltner,
-ATR, VWAP, participation, the skip-rule counters in `context`, swings and
-liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points
-and R), `m15` and `h1` (the higher frames). Use it, and compute only what it
+In an autonomous cycle the bar briefing (`bar_briefing`, the
+`harness-tools` skill) holds this bar's indicators (`m3` `trend`,
+`context`, `regime`; `m15` `indicators`): use it, and compute only what it
 doesn't hold.
 
 Get every value from market-snapshot. Never estimate.
@@ -31,12 +29,10 @@ Get every value from market-snapshot. Never estimate.
 | SuperTrend(10, 3) | ATR bands | Direction and trailing level. Flips late in chop; useful as a trailing stop in trends. |
 | Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 | Close outside the band with ADX ≥ 20 → expansion. Inside and flat → range. |
 
-Regime map:
+Regime: trend, range or transition, by the rule the code applies, is the
+`trend-vs-range` skill's; momentum and the participation fields, the
+`momentum-and-volume` skill's.
 
-- **Trend:** ADX > 20 and rising, price on one side of EMA 20, SuperTrend
-  stable → breakout and pullback strategies.
-- **Range:** ADX < 18, EMA 9/20 tangled, repeated VWAP crosses → no trend
-  strategies; trade the range edges or stand aside.
 - **Volatility:** the computed regime calls it `high` when ATR(14) ≥ 1.4 ×
   its 100-bar average and `low` at ≤ 0.7 × (`regime.volatility` in
   market-snapshot; use that value, don't recompute). High → keep the $ risk

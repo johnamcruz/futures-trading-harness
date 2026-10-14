@@ -160,8 +160,9 @@ request, every time, whatever the size of the change:
    points to. Today those are `docs/BACKTESTING.md`,
    `docs/BROKER-MCP-INTERFACE.md` (the contract broker servers implement),
    `docs/LEARNED-RULEBOOK.md` (the learned-policy design the prop code is
-   built from), and `docs/LIVE-DRY-RUN.md` (the runbook for live-money setup
-   that preflight points to).
+   built from), `docs/LIVE-DRY-RUN.md` (the runbook for live-money setup
+   that preflight points to), and `docs/research/mtf-setup-catalog.md` (the
+   census the basics skills cite as evidence).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
