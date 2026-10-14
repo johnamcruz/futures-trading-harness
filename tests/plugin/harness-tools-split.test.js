@@ -69,14 +69,6 @@ const CISD = [
   ['15m and 1h, in points, ticks and R), `candidates`', `15m and 1h, in points, ticks and R), ${CISD_FIELD}\`candidates\``],
   ['with a pointer to the runner\'s `candles` and `swingTargets`', 'with a pointer to the runner\'s `candles`, `swingTargets` and `cisd`'],
 ];
-// Scenario 2's facts (docs/COMPOSED-ENTRY.md section 8, PR 5) in the briefing's m3, named in place without growing
-// the cell (it is embedded in the head trader's and the roles' prompts): the 4h candle, every candle's sweep of its previous one, the 4h targets.
-const SCENARIO2 = [
-  ['`candles` (per timeframe, 3m, 5m, 15m and 1h, the last COMPLETED candle', '`candles` (per timeframe, 3m to 4h, the last COMPLETED candle'],
-  ['a pattern label (doji, hammer, shooting star, bullish or bearish engulfing, inside, outside, displacement, or none), and the key levels',
-    'a pattern label (`candle-reading`), its `sweep` of the previous candle\'s high or low (closed back inside or not), and the key levels'],
-  ['on the base bars, 15m and 1h, in points, ticks and R)', 'on the base bars, 15m, 1h and 4h, in points, ticks and R)'],
-];
 /** The m3 fields from `location` to `trendRule` reordered as briefing.js builds them. */
 function m3Order(text) {
   const loc = '`location`, ';
@@ -113,7 +105,7 @@ const ALLOWED = [
     reason: 'the old shared folder\'s note dropped (the next sentence refuses every other path), so the listing form costs the four roles that hold this skill nothing' },
   { old: '`skill-lookup.js --skill <name> [--role <role>]`', now: '`skill-lookup.js --skill <name> [--role <role>] \\| --query <text>`', reason: 'the CLI\'s listing form' },
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
-  { old: BRIEFING_CELL, now: SCENARIO2.reduce((t, [a, b]) => t.replace(a, b), m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || ''))), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, the m3 fields in the order briefing.js builds them, and scenario 2\'s facts (SCENARIO2)' },
+  { old: BRIEFING_CELL, now: m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || '')), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, and the m3 fields in the order briefing.js builds them' },
   // lessons and reconcile: the agent-facing cells are dropped. The tools' MCP descriptions (registry.js) say what each
   // returns, and their schemas list the arguments; only the reviewer and the head trader hold them, and embedding the
   // rows in trade-review would grow the reviewer. The people's scripts are in user-commands.

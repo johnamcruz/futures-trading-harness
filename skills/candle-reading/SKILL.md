@@ -27,33 +27,32 @@ A read, never a veto: the priority order (strategy-library) decides take,
 skip and size; the gate and the rulebook are untouched. Thresholds are
 hypotheses; a missing field is `unknown`.
 
-**The stack**: each timeframe's last completed candle, named so. 15m
-and 60m weigh more at a higher-timeframe level (a 60m rejection of the
-prior day's high outweighs a 3m one: `rejection`, `breakout`); 3m and 5m
-time the entry.
+**The stack**: each timeframe's last completed candle, named with its
+timeframe. 15m and 60m weigh more at a higher-timeframe level (a 60m
+rejection of the prior day's high outweighs a 3m one: `rejection`,
+`breakout`); 3m and 5m time the entry.
 
-- 3m, 5m, 15m, 60m and 4h (on an event): `m3.candles` and a summary
-  line each: the last completed candle (OHLCV, close time, shape, close
-  third, range in ATR, volume ratio, `pattern`), the levels it met
-  (`rejected`, `broke`, `touched`; only levels that existed before it
-  opened) and its `sweep` of the previous candle's high or low (closed
-  back or not). `unavailable` or missing (5m without 1m bars) is `unknown`.
+- 3m, 5m, 15m and 60m: `m3.candles` and a summary line each: the last
+  completed candle (OHLCV, close time, body and wick shares, close third,
+  range in ATR, volume against its average, `pattern`) and the levels it
+  met (`rejected`, `broke`, `touched`), only levels that existed before it
+  opened. `unavailable` or missing (5m without 1m bars) is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side.
 - In strategy rules the same candle is `htfd_*` (strategy-rules).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body share |c - o| /
 range; wick shares (h - max(o, c)) / range and (min(o, c) - l) / range;
 close location (c - l) / range, in the top, middle or bottom third; size
-against ATR (`m3.bar.rangeAtr`: small under 0.5, large over
+against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over about
 1.5).
 
 **Patterns** (hypotheses):
 
 - doji: body share under about 0.1, indecision;
-- pin bar (hammer, shooting star): one wick at least 0.6 of the
+- pin bar (hammer, shooting star): one wick at least about 0.6 of the
   range, the close in the opposite third;
-- engulfing: the body covers the prior one, opposite colour;
-- inside bar: within the prior bar's range, compression;
+- engulfing: the body covers the prior body, the opposite colour;
+- inside bar: within the prior bar's high and low, compression;
 - outside bar: beyond both;
 - displacement: large, the close in the extreme third.
 
@@ -62,7 +61,7 @@ against ATR (`m3.bar.rangeAtr`: small under 0.5, large over
 The stack counts once (`confluence-counting`, item 4).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured in our data yet.
+general, none measured in our data yet. Confirmation only.
 
 ## Examples
 
