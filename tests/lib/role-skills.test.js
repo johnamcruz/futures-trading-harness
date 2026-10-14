@@ -125,7 +125,7 @@ const MAIN_SKILLS = {
   'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools'],
   'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools'],
-  'strategy-researcher': ['strategy-authoring', 'strategy-library'],
+  'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library'],
   'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
   'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'harness-tools'],

@@ -55,7 +55,7 @@ one (VWAP, the session profile) at its close, at most four, plus its
 previous candle's high and low and the CRT range; `m3.swingTargets` is
 the next swing high above and low below in points, ticks and R. In
 strategy rules: `htfd_rejected(m, level)`, `htfd_broke(m, level)`,
-`htfd_next_swing_high(m)` (strategy-authoring).
+`htfd_next_swing_high(m)` (strategy-rules).
 
 ## Examples
 
