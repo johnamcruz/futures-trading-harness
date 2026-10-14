@@ -194,6 +194,18 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
+test('retired-lane is a hard rule: FTH_ORDER_GATE_SKIP=retired-lane does not skip it', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  const home = trendHome();
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW, retiredLane: ['bos'] }));
+  const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  assert.ok(skipping.skipChecks.has('retired-lane'), 'the skip is asked for');
+  const r = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: skipping, strategies });
+  assert.ok(r.violations.some(v => v.check === 'retired-lane'), JSON.stringify(r.violations));
+});
+
 test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;

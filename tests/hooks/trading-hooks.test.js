@@ -393,6 +393,10 @@ test('order gate: an entry tagged with a retired strategy is refused, saying so;
   assert.strictEqual(lane.code, 2);
   assert.match(lane.stderr, /\[retired-lane\] setup:anytime trades 3m bars, and the runner's 3m lane lists keltner \(retired on 2026-10-13/);
   assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), env).code, 0, 'exits still go');
+  // A hard rule: the gate's skip list can't switch it off.
+  const skipped = gate(orderPayload(ORDER), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane' });
+  assert.strictEqual(skipped.code, 2);
+  assert.match(skipped.stderr, /\[retired-lane\]/);
 });
 
 test('order gate fails closed on malformed input', () => {

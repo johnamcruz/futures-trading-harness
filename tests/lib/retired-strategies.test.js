@@ -350,3 +350,61 @@ test('a user\'s own strategy under a retired name is named at the runner\'s star
     runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: (m, level) => logs.push({ m, level }), event: () => {} });
   assert.ok(logs.some(l => l.level === 'error' && l.m.includes(`ema_cross (${file}) is your own strategy under a name retired`)), JSON.stringify(logs));
 });
+
+/** The runner wired at start (runner-wiring.js wireRunner) on `home` with `lanes`: its log lines. */
+function startRunner(home, lanes) {
+  const { wireRunner } = require('../../scripts/lib/runner-wiring');
+  const logs = [];
+  wireRunner({ cfg: cfgWith(lanes), root: ROOT, home, env: { FTH_HOME: home }, client: {}, dataDir: path.join(home, 'bars'), now: () => NOW,
+    runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: (m, level) => logs.push({ m, level }), event: () => {} });
+  return logs;
+}
+
+test('at the runner\'s start, before any cycle, a retired lane\'s timeframe is marked: an older unmarked record\'s fresh candidate can\'t pass', () => {
+  const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/trading/signal-state');
+  const home = trendHome();
+  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  // The record from before the upgrade: orb fired long on the last 3m bar, no mark.
+  writeSignals(home, buildSignals([{ name: 'orb', direction: 'long', candidate: true, signal: 'rules', stopDistance: 5 }], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW }));
+  const orb = () => evaluateOrder({ input: entryOrder({ rationale: 'setup:orb long, stop 21480' }), entries: [plan()], now: NOW, config, strategies: SHIPPED }).violations;
+  assert.ok(!orb().some(v => v.check === 'retired-lane'), 'no mark before the start');
+  const logs = startRunner(home, [{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'orb'] }]);
+  const rec = readSignals(home, 'MNQ', '3m');
+  assert.deepStrictEqual([rec.retiredLane, rec.candidates], [['bos'], []]);
+  const v = orb().find(x => x.check === 'retired-lane');
+  assert.ok(v, JSON.stringify(orb()));
+  assert.match(v.message, /To trade on 3m again, remove the retired name from the runner config's lanes \(or the lane\) and restart the runner: its start clears this mark\./);
+  assert.ok(logs.some(l => l.level === 'error' && /signal record 3m: marked: its runner lane lists bos \(retired\), so no entry on 3m/.test(l.m)), JSON.stringify(logs));
+  // No record yet on a retired timeframe: one is written with the mark.
+  const fresh = trendHome();
+  const before = readSignals(fresh, 'MNQ', '3m');
+  assert.strictEqual(readSignals(fresh, 'MNQ', '1m'), null);
+  startRunner(fresh, [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', strategies: ['supertrend'] }]);
+  assert.deepStrictEqual(readSignals(fresh, 'MNQ', '1m').retiredLane, ['supertrend']);
+  assert.deepStrictEqual(readSignals(fresh, 'MNQ', '3m'), before, 'a timeframe with no retired lane is left alone');
+});
+
+test('a mark left by a lane since deleted or fixed is cleared at the runner\'s start; one the runner can\'t write turns the kill switch on', () => {
+  const { buildSignals, writeSignals, readSignals } = require('../../scripts/lib/trading/signal-state');
+  const home = trendHome();
+  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:59:00.000Z' }, stepMs: 60000, now: NOW, retiredLane: ['keltner'] }));
+  const manual = { name: 'disc1', valid: true, errors: [], status: 'active', signal: 'manual', instruments: ['MNQ'], timeframe: '1m', sessions: [], compiledRules: null };
+  const entry = () => evaluateOrder({ input: entryOrder({ rationale: 'setup:disc1 long, stop 21480' }), entries: [plan()], now: NOW, config, strategies: [...SHIPPED, manual] }).violations;
+  assert.ok(entry().some(v => v.check === 'retired-lane'), 'marked');
+  // The 1m lane was deleted from the config: the start clears the mark.
+  const logs = startRunner(home, [{ timeframe: 3, trigger: 'bar' }]);
+  assert.strictEqual(readSignals(home, 'MNQ', '1m').retiredLane, undefined);
+  assert.ok(!entry().some(v => v.check === 'retired-lane'), 'cleared');
+  assert.ok(logs.some(l => /signal record 1m: retired-lane mark cleared/.test(l.m)));
+  // Another family's records are not the runner's: left as they are.
+  writeSignals(home, buildSignals([], { symbol: 'MES', bar: { t: '2026-10-07T13:59:00.000Z' }, stepMs: 60000, now: NOW, retiredLane: ['bos'] }));
+  startRunner(home, [{ timeframe: 3, trigger: 'bar' }]);
+  assert.deepStrictEqual(readSignals(home, 'MES', '1m').retiredLane, ['bos']);
+  // The marks can't be written (signals/ is a file): the kill switch goes on, so no entry slips through.
+  const broken = tmpDir();
+  fs.writeFileSync(path.join(broken, 'signals'), 'not a folder');
+  const bad = startRunner(broken, [{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }]);
+  assert.ok(bad.some(l => l.level === 'error' && /retired-lane signal marks could not be written .*kill switch on/.test(l.m)), JSON.stringify(bad));
+  assert.match(fs.readFileSync(path.join(broken, 'STOP'), 'utf8'), /retired-lane signal marks not written/);
+});

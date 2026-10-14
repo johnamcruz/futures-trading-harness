@@ -158,8 +158,10 @@ order gate refuses any entry on its timeframe under any tag
 (`retired-lane`). Its bars, the trailing stops, end of day and every open
 position's management go on: it runs a manage cycle while a position or
 order is open, and every bar when no account is configured to see them
-(`scripts/lib/lanes.js` `retireLanes`; remove the name from the runner
-config). A name that never existed still stops the runner at start
+(`scripts/lib/lanes.js` `retireLanes`). The runner marks that timeframe's
+signal record at its start, before any cycle, and clears a mark whose lane
+was since fixed or deleted: to trade on it again, remove the name (or the
+lane) from the runner config and restart the runner. A name that never existed still stops the runner at start
 (`scripts/lib/trading/strategies.js` `RETIRED`;
 `tests/lib/retired-strategies.test.js`). A private copy under one of
 these names in a folder of your own (`FTH_STRATEGIES_DIRS`) is yours, not

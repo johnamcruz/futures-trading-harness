@@ -54,7 +54,39 @@ function retiredLaneRefusal(home, { root, strategy, timeframe }) {
   if (!home || !timeframe) return null;
   const rec = readSignals(home, root, timeframe);
   if (!rec || rec.error || !Array.isArray(rec.retiredLane) || !rec.retiredLane.length) return null;
-  return `setup:${strategy} trades ${timeframe} bars, and the runner's ${timeframe} lane lists ${rec.retiredLane.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. Remove the name from the runner config's lanes; the lane's next bar record then clears this.`;
+  return `setup:${strategy} trades ${timeframe} bars, and the runner's ${timeframe} lane lists ${rec.retiredLane.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. To trade on ${timeframe} again, remove the retired name from the runner config's lanes (or the lane) and restart the runner: its start clears this mark.`;
+}
+
+/**
+ * At the runner's start, before any cycle: the retired mark on each of its symbols' records, for exactly the
+ * timeframes of its lanes that list a retired strategy (lanes.js retireLanes). A retired lane's timeframe gets the mark
+ * now (an older unmarked record could hold a still-fresh candidate until the lane's first bar), with its candidates
+ * emptied; a mark on any other timeframe (a lane fixed or deleted since) is cleared. `lanes`: the runner's lanes.
+ * Returns what it changed: [{ file, timeframe, marked: [names] | null }].
+ */
+function syncRetiredMarks(home, { symbols = [], lanes = [], now = new Date() }) {
+  const retired = new Map(lanes.filter(l => Array.isArray(l.retired) && l.retired.length).map(l => [`${l.timeframe}m`, l.retired]));
+  const roots = new Set(symbols.map(familyRoot));
+  const changed = [];
+  const write = (file, rec, timeframe, marked) => { writeSignals(home, rec); changed.push({ file, timeframe, marked }); };
+  for (const symbol of symbols) {
+    for (const [timeframe, names] of retired) {
+      const old = readSignals(home, symbol, timeframe);
+      const base = old && !old.error ? old : { symbol: String(symbol).toUpperCase(), timeframe, asOf: now.toISOString(), closedAt: now.toISOString(), source: null };
+      write(signalFile(home, symbol, timeframe), { ...base, symbol: base.symbol || String(symbol).toUpperCase(), timeframe, recordedAt: now.toISOString(), candidates: [], retiredLane: names }, timeframe, names);
+    }
+  }
+  let files = [];
+  try { files = fs.readdirSync(path.join(home, 'signals')).filter(f => /^[A-Z0-9]+-\d+m\.json$/.test(f)); } catch (_err) { files = []; }
+  for (const f of files) {
+    const [root, tf] = f.replace(/\.json$/, '').split('-');
+    if (!roots.has(root) || retired.has(tf)) continue;
+    const rec = readSignals(home, root, tf);
+    if (!rec || rec.error || !rec.retiredLane) continue;
+    const { retiredLane: _gone, ...rest } = rec;
+    write(signalFile(home, root, tf), { ...rest, symbol: rest.symbol || root, timeframe: tf, recordedAt: now.toISOString() }, tf, null);
+  }
+  return changed;
 }
 
 function writeSignals(home, record) {
@@ -163,4 +195,4 @@ function lastRecordedBar(home, root, timeframe) {
   return { bar: rec.asOf, timeframe: tf };
 }
 
-module.exports = { retiredLaneRefusal, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
+module.exports = { retiredLaneRefusal, syncRetiredMarks, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
