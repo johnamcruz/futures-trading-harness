@@ -439,3 +439,31 @@ test('the cycle log\'s lookups for the report cache leave out the head trader\'s
   L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill: 'rejection' }, T + 5);
   assert.deepStrictEqual(L.lookupsInCall(writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' }).lookups, role, call), ['rejection']);
 });
+
+test('cycleFacts / factsKey with the cycle\'s bar: the briefing on that bar holds past its validUntil; another bar\'s, an unreadable bar or no m3 never; without one, the clock decides', () => {
+  const BAR = '2026-10-07T13:57:00.000Z';
+  const first = (asOf, until) => ({ asOf, minutes: 3, sections: { m3: { version: `m3@${asOf}`, validUntil: until, data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }] } } } });
+  const later = new Date('2026-10-07T14:10:00.000Z');
+  const b = first(BAR, '2026-10-07T14:00:00.000Z');
+  // Past validUntil: the clock alone says no facts (every lookup required); the cycle's bar says these are its facts.
+  assert.strictEqual(L.cycleFacts({ first: b, now: later }), null);
+  assert.strictEqual(L.factsKey(b, later), null);
+  assert.deepStrictEqual(L.cycleFacts({ first: b, now: later, cycleBar: BAR }), b.sections.m3.data);
+  assert.strictEqual(L.factsKey(b, later, [], BAR), `m3@${BAR}`);
+  assert.strictEqual(L.factsKey(b, later, [], '2026-10-07T13:57:00Z'), `m3@${BAR}`, 'the same instant, written differently');
+  // Another bar, an unreadable one, a briefing without asOf or m3: none (fails closed), even while the clock holds.
+  const early = new Date('2026-10-07T13:59:00.000Z');
+  for (const [f, bar] of [[b, '2026-10-07T14:00:00.000Z'], [b, 'not a time'], [{ ...b, asOf: undefined }, BAR], [{ ...b, sections: {} }, BAR], [null, BAR]]) {
+    assert.strictEqual(L.cycleFacts({ first: f, now: early, cycleBar: bar }), null, `${bar} ${JSON.stringify(f && f.asOf)}`);
+    assert.strictEqual(L.factsKey(f, early, [], bar), null, bar);
+  }
+  // No cycle bar: the clock, as before.
+  assert.deepStrictEqual(L.cycleFacts({ first: b, now: early }), b.sections.m3.data);
+  // Over the home (the gate's view).
+  const home = tmpDir();
+  writeBriefing(home, { symbol: 'MNQ', ...b });
+  assert.strictEqual(L.briefingFacts(home, 'MNQ', later), null);
+  assert.deepStrictEqual(L.briefingFacts(home, 'MNQ', later, {}, BAR), b.sections.m3.data);
+  assert.strictEqual(L.briefingFactsKey(home, 'MNQ', later, {}, BAR), `m3@${BAR}`);
+  assert.strictEqual(L.briefingFacts(home, 'MNQ', later, null, BAR), null, 'unreadable lanes: none');
+});

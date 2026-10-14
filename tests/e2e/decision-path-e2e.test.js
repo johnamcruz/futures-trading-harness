@@ -241,7 +241,10 @@ const REFUSALS = [
   ['one fact only', { facts: w => D.trueFacts(w)[0] }, 'phase2-facts', /approved with 1 checkable fact\b/],
   ['a false fact', { facts: w => `${D.trueFacts(w)[0]}; vwap ${D.flip[D.m3Of(w).vwap.side]}` }, 'phase2-facts', /a fact the bar briefing contradicts: "vwap /],
   ['a fact in no known form', { facts: w => `${D.trueFacts(w).join('; ')}; the tape looks strong` }, 'phase2-facts', /in no known form: "the tape looks strong"/],
-  ['the briefing is another bar\'s', { act: staleBriefing }, 'phase2-facts', /briefing for this cycle's MNQ bar .* can't be read \(the MNQ briefing is for the bar at/],
+  // The briefing another bar's: full mode, the facts can't be checked; index mode, it is no facts for the lookups
+  // either, so every situational lookup is required (fails closed) and the roles' reports don't count.
+  ['full mode: the briefing is another bar\'s', { act: staleBriefing, mode: 'full' }, 'phase2-facts', /briefing for this cycle's MNQ bar .* can't be read \(the MNQ briefing is for the bar at/],
+  ['index mode: the briefing is another bar\'s', { act: staleBriefing }, 'roles-ran', /market-structure-analyst reported without looking up /],
   ['no journal plan', { plan: false }, 'plan-required', /No journal plan for MNQ/],
   ['no setup tag', { rationale: p => p.args.rationale.replace(/^setup:\S+ /, '') }, 'setup-tag', /must start with the strategy as setup:<name>/],
   ['a setup tag that names no strategy (a composed entry today)', { rationale: p => p.args.rationale.replace(/^setup:\S+/, 'setup:composed') }, 'strategy', /setup:composed is not a known strategy/],
@@ -271,6 +274,32 @@ test('decision path, refused: the strategy named did not fire on the bar (no ord
   assert.match(e.messages, new RegExp(`setup:${SETUP.strategy} ${SETUP.side} did not fire on the last closed MNQ bar`));
   assert.deepStrictEqual(D.placedAtBroker(w), []);
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.blocked);
+});
+
+// Live, the gate reads the wall clock: a delegated cycle (~10 minutes) reaches the executor after its bar briefing's
+// m3.validUntil. The briefing of the cycle's bar (FTH_CYCLE_BARS) still decides the lookups and the cached key.
+const expireBriefing = ctx => {
+  const f = path.join(ctx.env.FTH_HOME, 'briefing', 'MNQ.json');
+  const b = JSON.parse(fs.readFileSync(f, 'utf8'));
+  b.sections.m3.validUntil = new Date(Date.parse(ctx.env.FTH_REPLAY_NOW) - 1000).toISOString();
+  fs.writeFileSync(f, JSON.stringify(b));
+};
+
+test('decision path, a long cycle: the executor\'s call comes after the briefing\'s validUntil; the briefing of the cycle\'s bar decides the lookups (made, or served from the cache): the order goes', async () => {
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w, { act: expireBriefing }));
+  const e = lastEntry(w);
+  assert.deepStrictEqual([e.decision, e.checks], ['allowed', []], e.messages);
+  assert.strictEqual(D.placedAtBroker(w).length, 1);
+  // Served from the cache under the cycle's facts key, the bar's lookups counted though the briefing has expired.
+  const c = D.world();
+  const ms = 'market-structure-analyst';
+  await D.pass(c, decisionAt(FIRED_BAR), D.passCycle(c, 'looking', { cacheable: true }));
+  fs.unlinkSync(c.stateFile);
+  const r = await D.pass(c, decisionAt(FIRED_BAR), D.entryCycle(c, { cacheable: true, dropRole: ms, lookups: { ...D.REQUIRED_LOOKUPS, [ms]: [] }, act: expireBriefing }));
+  assert.ok(r.ran[0].context.cachedRoles.includes(ms), `served: ${r.ran[0].context.cachedRoles}`);
+  const ce = lastEntry(c);
+  assert.deepStrictEqual([ce.decision, ce.checks], ['allowed', []], ce.messages);
 });
 
 test('decision path, position open: a stop move, a partial close, the stop cut to size and exits go with no skill, lookup, role, briefing or readable transcript; a loosened stop and a new entry don\'t', async () => {

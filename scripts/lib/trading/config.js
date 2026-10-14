@@ -174,6 +174,9 @@ function loadConfig(env = process.env) {
     // The bar each symbol's cycle decides (FTH_CYCLE_BARS, set by the runner: {"MNQ": "<bar open time>"}), keyed by
     // family root: phase 2's facts are checked against that bar's briefing (fact-claims.js). Unreadable: none.
     cycleBars: cycleBarsOf(env.FTH_CYCLE_BARS),
+    // Several lanes: the bar each symbol's bar briefing is on (FTH_CYCLE_BRIEFING_BARS, the first lane's), whichever
+    // lane's bar closed: the briefing the cycle's lookups are judged by (skill-lookups.js briefingHolds). Unreadable: none.
+    cycleBriefingBars: cycleBarsOf(env.FTH_CYCLE_BRIEFING_BARS),
     // Several lanes (FTH_CYCLE_LANE_BARS, set by the runner): each symbol's lanes whose bar closed this cycle, by minutes,
     // { ROOT: { minutes: "<bar open>" } }: in index mode their candidates trigger lookups too (skill-lookups.js).
     cycleLaneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS),

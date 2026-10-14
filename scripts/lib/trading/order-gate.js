@@ -28,6 +28,7 @@ const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny } = require('./s
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
+const { familyRoot } = require('./contracts');
 const { attestedSkills, parseAttestation } = require('../head-prompt');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
@@ -51,6 +52,15 @@ const SIDE_WORD = /^\s*setup:[a-z0-9_-]+\s+(long|short|buy|sell)\b/i;
 
 // The order types a stop bracket may take, lowercase as the interface's enum: a stop leg (a limit or market leg is no stop).
 const STOP_BRACKET_TYPES = new Set(['stop', 'trailing_stop']);
+
+/**
+ * The bar the runner's cycle decides for the root's family, as its bar briefing is on (FTH_CYCLE_BRIEFING_BARS, several
+ * lanes; else FTH_CYCLE_BARS), or null outside a cycle: the briefing the lookups are judged by (skill-lookups.js).
+ */
+function briefingBarOf(config, root) {
+  const fam = familyRoot(root);
+  return (config.cycleBriefingBars || {})[fam] || (config.cycleBars || {})[fam] || null;
+}
 
 /** True when `b` is a stop bracket: {ticks: a whole number above 0, type: "stop" | "trailing_stop"}. */
 function isStopBracket(b) {
@@ -340,9 +350,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const transcript = transcriptPath || config.cycleTranscript;
   // In index mode (the default, FTH_ROLE_SKILLS not full) the situational skills this bar's briefing triggers too (skills-loaded.js).
   // The cycle's lanes unreadable (FTH_CYCLE_LANE_BARS set but not readable): every one marked for the head trader.
+  // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
+  // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
+  const factsBar = briefingBarOf(config, contractRoot(input.contractId));
   const situational = !(config.autonomous && config.roleSkills === 'index') ? []
     : config.cycleLaneBars === null ? headSituationalSkills()
-      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars));
+      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar));
   // opencode's head trader in index mode: the skills its prompt embeds count as loaded, only on the runner's attestation
   // (FTH_HEAD_PROMPT) checked now against the run's config file and the skills' current text (head-prompt.js), and only
   // for the runner's own cycle transcript (a hook's transcript is another harness's session). Anything off: none.
@@ -354,7 +367,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
-  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
+  const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
   add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
   // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:

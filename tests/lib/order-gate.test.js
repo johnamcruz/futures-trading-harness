@@ -2462,3 +2462,64 @@ test('head prompt (gateway): checkOrder counts the attested skills for the runne
     assert.ok(!has(exit, 'skills-loaded') && !has(exit, 'skills-at-entry'), label);
   }
 });
+
+test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS, or FTH_CYCLE_BRIEFING_BARS with lanes) decides the lookups and the cached key past its validUntil; another bar\'s, or none named, fails closed; exits never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
+  const dir = require('../helpers').tmpDir();
+  const home = trendHome();
+  const file = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const T = 1.8e12;
+  const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
+  fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
+    timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
+  // The cycle's bar opened 13:57 and its briefing held until just before NOW; the delegated cycle's executor calls ~10
+  // minutes later (the wall clock, live), so the briefing is no longer current at the gate's now.
+  const CYCLE_BAR = '2026-10-07T13:57:00.000Z';
+  const late = new Date(NOW.getTime() + 571000);
+  const brief = asOf => writeBriefing(home, { symbol: 'MNQ', asOf, sections: { m3: { version: `m3@${asOf}`, validUntil: new Date(NOW.getTime() - 1000).toISOString(), data: { window: 'opening drive', windowEntries: 'allowed', candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  brief(CYCLE_BAR);
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
+  // The lookups the reversal candidate requires, made during the roles' calls.
+  look('market-structure-analyst', 'rejection', 11);
+  look('market-structure-analyst', 'pullback-vs-reversal', 12);
+  look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+  const base = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file };
+  const run = (env, input = entryOrder(), now = late) => {
+    const cfg = { ...config, ...loadConfig({ ...base, ...env }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home };
+    const r = evaluateOrder({ input, entries: [plan()], now, config: cfg });
+    return { ...r, violations: r.violations.filter(v => v.check !== 'phase2-facts') };
+  };
+  const BARS = { FTH_CYCLE_BARS: JSON.stringify({ MNQ: CYCLE_BAR }) };
+  // The cycle names its bar: the briefing on it decides, past its validUntil (only the reversal lookups are required).
+  assert.deepStrictEqual(run(BARS).violations, []);
+  // No cycle bar named (a hook's session, or the runner's env lost): the expired briefing is no facts, so every
+  // situational lookup of each role is required (fails closed), as before.
+  const none = run({});
+  assert.deepStrictEqual(checks(none), ['roles-ran']);
+  assert.match(none.violations[0].message, /market-structure-analyst reported without looking up [^)]*breakout/);
+  // The cycle names another bar (the briefing on disk is an earlier bar's, or a later one was written mid-cycle), or an
+  // unreadable one: not this cycle's facts, every lookup required (fails closed), at any clock.
+  for (const env of [{ FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:00:00.000Z' }) }, { FTH_CYCLE_BARS: JSON.stringify({ MNQ: 'not a time' }) }]) {
+    for (const now of [late, NOW]) assert.deepStrictEqual(checks(run(env, entryOrder(), now)), ['roles-ran'], `${JSON.stringify(env)} ${now.toISOString()}`);
+  }
+  brief('2026-10-07T14:00:00.000Z');
+  assert.deepStrictEqual(checks(run(BARS)), ['roles-ran'], 'a later bar\'s briefing is not the cycle\'s');
+  brief(CYCLE_BAR);
+  // Several lanes: the bar the briefing is on (FTH_CYCLE_BRIEFING_BARS) decides, whichever lane's bar closed; a briefing
+  // bar naming another bar fails closed even when FTH_CYCLE_BARS names this one.
+  assert.deepStrictEqual(run({ FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:06:00.000Z' }), FTH_CYCLE_BRIEFING_BARS: JSON.stringify({ MNQ: CYCLE_BAR }) }).violations, []);
+  assert.deepStrictEqual(checks(run({ ...BARS, FTH_CYCLE_BRIEFING_BARS: JSON.stringify({ MNQ: '2026-10-07T14:00:00.000Z' }) })), ['roles-ran']);
+  // A cached report's lookups count under the cycle's key past validUntil too (the key the runner recorded at the
+  // cycle's start); another key, or no cycle bar (no key): nothing credited.
+  const p2 = path.join(dir, 'logs', 'cycle-transcript-p2.jsonl');
+  fs.writeFileSync(p2, [...ocSkills, timed('risk-manager', 30, 40)].join('\n'));
+  const cachedEnv = key => ({ ...BARS, FTH_CYCLE_TRANSCRIPT: p2, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
+    FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'], key }, 'trend-momentum-analyst': { skills: ['pullback-vs-reversal'], key } }) });
+  assert.deepStrictEqual(run(cachedEnv(`m3@${CYCLE_BAR}`)).violations, []);
+  assert.match(run(cachedEnv('m3@2026-10-07T13:54:00.000Z')).violations[0].message, /served from the report cache/);
+  assert.match(run({ ...cachedEnv(`m3@${CYCLE_BAR}`), FTH_CYCLE_BARS: '' }).violations[0].message, /served from the report cache/);
+  // Exits are never held, whatever the bar.
+  assert.deepStrictEqual(run({}, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations, []);
+});
