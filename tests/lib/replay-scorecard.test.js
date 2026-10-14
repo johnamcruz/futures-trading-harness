@@ -316,6 +316,15 @@ function makeRun({ withBars = true, finished = true, steps = STEPS } = {}) {
   return { home, runDir };
 }
 
+test('scoreRun rebuilds the room on the run\'s own round-number steps (its seeded home), never today\'s user config', () => {
+  const { seedFile, loadRoundSteps, FILE_NAME } = require('../../scripts/lib/trading/round-numbers');
+  const { home, runDir } = makeRun();
+  // The run was seeded with the round numbers off for the family; the developer's own home is irrelevant.
+  fs.writeFileSync(path.join(home, FILE_NAME), JSON.stringify(seedFile(loadRoundSteps({ FTH_HOME: tmpDir() }))).replace('"MNQ":100', '"MNQ":null'));
+  const room = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }).records[0].facts.setups[0].room;
+  assert.notStrictEqual(room.inTheWay && room.inTheWay.name, 'round number', JSON.stringify(room));
+});
+
 test('scoreRun: every decision of a run scored from its own records', () => {
   const { runDir } = makeRun();
   const { records, summary } = scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS });

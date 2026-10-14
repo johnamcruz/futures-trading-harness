@@ -293,7 +293,8 @@ const strategy = (extra = {}) => ({
   compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:1', min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 }, ...extra,
 });
 const market = bars => ({ symbol: 'MNQ', bars, tickSize: 0.25, tickValue: 0.5, feesPerSide: 0.37 });
-const engine = { timeframe: 3, gate: true, gateConfig: loadConfig({}), window: 160, maxDailyLoss: 500 };
+// The shipped round-number steps, never the developer's home.
+const engine = { timeframe: 3, gate: true, gateConfig: { ...loadConfig({}), roundSteps: require('../../scripts/lib/trading/round-numbers').defaultRoundSteps() }, window: 160, maxDailyLoss: 500 };
 const BARS = series(40);
 const GAPPY = series(40, 5, 60);
 
@@ -347,6 +348,19 @@ test('trade stream: entries fill after the cycle delay; the delay from measured 
   assert.strictEqual(delayFromCycles([1000, 5000, 2000, 9000, 3000, 4000, 8000, 6000, 7000, 10000]), 9000);
   assert.strictEqual(delayFromCycles([1000, 3000], 0.5), 1000);
   assert.strictEqual(delayFromCycles([]), 0);
+});
+
+test('trade stream: the facts\' room uses the evaluation\'s round-number config (the engine\'s gateConfig, or roundSteps given)', () => {
+  const { resolveRoundSteps } = require('../../scripts/lib/trading/round-numbers');
+  const prop = { strategy: strategy(), components: ['trendy'], contracts: 'micro' };
+  const from = Date.parse('2022-01-11T23:00:00Z');
+  const to = Date.parse('2022-01-12T23:00:00Z');
+  // A one-tick step: a round number one tick from price, so it is the first level in the way.
+  const tick = resolveRoundSteps(null, { steps: { MNQ: 0.25 } });
+  const inTheWay = opts => tradeStream({ markets: [market(BARS)], strategies: [strategy()], prop, from, to, ...opts }).trades[0].facts.inTheWay;
+  assert.match(String(inTheWay({ engine: { ...engine, gateConfig: { ...(engine.gateConfig || {}), roundSteps: tick } } })), /round number/, 'from the engine\'s gateConfig');
+  assert.match(String(inTheWay({ engine, roundSteps: tick })), /round number/, 'given');
+  assert.doesNotMatch(String(inTheWay({ engine, roundSteps: resolveRoundSteps(null, null) })), /round number/, 'control: no steps, no round number');
 });
 
 test('trade stream: the facts come from the live scan and briefing; a strategy that reads broker fields makes a branch', () => {

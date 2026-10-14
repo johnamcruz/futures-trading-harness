@@ -116,6 +116,25 @@ function userWorld(over = {}) {
   return { dir, live, env, run };
 }
 
+test('the run home is seeded with the user\'s round-number steps, resolved: replay\'s briefing reads what live\'s does', () => {
+  const { loadRoundSteps, FILE_NAME } = require('../../scripts/lib/trading/round-numbers');
+  const w = userWorld();
+  fs.writeFileSync(path.join(w.live, FILE_NAME), JSON.stringify({ steps: { ES: 50, NQ: 0.1 } }));
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const live = loadRoundSteps(w.env);
+  const replay = loadRoundSteps({ FTH_HOME: w.run.paths.runHome });
+  assert.deepStrictEqual(replay, live, 'the steps and the refusals');
+  assert.deepStrictEqual([replay.steps.MES, replay.steps.MNQ, replay.steps.M2K], [50, null, 10], 'override kept, refused family off, default kept');
+  // The briefing text is the same: the refused family says why in both.
+  const B = require('../../scripts/lib/trading/briefing');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).slice(0, 300);
+  const text = roundSteps => { const b = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, roundSteps, blackouts: { items: [] } }); return B.renderBriefing(b, { now: new Date(b.closedAt) }); };
+  const line = t => (t.match(/^- Round numbers: .*$/m) || [null])[0];
+  assert.match(line(text(live)), /MNQ step 0\.1 is not a whole number/);
+  assert.strictEqual(line(text(replay)), line(text(live)));
+});
+
 test('replay env: the run home, the replay broker and clock; no path overrides; every live broker\'s variables disabled', () => {
   const w = userWorld({ brokerEnv: { clockFile: 'SIM_CLOCK', stateDir: 'SIM_STATE', runId: null, start: 'SIM_START', end: null } });
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });

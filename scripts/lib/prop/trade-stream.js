@@ -92,7 +92,7 @@ function noStopPath(book, t, { tfMs, eod }) {
 }
 
 /** The facts at a trade's setup, by the live scan and briefing on the bars a cycle is handed. */
-function factsAt(book, t, { strategies, tfMin, count }) {
+function factsAt(book, t, { strategies, tfMin, count, roundSteps = null }) {
   const signal = t.setup && t.setup.signalBar;
   const i = book.index.get(signal);
   if (i === undefined) return { error: `no bar at the signal time ${signal}` };
@@ -102,7 +102,7 @@ function factsAt(book, t, { strategies, tfMin, count }) {
       return { t: bt, o, h, l, c, v, ...fields };
     });
     const results = scan(strategies, bars, { symbol: book.symbol, selected: [book.symbol] });
-    const brief = buildBriefing({ symbol: book.symbol, bars, minutes: tfMin, scan: results, now: new Date(Date.parse(signal) + tfMin * 60000) });
+    const brief = buildBriefing({ symbol: book.symbol, bars, minutes: tfMin, scan: results, roundSteps, now: new Date(Date.parse(signal) + tfMin * 60000) });
     const c = (brief.sections.m3.data.candidates || []).find(x => x.name === t.strategy && x.direction === t.direction);
     if (!c) return { error: `the scan on the signal bar has no ${t.direction} ${t.strategy} candidate` };
     return {
@@ -120,13 +120,14 @@ function factsAt(book, t, { strategies, tfMin, count }) {
  * strategies: every strategy the scan counts (the policy's `counted`), in its order; prop: { strategy (the policy
  * strategy), components (the names it trades), contracts }; engine: the backtest options (gateConfig, sessions,
  * eodAt, window, fill, slippageTicks, ...); from, to: ms bounds of the window (to exclusive); facts: false skips
- * them (faster; a rulebook that reads facts then fails closed on every trade).
+ * them (faster; a rulebook that reads facts then fails closed on every trade); roundSteps: the briefing's
+ * round-number config (round-numbers.js), by default the engine's gateConfig's, the one the evaluation loaded.
  *
  * Returns { days: [{ day, regime, trades }] (every trading day with bars in the window, in order),
  * trades, fieldBranch (the traded strategies that read broker fields), entryDelayMs, slippageTicks, expired,
  * skipped, runtimeMs }.
  */
-function tradeStream({ markets, strategies, prop, engine = {}, from = null, to = null, facts = true, entryDelayMs = 0, regimeLookback = 20 }) {
+function tradeStream({ markets, strategies, prop, engine = {}, from = null, to = null, facts = true, entryDelayMs = 0, regimeLookback = 20, roundSteps = (engine.gateConfig || {}).roundSteps || null }) {
   const started = Date.now();
   if (!prop || !prop.strategy || !Array.isArray(prop.components) || !prop.components.length) throw new Error('prop: { strategy, components, contracts }: the policy strategy and the strategies it trades');
   if (!(Number.isFinite(entryDelayMs) && entryDelayMs >= 0)) throw new Error(`entryDelayMs: 0 or more, not ${String(entryDelayMs)}`);
@@ -157,7 +158,7 @@ function tradeStream({ markets, strategies, prop, engine = {}, from = null, to =
       stopTicks, moveTicks, r: t.r, maeR: t.maeR, mfeR: t.mfeR, troughTicks: t.troughTicks || [],
       overshootTicks: stopped ? Math.max(0, round6((sign * (t.initialStop - t.exit)) / tick - slip)) : null,
       noStop: noStopPath(book, t, { tfMs, eod }),
-      facts: facts ? factsAt(book, t, { strategies, tfMin, count }) : { error: 'facts not computed (facts: false)' },
+      facts: facts ? factsAt(book, t, { strategies, tfMin, count, roundSteps }) : { error: 'facts not computed (facts: false)' },
     };
   });
   const byDay = new Map();

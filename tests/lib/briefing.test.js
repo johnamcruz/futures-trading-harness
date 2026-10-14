@@ -11,10 +11,14 @@ const B = require('../../scripts/lib/trading/briefing');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { barBriefing } = require('../../scripts/lib/harness-tools/briefing');
 const { tmpDir } = require('../helpers');
+const { defaultRoundSteps } = require('../../scripts/lib/trading/round-numbers');
+
+// The shipped round-number steps only (never the developer's home): what the runner passes with no override.
+const STEPS = defaultRoundSteps();
 
 const BARS = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
 const at = n => BARS.slice(0, n);
-const build = (n, prev = null, extra = {}) => B.buildBriefing({ symbol: 'NQ', bars: at(n), minutes: 3, prev, ...extra });
+const build = (n, prev = null, extra = {}) => B.buildBriefing({ symbol: 'NQ', bars: at(n), minutes: 3, prev, roundSteps: STEPS, ...extra });
 
 test('nextClose: candles from the 18:00 ET session open; sessionWindow: the session-timing skill\'s windows', () => {
   // 2026-06-01 14:57Z is 10:57 ET (EDT): the 15m candle closes 11:00 ET, the 1h at 11:00 ET, the 3m at 11:00 ET.
@@ -189,7 +193,7 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   assert.match(old, /^The bar briefing for NQ is old \(its bar closed .*\): no current briefing\. Take the market facts from the bars yourself/);
   assert.doesNotMatch(old, /\[m3\]/);
   const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
-  const record = briefingRecorder(home, { timeframe: 3 }, () => new Date(b.closedAt));
+  const record = briefingRecorder(home, { timeframe: 3 }, () => new Date(b.closedAt), { FTH_HOME: home });
   assert.throws(() => record({ symbol: 'NQ', bars: [] }, []), /need closed bars/);
   assert.strictEqual(B.readBriefing(home, 'NQ'), null, 'the earlier bar\'s briefing is gone');
   // The runner's step writes this bar's briefing from the bars it hands the cycle.
@@ -206,6 +210,31 @@ test('an old briefing is never served as this bar\'s; a failed build removes the
   // The gate's clock is unknown too: no entries, and a candidate is blocked by the window first.
   assert.deepStrictEqual([m3.windowEntries, m3.windowRefusal], ['none', 'the gate config can\'t be read (config unreadable): entries refused until it can']);
   assert.match(m3.candidates[0].blocked, /^no-entry window: .* \(market open, no entries\) until /);
+});
+
+test('the runner passes its home\'s round-number steps, read once per bar close, to the first briefing and every timeframe\'s', () => {
+  const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
+  const { FILE_NAME } = require('../../scripts/lib/trading/round-numbers');
+  const home = tmpDir();
+  const file = path.join(home, FILE_NAME);
+  fs.writeFileSync(file, JSON.stringify({ steps: { NQ: 50 } }));
+  const record = briefingRecorder(home, { timeframe: 3 }, () => new Date(), { FTH_HOME: home }, { frames: [{ lane: -1, minutes: 15 }, { lane: 1, minutes: 3 }] });
+  const rounds = nl => [...nl.above, ...nl.below].filter(x => /round number/.test(x.name)).map(x => x.price).sort((a, c) => a - c);
+  record({ symbol: 'NQ', bars: at(300) }, [], null);
+  // The override (50), not the default (100): price 27013 sits between 27000 and 27050.
+  assert.deepStrictEqual(rounds(B.readBriefing(home, 'NQ').sections.m3.data.nearestLiquidity), [27000, 27050]);
+  const f15 = rounds(B.readFrameBriefing(home, 'NQ', 15).sections.bar.data.nearestLiquidity);
+  assert.ok(f15.length && f15.every(x => x % 50 === 0) && f15.some(x => x % 100 !== 0), `15m on the same steps: ${f15}`);
+  // Edited mid-bar: a timeframe of the same bar close still gets the steps the bar started with.
+  fs.writeFileSync(file, JSON.stringify({ steps: { NQ: 0.1 } }));
+  record({ symbol: 'NQ', lane: 1, minutes: 3, bars: at(300) }, [], null);
+  assert.deepStrictEqual(rounds(B.readFrameBriefing(home, 'NQ', 3).sections.bar.data.nearestLiquidity), [27000, 27050]);
+  // The next bar reads the edit: refused, so none, and the briefing says why.
+  record({ symbol: 'NQ', bars: at(301) }, [], null);
+  const next = B.readBriefing(home, 'NQ');
+  assert.deepStrictEqual(rounds(next.sections.m3.data.nearestLiquidity), []);
+  assert.match(next.sections.m3.data.nearestLiquidity.roundNumbers, /MNQ step 0\.1 is not a whole number of its 0\.25 ticks/);
+  assert.match(B.renderBriefing(next, { now: new Date(next.closedAt) }), /^- Round numbers: none \(.*MNQ step 0\.1 /m);
 });
 
 test('the runner\'s briefing step reads the gate\'s clock from its env: FTH_NO_ENTRY_WINDOWS and FTH_ENTRY_HOURS reach the window', () => {
@@ -503,6 +532,83 @@ test('bar_briefing by month: a note only when the month differs from the briefin
   assert.match(barBriefing({ symbol: 'MNQ:2026-09' }, { env, now }).text, /^Note: you asked for MNQ:2026-09; this briefing is for NQ:2026-06/);
   assert.doesNotMatch(barBriefing({ symbol: 'MNQ:2026-06' }, { env, now }).text, /^Note:/);
   assert.doesNotMatch(barBriefing({ symbol: 'MNQ' }, { env, now }).text, /^Note:/);
+});
+
+test('round numbers are on the family\'s configured step (round-numbers.js; defaults 100 on NQ, 25 on ES, 10 on M2K), none for an unlisted root', () => {
+  const rounds = symbol => {
+    const nl = B.buildBriefing({ symbol, bars: at(300), minutes: 3, roundSteps: STEPS }).sections.m3.data.nearestLiquidity;
+    return [...nl.above, ...nl.below].filter(x => /round number/.test(x.name)).map(x => x.price).sort((a, b) => a - b);
+  };
+  // Price 27013: the multiples of each family's step just below and above it.
+  assert.deepStrictEqual(rounds('NQ'), [27000, 27100]);
+  assert.deepStrictEqual(rounds('MNQ'), [27000, 27100], 'the micro shares its mini\'s step');
+  assert.deepStrictEqual(rounds('ES'), [27000, 27025]);
+  assert.deepStrictEqual(rounds('M2K:2026-06'), [27010, 27020], 'a contract by month uses its root\'s step');
+  assert.deepStrictEqual(rounds('XYZ'), [], 'no step, no round numbers (never another family\'s)');
+});
+
+test('price on a round number: that one is `at` (in the summary too), with the next one above and the next below', () => {
+  // Bar 679 closes at 27100: on ES's 25 step, 27100 is at price, 27125 above and 27075 below.
+  const b = B.buildBriefing({ symbol: 'ES', bars: at(679), minutes: 3, roundSteps: STEPS });
+  const nl = b.sections.m3.data.nearestLiquidity;
+  assert.strictEqual(b.price, 27100);
+  assert.deepStrictEqual(nl.at, [{ name: 'round number', price: 27100, points: 0, R: 0 }]);
+  assert.ok(nl.above.some(x => x.name === 'round number' && x.price === 27125), JSON.stringify(nl.above));
+  // 27075 merges with the prior VAH 27075.17 (within a tick): one level, both names.
+  assert.ok(nl.below.some(x => /round number/.test(x.name) && Math.abs(x.price - 27075) <= 0.25), JSON.stringify(nl.below));
+  assert.match(B.renderBriefing(b, { now: new Date(b.closedAt) }), /^- At price: round number 27100\.$/m);
+  // Off a round number, or with no step: no `at`, and no summary line.
+  assert.strictEqual(B.buildBriefing({ symbol: 'ES', bars: at(300), minutes: 3, roundSteps: STEPS }).sections.m3.data.nearestLiquidity.at, undefined);
+  const none = B.buildBriefing({ symbol: 'XYZ', bars: at(679), minutes: 3, roundSteps: STEPS });
+  assert.strictEqual(none.sections.m3.data.nearestLiquidity.at, undefined);
+  assert.doesNotMatch(B.renderBriefing(none, { now: new Date(none.closedAt) }), /At price/);
+});
+
+test('the briefing takes the loaded round-number steps: an override moves the levels; a refused step shows none and says why', () => {
+  const { resolveRoundSteps } = require('../../scripts/lib/trading/round-numbers');
+  const rounds = (symbol, roundSteps) => {
+    const b = B.buildBriefing({ symbol, bars: at(300), minutes: 3, roundSteps });
+    const nl = b.sections.m3.data.nearestLiquidity;
+    return { b, nl, prices: [...nl.above, ...nl.below].filter(x => /round number/.test(x.name)).map(x => x.price).sort((a, c) => a - c) };
+  };
+  assert.deepStrictEqual(rounds('NQ', resolveRoundSteps({ steps: { NQ: 50 } })).prices, [27000, 27050]);
+  const refused = rounds('NQ', resolveRoundSteps({ steps: { NQ: 0.1 } }));
+  assert.deepStrictEqual(refused.prices, []);
+  assert.match(refused.nl.roundNumbers, /MNQ step 0\.1 is not a whole number of its 0\.25 ticks/);
+  assert.match(B.renderBriefing(refused.b, { now: new Date(refused.b.closedAt) }), /^- Round numbers: none \(defaults: MNQ step 0\.1 /m);
+  assert.strictEqual(rounds('NQ', resolveRoundSteps({ steps: { NQ: 100 } })).nl.roundNumbers, undefined, 'no refusal, no field');
+});
+
+test('roundNumbers: below and above price, or on one (at) with the next each side; only positive prices; no step, none', () => {
+  assert.deepStrictEqual(B.roundNumbers(27013, 100), { at: null, levels: [27000, 27100] });
+  assert.deepStrictEqual(B.roundNumbers(27100, 25), { at: 27100, levels: [27075, 27125] });
+  // A step over price: no round number at or below zero.
+  assert.deepStrictEqual(B.roundNumbers(27013, 30000), { at: null, levels: [30000] });
+  assert.deepStrictEqual(B.roundNumbers(30000, 30000), { at: 30000, levels: [60000] });
+  assert.deepStrictEqual(B.roundNumbers(27013, null), { at: null, levels: [] });
+  assert.deepStrictEqual(B.roundNumbers(27013, 0), { at: null, levels: [] });
+});
+
+test('round numbers show on the contract\'s tick like every other level: SI 0.125 on its 0.005 tick is 27.125, never 27.13', () => {
+  const { resolveRoundSteps } = require('../../scripts/lib/trading/round-numbers');
+  const steps = resolveRoundSteps(null, { steps: { SI: 0.125 } });
+  assert.deepStrictEqual(steps.errors, []);
+  // NQ bars scaled to silver prices: bar 504 closes 27125, so 27.125 (on the 0.125 step).
+  const scaled = at(504).map(b => ({ ...b, o: b.o / 1000, h: b.h / 1000, l: b.l / 1000, c: b.c / 1000 }));
+  const b = B.buildBriefing({ symbol: 'SI', bars: scaled, minutes: 3, roundSteps: steps });
+  const nl = b.sections.m3.data.nearestLiquidity;
+  assert.strictEqual(b.price, 27.125);
+  assert.deepStrictEqual(nl.at, [{ name: 'round number', price: 27.125, points: 0, R: 0 }]);
+  const rounds = [...nl.above, ...nl.below].filter(x => /round number/.test(x.name)).map(x => x.price);
+  for (const p of rounds) assert.ok([27, 27.25].includes(p), `${p}`);
+  assert.doesNotMatch(JSON.stringify(nl), /27\.13\b/);
+  assert.match(B.renderBriefing(b, { now: new Date(b.closedAt) }), /^- At price: round number 27\.125\.$/m);
+  // Off a round number: the neighbour above 27.013 is 27.125 in the room, on the tick too.
+  const off = B.buildBriefing({ symbol: 'SI', bars: scaled.slice(0, 300), minutes: 3, roundSteps: steps });
+  const above = off.sections.m3.data.nearestLiquidity.above.filter(x => /round number/.test(x.name)).map(x => x.price);
+  assert.strictEqual(off.price, 27.013);
+  assert.deepStrictEqual(above, [27.125]);
+  assert.match(B.renderBriefing(off, { now: new Date(off.closedAt) }), /round number 27\.125 \(/);
 });
 
 test('levels merge within the contract\'s own tick (contracts.js), in the nearest levels too; VWAP rounded; an unknown R spelled out', () => {

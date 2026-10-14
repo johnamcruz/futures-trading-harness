@@ -29,7 +29,7 @@ By PLAN step:
    with the break, or the range is mature (`trend-vs-range`).
 - **3 Location**: a key level in the way (`levels-and-reactions`:
    prior-day or overnight high/low, IB/OR, value-area edge, CRT range
-   edge, swing, previous candle high/low).
+   edge, swing, previous candle high/low: `mtf_read` `json`, not the briefing).
 - **4 Setup**: a completed 15m or 60m candle closes beyond the level with
    acceptance: a strong close in the extreme third, the body beyond the
    level, not just a wick (`breakout-vs-fakeout`, `candle-reading`). A

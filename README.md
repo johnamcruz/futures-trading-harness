@@ -697,6 +697,19 @@ those conditions are false, so `ofi` and `ofi_absorption` give no signal and
 | `FTH_HOOK_PROFILE` / `FTH_DISABLED_HOOKS` | `standard` / (none) | Hook gating |
 | `FTH_BROKER` / `FTH_BROKERS_FILE` | the broker `mcp-configs/brokers.json` names / `~/.futures-trading-harness/brokers.json` | The broker MCP server ([Brokers](#brokers)) |
 
+### Briefing settings
+
+`config/round-numbers.json` holds the bar briefing's round-number steps per
+contract family, in points (`"steps"`, keyed by any root of the family; the
+micro and the mini share one): NQ 100, ES 25, YM 100, RTY 10, GC 10, SI 0.5.
+`~/.futures-trading-harness/round-numbers.json` overrides a family's step,
+or turns it off with `null`. A step is a whole number of the family's ticks
+(`scripts/lib/trading/contracts.js`), from one tick to 2000 ticks; an entry
+that isn't is refused, and that family shows no round numbers, with the
+reason in the briefing. A family not listed shows none. A replay's run home
+is seeded with the resolved steps and refusals, so replay shows what live
+would.
+
 ### The rationale convention
 
 `place_order` rationales start with `setup:<strategy> ...` for entries,

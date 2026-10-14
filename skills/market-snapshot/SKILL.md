@@ -62,9 +62,13 @@ doesn't hold.
    - `vwap`: which VWAP applies now (`rth` or `session`), the distance in
      ATR(14), and the closes crossing each VWAP in the last 30 bars
      (`rthCrossesLast30`, `sessionCrossesLast30`; read the one that applies).
-   - `participation`: relative volume of the last bar and the last 3 vs the
-     opening-range average, the 20 bars before, and the same time the
-     previous trading day (orb's skip rule reads `relVolLastVsOpeningRange`).
+   - `participation`: `lastBarVolume`; the last bar and the last 3 bars'
+     average vs the opening-range average bar (`relVolLastVsOpeningRange`,
+     `relVolLast3VsOpeningRange`); the last 3 vs the 20 bars before them
+     (`relVolLast3VsPrior20`); and the last bar vs the one bar at the same
+     ET time on the previous trading day (`relVolVsSameTimePriorDay`: one
+     bar, not an average over sessions). orb's skip rule reads
+     `relVolLastVsOpeningRange`.
    - Both count by trading day (from the 18:00 ET open): from 18:00 ET until
      the new range closes (09:30 ET + orbMinutes; 09:45 by default),
      `levels.openingRange` and the opening-range ratios are null, never the
@@ -99,7 +103,16 @@ doesn't hold.
      20-bar average (a squeeze is under 1), the band-close streak, SuperTrend
      flips in the last 20 bars, the last 5 bars' range in ATR, the session's
      high and low so far, and the last bar's volume vs its 60-bar average
-     (`volVsAvg60`). Read a skip rule's number here; never estimate it.
+     (`volVsAvg60`). Read a skip rule's number here; never estimate it. The
+     bar briefing's `m3` `context` has the same counters except
+     `volVsAvg60` and `session` (the session high and low reach the
+     briefing only as named levels, `session high` and `session low`,
+     ranked with the others in `nearestLiquidity` and the candidates'
+     `ahead`):
+     `volVsAvg60` is in this tool's output only.
+     No strategy's skip rule reads it; the strategies whose rules compare
+     volume with an average compute it in their own rules (`vol_sma`),
+     and the scan reports the result.
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
      in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the
@@ -121,5 +134,8 @@ referenceStop.long = 21481.37 → round down to tick 0.25 → 21481.25
 ```
 
 Timestamps are UTC; sessions and ranges are computed in America/New_York.
-Fractal swings need strictly higher/lower neighbours, so equal highs are not
-swings (treat them as liquidity; see levels-and-reactions).
+Fractal swings need strictly higher/lower neighbours (2 bars each side), so
+a flat top or bottom (bars side by side at the same high or low) is no swing.
+`liquidity.equalHighs`/`equalLows` are pairs of separate confirmed swings
+within 0.1 x ATR(14) of each other (see levels-and-reactions); a flat
+top shows up in neither.

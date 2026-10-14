@@ -27,7 +27,9 @@ swings `m3.swings.high`, `m3.swings.low`, 15m and 1h `m3.htfLevels`
 `m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
 `m3.liquidity.openFvgs` and partly filled ones
 `m3.liquidity.partlyFilledFvgs` (the unfilled part); round numbers: `round number` in
-`m3.nearestLiquidity`.
+`m3.nearestLiquidity` (the multiples of the family's configured step just
+above and below price; price on one: its `at`; a refused step: none, the
+reason in its `roundNumbers`).
 
 **Which matter now**: the nearest, `m3.nearestLiquidity.above` and
 `m3.nearestLiquidity.below` (in points and R); for a setup,

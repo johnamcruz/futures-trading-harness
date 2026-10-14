@@ -22,6 +22,7 @@ const { scanSummary } = require('../../scripts/lib/harness-tools/compact');
 const { sideValuesText } = require('../../scripts/lib/trading/rules');
 const { snapshot } = require('../../scripts/lib/trading/market-snapshot');
 const { buildBriefing, renderBriefing } = require('../../scripts/lib/trading/briefing');
+const { defaultRoundSteps } = require('../../scripts/lib/trading/round-numbers');
 const { specFor } = require('../../scripts/lib/trading/contracts');
 
 const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
@@ -181,7 +182,7 @@ function viewAt(s, bars, i, strategies = SHIPPED) {
   const t = upTo.at(-1).t;
   const closedAt = new Date(Date.parse(t) + s.minutes * 60000);
   const results = runnerScan(strategies, cfgOf(s), s.symbol, upTo, closedAt);
-  const b = buildBriefing({ symbol: s.symbol, contractId: s.symbol, bars: upTo, minutes: s.minutes, scan: results, blackouts: { items: [] }, now: closedAt });
+  const b = buildBriefing({ symbol: s.symbol, contractId: s.symbol, bars: upTo, minutes: s.minutes, scan: results, blackouts: { items: [] }, roundSteps: defaultRoundSteps(), now: closedAt });
   return [
     `=== ${s.label} bar ${i} (opened ${t}) ===`,
     '--- strategies_scan (the runner\'s, compact) ---',

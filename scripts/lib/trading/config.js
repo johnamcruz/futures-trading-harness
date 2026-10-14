@@ -11,6 +11,7 @@ const path = require('path');
 const { harnessHome } = require('../paths');
 const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
 const { selectionOf } = require('./contracts');
+const { loadRoundSteps } = require('./round-numbers');
 
 // The roles whose report the runner may serve from its cache (report-cache.js): the analysts and risk-manager phase 1.
 const CACHEABLE = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
@@ -126,6 +127,9 @@ function loadConfig(env = process.env) {
     ...exchangeCalendar({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
     // The last trading day the calendar covers: no entries after it (holidays unknown).
     calendarEnds: calendarEnd({ closed: env.FTH_CLOSED_DATES, early: env.FTH_EARLY_CLOSE_DATES }),
+    // The bar briefing's round-number steps per contract family (round-numbers.js): config/round-numbers.json
+    // under <FTH_HOME>/round-numbers.json; { steps, errors }, a refused entry's family off.
+    roundSteps: loadRoundSteps(env),
   };
 }
 

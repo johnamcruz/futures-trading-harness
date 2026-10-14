@@ -81,8 +81,10 @@ never paste a long `get_bars` reply into a file.
    `swingLows` in the snapshot) with prices and times, trend
    classification, the latest BOS or CHoCH with how many candles ago (the
    briefing's `lastBreak` in `m3`, `m15` and `h1`: computed from confirmed
-   swings, never by eye), and the dealing range with its 50% (`m15` `frame`
-   and `h1` `range`). For 15m and 1h the swings that still hold and the one a
+   swings, never by eye), and each frame's last-20-candle range with its 50%
+   (`m15` `frame.range`, `h1` `h1.range` and `h4.range`: high, low, mid; the
+   high and low of the last 20 completed candles, not a swing-to-swing
+   dealing range). For 15m and 1h the swings that still hold and the one a
    3m close last broke are the briefing's `m3` `htfLevels`; fetch 15m or 60m
    bars only for older swings.
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if

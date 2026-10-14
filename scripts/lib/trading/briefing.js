@@ -37,8 +37,10 @@
  * whatever was built on it (an analyst's report) stays valid while the
  * versions it used are unchanged.
  *
- *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, blackouts, clock, now })   the briefing (prev: the last one,
- *                                                              reused where valid; clock: the gate config's entry windows)
+ *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, blackouts, clock, roundSteps, now })   the briefing (prev: the
+ *                                                              last one, reused where valid; clock: the gate config's entry
+ *                                                              windows; roundSteps: the loaded round-number config,
+ *                                                              round-numbers.js, passed by the caller that owns it: none, none shown)
  *   current(b, now)                                              whether it is this bar's (its m3 still holds at now)
  *   renderBriefing(b, { now })                                   one text block per section, with validity
  *   briefingFile(home, root) / writeBriefing / readBriefing      <FTH_HOME>/briefing/<MICRO ROOT>.json
@@ -50,7 +52,7 @@
  * parts that change no faster than its bars (m15 up to 15m bars, h1 up to 1h, day) are shared: read from that
  * briefing, never copied, so every timeframe's briefing names the same versions.
  *
- *   buildFrameBriefing({ symbol, contractId, bars, minutes, first, lane, scan, scanError, barsFile, blackouts, clock, now })
+ *   buildFrameBriefing({ symbol, contractId, bars, minutes, first, lane, scan, scanError, barsFile, blackouts, clock, roundSteps, now })
  *                                                                its `bar` part (first: the runner's briefing)
  *   sharedParts(minutes)                                         the runner's parts it shares: ['m15', 'h1', 'day'] up to 15m
  *   frameHolds(f, at)                                            its bar is the one holding at `at`
@@ -73,6 +75,7 @@ const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { sideTarget } = require('./order-plan');
+const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText } = require('./rules');
 
@@ -161,7 +164,7 @@ const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null }) {
   // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
   // list). Display only: room, R and every other decision input are computed from the unrounded levels.
   const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
@@ -219,7 +222,11 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
   const eqHighs = pool(liq.equalHighs, 'high');
   const eqLows = pool(liq.equalLows, 'low');
   const rth = applies === 'rth';
-  const round100 = [Math.ceil(price / 100) * 100, Math.floor(price / 100) * 100].filter(x => x !== price);
+  // The round numbers on the family's step (contracts.js), none for a root without one: the one just above and
+  // the one just below price; price on one: that one ("at") and the next above and below.
+  // Each is shown as every other level is (level(): on the contract's tick), so 30.125 on a 0.005 tick stays 30.125.
+  const { at: roundOn, levels: roundLevels } = roundNumbers(price, roundStep);
+  const roundAt = roundOn === null ? [] : [['round number', roundOn]];
   const levels = [
     ['day high', rth ? day.high : null], ['day low', rth ? day.low : null], ['IB high', day.ibHigh], ['IB low', day.ibLow],
     ['opening range high', (lv.openingRange || {}).high], ['opening range low', (lv.openingRange || {}).low],
@@ -234,9 +241,14 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
     ...[...eqHighs, ...eqLows].filter(x => !x.taken).map(x => [x.name, x.price]),
-    ...round100.map(x => ['round number', x]),
+    ...roundLevels.map(x => ['round number', x, level(x)]),
   ];
-  const room = nearest(price, oneR, levels, tick);
+  const room = {
+    ...nearest(price, oneR, levels, tick),
+    ...(roundAt.length ? { at: roundAt.map(([name, p]) => ({ name, price: level(p), points: 0, R: 0 })) } : {}),
+    // A configured step that was refused (round-numbers.js): none shown, and why.
+    ...(roundError ? { roundNumbers: roundError } : {}),
+  };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -407,7 +419,7 @@ function newsState(blackouts, at) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, now = new Date() }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date() }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -434,7 +446,10 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
   // Levels within a tick are one level: the contract's tick (contracts.js), 0.25 for a root it doesn't list.
   const tick = grid || 0.25;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid });
+  // Round-number steps: config (round-numbers.js) the caller loaded and passes; none passed, no round numbers.
+  const root = String(symbol || '').split(':')[0];
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
+    roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps) });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -445,6 +460,19 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
     sections[name] = { version: `${name}@${closedAt.toISOString()}`, computedAt: closedAt.toISOString(), validUntil: s.validUntil.toISOString(), reason: old ? 'expired' : 'new', data: s.data };
   }
   return { symbol, contractId, minutes, asOf: last.t, closedAt: closedAt.toISOString(), price: last.c, builtAt: now.toISOString(), sections };
+}
+
+/**
+ * The round numbers on a step: { at, levels }. Off a multiple: the one just below and the one just above price;
+ * on one: that one is `at` and the levels are the next below and above. Only positive prices (a step at or over
+ * price has none below it); no step, none.
+ */
+function roundNumbers(price, step) {
+  if (!(step > 0) || !Number.isFinite(price)) return { at: null, levels: [] };
+  const k = Math.round(price / step);
+  const on = Math.abs(price / step - k) < 1e-9;
+  const levels = (on ? [k - 1, k + 1] : [Math.floor(price / step), Math.ceil(price / step)]).map(n => n * step).filter(x => x > 0);
+  return { at: on ? k * step : null, levels };
 }
 
 /**
@@ -531,6 +559,8 @@ function summaryLines(b, et) {
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
     `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
     `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,
+    ...(room.at && room.at.length ? [`- At price: ${room.at.map(x => `${x.name} ${x.price}`).join(', ')}.`] : []),
+    ...(room.roundNumbers ? [`- Round numbers: none (${room.roundNumbers}).`] : []),
   ];
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
@@ -594,10 +624,10 @@ const sharedParts = minutes => Object.keys(SHARED_CLOCK).filter(p => SHARED_CLOC
  * sharedParts). `lane`: the bars are a lane's, so `scan` is that lane's scan and its candidates are this bar's;
  * else no strategy trades these bars and the setups are the runner's briefing's.
  */
-function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, lane = false, scan = null, scanError = null, barsFile = null, blackouts = null, clock = null, now = new Date() }) {
+function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, lane = false, scan = null, scanError = null, barsFile = null, blackouts = null, clock = null, roundSteps = null, now = new Date() }) {
   if (!first || !first.sections || !first.sections.m3) throw new Error(`no runner bar briefing to share with the ${minutes}m one`);
   if (first.symbol !== symbol || (first.contractId || null) !== contractId) throw new Error(`the runner's bar briefing is for ${first.symbol} ${first.contractId || ''}, not ${symbol} ${contractId || ''}`);
-  const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, now });
+  const b = buildBriefing({ symbol, contractId, bars, minutes, scan: lane ? scan : null, scanError: lane ? scanError : null, blackouts, clock, roundSteps, now });
   const base = b.sections.m3;
   // No trend rule: one read off these bars isn't the gate's, and the gate's, copied here, would be served as current
   // for this bar's whole life (and in a report cached on it). The gate's current rule is the runner's briefing's.
@@ -687,5 +717,5 @@ function removeFrameBriefing(home, root, minutes) {
 
 module.exports = {
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
-  sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
+  roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
 };
