@@ -75,12 +75,12 @@ test('trader-process: it orders the thinking and adds no filter; the priority or
     '**The priority order decides** (strategy-library, "The priority order"): take, skip and size.',
     "Only its hard stops and the gate's end a plan early.",
     // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
-    '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade_lifecycle`); no one read makes a trade.',
+    '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Protecting, managing and exiting an open position, and the end-of-day flatten, go ahead whatever steps 1-8 say; a no-entry window or a wait never blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is written `unknown` (or `unavailable`); never estimate one.",
     'Take, skip or wait, decided with the priority order; write its ONE main reason. The counts never overrule it.',
     'Never loosen the stop.',
-    '**Setup.** The setup reads and the side (`trade_lifecycle`), with the trend or against it.',
+    '**Setup.** The setup reads and the side (`trade-lifecycle`), with the trend or against it.',
     '**Risk.** Stop (`invalidation`), size, exit (target or trail), the room; the numbers from `order_plan` or the compose record.',
     '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
     "The bias agrees with the gate's `Trend rule:` line; where they differ, the Trend rule wins, and the plan says so.",
@@ -256,7 +256,7 @@ test('trader-process: the executor executes; it carries no PLAN and no analysis'
   const { data, body } = parseFrontmatter(read('agents/trade-executor.md'));
   assert.deepStrictEqual([...data['role-skills'], ...(data['role-index'] || [])], ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals']);
   assert.ok(body.includes("You execute. You don't analyse, re-plan, or second-guess."));
-  assert.ok(flat(body).includes('- Entry: enter only on the approved verdict and its fired trigger; never anticipate.'));
+  assert.ok(flat(body).includes('- Entry: enter only on the approved verdict and its trigger (a fired strategy, or this bar\'s compose record); never anticipate.'));
   assert.ok(flat(body).includes('- Management: protect and exit, always; move stops or scale out as the plan says.'));
   assert.doesNotMatch(body, /trader-process|trader process|PLAN|\b[1-9] (?:HTF|Context|Location|Setup|Confluence|Risk|Decision)\b/);
   assert.ok(!read('skills/trader-process/SKILL.md').includes('| trade-executor |'));

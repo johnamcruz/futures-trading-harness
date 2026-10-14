@@ -162,7 +162,7 @@ const OP_BEFORE_SHA256 = '6d319c1504ba47d0c7bcae2931a69f48f720225000dacb946959ae
 const OP_HOMES = ['position-sizing', 'order-plan'];
 const OP_ALLOWED = [
   { old: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows it: the stop in points and whole ticks, the risk per contract, the size and where it came from (1 for a rules strategy, the size-1 rule; the verdict\'s, within the attempt\'s budget, for a policy strategy), and the dollar risk.',
-    now: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).',
+    now: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade it plans the compose record (`trade-lifecycle`; refused over its cap).',
     reason: 'what it shows is the order_plan row (stop and target in points and whole ticks, how the size was derived, $ risk) plus order-plan\'s "Its working includes the risk per contract."; a composed trade\'s numbers are its compose record\'s (the skill audit, X2)' },
 ];
 

@@ -13,7 +13,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 ## How It Works
 
 - **Read each setup's facts first**: a composed setup's are your reads and
-  the record's plan, each checked by `compose_check` (`trade_lifecycle`); a
+  the record's plan, each checked by `compose_check` (`trade-lifecycle`); a
   candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3`
   `candidates`. They are context, not a verdict: judge the setup by its
   strategy's STRATEGY.md (`strategies_show`: its context filter and skip
@@ -47,13 +47,12 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   say which in the plan. Under 30 trades is anecdotal, not evidence. No
   record ("no backtest recorded") is the weakest case, not a neutral one, and
   a STALE record (the strategy changed since) doesn't describe it.
-- **Confluence.** Several strategies firing the same side on the bar (the
-  scan's `confluence.with`, the prompt's "fired on this bar" line) is a
-  stronger setup: say so in the plan, and prefer it over a lone signal. Strategies firing
-  both sides (`confluence.against`) is a conflict: stand aside (the priority
-  order, step 6: no exception). The backtest reports results by confluence
-  (`byConfluence`); trust it over a feeling that agreement helps.
-- Otherwise compose one (`trade_lifecycle`), or pick at most one strategy that is a `candidate` in the scan in
+- **Confluence.** A composed setup's: the count of `confluence-counting`.
+  Rules strategies firing the same side on the bar (`confluence.with`) are a
+  stronger setup; both sides (`confluence.against`) a conflict: stand aside
+  (the priority order, step 6: no exception). Trust the backtest's
+  `byConfluence` over a feeling that agreement helps.
+- Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in
   this direction on the last closed bar (candidates are already in session and
   in regime: the trigger fired), or a manual strategy whose trigger you
   verified on closed bars and whose `regimes` fit; quote the trigger in the

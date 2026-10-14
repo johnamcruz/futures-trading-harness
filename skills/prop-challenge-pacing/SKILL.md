@@ -45,19 +45,17 @@ it:
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
 - Entries under an attempt go through `prop_portfolio`'s verdict on
-  `trade_lifecycle`: `compose_check` asks for it, with the record's side
-  and stop (`trade_lifecycle`), and records it at the record's bar: the
-  strategy, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
+  `trade_lifecycle`: `order_plan` for `trade_lifecycle` records it once per
+  compose record, from its side and stop, at its bar (`trade-lifecycle`): the
+  side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
   size, the stop in ticks, and its multiplier: the share of the budget the
   rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is
   an item whose fact is missing or stale). The size is already sized at it. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so,
-  and then exactly as given: rationale
-  `setup:<policy strategy> ...`, that contract and side, at most that size,
-  `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the
-  policy strategy's name, the bars file and its `symbol`, the micro whose
-  bars the runner scans, gives exactly these arguments, or refuses with the
-  gate's reason). A verdict is for its own bar: the gate takes it only while
+  and then as given: rationale `setup:<policy strategy> ...`, the record's
+  contract and side, at most the lower of the verdict's size and the
+  composed cap, the record's ticks (`order_plan` for `trade_lifecycle`
+  gives exactly these arguments, or refuses with the gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
   timeframe (the runner records each bar it scans). Once a newer bar is recorded
   without a verdict for its setup, the old one is refused (`[policy] ... the latest
@@ -131,4 +129,5 @@ drawdown from the peak). A 40-tick stop plus a tick of expected slippage
 risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
 $21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
 $207.80 each, $831.20 in all). With MNQ selected the verdict is 45 MNQ ($955.80).
+trade_lifecycle's $300 cap is lower: 1 NQ (40 x $5 = $200) or 15 MNQ (40 x $0.50 x 15 = $300).
 ```

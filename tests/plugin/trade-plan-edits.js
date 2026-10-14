@@ -17,7 +17,7 @@ its own stop: check there is room to the target or the trail's
 activation), and the session window`,
   reason: 'a composed trade\'s room is its compose record\'s inTheWay; the skip rules that named it were the retired rules strategies\'' },
   { old: 'The exit follows the strategy\'s `exit` (shown in the scan):',
-    now: `The exit: a composed trade's target is the record's level (\`trade_lifecycle\`);
+    now: `The exit: a composed trade's target is the record's level (\`trade-lifecycle\`);
 a policy's or a rules strategy's follows its \`exit\` (the rulebook, the scan):`,
     reason: 'a composed trade\'s exit is its record\'s target level; a policy trails by its rulebook' },
   { old: '  from the scan\'s `exit`, don\'t assume them.', now: '  from its `exit`, don\'t assume them.', reason: 'a policy\'s exit is its rulebook\'s, not the scan\'s' },
@@ -34,20 +34,23 @@ once you have chosen the strategy and the side (the steps above: the trigger,
 the trend rule, the skip rules, the account), call it with them, e.g.
 \`order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "orb", "side": "long"}\`.`,
   now: `**The exact numbers come from \`order_plan\`** (a rules strategy, a policy
-verdict) **or the compose record** (\`trade_lifecycle\`),
+verdict, or \`trade_lifecycle\`'s compose record: \`trade-lifecycle\`),
 not from your own arithmetic: once you have chosen the strategy and the
 side, call it with them, e.g.
 \`order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "<name>", "side": "long"}\`.`,
-  reason: 'a composed trade\'s numbers are its compose record\'s; orb is retired' },
+  reason: 'a composed trade\'s numbers are its compose record\'s, which order_plan plans (the trade-lifecycle skill); orb is retired' },
   { old: `policy entry may have. A different size from
 your plan changes only \`size\`, and the risk scales with it: smaller for a
 \`mixed\` read or a reversal fade, and, for a rules strategy, larger only as
 position-sizing allows (a setup with 30+ reviewed trades and positive
 expectancy, within the budget and caps). A manual`,
-  now: `policy entry may have; a composed trade's is the size you stated, at most
-the record's \`maxSize\`. A different size from
-your plan changes only \`size\`, and the risk scales with it. A manual`,
-  reason: 'owner decision D1: a composed trade\'s size is its own under the caps, never halved for a mixed read; the size-1 rule is position-sizing\'s' },
+  now: `policy entry may have; a composed trade's is the size you stated, refused
+over its cap (in an attempt, also the verdict). A different size from
+your plan changes only \`size\`, and the risk scales with it: for a rules
+strategy, smaller for a \`mixed\` read or a reversal fade, and larger only as
+position-sizing allows (a setup with 30+ reviewed trades and positive
+expectancy, within the budget and caps). A manual`,
+  reason: 'owner decision D1: a composed trade\'s size is its own under the caps (order_plan refuses one over them), never halved for a mixed read; the halving and the size steps stay for a rules strategy' },
 ];
 
 /** The fixture with every edit applied; throws when an edit's old text isn't in it exactly once. */

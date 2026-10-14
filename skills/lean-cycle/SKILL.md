@@ -15,7 +15,7 @@ description: Use when the prompt says lean - a 1-minute cycle with no parallel a
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in
 order: step 1, the bar briefing (without one: the multi-timeframe read,
 `market_snapshot` and `strategies_scan` on the bars file), and the blackouts
-(`blackouts_list`). No candidate and no setup you compose (`trade_lifecycle`)
+(`blackouts_list`). No candidate and no setup you compose (`trade-lifecycle`)
 → note and end (`candidates: null`, the scan failed or the bar wasn't
 scanned, counts as none). A candidate or a composed setup → `risk-manager`
 phase 1 and 2, then execute. Steps 3-7 apply, with "the

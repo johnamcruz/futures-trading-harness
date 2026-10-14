@@ -27,8 +27,8 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    wide for the budget: skip, or find a tighter, structure-based stop. Never
    shrink the stop to make the size work.
 5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
-   (`get_server_config`); size 1 on micros until the setup has 30+
-   reviewed trades with positive expectancy. The order gate enforces two
+   (`get_server_config`); size 1 on micros for a rules strategy until
+   its setup has 30+ reviewed trades with positive expectancy. The order gate enforces two
    of them on every entry: the size at most `maxOrderSize` (the harness
    records it from `get_server_config`, and refuses entries until it has),
    and, when the strategy sets `risk.max_risk_usd`, size × stop ticks ×
@@ -49,7 +49,8 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
-   `risk.max_risk_usd` if it sets one (its components' caps don't apply). Everything else (stop first, protective
+   `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
+   `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
    stop always working) still applies.
 7. **Half size** wherever the priority order (strategy-library) halves a
    trade, computed as it says there. Never round a half up. A composed
@@ -57,8 +58,8 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
    verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
    for the strategy and side you chose and shows its working (the
-   `order-plan` skill); for a composed trade, the compose record (its
-   `maxSize`: the most `risk.max_risk_usd` allows). Use its numbers
+   `order-plan` skill); for a composed trade it plans the compose record
+   (`trade-lifecycle`; refused over its cap). Use its numbers
    instead of computing them by hand. The budget (step 3) and the caps are
    still your judgement: a budget below its risk is a skip, and a size you
    are allowed to raise (30+ reviewed trades) changes only `size`, with the
@@ -74,6 +75,6 @@ budget = $75 → size = floor(75 / 35) = 2 → capped to 1 (setup has 12 reviews
 Plan: 1 MNQ, risk $35.
 
 compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):
-risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick
-(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)
+risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick
+(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)
 ```

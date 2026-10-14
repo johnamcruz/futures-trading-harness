@@ -75,18 +75,32 @@ const ALLOWED = [
     now: "**The trend rule**: a trend strategy against the prevailing trend → no trade.",
     reason: "the parenthesis restated the gate (multi-timeframe-analysis owns the trend rule); room for D2 below without growing a prompt" },
   { old: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target.",
-    now: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs a 15m or 1h CHoCH its way.",
-    reason: "owner decision D2 (fix/skills-composed-process): a composed entry against the trend needs a 15m or 1h CHoCH its way" },
+    now: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs a CHoCH its way at or above the trend's frame.",
+    reason: "owner decision D2 (fix/skills-composed-process): a composed entry against the trend needs a CHoCH its way at or above the trend's frame" },
   { old: "strategies_show orb → skip rule \"relative volume < 1.0x\" → volume analyst reports 0.8x → no trade.",
     now: "trade_lifecycle long, read long mixed → its stated size.",
     reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; orb is retired" },
   { old: "strategies_scan → crt_1h short, a candidate, stopDistance 18.5 → read the",
-    now: "trade_lifecycle short, 1h up, no 15m or 1h CHoCH down → step 2: no trade.",
+    now: "trade_lifecycle short, 1h up, no 1h CHoCH down → step 2: no trade.",
     reason: "owner decision D2: the trend rule for a composed trade; crt_1h is retired" },
   { old: "body's skip rules → none apply → plan it.",
     copies: 0,
     reason: "the second line of the crt_1h example (retired)" },
 ];
+
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "trade_lifecycle long, read long mixed → its stated size.",
+    to: null,
+    reason: "review of #169: the intro and step 4 say it; the example made room for step 3 and 4's composed clauses without growing a prompt" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
 
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
 function differences(beforeText, homeTexts) {
@@ -165,8 +179,8 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   assert.notDeepStrictEqual(differences(old, swap('strategy-gate-checks', gate.replace('never more than 45 minutes ago', 'never more than 50 minutes ago'))), []);
   // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
   const lib = homes[at('strategy-library')];
-  const ROOM = /3\. \*\*Room\*\*[^]*?\(`needR`\) → no trade\.\n/.exec(lib)[0];
-  const TREND = /2\. \*\*The trend rule\*\*[^]*?its way\.\n/.exec(lib)[0];
+  const ROOM = /3\. \*\*Room\*\*[^]*?`risk\.min_rr`\)\.\n/.exec(lib)[0];
+  const TREND = /2\. \*\*The trend rule\*\*[^]*?trend's frame\.\n/.exec(lib)[0];
   const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
   assert.notStrictEqual(swapped, lib);
   assert.deepStrictEqual(differences(old, swap('strategy-library', swapped)), [], 'a swap loses nothing');
@@ -230,4 +244,8 @@ test('strategy-library split: a rules entry still needs all of the old skill (th
   const { REQUIRED_FOR_COMPOSED } = require('../../scripts/lib/trading/skills-loaded');
   for (const s of REQUIRED_FOR_COMPOSED) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
   for (const s of HOMES.filter(x => x !== 'harness-root')) assert.ok(!sentence.includes(s), `the prompt no longer loads ${s}`);
+});
+
+test('strategy-library-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

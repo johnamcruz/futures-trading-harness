@@ -39,7 +39,7 @@ smaller of the verdict's (or position-sizing's) and what the steps allow.
 Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
 at size 1 every halving is a skip). Halvings don't compound: however many
 steps halve, the size is halved once. A composed trade is never halved: its
-stated size stands under the code's caps; a `mixed` read is a reason.
+stated size stands under the code's caps.
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
@@ -47,13 +47,15 @@ stated size stands under the code's caps; a `mixed` read is a reason.
 2. **The trend rule**: a trend strategy against the prevailing trend → no
    trade. A reversal strategy may
    fade it only at a higher-timeframe level, at half size and the nearest
-   target; a composed one needs a 15m or 1h CHoCH its way.
+   target; a composed one needs a CHoCH its way at or above the trend's frame.
 3. **Room**: the first level in its way (`inTheWay`, in its own R) comes
-   before the room it needs (`needR`) → no trade.
+   before the room it needs (`needR`) → no trade. A composed trade's
+   room: its R:R to the first real level (at least `risk.min_rr`).
 4. **The multi-timeframe read for its side**: `aligned` → full;
    `pullback` → no trade until the trigger timeframe turns back with the
    bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a
-   non-reversal setup → no trade.
+   non-reversal setup → no trade. Composed: `counter`
+   with step 2's CHoCH is a reversal.
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
 6. **Confluence**: another strategy firing the other side → no trade;
@@ -66,6 +68,5 @@ Every other skill and role applies this order; none restates it.
 ## Examples
 
 ```text
-trade_lifecycle long, read long mixed → its stated size.
-trade_lifecycle short, 1h up, no 15m or 1h CHoCH down → step 2: no trade.
+trade_lifecycle short, 1h up, no 1h CHoCH down → step 2: no trade.
 ```

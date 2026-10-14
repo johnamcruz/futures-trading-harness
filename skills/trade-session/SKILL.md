@@ -95,8 +95,8 @@ prompt states the recorded rule; interactively, `bars_fetch` with `record`
 trend entries unless the recorded bar closed less than 15 minutes ago: fetch
 fresh bars, re-recording an old file doesn't help). Never
 argue a trend strategy into a counter-trend trade; a composed one goes
-against it only with a true 15m or 1h CHoCH its way among its reads
-(`bos-vs-choch`). Put the read for the side in the plan entry. A policy
+against it only with a true CHoCH its way at or above the trend's
+frame (`trade-lifecycle`). Put the read for the side in the plan entry. A policy
 verdict is a ceiling, never an order.
 
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
@@ -107,7 +107,7 @@ and 1h), per the signal record
 (the runner records every bar; interactively, `strategies_scan` with the
 bars file, `symbol`, and `record: true`). A different setup tag on the
 same trade is refused: enter only on the strategy that fired. A composed
-entry's trigger is this bar's compose record (`trade_lifecycle`).
+entry's trigger is this bar's compose record (`trade-lifecycle`).
 
 **Lean cycle** (the prompt says "lean"): the `lean-cycle` skill.
 

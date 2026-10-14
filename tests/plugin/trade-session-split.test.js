@@ -79,8 +79,8 @@ const ALLOWED = [
     now: 'A role\'s call is that role\'s own analysis (the order gate counts it as its report): never ask a role to read, load or summarize skills or files for you; load skills yourself (your skill tool; none: skill_lookup or `SKILL.md`).',
     reason: 'the head trader without a skill tool (opencode, index mode) reads a skill with skill_lookup, which the gate counts' },
   { old: "Never argue a trend strategy into a counter-trend trade.",
-    now: "Never argue a trend strategy into a counter-trend trade; a composed one goes against it only with a true 15m or 1h CHoCH its way among its reads (`bos-vs-choch`).",
-    reason: "owner decision D2 (fix/skills-composed-process): a composed entry may go against the trend with a verified 15m or 1h CHoCH its way" },
+    now: "Never argue a trend strategy into a counter-trend trade; a composed one goes against it only with a true CHoCH its way at or above the trend's frame (`trade-lifecycle`).",
+    reason: "owner decision D2 (fix/skills-composed-process): a composed entry may go against the trend with a verified CHoCH at or above the trend's frame its way" },
   { old: "The read for the candidate's side sets its size by the priority order (strategy-library, step 4).",
     copies: 0,
     reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here" },
@@ -160,6 +160,47 @@ const ALLOWED = [
     now: "A different size from your plan changes only `size`, and the risk scales with it.",
     reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; its size is the model's under the code's caps, so the size rule is strategy-library's alone, not restated here (trade-plan-edits.js)" },
 ];
+
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "**Confluence.** Several strategies firing the same side on the bar (the scan's `confluence.with`, the prompt's \"fired on this bar\" line) is a stronger setup: say so in the plan, and prefer it over a lone signal.",
+    to: "**Confluence.** A composed setup's: the count of `confluence-counting`.",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: a composed setup counts confluence-counting's items; the strategies-firing rules are the rules strategies'" },
+  { from: "Strategies firing both sides (`confluence.against`) is a conflict: stand aside (the priority order, step 6: no exception).",
+    to: "Rules strategies firing the same side on the bar (`confluence.with`) are a stronger setup; both sides (`confluence.against`) a conflict: stand aside (the priority order, step 6: no exception).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: one sentence for the rules strategies" },
+  { from: "The backtest reports results by confluence (`byConfluence`); trust it over a feeling that agreement helps.",
+    to: "Trust the backtest's `byConfluence` over a feeling that agreement helps.",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: shortened, so the head prompt doesn't grow" },
+  { from: "No candidate and no setup you compose (`trade_lifecycle`) → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    to: "No candidate and no setup you compose (`trade-lifecycle`) → note and end (`candidates: null`, the scan failed or the bar wasn't scanned, counts as none).",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "**Read each setup's facts first**: a composed setup's are your reads and the record's plan, each checked by `compose_check` (`trade_lifecycle`); a candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`.",
+    to: "**Read each setup's facts first**: a composed setup's are your reads and the record's plan, each checked by `compose_check` (`trade-lifecycle`); a candidate's, `facts`, `inTheWay`, `needR` and `blocked` in `m3` `candidates`.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "Otherwise compose one (`trade_lifecycle`), or pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    to: "Otherwise compose one (`trade-lifecycle`), or pick at most one strategy that is a `candidate` in the scan in this direction on the last closed bar (candidates are already in session and in regime: the trigger fired), or a manual strategy whose trigger you verified on closed bars and whose `regimes` fit; quote the trigger in the plan.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "The exit: a composed trade's target is the record's level (`trade_lifecycle`); a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):",
+    to: "The exit: a composed trade's target is the record's level (`trade-lifecycle`); a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174)" },
+  { from: "**The exact numbers come from `order_plan`** (a rules strategy, a policy verdict) **or the compose record** (`trade_lifecycle`), not from your own arithmetic: once you have chosen the strategy and the side, call it with them, e.g.",
+    to: "**The exact numbers come from `order_plan`** (a rules strategy, a policy verdict, or `trade_lifecycle`'s compose record: `trade-lifecycle`), not from your own arithmetic: once you have chosen the strategy and the side, call it with them, e.g.",
+    reason: "the pointer goes to the trade-lifecycle skill now that it exists (#172-#174); order_plan plans the compose record (#173)" },
+  { from: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have; a composed trade's is the size you stated, at most the record's `maxSize`.",
+    to: "Its size is the starting size: 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy, the verdict's cut to the attempt's size budget now, which is the most a policy entry may have; a composed trade's is the size you stated, refused over its cap (in an attempt, also the verdict).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: order_plan refuses a composed size over its cap and, in an attempt, the verdict" },
+  { from: "A different size from your plan changes only `size`, and the risk scales with it.",
+    to: "A different size from your plan changes only `size`, and the risk scales with it: for a rules strategy, smaller for a `mixed` read or a reversal fade, and larger only as position-sizing allows (a setup with 30+ reviewed trades and positive expectancy, within the budget and caps).",
+    reason: "review of #169: composed-correct, against the merged trade_lifecycle code: the halving and the size steps stay for a rules strategy" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
 
 const homeTexts = () => HOMES.map(skill);
 
@@ -292,4 +333,8 @@ test('trade-session split: the gate requires setup-judgment and trade-plan at en
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);
   assert.match(row, /Exits, `\[protect\]` stops, stop moves, size cuts and cancels still go\./);
+});
+
+test('trade-session-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

@@ -17,7 +17,7 @@ It adds no filter and no veto:
   order"): take, skip and size. Only its hard stops and the gate's end a
   plan early.
 - **A setup is a combination of reads** you state, step by step, and
-  `compose_check` verifies (`trade_lifecycle`); no one read makes a trade.
+  `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
 - **Management always runs.** Protecting, managing and exiting an open
   position, and the end-of-day flatten, go ahead whatever steps 1-8 say;
   a no-entry window or a wait never blocks an exit or a risk reduction.
@@ -33,7 +33,7 @@ It adds no filter and no veto:
    Attempt lines).
 3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
    Read: `levels-and-reactions`, `breakout-vs-fakeout`.
-4. **Setup.** The setup reads and the side (`trade_lifecycle`), with the
+4. **Setup.** The setup reads and the side (`trade-lifecycle`), with the
    trend or against it. Read: `pullback-vs-reversal`, `cisd`; setups:
    `rejection`, `breakout`.
 5. **Confluence.** Count the six items of `confluence-counting`.

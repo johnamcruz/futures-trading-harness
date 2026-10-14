@@ -31,6 +31,15 @@ const SPLITS = {
     before: 'tests/fixtures/skill-split/prop-challenge-pacing.before.txt',
     sha256: 'fab004b179da5f5ce4d4b89b42a7a16323927845fba4c7e1acb92dd611fb548d',
     homes: ['prop-challenge-pacing', 'prop-evaluator', 'prop-pacing-judgment'],
+    // Edits made since the split (skill-split-late.js), each with its reason.
+    late: [
+      { from: "Entries under an attempt go through `prop_portfolio`'s verdict on `trade_lifecycle`: `compose_check` asks for it, with the record's side and stop (`trade_lifecycle`), and records it at the record's bar: the strategy, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        to: "Entries under an attempt go through `prop_portfolio`'s verdict on `trade_lifecycle`: `order_plan` for `trade_lifecycle` records it once per compose record, from its side and stop, at its bar (`trade-lifecycle`): the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest size, the stop in ticks, and its multiplier: the share of the budget the rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is an item whose fact is missing or stale).",
+        reason: "review of #169: as the merged code does it (#172-#174): order_plan for trade_lifecycle records the policy's verdict once per compose record (lifecycle-order.js, prop/composed-verdict.js)" },
+      { from: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then exactly as given: rationale `setup:<policy strategy> ...`, that contract and side, at most that size, `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the policy strategy's name, the bars file and its `symbol`, the micro whose bars the runner scans, gives exactly these arguments, or refuses with the gate's reason).",
+        to: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then as given: rationale `setup:<policy strategy> ...`, the record's contract and side, at most the lower of the verdict's size and the composed cap, the record's ticks (`order_plan` for `trade_lifecycle` gives exactly these arguments, or refuses with the gate's reason).",
+        reason: "review of #169: as the merged code does it (#172-#174): the record's contract, side and ticks, at most the lower of the verdict and the composed cap" },
+    ],
     moved: {
       // "Scoring a policy strategy on history (the evaluator)", its body.
       'prop-evaluator': { lines: [[124, 146]] },
@@ -86,6 +95,23 @@ const SPLITS = {
     before: 'tests/fixtures/skill-split/position-sizing.before.txt',
     sha256: 'ad2b70ca7fa99844f29287fe5cb751e97f64d6fcfd336b7b7cc73e54daf45790',
     homes: ['position-sizing', 'micro-mini-specs'],
+    late: [
+      { from: "**Caps:** the broker server's `maxOrderSize` and `maxPositionSize` (`get_server_config`); size 1 on micros until the setup has 30+ reviewed trades with positive expectancy.",
+        to: "**Caps:** the broker server's `maxOrderSize` and `maxPositionSize` (`get_server_config`); size 1 on micros for a rules strategy until its setup has 30+ reviewed trades with positive expectancy.",
+        reason: "review of #169: as the merged code does it (#172-#174): the size-1 rule is a rules strategy's; a composed trade's size is its own under its cap" },
+      { from: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (its components' caps don't apply).",
+        to: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (a rules component's caps don't apply; `trade_lifecycle`'s cap does: the lower of it and the verdict).",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap applies under the verdict (lifecycle-order.js)" },
+      { from: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).",
+        to: "**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade it plans the compose record (`trade-lifecycle`; refused over its cap).",
+        reason: "review of #169: as the merged code does it (#172-#174): order_plan plans the compose record (#173)" },
+      { from: "risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick",
+        to: "risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
+      { from: "(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)",
+        to: "(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)",
+        reason: "review of #169: as the merged code does it (#172-#174): trade_lifecycle's cap is $300 (#173)" },
+    ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.
       'micro-mini-specs': { lines: [[18, 28]], units: ['The table is for sanity checks only:'] },
@@ -106,6 +132,15 @@ const SPLITS = {
     ],
   },
 };
+
+// The late edits applied to each split's allow-list; one that matches nothing fails (the list only shrinks).
+const { withLate } = require('./skill-split-late');
+const LATE_STALE = [];
+for (const s of Object.values(SPLITS)) {
+  const r = withLate(s.allowed, s.late || [], units(fs.readFileSync(path.join(ROOT, s.before), 'utf8')));
+  s.allowed = r.allowed;
+  LATE_STALE.push(...r.stale.map(l => l.from));
+}
 
 /** The old units each home must hold: Map home -> Map unit -> count (the kept skill takes every unit not moved). */
 function expectedHomes(s, beforeText) {
@@ -269,4 +304,8 @@ test('micro-mini-specs: every row whose roots contracts.js lists agrees with it 
     }
   }
   assert.ok(checked >= 8, `checked ${checked}`);
+});
+
+test('prop and sizing splits: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

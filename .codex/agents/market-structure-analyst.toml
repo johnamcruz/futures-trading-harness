@@ -90,8 +90,8 @@ never paste a long `get_bars` reply into a file.
    value gaps (`liquidity.openFvgs`) and partly filled ones
    (`liquidity.partlyFilledFvgs`, the unfilled part), untested 1h swings (`m3`
    `untested1hSwings`).
-5. Which structure strategies are live for this symbol (`strategies_list`;
-   e.g. `setup:crt_1h`, `setup:crt_4h`), with the trigger condition and price
+5. Which structure strategies are live for this symbol (`strategies_list`),
+   with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
    evaluate from their STRATEGY.md body (`strategies_show`) against the
    briefing's numbers; what no tool computes, say is not computed. The

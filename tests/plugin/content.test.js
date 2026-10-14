@@ -315,7 +315,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/manage-position/SKILL.md'), /close at\s+market \(time stop\)\. Each stop move and close goes through the\s+trade-executor role, as all management does\./);
   // Step 6 has no exception: a conflict is no trade, a reversal too.
   assert.match(read('agents/risk-manager.md'), /`confluence\.against`\):\s+its step 6\./);
-  assert.match(read('skills/setup-judgment/SKILL.md'), /`confluence\.against`\) is a conflict: stand aside \(the priority\s+order, step 6: no exception\)\./);
+  assert.match(read('skills/setup-judgment/SKILL.md'), /both sides \(`confluence\.against`\) a conflict: stand aside\s+\(the priority order, step 6: no exception\)\./);
   assert.match(read('agents/risk-manager.md'), /The briefing's `m3`\s+`candidates` give each setup's facts[^]*?context for the checks below, never a check of their own\./);
   for (const f of ['agents/risk-manager.md', ...TRADE_SESSION_SPLIT, 'skills/multi-timeframe-analysis/SKILL.md', 'skills/htf-to-ltf/SKILL.md', 'skills/daily-bias/SKILL.md', 'skills/tool-arguments/SKILL.md', 'skills/strategy-tools/SKILL.md', 'skills/bar-briefing/SKILL.md', 'skills/strategy-library/SKILL.md', 'skills/order-plan/SKILL.md', 'skills/reason-check/SKILL.md']) assert.doesNotMatch(read(f), /\bgrade [ABC]\b|`grade`/, f);
   const rm = read('agents/risk-manager.md');
@@ -327,7 +327,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/htf-to-ltf/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /`pullback` → no trade until the trigger timeframe turns back with the\s+bias \(a shift, a reclaim\), then full; `mixed` → half;/);
-  assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target; a composed one needs a 15m or 1h CHoCH its way\./);
+  assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target; a composed one needs a CHoCH its way at or above the trend's frame\./);
   for (const a of ['trend-momentum-analyst', 'volume-liquidity-analyst']) assert.match(read(`agents/${a}.md`), /\nBias: long \| short \| neutral \(confidence: low \| medium \| high\)\n/, a);
   assert.match(rm, /^tools: .*mcp__harness__bar_briefing/m);
   assert.match(rm, /The market facts come from the bar briefing[^]*?don't fetch bars or run\s+`strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold/);

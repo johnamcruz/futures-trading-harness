@@ -33,6 +33,26 @@ const ALLOWED = [
     reason: 'step 8 is the strategy-backtest skill' },
 ];
 
+// Edits made to the homes since the split (skill-split-late.js), each with its reason: the coverage test holds each
+// home to its edited text, and a late edit that matches nothing fails.
+const { withLate } = require('./skill-split-late');
+const LATE = [
+  { from: "`trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester skips it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design (`crt_1h`, `crt_4h`, `ofi_absorption`, `value_area_reentry`); say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's",
+    to: "`trend` (the default) or `reversal`. A trend strategy never enters against the prevailing higher-timeframe trend (the highest of 4h, 1h, 15m with one): the scan drops the signal, the backtester skips it, and the order gate refuses the entry. Set `reversal` only when the setup is a raid or exhaustion at a higher-timeframe level that fades that trend by design; say why in the body. Policy strategies have no `mtf`: each setup keeps its strategy's",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit; moved into fix/skills-composed-process so strategy-library's composed clauses grow no prompt)" },
+  { from: "`stop` (`atr:<k>` = k × ATR(20), a distance expression such as `0.5 * atr(20)` or `cisd_risk(15)`, a map `{ long: <expr>, short: <expr> }` when each side's stop sits somewhere else (beyond a swept low or high, as in `crt_1h`), `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists and, when `max_risk_usd` is set, refuses an entry whose risk (size × stop ticks × the broker's tick value) is over it, or whose risk it can't compute (a market entry with its stop only in the rationale: give `stopLossBracket.ticks`); `min_rr` is applied by the agents (risk-manager), not by code. In a policy strategy, only its own `max_risk_usd` applies to its entries, not its components'",
+    to: "`stop` (`atr:<k>` = k × ATR(20), a distance expression such as `0.5 * atr(20)` or `cisd_risk(15)`, a map `{ long: <expr>, short: <expr> }` when each side's stop sits somewhere else (beyond a swept low or high), `structure`, `swing`, `manual`), `min_rr`, optional `max_risk_usd`. The order gate checks that a stop exists and, when `max_risk_usd` is set, refuses an entry whose risk (size × stop ticks × the broker's tick value) is over it, or whose risk it can't compute (a market entry with its stop only in the rationale: give `stopLossBracket.ticks`); `min_rr` is applied by the agents (risk-manager), not by code. In a policy strategy, only its own `max_risk_usd` applies to its entries, not its components'",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit; moved into fix/skills-composed-process so strategy-library's composed clauses grow no prompt)" },
+  { from: "See `strategies/vwap_reclaim/STRATEGY.md` for a complete rules strategy.",
+    to: "See `strategies/_template/STRATEGY.md` for a rules strategy's skeleton.",
+    reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit; moved into fix/skills-composed-process so strategy-library's composed clauses grow no prompt); the template is the skeleton that ships" },
+];
+const LATE_STALE = (() => {
+  const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
+  ALLOWED.splice(0, ALLOWED.length, ...r.allowed);
+  return r.stale.map(l => l.from);
+})();
+
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 
 test('strategy-authoring split: every unit of the old skill is in exactly one new home, in its old order', () => {
@@ -102,4 +122,8 @@ test('strategy-authoring split: the strategy researcher loads what its method us
   // loads with its skill tool when a session asks for a backtest.
   assert.ok(!sr.includes('strategy-backtest'));
   assert.match(read('skills/strategy-authoring/SKILL.md').replace(/\s+/g, ' '), /the `strategy-backtest` skill/);
+});
+
+test('strategy-authoring-split: every late edit matches a unit of the homes', () => {
+  assert.deepStrictEqual(LATE_STALE, []);
 });

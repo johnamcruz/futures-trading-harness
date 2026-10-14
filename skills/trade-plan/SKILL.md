@@ -28,7 +28,7 @@ and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the
 tag `paper` in plan-only mode.
 
-The exit: a composed trade's target is the record's level (`trade_lifecycle`);
+The exit: a composed trade's target is the record's level (`trade-lifecycle`);
 a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):
 
 - **Trailing:** stop only, no target order. The runner (or you, without one)
@@ -50,7 +50,7 @@ numbers in the rationale and the brackets. The scan's distances are price
 points, not ticks: its summary shows both (`stop 5.25 pts = 21 ticks`).
 
 **The exact numbers come from `order_plan`** (a rules strategy, a policy
-verdict) **or the compose record** (`trade_lifecycle`),
+verdict, or `trade_lifecycle`'s compose record: `trade-lifecycle`),
 not from your own arithmetic: once you have chosen the strategy and the
 side, call it with them, e.g.
 `order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "<name>", "side": "long"}`.
@@ -70,9 +70,12 @@ a verdict for an older bar than the last one recorded: no entry until the
 next setup's verdict. Its size is the starting size:
 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy,
 the verdict's cut to the attempt's size budget now, which is the most a
-policy entry may have; a composed trade's is the size you stated, at most
-the record's `maxSize`. A different size from
-your plan changes only `size`, and the risk scales with it. A manual
+policy entry may have; a composed trade's is the size you stated, refused
+over its cap (in an attempt, also the verdict). A different size from
+your plan changes only `size`, and the risk scales with it: for a rules
+strategy, smaller for a `mixed` read or a reversal fade, and larger only as
+position-sizing allows (a setup with 30+ reviewed trades and positive
+expectancy, within the budget and caps). A manual
 strategy has no order_plan (its stop is your read of STRATEGY.md): work its
 numbers by the rules above and position-sizing.
 
