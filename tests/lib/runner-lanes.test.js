@@ -807,3 +807,43 @@ test('lanes: the first lane\'s bar is decided and briefed before another lane\'s
   }
   assert.ok(pairs >= 2);
 });
+
+test('lanes, through the real briefing recorder (runner-wiring.js): a lane frame that can\'t be built returns { error }, and the runner allows no entry on that lane', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { tmpDir } = require('../helpers');
+  const { briefingRecorder } = require('../../scripts/lib/runner-wiring');
+  const home = tmpDir();
+  try {
+    const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', account: '7', lanes: BAR_LANES });
+    const env = { FTH_HOME: home, FTH_BLACKOUTS_FILE: path.join(home, 'none.json') };
+    const logs = [];
+    const recorder = briefingRecorder(home, cfg, () => new Date(et(10, 1, 2)), env, { frames: FRAME_1M, log: (m, l) => logs.push([m, l]) });
+    // No runner briefing on disk: the 1m lane's frame can't be built, and the recorder says so.
+    const bars = Array.from({ length: 5 }, (_, k) => ({ t: iso(et(9, 56 + k)), o: 1, h: 2, l: 0, c: 1, v: 1 }));
+    const r = recorder({ symbol: 'MNQ', contractId: 'MNQ', lane: 1, minutes: 1, bars, bar: { t: bars.at(-1).t } }, FIRED, null);
+    assert.ok(r && /no runner bar briefing to share with the 1m one/.test(r.error), JSON.stringify(r));
+    assert.ok(logs.some(([m, l]) => l === 'error' && /no 1m bar briefing this bar/.test(m)));
+    // A lane the analysts aren't on: nothing to build, no error.
+    assert.strictEqual(recorder({ symbol: 'MNQ', contractId: 'MNQ', lane: 1, minutes: 5, bars, bar: { t: bars.at(-1).t } }, FIRED, null), null);
+    // The runner on the real recorder, its own briefing never written (as when its build fails): every 1m bar's frame
+    // fails, so its record says nothing fired (the gate refuses); the 3m bars' keep theirs.
+    const run = await blockedRun({ lanes: BAR_LANES, briefing: item => (item.lane > 0 ? recorder(item, FIRED, null) : null) });
+    assert.ok(run.signals.filter(s => s.lane === 1).length >= 3 && run.allowed(1) === 0, JSON.stringify(run.signals));
+    assert.ok(run.allowed(3) >= 1);
+    assert.ok(run.events.some(e => e.kind === 'lane_briefing_unavailable' && e.lane === '1m' && /no runner bar briefing to share with the 1m one/.test(e.reason)));
+    // With the runner's briefing written by the same recorder, the 1m frames build and the 1m bars record what fired.
+    const built = await blockedRun({ lanes: BAR_LANES, briefing: item => recorder(item, FIRED, null) });
+    assert.ok(built.allowed(1) >= 3 && built.events.every(e => e.kind !== 'lane_briefing_unavailable'), JSON.stringify(built.events.filter(e => e.kind === 'lane_briefing_unavailable')));
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('lanes: a blocked lane with only working orders (no position) still runs its cycle, manage-only', async () => {
+  const working = await blockedRun({ lanes: BAR_LANES, positions: { net: 0, working: 1 } });
+  assert.strictEqual(working.allowed(1), 0);
+  const only1m = working.cycles.filter(c => c.context.lanes.join() === '1m');
+  assert.ok(only1m.length >= 1 && only1m.every(c => c.context.manageOnly === true), JSON.stringify(working.cycles.map(c => c.context.lanes)));
+  assert.ok(working.logs.some(([m]) => /MNQ 1m bar .*: cycle \(manage only: the 1m lane's bar briefing can't be built \(boom\)/.test(m)));
+});

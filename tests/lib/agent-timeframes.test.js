@@ -502,12 +502,16 @@ const both = [{ name: 'x', direction: 'long', candidate: true, stopDistance: 10,
 test('a lane\'s traded setups: their room includes the runner\'s session levels (the same values), so a session level in the way is never skipped', () => {
   let sessionFirst = 0;
   let flips = 0;
+  let profileAhead = 0;
+  const PROFILE = /^(prior|session) (POC|VAH|VAL)$/;
   for (let n0 = 1100; n0 <= upTo(15, 57); n0 += 7) {
     const n = at15(n0);
     const f = first(n);
     const fr = laneAt(f, n, both);
     const d = fr.sections.bar.data;
     const keys = f.keyLevels.filter(([, p]) => Number.isFinite(p));
+    // The runner's key levels hold the profiles' (prior day and session: POC, VAH, VAL), each with its shown price.
+    assert.ok(['prior POC', 'prior VAH', 'prior VAL', 'session POC', 'session VAH', 'session VAL'].every(k => keys.some(([name, , shown]) => name === k && Number.isFinite(shown))), `${n}: ${keys.map(([k]) => k).join(', ')}`);
     // The session levels it uses are exactly the runner's: each one in its room has the runner's price.
     for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below]) {
       for (const name of x.name.split(' / ').filter(s => SESSION_NAMES.test(s))) assert.ok(keys.some(([k, p]) => k === name && Math.abs(p - x.price) <= 0.25), `${name} ${x.price}`);
@@ -525,8 +529,11 @@ test('a lane\'s traded setups: their room includes the runner\'s session levels 
         if (SESSION_NAMES.test(c.inTheWay.name)) sessionFirst += 1;
       }
       if (bare.candidates[i].inTheWay.name !== c.inTheWay.name) flips += 1;
+      if (c.ahead.some(x => x.name.split(' / ').some(k => PROFILE.test(k)))) profileAhead += 1;
     }
   }
+  // A profile level is in a traded setup's way on some bars: the room never leaves them out.
+  assert.ok(profileAhead > 5, `${profileAhead} candidates with a profile level ahead`);
   // The check has teeth: session levels come first for some setups, and without them their room would differ.
   assert.ok(sessionFirst > 5 && flips > 5, `${sessionFirst} with a session level first, ${flips} that differ without them`);
 });
