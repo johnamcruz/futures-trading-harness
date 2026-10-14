@@ -22,15 +22,15 @@
  * (autotrader.js outcomeOf); a trade-executor launch is not one (it may only trail a stop). With none timed, the
  * cycle's end, when the run finished and wrote such a result. The order: the first entry place_order the gate logged
  * (gate log, wall `ts`) during the run, else one in the transcript, with the gate's answer (allowed or refused).
- * The gate log is matched by time window only (the run's wall start to its end): a per-cycle id on the gateway's
- * records would tie them exactly, once the gateway records one.
+ * The gate log's records are this cycle's by its id (check-order.js cycleId, stamped by the gateway), within the run's
+ * window (its wall start to its end and the log write's slack).
  *
  * The deadline: a setup's bar is superseded when the next bar closes. When that next bar falls outside the session
  * (trading/clock.js inMarketHours: the daily halt, the weekend; or after the runner's end of day, context.eodAt) there
  * is no deadline: neither overran nor missed is counted.
  *
  *   transcriptTimes(text, lineTimes)   { roles: [{ role, start, end, ok }], resultAt, orders: [{ ms, entry }] } (wall ms)
- *   gateOrders(file, fromMs, toMs)     [{ ms, decision, entry }] place_order decisions the gate logged in [from, to]
+ *   gateEntries(env, fromMs, toMs)     [{ ms, decision, entry }] this cycle's place_order decisions in the gate log
  *   barWindow(context, minutes)        { barClose, nextClose, setup, deadline } (ms; nulls without bars or a session)
  *   cycleTiming(input)                 the cycle log's `timing` record
  *   runTiming(run)                     cycleTiming for a run as cycle-run.js ran it (its clock, its gate log), or null
@@ -40,14 +40,14 @@
  * Never throws on a malformed transcript or gate log: what it can't read it leaves out.
  */
 
-const fs = require('fs');
 const { inMarketHours } = require('./trading/clock');
 const { RISK_REDUCING } = require('./cycle-log');
 
 const TASK_TOOLS = new Set(['task', 'Task', 'Agent']);
 const RESULT_LINE = /CYCLE RESULT:[^\n]*/g;
 const ORDER_TOOL = /(^|__|_)place_order$/;
-const GATE_TAIL_BYTES = 1024 * 1024;
+// After the run's end, the slack for the gate log's write (cycle-log.js, replay/labels.js GATE_SLACK_MS).
+const GATE_SLACK_MS = 2000;
 
 const isObj = v => Boolean(v) && typeof v === 'object';
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -131,29 +131,16 @@ function transcriptTimes(text, lineTimes = null) {
   return { roles: roles.filter(r => r.role), resultAt, orders: orders.filter(o => o.ms !== null) };
 }
 
-/** The place_order decisions the gate logged between fromMs and toMs (the log's tail only: a long log stays cheap). */
-function gateOrders(file, fromMs, toMs) {
-  let text;
-  try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      const len = Math.min(size, GATE_TAIL_BYTES);
-      const buf = Buffer.alloc(len);
-      fs.readSync(fd, buf, 0, len, size - len);
-      text = buf.toString('utf8');
-    } finally { fs.closeSync(fd); }
-  } catch (_err) { return []; }
-  const out = [];
-  for (const l of text.split('\n')) {
-    let e;
-    try { e = JSON.parse(l); } catch (_err) { continue; }
-    // Only a record naming place_order: a hook's refusal names no tool (it may be a modify or a close).
-    if (!isObj(e) || !ORDER_TOOL.test(String(e.tool || ''))) continue;
-    const ms = Date.parse(e.ts);
-    if (Number.isFinite(ms) && ms >= fromMs && ms <= toMs) out.push({ ms, decision: e.decision || null, entry: isEntry(e.rationale) });
-  }
-  return out.sort((a, b) => a.ms - b.ms);
+/**
+ * This cycle's place_order decisions in the gate log between fromMs and toMs, as the cycle log reads them
+ * (cycle-log.js gateOrders: the gateway's records stamped with this cycle's id, check-order.js cycleId from the run's
+ * env; a tracker refusal folded into the allowed record it follows): [{ ms, decision, entry }], in order. Another
+ * cycle's, home's or session's orders in the same window are never this cycle's; no cycle id, none.
+ */
+function gateEntries(env, fromMs, toMs) {
+  return require('./cycle-log').gateOrders(env, fromMs, toMs)
+    .map(e => ({ ms: e.ms, decision: e.decision || null, entry: isEntry(e.rationale) }))
+    .sort((a, b) => a.ms - b.ms);
 }
 
 /** The next bar is in the session: the market is open from the bar's close to the next close, before the end of day. */
@@ -189,7 +176,7 @@ const iso = ms => (ms === null || ms === undefined ? null : new Date(ms).toISOSt
 /**
  * The cycle's timing record. Input: { text (the transcript), lineTimes, context, minutes, startedMs and endedMs (the
  * run's wall start and end), cycleAtMs (the cycle's own time at its start), replay, gate ([{ ms, decision, entry }] from
- * gateOrders), ok, timedOut, result }.
+ * gateEntries), ok, timedOut, result }.
  */
 function cycleTiming({ text = '', lineTimes = null, context = null, minutes = null, startedMs, endedMs, cycleAtMs = startedMs, replay = false, gate = [], ok = null, timedOut = false, result = null }) {
   const onClock = w => (w === null || w === undefined ? null : cycleAtMs + (w - startedMs));
@@ -258,18 +245,17 @@ function timingReport(cycles) {
 /**
  * The timing of one run as cycle-run.js ran it: `res` (the run's result: stdout/output, lineTimes, env), the cycle's
  * `context` and `result`, `startedMs`/`endedMs` (wall), `now` (the cycle's time the runner gave it). The cycle's own
- * clock is the replay clock's when one is in force in the run's env (as the gate reads it), else `now`; the gate log is
- * the run's (FTH_GATE_LOG, else the home's). Null when it can't be built (logging never stops a cycle).
+ * clock is the replay clock's when one is in force in the run's env (as the gate reads it), else `now`; the gate log's
+ * records are the run's own (its env's cycle id). Null when it can't be built (logging never stops a cycle).
  */
-function runTiming({ res, cfg, context, home, env, startedMs, endedMs, now, result }) {
+function runTiming({ res, cfg, context, env, startedMs, endedMs, now, result }) {
   try {
     const runEnv = (res && res.env) || env || {};
-    const { gateLogPath } = require('./trading/check-order');
     // The cycle's own time as the cycle log files it (cycle-log.js cycleClock: the replay clock's in a replay).
     const clock = require('./cycle-log').cycleClock(runEnv, now);
     const cycleAtMs = clock.cycleAt.getTime();
     const lineTimes = Array.isArray(res.lineTimes) ? res.lineTimes : null;
-    const gate = gateOrders(gateLogPath({ FTH_GATE_LOG: runEnv.FTH_GATE_LOG || '', FTH_HOME: home }), startedMs, endedMs + 1000);
+    const gate = gateEntries(runEnv, startedMs, endedMs + GATE_SLACK_MS);
     return cycleTiming({
       text: lineTimes ? res.stdout : res.output, lineTimes, context, minutes: cfg && cfg.timeframe, startedMs, endedMs, cycleAtMs,
       replay: clock.replay, gate, ok: res.ok, timedOut: res.timedOut, result,
@@ -279,4 +265,4 @@ function runTiming({ res, cfg, context, home, env, startedMs, endedMs, now, resu
   }
 }
 
-module.exports = { transcriptTimes, gateOrders, barWindow, cycleTiming, runTiming, timingReport };
+module.exports = { transcriptTimes, gateEntries, barWindow, cycleTiming, runTiming, timingReport };

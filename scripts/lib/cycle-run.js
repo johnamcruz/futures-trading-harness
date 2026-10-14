@@ -53,7 +53,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const { result, reportedResult, resultNote } = scoreRun(res, { action, harness: cfg.harness });
   // When it acted against its bar (cycle-timing.js): measurement only.
-  const timing = runTiming({ res, cfg, context, home: deps.home, env, startedMs, endedMs, now, result });
+  const timing = runTiming({ res, cfg, context, env, startedMs, endedMs, now, result });
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing });
   out(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);

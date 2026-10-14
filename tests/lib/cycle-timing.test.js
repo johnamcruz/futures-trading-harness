@@ -9,6 +9,7 @@ const { runCycle } = require('../../scripts/lib/cycle-run');
 const { runHarness } = require('../../scripts/lib/harness-run');
 const { validateConfig } = require('../../scripts/lib/autotrader');
 const report = require('../../scripts/lib/replay/report');
+const { cycleId } = require('../../scripts/lib/trading/check-order');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -174,19 +175,27 @@ test('timing: the decision line is the last CYCLE RESULT with an outcome; "(none
   assert.deepStrictEqual(T.transcriptTimes(exit).orders, [{ ms: w(5), entry: false }]);
 });
 
-test('timing: the gate log\'s place_order decisions inside the run, entries told from risk-reducing ones; a hook refusal naming no tool and malformed lines skipped', () => {
-  const file = path.join(tmpDir(), 'gate.jsonl');
-  fs.writeFileSync(file, [
-    { ts: iso(w(-5)), source: 'gateway', tool: 'place_order', decision: 'allowed' },
-    { ts: iso(w(3)), source: 'hook', decision: 'blocked' },
+test('timing: this cycle\'s place_order decisions in the gate log, by its cycle id, entries told from risk-reducing ones; others\' records, hook records and malformed lines skipped', () => {
+  const dir = tmpDir();
+  const env = { FTH_HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_CYCLE_TRANSCRIPT: path.join(dir, 'logs', 'cycle-transcript-a.jsonl') };
+  const cycle = cycleId(env);
+  const other = cycleId({ FTH_CYCLE_TRANSCRIPT: path.join(dir, 'logs', 'cycle-transcript-b.jsonl') });
+  fs.writeFileSync(env.FTH_GATE_LOG, [
+    { ts: iso(w(-5)), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle },
+    { ts: iso(w(3)), source: 'hook', decision: 'blocked', cycle },
     'not json', 'null',
-    { ts: iso(w(4)), source: 'gateway', tool: 'cancel_order', decision: 'allowed' },
-    { ts: iso(w(5)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: '[exit] stop hit' },
-    { ts: iso(w(6)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:fx_break long' },
-    { ts: iso(w(90)), source: 'gateway', tool: 'place_order', decision: 'allowed' },
+    { ts: iso(w(4)), source: 'gateway', tool: 'cancel_order', decision: 'allowed', cycle },
+    // Another cycle's entry (a concurrent run) and one with no id, inside this run's window: never this cycle's.
+    { ts: iso(w(4)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: 'setup:other', cycle: other },
+    { ts: iso(w(4)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: 'setup:none' },
+    { ts: iso(w(5)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: '[exit] stop hit', cycle },
+    { ts: iso(w(6)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:fx_break long', cycle },
+    { ts: iso(w(90)), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle },
   ].map(x => (typeof x === 'string' ? x : JSON.stringify(x))).join('\n'));
-  assert.deepStrictEqual(T.gateOrders(file, W, w(10)), [{ ms: w(5), decision: 'allowed', entry: false }, { ms: w(6), decision: 'blocked', entry: true }]);
-  assert.deepStrictEqual(T.gateOrders(path.join(tmpDir(), 'none.jsonl'), W, w(10)), []);
+  assert.deepStrictEqual(T.gateEntries(env, W, w(10)), [{ ms: w(5), decision: 'allowed', entry: false }, { ms: w(6), decision: 'blocked', entry: true }]);
+  // No cycle id (not a runner cycle): none; no log: none.
+  assert.deepStrictEqual(T.gateEntries({ ...env, FTH_CYCLE_TRANSCRIPT: '' }, W, w(10)), []);
+  assert.deepStrictEqual(T.gateEntries({ ...env, FTH_GATE_LOG: path.join(dir, 'none.jsonl') }, W, w(10)), []);
 });
 
 test('timing report: latencies, overruns, setups caught and missed, role medians; split by setup and quiet bars; shown in the replay report', () => {
@@ -215,14 +224,18 @@ test('timing in the cycle log: cycle-run records the run\'s timeline on the wall
   for (const extra of [{}, { FTH_REPLAY_NOW: '2026-04-28T04:12:02Z' }]) {
     const home = tmpDir();
     let wall = W;
-    const run = async () => {
+    const run = async (argv, o) => {
+      // The gateway's records: this cycle's entry (refused) and an earlier one of another cycle's in the same window.
+      fs.writeFileSync(o.env.FTH_GATE_LOG, [
+        { ts: iso(w(10)), source: 'gateway', tool: 'place_order', decision: 'allowed', rationale: 'setup:other', cycle: 'another-cycle' },
+        { ts: iso(w(20)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:fx_break long', cycle: cycleId(o.env) },
+      ].map(x => JSON.stringify(x)).join('\n'));
       wall = w(30);
       return { ok: true, timedOut: false, code: 0, output: jsonl([ocTask('risk-manager', 2, 12), ocText('CYCLE RESULT: no-trade - skip', 29)]) };
     };
     const now = new Date(CYCLE_AT);
     const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'], timeframe: 3 });
     const env = { FTH_HOME: home, HOME: home, PATH: process.env.PATH, FTH_GATE_LOG: path.join(home, 'g.jsonl'), ...extra };
-    fs.writeFileSync(env.FTH_GATE_LOG, `${JSON.stringify({ ts: iso(w(20)), source: 'gateway', tool: 'place_order', decision: 'blocked', rationale: 'setup:fx_break long' })}\n`);
     await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 1000, context: SETUP_BAR }, { root: ROOT, home, env, run, now: () => now, wallNow: () => wall, guard: () => true });
     const dir = path.join(home, 'logs');
     const line = JSON.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find(f => f.startsWith('cycles-'))), 'utf8').trim());
