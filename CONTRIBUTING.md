@@ -14,6 +14,10 @@
 ## Adding a skill, agent, or command
 
 - Skills: `skills/<name>/SKILL.md` with `name`, `description`, and the three sections.
+  The description is at most 160 characters (the longer ones are pinned in
+  `tests/plugin/skill-descriptions.pins.json` and only shrink), and every skill
+  is indexed: a role's lists, the head trader's load list, a command shim, or
+  the reasoned allow-list (`tests/plugin/skills-indexed.test.js`).
 - Agents: `agents/<name>.md` with `name`, `description`, `tools`, `model`; fewest
   tools that work; order tools belong to `trade-executor` only. `role-skills` lists
   the skills the role uses every call; `role-index`, optional, the ones it reads only

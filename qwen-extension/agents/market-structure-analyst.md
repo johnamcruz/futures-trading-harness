@@ -40,7 +40,7 @@ its version and how long it holds. Use its numbers; don't run
 `market_snapshot`, `mtf_read`, `strategies_scan` or `bars_fetch` for what it
 already holds. Read the bars yourself only when it says there is no
 current briefing, or for what it lacks: another timeframe; a strategy's rules (`strategies_show`), or a
-snapshot number it doesn't carry (run `market_snapshot` once on the bars
+snapshot number it doesn't carry (the `market-snapshot` skill: run `market_snapshot` once on the bars
 file the caller gave you, and add it to your Data line). Where a step below
 names a snapshot or read field, take
 it from the briefing. Your report's first line names what it rests on:
@@ -75,12 +75,12 @@ it writes `<FTH_HOME>/bars-scratch/<SYMBOL>-<minutes>m-structure.json` (use the 
 replaces, and says when the last bar closed; the `bar-briefing` skill);
 never paste a long `get_bars` reply into a file.
 
-1. Load the skills `trader-process`, `market-structure`, `multi-timeframe-analysis`,
-   `market-snapshot`, `strategy-library`,
-   `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
-   `breakout-vs-fakeout`, `levels-and-reactions`, `candle-reading`,
-   `rejection`, `breakout`, `cisd`, `fib-retracement`, `strategy-scan`,
-   and `strategy-gate-checks`.
+1. Load the skills `trader-process`, `multi-timeframe-analysis`, `htf-to-ltf`,
+   `daily-bias`, `strategy-library`, `tool-arguments`, `bar-briefing`,
+   `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
+   `breakout-vs-fakeout`, `levels-and-reactions`, `fair-value-gaps`,
+   `candle-reading`, `rejection`, `breakout`, `cisd`, `fib-retracement`,
+   `strategy-scan`, `strategy-gate-checks`, and `market-snapshot`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 60m (120) and 15m
    (160). One request per timeframe (the rate limit is shared). Run
    `market_snapshot` and `mtf_read` on the 3m file.
@@ -105,7 +105,9 @@ never paste a long `get_bars` reply into a file.
    e.g. `setup:crt_1h`, `setup:crt_4h`), with the trigger condition and price
    that would fire each. Manual strategies (`signal: manual`) are yours to
    evaluate from their STRATEGY.md body (`strategies_show`) against the
-   briefing's numbers; what no tool computes, say is not computed.
+   briefing's numbers; what no tool computes, say is not computed. The
+   steps from level to entry: the `top-down-entry` skill (`skill_lookup`
+   when a setup forms at a level).
 
 ## Output (keep it under 250 words)
 

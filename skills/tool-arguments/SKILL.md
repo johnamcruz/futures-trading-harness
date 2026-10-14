@@ -24,13 +24,13 @@ scripts. None places, changes, or cancels an order.
 
 | Tool | Arguments | What it returns | Script (people) |
 |---|---|---|---|
-| `skill_lookup` | `skill`, `role`? | a skill of the harness in full: one a role's prompt lists in its skill index (its `role-index`), looked up only when the cycle needs it. With `role` (your role's name) in an autonomous cycle the lookup is recorded: where the bar's briefing makes a skill in your index required (your prompt says when), your report counts for an entry only once you looked it up during one of your calls this cycle. An unknown skill is refused. Read-only | `skill-lookup.js --skill <name> [--role <role>]` |
+| `skill_lookup` | `skill`?, `role`?, `query`? | a skill in full: one your skill index lists, read only when the cycle needs it. With `role` (your role's name), in an autonomous cycle, the lookup is recorded: when your prompt says the bar requires a skill of your index, your report counts for an entry only once you looked it up in one of your calls this cycle. An unknown skill is refused. No `skill`: the list (`query` filters). Read-only | `skill-lookup.js --skill <name> [--role <role>] \| --query <text>` |
 
 - `bars` and `daily` are bars files by absolute path (no `~`): the runner's bars
   file (the prompt names it, under the bar directory) or a `bars_fetch`
   file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns:
-  each harness home, a replay's run home included, has its own, and
-  `/tmp/fth` is no longer read). Nothing else is read: another path, a symlink, or
+  each harness home, a replay's run home included, has its own). Nothing
+  else is read: another path, a symlink, or
   a file that isn't `.json` or `.csv` is refused (Parquet and Excel files
   are the user's, for backtests).
 - `symbol` is a contract root in capitals (`MNQ`, `MES`).

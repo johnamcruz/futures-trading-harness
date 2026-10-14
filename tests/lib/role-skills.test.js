@@ -60,21 +60,23 @@ test('planErrors: an index skill that doesn\'t exist, one in both lists, or an i
 test('the agents: role-index skills exist, aren\'t core, and the role holds skill_lookup; the proof case indexes the basics skills', () => {
   const agents = HS.loadAgents(ROOT);
   assert.doesNotThrow(() => HS.checkRoleSkills(ROOT));
-  // The proof case: the eleven basics skills, and cisd and fib-retracement since, are in the index of the roles that
-  // carry them.
+  // The proof case: the eleven basics skills, and cisd, fib-retracement, daily-bias and fair-value-gaps since, are in the
+  // index of the roles that carry them; so is the fallback market-snapshot (skill-retire.test.js).
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'];
+    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement',
+    'daily-bias', 'fair-value-gaps'];
   // And the strategy-library split's pieces a role reads only when a cycle needs one (strategy-library, with the
   // priority order, stays core wherever it was), and the prop and sizing split's micro-mini-specs (the risk manager).
   const SPLIT = ['strategy-scan', 'strategy-gate-checks', 'micro-mini-specs'];
   // contract-roll too: the volume-liquidity analyst reads VWAP and levels, which a roll day breaks.
-  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT, 'contract-roll'].sort());
+  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT, 'contract-roll', 'market-snapshot'].sort());
   for (const a of agents.filter(x => x.index.includes('strategy-scan') || x.skills.includes('strategy-scan'))) assert.ok(a.skills.includes('strategy-library'), `${a.name}: strategy-library core`);
-  for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s)), [], `${a.name}: basics only in its index`);
+  for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s) || s === 'market-snapshot'), [], `${a.name}: basics and the fallback only in its index`);
   const req = RS.requiredByRole(ROOT, 'index');
   assert.deepStrictEqual(req.get('risk-manager'), [{ skill: 'confluence-counting', when: [{ key: 'candidate', value: null }] }, { skill: 'invalidation', when: [{ key: 'candidate', value: null }] }]);
   assert.deepStrictEqual(req.get('trend-momentum-analyst'), [{ skill: 'pullback-vs-reversal', when: [{ key: 'candidate.trendRule', value: 'reversal' }] }]);
   assert.strictEqual(req.get('volume-liquidity-analyst'), undefined, 'no situational skill in its index: it looks up as it judges');
+  assert.ok(!req.get('market-structure-analyst').some(r => r.skill === 'fair-value-gaps'), 'fair-value-gaps has no gate rule');
   assert.strictEqual(RS.requiredByRole(ROOT, 'full').size, 0, 'full mode requires no lookup');
   assert.deepStrictEqual(RS.loadRoles(ROOT).map(a => [a.name, a.index]), agents.map(a => [a.name, a.index]));
 });
@@ -93,9 +95,17 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   assert.doesNotMatch(fullVl, /Look up as needed/, 'full: one load sentence, as before');
   assert.ok(!vl.includes('<skill name="absorption">'), 'index: not embedded');
   assert.ok(vl.includes('## Your skill index') && vl.includes(`- absorption: ${ab.description}`), 'index: one line, its description');
-  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `liquidity-concepts`, `session-timing`, `market-snapshot`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `momentum-and-volume`, `absorption`, and `contract-roll`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
+  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `session-timing`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `fair-value-gaps`, `momentum-and-volume`, `absorption`, `contract-roll`, and `market-snapshot`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
   assert.match(vl, /`skill_lookup \{"skill": "<skill>", "role": "volume-liquidity-analyst"\}`/);
   assert.doesNotMatch(vl, /Required by the situation/);
+  // Every other skill is one call away (skill_lookup's catalog): one short line in index mode, never the catalog.
+  const OTHER = 'Other skills: `skill_lookup {}` lists them all.';
+  assert.ok(OTHER.length <= 80);
+  for (const a of HS.loadAgents(ROOT)) {
+    assert.strictEqual(index.agent[a.name].prompt.split(OTHER).length - 1, a.index.length ? 1 : 0, `${a.name}: index mode`);
+    assert.ok(!full.agent[a.name].prompt.includes(OTHER), `${a.name}: full mode`);
+  }
+  assert.match(vl, /- market-snapshot: [^\n]*\n\nOther skills: `skill_lookup \{\}` lists them all\.\n/, 'after the index');
   const rm = index.agent['risk-manager'].prompt;
   assert.match(rm, /Required by the situation[^]*- a setup fired \(the briefing lists a candidate\): `confluence-counting`\n- a setup fired \(the briefing lists a candidate\): `invalidation`/);
   assert.ok(vl.length < fullVl.length);
@@ -146,16 +156,19 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // for the news analyst, contract-roll (indexed) for the volume-liquidity analyst, strategy-rules for the strategy researcher.
 // From the prop and sizing split (tests/plugin/prop-sizing-split.test.js): micro-mini-specs (indexed) and
 // prop-pacing-judgment (core) for the risk manager, which doesn't load prop-evaluator (the evaluator is the user's
-// command; no step of the role reads it).
+// command; no step of the role reads it). From the multi-timeframe-analysis split: htf-to-ltf (core) and daily-bias
+// (indexed) for the market-structure analyst. Retired since: market-structure and liquidity-concepts; market-snapshot is
+// index-only; a role loads the skills their content went to where its body reads those fields (fair-value-gaps and the
+// topic skills: skill-retire.test.js).
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'market-structure-analyst': ['multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
   'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
   'trade-executor': ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
   'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
-  'volume-liquidity-analyst': ['vwap-volume-profile', 'liquidity-concepts', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'contract-roll', 'tool-arguments', 'bar-briefing'],
+  'volume-liquidity-analyst': ['vwap-volume-profile', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'contract-roll', 'tool-arguments', 'bar-briefing', 'fair-value-gaps'],
 };
 
 test('full mode: Claude (the canonical body), Codex and Qwen load the same skills as main for each role, in one load sentence; so does opencode', () => {

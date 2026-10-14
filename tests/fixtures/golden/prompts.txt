@@ -3,13 +3,13 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:03 O 27382.75 H 27403.25 L 27372.25 C 27378.5 V 3337 c-o -4.25; 10:06 O 27378.25 H 27403.25 L 27370.25 C 27377.75 V 3901 c-o -0.5; 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75.
   MNQ fired on this bar (scan candidates, already in session, regime, and the trend rule): orb short [orb backtest 52% win, E +0.21R (n 140); live 3W/2L].
-  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file for the 3-minute timeframe instead of fetching it.
+  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
   M2K: no rules strategy fired on this bar (the scan's candidates).
@@ -26,7 +26,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -46,13 +46,13 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:03 O 27382.75 H 27403.25 L 27372.25 C 27378.5 V 3337 c-o -4.25; 10:06 O 27378.25 H 27403.25 L 27370.25 C 27377.75 V 3901 c-o -0.5; 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75.
   MNQ fired on this bar (scan candidates, already in session, regime, and the trend rule): orb short [orb backtest 52% win, E +0.21R (n 140); live 3W/2L].
-  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file for the 3-minute timeframe instead of fetching it.
+  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
   M2K: no rules strategy fired on this bar (the scan's candidates).
@@ -69,7 +69,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Lean cycle: on a candidate, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -89,13 +89,13 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:03 O 27382.75 H 27403.25 L 27372.25 C 27378.5 V 3337 c-o -4.25; 10:06 O 27378.25 H 27403.25 L 27370.25 C 27377.75 V 3901 c-o -0.5; 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75.
   MNQ fired on this bar (scan candidates, already in session, regime, and the trend rule): orb short [orb backtest 52% win, E +0.21R (n 140); live 3W/2L].
-  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file for the 3-minute timeframe instead of fetching it.
+  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
   M2K: no rules strategy fired on this bar (the scan's candidates).
@@ -112,7 +112,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
@@ -122,12 +122,12 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:03 O 27382.75 H 27403.25 L 27372.25 C 27378.5 V 3337 c-o -4.25; 10:06 O 27378.25 H 27403.25 L 27370.25 C 27377.75 V 3901 c-o -0.5; 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75.
-  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file for the 3-minute timeframe instead of fetching it.
+  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
   News: none in force; next CPI 2026-04-28 08:30 ET (blackout 08:25-08:45 ET).
@@ -142,7 +142,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  Read the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries).
+  Read the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks; also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in manage-only (the daily cycle cap is reached: manage open positions and working orders, no new entries).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -152,13 +152,13 @@ Autonomous cycle.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:03 O 27382.75 H 27403.25 L 27372.25 C 27378.5 V 3337 c-o -4.25; 10:06 O 27378.25 H 27403.25 L 27370.25 C 27377.75 V 3901 c-o -0.5; 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75.
   MNQ fired on this bar (scan candidates, already in session, regime, and the trend rule): orb short [orb backtest 52% win, E +0.21R (n 140); live 3W/2L].
-  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file for the 3-minute timeframe instead of fetching it.
+  M2K: a 3-minute bar just closed (opened 15:00 ET); closed 3-minute bars, oldest first, are in /bars/M2K-3m.json (get_bars format; contractId M2K) - use that file; don't fetch 3-minute bars.
   M2K: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.
   M2K last 10 closed 3m bars (ET open time, oldest first): 14:33 O 2203.6 H 2204.6 L 2200.9 C 2201.2 V 744 c-o -2.4; 14:36 O 2201.4 H 2202 L 2199.3 C 2199.4 V 783 c-o -2; 14:39 O 2199.4 H 2199.7 L 2198.1 C 2198.3 V 1272 c-o -1.1; 14:42 O 2198.2 H 2200.2 L 2197.4 C 2199.8 V 1189 c-o +1.6; 14:45 O 2199.7 H 2200.4 L 2198.2 C 2198.7 V 495 c-o -1; 14:48 O 2198.8 H 2201.6 L 2198.3 C 2201.6 V 896 c-o +2.8; 14:51 O 2201.6 H 2204.3 L 2201 C 2203.5 V 1075 c-o +1.9; 14:54 O 2203.6 H 2206.4 L 2201.9 C 2205.3 V 1120 c-o +1.7; 14:57 O 2205.4 H 2205.7 L 2202 C 2202.2 V 695 c-o -3.2; 15:00 O 2202 H 2203.6 L 2200.8 C 2201.1 V 765 c-o -0.9.
   M2K: no rules strategy fired on this bar (the scan's candidates).
@@ -175,7 +175,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in paper mode (plan only, no orders).
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in paper mode (plan only, no orders).
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -184,7 +184,7 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
@@ -198,7 +198,7 @@ Autonomous cycle.
   Don't flip-flop without a new reason.
   Unreviewed: none.
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -218,7 +218,7 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
@@ -234,7 +234,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -254,7 +254,7 @@ Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
-  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
   Today: open 27412.5, gap +18.25 above the prior close; opening range 27398.25-27431.75; IB not complete.
@@ -271,7 +271,7 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): MNQ strategy scan (need at least 3 bars, got 2): what fired is unknown.
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.

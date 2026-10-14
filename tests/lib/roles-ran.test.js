@@ -30,7 +30,7 @@ test('opencode: completed foreground task calls count by role; errored, running 
   assert.deepStrictEqual(calls(oc('risk-manager', [1, 2], { output: '<task id="s" state="running">started</task>' })), []);
   // Another tool's event, or a skill load, is not a role; a role named inside another call's text never counts.
   const other = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'broker_journal_add', state: { status: 'completed', input: { text: oc('risk-manager') } } } });
-  const skill = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'skill', state: { status: 'completed', input: { name: 'market-structure' } } } });
+  const skill = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'skill', state: { status: 'completed', input: { name: 'bos-vs-choch' } } } });
   assert.deepStrictEqual(calls([other, skill].join('\n')), []);
 });
 

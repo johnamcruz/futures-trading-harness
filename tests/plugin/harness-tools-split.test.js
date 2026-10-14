@@ -95,6 +95,15 @@ const ALLOWED = [
     now: 'The one exception is authoring: the `strategy-researcher` role, which the user starts interactively for a new strategy, may run a backtest itself (the `strategy-backtest` skill); no trading role does.',
     reason: 'the backtest is the strategy-backtest skill\'s since the strategy-authoring split' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
+  // skill_lookup lists every skill without `skill` (foundation batch B, index-all-skills): its row's three cells.
+  { old: '`skill`, `role`?', now: '`skill`?, `role`?, `query`?', reason: 'skill_lookup without skill lists every skill (query filters)' },
+  { old: 'a skill of the harness in full: one a role\'s prompt lists in its skill index (its `role-index`), looked up only when the cycle needs it. With `role` (your role\'s name) in an autonomous cycle the lookup is recorded: where the bar\'s briefing makes a skill in your index required (your prompt says when), your report counts for an entry only once you looked it up during one of your calls this cycle. An unknown skill is refused. Read-only',
+    now: 'a skill in full: one your skill index lists, read only when the cycle needs it. With `role` (your role\'s name), in an autonomous cycle, the lookup is recorded: when your prompt says the bar requires a skill of your index, your report counts for an entry only once you looked it up in one of your calls this cycle. An unknown skill is refused. No `skill`: the list (`query` filters). Read-only',
+    reason: 'the listing form, with the old cell shortened so the row (core for four roles) doesn\'t grow their prompts more than needed' },
+  { old: '`bars` and `daily` are bars files by absolute path (no `~`): the runner\'s bars file (the prompt names it, under the bar directory) or a `bars_fetch` file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns: each harness home, a replay\'s run home included, has its own, and `/tmp/fth` is no longer read).',
+    now: '`bars` and `daily` are bars files by absolute path (no `~`): the runner\'s bars file (the prompt names it, under the bar directory) or a `bars_fetch` file under `<FTH_HOME>/bars-scratch` (use the path `bars_fetch` returns: each harness home, a replay\'s run home included, has its own).',
+    reason: 'the old shared folder\'s note dropped (the next sentence refuses every other path), so the listing form costs the four roles that hold this skill nothing' },
+  { old: '`skill-lookup.js --skill <name> [--role <role>]`', now: '`skill-lookup.js --skill <name> [--role <role>] \\| --query <text>`', reason: 'the CLI\'s listing form' },
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
   { old: BRIEFING_CELL, now: m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || '')), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, and the m3 fields in the order briefing.js builds them' },
   // lessons and reconcile: the agent-facing cells are dropped. The tools' MCP descriptions (registry.js) say what each
@@ -272,9 +281,13 @@ test('the new skills answer one question in a short index line; the topic skills
     const d = parseFrontmatter(skill(s)).data.description;
     assert.ok(d.length <= 80, `${s}: description ${d.length} chars, over 80 (each is a line of the head trader's catalog)`);
   }
-  for (const s of ['liquidity-concepts', 'vwap-volume-profile', 'market-structure', 'trend-momentum-indicators', 'market-snapshot', 'multi-timeframe-analysis']) {
-    assert.match(skill(s), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/, s);
-  }
+  assert.match(skill('vwap-volume-profile'), /In an autonomous cycle the bar briefing \(`bar_briefing`, the\s+`bar-briefing`\s+skill\)/);
+  // liquidity-concepts and market-structure are retired (tests/plugin/skill-retire.test.js); trend-momentum-indicators
+  // starts from the briefing's fields, and market-snapshot is the fallback without a briefing.
+  assert.match(skill('trend-momentum-indicators'), /The bar briefing holds these values \(`m3` `trend`, `context`, `regime`;\s+`m15` `indicators`\); without one, `market-snapshot`\./);
+  assert.match(skill('market-snapshot'), /The bar briefing says there is no current briefing, or that it is old\./);
+  // The multi-timeframe read's briefing fields: timeframe-sources (split from multi-timeframe-analysis) points there.
+  assert.match(skill('timeframe-sources'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`/);
 });
 
 test('no file names the retired harness-tools skill (the code module scripts/lib/harness-tools/ and its tests keep their name)', () => {
@@ -337,8 +350,10 @@ function skillRefs(rel, text, quotesOld = false) {
 
 // trade-session step 4 as main had it (at 0b1a2f79): the head trader's own procedure, read every cycle, stays as it
 // was, byte for byte (order-plan is referenced from the risk manager's step 5, not added to the head trader's reading).
+// One edit since, same length: the structure role's report is "(market structure)", not the retired skill's name
+// (tests/plugin/skill-retire.test.js).
 const STEP4 = 'tests/fixtures/skill-split/trade-session-step4.before.txt';
-const STEP4_SHA256 = '7fc1e45612ccb7a7569bca0119c44d5a48a9d849c5694f25407e033d5ea06228';
+const STEP4_SHA256 = '392cb9fcf88ec97ef5a747e08c6770c01db8029d363671f01ce4eb968b4749b7';
 
 test('trade-session step 4 is main\'s, byte for byte; the head trader\'s load list is unchanged', () => {
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');

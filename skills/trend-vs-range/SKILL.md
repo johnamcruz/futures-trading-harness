@@ -35,7 +35,9 @@ fewer than two confirmed swings, no vote):
 `m15.frame.swingPattern`, `h1.h1.swingPattern`, `h1.h4.swingPattern`; on
 3m, from `m3.liquidity.swingHighs` and `m3.liquidity.swingLows`. Latest
 break (`bos-vs-choch`): `m3.lastBreak.last` (`kind` BOS or CHoCH, `direction`, `barsAgo`),
-`m3.lastBreak.previous`, `m15.lastBreak`, `h1.lastBreak`.
+`m3.lastBreak.previous`, `m15.lastBreak`, `h1.lastBreak`. A stop belongs
+behind structure (a swing), not at an arbitrary distance; the stop itself
+stays the strategy's (`invalidation`).
 
 **The read**, per timeframe:
 

@@ -28,7 +28,7 @@
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
  *                                                         until the next 15m close
  *   h1     the 1h and 4h reads, the 1h's latest BOS or CHoCH   until the next 1h close
- *   day    the prior RTH day and its volume profile      until the first bar after the 16:00 ET RTH close
+ *   day    the prior RTH day, as a daily candle, and its volume profile   until the first bar after the 16:00 ET RTH close
  *
  * A value lives in the section whose clock it changes on: anything that
  * moves bar by bar (a running high, a developing profile) is in m3.
@@ -79,7 +79,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { snapshot, levelsAsOf } = require('./market-snapshot');
+const { snapshot, levelsAsOf, priorDayCandle } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
 const { normalizeBars, atr: atrOf, sessionKey } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
@@ -161,7 +161,8 @@ const etClock = at => new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-
 const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 // A higher-timeframe read (mtf.js): its EMAs are EMA20 and EMA50 (named so: the 3m and 15m indicators are EMA9/EMA20),
-// its swing pattern, and its dealing range with the 50%. Swing levels against price are in m3 (they move with price).
+// its swing pattern, and the last 20 candles' range (high, low) with its 50% (not a swing-to-swing dealing range).
+// Swing levels against price are in m3 (they move with price).
 const brief = (f, level = round2) => (f ? {
   trend: f.trend, bias: f.bias, swingPattern: f.votes && f.votes.structure, close: f.close, ema20: f.emaFast, ema50: f.emaSlow, adx: f.adx, atr: f.atr,
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
@@ -403,6 +404,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           // From the levels to the cent, not the shown ticks: a shown VAH a tick under price can read inside.
           priorValue: where(price, prior.val, prior.vah), sessionValue: sess.poc ? where(price, sess.val, sess.vah) : null,
           initialBalance: where(price, day.ibLow, day.ibHigh), priorRthRange: lv.priorRth ? where(price, lv.priorRth.low, lv.priorRth.high) : null,
+          priorRthClose: lv.priorRth ? side(price, lv.priorRth.close) : null,
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
@@ -442,6 +444,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
       validUntil: nextRthRoll(new Date(closedAt.getTime() - step), minutes),
       data: {
         priorRth: lv.priorRth || null,
+        // The prior RTH day as a daily candle: its open, direction, close location, and close against the day before.
+        priorRthCandle: priorDayCandle(bars),
         priorProfile: prior.poc ? { poc: level(priorX.poc), vah: level(priorX.vah), val: level(priorX.val), hvn: (priorX.hvn || []).map(x => level(x)), lvn: (priorX.lvn || []).map(x => level(x)) } : null,
       },
     },

@@ -1,6 +1,6 @@
 ---
 name: pullback-vs-reversal
-description: Read a move against the higher-timeframe trend as a pullback (trend intact, a shallow retrace, the swing holding, volume falling) or a reversal (a higher-frame CHoCH, past the impulse origin, displacement against the trend) from the briefing's breaks, swings and the last 10 bars. A read for trader-process step 4, never a veto.
+description: Read a move against the higher-timeframe trend as a pullback (trend intact, shallow retrace, swing holding, volume falling) or a reversal (a higher-frame CHoCH, past the impulse origin, counter displacement) from the briefing's breaks, swings, last 10 bars, premium or discount. A trader-process step 4 read, never a veto.
 ---
 
 # Pullback vs Reversal
@@ -32,9 +32,15 @@ stacking up the timeframes (3m, then 15m, then 1h) are a reversal
 developing. A 15m or 1h CHoCH against the trend weighs most: then the
 read is a reversal attempt. The pullback ends when its own minor
 structure breaks back: `m3.lastBreak.last` turns the trend's way (the
-shift or reclaim of multi-timeframe-analysis): a lower-timeframe CHoCH
+shift or reclaim of `htf-to-ltf`): a lower-timeframe CHoCH
 back the HTF way at a level times the entry. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
+
+**Premium and discount.** Split the current dealing range (last major swing
+low to high) at 50%: above is premium, below is discount. Within a trend,
+pullbacks into discount (premium for shorts) are where continuation setups
+sit. The briefing has no dealing range: `m15.frame.range` `mid` is the last
+20 15m candles' 50%, not a swing-to-swing range.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): depth alone is no
 edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).

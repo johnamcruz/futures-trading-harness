@@ -29,7 +29,7 @@ description: Read-only premarket preparation - parallel analyst, news, and risk 
    - Bias per timeframe from the multi-timeframe read (no bars file in
      premarket: `bars_fetch` 3m with `record` and `daily` first, once; then
      `mtf_read` with `bars` and `daily`, see the
-     `multi-timeframe-analysis` skill): one line per timeframe, the alignment
+     `timeframe-sources` and `daily-bias` skills): one line per timeframe, the alignment
      for longs and shorts, and where analysts disagree.
    - Key levels table (price, what, source).
    - Strategies in play: from `strategies_list` with `json: true`

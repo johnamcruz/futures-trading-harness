@@ -426,8 +426,9 @@ function cachedText(cached) {
 // Codex reads them (it carries them in AGENTS.md); a custom harness, either.
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
 // The skills an entry needs loaded (the order gate's skills-loaded check, REQUIRED_FOR_ENTRY), then the ones the head
-// trader loads every cycle that the gate does not require (ALSO_LOAD; none yet).
-const ALSO_LOAD = [];
+// trader loads every cycle that the gate does not require (ALSO_LOAD: htf-to-ltf, the alignment labels and the reversal rule,
+// trade-session step 0).
+const ALSO_LOAD = ['htf-to-ltf'];
 const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
 /** The skills a cycle loads, as the prompt names them: "a, b, and c (the order gate refuses an entry without them); also load d and e". */
 const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>
@@ -473,7 +474,7 @@ function prompts(cfg, now, root = '') {
       // already described this cycle, which adds only its own bars and signals.
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
-        ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file for the ${minutes}-minute timeframe instead of fetching it.`
+        ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
         + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')

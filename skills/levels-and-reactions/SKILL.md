@@ -1,6 +1,6 @@
 ---
 name: levels-and-reactions
-description: Which levels matter (prior RTH high, low and close, overnight high and low, opening range, IB, VWAP, value-area edges and POC, swings, round numbers, higher-timeframe swings) with the briefing field for each, and how price reacts at them - rejection, acceptance, sweep. A read for trader-process step 3, never a veto.
+description: Which levels matter (prior RTH high/low/close, overnight high/low, opening range, IB, VWAP, value area and POC, swings, equal highs/lows, round numbers, higher-timeframe swings) with the briefing field for each, and how price reacts at them - rejection, acceptance, sweep. A trader-process step 3 read, never a veto.
 ---
 
 # Levels and Reactions
@@ -17,19 +17,30 @@ hypotheses; a missing field is `unknown`.
 
 **Levels**: prior RTH `day.priorRth.high`, `day.priorRth.low`,
 `day.priorRth.close`; overnight `m3.overnight.high`, `m3.overnight.low`;
-opening range `m3.today.openingRange` (null until formed); IB
+opening range `m3.today.openingRange` (the first 15 minutes from 09:30 ET;
+null until formed); IB
 `m3.today.ibHigh`, `m3.today.ibLow`; VWAP `m3.vwap.rth`,
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low`, 15m and 1h `m3.htfLevels`
+swings `m3.swings.high`, `m3.swings.low` (the last 4:
+`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
 (`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
 `m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
 `m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part); round numbers: `round number` in
+`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+
+**Resting liquidity** (stops cluster just beyond obvious levels). Equal
+highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
+× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
+MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+traded through. A flat top or bottom (bars side by side at the same high
+or low) is no swing, so it is in neither. Targets: the next untested
+liquidity pool in the trade's direction. Reversal setups (crt_1h)
+follow a sweep; continuation setups follow a break.
 
 **Which matter now**: the nearest, `m3.nearestLiquidity.above` and
 `m3.nearestLiquidity.below` (in points and R); for a setup,
@@ -42,20 +53,12 @@ docs/research/mtf-setup-catalog.md).
 **Reactions**, on closed bars:
 
 - rejection: reaches it, closes back away in the far third, no close
-  beyond (`candle-reading`);
+  beyond (`candle-reading`; per timeframe `m3.candles`, in rules strategy-rules);
 - acceptance: closes beyond that hold (`breakout-vs-fakeout`);
 - sweep: through and back within 1-3 bars, `m3.sweeps`;
 - none yet: not reached. No reaction is not a rejection.
 
-On each timeframe's last completed candle (3m, 5m, 15m, 60m) these are
-computed: `m3.candles` lists the levels it met as `rejected` (through and
-closed back), `broke` (closed beyond, most of the body beyond) or
-`touched`, a fixed level as it stood when the candle opened, a moving
-one (VWAP, the session profile) at its close, at most four, plus its
-previous candle's high and low and the CRT range; `m3.swingTargets` is
-the next swing high above and low below in points, ticks and R. In
-strategy rules: `htfd_rejected(m, level)`, `htfd_broke(m, level)`,
-`htfd_next_swing_high(m)` (strategy-rules).
+No call until the close; wicks are information, not signals.
 
 ## Examples
 

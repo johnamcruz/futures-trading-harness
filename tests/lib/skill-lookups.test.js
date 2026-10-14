@@ -42,9 +42,64 @@ test('triggers: each one fires on its briefing fact and not otherwise; the vocab
   assert.deepStrictEqual(SL.situationalSkills(null), []);
 });
 
-test('skillsInTranscript: a whole-skill skill_lookup in the session\'s transcript counts as a load', () => {
-  const ev = (tool, input, status = 'completed') => JSON.stringify({ type: 'tool_use', part: { tool, state: { status, input } } });
-  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'liquidity-concepts' }), ev('harness_skill_lookup', { skill: 'x' }, 'error')].join('\n'))], ['liquidity-concepts']);
+test('skillsInTranscript: a whole-skill skill_lookup in the session\'s transcript counts as a load; a refusal or an error never', () => {
+  const ev = (tool, input, output, status = 'completed') => JSON.stringify({ type: 'tool_use', part: { tool, state: { status, input, output } } });
+  const read = skill => `<skill name="${skill}">\nbody\n</skill>\n`;
+  assert.deepStrictEqual([...SL.skillsInTranscript([ev('harness_skill_lookup', { skill: 'fair-value-gaps' }, read('fair-value-gaps')), ev('harness_skill_lookup', { skill: 'x' }, read('x'), 'error')].join('\n'))], ['fair-value-gaps']);
+  // Tightened: a completed call counts only when its reply is the skill. An error reply (an unknown skill), a
+  // refused {skill, query} call (schema-valid, refused by the operation), and a reply with no output count as no load.
+  const none = [
+    ev('harness_skill_lookup', { skill: 'trade-session' }, '[skill-lookup] no skill "trade-session" (skills/<name>/SKILL.md)\n'),
+    ev('harness_skill_lookup', { skill: 'trade-session', query: 'x' }, '[skill-lookup] --query lists skills; --skill reads one: give one of them\n'),
+    ev('harness_skill_lookup', { skill: 'trade-session' }, undefined),
+    ev('harness_skill_lookup', { skill: 'trade-session' }, 'Every skill of the harness (44); <skill name="trade-session">'),
+  ];
+  assert.deepStrictEqual([...SL.skillsInTranscript(none.join('\n'))], []);
+  // The skill's reply after leading whitespace (a newline, spaces) is still the skill: it counts.
+  assert.deepStrictEqual([...SL.skillsInTranscript(ev('harness_skill_lookup', { skill: 'invalidation' }, `\n  ${read('invalidation')}`))], ['invalidation']);
+});
+
+test('through the MCP tool: a listing with a role and a required skill\'s name as query records nothing and meets no lookup', async () => {
+  const { callTool } = require('../../scripts/lib/harness-tools/protocol');
+  const transcript = path.join(tmpDir(), 'cycle-transcript.jsonl');
+  const env = { FTH_CYCLE_TRANSCRIPT: transcript };
+  const role = 'market-structure-analyst';
+  const required = require('../../scripts/lib/role-skills').requiredByRole(path.resolve(__dirname, '..', '..'), 'index');
+  const call = { role, start: Date.now() - 1000, end: Date.now() + 60000 };
+  const rev = m3([{ trendRule: 'reversal' }]);
+  assert.ok(L.unmetLookups(call, { records: [], required, m3: rev }).includes('pullback-vs-reversal'), 'required on a reversal');
+  const listed = await callTool('skill_lookup', { role, query: 'pullback-vs-reversal' }, { env });
+  assert.ok(!listed.isError, listed.content[0].text);
+  assert.match(listed.content[0].text, /^- pullback-vs-reversal: /m);
+  assert.strictEqual(fs.existsSync(L.lookupsFile(transcript)), false, 'no lookups file');
+  assert.ok(L.unmetLookups(call, { records: L.readLookups(transcript), required, m3: rev }).includes('pullback-vs-reversal'));
+  // The control: the same role reading the skill through the tool is recorded and meets it.
+  const readOne = await callTool('skill_lookup', { role, skill: 'pullback-vs-reversal' }, { env });
+  assert.ok(!readOne.isError, readOne.content[0].text);
+  assert.ok(!L.unmetLookups(call, { records: L.readLookups(transcript), required, m3: rev }).includes('pullback-vs-reversal'));
+  // A refused {skill, query} call reads nothing and records nothing.
+  const t2 = path.join(tmpDir(), 'cycle-transcript.jsonl');
+  const refused = await callTool('skill_lookup', { role, skill: 'pullback-vs-reversal', query: 'x' }, { env: { FTH_CYCLE_TRANSCRIPT: t2 } });
+  assert.strictEqual(refused.isError, true);
+  assert.strictEqual(fs.existsSync(L.lookupsFile(t2)), false);
+});
+
+test('a catalog listing (skill_lookup without skill) satisfies no required lookup and no required load', () => {
+  const { skillLookup } = require('../../scripts/lib/harness-tools/skills');
+  const transcript = path.join(tmpDir(), 'cycle-transcript.jsonl');
+  const env = { FTH_CYCLE_TRANSCRIPT: transcript };
+  const role = 'market-structure-analyst';
+  // The role lists every skill, and filters by a required one's name, inside its call: nothing is recorded.
+  skillLookup({ role }, { env, wallNow: () => T + 15 });
+  skillLookup({ role, query: 'pullback-vs-reversal' }, { env, wallNow: () => T + 16 });
+  const records = L.readLookups(transcript);
+  assert.deepStrictEqual(records, []);
+  const required = require('../../scripts/lib/role-skills').requiredByRole(path.resolve(__dirname, '..', '..'), 'index');
+  const unmet = L.unmetLookups({ role, start: T + 10, end: T + 20 }, { records, required, m3: m3([{ trendRule: 'reversal' }]) });
+  assert.ok(unmet.includes('pullback-vs-reversal'), JSON.stringify(unmet));
+  // The same calls in the session's transcript count as no skill load either (the head trader's skills-loaded check).
+  const ev = input => JSON.stringify({ type: 'tool_use', part: { tool: 'harness_skill_lookup', state: { status: 'completed', input } } });
+  assert.deepStrictEqual([...SL.skillsInTranscript([ev({}), ev({ query: 'trade-session' }), ev({ role, query: 'strategy-library' })].join('\n'))], []);
 });
 
 test('recordLookup / readLookups: only in a runner\'s cycle and with a role; bad lines skipped', () => {
@@ -128,7 +183,7 @@ test('the cycle log records the cycle\'s lookups and removes the run\'s lookups 
   const { writeCycleLog } = require('../../scripts/lib/cycle-log');
   const home = tmpDir();
   const transcript = path.join(home, 'cycle-transcript.jsonl');
-  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'liquidity-concepts' }, T);
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role: 'volume-liquidity-analyst', skill: 'fair-value-gaps' }, T);
   const { summary } = writeCycleLog(home, { action: 'trade', harness: 'opencode', prompt: 'p', output: '', transcript, roleSkills: 'index' });
   assert.deepStrictEqual(summary.skillLookups, { mode: 'index', lookups: 1, byRole: { 'volume-liquidity-analyst': 1 }, requiredCalls: 0, met: 0 });
   assert.ok(!fs.existsSync(L.lookupsFile(transcript)));

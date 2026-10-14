@@ -6,7 +6,7 @@ Autonomous cycle.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
   The cycle's time: 2026-04-27 10:36:01 ET (2026-04-27T14:36:01.000Z).
   Lanes closed this cycle: 3m (every bar); one cycle covers them all (decide once for every lane's setups).
-  MNQ: a 3-minute bar just closed (opened 10:33 ET); closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
+  MNQ: a 3-minute bar just closed (opened 10:33 ET); closed 3-minute bars, oldest first, are in <home>/bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too (recorded for the order gate, which enforces it).
   MNQ: no premarket plan in the journal for today.
   MNQ day: opened 27410.75 inside the prior value area, gap -23.25 from the prior close; prior day 27130.25-27462.5, close 27434, value area 27246.5-27455.75 (POC 27414.25); overnight 27344.25-27542.5; opening type open-auction; initial balance 27298.5-27435 (136.5 points), extended 0 up and 0 down: inside the initial balance; range so far 136.5 (no 10-day average: fewer days in the data).
@@ -16,7 +16,7 @@ Autonomous cycle.
   End of day: the runner flattens every position at 15:50 ET (in 314 min); a trade must have room to work before then.
   Account 7 at 10:36 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m (bar_briefing with "timeframe": "15m"; its bars file is named there), volume-liquidity-analyst on 1h (bar_briefing with "timeframe": "1h"; its bars file is named there); the others read the 3-minute bars below.
@@ -31,7 +31,7 @@ Autonomous cycle.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
   The cycle's time: 2026-04-27 10:37:02 ET (2026-04-27T14:37:02.000Z).
   Lanes closed this cycle: 1m (on a signal: a strategy fired or a position is open); one cycle covers them all (decide once for every lane's setups).
-  MNQ: a 1-minute bar just closed (opened 10:36 ET); closed 1-minute bars, oldest first, are in <home>/bars/MNQ-1m.json (get_bars format; contractId MNQ) - use that file for the 1-minute timeframe instead of fetching it.
+  MNQ: a 1-minute bar just closed (opened 10:36 ET); closed 1-minute bars, oldest first, are in <home>/bars/MNQ-1m.json (get_bars format; contractId MNQ) - use that file; don't fetch 1-minute bars.
   MNQ Trend rule: prevailing trend 15m down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too (recorded for the order gate, which enforces it).
   MNQ: no premarket plan in the journal for today.
   MNQ day: opened 27410.75; opening type open-auction; initial balance 27298.5-27435 (136.5 points), extended 0 up and 0 down: inside the initial balance; range so far 136.5 (no 10-day average: fewer days in the data).
@@ -43,7 +43,7 @@ Autonomous cycle.
   Your last 1 cycle(s) on the lanes that closed (with the first lane's last few, and those of the lane an open trade was entered on), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -75t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them) before deciding, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks (the order gate refuses an entry without them); also load htf-to-ltf before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.

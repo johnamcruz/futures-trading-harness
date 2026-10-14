@@ -19,15 +19,16 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement', 'fair-value-gaps'];
 const SETUPS = ['rejection', 'breakout'];
 const file = s => `skills/${s}/SKILL.md`;
 
-// Who carries which (each role only what it uses; the executor and the news analyst none).
+// Who carries which (each role only what it uses, and the homes of the retired skills it loaded: skill-retire.test.js;
+// the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'],
   'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
-  'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
+  'volume-liquidity-analyst': ['levels-and-reactions', 'fair-value-gaps', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
   'trade-executor': [],
   'news-calendar-analyst': [],
@@ -64,6 +65,18 @@ const PINS = {
   'levels-and-reactions': [
     'No reaction is not a rejection.',
     'Which kind matters most is not measured',
+    'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other',
+    'Targets: the next untested liquidity pool in the trade\'s direction.',
+    'is no swing, so it is in neither.',
+  ],
+  'fair-value-gaps': [
+    'Price inside a gap is never "at an open FVG".',
+    'only the unfilled part is still a gap;',
+    'gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
+    'a filled gap is in neither list. Never mark one by eye.',
+    'The briefing does not rank gaps among the levels in a setup\'s way',
+    'The room step stays the priority order\'s, on `inTheWay`.',
+    'Evidence**: not measured;',
   ],
   'momentum-and-volume': [
     'over the mean of the bars before them (the code takes 21)',
@@ -290,20 +303,26 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   assert.match(cc, /\| 4 \| Reaction at the nearest level \(`levels-and-reactions`, `rejection`\) \|/);
   // momentum-and-volume and confluence-counting define item 5 the same way.
   assert.match(cc, /\| 5 \|[^\n]*\| all with it \| all against it \| mixed or thin \|/);
-  assert.doesNotMatch(read('skills/market-snapshot/SKILL.md'), /liquidity-concepts/);
-  // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js).
+  // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js), stated once,
+  // in levels-and-reactions (liquidity-concepts retired: skill-retire.test.js).
   const ms = read('scripts/lib/trading/market-snapshot.js');
   assert.match(ms, /const tol = atrNow \? 0\.1 \* atrNow : 0;/);
   assert.match(ms, /const recentHighs = highs\.slice\(-12\);/);
-  assert.ok(flat(read('skills/liquidity-concepts/SKILL.md')).includes('two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other'));
-  assert.doesNotMatch(read('skills/liquidity-concepts/SKILL.md'), /~2 ticks/);
+  assert.ok(flat(read(file('levels-and-reactions'))).includes('two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other'));
+  assert.doesNotMatch(read(file('levels-and-reactions')), /~2 ticks/);
+  // Fair value gaps as the code computes them: the last 60 bars (a strong displacement middle bar, by ATR(14): #129), the
+  // last 3 of each kind; an open gap untouched, a partly filled one traded into but not through (low-high the unfilled part).
+  assert.match(ms, /function fairValueGaps\(bars, n = 60, atr14 = ind\.atr\(bars, 14\)\)/);
+  assert.match(ms, /openFvgs: open\.slice\(-3\),\n\s*partlyFilledFvgs: partly\.slice\(-3\),/);
+  assert.match(ms, /else if \(deepest > g\.low\) partly\.push\(\{ side: 'bullish', low: g\.low, high: deepest, gapLow: g\.low, gapHigh: g\.high, at: g\.at \}\);/);
   // Unsourced numbers stay out of confluence-counting.
   assert.doesNotMatch(read(file('confluence-counting')), /46%|9 minutes|about half|quant audit/);
   // Each role only what it uses: the structure analyst reads levels and sweeps from the small skills.
   // Its core (role-skills) and its index (role-index: looked up as needed in opencode's index mode).
   const skillsOf = r => { const d = parseFrontmatter(read(`agents/${r}.md`)).data; return [...(d['role-skills'] || []), ...(d['role-index'] || [])]; };
-  assert.ok(!skillsOf('market-structure-analyst').includes('liquidity-concepts'));
-  assert.ok(skillsOf('volume-liquidity-analyst').includes('liquidity-concepts'));
+  for (const r of ['market-structure-analyst', 'volume-liquidity-analyst']) {
+    assert.ok(skillsOf(r).includes('fair-value-gaps') && skillsOf(r).includes('levels-and-reactions'), r);
+  }
 });
 
 test('basics skills: key sentences pinned; a changed one fails', () => {
@@ -440,8 +459,9 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
   assert.match(flat(step(4)), /setups: `rejection`, `breakout`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.
-  assert.match(read('skills/market-structure/SKILL.md'), /the `trend-vs-range` skill[^]*`pullback-vs-reversal`[^]*`breakout-vs-fakeout`[^]*the `invalidation` skill/);
-  assert.match(read('skills/liquidity-concepts/SKILL.md'), /`levels-and-reactions` skill's[^]*the `breakout-vs-fakeout` skill/);
+  // (market-structure and liquidity-concepts are retired; their content's homes: skill-retire.test.js.)
+  assert.ok(read(file('levels-and-reactions')).includes('`fair-value-gaps`'), 'levels-and-reactions points to fair-value-gaps');
+  assert.ok(read(file('fair-value-gaps')).includes('`levels-and-reactions`'), 'fair-value-gaps points to levels-and-reactions');
   assert.match(read('skills/vwap-volume-profile/SKILL.md'), /`momentum-and-volume` skill's[^]*the `absorption` skill/);
   assert.match(read('skills/trend-momentum-indicators/SKILL.md'), /`trend-vs-range` skill's/);
   // The generated opencode roles carry them: in full mode (FTH_ROLE_SKILLS=full) embedded; in the committed file
@@ -478,18 +498,13 @@ test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exa
     const homes = all.filter(d => flat(read(file(d))).includes(sentence));
     assert.deepStrictEqual(homes, ['bos-vs-choch'], sentence);
   }
-  // A sentence still in market-structure (two homes) fails.
-  const ms = read(file('market-structure'));
-  assert.ok(!flat(ms).includes('BOS: a close'));
-  const twoHomes = d => [flat(read(file('bos-vs-choch'))), flat(`${ms} ${MOVED[2]}`)].filter(x => x.includes(d)).length;
+  // A sentence in a second skill (two homes) fails. (market-structure itself is retired: skill-retire.test.js.)
+  assert.ok(!fs.existsSync(path.join(ROOT, 'skills', 'market-structure')));
+  const other = flat(read(file('pullback-vs-reversal')));
+  assert.ok(!other.includes('BOS: a close'));
+  const twoHomes = d => [flat(read(file('bos-vs-choch'))), `${other} ${MOVED[2]}`].filter(x => x.includes(d)).length;
   assert.strictEqual(twoHomes(MOVED[2]), 2);
-  // The pointers: market-structure and the reads that use structure breaks.
-  assert.match(ms, /\*\*Events\*\*: BOS and CHoCH[^]*the\s+`bos-vs-choch` skill/);
-  const MS_POINTERS = ['1. **Swings**: how they are confirmed, the `bos-vs-choch` skill.', '6. **Higher timeframe wins** (`bos-vs-choch`, by timeframe).'];
-  for (const p of MS_POINTERS) {
-    assert.ok(flat(ms).includes(p), p);
-    assert.ok(!flat(ms).replace(p, '').includes(p), `removing: ${p}`);
-  }
+  // The reads that use structure breaks point to it.
   for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'rejection', 'breakout', 'confluence-counting', 'invalidation']) {
     assert.ok(read(file(s)).includes('`bos-vs-choch`'), s);
   }
@@ -601,4 +616,168 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   assert.match(flat(read(file('cisd'))), /strong/);
   // pullback-vs-reversal points to both in a few words.
   assert.match(flat(read(file('pullback-vs-reversal'))), /A CISD \(`cisd`\) is an earlier sign than the CHoCH; depth in fib terms: `fib-retracement`\./);
+});
+
+// The two procedures of the multi-timeframe read: today's bias (daily-bias) and the top-down read to the entry
+// (top-down-entry, split from htf-to-ltf). Not basics (no take/skip/loser format), but the same checks where they apply:
+// every briefing field named resolves on a real briefing, the ordered steps are pinned, the examples are tick-correct,
+// and both stay reads that yield to the trend rule.
+const PROCEDURES = {
+  'daily-bias': { section: '### Today\'s bias, step by step', steps: ['Prior day\'s candle', 'Price against the prior day', 'The open', '1h and 4h structure', 'Regime', 'Write it'] },
+  'top-down-entry': { section: '## How It Works', steps: ['HTF: side and level', '15m: the setup there', '3m/5m: the trigger', 'Where the idea is wrong', 'Where it aims'] },
+};
+
+/** The procedure's numbered steps, in order, inside its section (before the next heading). */
+function stepsInOrder(text, { section, steps }) {
+  const at = text.indexOf(`\n${section}\n`);
+  if (at < 0) return false;
+  const body = text.slice(at).split(/\n#{2,3} /)[1];
+  let last = -1;
+  return steps.every((s, k) => {
+    const i = body.indexOf(`\n${k + 1}. **${s}.**`);
+    const ok = i > last;
+    last = i;
+    return ok;
+  }) && !body.includes(`\n${steps.length + 1}. **`);
+}
+
+test('daily-bias and top-down-entry: every briefing field named resolves on a briefing built by briefing.js; an invented one fails', () => {
+  const bs = briefings();
+  const named = Object.keys(PROCEDURES).flatMap(s => pathsIn(read(file(s))).map(p => [s, p]));
+  for (const [s, p] of named) assert.ok(bs.some(b => resolves(b, p)), `${s}: ${p}`);
+  const paths = named.map(([, p]) => p);
+  for (const p of ['day.priorRthCandle', 'm3.location.priorRthClose', 'm3.today.openType', 'h1.lastBreak.last', 'h1.h4.swingPattern', 'm3.trendRule', 'm3.swingTargets', 'candidate.inTheWay']) {
+    assert.ok(paths.includes(p), `named: ${p}`);
+  }
+  assert.ok(paths.length >= 14, `${paths.length} paths checked`);
+  // The candle's fields the skill names in backticks are the briefing's own.
+  const candle = bs.map(b => b.sections.day.data.priorRthCandle).find(Boolean);
+  for (const k of ['dir', 'closeLocation', 'closeVsDayBefore']) assert.ok(k in candle && read(file('daily-bias')).includes(`\`${k}\``), k);
+  assert.ok(!bs.some(b => resolves(b, 'day.priorRthCandle.pattern')) && !bs.some(b => resolves(b, 'h1.h4.lastBreak')));
+});
+
+test('daily-bias and top-down-entry: the procedures\' steps are pinned in order; a changed, dropped or reordered step fails', () => {
+  for (const [s, proc] of Object.entries(PROCEDURES)) {
+    const text = read(file(s));
+    assert.ok(stepsInOrder(text, proc), s);
+    assert.ok(!stepsInOrder(text.replace(`**${proc.steps[1]}.**`, '**Something else.**'), proc), `${s}: changed`);
+    assert.ok(!stepsInOrder(text.replace(`${proc.section}\n`, '### Elsewhere\n'), proc), `${s}: the section renamed`);
+    const one = new RegExp(`\\n1\\. \\*\\*${proc.steps[0].replace(/[/.]/g, '\\$&')}\\.\\*\\*`);
+    const two = new RegExp(`\\n2\\. \\*\\*${proc.steps[1].replace(/[/.]/g, '\\$&')}\\.\\*\\*`);
+    assert.ok(!stepsInOrder(text.replace(one, '\n2. **X.**').replace(two, `\n1. **${proc.steps[0]}.**`), proc), `${s}: reordered`);
+  }
+  const db = flat(read(file('daily-bias')));
+  for (const pin of [
+    'The higher one sets the side; the 1h against it lowers the confidence.',
+    'Long, short or neutral; high when steps 1-5 all back it, medium when one does not, low when two or more do not;',
+    '**Flips intraday**: a 1h CHoCH against it, or closes back inside the prior range after a breakout of it.',
+    '**Neutral**: expect two-sided trade; the range\'s extremes (prior range, value, overnight) are the better locations.',
+    'A holiday or early-close prior day is a weak read.',
+    '`m3.location.priorRthClose` (`above`, `below`, `at`)',
+  ]) assert.ok(db.includes(pin), pin);
+  // Neutral is a read, not a filter.
+  assert.doesNotMatch(db, /or nothing|stand aside/);
+  // The values the bias names are the code's: the candle against the day before, price against the close, the open, the regime.
+  const ms = read('scripts/lib/trading/market-snapshot.js');
+  for (const v of ['above its high', 'below its low', 'inside its range']) assert.ok(ms.includes(`'${v}'`), v);
+  assert.ok(read('scripts/lib/trading/briefing.js').includes('(p > level ? \'above\' : p < level ? \'below\' : \'at\')'));
+  assert.ok(read('scripts/lib/trading/day-context.js').includes('return \'open-auction\';'));
+  assert.match(db, /an open-auction is two-sided/);
+  const { PRIMARY } = require('../../scripts/lib/trading/regime');
+  assert.ok(PRIMARY.includes('range') && PRIMARY.includes('transition'));
+});
+
+test('daily-bias and top-down-entry: reads that yield to the trend rule; the stop and exit stay the strategy\'s', () => {
+  const YIELD = 'the trend rule (`multi-timeframe-analysis`) and the priority order (strategy-library) decide entries. Against the prevailing trend, trend strategies wait';
+  for (const s of Object.keys(PROCEDURES)) assert.ok(flat(read(file(s))).includes(YIELD), s);
+  assert.ok(flat(read(file('daily-bias'))).includes('it never points at a side the rule refuses.'));
+  const top = flat(read(file('top-down-entry')));
+  for (const pin of [
+    '**HTF: side and level.** The side the trend rule allows (`m3.trendRule`); today\'s bias (`daily-bias`) sets the confidence, never a side the rule refuses.',
+    'check that the strategy\'s stop sits beyond it.',
+    'check that the room to it allows the trade.',
+    'The stop and exit stay the strategy\'s (the priority order, step 2: a reversal takes the nearest target).',
+    'Completed candles only, on every timeframe.',
+    'the HTF gives the side, the LTF only the timing.',
+  ]) assert.ok(top.includes(pin), pin);
+  // The counter example: the trend rule's side wins over a rejection at a level.
+  assert.match(top, /2022-08-12, trend rule 4h up\.[^`]*shorts are not the side the rule allows/);
+});
+
+test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use when" descriptions; the head trader\'s per-cycle load does not grow', () => {
+  const skills = new Set(fs.readdirSync(path.join(ROOT, 'skills')));
+  for (const s of [...Object.keys(PROCEDURES), 'htf-to-ltf']) {
+    const text = read(file(s));
+    const { data, body } = parseFrontmatter(text);
+    assert.match(data.description, /^Use when /, s);
+    assert.ok(data.description.length <= 160, `${s}: description ${data.description.length}`);
+    assert.ok(Buffer.byteLength(body) <= 3400, `${s}: ${Buffer.byteLength(body)} bytes`);
+    // Every skill it names in backticks exists.
+    for (const m of text.matchAll(/`([a-z]+(?:-[a-z0-9]+)+)`/g)) {
+      if (/^(?:open|trend)-/.test(m[1])) continue; // values (an open type, a regime), not skills
+      assert.ok(skills.has(m[1]), `${s} names \`${m[1]}\``);
+    }
+  }
+  for (const s of Object.keys(PROCEDURES)) assert.ok(read(file(s)).includes('back-adjusted CSV prices'), `${s}: the examples say their prices are back-adjusted`);
+  // htf-to-ltf points to the top-down read in one line; the top-down read points to the reads it uses, never restates them.
+  assert.ok(flat(read(file('htf-to-ltf'))).includes('Top down: `top-down-entry`.'));
+  assert.doesNotMatch(read(file('htf-to-ltf')), /### 3\. Top down/);
+  const top = read(file('top-down-entry'));
+  for (const p of ['htf-to-ltf', 'daily-bias', 'levels-and-reactions', 'rejection', 'breakout', 'cisd', 'pullback-vs-reversal', 'bos-vs-choch', 'candle-reading', 'momentum-and-volume', 'invalidation']) {
+    assert.ok(top.includes(`\`${p}\``), p);
+  }
+  // Referenced, never embedded: no role lists it (full mode would embed it); the market-structure analyst's body names it
+  // in its setup step and looks it up as needed; the head trader never loads it every cycle.
+  for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) {
+    const d = parseFrontmatter(read(`agents/${f}`)).data;
+    assert.ok(![...(d['role-skills'] || []), ...(d['role-index'] || [])].includes('top-down-entry'), f);
+  }
+  const msa = read('agents/market-structure-analyst.md');
+  assert.ok(flat(msa).includes('The steps from level to entry: the `top-down-entry` skill (`skill_lookup` when a setup forms at a level).'));
+  assert.ok(!/Load the\s+skills?\s+[^.]*`top-down-entry`/.test(flat(msa)), 'not in the load sentence');
+  assert.ok(!JSON.parse(read('workspace/opencode.json')).agent['market-structure-analyst'].prompt.includes('<skill name="top-down-entry">'), 'not embedded');
+  const ts = read('skills/trade-session/SKILL.md');
+  const step0 = flat(ts.slice(ts.indexOf('### 0. Load the skills'), ts.indexOf('### 1.')));
+  assert.ok(!step0.includes('top-down-entry'));
+  // What the head trader loads every cycle (trade-session step 0: the gated three, trader-process, htf-to-ltf), in
+  // bytes, is no more than at the split's merge (foundation batch B, on main at 507adfbd, whose same load without htf-to-ltf
+  // was 58878): 55733.
+  const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x));
+  assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'strategy-gate-checks', 'strategy-library', 'strategy-scan', 'trade-session', 'trader-process']);
+  const bytes = loads.reduce((a, x) => a + Buffer.byteLength(read(file(x))), 0);
+  assert.ok(bytes <= 55733, `the head trader's per-cycle load: ${bytes} bytes`);
+});
+
+/** Every trade in an example: long or short at E, stop S (P pts = T ticks, $D per MNQ), on the tick and consistent; a target X (Q pts, RR) when given. */
+function topDownExamples(text) {
+  const ex = text.slice(text.indexOf('## Examples'));
+  const trades = [...ex.matchAll(/(long|short) (\d+\.\d\d), stop (\d+\.\d\d)[^(]*\((\d+\.\d\d) pts = (\d+)\s+ticks, \$(\d+\.\d\d) per MNQ\)(?:;\s+target[^(]*?(\d+\.\d\d) \((\d+\.\d\d) pts, (\d+\.\d\d)R\))?/g)];
+  if (!trades.length) return false;
+  const prices = [...ex.matchAll(/\b(\d{5}\.\d\d)\b/g)].map(k => Number(k[1]));
+  return prices.every(p => Number.isInteger(p / 0.25)) && trades.every(m => {
+    const [, side, e, s, pts, ticks, usd, x, q, r] = m;
+    const [E, S, P, T, D] = [e, s, pts, ticks, usd].map(Number);
+    const long = side === 'long';
+    const stopOk = (long ? S < E : S > E) && Math.abs(Math.abs(E - S) - P) < 1e-9 && P / 0.25 === T && T * 0.5 === D;
+    if (x === undefined) return stopOk;
+    const [X, Q, R] = [x, q, r].map(Number);
+    return stopOk && (long ? X > E : X < E) && Math.abs(Math.abs(X - E) - Q) < 1e-9 && Math.abs(Q / P - R) < 0.005;
+  });
+}
+
+test('daily-bias and top-down-entry: the examples are tick-correct (NQ 0.25 tick; MNQ $0.50 a tick)', () => {
+  const top = read(file('top-down-entry'));
+  assert.ok(topDownExamples(top));
+  assert.strictEqual([...top.split('## Examples')[1].matchAll(/ per MNQ\)/g)].length, 2, 'both trades checked');
+  for (const s of Object.keys(PROCEDURES)) {
+    const ex = read(file(s)).split('## Examples')[1];
+    for (const m of ex.matchAll(/\b(\d{5}\.\d\d)\b/g)) assert.ok(Number.isInteger(Number(m[1]) / 0.25), `${s}: ${m[1]}`);
+  }
+  // A wrong tick count, dollar amount, R, side or off-tick price fails, in either trade.
+  const good = '## Examples\nlong 14960.00, stop 14938.50 under the low (21.50 pts = 86 ticks, $43.00 per MNQ);\ntarget 15040.25 (80.25 pts, 3.73R)\n'
+    + 'short 16789.25, stop 16814.00 (24.75 pts = 99 ticks, $49.50 per MNQ).\n';
+  assert.ok(topDownExamples(good));
+  for (const [a, b] of [['86 ticks', '85 ticks'], ['$43.00', '$43.50'], ['3.73R', '3.50R'], ['15040.25', '15040.30'], ['stop 14938.50', 'stop 14981.50'], ['99 ticks', '98 ticks'], ['$49.50', '$49.00'], ['stop 16814.00', 'stop 16764.50']]) {
+    assert.ok(!topDownExamples(good.replace(a, b)), b);
+  }
 });

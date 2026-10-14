@@ -6,7 +6,7 @@ thesis, trigger (what happened, price, time), entry, stop, exit, size
 P&L, and for a prop attempt the cushion and size budget), skip rules checked,
 analyst agreement, and what each role reported that the plan rests on: the
 structure bias and the level the entry and stop sit against
-(market-structure); the VWAP side, the value area or POC, the nearest
+(market structure); the VWAP side, the value area or POC, the nearest
 liquidity in the trade's way (the candidate's `inTheWay` in the briefing's
 `m3` `candidates`: the first level in its direction in points and R, where
 1R is its own stop; with `order_plan`'s stop, check there is room to the

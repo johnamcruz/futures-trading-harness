@@ -27,7 +27,8 @@ h = l is `unknown`).
   over the mean of the bars before them (the code takes 21);
 - `m3.participation.relVolLastVsOpeningRange`,
   `m3.participation.relVolLast3VsOpeningRange`: over today's opening-range
-  bar average (null before it closes, and overnight);
+  bar average (null before it closes, and overnight; orb's skip rule reads
+  the first);
 - `m3.participation.relVolVsSameTimePriorDay`: over the same ET minute's
   bar the previous trading day; `m3.participation.lastBarVolume`.
 

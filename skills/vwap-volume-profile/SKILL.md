@@ -1,6 +1,6 @@
 ---
 name: vwap-volume-profile
-description: Use session and RTH VWAP, the volume profile (POC, value area, high and low volume nodes), and relative volume to judge trend quality, fair value, and participation in futures. Use when evaluating mean-reversion vs trend days, where price sits against value, targets at volume nodes, or whether a breakout has participation.
+description: Use session and RTH VWAP, the volume profile (POC, value area, volume nodes), the day so far (open type, IB, day type), and relative volume to judge trend quality, fair value and participation. Use for mean-reversion vs trend days, where price sits against value, targets at volume nodes, or a breakout's participation.
 ---
 
 # VWAP and Volume
@@ -20,7 +20,12 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
 (`m3`, `day`): use it, and compute only what it doesn't hold.
 
 1. **VWAP** from market-snapshot: `vwapSession` (anchored 18:00 ET, Globex) and
-   `vwapRth` (anchored 09:30 ET).
+   `vwapRth` (anchored 09:30 ET). `vwapRth` is null before today's 09:30 ET
+   open and after 16:00 ET: use `vwapSession` then, as the strategy filters
+   do. The briefing's `m3.vwap`: which VWAP applies now (`applies`: `rth`
+   or `session`), the distance in ATR(14) (`distanceAtr`), and the closes
+   crossing each VWAP in the last 30 bars (`rthCrossesLast30`,
+   `sessionCrossesLast30`; read the one that applies).
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day; fade extremes, small
@@ -38,7 +43,9 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
 
    Each has `poc` (point of control: the most-traded price), `vah`/`val`
    (the value area: 70% of the volume around the POC), `price` (above,
-   inside, or below value), `fromPocAtr`, and the nodes: `hvn` (high volume:
+   inside, or below value, from the exact levels: a shown VAH a tick under
+   price can still read inside), `fromPocAtr` ((price - POC) / ATR(14)),
+   and the nodes: `hvn` (high volume:
    acceptance, where moves stall and rotate) and `lvn` (low volume:
    rejection, where price moves fast), with the nearest above and below
    (`hvnAbove`, `lvnBelow`, ...). Strategies read the same levels as
@@ -52,12 +59,25 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
      small targets.
    - A POC at one end of a wide value area means the day trended: a weak
      reference for the next day.
-   - Levels are on a 100-row grid over the day's range, not on ticks: round
-     to the tick before you use one as an order price.
+   - Levels are computed on a 100-row grid over the day's range, and shown
+     on the contract's tick (as in the briefing) for a harness bars file or
+     with `symbol`; otherwise to two decimals, between ticks: round to
+     `tickSize` before using one as an order price.
 
    It is a bar-based approximation (each bar's volume spread evenly over its
    range), not a tick-level profile. Say so when you cite it.
 4. **Volume climax**: the `absorption` skill.
+5. **The day so far** (`m3.today`, from the 09:30 ET open; the prompt's
+   "day:" line says the same): the open against the prior RTH day
+   (`openVs`: inside the prior value area, outside value inside the range,
+   or outside the range), the `gap` from the prior close, the `openType`
+   (open-drive, open-test-drive, open-rejection-reverse, open-auction, from
+   the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first
+   hour) and how far the day has gone past it (`extUp`, `extDown`), the
+   `dayType` so far (inside the initial balance; normal variation: one side
+   extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
+   0.35 ADR; neutral: both sides), and the range against the average daily
+   range (`rangeVsAdr`, over 10 days).
 
 ## Examples
 
