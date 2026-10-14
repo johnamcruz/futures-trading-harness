@@ -95,6 +95,7 @@ const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
 const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
 const { halfOf } = require('./fib');
+const { levelCloses, MAX_CLOSES } = require('./level-closes');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -189,8 +190,7 @@ const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorPr
 const CISD_FRAMES = [3, 5, 15, 60];
 
 /** The latest CISD per timeframe, compact (cisd.js cisdFacts; prices on the tick by `level`). */
-function cisdBlock(bars, level) {
-  const levels = causalLevels(bars);
+function cisdBlock(bars, level, levels = causalLevels(bars)) {
   const atr = atrOf(bars, 20);
   const out = {};
   for (const m of CISD_FRAMES) {
@@ -199,7 +199,7 @@ function cisdBlock(bars, level) {
     if (f.none) { out[f.tf] = 'none in these bars'; continue; }
     out[f.tf] = {
       dir: f.dir, level: f.level, confirmedClose: f.confirmedClose, displacement: f.displacement, engulfing: f.engulfing, sweep: f.sweep, leg: { origin: f.leg.origin, extreme: f.leg.extreme },
-      ote: f.ote, status: f.status, priceInOte: f.priceInOte, retracement: f.retracement,
+      ote: f.ote, status: f.status, priceInOte: f.priceInOte, retracement: f.retracement, ...(f.bounce ? { bounce: f.bounce } : {}),
     };
   }
   return out;
@@ -355,6 +355,11 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   const bar = snap.last;
   const atr14 = (snap.volatility || {}).atr14;
   const sessionRange = (snap.context || {}).session || null;
+  // The rules language's causal levels (rth_open, the prior day, overnight), once: the CISD's sweep and the closes read them.
+  const causal = causalLevels(bars);
+  // This bar's close against the session's levels (level-closes.js), each placed with its owner below, only when it
+  // happened; the summary's "This bar's close" line says them (not repeated in the detail: SUMMARY_ONLY).
+  const closes = own ? {} : levelCloses(bars, bars.length - 1, { levels: causal });
   return {
     m3: {
       validUntil: new Date(closedAt.getTime() + step),
@@ -372,7 +377,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         atr14: round2(atr14),
         vwap: { applies, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr,
           // Closes crossing each VWAP in the last 30 bars, labeled by the VWAP: the session one is the regime's sessionVwapCrosses.
-          rthCrossesLast30: (snap.vwap || {}).rthCrossesLast30 ?? null, sessionCrossesLast30: (snap.vwap || {}).sessionCrossesLast30 ?? null },
+          rthCrossesLast30: (snap.vwap || {}).rthCrossesLast30 ?? null, sessionCrossesLast30: (snap.vwap || {}).sessionCrossesLast30 ?? null,
+          ...(closes.vwapCrossed ? { crossed: closes.vwapCrossed } : {}) },
         participation: snap.participation ? omit(snap.participation, ['note']) : null,
         // The counters the strategies' skip rules name (EMA crosses, ADX falling, Keltner squeeze and band-close streak,
         // SuperTrend flips, the last 5 bars' range in ATR).
@@ -399,7 +405,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // The room to run: the three nearest levels above and below price, in points and R.
         nearestLiquidity: room,
         // Today so far and the developing levels: they move bar by bar.
-        today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
+        today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null,
+          ...(closes.openingRangeCrossed ? { openingRangeCrossed: closes.openingRangeCrossed } : {}) },
         overnight: lv.overnight || null,
         sessionProfile: sess.poc ? { poc: level(sessX.poc), vah: level(sessX.vah), val: level(sessX.val), hvnAbove: level(sessX.hvnAbove), hvnBelow: level(sessX.hvnBelow), lvnAbove: level(sessX.lvnAbove), lvnBelow: level(sessX.lvnBelow) } : null,
         priorProfileNodes: prior.poc ? { hvnAbove: level(priorX.hvnAbove), hvnBelow: level(priorX.hvnBelow), lvnAbove: level(priorX.lvnAbove), lvnBelow: level(priorX.lvnBelow) } : null,
@@ -411,6 +418,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           priorRthClose: lv.priorRth ? side(price, lv.priorRth.close) : null,
           // The half of the session's range so far (from 18:00 ET) price is in (fib.js halfOf): premium, discount or equilibrium.
           sessionRangeHalf: sessionRange ? halfOf({ origin: sessionRange.low, extreme: sessionRange.high }, price) : null,
+          ...(closes.closesBeyondValue ? { closesBeyondValue: closes.closesBeyondValue } : {}),
+          ...(closes.backInsideValue ? { backInsideValue: closes.backInsideValue } : {}),
         },
         // The scan's candidates, each with its stop (its 1R), its exit, and the first level in its way in points and R.
         // null: the scan failed or the bar wasn't scanned, so what fired is unknown (not "nothing fired").
@@ -418,7 +427,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         ...(scan ? {} : { scanError: scanError || 'the scan failed this bar' }),
         trendRule: read.lines[read.lines.length - 1],
         // The latest CISD per timeframe on completed candles, with its displacement leg's OTE zone (cisd.js, fib.js).
-        cisd: cisdBlock(bars, level),
+        cisd: cisdBlock(bars, level, causal),
         // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
@@ -689,6 +698,8 @@ function summaryLines(b, et) {
     ...(room.at && room.at.length ? [`- At price: ${room.at.map(x => `${x.name} ${x.price}`).join(', ')}.`] : []),
     ...(room.roundNumbers ? [`- Round numbers: none (${room.roundNumbers}).`] : []),
   ];
+  const closes = closesLine(m3);
+  if (closes) out.push(closes);
   out.push(...candleLines(m3, et, roomOf, b.closedAt));
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
@@ -704,6 +715,27 @@ function summaryLines(b, et) {
   return out;
 }
 
+// Closes in a row: "the first close", "3 closes in a row", "20+ closes in a row" (the count stops at MAX_CLOSES).
+const inARow = n => (n === 1 ? 'the first close' : `${n}${n >= MAX_CLOSES ? '+' : ''} closes in a row`);
+/**
+ * The summary's "This bar's close" line: what the close did against the session's levels (level-closes.js), only when
+ * something happened (null: nothing), e.g. "- This bar's close: crossed above the RTH VWAP; 2 closes in a row above
+ * prior value." A close on an edge is neither beyond nor inside.
+ */
+function closesLine(m3) {
+  const vw = (m3.vwap || {}).crossed || {};
+  const today = m3.today || {};
+  const loc = m3.location || {};
+  const word = d => (d === 'up' ? 'above' : 'below');
+  const parts = [
+    ...Object.entries(vw).map(([k, d]) => `crossed ${word(d)} the ${k === 'rth' ? 'RTH' : 'session'} VWAP`),
+    ...(today.openingRangeCrossed ? [`crossed ${word(today.openingRangeCrossed)} the opening range ${today.openingRangeCrossed === 'up' ? 'high' : 'low'}`] : []),
+    ...(loc.closesBeyondValue ? [`${inARow(loc.closesBeyondValue.closes)} ${loc.closesBeyondValue.side} prior value`] : []),
+    ...(loc.backInsideValue ? [`${inARow(loc.backInsideValue.closes)} back inside prior value (the RTH open was ${loc.backInsideValue.opened} it)`] : []),
+  ];
+  return parts.length ? `- This bar's close: ${parts.join('; ')}.` : null;
+}
+
 /** The summary's CISD line: each timeframe's latest CISD and its OTE zone, the unavailable ones left out (null: none). */
 function cisdLine(block, et) {
   if (!block || typeof block !== 'object') return null;
@@ -711,7 +743,7 @@ function cisdLine(block, et) {
     if (typeof x === 'string') return `${tf} none`;
     const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}`
       : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
-    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement}${x.engulfing ? ', engulfing' : ''})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}`;
+    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement}${x.engulfing ? ', engulfing' : ''})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
   });
   return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
@@ -729,13 +761,16 @@ const targets = list => list.reduce((out, x) => {
  * each candle's pattern, close location, range, volume and levels; an unavailable timeframe), and so is a candle's
  * OHLCV when it is the `bar` above (the base timeframe's own), so the text stays small; the JSON keeps it all.
  */
+// What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
+const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
+
 function detailEntries(data) {
   const bar = data.bar || {};
   const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
   return Object.entries(data).filter(([k]) => k !== 'swingTargets' && k !== 'rangeTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
     ? [k, Object.fromEntries(Object.entries(v).filter(([tf, c]) => !c.unavailable && !(tf in EVENT_FRAMES))
       .map(([tf, c]) => [tf, { t: c.t, ...ohlcv(c), body: c.body, upperWick: c.upperWick, lowerWick: c.lowerWick, ...(c.patterns ? { patterns: c.patterns } : {}) }]))]
-    : [k, v]));
+    : [k, SUMMARY_ONLY[k] && v && typeof v === 'object' ? omit(v, SUMMARY_ONLY[k]) : v]));
 }
 
 /**

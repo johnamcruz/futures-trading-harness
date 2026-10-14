@@ -114,6 +114,7 @@ Summary (MNQ 3m, 10:33 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): overnight low 27344.25 (18.75 pts, 1.29R), session VAL 27344.75 (19.36 pts, 1.33R), last 3m swing low 27352.5 (27 pts, 1.86R).
 - Room below (R = the 3m reference stop): round number 27300 (25.5 pts, 1.76R), day low / IB low / session low / 15m swing low 27298.5 (27 pts, 1.86R), prior VAL 27246.5 (78.96 pts, 5.44R).
+- This bar's close: crossed below the opening range low.
 - 3m (closed 10:33): none, close bottom third, range 1.31 ATR, vol 1.17x; traded beyond the previous 3m low, closed below its low; broke below overnight low, broke below opening range low, broke below session VAL, broke below previous 3m low.
 - 15m (closed 10:30): inside, close bottom third, range 1.04 ATR, vol 2.44x; rejected opening range low (closed back above), broke below session POC, touched VWAP (rth).
 - 1h (closed 10:00): hammer, close top third, range 2.17 ATR, vol 5.55x; swept the previous 1h low, closed back inside; rejected prior RTH close (closed back below), rejected overnight low (closed back above), rejected VWAP (rth) (closed back above), rejected session VAL (closed back above), +9 more.
@@ -292,6 +293,7 @@ Summary (MNQ 3m, 19:21 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): session POC 27488 (0.09 pts, 0.02R), last 3m swing high 27489.75 (1.75 pts, 0.38R), session VAH 27499 (11.06 pts, 2.39R).
 - Room below (R = the 3m reference stop): VWAP (session) 27475.89 (12.11 pts, 2.61R), last 3m swing low 27474.75 (13.25 pts, 2.86R), session VAL 27471.5 (16.56 pts, 3.57R).
+- This bar's close: 20+ closes in a row above prior value.
 - 3m (closed 19:21): shooting star, close bottom third, range 0.86 ATR, vol 1.43x; swept the previous 3m high, closed back inside; rejected session POC (closed back below), rejected previous 3m high (closed back below).
 - 15m (closed 19:15): none, close bottom third, range 0.54 ATR, vol 0.15x; swept the previous 15m low, closed back inside; rejected VWAP (session) (closed back above), rejected session POC (closed back below), rejected previous 15m low (closed back above).
 - 1h (closed 19:00): none, close top third, range 1.26 ATR, vol 0.35x; traded beyond the previous 1h high, closed above its high; rejected session POC (closed back below), rejected 1h swing high 27500.25 (closed back below), rejected round number 27500 (closed back below), broke above prior RTH close, +7 more.

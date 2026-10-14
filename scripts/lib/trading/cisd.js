@@ -345,7 +345,7 @@ function cisdSeries(bars, minutes, { levels, atr, params = PARAMS, barMinutes = 
 /**
  * The latest CISD on `minutes`-minute completed candles as of the last bar, as the briefing shows it: { tf, dir,
  * level, confirmedAt (the confirming candle's open), confirmedClose, run, displacement, engulfing, sweep, leg, ote, status, priceInOte,
- * retracement } or { tf, none } / { tf, unavailable }. `round` puts a price on the contract's tick (display only).
+ * retracement, bounce ('up' | 'down': the last bar is the bounce out of the zone; only then) } or { tf, none } / { tf, unavailable }. `round` puts a price on the contract's tick (display only).
  */
 function cisdFacts(bars, minutes, { levels, atr, params = PARAMS, barMinutes = null, round = x => x } = {}) {
   const tf = minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
@@ -366,6 +366,8 @@ function cisdFacts(bars, minutes, { levels, atr, params = PARAMS, barMinutes = n
     status: st.status,
     priceInOte: live ? st.price >= st.zone.bottom && st.price <= st.zone.top : false,
     retracement: st.origin !== st.extreme ? r2(fib.retracementOf(leg, st.price)) : null,
+    // The bounce out of the OTE zone on this (the last) bar, only when it happened: the entry the series reads.
+    ...(s.entry[bars.length - 1] ? { bounce: s.entry[bars.length - 1] > 0 ? 'up' : 'down' } : {}),
   };
 }
 
