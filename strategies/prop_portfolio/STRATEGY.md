@@ -6,7 +6,7 @@ status: active                # the owner's call: live and replay; the sizing ru
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
 timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works)
 signal: policy                # trades the setups of the strategies below on the account
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first active one that fires on a bar is the setup (a paper one stays paper)
+strategies: [cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # priority order: the first active one that fires on a bar is the setup (a paper one stays paper)
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
 # sizing, exit and the verdict's multipliers: in its account's rulebook (RULEBOOK.md beside ACCOUNT.md, policies.prop_portfolio), the one place for them
@@ -18,7 +18,7 @@ source: harness design (the prop challenge as a strategy); the learned-rulebook 
 
 # Strategy: Prop Portfolio (`setup:prop_portfolio`)
 
-A prop-challenge strategy. It trades the setups of the twelve 3-minute rules
+A prop-challenge strategy. It trades the setups of the eight 3-minute rules
 strategies on four index futures (Nasdaq, S&P, Dow, Russell) against one
 Topstep 100K combine. It takes every setup at the account's size budget, or
 skips one the budget can't fund, and its trail exits every trade.
@@ -33,7 +33,7 @@ skips one the budget can't fund, and its trail exits every trade.
 ## How It Works
 
 1. On every closed bar of its timeframe (`timeframe: 3m`) the runner scans
-   the twelve strategies in the order listed, on each index's bars. The
+   the eight strategies in the order listed, on each index's bars. The
    first `active` one with a setup (its own rules and stop) is this
    strategy's setup on that index. A `paper` strategy (none today: the
    owner activated value_area) stays paper inside it: its setup is passed
@@ -89,8 +89,8 @@ Each contract's risk is its stop plus a tick of expected slippage, plus fees bot
 Cushion $1,000, $2,000 below the peak (past drawdown_halve_usd): budget cushion_frac x $1,000 / 2 = $150.
   YM, a 40-tick stop: 7 MYM ($148.68), under one mini, so micros.
 
-prop_portfolio long setup on ES from supertrend: sizing says full (multiplier 1, max 4 ES, stop 16 ticks)
+prop_portfolio long setup on ES from orb: sizing says full (multiplier 1, max 4 ES, stop 16 ticks)
 -> place_order ES buy 4, stopLossBracket.ticks 16,
-   rationale "setup:prop_portfolio supertrend long, stop 16 ticks, verdict full"
+   rationale "setup:prop_portfolio orb long, stop 16 ticks, verdict full"
 NQ setup on the next bar while the ES trade is open: the gate refuses it (one position at a time).
 ```

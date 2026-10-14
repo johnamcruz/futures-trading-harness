@@ -11,7 +11,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
   the selected one, the contract in the runner's `symbols` (`FTH_SYMBOLS` for
   an interactive session). Listing either leg covers the selected leg, so one
   leg per family is enough (listing MNQ, it trades a selected NQ), and the
-  other leg is refused ("setup:bos trades MNQ (the selected contract), not
+  other leg is refused ("setup:orb trades MNQ (the selected contract), not
   NQ"): it never alternates between the two. With no leg of the family
   selected, it trades exactly what it lists (a rules strategy listing both
   legs trades neither until one is selected). Everything else is checked on the
@@ -26,10 +26,6 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | Strategy | Signal | Status |
 |---|---|---|
 | `orb` | opening range breakout | active |
-| `ema_cross` | EMA 9/20 cross | active |
-| `keltner` | Keltner breakout | active |
-| `supertrend` | SuperTrend flip | active |
-| `bos` | break of structure | active |
 | `cisd_ote` | CISD on 12m + OTE fib zone pullback | active |
 | `vwap_reclaim` | rules (written in Markdown) | active |
 | `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | active |
@@ -40,8 +36,8 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | `value_area_reentry` | rules: volume profile 80% rule; open outside the prior day's value area, two closes back inside, target the far side | active |
 | `value_area_breakout` | rules: two closes beyond the prior day's value area on above-average volume; trend trail | active |
 
-The trend-following strategies (`ema_cross`, `supertrend`, `keltner`, `bos`, `orb`,
-`value_area_breakout`: trend or transition; `vwap_reclaim`: trend) are regime-gated
+The trend-following strategies (`orb`, `value_area_breakout`: trend or
+transition; `vwap_reclaim`: trend) are regime-gated
 (`regimes`, `regime_gate: true`): in a range the scan never lists them and the order gate
 refuses their entries.
 
@@ -80,7 +76,7 @@ with `long:`/`short:` condition lists in the frontmatter (see
 `vwap_reclaim/` and the `strategy-authoring` skill for the rule language), and
 code evaluates it on every closed bar. A discretionary trigger uses
 `signal: manual` and is judged by the agents from the body. Every shipped
-strategy is rules, including the six ported strategies. Zone logic the
+strategy is rules, including the two ported strategies (`orb`, `cisd_ote`). Zone logic the
 rules can't spell out (cisd_ote) is a series the rules use (`cisd_ote_dir`).
 
 The ports' rules trade exactly as the original bot's detectors do:
@@ -100,9 +96,9 @@ trades the setups of the rules strategies it lists on a prop account: each
 setup at the largest size the attempt's budget allows (in the selected
 contract), or skipped, and every trade exits by its trail.
 
-- `prop_portfolio`: every 3-minute strategy (ema_cross, supertrend,
-  keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area,
-  value_area_reentry, value_area_breakout) on NQ, ES, YM, and RTY (micros or
+- `prop_portfolio`: every 3-minute strategy (cisd_ote, orb, vwap_reclaim,
+  crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout) on
+  NQ, ES, YM, and RTY (micros or
   minis), one `topstep_100k` attempt and one position at a time across them.
 - `prop_flow_1m`: the 1-minute order-flow strategies (ofi, ofi_absorption).
   A policy strategy trades one timeframe.
@@ -125,6 +121,38 @@ a paper run. The trained (PPO)
 policy that once decided its setups is retired; the learned-rulebook design
 (to come) replaces it with numbers and rules the skills teach and the gate
 enforces.
+
+## Retired strategies
+
+Removed from the repository; their documents stay in its history. Only the
+mechanical triggers are gone: the indicators they read (EMAs, ADX,
+SuperTrend, Keltner) and the structure breaks (BOS, CHoCH) stay in the bar
+briefing and the market snapshot as confluence data, and the skills still
+teach the concepts (`trend-momentum-indicators`, `market-structure`).
+
+| Strategy | Signal | Retired | Why |
+|---|---|---|---|
+| `bos` | break of structure (3m) | 2026-10-13 | the owner's decision (below) |
+| `keltner` | Keltner channel breakout (3m) | 2026-10-13 | the owner's decision (below) |
+| `ema_cross` | EMA 9/20 cross (3m) | 2026-10-13 | the owner's decision (below) |
+| `supertrend` | SuperTrend flip (3m) | 2026-10-13 | the owner's decision (below) |
+
+Why, for all four:
+
+- The owner's decision: as strategies they confused the model, and the
+  basic skills already cover what they detect.
+- Correlated: in the 2026-10-13 quant audit, about half of the `bos`
+  candidates had a `keltner` one within 9 minutes, and for `ema_cross` and
+  `supertrend` 46%.
+- Negative after costs on Train in the 2026-10-13 edge census.
+
+A record that still names one never breaks anything: an entry tagged with
+it is refused, saying it was retired (the order gate, `order_plan`, a
+policy verdict from it, a lanes config or policy list naming it, a
+backtest asked for it), while an `[exit]` or `[protect]` order for a
+position it opened still goes and the runner keeps trailing that position
+by its remembered exit plan (`scripts/lib/trading/strategies.js`
+`RETIRED`; `tests/lib/retired-strategies.test.js`).
 
 ## Commands
 

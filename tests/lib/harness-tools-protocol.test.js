@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, recordBrokerSpecs } = require('../helpers');
+const { tmpDir, recordBrokerSpecs, FX_STRATEGIES } = require('../helpers');
 const { createServer, callTool, boundedLines, PROTOCOL_VERSIONS, MAX_OUTPUT_BYTES } = require('../../scripts/lib/harness-tools/protocol');
 
 function server(env = { FTH_HOME: tmpDir() }, root) {
@@ -184,7 +184,7 @@ test('callTool: a Parquet or Excel file under the bars directory is refused by e
     fs.chmodSync(file, 0o000); // opening it would fail with EACCES: the refusal must come first
     for (const [tool, args] of [['strategies_scan', { bars: file, symbol: 'MNQ' }], ['strategies_recent', { bars: file, symbol: 'MNQ' }],
       ['market_snapshot', { bars: file }], ['mtf_read', { bars: file }], ['mtf_read', { bars: path.join(dir, 'NQ-3m.csv'), daily: file }],
-      ['order_plan', { bars: file, symbol: 'MNQ', strategy: 'bos', side: 'long' }]]) {
+      ['order_plan', { bars: file, symbol: 'MNQ', strategy: 'orb', side: 'long' }]]) {
       const r = await callTool(tool, args, { env });
       assert.strictEqual(r.isError, true, `${tool} ${ext}`);
       assert.match(r.content[0].text, /^\[harness\] (bars|daily): a bars file \(\.json, \.csv, at most 50 MB\).*not a bars file type/, `${tool} ${ext}`);
@@ -237,25 +237,25 @@ test('callTool: order_plan through the server - the working and the place_order 
   const home = tmpDir();
   fs.mkdirSync(path.join(home, 'bars'), { mode: 0o700 });
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
-  // The parity bar where bos fired long; the harness clock just after it closed.
+  // The parity bar where the fixture fx_break fired long; the harness clock just after it closed.
   const fired = '2026-04-28T04:09:00.000Z';
   const bars = path.join(home, 'bars', 'MNQ-3m.json');
   fs.writeFileSync(bars, JSON.stringify(readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).filter(b => Date.parse(b.t) <= Date.parse(fired))), { mode: 0o600 });
-  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: new Date(Date.parse(fired) + 200000).toISOString() };
+  const env = { FTH_HOME: home, NODE_ENV: 'test', FTH_TEST_NOW: new Date(Date.parse(fired) + 200000).toISOString(), FTH_STRATEGIES_DIRS: FX_STRATEGIES };
   // No tick specs from the broker yet: refused, saying to look the contract up.
-  const unspecified = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 }, { env });
+  const unspecified = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'fx_break', side: 'long', accountId: 7 }, { env });
   assert.strictEqual(unspecified.isError, true);
   assert.match(unspecified.content[0].text, /no tick specs from the broker for MNQ yet: call get_contract or search_contracts for MNQ first/);
   recordBrokerSpecs(home); // as the translator records them from the broker's answer
-  const r = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos', side: 'long', accountId: 7 }, { env });
+  const r = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'fx_break', side: 'long', accountId: 7 }, { env });
   assert.ok(!r.isError, r.content[0].text);
   const [line, json] = r.content[0].text.split('\n');
-  assert.match(line, /^bos long: 1 MNQ at market \(entry ref 27427\.50\) \| stop 27423\.00, below the entry: 4\.4283 pts = 18 ticks/);
+  assert.match(line, /^fx_break long: 1 MNQ at market \(entry ref 27427\.50\) \| stop 27423\.00, below the entry: 4\.4283 pts = 18 ticks/);
   assert.deepStrictEqual(JSON.parse(json.replace(/^place_order arguments: /, '')).stopLossBracket, { ticks: 18, type: 'stop' });
-  const no = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos', side: 'short' }, { env });
+  const no = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'fx_break', side: 'short' }, { env });
   assert.strictEqual(no.isError, true);
-  assert.match(no.content[0].text, /^\[strategies\] bos fired long on the last closed bar, not short/m);
-  const missing = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'bos' }, { env });
+  assert.match(no.content[0].text, /^\[strategies\] fx_break fired long on the last closed bar, not short/m);
+  const missing = await callTool('order_plan', { bars, symbol: 'MNQ', strategy: 'fx_break' }, { env });
   assert.strictEqual(missing.isError, true);
   assert.match(missing.content[0].text, /side/);
 });

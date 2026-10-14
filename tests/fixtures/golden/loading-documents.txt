@@ -1,49 +1,4 @@
-strategies (16): bos, cisd_ote, crt_1h, crt_4h, ema_cross, keltner, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, supertrend, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
-strategy bos: {
-  "body": "2174 chars sha256:4430c8574c0ea170",
-  "compiledRules": "sha256:948e1f063bec2c6e",
-  "compiledStop": null,
-  "compiledTarget": null,
-  "description": "Break of structure continuation strategy - a close beyond the last confirmed fractal swing (k=2) on 3-minute futures bars, ported from the original Python bot. Use when price closes through the latest swing high/low in the direction of the higher-timeframe trend.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "trend",
-  "name": "bos",
-  "regime_gate": true,
-  "regimes": [
-    "trend",
-    "transition"
-  ],
-  "risk": {
-    "stop": "atr:0.5",
-    "min_rr": 1.5
-  },
-  "rules": {
-    "long": [
-      "close crosses_above swing_high",
-      "atr(20) > 0"
-    ],
-    "short": [
-      "close crosses_below swing_low",
-      "atr(20) > 0"
-    ]
-  },
-  "signal": "rules",
-  "source": "original bot, strategies/bos.py",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 3
-}
+strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
 strategy cisd_ote: {
   "body": "4439 chars sha256:8dcfdfc2eb510a47",
   "compiledRules": "sha256:65dca0ef09f7abe2",
@@ -180,53 +135,6 @@ strategy crt_4h: {
   "valid": true,
   "version": 2
 }
-strategy ema_cross: {
-  "body": "2043 chars sha256:9d8b5ad8bf4ea0bc",
-  "compiledRules": "sha256:d94948967560b033",
-  "compiledStop": null,
-  "compiledTarget": null,
-  "description": "9/20 EMA crossover trend-continuation strategy gated by ADX >= 18 on 3-minute futures bars, ported from the original Python bot. Use when the fast EMA crosses the slow EMA in a trending regime.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "trend",
-  "name": "ema_cross",
-  "regime_gate": true,
-  "regimes": [
-    "trend",
-    "transition"
-  ],
-  "risk": {
-    "stop": "atr:0.5",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "ema(9) crosses_above ema(20)",
-      "adx(14) >= 18",
-      "atr(20) > 0"
-    ],
-    "short": [
-      "ema(9) crosses_below ema(20)",
-      "adx(14) >= 18",
-      "atr(20) > 0"
-    ]
-  },
-  "signal": "rules",
-  "source": "original bot, strategies/ema_cross.py",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 3
-}
 strategy ext_reader: {
   "body": "965 chars sha256:5de2ee4a1c01e6cd",
   "compiledRules": "sha256:918e17a16c8a19fb",
@@ -269,53 +177,6 @@ strategy ext_reader: {
   "timeframe": "3m",
   "valid": true,
   "version": 1
-}
-strategy keltner: {
-  "body": "2141 chars sha256:a4eca311bd37090c",
-  "compiledRules": "sha256:a6a9c0e47c394717",
-  "compiledStop": null,
-  "compiledTarget": null,
-  "description": "Keltner channel volatility-expansion breakout strategy (EMA20 +/- 1.5 x ATR20, ADX >= 20) on 3-minute futures bars, ported from the original Python bot. Use when a bar closes outside the Keltner channel in a trending regime.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "trend",
-  "name": "keltner",
-  "regime_gate": true,
-  "regimes": [
-    "trend",
-    "transition"
-  ],
-  "risk": {
-    "stop": "atr:0.5",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "close crosses_above keltner_upper",
-      "adx(14) >= 20",
-      "atr(20) > 0"
-    ],
-    "short": [
-      "close crosses_below keltner_lower",
-      "adx(14) >= 20",
-      "atr(20) > 0"
-    ]
-  },
-  "signal": "rules",
-  "source": "original bot, strategies/keltner.py",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 3
 }
 strategy ofi: {
   "body": "5061 chars sha256:9223da1b9a054ed5",
@@ -515,7 +376,7 @@ strategy prop_flow_1m: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4863 chars sha256:349045cd63a42255",
+  "body": "4847 chars sha256:ba321cc576daf954",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -555,10 +416,6 @@ strategy prop_portfolio: {
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",
   "strategies": [
-    "ema_cross",
-    "supertrend",
-    "keltner",
-    "bos",
     "cisd_ote",
     "orb",
     "vwap_reclaim",
@@ -571,51 +428,6 @@ strategy prop_portfolio: {
   "timeframe": "3m",
   "valid": true,
   "version": 1
-}
-strategy supertrend: {
-  "body": "1911 chars sha256:14749666f7c1f398",
-  "compiledRules": "sha256:8d2df67cec89d5e8",
-  "compiledStop": null,
-  "compiledTarget": null,
-  "description": "SuperTrend(10, 3) direction-flip strategy on 1- or 3-minute futures bars, ported from the original Python bot. Use when SuperTrend flips and higher-timeframe structure supports the new direction.",
-  "errors": [],
-  "exit": {
-    "trail_activate_r": 2,
-    "trail_giveback_r": 0.5
-  },
-  "instruments": [
-    "MNQ",
-    "MES",
-    "MYM",
-    "M2K"
-  ],
-  "mtf": "trend",
-  "name": "supertrend",
-  "regime_gate": true,
-  "regimes": [
-    "trend",
-    "transition"
-  ],
-  "risk": {
-    "stop": "atr:0.5",
-    "min_rr": 2
-  },
-  "rules": {
-    "long": [
-      "supertrend_dir crosses_above 0",
-      "atr(20) > 0"
-    ],
-    "short": [
-      "supertrend_dir crosses_below 0",
-      "atr(20) > 0"
-    ]
-  },
-  "signal": "rules",
-  "source": "original bot, strategies/supertrend.py",
-  "status": "active",
-  "timeframe": "3m",
-  "valid": true,
-  "version": 3
 }
 strategy value_area: {
   "body": "8269 chars sha256:1e8d5fac1445587d",

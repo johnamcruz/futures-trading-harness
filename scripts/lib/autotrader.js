@@ -321,7 +321,7 @@ function recentBarsText(symbol, bars, timeframe) {
 
 /**
  * What fired on this bar, with its confluence and track record: "orb long
- * with ema_cross [orb track record: ...]". A paper strategy is marked (the
+ * with cisd_ote [orb track record: ...]". A paper strategy is marked (the
  * gate refuses its live entry); in a manage-only cycle nothing new may be
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.

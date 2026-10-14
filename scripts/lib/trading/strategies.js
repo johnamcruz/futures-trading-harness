@@ -43,6 +43,11 @@ const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
 const TIMEFRAME = /^[1-9]\d*(m|h|d)$/;
 const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual|strategy)$/;
+// Strategies removed from the repository (strategies/README.md, "Retired strategies"): a name here that no strategy
+// folder defines is refused as retired, saying so, wherever an old record, config or document still names it.
+const RETIRED = { bos: '2026-10-13', keltner: '2026-10-13', ema_cross: '2026-10-13', supertrend: '2026-10-13' };
+/** " (retired on <date>: strategies/README.md, \"Retired strategies\")" for a retired name, else "". */
+const retiredNote = name => (Object.hasOwn(RETIRED, name) ? ` (retired on ${RETIRED[name]}: strategies/README.md, "Retired strategies")` : '');
 
 function expandHome(p) {
   return p === '~' ? os.homedir() : p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
@@ -144,9 +149,11 @@ function validateStrategy(data, body, folderName) {
   req(Array.isArray(data.instruments) && data.instruments.length > 0
     && data.instruments.every(s => typeof s === 'string' && /^[A-Z0-9]+$/.test(s)), 'instruments: list of contract roots, e.g. [MNQ, MES]');
   req(typeof data.timeframe === 'string' && TIMEFRAME.test(data.timeframe), 'timeframe: e.g. 3m, 15m, 1h');
-  const legacy = ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote'].includes(data.signal);
+  const legacy = ['orb', 'cisd_ote', ...Object.keys(RETIRED)].includes(data.signal);
   req(SIGNALS.includes(data.signal), legacy
-    ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (copy the rules block from strategies/${data.signal}/STRATEGY.md)`
+    ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (${Object.hasOwn(RETIRED, data.signal)
+      ? `the ${data.signal} strategy was retired on ${RETIRED[data.signal]}: its rules block is in the repository's history, strategies/README.md says why`
+      : `copy the rules block from strategies/${data.signal}/STRATEGY.md`})`
     : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a prop-challenge strategy trades other strategies' setups on a prop account, sized from its budget)`);
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
@@ -159,7 +166,7 @@ function validateStrategy(data, body, folderName) {
   if (data.signal === 'policy') {
     const list = data.strategies;
     req(Array.isArray(list) && list.length > 0 && list.every(n => typeof n === 'string' && NAME.test(n)) && new Set(list).size === list.length,
-      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [ema_cross, keltner])');
+      'strategies: the rules strategies whose setups it trades, in priority order (e.g. [orb, cisd_ote])');
     req(typeof data.account === 'string' && /^[a-z0-9][a-z0-9_-]*$/.test(data.account), 'account: the prop account profile it trades (accounts/<name>/ACCOUNT.md)');
     if (data.sizing !== undefined) {
       const z = data.sizing;
@@ -355,7 +362,7 @@ function loadStrategies(pluginRoot, env = process.env) {
     const errs = [];
     for (const n of s.strategies) {
       const c = byName.get(n);
-      if (!c) errs.push(`strategies: ${n} is not a strategy`);
+      if (!c) errs.push(`strategies: ${n} is not a strategy${retiredNote(n)}`);
       else if (!c.valid) errs.push(`strategies: ${n} is invalid (${c.errors[0]})`);
       else if (c.signal !== 'rules') errs.push(`strategies: ${n} is signal: ${c.signal}; a policy trades rules strategies only`);
       // Not re-run on other bars: its periods and stop are in its own bars (a 3m strategy on 1m bars is another strategy).
@@ -522,7 +529,7 @@ function componentRefusal(policy, registry, name, { paper = false } = {}) {
   if (!(policy && Array.isArray(policy.strategies) && policy.strategies.includes(name))) return `${name || 'the setup\'s strategy'} is not one of ${owner || 'the policy'}'s strategies`;
   if (!Array.isArray(registry)) return `${name}'s status can't be read (no strategy registry), so ${owner} can't trade it`;
   const c = registry.find(x => x.name === name);
-  if (!c) return `${name} is not a known strategy`;
+  if (!c) return `${name} is not a known strategy${retiredNote(name)}`;
   if (!c.valid) return `strategies/${name}/STRATEGY.md is invalid (${(c.errors || [])[0]})`;
   if (c.signal !== 'rules') return `${name} is signal: ${c.signal}; a policy trades rules strategies only`;
   if (c.status === 'active' || (paper && c.status !== 'disabled')) return null;
@@ -534,7 +541,11 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
   // An unreadable selection: no entries until it names one contract per index (fails closed).
   if (selection && selection.error) return `${selection.error}. No entries until it is fixed.`;
   const s = strategies.find(x => x.name === name);
-  if (!s) return `setup:${name} is not a known strategy. Add strategies/${name}/STRATEGY.md or use an existing setup tag.`;
+  if (!s) {
+    return Object.hasOwn(RETIRED, name)
+      ? `setup:${name} is not a known strategy${retiredNote(name)}: no new entries from it. A position it opened is still exited and protected with [exit] or [protect].`
+      : `setup:${name} is not a known strategy. Add strategies/${name}/STRATEGY.md or use an existing setup tag.`;
+  }
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
   const notTraded = rootRefusal(s, contractRoot, selection ? selection.symbols : null);
@@ -549,6 +560,8 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
 }
 
 module.exports = {
+  RETIRED,
+  retiredNote,
   exitPlan,
   exitErrors,
   STATUSES,

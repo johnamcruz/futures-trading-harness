@@ -16,7 +16,7 @@ const { regimeGatedStrategy, regimeViolation } = require('../../scripts/lib/trad
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const ALL = Object.fromEntries(loadStrategies(ROOT, {}).strategies.map(s => [s.name, s]));
-const TREND = ['ema_cross', 'supertrend', 'keltner', 'bos', 'orb', 'value_area_breakout'];
+const TREND = ['orb', 'value_area_breakout'];
 const T0 = Date.UTC(2026, 9, 7, 13, 30);
 const series = (fn, n = 200) => Array.from({ length: n }, (_, k) => {
   const c = fn(k);

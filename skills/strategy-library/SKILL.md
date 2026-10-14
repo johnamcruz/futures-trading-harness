@@ -76,7 +76,7 @@ units are in the strategy's own document (`strategies_show`); never guess them. 
 market-snapshot with each strategy's `params`, and a full result reports:
 `direction` (mechanical signal on the last closed bar),
 `filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`: the trend-following strategies, `ema_cross`, `supertrend`, `keltner`, `bos`,
+`inRegime` (fits the strategy's `regimes`: the trend-following strategies,
 `orb`, `value_area_breakout` and `vwap_reclaim`, never trade a range, and the order gate refuses
 their entries there too), `confluence` (on a strategy
 that fired: the other strategies on its timeframe that fired the same side,
@@ -148,7 +148,7 @@ Live entries are blocked unless `setup:<name>` names a valid strategy with
 `status: active`, the contract root is in `instruments`, and the time is inside
 `sessions`. A rules strategy trades one leg of a micro/mini family it lists:
 the selected contract (the runner's `symbols`, or `FTH_SYMBOLS`). Listing MNQ,
-it trades NQ when NQ is selected, and then never MNQ ("setup:bos trades NQ
+it trades NQ when NQ is selected, and then never MNQ ("setup:orb trades NQ
 (the selected contract), not MNQ"): trade the selected contract, don't switch
 legs. With no leg selected it trades exactly what it lists (listing both legs
 of a family, neither until one is selected). A policy strategy trades the

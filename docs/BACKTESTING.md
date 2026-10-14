@@ -376,16 +376,23 @@ proves this.
 ### Strategy correctness
 
 `tests/lib/parity.test.js` runs the shipped strategies' rules over the original bot's
-own NQ and RTY 3-minute data. It checks each of the six strategies against
-the signals the original bot's Python detectors produced on the same bars: same
-bar, same direction, same stop.
+own NQ and RTY 3-minute data. It checks each ported strategy (`orb`,
+`cisd_ote`) against the signals the original bot's Python detectors produced
+on the same bars: same bar, same direction, same stop. The expected files
+still hold the signals of the four ports retired on 2026-10-13 (`bos`,
+`ema_cross`, `keltner`, `supertrend`; `strategies/README.md`, "Retired
+strategies"), as the original bot produced them; the test leaves those out.
 
-We also ran the same check over 17,500 bars on NQ, ES, RTY, YM, and GC. All
-3,623 signals matched. When the ports moved from code detectors to rules,
+Before the retirement we also ran the same check, on all six ports, over
+17,500 bars on NQ, ES, RTY, YM, and GC. All 3,623 signals matched. When the ports moved from code detectors to rules,
 the rules reproduced the detectors on another 20,000 bars: 4,158 signals,
 same bar, direction, and stop.
 
 ## Examples
+
+A run from before `bos`, `ema_cross`, `keltner` and `supertrend` were
+retired (2026-10-13); today the same command runs the strategies shipped
+now:
 
 ```text
 $ node scripts/backtest.js --data data/NQ_3min.csv --symbol MNQ --start 2026-03-01 --end 2026-04-01

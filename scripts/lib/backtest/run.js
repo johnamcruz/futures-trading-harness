@@ -31,7 +31,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadStrategies, tradesRoot, componentRefusal } = require('../trading/strategies');
+const { loadStrategies, tradesRoot, componentRefusal, retiredNote } = require('../trading/strategies');
 const { loadBars, barMinutes, aggregate, auditBars, extraKeys } = require('./data');
 const { runEngine, prepare, DEFAULTS } = require('./engine');
 const { summarizeResult } = require('../trading/scan-log');
@@ -185,7 +185,7 @@ function pickStrategies(all, cfg) {
   if (cfg.strategies) {
     return cfg.strategies.map(name => {
       const s = all.find(x => x.name === name);
-      if (!s) throw new Error(`unknown strategy "${name}"`);
+      if (!s) throw new Error(`unknown strategy "${name}"${retiredNote(name)}`);
       if (!s.valid) throw new Error(`strategy "${name}" is invalid: ${s.errors[0]}`);
       if (s.timeframe !== tf) throw new Error(`strategy "${name}" trades ${s.timeframe}; this backtest runs ${tf} bars`);
       return s;

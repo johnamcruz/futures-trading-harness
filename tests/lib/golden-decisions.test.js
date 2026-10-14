@@ -25,6 +25,8 @@ const { buildBriefing, renderBriefing } = require('../../scripts/lib/trading/bri
 const { specFor } = require('../../scripts/lib/trading/contracts');
 
 const SHIPPED = loadStrategies(G.ROOT, {}).strategies;
+// The shipped strategies with the fixtures fx_break and fx_cross (tests/fixtures/strategies-fx): setups with confluence.
+const WITH_FX = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: require('../helpers').FX_STRATEGIES }).strategies;
 const ALL = loadStrategies(G.ROOT, { FTH_STRATEGIES_DIRS: G.EXT_STRATEGIES }).strategies;
 const FIRST = 100; // the first bar decided
 // The goldens, by series, named in full (tests/plugin/golden.test.js maps every golden file to a name here).
@@ -174,11 +176,11 @@ const VIEWS = { 'MNQ 3m': [589, 1244, 1299, 1400], 'M2K 3m': [671, 791, 1195, 12
 const specOf = root => specFor(root);
 
 /** What the model reads on bar i: the runner's scan (compact), the market snapshot, the bar briefing. */
-function viewAt(s, bars, i) {
+function viewAt(s, bars, i, strategies = SHIPPED) {
   const upTo = bars.slice(0, i + 1);
   const t = upTo.at(-1).t;
   const closedAt = new Date(Date.parse(t) + s.minutes * 60000);
-  const results = runnerScan(SHIPPED, cfgOf(s), s.symbol, upTo, closedAt);
+  const results = runnerScan(strategies, cfgOf(s), s.symbol, upTo, closedAt);
   const b = buildBriefing({ symbol: s.symbol, contractId: s.symbol, bars: upTo, minutes: s.minutes, scan: results, blackouts: { items: [] }, now: closedAt });
   return [
     `=== ${s.label} bar ${i} (opened ${t}) ===`,
@@ -206,3 +208,15 @@ for (const s of SERIES) {
     assertGolden(GOLDEN[s.label].views, text);
   });
 }
+
+// Confluence as the model reads it (a candidate's "with:" list, the briefing's "confluence: with ..."): no shipped
+// pair fires together at a pinned bar since the 2026-10-13 retirement, so the fixtures stand in. MNQ 3m bar 589:
+// fx_break and fx_cross long together; bar 1244: fx_break and orb short together.
+test('MNQ 3m with the fx fixtures: the compact scan, snapshot and briefing of setups with confluence are pinned', () => {
+  const s = SERIES.find(x => x.label === 'MNQ 3m');
+  const text = [589, 1244].map(i => viewAt(s, s.broker, i, WITH_FX)).join('\n');
+  assert.match(text, /fx_break long \| .*\| with: fx_cross; against: none/);
+  assert.match(text, /orb short \| .*\| with: fx_break; against: none/);
+  assert.match(text, /confluence: with fx_cross/);
+  assertGolden('views-confluence.txt', text);
+});

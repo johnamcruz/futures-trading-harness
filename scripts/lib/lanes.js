@@ -44,7 +44,7 @@
  * config's): its bars feed the multi-timeframe record, the bar briefing and the trailing stops.
  */
 
-const { onTimeframe } = require('./trading/strategies');
+const { onTimeframe, retiredNote } = require('./trading/strategies');
 const { familyRoot } = require('./trading/contracts');
 const { ANALYSTS } = require('./trading/roles-ran');
 
@@ -127,7 +127,7 @@ function laneStrategyErrors(lanes, strategies) {
       for (const n of lane[k] || []) {
         const s = strategies.find(x => x.name === n);
         const at = `lanes[${i}].${k}`;
-        if (!s) errors.push(`${at}: no strategy named ${n}`);
+        if (!s) errors.push(`${at}: no strategy named ${n}${retiredNote(n)}`);
         else if (!s.valid) errors.push(`${at}: ${n} is not valid (${(s.errors || []).join('; ') || 'see strategies_validate'})`);
         else if (k === 'policies' && s.signal !== 'policy') errors.push(`${at}: ${n} is signal: ${s.signal}, not a policy strategy (list it under strategies)`);
         else if (k === 'strategies' && s.signal === 'policy') errors.push(`${at}: ${n} is a policy strategy (list it under policies)`);

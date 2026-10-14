@@ -13,7 +13,10 @@ const { stats, maxDrawdown } = require('../../scripts/lib/backtest/report');
 const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadConfig } = require('../../scripts/lib/trading/config');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
-const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES } = require('../helpers');
+
+/** The fixture rules strategies fx_break and fx_cross (tests/fixtures/strategies-fx), loaded beside the shipped ones. */
+const FX = { FTH_STRATEGIES_DIRS: FX_STRATEGIES };
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DATA = path.join(__dirname, '..', 'fixtures', 'data');
@@ -161,18 +164,18 @@ test('a backtest run on the parity data writes a report; trades match the live e
   const dir = tmpDir();
   const { report, runDir } = runBacktest({
     symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') },
-    strategies: ['supertrend', 'bos'], gate: false, outDir: dir,
-  }, { root: ROOT, outRoot: dir });
+    strategies: ['fx_cross', 'fx_break'], gate: false, outDir: dir,
+  }, { root: ROOT, outRoot: dir, env: FX });
   assert.ok(report.summary.trades > 10);
-  assert.ok(report.trades.every(t => ['supertrend', 'bos'].includes(t.strategy)));
+  assert.ok(report.trades.every(t => ['fx_cross', 'fx_break'].includes(t.strategy)));
   for (const f of ['report.md', 'report.json', 'trades.csv']) assert.ok(fs.existsSync(path.join(runDir, f)));
   // Every trade's R is consistent with its prices.
   for (const t of report.trades) assert.ok(Math.abs(t.r - (t.direction === 'long' ? 1 : -1) * (t.exit - t.entry) / t.risk) < 1e-3);
 
   // Where it came from: strategy hashes, the data file's hash and size, and the data audit.
   const pv = report.meta.provenance;
-  assert.deepStrictEqual(Object.keys(pv.strategies).sort(), ['bos', 'supertrend']);
-  assert.match(pv.strategies.bos, /^[0-9a-f]{16}$/);
+  assert.deepStrictEqual(Object.keys(pv.strategies).sort(), ['fx_break', 'fx_cross']);
+  assert.match(pv.strategies.fx_break, /^[0-9a-f]{16}$/);
   assert.match(pv.data.MNQ.sha256, /^[0-9a-f]{16}$/);
   assert.ok(pv.data.MNQ.bytes > 0);
   assert.ok(report.meta.dataAudit.MNQ.bars > 1000);
@@ -217,9 +220,9 @@ test('data: empty price cells drop the row instead of reading as 0; epoch number
 
 test('the gate limits come from the environment, as live', () => {
   const dir = tmpDir();
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['bos'], outDir: dir };
-  const loose = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' } }).report.summary.trades;
-  const capped = runBacktest(base, { root: ROOT, outRoot: dir, env: { FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_MAX_ENTRIES_PER_DAY: '1' } }).report.trades;
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, strategies: ['fx_break'], outDir: dir };
+  const loose = runBacktest(base, { root: ROOT, outRoot: dir, env: { ...FX, FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '' } }).report.summary.trades;
+  const capped = runBacktest(base, { root: ROOT, outRoot: dir, env: { ...FX, FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_MAX_ENTRIES_PER_DAY: '1' } }).report.trades;
   const perDay = new Map();
   for (const t of capped) perDay.set(t.entryTime.slice(0, 10), (perDay.get(t.entryTime.slice(0, 10)) || 0) + 1);
   assert.ok(loose > capped.length);
@@ -312,16 +315,16 @@ function tinyAccount(accounts) {
 test('prop challenge mode: a policy strategy\'s attempts from each start, reported by month', () => {
   const dir = tmpDir();
   const accounts = path.join(dir, 'accounts');
-  listPolicies(tinyAccount(accounts), ['prop_bos']);
+  listPolicies(tinyAccount(accounts), ['prop_fx']);
   const strategiesDir = path.join(dir, 'strategies');
-  fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-    .replace('name: prop_portfolio', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace('account: topstep_100k', 'account: tiny'));
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_bos' };
+  fs.mkdirSync(path.join(strategiesDir, 'prop_fx'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'prop_fx', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: prop_fx').replace(/^strategies: .*$/m, 'strategies: [fx_break]').replace(/^account: .*$/m, 'account: tiny'));
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_fx' };
   const { report, runDir } = runBacktest(base, { root: ROOT, outRoot: dir, env });
-  assert.strictEqual(report.prop, 'prop_bos');
-  assert.deepStrictEqual(report.strategies, ['bos']);
+  assert.strictEqual(report.prop, 'prop_fx');
+  assert.deepStrictEqual(report.strategies, ['fx_break']);
   assert.strictEqual(report.contracts, 'auto');
   assert.ok(report.baseline.attempts > 0);
   assert.strictEqual(report.baseline.passed + report.baseline.blown + report.baseline.timeout + report.baseline.unfinished, report.baseline.attempts);
@@ -329,7 +332,7 @@ test('prop challenge mode: a policy strategy\'s attempts from each start, report
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, account: 'tiny' }, ROOT), /comes from a policy strategy/);
   // Trained policy bundles are retired: a config naming one is refused, never run as if it weren't there.
   assert.throws(() => validateBacktestConfig({ data: { MNQ: 'a.csv' }, bundle: 'p' }, ROOT), /bundle: trained policy bundles are retired/);
-  assert.throws(() => runBacktest({ ...base, prop: 'bos' }, { root: ROOT, outRoot: dir, env }), /a prop run needs a policy strategy \(signal: policy\)/);
+  assert.throws(() => runBacktest({ ...base, prop: 'fx_break' }, { root: ROOT, outRoot: dir, env }), /a prop run needs a policy strategy \(signal: policy\)/);
   assert.throws(() => runBacktest({ ...base, prop: 'nope' }, { root: ROOT, outRoot: dir, env }), /prop: nope is not a strategy/);
   assert.strictEqual(report.withPolicy, undefined);
   assert.strictEqual(report.policy, undefined);
@@ -345,13 +348,13 @@ test('prop challenge mode sizes from the account\'s rulebook and folds its multi
   const bookFile = path.join(tiny, 'RULEBOOK.md');
   const fresh = fs.readFileSync(bookFile, 'utf8');
   const shipped = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
-  const book = multipliers => { fs.writeFileSync(bookFile, fresh); listPolicies(tiny, ['prop_bos'], { multipliers }); };
+  const book = multipliers => { fs.writeFileSync(bookFile, fresh); listPolicies(tiny, ['prop_fx'], { multipliers }); };
   const strategiesDir = path.join(dir, 'strategies');
-  fs.mkdirSync(path.join(strategiesDir, 'prop_bos'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'prop_bos', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
-    .replace('name: prop_portfolio', 'name: prop_bos').replace(/^strategies: .*$/m, 'strategies: [bos]').replace(/^account: .*$/m, 'account: tiny'));
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
-  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_bos' };
+  fs.mkdirSync(path.join(strategiesDir, 'prop_fx'), { recursive: true });
+  fs.writeFileSync(path.join(strategiesDir, 'prop_fx', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: prop_fx').replace(/^strategies: .*$/m, 'strategies: [fx_break]').replace(/^account: .*$/m, 'account: tiny'));
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
+  const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, outDir: dir, gate: false, prop: 'prop_fx' };
   book(null);
   const plain = runBacktest(base, { root: ROOT, outRoot: dir, env }).report;
   assert.deepStrictEqual(plain.sizing, { ...require('../../scripts/lib/trading/combine').DEFAULT_SIZING, ...shipped.sizing });
@@ -369,15 +372,15 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   // GC: the same prices under a root value_area doesn't list (it trades the equity index micros).
   const va = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area');
   assert.ok(!va.instruments.includes('GC') && !va.instruments.includes('MGC'));
-  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: dir },
-    { root: ROOT, outRoot: dir, log: m => logs.push(m) });
+  const { report, runDir } = runBacktest({ symbols: ['MNQ', 'GC'], timeframe: 3, data: { MNQ: csv, GC: csv }, strategies: ['value_area', 'fx_break'], gate: false, outDir: dir },
+    { root: ROOT, outRoot: dir, env: FX, log: m => logs.push(m) });
   const [p] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(va);
   const n = report.fieldCoverage[0].coverage.MNQ.bars;
   assert.ok(n > 0);
   // Coverage: the share of the MNQ bars in range that carry it (none, on a CSV); GC is not a market value_area trades.
   const want = [{ strategy: 'value_area', path: p, coverage: { MNQ: { bars: n, carried: 0, share: 0 } }, symbols: ['MNQ'] }];
   assert.deepStrictEqual(report.fieldCoverage, want);
-  assert.deepStrictEqual(report.missingFields, want, 'bos reads none; GC is not a market value_area trades');
+  assert.deepStrictEqual(report.missingFields, want, 'fx_break reads none; GC is not a market value_area trades');
   const json = JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8'));
   assert.deepStrictEqual([json.missingFields, json.fieldCoverage], [want, want]);
   const md = fs.readFileSync(path.join(runDir, 'report.md'), 'utf8');
@@ -387,7 +390,7 @@ test('a plain backtest on a CSV says, in its log, report.json and report.md, tha
   assert.deepStrictEqual(logs.filter(l => /reads field\(/.test(l)).length, 1, logs.join('\n'));
   // Only GC: value_area trades none of it, so nothing is said.
   const gcLogs = [];
-  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['value_area', 'bos'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, log: m => gcLogs.push(m) });
+  const gc = runBacktest({ symbols: ['GC'], timeframe: 3, data: { GC: csv }, strategies: ['value_area', 'fx_break'], gate: false, outDir: path.join(dir, 'gc') }, { root: ROOT, outRoot: dir, env: FX, log: m => gcLogs.push(m) });
   assert.strictEqual(gc.report.missingFields, undefined);
   assert.strictEqual(gc.report.fieldCoverage, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(gc.runDir, 'report.md'), 'utf8'), /Bar fields missing/);
@@ -406,31 +409,31 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
       .replace('name: prop_portfolio', `name: ${name}`).replace(/^strategies: .*$/m, `strategies: [${list.join(', ')}]`).replace('account: topstep_100k', 'account: tiny')
       .replace(/^status: active\b/m, `status: ${status}`));
   };
-  // va_paper: a paper copy of value_area (the repo's own value_area is active, the owner's decision); bos is active.
+  // va_paper: a paper copy of value_area (the repo's own value_area is active, the owner's decision); the fixture fx_break is active.
   fs.mkdirSync(path.join(strategiesDir, 'va_paper'), { recursive: true });
   fs.writeFileSync(path.join(strategiesDir, 'va_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8')
     .replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
-  policy('prop_mixed', ['va_paper', 'bos']);
-  policy('prop_mixed_paper', ['va_paper', 'bos'], 'paper');
+  policy('prop_mixed', ['va_paper', 'fx_break']);
+  policy('prop_mixed_paper', ['va_paper', 'fx_break'], 'paper');
   policy('prop_all_paper', ['va_paper']);
   // The repo's value_area is active: an active policy trades it, as prop_portfolio does live.
   assert.strictEqual(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area').status, 'active');
-  policy('prop_va', ['value_area', 'bos']);
-  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: strategiesDir };
+  policy('prop_va', ['value_area', 'fx_break']);
+  const env = { FTH_ACCOUNTS_DIRS: accounts, FTH_STRATEGIES_DIRS: `${strategiesDir},${FX_STRATEGIES}` };
   const base = { symbols: ['MNQ'], timeframe: 3, data: { MNQ: path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv') }, gate: false };
   const run = (prop, logs = []) => runBacktest({ ...base, prop, outDir: path.join(dir, prop) }, { root: ROOT, outRoot: dir, env, log: m => logs.push(m) }).report;
   const logs = [];
   const mixed = run('prop_mixed', logs);
-  assert.deepStrictEqual(mixed.strategies, ['bos']);
+  assert.deepStrictEqual(mixed.strategies, ['fx_break']);
   assert.deepStrictEqual(mixed.leftOut, ['va_paper']);
   assert.ok(logs.some(l => /^prop_mixed: leaves out va_paper: va_paper has status "paper": prop_mixed trades only its active strategies live/.test(l)), logs.join('\n'));
   // ... but it still fires in the scan: it counts toward conflict, as live (the engine test above).
-  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; bos \(counting va_paper toward conflict only\); contracts/.test(l)), logs.join('\n'));
+  assert.ok(logs.some(l => /^prop_mixed: .*attempts .*; fx_break \(counting va_paper toward conflict only\); contracts/.test(l)), logs.join('\n'));
   const paper = run('prop_mixed_paper');
-  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['va_paper', 'bos'], []]);
+  assert.deepStrictEqual([paper.strategies, paper.leftOut], [['va_paper', 'fx_break'], []]);
   const vaLogs = [];
   const va = run('prop_va', vaLogs);
-  assert.deepStrictEqual([va.strategies, va.leftOut], [['value_area', 'bos'], []], 'value_area is active: traded, not left out');
+  assert.deepStrictEqual([va.strategies, va.leftOut], [['value_area', 'fx_break'], []], 'value_area is active: traded, not left out');
   // The CSV carries no broker bar fields: the run says value_area's field() conditions are false here, in its log and report.
   const [flowPath] = require('../../scripts/lib/backtest/bar-fields').fieldPaths(loadStrategies(ROOT, {}).strategies.find(x => x.name === 'value_area'));
   assert.ok(flowPath, 'value_area reads a broker bar field');
@@ -440,16 +443,16 @@ test('prop challenge mode trades what live trades: an active policy leaves out a
   assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar field coverage\n[^]*\| value_area \| `[^`]+` \| MNQ \| 0% \|/);
   assert.ok(vaLogs.some(l => l.startsWith(`warning: value_area reads field("${flowPath}"), which no MNQ bar in this data carries`)), vaLogs.join('\n'));
   assert.match(fs.readFileSync(path.join(dir, 'prop_va', 'combine.md'), 'utf8'), /## Bar fields missing from this data\n\n- value_area reads field/);
-  assert.strictEqual(mixed.missingFields, undefined, 'bos reads no bar field');
-  // A paper component that fires on this data (ema_cross on paper, first in the list): never picked by the active policy.
+  assert.strictEqual(mixed.missingFields, undefined, 'fx_break reads no bar field');
+  // A paper component that fires on this data (fx_cross on paper, first in the list): never picked by the active policy.
   fs.mkdirSync(path.join(strategiesDir, 'ema_paper'), { recursive: true });
-  fs.writeFileSync(path.join(strategiesDir, 'ema_paper', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'ema_cross', 'STRATEGY.md'), 'utf8')
-    .replace(/^name: ema_cross$/m, 'name: ema_paper').replace(/^status: active\b/m, 'status: paper'));
-  policy('prop_ema_live', ['ema_paper', 'bos']);
-  policy('prop_ema_paper', ['ema_paper', 'bos'], 'paper');
+  fs.writeFileSync(path.join(strategiesDir, 'ema_paper', 'STRATEGY.md'), fs.readFileSync(path.join(FX_STRATEGIES, 'fx_cross', 'STRATEGY.md'), 'utf8')
+    .replace(/^name: fx_cross$/m, 'name: ema_paper').replace(/^status: active\b/m, 'status: paper'));
+  policy('prop_ema_live', ['ema_paper', 'fx_break']);
+  policy('prop_ema_paper', ['ema_paper', 'fx_break'], 'paper');
   const emaLive = run('prop_ema_live');
   const emaPaper = run('prop_ema_paper');
-  assert.deepStrictEqual([emaLive.strategies, emaPaper.strategies], [['bos'], ['ema_paper', 'bos']]);
+  assert.deepStrictEqual([emaLive.strategies, emaPaper.strategies], [['fx_break'], ['ema_paper', 'fx_break']]);
   // The paper run's attempts take ema_paper's setups; the live policy's never do, so they differ.
   assert.notDeepStrictEqual(emaLive.baseline, emaPaper.baseline);
   assert.throws(() => run('prop_all_paper'), /prop: prop_all_paper trades none of its strategies \(va_paper has status "paper"/);

@@ -178,7 +178,7 @@ combine_status {}
 my_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
 day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries allowed
 
-prop_portfolio: long setup from supertrend: full, at most 4 NQ with a 40-tick stop
+prop_portfolio: long setup from orb: full, at most 4 NQ with a 40-tick stop
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
 prop_portfolio's sizing (its numbers are in the account's RULEBOOK.md, the
