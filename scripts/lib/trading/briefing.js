@@ -19,10 +19,10 @@
  *          liquidity above and below in points and ATR (room to run), where price is against the value areas, IB and prior RTH
  *          range, the scan's candidates, the trend rule, the latest CISD per timeframe (3m, 5m, 15m, 1h:
  *          cisd.js, completed candles; its OTE zone and whether price is in it now), and the completed-candle facts
- *          (candle-facts.js): per timeframe (3m, 5m, 15m, 60m) the last COMPLETED candle (never the one forming) with its
+ *          (candle-facts.js): per timeframe (3m, 5m, 15m, 60m, 4h) the last COMPLETED candle (never the one forming) with its
  *          shape, pattern and how it met the key levels as they stood (fixed ones complete by its open, moving ones at
- *          its close; 5m from a 1m lane's bars when the base bars can't), and the next swing target each side on the
- *          base bars, 15m and 60m                                    until the next base-bar close
+ *          its close; 5m from a 1m lane's bars when the base bars can't; the 4h's sweep of the previous 4h candle),
+ *          and the next swing target each side on the base bars, 15m, 60m and 4h       until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -416,7 +416,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
-        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60] }),
+        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60, 240] }),
       },
     },
     m15: {
@@ -729,6 +729,9 @@ function detailEntries(data) {
     : [k, v]));
 }
 
+/** A 4h candle's sweep of its previous candle (candle-facts.js prevSweep), as the summary says it; '' without one. */
+const sweepText = s => (s ? `; swept the ${s.of}, closed ${s.closedBack ? 'back inside its range' : 'beyond it'}` : '');
+
 /** The summary's completed-candle lines: one per timeframe, then the next swing targets. */
 function candleLines(m3, et, roomOf = 'R = the reference stop') {
   if (typeof m3.candles === 'string') return [`- Completed candles and swing targets: ${m3.candles}.`];
@@ -742,7 +745,7 @@ function candleLines(m3, et, roomOf = 'R = the reference stop') {
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null].filter(Boolean).join(', ');
-    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${met.length ? `; ${met.join(', ')}` : ''}.`);
+    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
