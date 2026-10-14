@@ -2,7 +2,7 @@
 
 // The trading-basics skills: small skills that teach a read each (trend vs range, pullback vs reversal, breakout vs
 // fakeout, levels and reactions, momentum and volume, absorption, invalidation, confluence counting, candle reading, BOS vs
-// CHoCH, CISD, fib retracement).
+// CHoCH, CISD, fib retracement), and the two setups on any timeframe (rejection, breakout).
 // Each is a read, never a veto: the priority order (strategy-library) decides. These tests pin their structure, that
 // every briefing field they name resolves on a real briefing built by briefing.js, their take, skip and losing
 // examples (tick-correct), the absence of veto language, their key sentences (a mutation fails), and the roles that
@@ -19,13 +19,13 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'bos-vs-choch', 'cisd', 'fib-retracement'];
-const SETUPS = ['mtf-rejection', 'mtf-breakout'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement'];
+const SETUPS = ['rejection', 'breakout'];
 const file = s => `skills/${s}/SKILL.md`;
 
 // Who carries which (each role only what it uses; the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'],
   'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
   'volume-liquidity-analyst': ['levels-and-reactions', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
@@ -106,14 +106,19 @@ const PINS = {
     'Judge a pattern at its candle\'s close, on every timeframe.',
     'standalone candlestick patterns have weak evidence in general',
   ],
-  'mtf-rejection': [
+  rejection: [
     'The order gate allows an entry only when a strategy fired on the bar.',
     'It is never a reason to enter without a fired strategy.',
     'a dedicated detector strategy for it is coming.',
-    'a completed 15m or 60m candle rejects the level',
+    '**4 Setup**: a completed candle rejects the level: it trades through and closes back inside, with a long wick and the close in the opposite third, or an engulfing at the level',
+    '| 3m, 5m | entry timing at an HTF level; alone, a minor level | least |',
+    '| 15m | the working structure and the session levels | more |',
+    '| 60m | HTF levels (prior day, overnight, CRT) | most |',
+    '**Strongest**: a 15m or 60m rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
     'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is read in item 1 of `confluence-counting`; the priority order decides.',
     'Never anticipate it.',
-    '**Paired with `mtf-breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
+    'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
+    '**Paired with `breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
     'After an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`), it is a continuation.',
     'A reversal rejection reads strongest with an HTF CHoCH its way (`bos-vs-choch`).',
     'or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).',
@@ -137,15 +142,21 @@ const PINS = {
     'completed candles only, never the candle forming.',
     'Never anticipate it: a touch is not a bounce.',
   ],
-  'mtf-breakout': [
+  breakout: [
     'The order gate allows an entry only when a strategy fired on the bar.',
     'It is never a reason to enter without a fired strategy.',
     'a dedicated detector strategy for it is coming.',
-    'a completed 15m or 60m candle closes beyond the level with acceptance',
+    '**4 Setup**: a completed candle closes beyond the level with acceptance',
     'not just a wick',
+    '| 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |',
+    '| 15m | the working structure and the session levels | more |',
+    '| 60m | HTF levels (prior day, overnight, CRT) | most |',
+    '**Strongest**: a 15m or 60m breakout confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
+    'a retest of the broken level that holds (a pullback: `pullback-vs-reversal`), with a rejection candle there (preferred), or a continuation displacement.',
     'Never anticipate it.',
+    'Aim for the next swing (`m3.swingTargets`); the room to the next level (`candidate.inTheWay`, `candidate.ahead`) is step 3\'s; the target and exit stay the strategy\'s.',
     'a close back inside the level means the breakout failed: invalidation.',
-    '**Paired with `mtf-rejection`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
+    '**Paired with `rejection`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
     'A close beyond a level that is also a BOS on that timeframe (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure',
     'A CHoCH against the trade on its timeframe or higher (`bos-vs-choch`) is one too.',
   ],
@@ -218,7 +229,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
     assert.ok(words >= 250 && words <= 650, `${s}: ${words} words`);
-    assert.ok(Buffer.byteLength(body) <= 3400, `${s}: ${Buffer.byteLength(body)} bytes, embedded in its roles' prompts`);
+    // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 60m): a little more room.
+    const max = SETUPS.includes(s) ? 4000 : 3400;
+    assert.ok(Buffer.byteLength(body) <= max, `${s}: ${Buffer.byteLength(body)} bytes, embedded in its roles' prompts`);
   }
 });
 
@@ -271,7 +284,10 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   assert.match(cc, /\| 1 \| HTF read, `candidate\.alignment` \(HTF breaks included\) \|/);
   assert.doesNotMatch(cc, /break[^|.]*item 4|item 4[^|.]*break/);
   assert.doesNotMatch(cc, /\| 7 \|/);
-  assert.ok(flat(read(file('mtf-rejection'))).includes('is read in item 1 of `confluence-counting`'));
+  assert.ok(flat(read(file('rejection'))).includes('is read in item 1 of `confluence-counting`'));
+  // A rejection is item 4's, once, on however many timeframes it shows; item 4 points to the setup.
+  assert.ok(cc.includes('**A reaction counts once in item 4.** A rejection on several timeframes is one reaction, not one per timeframe.'));
+  assert.match(cc, /\| 4 \| Reaction at the nearest level \(`levels-and-reactions`, `rejection`\) \|/);
   // momentum-and-volume and confluence-counting define item 5 the same way.
   assert.match(cc, /\| 5 \|[^\n]*\| all with it \| all against it \| mixed or thin \|/);
   assert.doesNotMatch(read('skills/market-snapshot/SKILL.md'), /liquidity-concepts/);
@@ -374,7 +390,7 @@ test('basics skills: candle-reading is confirmation at a level, on completed can
   assert.match(flat(ex), /on the 15m close[^\n]*?on the 60m close[^\n]*?on the 3m close[^\n]*?Stack agrees/);
 });
 
-test('basics skills: the two multi-timeframe setups follow the PLAN steps, on completed candles, at a level', () => {
+test('basics skills: the two setups, on any timeframe, follow the PLAN steps, on completed candles, at a level', () => {
   for (const s of SETUPS) {
     const text = read(file(s));
     const t = flat(text);
@@ -389,8 +405,21 @@ test('basics skills: the two multi-timeframe setups follow the PLAN steps, on co
     const names = [...t.slice(0, t.indexOf('A read, never a veto')).matchAll(/`([a-z0-9_]+)`/g)].map(m => m[1]);
     assert.ok(names.length >= 3, s);
     for (const n of names) assert.strictEqual(parseFrontmatter(read(`strategies/${n}/STRATEGY.md`)).data.status, 'active', `${s}: ${n}`);
+    // Generic: the setup is defined on any completed candle, not on one timeframe; its timeframe table has three rows.
+    assert.doesNotMatch(t, /\*\*4 Setup\*\*: a completed (?:3m|5m|15m|60m)/, s);
+    for (const row of ['| 3m, 5m |', '| 15m |', '| 60m |']) assert.ok(t.includes(row), `${s}: ${row}`);
+    assert.ok(t.includes('| Timeframe | What it reads | Weight |') && t.includes('| least |') && t.includes('| most |'), `${s}: the weight by timeframe`);
+    // The multi-timeframe form is the best practice, pointed to the reads that define it, not restated.
+    for (const p of ['trend-vs-range', 'pullback-vs-reversal', 'bos-vs-choch', 'candle-reading', 'levels-and-reactions']) assert.ok(t.includes(`\`${p}\``), `${s}: ${p}`);
     const ex = text.split('## Examples')[1];
-    for (const k of ['Take:', 'Skip:', 'Loser:']) assert.match(ex.slice(ex.indexOf(k)), /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^]*?on the (?:15m|60m) close/, `${s} ${k}`);
+    const tfs = new Set();
+    for (const k of ['Take:', 'Skip:', 'Loser:']) {
+      const m = /^[A-Za-z]+: at the [a-zA-Z ]+ \d{5}\.\d\d[^]*?on the (3m|5m|15m|60m) close/.exec(ex.slice(ex.indexOf(k)));
+      assert.ok(m, `${s} ${k}`);
+      tfs.add(m[1]);
+    }
+    // The examples show the setup on at least two different timeframes.
+    assert.ok(tfs.size >= 2, `${s}: examples on ${[...tfs].join(', ')}`);
   }
 });
 
@@ -409,7 +438,7 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   // Step 5 counts confluence-counting's six items, and the candidate's own values are always neutral.
   assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`; the candidate\'s own `values` are always neutral.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
-  assert.match(flat(step(4)), /setups: `mtf-rejection`, `mtf-breakout`\./);
+  assert.match(flat(step(4)), /setups: `rejection`, `breakout`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.
   assert.match(read('skills/market-structure/SKILL.md'), /the `trend-vs-range` skill[^]*`pullback-vs-reversal`[^]*`breakout-vs-fakeout`[^]*the `invalidation` skill/);
   assert.match(read('skills/liquidity-concepts/SKILL.md'), /`levels-and-reactions` skill's[^]*the `breakout-vs-fakeout` skill/);
@@ -453,7 +482,7 @@ test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exa
     assert.ok(flat(ms).includes(p), p);
     assert.ok(!flat(ms).replace(p, '').includes(p), `removing: ${p}`);
   }
-  for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'mtf-rejection', 'mtf-breakout', 'confluence-counting', 'invalidation']) {
+  for (const s of ['trend-vs-range', 'pullback-vs-reversal', 'rejection', 'breakout', 'confluence-counting', 'invalidation']) {
     assert.ok(read(file(s)).includes('`bos-vs-choch`'), s);
   }
 });
@@ -501,7 +530,7 @@ test('bos-vs-choch: the timeframes are read top-down, the same logic in the setu
   const t = flat(read(file('bos-vs-choch')));
   for (const tf of ['| 3m, 5m |', '| 15m |', '| 1h (4h swings) |']) assert.ok(t.includes(tf), tf);
   assert.doesNotMatch(t, /\bthe (?:key|main) (?:structural )?(?:signal|evidence)\b/);
-  for (const s of ['bos-vs-choch', 'mtf-rejection', 'mtf-breakout', 'invalidation']) {
+  for (const s of ['bos-vs-choch', 'rejection', 'breakout', 'invalidation']) {
     assert.match(flat(read(file(s))), /timeframe or higher/, s);
   }
 });

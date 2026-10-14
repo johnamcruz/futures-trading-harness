@@ -96,7 +96,7 @@ function restatements(key, v) {
   if (exit) res.push(new RegExp(`(?:^|[^\\d.])${num}R\\s*/`), new RegExp(`/\\s*${num}R\\b`));
   return res.map(re => ({ re, policyOnly: exit }));
 }
-const POLICY_FILES = [...POLICIES.map(p => `strategies/${p.name}/STRATEGY.md`), 'skills/prop-challenge-pacing/SKILL.md'];
+const POLICY_FILES = [...POLICIES.map(p => `strategies/${p.name}/STRATEGY.md`), 'skills/prop-challenge-pacing/SKILL.md', 'skills/prop-evaluator/SKILL.md', 'skills/prop-pacing-judgment/SKILL.md'];
 const POLICY_LINE = new RegExp(`\\b(?:${POLICIES.map(p => esc(p.name)).join('|')}|polic(?:y|ies))\\b`, 'i');
 
 /** The files the rule covers: the repository's text, but the rulebooks, the tests and generated copies of the canonical files. */

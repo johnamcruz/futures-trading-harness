@@ -50,6 +50,10 @@ const ALLOWED = [
   { old: 'The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: see rule 1): read them, and don\'t reverse a recent decision without saying what changed.',
     now: 'The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don\'t reverse a recent decision without saying what changed.',
     reason: 'rule 1\'s per-lane text is now the runner-lanes skill: point straight to it' },
+  // A pointer to a skill retired later (tests/plugin/harness-tools-split.test.js): each tool's row is in its own skill.
+  { old: '**Harness tools, not scripts.** Bars, scans, the snapshot, the multi-timeframe read, blackouts, the prop status, lessons, and reconcile are tools on the `harness` MCP server (the `harness-tools` skill): call them; don\'t run the harness\'s scripts from a shell.',
+    now: '**Harness tools, not scripts.** Bars, scans, the snapshot, the multi-timeframe read, blackouts, the prop status, lessons, and reconcile are tools on the `harness` MCP server (each in its skill): call them; don\'t run the harness\'s scripts from a shell.',
+    reason: 'the tool skill is retired; each tool\'s row is in its topic skill (no longer than the old pointer: the head trader reads it every cycle)' },
 ];
 
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction

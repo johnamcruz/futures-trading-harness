@@ -59,11 +59,12 @@ test('the agents: role-index skills exist, aren\'t core, and the role holds skil
   // The proof case: the eleven basics skills, and cisd and fib-retracement since, are in the index of the roles that
   // carry them.
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement'];
+    'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'];
   // And the strategy-library split's pieces a role reads only when a cycle needs one (strategy-library, with the
-  // priority order, stays core wherever it was).
-  const SPLIT = ['strategy-scan', 'strategy-gate-checks'];
-  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT].sort());
+  // priority order, stays core wherever it was), and the prop and sizing split's micro-mini-specs (the risk manager).
+  const SPLIT = ['strategy-scan', 'strategy-gate-checks', 'micro-mini-specs'];
+  // contract-roll too: the volume-liquidity analyst reads VWAP and levels, which a roll day breaks.
+  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT, 'contract-roll'].sort());
   for (const a of agents.filter(x => x.index.includes('strategy-scan') || x.skills.includes('strategy-scan'))) assert.ok(a.skills.includes('strategy-library'), `${a.name}: strategy-library core`);
   for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s)), [], `${a.name}: basics only in its index`);
   const req = RS.requiredByRole(ROOT, 'index');
@@ -86,7 +87,7 @@ test('opencode.json: the committed file is full; full embeds role-index skills t
   assert.doesNotMatch(fullVl, /Look up as needed/, 'full: one load sentence, as before');
   assert.ok(!vl.includes('<skill name="absorption">'), 'index: not embedded');
   assert.ok(vl.includes('## Your skill index') && vl.includes(`- absorption: ${ab.description}`), 'index: one line, its description');
-  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `liquidity-concepts`, `session-timing`, `market-snapshot`, `trader-process`, and `harness-tools` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `momentum-and-volume`, and `absorption`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
+  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `liquidity-concepts`, `session-timing`, `market-snapshot`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `momentum-and-volume`, `absorption`, and `contract-roll`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
   assert.match(vl, /`skill_lookup \{"skill": "<skill>", "role": "volume-liquidity-analyst"\}`/);
   assert.doesNotMatch(vl, /Required by the situation/);
   const rm = index.agent['risk-manager'].prompt;
@@ -132,15 +133,23 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // order-mechanics. The risk manager (it places no order) takes gate-refusals-limits and gate-refusals-cycle (the size,
 // risk, prop and FACTS refusals its checks name); the executor gate-refusals (the order itself) and
 // gate-refusals-positions (managing a position): the limits and cycle rows are the head trader's to act on.
+// From the split of the retired tool skill (tests/plugin/harness-tools-split.test.js): bar-briefing (core) for the analysts and the
+// risk manager, and reason-check (core) for the risk manager (it references order-plan from its step 5). From its
+// retirement: tool-arguments in place of the retired skill, and strategy-tools (core) for the roles that hold strategies tools.
+// From the session-timing and strategy-authoring splits: news-blackouts and exchange-holidays in place of session-timing
+// for the news analyst, contract-roll (indexed) for the volume-liquidity analyst, strategy-rules for the strategy researcher.
+// From the prop and sizing split (tests/plugin/prop-sizing-split.test.js): micro-mini-specs (indexed) and
+// prop-pacing-judgment (core) for the risk manager, which doesn't load prop-evaluator (the evaluator is the user's
+// command; no step of the role reads it).
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
-  'news-calendar-analyst': ['session-timing', 'trader-process'],
-  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
-  'strategy-researcher': ['strategy-authoring', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
+  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
+  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
+  'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
   'trade-executor': ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
-  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'harness-tools', 'strategy-scan', 'strategy-gate-checks'],
-  'volume-liquidity-analyst': ['vwap-volume-profile', 'liquidity-concepts', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'harness-tools'],
+  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'volume-liquidity-analyst': ['vwap-volume-profile', 'liquidity-concepts', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'contract-roll', 'tool-arguments', 'bar-briefing'],
 };
 
 test('full mode: Claude (the canonical body), Codex and Qwen load the same skills as main for each role, in one load sentence; so does opencode', () => {

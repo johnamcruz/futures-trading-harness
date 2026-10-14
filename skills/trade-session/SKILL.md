@@ -66,7 +66,7 @@ its checklist is the order you decide in. Load the others as a step names them.
   says nothing about a 3m strategy). Stale or mismatched bars → manage open
   positions only, journal a note, end. On interactive use, check the contract
   is the front month (`search_contracts` / the roll guidance in
-  `session-timing`) before planning.
+  `contract-roll`) before planning.
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
   a pending entry from your own plan that carries its stop bracket. An order
@@ -97,13 +97,13 @@ its checklist is the order you decide in. Load the others as a step names them.
   writes the runner's default count of closed bars (5000 3-minute, 15000
   1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness
   home's own; use the path it returns) and records the
-  multi-timeframe read for the gate (the `harness-tools` skill). Never paste
+  multi-timeframe read for the gate (the `bar-briefing` skill). Never paste
   a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 
 **Every cycle, first:** the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"}`,
-the `harness-tools` skill): this bar's analysis by timeframe, computed once by
+the `bar-briefing` skill): this bar's analysis by timeframe, computed once by
 the runner (the multi-timeframe read with the alignment per side, the trend
 rule, the scan's candidates and confluence, the snapshot's levels, VWAP,
 participation and liquidity, the session window), each part with its version

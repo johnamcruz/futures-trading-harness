@@ -1,16 +1,18 @@
 ---
 name: prop-challenge-pacing
-description: Pace a prop-firm evaluation or funded account - profit target, trailing max loss, daily loss limit, consistency - so the account survives long enough for the edge to show. Covers harness-tracked attempts (accounts/<name>/ACCOUNT.md; the harness tool combine_status, and the user's combine.js to start or stop one) and the policy strategies that trade them. Use at the start of each day, after big wins or losses, and whenever a policy strategy (signal policy) is trading.
+description: Use when a policy strategy trades a harness-tracked prop attempt - its state, its verdicts, the gate's refusals.
 ---
 
 # Prop Challenge Pacing
 
 ## When to Use
 
-- Start of each trading day: set today's risk budget.
-- After a large win (protect it) or a drawdown (de-risk).
+- A policy strategy (`signal: policy`) is trading, or `combine_status` lists an attempt.
 
 ## How It Works
+
+Scoring a policy on history: the `prop-evaluator` skill. Pacing an account
+with no profile: the `prop-pacing-judgment` skill.
 
 ### Harness-tracked attempts (a policy strategy)
 
@@ -115,61 +117,9 @@ it:
   Never split the budget between markets; each verdict is sized from the
   whole cushion.
 
-### Scoring a policy strategy on history (the evaluator)
-
-How often a policy strategy passes, blows or times out on history is the
-evaluator's answer. It is the user's command, as the backtester is; an agent
-never runs it:
-`node <root>/scripts/evaluate.js --prop <policy> --data <SYMBOL>=<bars file> --from <date> --to <date>`
-(`docs/BACKTESTING.md`, "The two-layer evaluator"). It prints the pass,
-blow and timeout rates with their intervals, the effective sample size
-(attempts that share no session), the resampled paths, the expectancy cuts,
-and the promotion gate's verdict. When you read or report its result:
-
-- **Quote the interval and the effective sample size,** not only the rate.
-  A handful of independent attempts can't tell a 25% policy from a 40% one.
-- **A blow anywhere is a failure.** The top-level blow count covers the
-  real attempts, the resampled paths and the expectancy cuts.
-- **Only Train runs freely.** The evaluator refuses any other window
-  without a look (`--look-candidate`, `--look-purpose tuning|judging`,
-  `--ledger <file>`) that the ledger allows. It logs the look before reading
-  a bar. Looking spends the out-of-sample budget: only the user decides to
-  take one, knowing which window and what it spends. A refusal
-  (`needs a look`, `retired`, `reserved`, `crosses a unit`) is final: report
-  it, don't route around it with another window or tool.
-- **Flow-off results.** For a policy whose strategies read broker fields,
-  attempts outside the fields' coverage are marked `flowOff`. They show the
-  policy without that branch, not as it trades live.
-
-### Pacing by judgment (no account profile)
-
-Ask the user for the account's current rules; don't assume them. Track these
-numbers each morning (from `get_account_snapshot` and the user):
-
-- **Target remaining** = profit target − profit so far.
-- **Cushion** = balance − trailing loss floor. The floor trails the end-of-day
-  high-water mark on the bundled combine profiles; it stops trailing at the starting
-  balance once the passmark is reached (account-type dependent).
-- **Days traded** and the best day's share of total profit (consistency).
-
-Rules of thumb (the PropEvolve objective: pass without blowing the account):
-
-1. **Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk
-   ≤ 10% of the cushion. A small cushion means smaller size, not "make it back".
-2. **Pace, don't sprint.** Aim for the target remaining ÷ 10–15 days per day. Stop for the
-   day at +1.5× the daily pace; protecting a green day is worth more than
-   stretching it.
-3. **Consistency.** If one day would exceed the firm's best-day share,
-   stop for the day. Past the target, the gate stops entries once today's
-   close would pass; while the best day is still too large a share, the
-   attempt keeps trading (at normal size) on days smaller than the best one,
-   and stops for the day once today is the best day (more can't help).
-4. **After a red day,** the next day's budget is half until a green day.
-5. **Near the target,** cut size: the last 10% isn't worth risking the account.
-6. **Funded accounts,** scale only per the firm's scaling plan and the
-   journal's evidence.
-
-Write the day's numbers into the `plan` entry so reviews can grade pacing.
+| Tool | Arguments | What it returns | Script (people) |
+|---|---|---|---|
+| `combine_status` | `account`?, `json`? | each started prop attempt and the policy verdicts; an `account` that isn't a profile (a run id, the broker's account) reads every started attempt and says so | `combine.js status [--account <name>] [--json]` |
 
 ## Examples
 
@@ -188,10 +138,4 @@ risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
 $21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
 $207.80 each, $831.20 in all). Halved by the priority order: 22 micros, 2 NQ.
 With MNQ selected the verdict is 45 MNQ ($955.80), halved 22 MNQ.
-```
-
-```text
-Target $3,000, profit $1,150 → remaining $1,850. Cushion $1,400.
-Daily budget = 25% × 1,400 = $350; per trade ≤ 10% × 1,400 = $140;
-pace ≈ $1,850 ÷ 10 = $185/day; stop for the day at +1.5 × $185 ≈ $280.
 ```

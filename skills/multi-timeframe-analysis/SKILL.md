@@ -40,7 +40,7 @@ them rather than retrying.
 
 ### 2. Run the read
 
-In an autonomous cycle the bar briefing (`bar_briefing`, the `harness-tools`
+In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing`
 skill) already holds this read for the bar: the 15m frame and the alignment
 per side (`m15`), the 1h and 4h frames (`h1` `h1` and `h4`), and the trend
 rule (`m3` `trendRule`). Each frame there has the trend, bias, swing pattern,
@@ -60,7 +60,7 @@ mtf_read {"bars": "<trigger bars>", "timeframes": [15, 60, 240], "json": true}  
 
 `<trigger bars>` is the runner's bars file by absolute path (e.g.
 `/home/u/.futures-trading-harness/bars/MNQ-3m.json`; no `~`) or a
-`bars_fetch` file (the `harness-tools` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
+`bars_fetch` file (the `tool-arguments` skill says which files it reads). Candles align to the 18:00 ET open: 1-hour candles open
 on the hour, 4-hour ones at 18:00, 22:00, 02:00, 06:00, 10:00, and 14:00 ET.
 Only completed candles decide a trend; the one forming is reported apart.
 

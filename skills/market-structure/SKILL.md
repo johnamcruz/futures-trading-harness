@@ -14,7 +14,7 @@ description: Read futures market structure - swing highs/lows, trend vs range, b
 ## How It Works
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the
-`harness-tools` skill) holds this bar's structure (`m3`, `m15`, `h1`): use
+`bar-briefing` skill) holds this bar's structure (`m3`, `m15`, `h1`): use
 it, and compute only what it doesn't hold.
 
 1. **Swings**: how they are confirmed, the `bos-vs-choch` skill. Mark

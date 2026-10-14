@@ -13,7 +13,7 @@ description: Identify futures liquidity - prior day/overnight highs and lows, eq
 ## How It Works
 
 In an autonomous cycle the bar briefing (`bar_briefing`, the
-`harness-tools` skill) holds this bar's liquidity (`m3` `liquidity`,
+`bar-briefing` skill) holds this bar's liquidity (`m3` `liquidity`,
 `sweeps`, `htfLevels`, `nearestLiquidity`): use it, and compute only what
 it doesn't hold. The sweeps are computed there: never call one by eye.
 

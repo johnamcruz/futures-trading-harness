@@ -22,7 +22,7 @@ overrule it. A missing field is `unknown` and counts neutral.
 | 1 | HTF read, `candidate.alignment` (HTF breaks included) | `aligned` | `counter` | `pullback`, `mixed`, null |
 | 2 | Other strategies, `candidate.confluence.with` / `candidate.confluence.against` | any with it | any against it | none |
 | 3 | VWAP, `candidate.vwapSide` | its side | the other side | `at` |
-| 4 | Reaction at the nearest level (`levels-and-reactions`) | rejection or sweep its way | acceptance against it | none yet |
+| 4 | Reaction at the nearest level (`levels-and-reactions`, `rejection`) | rejection or sweep its way | acceptance against it | none yet |
 | 5 | Momentum, participation and indicators (`momentum-and-volume`, `absorption`) | all with it | all against it | mixed or thin |
 | 6 | Its own `candidate.values` | - | - | always |
 
@@ -39,6 +39,8 @@ overrule it. A missing field is `unknown` and counts neutral.
 - **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
   `m15.lastBreak.last`, `h1.lastBreak.last`), or its absence, is part of
   the HTF read, never an item of its own.
+- **A reaction counts once in item 4.** A rejection on several timeframes
+  is one reaction, not one per timeframe.
 - **Not counted**: the trend rule, the regime fit, the room, the window,
   the news: the priority order's own steps or the gate's.
 
