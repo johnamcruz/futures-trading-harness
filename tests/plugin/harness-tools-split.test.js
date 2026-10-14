@@ -57,14 +57,28 @@ const HEADER_OF = home => (home === 'user-commands' ? ['Tool', 'Script (people)'
 // The bar_briefing row's description, with the CISD block the briefing has carried since #125 (briefing.js
 // cisdBlock and its summary line) named where the old row lists the m3 fields.
 const BRIEFING_CELL = units(read(BEFORE)).find(u => u.startsWith('the bar briefing the autonomous runner built'));
-// The order the briefing prints them (briefing.js): the candle lines, the swing targets, then the CISD line; in the
-// m3 fields, `cisd` before `candidates`, as briefing.js builds m3; a timeframe's briefing points to the runner's.
+// The summary in the order the briefing prints it (briefing.js): the candle lines, the swing targets, then the CISD
+// line. The m3 fields in the order briefing.js builds m3: location, candidates, trendRule, cisd, candles, swingTargets.
+// A timeframe's briefing points to the runner's `cisd`.
 const CISD_FIELD = '`cisd` (the latest CISD per timeframe, 3m, 5m, 15m and 1h, on completed candles: its direction, level, displacement, any key-level sweep before it, and its leg\'s OTE zone with its status and whether price is in it; a read, not a signal), ';
 const CISD = [
   ['a line per timeframe for its last completed candle, the next swing targets,', 'a line per timeframe for its last completed candle, the next swing targets, the latest CISD per timeframe,'],
   ['15m and 1h, in points, ticks and R), `candidates`', `15m and 1h, in points, ticks and R), ${CISD_FIELD}\`candidates\``],
   ['with a pointer to the runner\'s `candles` and `swingTargets`', 'with a pointer to the runner\'s `candles`, `swingTargets` and `cisd`'],
 ];
+/** The m3 fields from `location` to `trendRule` reordered as briefing.js builds them. */
+function m3Order(text) {
+  const loc = '`location`, ';
+  const a = text.indexOf(`${loc}\`candles\` (per timeframe,`);
+  const cisd = text.indexOf('`cisd` (the latest CISD', a);
+  const cand = text.indexOf('`candidates` (each with', a);
+  const tr = text.indexOf('`trendRule`. `m15`', a);
+  if ([a, cisd, cand, tr].some(x => x < 0) || !(a < cisd && cisd < cand && cand < tr)) return text;
+  const candles = text.slice(a + loc.length, cisd).replace(/, $/, '');
+  const cisdSeg = text.slice(cisd, cand).replace(/, $/, '');
+  const candidates = text.slice(cand, tr).replace(/, $/, '');
+  return `${text.slice(0, a)}${loc}${candidates}, \`trendRule\`, ${cisdSeg}, ${candles}${text.slice(tr + '`trendRule`'.length)}`;
+}
 
 // Deliberate differences, each with its reason.
 const ALLOWED = [
@@ -75,7 +89,7 @@ const ALLOWED = [
     now: 'Calling any harness tool: its arguments, the paths it reads, what it refuses; skill_lookup\'s row.', reason: 'the When to Use of the skill that holds the general rules, not of every tool' },
   // The example call was already prop-challenge-pacing's own first example line: one copy, not two.
   { old: 'combine_status {}', copies: 1, reason: 'already the first line of prop-challenge-pacing\'s Examples' },
-  { old: BRIEFING_CELL, now: CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || ''), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name' },
+  { old: BRIEFING_CELL, now: m3Order(CISD.reduce((t, [a, b]) => t.replace(a, b), BRIEFING_CELL || '')), reason: 'the briefing\'s `m3` `cisd` (#125), which the old row didn\'t name, and the m3 fields in the order briefing.js builds them' },
   // lessons and reconcile: the agent-facing cells are dropped. The tools' MCP descriptions (registry.js) say what each
   // returns, and their schemas list the arguments; only the reviewer and the head trader hold them, and embedding the
   // rows in trade-review would grow the reviewer. The people's scripts are in user-commands.
@@ -242,7 +256,7 @@ test('every role has the row of every harness tool it holds in its core, or a re
   assert.doesNotMatch(read('agents/risk-manager.md'), /^role-skills: \[[^\]]*\border-plan\b/m);
   assert.match(flat(skill('bar-briefing')), /Without one, the news blackouts are `blackouts_list`\./);
   // The scan's tool calls in strategy-scan reference the rows' skill.
-  assert.match(skill('strategy-scan'), /With the harness tools \(the `strategy-tools` skill\):/);
+  assert.match(skill('strategy-scan'), /With the harness tools \(`strategy-tools`\):/);
 });
 
 test('the new skills answer one question in a short index line; the topic skills reference bar-briefing for the briefing', () => {
@@ -278,46 +292,52 @@ test('no file names the retired harness-tools skill (the code module scripts/lib
   // The check catches what it is for: any case, a space or a hyphen, backticked or bare, in a list, a title; in a file
   // whose allow-list may quote it, a line that isn't an allow-list quote.
   for (const s of ['the `harness-tools` skill', 'skills/harness-tools/SKILL.md', 'role-skills: [a, harness-tools, b]', 'the harness-tools skill',
-    'the Harness-Tools skill', 'the harness tools skill', 'the `Harness Tools` skill', '(harness-tools)', 'load harness-tools first', 'load harness-tools.', '# Harness Tools']) {
+    'the Harness-Tools skill', 'the harness tools skill', 'the `Harness Tools` skill', '(harness-tools)', 'load harness-tools first', 'load harness-tools.', '# Harness Tools',
+    'see [it](../harness-tools/SKILL.md)', 'harness-tools/SKILL.md', 'the harness\ntools skill', 'the `harness_tools` skill', 'the harness\u2011tools skill',
+    'the harness-tools operations skill', 'the harness-tools server skill', 'the harness-tools MCP server skill']) {
     assert.notDeepStrictEqual(skillRefs('x.md', s), [], s);
   }
   assert.notDeepStrictEqual(skillRefs(QUOTES_OLD[0], 'see the harness-tools skill', true), [], 'a new line in a file that quotes the old text');
   assert.deepStrictEqual(skillRefs(QUOTES_OLD[0], "  { old: 'then `mtf_read` (the `harness-tools` skill).',", true), [], 'its allow-list quote');
+  assert.notDeepStrictEqual(skillRefs(QUOTES_OLD[0], "  { old: 'x', reason: 'see the harness-tools skill' },", true), [], 'text after the quoted old value');
   // The code module keeps its name; prose about the harness's tools is no reference to the skill.
   for (const s of ['scripts/lib/harness-tools/registry.js', 'harness-tools-mcp.js', 'tests/lib/harness-tools-order-plan.test.js', 'tests/plugin/harness-tools-split.test.js', 'tests/lib/harness-tools.test.js',
-    'the harness-tools MCP server', "path.join(ROOT, 'scripts', 'lib', 'harness-tools', script)", 'With the harness tools (the `strategy-tools` skill):', 'the harness tools server']) {
+    'the harness-tools MCP server', 'the harness-tools server', 'the harness-tools operations', "require('./harness-tools/registry')", '(harness-tools/reasons.js)', 'const { TOOLS: HARNESS_TOOLS }', "path.join(ROOT, 'scripts', 'lib', 'harness-tools', script)", 'scripts/lib/harness-tools/', 'With the harness tools (`strategy-tools`):', 'the harness tools server']) {
     assert.deepStrictEqual(skillRefs('x.md', s), [], s);
   }
 });
 
 /**
- * The lines of a file that name the retired skill: any case, a space or a hyphen between the words. The hyphenated
- * name is the skill's unless it is the code module's (`lib/harness-tools`, `harness-tools/`, `harness-tools-mcp`,
- * `harness-tools[-<x>].test`, "the harness-tools MCP server", "server" or "operations");
- * the spaced one ("the harness tools") is plain prose unless it is backticked, called a skill, or a title.
+ * Where a file names the retired skill: any case; a space, a hyphen (U+2010-U+2014 too) or an underscore between the
+ * words; across a line break. The hyphenated name is the skill's unless it is the code module's (`lib/harness-tools`,
+ * `'lib', 'harness-tools'`, `harness-tools-mcp`, `harness-tools[-<x>].test`, or "the harness-tools MCP server",
+ * "server" or "operations", unless "skill" follows, or a module file, `harness-tools/<file>`); so a link to its
+ * SKILL.md or a relative path to its folder (`../harness-tools/`) is the skill's. `HARNESS_TOOLS`, a constant, is not. The spaced one ("the harness tools") is plain prose unless it is backticked, in a skills path, called a
+ * skill, or a title. In a file whose allow-list quotes the old text, only the quoted `old` values are skipped.
  */
 function skillRefs(rel, text, quotesOld = false) {
-  const HYPHEN = /(?<!lib\/|'lib', ')harness-tools(?![\w/.-]|\s+(?:MCP|server|operations)\b)|harness-tools(?=[-.])(?!-mcp\b|-[a-z-]+\.test\b|\.test\b)/i;
-  const SPACED = /`harness[\s-]tools`|skills\/harness[\s-]tools\b|harness[\s-]tools`?\s+skill|^#+\s*harness[\s-]tools\s*$/i;
-  const out = [];
-  text.split('\n').forEach((line, i) => {
-    if (quotesOld && /^\s*\{?\s*old: '/.test(line)) return;
-    if (HYPHEN.test(line) || SPACED.test(line)) out.push(`${rel}:${i + 1}: ${line.trim().slice(0, 100)}`);
-  });
+  let src = text.replace(/[\u2010-\u2014]/g, '-').replace(/harness_tools|Harness_Tools/g, 'harness-tools');
+  if (quotesOld) src = src.replace(/(\bold: )'(?:[^'\\\n]|\\.)*'/g, "$1''");
+  const titles = src.split('\n').filter(l => /^#+\s*harness[\s-]tools\s*$/i.test(l));
+  const flat = src.replace(/\s+/g, ' ');
+  const MODULE_NEXT = String.raw`\s+(?:MCP\s+server|MCP|server|operations)\b(?!(?:\s+(?:MCP|server|operations))*\s+skills?\b)`;
+  const HYPHEN = new RegExp(String.raw`(?<!lib\/|'lib', ')harness-tools(?![\w.-]|\/(?!SKILL\.md)[\w-]+|${MODULE_NEXT})|harness-tools(?=[-.])(?!-mcp\b|-[a-z-]+\.test\b|\.test\b)`, 'gi');
+  const SPACED = /`harness[\s-]tools`|skills\/harness[\s-]tools\b|harness[\s-]tools`?\s+skill/gi;
+  const out = titles.map(l => `${rel}: ${l.trim()}`);
+  for (const re of [HYPHEN, SPACED]) for (const m of flat.matchAll(re)) out.push(`${rel}: …${flat.slice(Math.max(0, m.index - 40), m.index + 60)}…`);
   return out;
 }
 
 // trade-session step 4 as main had it (at 0b1a2f79): the head trader's own procedure, read every cycle, stays as it
-// was; the one change is the reference to the order-plan skill.
+// was, byte for byte (order-plan is referenced from the risk manager's step 5, not added to the head trader's reading).
 const STEP4 = 'tests/fixtures/skill-split/trade-session-step4.before.txt';
 const STEP4_SHA256 = '7fc1e45612ccb7a7569bca0119c44d5a48a9d849c5694f25407e033d5ea06228';
-const STEP4_REF = ['**The exact numbers come from `order_plan`**, not from your own arithmetic:', '**The exact numbers come from `order_plan`** (`order-plan`), not from your own arithmetic:'];
 
-test('trade-session step 4 is main\'s, with a reference to order-plan; the head trader\'s load list is unchanged', () => {
+test('trade-session step 4 is main\'s, byte for byte; the head trader\'s load list is unchanged', () => {
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');
   const ts = skill('trade-session');
   const step4 = ts.slice(ts.indexOf('### 4. Plan'), ts.indexOf('### 5. Verdict'));
-  assert.strictEqual(step4, read(STEP4).replace(STEP4_REF[0], STEP4_REF[1]));
+  assert.strictEqual(step4, read(STEP4), 'step 4 byte-equal to main');
   // order-plan is referenced, not loaded every cycle: not in the gate's list, nor in the prompt's.
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.ok(!REQUIRED_FOR_ENTRY.includes('order-plan'));

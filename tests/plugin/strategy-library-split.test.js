@@ -66,7 +66,7 @@ const ALLOWED = [
     reason: 'the example as the scan prints it, with orb\'s own min R:R' },
   // A pointer to a skill retired later (tests/plugin/harness-tools-split.test.js): the strategies tools' rows are
   // strategy-tools'.
-  { old: 'With the harness tools (the `harness-tools` skill):', now: 'With the harness tools (the `strategy-tools` skill):',
+  { old: 'With the harness tools (the `harness-tools` skill):', now: 'With the harness tools (`strategy-tools`):',
     reason: 'the tool skill is retired; the strategies tools\' rows are in strategy-tools' },
 ];
 
@@ -183,7 +183,7 @@ test('strategy-library split: each skill answers one question in a short index l
   // The priority order is in strategy-library only (the content test holds the rest of the priority-order guard).
   for (const s of HOMES.slice(1)) assert.doesNotMatch(read(`skills/${s}/SKILL.md`), /\*\*Hard stops → no trade\*\*|floor\(size \/ 2\)/, s);
   // The tool calls point to the strategies tools' rows (the strategy-tools skill).
-  assert.match(read('skills/strategy-scan/SKILL.md'), /### Read the library\n\nWith the harness tools \(the `strategy-tools` skill\):\n\n```text\nstrategies_list/);
+  assert.match(read('skills/strategy-scan/SKILL.md'), /### Read the library\n\nWith the harness tools \(`strategy-tools`\):\n\n```text\nstrategies_list/);
 });
 
 test('strategy-library split: the head trader still loads all of the old skill (the gate requires the pieces; the prompt and trade-session name them)', () => {

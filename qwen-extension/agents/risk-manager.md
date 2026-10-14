@@ -86,7 +86,8 @@ The market facts come from the bar briefing (`bar_briefing {"symbol": "<SYMBOL>"
 the `bar-briefing` skill) and the analysts' reports: don't fetch bars or run
 `strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold.
 Your own calls are the account reads phase 1 needs, `order_plan` (step 5),
-and `strategies_show` for a strategy's rules; each once; for a manual
+and `strategies_show` for a strategy's rules; each once (a second `order_plan` call
+after a tick-spec refusal); for a manual
 strategy only, the bars and `market_snapshot` check 0 names. When the briefing
 answers that there is no current one, take the candidates, the trend rule
 and the alignment from the plan the caller gives you and the analysts'

@@ -13,7 +13,7 @@ description: Read strategy scans - candidates, why not, trend flags, confluence.
 
 ### Read the library
 
-With the harness tools (the `strategy-tools` skill):
+With the harness tools (`strategy-tools`):
 
 ```text
 strategies_list {}                       name, status, signal, instruments

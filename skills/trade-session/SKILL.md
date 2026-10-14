@@ -387,7 +387,7 @@ target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
 numbers in the rationale and the brackets. The scan's distances are price
 points, not ticks: its summary shows both (`stop 5.25 pts = 21 ticks`).
 
-**The exact numbers come from `order_plan`** (`order-plan`), not from your own arithmetic:
+**The exact numbers come from `order_plan`**, not from your own arithmetic:
 once you have chosen the strategy and the side (the steps above: the trigger,
 the trend rule, the skip rules, the account), call it with them, e.g.
 `order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "orb", "side": "long"}`.
