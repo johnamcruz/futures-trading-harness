@@ -19,6 +19,7 @@ Summary (MNQ 1m, 20:11 ET):
 - News: no blackout ahead.
 - Room above (R = the 1m reference stop): 15m swing high / round number 27099.75 (88.25 pts, 24.48R).
 - Room below (R = the 1m reference stop): round number 27000 (11.5 pts, 3.19R).
+- Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade -0.88/-0.332/-1; flow.windows.3.delta -64/-218/-827; +3 more.
 - 3m (closed 20:09): inside, close top third, range 0.89 ATR, vol 1.77x; touched CRT 1h range low.
 - 5m (closed 20:10): inside, close top third, range 1.1 ATR, vol 5.35x, momentum up; rejected CRT 1h range low (closed back below), touched previous 5m low.
 - 15m (closed 20:00): bullish engulfing, close top third, vol 1.08x; traded beyond the previous 15m high, closed above its high; touched previous 15m high.
@@ -101,6 +102,7 @@ Summary (MNQ 1m, 08:47 ET):
 - News: no blackout ahead.
 - Room above (R = the 1m reference stop): round number 27000 (43.25 pts, 7.41R), 15m swing high 27079.75 (123 pts, 21.06R).
 - Room below (R = the 1m reference stop): 15m swing low 26941.75 (15 pts, 2.57R), 15m swing low 26916.25 (40.5 pts, 6.93R), round number 26900 (56.75 pts, 9.72R).
+- Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade 0.884/0.732/-0.819; flow.windows.3.delta 274/993/75; +3 more.
 - 3m (closed 08:45): none, close bottom third, range 0.58 ATR, vol 0.57x; swept the previous 3m high, closed back inside; rejected previous 3m high (closed back below).
 - 5m (closed 08:45): bullish engulfing, close middle third, range 0.67 ATR, vol 0.72x; swept the previous 5m high, closed back inside; rejected previous 5m high (closed back below).
 - 15m (closed 08:45): inside, close middle third, range 0.7 ATR, vol 1.52x; rejected CRT 1h range high (closed back below).
@@ -184,6 +186,7 @@ Summary (MNQ 1m, 22:19 ET):
 - Room above (R = the 1m reference stop): session high / overnight high 27542.5 (4.5 pts, 1.63R), round number 27600 (62 pts, 22.51R).
 - Room below (R = the 1m reference stop): round number 27500 (38 pts, 13.8R), session VAH 27473 (64.89 pts, 23.56R), prior RTH high 27462.5 (75.5 pts, 27.41R).
 - This bar's close: 20+ closes in a row above prior value.
+- Broker bar fields (last 3 bars, oldest first): ext.a -0.6/1/0.5; ext.b.flag false/false/true; ext.b.n 2/3/4; flow.complete true/true/true; flow.ofiTrade 0.597/-0.954/0.294; flow.windows.3.delta -41/-63/21; +3 more.
 - 3m (closed 22:18): none, close top third, range 0.71 ATR, vol 0.4x; traded beyond the previous 3m high, closed above its high; touched previous 3m high.
 - 5m (closed 22:15): none, close middle third, range 0.56 ATR, vol 0.44x; swept the previous 5m high, closed back inside; touched previous 5m high.
 - 15m (closed 22:15): none, close middle third, range 0.71 ATR, vol 0.61x; swept the previous 15m high, closed back inside; rejected overnight high (closed back below), rejected CRT 1h range high (closed back below), rejected CRT 4h range high (closed back below), rejected previous 15m high (closed back below).

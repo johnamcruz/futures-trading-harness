@@ -115,11 +115,17 @@ test('report cache: each key component changed alone misses (only what rests on 
   ].join('\n'));
 });
 
-test('report cache: a broker\'s extra bar fields build the same briefing, so the same keys and the same hits', () => {
+test('report cache: a broker\'s extra bar fields build the same briefing (but the fields passed through), so the same keys and the same hits', () => {
   const plain = recorded(MNQ);
   const ext = recorded(G.withExt(MNQ));
-  assert.deepStrictEqual(ext.a, plain.a, 'the briefing');
-  assert.deepStrictEqual(ext.b, plain.b);
+  // The one difference: m3.brokerFields carries the broker's own fields as served (broker-fields.js); null without them.
+  const strip = b => { const c = JSON.parse(JSON.stringify(b)); assert.ok('brokerFields' in c.sections.m3.data); delete c.sections.m3.data.brokerFields; return c; };
+  for (const k of ['a', 'b']) {
+    assert.strictEqual(plain[k].sections.m3.data.brokerFields, null);
+    assert.deepStrictEqual(ext[k].sections.m3.data.brokerFields.paths, ['ext.a', 'ext.b.flag', 'ext.b.n']);
+  }
+  assert.deepStrictEqual(strip(ext.a), strip(plain.a), 'the briefing');
+  assert.deepStrictEqual(strip(ext.b), strip(plain.b));
   assert.strictEqual(keysText(ext.cache), keysText(plain.cache));
   assert.deepStrictEqual(components(ext).map(([l, s]) => [l, s.roles]), components(plain).map(([l, s]) => [l, s.roles]));
 });

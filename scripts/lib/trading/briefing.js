@@ -96,6 +96,7 @@ const { cisdFacts } = require('./cisd');
 const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
+const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -428,6 +429,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         trendRule: read.lines[read.lines.length - 1],
         // The latest CISD per timeframe on completed candles, with its displacement leg's OTE zone (cisd.js, fib.js).
         cisd: cisdBlock(bars, level, causal),
+        // The broker's own fields on the last 3 bars, as served (broker-fields.js): no meaning given here. In the JSON in
+        // full; the summary's "Broker bar fields" line says them compactly (not repeated in the detail: SUMMARY_ONLY).
+        brokerFields: brokerFieldsAt(bars, bars.length - 1),
         // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
@@ -700,6 +704,8 @@ function summaryLines(b, et) {
   ];
   const closes = closesLine(m3);
   if (closes) out.push(closes);
+  const fields = brokerFieldsText(m3.brokerFields);
+  if (fields) out.push(fields);
   out.push(...candleLines(m3, et, roomOf, b.closedAt));
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
@@ -765,6 +771,7 @@ const targets = list => list.reduce((out, x) => {
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
 function detailEntries(data) {
+  if ('brokerFields' in data) data = omit(data, ['brokerFields']);
   const bar = data.bar || {};
   const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
   return Object.entries(data).filter(([k]) => k !== 'swingTargets' && k !== 'rangeTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
