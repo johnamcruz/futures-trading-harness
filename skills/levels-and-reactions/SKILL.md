@@ -47,6 +47,16 @@ docs/research/mtf-setup-catalog.md).
 - sweep: through and back within 1-3 bars, `m3.sweeps`;
 - none yet: not reached. No reaction is not a rejection.
 
+On each timeframe's last completed candle (3m, 5m, 15m, 60m) these are
+computed: `m3.candles` lists the levels it met as `rejected` (through and
+closed back), `broke` (closed beyond, most of the body beyond) or
+`touched`, a fixed level as it stood when the candle opened, a moving
+one (VWAP, the session profile) at its close, at most four, plus its
+previous candle's high and low and the CRT range; `m3.swingTargets` is
+the next swing high above and low below in points, ticks and R. In
+strategy rules: `htfd_rejected(m, level)`, `htfd_broke(m, level)`,
+`htfd_next_swing_high(m)` (strategy-authoring).
+
 ## Examples
 
 ```text

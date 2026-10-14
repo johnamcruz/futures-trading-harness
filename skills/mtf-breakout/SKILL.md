@@ -29,7 +29,7 @@ By PLAN step:
    with the break, or the range is mature (`trend-vs-range`).
 - **3 Location**: a key level in the way (`levels-and-reactions`:
    prior-day or overnight high/low, IB/OR, value-area edge, CRT range
-   edge, swing, previous candle high/low: `mtf_read` `json`, not the briefing).
+   edge, swing, previous candle high/low; `m3.candles` has them).
 - **4 Setup**: a completed 15m or 60m candle closes beyond the level with
    acceptance: a strong close in the extreme third, the body beyond the
    level, not just a wick (`breakout-vs-fakeout`, `candle-reading`). A
@@ -45,7 +45,8 @@ By PLAN step:
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
    low (high for a short); the stop is the strategy's
    (`candidate.stopPoints`, `order_plan`): check it sits there
-   (`invalidation`). Size: the priority order and the rulebook.
+   (`invalidation`). Target: `m3.swingTargets`.
+   Size: the priority order and the rulebook.
 - **9 Manage**: a close back inside the level means the breakout failed:
    invalidation. A CHoCH against the trade on its timeframe or higher
    (`bos-vs-choch`) is one too.

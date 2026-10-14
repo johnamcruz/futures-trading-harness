@@ -348,4 +348,44 @@ function snapshot(input, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps };
+/**
+ * The key levels as the snapshot of the bars up to and including bar i gives them (the same code, on bars 0..i only):
+ * the prior RTH day, the overnight range, the opening range once complete, the session and RTH VWAP (and which
+ * applies), the prior day's and the session's POC/VAH/VAL, and the initial balance once complete. For a completed
+ * candle read against the levels as they stood at its close (candle-facts.js; the briefing).
+ */
+// The whole-series parts levelsAsOf reads at a bar, once per bars array (each a causal series: its value at bar i reads
+// bars 0..i only, as the snapshot of bars 0..i computes it).
+const AS_OF = new WeakMap();
+function levelsAsOf(bars, i, overrides = {}) {
+  const p = { ...PARAMS, ...overrides };
+  const options = vp.optionsFromParams(p);
+  const key = JSON.stringify(p);
+  if (!AS_OF.has(bars) || AS_OF.get(bars).key !== key) {
+    AS_OF.set(bars, {
+      key,
+      or: ind.openingRange(bars, p.orbMinutes),
+      vwapSession: ind.anchoredVwap(bars, GLOBEX_OPEN),
+      vwapRth: ind.anchoredVwap(bars, RTH_OPEN, RTH_CLOSE),
+      prior: vp.profileSeries(bars, 'prior_rth', { options }).profile,
+      day: dayContext.dayContextSeries(bars, { adrDays: p.adrDays, params: p }).day,
+    });
+  }
+  const s = AS_OF.get(bars);
+  const upTo = bars.slice(0, i + 1);
+  const three = x => (x ? { poc: round(x.poc, 2), vah: round(x.vah, 2), val: round(x.val, 2) } : null);
+  const vwapRth = at(s.vwapRth, i);
+  const d = s.day[i];
+  return {
+    ...levels(upTo),
+    openingRange: at(s.or.high, i) === null ? null : { high: s.or.high[i], low: s.or.low[i] },
+    vwapSession: round(at(s.vwapSession, i)),
+    vwapRth: round(vwapRth),
+    vwapApplies: vwapRth !== null ? 'rth' : 'session',
+    priorProfile: three(s.prior[i]),
+    sessionProfile: three(vp.profileAt(bars, 'session', i, { options })),
+    ib: d ? { high: d.ibHigh ?? null, low: d.ibLow ?? null } : null,
+  };
+}
+
+module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps, levelsAsOf };

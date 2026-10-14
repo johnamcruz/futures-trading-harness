@@ -118,6 +118,8 @@ function createRunner(deps) {
     recordSignals = () => {},
     // The bar briefing (trading/briefing.js): the analysis by timeframe, reused until each part expires.
     recordBriefing = () => {},
+    // A 1m lane's closed bars, noted before the pass's briefings (the runner's briefing builds 5m candles from them).
+    recordFineBars = () => {},
     // The report cache (trading/report-cache.js): serve({ symbols, account, now }) -> { roles, reports } still valid,
     // record({ symbols, account, now, output, served }) after the cycle. null: every role runs every cycle.
     reportCache = null,
@@ -1176,6 +1178,11 @@ function createRunner(deps) {
       if (wait !== null) { held = ready; return wait; }
     }
     if (ready.length) {
+      // A 1m lane's bars that closed this pass, before any briefing: a 5m candle ending at this close is complete only
+      // with its last 1m bar, so the 1m bars of the same close count (replay and live: the same pass, the same order).
+      for (const x of ready) {
+        if (!x.stale && x.minutes === 1) { try { recordFineBars(x); } catch (_err) { /* recording never stops the pass */ } }
+      }
       // Trailing stops and leftover orders first: they only ever reduce risk. Once per symbol (its first lane's bar
       // when that closed: the trail counts the first lane's bars), never twice on one account read's orders.
       const noCycles = d.action === 'housekeep';

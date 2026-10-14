@@ -17,8 +17,12 @@
  *          profile, the latest BOS or CHoCH, sweeps of the key levels in the
  *          last 10 bars, the 1h swings not traded back to, the nearest
  *          liquidity above and below in points and ATR (room to run), where price is against the value areas, IB and prior RTH
- *          range, the scan's candidates, the trend rule, and the latest CISD per timeframe (3m, 5m, 15m, 1h:
- *          cisd.js, completed candles; its OTE zone and whether price is in it now)   until the next base-bar close
+ *          range, the scan's candidates, the trend rule, the latest CISD per timeframe (3m, 5m, 15m, 1h:
+ *          cisd.js, completed candles; its OTE zone and whether price is in it now), and the completed-candle facts
+ *          (candle-facts.js): per timeframe (3m, 5m, 15m, 60m) the last COMPLETED candle (never the one forming) with its
+ *          shape, pattern and how it met the key levels as they stood (fixed ones complete by its open, moving ones at
+ *          its close; 5m from a 1m lane's bars when the base bars can't), and the next swing target each side on the
+ *          base bars, 15m and 60m                                    until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -75,9 +79,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { snapshot } = require('./market-snapshot');
+const { snapshot, levelsAsOf } = require('./market-snapshot');
 const { mtfRead, candles } = require('./mtf');
-const { normalizeBars, atr: atrOf } = require('./indicators');
+const { normalizeBars, atr: atrOf, sessionKey } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
 const { familyRoot, tickOf, levelOnTick } = require('./contracts');
@@ -86,6 +90,7 @@ const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
+const { briefingCandles, briefingTargets, holdingSwingsAt } = require('./candle-facts');
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const ET = 'America/New_York';
@@ -195,8 +200,30 @@ function cisdBlock(bars, level) {
   return out;
 }
 
+// The key levels a completed candle is read against: value areas, VWAP, the prior day, overnight, IB and opening range
+// (and the 15m and 1h swings, the round numbers in its range, its previous candle and the CRT range: candle-facts.js).
+// The moving ones among them (read at a candle's close); the rest are fixed (read as they stood at its open).
+const MOVING = /^(VWAP|session (POC|VAH|VAL))/;
+// The fixed ones a bar's own value includes once it completes them (read on the last bar closed by a candle's open).
+const AT_OPEN = /^(overnight|IB)/;
+const CANDLE_LEVELS = /^(prior (POC|VAH|VAL|RTH high|RTH low|RTH close)|session (POC|VAH|VAL)|VWAP|overnight (high|low)|IB (high|low)|opening range (high|low))/;
+/** The snapshot's levels as of a bar (market-snapshot levelsAsOf), named as the briefing names them. */
+function namedLevels(x) {
+  const pp = x.priorProfile || {};
+  const sp = x.sessionProfile || {};
+  const or = x.openingRange || {};
+  const ib = x.ib || {};
+  return [
+    ['IB high', ib.high], ['IB low', ib.low], ['opening range high', or.high], ['opening range low', or.low],
+    [`VWAP (${x.vwapApplies})`, round2(x.vwapApplies === 'rth' ? x.vwapRth : x.vwapSession)],
+    ['prior RTH high', (x.priorRth || {}).high], ['prior RTH low', (x.priorRth || {}).low], ['prior RTH close', (x.priorRth || {}).close],
+    ['overnight high', (x.overnight || {}).high], ['overnight low', (x.overnight || {}).low],
+    ['prior VAH', pp.vah], ['prior VAL', pp.val], ['prior POC', pp.poc], ['session VAH', sp.vah], ['session VAL', sp.val], ['session POC', sp.poc],
+  ].filter(([, p]) => Number.isFinite(p));
+}
+
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
+function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
   // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
   // list). Display only: room, R and every other decision input are computed from the unrounded levels.
   const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
@@ -296,6 +323,27 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     // A configured step that was refused (round-numbers.js): none shown, and why.
     ...(roundError ? { roundNumbers: roundError } : {}),
   };
+  // The key levels a completed candle is read against. A FIXED one (the prior day, overnight, opening range, IB, the
+  // prior profile, the 15m and 1h swings still holding) counts when it was complete by the candle's open (its last bar
+  // closed at or before it), at its value then: never a level the candle's own bars made, nor one formed later. Each is
+  // read from the snapshot's own code (levelsAsOf) on the bar where it first holds that value without the candle's own
+  // data: overnight, IB and swings on the last bar closed by the open (openIdx: they include their completing bar);
+  // the opening range, the prior day and the prior profile on the candle's first bar (firstIdx: they appear on the bar
+  // after they complete, from earlier bars only). A MOVING one (VWAP, the developing session profile) at the candle's
+  // CLOSE (base bar idx: this bar's are the briefing's own, one value per level as above).
+  const ownLevels = levels.filter(([name]) => CANDLE_LEVELS.test(name));
+  const asOf = new Map();
+  const named = k => { if (!asOf.has(k)) asOf.set(k, k >= 0 ? namedLevels(levelsAsOf(bars, k)) : []); return asOf.get(k); };
+  // At a new session's first candle (18:00 ET, Sunday's open) the last session's overnight range and IB are stale: no
+  // level (the opening range reads the candle's own first bar, so it is the new session's; the prior RTH day is the
+  // day that just closed). The rules language does the same (candle-facts.js relationSeries, `session`).
+  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, 18 * 60) === sessionKey(bars[b].t, 18 * 60);
+  const levelsAt = (idx, openIdx, firstIdx) => [
+    ...(sameSession(openIdx, firstIdx) ? named(openIdx).filter(([name]) => AT_OPEN.test(name)) : []),
+    ...named(firstIdx).filter(([name]) => !AT_OPEN.test(name) && !MOVING.test(name)),
+    ...(idx === bars.length - 1 ? ownLevels : named(idx)).filter(([name]) => MOVING.test(name)),
+    ...(openIdx >= 0 ? [15, 60].flatMap(m => holdingSwingsAt(bars, m, minutes, openIdx)) : []).map(x => [`${x.label} swing ${x.type} ${x.price}`, x.price]),
+  ];
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -362,6 +410,10 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         trendRule: read.lines[read.lines.length - 1],
         // The latest CISD per timeframe on completed candles, with its displacement leg's OTE zone (cisd.js, fib.js).
         cisd: cisdBlock(bars, level),
+        // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
+        // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
+        candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, roundStep }),
+        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60] }),
       },
     },
     m15: {
@@ -471,7 +523,7 @@ function newsState(blackouts, at) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -500,7 +552,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const tick = grid || 0.25;
   // Round-number steps: config (round-numbers.js) the caller loaded and passes; none passed, no round numbers.
   const root = String(symbol || '').split(':')[0];
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
+  // 1m bars (a 1m lane's) build a timeframe the base bars can't (5m from 3m); only those closed by this bar's close.
+  const fine = Array.isArray(fineBars) && fineBars.length ? normalizeBars(fineBars) : null;
+  const fresh = computeSections({ bars, fine, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
@@ -621,6 +675,7 @@ function summaryLines(b, et) {
     ...(room.at && room.at.length ? [`- At price: ${room.at.map(x => `${x.name} ${x.price}`).join(', ')}.`] : []),
     ...(room.roundNumbers ? [`- Round numbers: none (${room.roundNumbers}).`] : []),
   ];
+  out.push(...candleLines(m3, et, roomOf));
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
@@ -647,6 +702,48 @@ function cisdLine(block, et) {
   return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
 
+const target = x => `${x.frame} ${x.price} (${x.points} pts, ${x.ticks} ticks, ${x.R === null ? 'R unknown' : `${x.R}R`})`;
+/** The same swing on several timeframes once, its frames joined (15m/1h 27135.75). */
+const targets = list => list.reduce((out, x) => {
+  const same = out.find(y => y.price === x.price);
+  if (same) same.frame = `${same.frame}/${x.frame}`; else out.push({ ...x });
+  return out;
+}, []).map(target).join(', ');
+
+/**
+ * A section's data as the detail shows it: what the summary already says in full is left out (the swing targets;
+ * each candle's pattern, close location, range, volume and levels; an unavailable timeframe), and so is a candle's
+ * OHLCV when it is the `bar` above (the base timeframe's own), so the text stays small; the JSON keeps it all.
+ */
+function detailEntries(data) {
+  const bar = data.bar || {};
+  const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
+  return Object.entries(data).filter(([k]) => k !== 'swingTargets').map(([k, v]) => (k === 'candles' && v && typeof v === 'object'
+    ? [k, Object.fromEntries(Object.entries(v).filter(([, c]) => !c.unavailable)
+      .map(([tf, c]) => [tf, { t: c.t, ...ohlcv(c), body: c.body, upperWick: c.upperWick, lowerWick: c.lowerWick, ...(c.patterns ? { patterns: c.patterns } : {}) }]))]
+    : [k, v]));
+}
+
+/** The summary's completed-candle lines: one per timeframe, then the next swing targets. */
+function candleLines(m3, et, roomOf = 'R = the reference stop') {
+  if (typeof m3.candles === 'string') return [`- Completed candles and swing targets: ${m3.candles}.`];
+  if (!m3.candles) return [];
+  const out = [];
+  for (const [tf, c] of Object.entries(m3.candles)) {
+    // A timeframe nothing here can build (5m with no 1m lane): left out of the summary (the JSON says why).
+    if (c.unavailable) { if (!/no 1m bars configured/.test(c.unavailable)) out.push(`- ${tf}: unavailable (${c.unavailable}).`); continue; }
+    // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
+    const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
+    if (c.moreLevels) met.push(`+${c.moreLevels} more`);
+    const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
+      c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null].filter(Boolean).join(', ');
+    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${met.length ? `; ${met.join(', ')}` : ''}.`);
+  }
+  const t = m3.swingTargets || { above: [], below: [] };
+  out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);
+  return out;
+}
+
 /** The briefing as text: the summary, then one block per section, with when it was computed and until when it holds. */
 function renderBriefing(b, { now = new Date() } = {}) {
   const day = etDate(new Date(b.closedAt));
@@ -658,7 +755,7 @@ function renderBriefing(b, { now = new Date() } = {}) {
     if (!s) continue;
     const stale = Date.parse(s.validUntil) <= now.getTime() ? ' EXPIRED (the next briefing replaces it)' : '';
     lines.push(`[${name}] version ${s.version}, valid until ${et(s.validUntil)} ET${stale}`);
-    for (const [k, v] of Object.entries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
+    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -725,6 +822,11 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
     // the runner's.
     cisd: `not in a ${minutes}m briefing: the CISD per timeframe (3m, 5m, 15m, 1h) is computed on the runner's ${first.minutes}m bars, one value each: in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe)`,
   };
+  // The completed-candle facts and swing targets read the session's levels (one value each, on the runner's bars): they
+  // are the runner's briefing's, as the session's facts are; a frame points to them (its own bars' would be another
+  // number, and a copy would be held as current for this bar's whole life).
+  data.candles = `in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe): each timeframe's last completed candle and the levels it met, and the next swing targets, one value per level`;
+  delete data.swingTargets;
   if (!lane) {
     delete data.candidates;
     delete data.scanError;
@@ -778,7 +880,7 @@ function renderFrameBriefing(f, first, { now = new Date() } = {}) {
   const part = (label, s) => {
     const stale = Date.parse(s.validUntil) <= now.getTime() ? ' EXPIRED (the next briefing replaces it)' : '';
     lines.push(`[${label}] version ${s.version}, valid until ${et(s.validUntil)} ET${stale}`);
-    for (const [k, v] of Object.entries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
+    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
   };
   part(`bar ${f.minutes}m`, f.sections.bar);
   for (const p of shared) part(p, first.sections[p]);
