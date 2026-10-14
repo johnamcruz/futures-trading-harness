@@ -32,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
-const { REQUIRED_FOR_ENTRY, skillName } = require('./trading/skills-loaded');
+const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
 const { cycleFactChecks } = require('./trading/fact-claims');
 const { documents, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
 
@@ -124,8 +124,9 @@ function summarize(output) {
     tools,
     commands,
     orders,
-    // An entry sent without the skills a trade decision needs (a Claude transcript lists every Skill load).
-    missingSkills: entries.length && calls.length ? REQUIRED_FOR_ENTRY.filter(s => !skills.includes(s)) : [],
+    // An entry sent without the skills a trade decision needs (a Claude transcript lists every Skill load): the
+    // per-cycle ones (REQUIRED_FOR_ENTRY), then the ones read before an entry (REQUIRED_AT_ENTRY).
+    missingSkills: entries.length && calls.length ? [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s)) : [],
   };
 }
 

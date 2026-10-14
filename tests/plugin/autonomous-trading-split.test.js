@@ -53,6 +53,13 @@ const ALLOWED = [
   { old: '**Harness tools, not scripts.** Bars, scans, the snapshot, the multi-timeframe read, blackouts, the prop status, lessons, and reconcile are tools on the `harness` MCP server (the `harness-tools` skill): call them; don\'t run the harness\'s scripts from a shell.',
     now: '**Harness tools, not scripts.** Bars, scans, the snapshot, the multi-timeframe read, blackouts, the prop status, lessons, and reconcile are tools on the `harness` MCP server (each in its skill): call them; don\'t run the harness\'s scripts from a shell.',
     reason: 'the tool skill is retired; each tool\'s row is in its topic skill (no longer than the old pointer: the head trader reads it every cycle)' },
+  // trade-session's step 3 checks and step 2 roles are skills of their own (tests/plugin/trade-session-split.test.js).
+  { old: 'Check its reasons against the facts before you write it (`reason_check`, trade-session step 3): a reason marked FALSE is dropped and the decision made again.',
+    now: 'Check its reasons against the facts before you write it (`reason_check`, setup-judgment): a reason marked FALSE is dropped and the decision made again.',
+    reason: 'reason_check moved from trade-session step 3 to setup-judgment: the pointer names it, shorter' },
+  { old: 'A full cycle still runs its analysts in parallel, except those whose report the prompt gives under "Cached reports" (trade-session step 2): those reports are this cycle\'s; don\'t launch the role again.',
+    now: 'A full cycle still runs its analysts in parallel, except those whose report the prompt gives under "Cached reports" (role-round): those reports are this cycle\'s; don\'t launch the role again.',
+    reason: 'cached reports moved from trade-session step 2 to role-round: the pointer names it, shorter' },
 ];
 
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction

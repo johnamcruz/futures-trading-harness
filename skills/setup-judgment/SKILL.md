@@ -21,13 +21,13 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   group's held branches only), where a field's meaning and units are in the
   strategy's own document). They are context, not a verdict: judge the setup by its
   strategy's STRATEGY.md (`strategies_show`: its context filter and skip
-  rules) and the rules below (the trend rule, the alignment table in `htf-to-ltf`,
+  rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`,
   its min R:R). A setup the trend rule allows, `aligned` for its side, with
   room past what it needs and confluence with it is the opportunity this
-  harness looks for, when the rest of this step agrees and it isn't
+  harness looks for, when the rest of this skill agrees and it isn't
   `blocked`: the strategy's normal size (position-sizing and the prop
   budget), and let its own exit work (don't bank before its trail or
-  target). The priority order below decides: a policy strategy's verdict
+  target). The priority order decides: a policy strategy's verdict
   too.
 - Tabulate each analyst's bias and confidence. Trade only when at least two of
   the three market analysts agree and none is strongly opposed.

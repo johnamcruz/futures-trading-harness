@@ -18,7 +18,7 @@ description: Use when flat with working orders - cancel leftovers, keep only a b
   own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind
   only, no `contractId` filter: the
   one whose `data.result.orderId` is the order; its `data.request` has
-  `stopLossBracket` when the bracket went with it); step 6's note on a
+  `stopLossBracket` when the bracket went with it); entry-outcome's note on a
   working entry adds context. An entry without one, or with no such record,
   is cancelled first, the cancel
   confirmed (the `order-mechanics` skill), and a `result:nofill` review journalled: cancelling an

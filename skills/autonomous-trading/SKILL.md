@@ -77,7 +77,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    (one outcome word, then ` - ` and the reason, as in the examples below;
    any other word is no result, a failed cycle).
    Check its reasons against the facts before you write it (`reason_check`,
-   trade-session step 3): a reason marked FALSE is dropped and the decision
+   setup-judgment): a reason marked FALSE is dropped and the decision
    made again.
    `blocked` only when the order gate, the gateway or the broker refused an
    order this cycle; nothing fired, or you stood aside, is `no-trade`.
@@ -101,7 +101,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    call, with `daily` when you have the daily file), `get_account_snapshot`,
    `get_quote`, `get_bars`. A full cycle still runs its analysts in parallel,
    except those whose report the prompt gives under "Cached reports"
-   (trade-session step 2): those reports are this cycle's; don't launch the
+   (role-round): those reports are this cycle's; don't launch the
    role again.
    Don't repeat what the prompt or a role gave you (the trade-executor's
    report is the after-order read of trade-session step 6), except:

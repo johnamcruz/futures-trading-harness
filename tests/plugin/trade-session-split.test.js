@@ -52,6 +52,19 @@ const ALLOWED = [
   { old: 'The analysts the prompt doesn\'t name read the runner\'s bars and briefing as above.',
     now: 'The analysts the prompt doesn\'t name read the runner\'s bars and briefing as the `role-round` skill says.',
     reason: '"as above" was trade-session step 2\'s full cycle, which is role-round now' },
+  // Relative references the moved text made to trade-session (review): each names what it means where it is now.
+  { old: 'They are context, not a verdict: judge the setup by its strategy\'s STRATEGY.md (`strategies_show`: its context filter and skip rules) and the rules below (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).',
+    now: 'They are context, not a verdict: judge the setup by its strategy\'s STRATEGY.md (`strategies_show`: its context filter and skip rules) and these rules (the trend rule, the alignment table in `htf-to-ltf`, its min R:R).',
+    reason: '"below" pointed past it in trade-session step 3; the parenthesis names the rules' },
+  { old: 'A setup the trend rule allows, `aligned` for its side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this step agrees and it isn\'t `blocked`: the strategy\'s normal size (position-sizing and the prop budget), and let its own exit work (don\'t bank before its trail or target).',
+    now: 'A setup the trend rule allows, `aligned` for its side, with room past what it needs and confluence with it is the opportunity this harness looks for, when the rest of this skill agrees and it isn\'t `blocked`: the strategy\'s normal size (position-sizing and the prop budget), and let its own exit work (don\'t bank before its trail or target).',
+    reason: '"this step" was trade-session step 3, whose checks are this skill now' },
+  { old: 'The priority order below decides: a policy strategy\'s verdict too.',
+    now: 'The priority order decides: a policy strategy\'s verdict too.',
+    reason: 'the priority order is the core\'s step 3 bullet now, not below it' },
+  { old: 'An order list may not show a bracket before the entry fills, so tell by the entry\'s own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind only, no `contractId` filter: the one whose `data.result.orderId` is the order; its `data.request` has `stopLossBracket` when the bracket went with it); step 6\'s note on a working entry adds context.',
+    now: 'An order list may not show a bracket before the entry fills, so tell by the entry\'s own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind only, no `contractId` filter: the one whose `data.result.orderId` is the order; its `data.request` has `stopLossBracket` when the bracket went with it); entry-outcome\'s note on a working entry adds context.',
+    reason: 'step 6\'s note on a working entry is the entry-outcome skill now' },
 ];
 
 const homeTexts = () => HOMES.map(skill);
@@ -120,7 +133,7 @@ test('trade-session split: trade-plan is step 4 byte for byte (tests/plugin/harn
 
 // The head trader's reading per cycle, by path: workspace/AGENTS.md (its skill index), the skills it loads every cycle
 // (the order gate's REQUIRED_FOR_ENTRY with the trade-session core, trader-process, htf-to-ltf, autonomous-trading) and
-// the pieces the path reads. Before the split (main at 6f972d0e, batch B merged with its descriptions shortened):
+// the pieces the path reads. Before the split (main at 6ef8cd4c, batch B merged with its descriptions shortened):
 // AGENTS.md was 24466 bytes (27240 at batch B's head) and trade-session the fixture. The skills common to both sides
 // are read from the tree, so they cancel; in index mode the head trader's situational skills are the same on both
 // sides too, so each path's budget holds in both modes.
@@ -148,12 +161,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
   for (const s of [...PIECES, 'gate-refusals-skills']) assert.match(read('workspace/AGENTS.md'), new RegExp(`^- \`${s}\` \\(skills/${s}/SKILL\\.md\\): Use `, 'm'), s);
 });
 
-// Each role's generated prompt (opencode's, the only adapter that embeds skills) in bytes, at main 6f972d0e (batch B
+// Each role's generated prompt (opencode's, the only adapter that embeds skills) in bytes, at main 6ef8cd4c (batch B
 // merged; each at most batch B's own but risk-manager and trend-momentum-analyst in full mode, which main's merge
-// review grew by 7 bytes).
+// review grew by 6 bytes).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 88189, 'news-calendar-analyst': 10523, 'risk-manager': 90634, 'strategy-researcher': 25662, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55851, 'volume-liquidity-analyst': 49366 },
-  index: { 'market-structure-analyst': 43688, 'news-calendar-analyst': 10523, 'risk-manager': 81291, 'strategy-researcher': 25662, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 41016, 'volume-liquidity-analyst': 33601 },
+  full: { 'market-structure-analyst': 88188, 'news-calendar-analyst': 10523, 'risk-manager': 90633, 'strategy-researcher': 25662, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 55850, 'volume-liquidity-analyst': 49365 },
+  index: { 'market-structure-analyst': 43667, 'news-calendar-analyst': 10523, 'risk-manager': 81270, 'strategy-researcher': 25662, 'trade-executor': 30268, 'trade-reviewer': 9195, 'trend-momentum-analyst': 40995, 'volume-liquidity-analyst': 33580 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
