@@ -306,6 +306,20 @@ test('strategy check: an entry tagged with a retired strategy is refused, saying
   }
 });
 
+test('strategy check: the trade lifecycle (signal: composed) places no entry until the gate checks its reads; its exit goes', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  assert.strictEqual(strategies.find(s => s.name === 'trade_lifecycle').status, 'active');
+  for (const side of ['buy', 'sell']) {
+    const r = evaluateOrder({ input: entryOrder({ side, rationale: `setup:trade_lifecycle ${side === 'buy' ? 'long' : 'short'}, stop 21480` }), entries: [plan(1)], now: NOW, config, strategies });
+    const v = r.violations.find(x => x.check === 'strategy');
+    assert.ok(v, JSON.stringify(r.violations));
+    assert.match(v.message, /^setup:trade_lifecycle is the trade lifecycle \(signal: composed\): the order gate doesn't check its reads yet, so it places no entries/);
+  }
+  const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the trade_lifecycle long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies });
+  assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
+});
+
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   // fx_orb: the fixture holding the retired orb rules (sessions [ny]); give it a narrower session here. Its trigger fired

@@ -21,6 +21,7 @@ const reconcile = require('./reconcile');
 const briefing = require('./briefing');
 const reasons = require('./reasons');
 const skills = require('./skills');
+const compose = require('./compose');
 
 const OPERATIONS = {
   strategies_list: strategies.list,
@@ -40,6 +41,7 @@ const OPERATIONS = {
   bar_briefing: briefing.barBriefing,
   reason_check: reasons.check,
   skill_lookup: skills.skillLookup,
+  compose_check: compose.composeCheck,
 };
 
 module.exports = { OPERATIONS };

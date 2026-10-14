@@ -13,7 +13,7 @@ const { validate } = require('../../scripts/lib/harness-tools/validate');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const NAMES = ['strategies_list', 'strategies_show', 'strategies_validate', 'strategies_scan', 'strategies_recent', 'order_plan', 'market_snapshot', 'mtf_read',
-  'blackouts_list', 'blackouts_add', 'bars_fetch', 'combine_status', 'lessons', 'reconcile', 'bar_briefing', 'reason_check', 'skill_lookup'];
+  'blackouts_list', 'blackouts_add', 'bars_fetch', 'combine_status', 'lessons', 'reconcile', 'bar_briefing', 'reason_check', 'skill_lookup', 'compose_check'];
 
 test('registry: the server is "harness", with one tool per operation', () => {
   assert.strictEqual(SERVER_NAME, 'harness');

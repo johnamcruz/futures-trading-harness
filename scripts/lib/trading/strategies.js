@@ -31,8 +31,10 @@ const rulebook = require('./rulebook');
 const { accountDirs } = require('./accounts');
 
 const STATUSES = ['active', 'paper', 'disabled'];
-// `rules` (declarative conditions in the frontmatter) or `manual` (the LLM judges the body).
-const SIGNALS = ['rules', 'manual', 'policy'];
+// `rules` (declarative conditions in the frontmatter), `manual` (the LLM judges the body), `policy` (a prop challenge
+// over rules strategies) or `composed` (the trade lifecycle: the model composes each entry from its skills, its reads
+// checked by compose_check: harness-tools/compose.js).
+const SIGNALS = ['rules', 'manual', 'policy', 'composed'];
 const FILTERS = {
   adx_min: v => typeof v === 'number' && v >= 0,
   adx_max: v => typeof v === 'number' && v >= 0,
@@ -177,7 +179,14 @@ function validateStrategy(data, body, folderName) {
     ? `signal: ${data.signal} is no longer a code detector; write the trigger as rules (${Object.hasOwn(RETIRED, data.signal)
       ? `the ${data.signal} strategy was retired on ${RETIRED[data.signal]}: its rules block is in the repository's history, strategies/README.md says why`
       : `copy the rules block from strategies/${data.signal}/STRATEGY.md`})`
-    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a prop-challenge strategy trades other strategies' setups on a prop account, sized from its budget)`);
+    : `signal: one of ${SIGNALS.join(', ')} (rules = conditions in the rules block; manual = the LLM evaluates the trigger from the body; policy = a prop-challenge strategy trades other strategies' setups on a prop account, sized from its budget; composed = the model composes each entry from its skills and compose_check verifies its reads)`);
+  // The trade lifecycle: its stop is the verified invalidation level the model names, and the gate's dollar cap is
+  // skipped for a strategy that states none (order-limits.js), so it must state one.
+  if (data.signal === 'composed') {
+    req(data.risk && data.risk.stop === 'structure', 'risk.stop: structure (signal: composed: the stop is the verified level the model names)');
+    req(data.risk && typeof data.risk.max_risk_usd === 'number' && data.risk.max_risk_usd > 0, 'risk.max_risk_usd: required for signal: composed (the per-trade dollar cap)');
+    req(data.exit === undefined, 'exit: not for signal: composed (its target is the verified level the model names)');
+  }
   if (data.signal === 'rules') {
     errors.push(...compileRules(data.rules).errors);
   } else if (data.rules !== undefined) {
@@ -498,6 +507,8 @@ function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
       results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: the runner screens the setups of ${s.strategies.join(', ')}` : 'a policy strategy with no strategies listed: no setups' });
       continue;
     }
+    // The trade lifecycle has no trigger to scan: the model composes it (compose_check).
+    if (s.signal === 'composed') continue;
     try {
       results.push(withStyle(ev.at(s, norm.length - 1, { now, describe: true }), s));
     } catch (err) {
@@ -583,6 +594,9 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
   }
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
+  // Fails closed until the gate re-checks a composed entry's reads against the cycle bar's briefing: until then a
+  // composed strategy places no entry, whatever its status (its exits and protection never reach this check).
+  if (s.signal === 'composed') return `setup:${name} is the trade lifecycle (signal: composed): the order gate doesn't check its reads yet, so it places no entries. compose_check records the plan; no order.`;
   const notTraded = rootRefusal(s, contractRoot, selection ? selection.symbols : null);
   if (notTraded) return `setup:${name} ${notTraded}.`;
   if (!inSessions(s, now)) return `setup:${name} is outside its sessions (${s.sessions.join(', ')}).`;

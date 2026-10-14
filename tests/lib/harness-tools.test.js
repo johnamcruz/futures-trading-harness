@@ -58,7 +58,7 @@ test('cli: context defaults, options, and an OpError keeps the output before the
 test('strategies: list, show, validate, scan, recent as operations', () => {
   // The shipped tree lists prop_portfolio only (every rules strategy retired); the fixture strategies (FX_GOLDEN:
   // the retired rules under fx_ names) give the scans something to fire.
-  assert.deepStrictEqual(JSON.parse(strategies.list({ json: true }, { env: {}, now: clock() }).text).map(r => r.name), ['prop_portfolio']);
+  assert.deepStrictEqual(JSON.parse(strategies.list({ json: true }, { env: {}, now: clock() }).text).map(r => r.name), ['prop_portfolio', 'trade_lifecycle']);
   const ctx = { env: { FTH_STRATEGIES_DIRS: FX_GOLDEN }, now: clock() };
   const rows = JSON.parse(strategies.list({ json: true }, ctx).text);
   assert.ok(rows.some(r => r.name === 'fx_orb'));
@@ -253,7 +253,7 @@ test('bars: fetch through the broker; only its own arguments reach the file writ
 
 test('index: one function per agent operation, and none of the user\'s', () => {
   assert.deepStrictEqual(Object.keys(OPERATIONS).sort(), [
-    'bar_briefing', 'bars_fetch', 'blackouts_add', 'blackouts_list', 'combine_status', 'lessons', 'market_snapshot', 'mtf', 'order_plan', 'reason_check', 'reconcile',
+    'bar_briefing', 'bars_fetch', 'blackouts_add', 'blackouts_list', 'combine_status', 'compose_check', 'lessons', 'market_snapshot', 'mtf', 'order_plan', 'reason_check', 'reconcile',
     'skill_lookup', 'strategies_list', 'strategies_recent', 'strategies_scan', 'strategies_show', 'strategies_validate',
   ]);
   for (const [name, fn] of Object.entries(OPERATIONS)) assert.strictEqual(typeof fn, 'function', name);

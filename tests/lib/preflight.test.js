@@ -156,7 +156,7 @@ test('preflight run: every check through fakes, read-only (no order tool is ever
   assert.strictEqual(status(report.results, 'clock'), 'ok');
   // The runner's lane and each agent role's timeframe are reported (lanes.js).
   assert.strictEqual(status(report.results, 'lane 3m'), 'ok');
-  assert.match(report.results.find(x => x.check === 'lane 3m').detail, /^3m bars, trigger bar; strategies: none; policies: prop_portfolio \(from timeframe and trigger\)$/, 'the shipped tree: no rules strategy since 2026-10-14');
+  assert.match(report.results.find(x => x.check === 'lane 3m').detail, /^3m bars, trigger bar; strategies: trade_lifecycle; policies: prop_portfolio \(from timeframe and trigger\)$/, 'the shipped tree: no rules strategy since 2026-10-14; the trade lifecycle on the 3m lane');
   assert.strictEqual(status(report.results, 'agent timeframes'), 'ok');
   assert.match(report.results.find(x => x.check === 'agent timeframes').detail, /risk-manager 3m/);
   assert.strictEqual(status(report.results, 'account lock'), 'ok');

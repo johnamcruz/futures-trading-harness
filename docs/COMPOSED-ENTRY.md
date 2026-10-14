@@ -262,11 +262,13 @@ refuses it, naming the read.
 runner passes the cycle bar; without it `briefingFor` would return the
 briefing current at the wall clock, so the tool refuses rather than guess.
 It then works out the plan in code and appends a record to
-`<FTH_HOME>/composed/<ROOT>.jsonl`, the way the runner records policy
-verdicts (`prop-state.js:526`):
+`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl` (one file per index family; its
+schema is `RECORD_KEYS` in `trading/trade-lifecycle.js`), the way the runner
+records policy verdicts (`prop-state.js:526`):
 
 - the root, contract, side, bar (the briefing's `asOf`), `at`, `expiresAt`
-  (the next base-bar close), the run id and the lane;
+  (the next base-bar close), the cycle id and the lane (the briefing's base
+  timeframe); the run id comes with the runner (PR 14);
 - the context: `m3.regime` (primary and volatility), `m3.window`, the trend
   rule for the side, `m15.alignment` for the side, `m3.today.dayType`
   (section 4.2);
@@ -338,7 +340,7 @@ the tag (`order-gate.js:49`), so a signature, if written, comes after it.
 
 | Check | Composed entry |
 |---|---|
-| `setup-tag`, `strategy` | Unchanged. `trade_lifecycle` resolves to `strategies/trade_lifecycle/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`paper`), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
+| `setup-tag`, `strategy` | Unchanged. `trade_lifecycle` resolves to `strategies/trade_lifecycle/STRATEGY.md`, a document with a new `signal: composed` that holds the status (`active`, the owner's decision: until this check is built the strategy check refuses its entries), sessions, contracts, `risk.min_rr` and `risk.max_risk_usd` (required); no rules, no combination |
 | `trigger-fired` | Replaced, for `setup:composed`, by a new hard check `composed-reads`, keyed on the tag and run outside the skippable checks, so it runs even when the composed document is missing or invalid (not behind `named.valid !== false`, `order-gate.js:280-284`). It loads the latest record for the root and **re-runs the pure reads checker** on the record's reads against `briefingFor(home, root, { cycleBar })`: it never trusts the record's `ok` flag. The reads must be true and side-agreeing, the record for this bar (unexpired) and the order's side; the plan is recomputed and the bracket ticks must equal it; the size at most `maxSize`; the order `type: limit` at the record's reference or better (section 3.4); the record not yet used for an entry; an exploratory record only in replay practice (D18); and, once required (D15), an `experience_lookup` on the record recorded this cycle |
 | `mtf-trend` | Unchanged; the style is `trend` unless D2's verified reversal applies |
 | `phase2-facts` | Unchanged forms and minimum; `factsOrder` (`order-gate.js:64-72`) gives the composed record, so a room fact is checked against the record's first level in the way instead of `m3.candidates` |
@@ -502,7 +504,7 @@ computes.
 
 | Source | Gives the log |
 |---|---|
-| The composed record (`<FTH_HOME>/composed/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
+| The composed record (`<FTH_HOME>/trade-lifecycle/<ROOT>.jsonl`, section 3.3) | The reads, plan, signature, bar and context fields |
 | Cycle log (`cycle-log.js`: `<FTH_HOME>/logs/cycles-<day>.jsonl`) | The cycle's result, its `compose_check` and `experience_lookup` calls, the gate's refusals |
 | Decision history (`decision-history.js`) | The action words (entered, skipped, no-trade) and its fill matching for an entered trade's real R (`closedTrade`, `decision-history.js:326`). The history itself is not the log: the runner keeps only the last ten (`runner.js:1410`) |
 | Counterfactual (`replay/counterfactual.js:70`, `simulate`) | A pass's R from the record's stop and target distances, with the backtester's slippage |
@@ -998,7 +1000,7 @@ Each PR is small, runs `npm run verify`, and gets the adversarial review.
 
 - **PR 11.** **`compose_check` and the record.** The tool, the record file, the stop
   and target rules, the minimum stop; `strategies/trade_lifecycle`
-  (`signal: composed`, `status: paper`, `risk.max_risk_usd` required).
+  (`signal: composed`, `status: active` with its entries refused until PR 12, `risk.max_risk_usd` required).
 - **PR 12.** **Gate.** `composed-reads` (re-runs the checker, keyed on the tag,
   requires the limit entry), side agreement, the replay exemption (D10),
   `factsOrder` for room facts, `SITUATIONAL` rekeyed on the record; gate and wiring

@@ -208,6 +208,26 @@ const TOOLS = [
     args: i => pick(i, { skill: 'skill', role: 'role', query: 'query' }),
     narrow: 'the skill is too large to return; for the list, give query',
   },
+  {
+    name: 'compose_check', op: 'compose_check', script: 'compose-check',
+    description: 'Check a trade-lifecycle combination: your reads (one per step at least: bias, location, setup, entry, stop, target; each a closed form) against this cycle\'s bar briefing, each TRUE, FALSE or UNCHECKED and agreeing with the side or not; then the plan in code (a limit at the bar\'s close, the stop one tick beyond your stop level, at least max(8 ticks, 0.25 x ATR(20)), the target on your level, R:R, your size\'s dollar risk). Records every call; OK or the reads and problems that fail. A checker, never advice; it places nothing.',
+    inputSchema: object({
+      symbol: SYMBOL,
+      side: { type: 'string', enum: ['long', 'short'] },
+      reads: {
+        type: 'array', minItems: 1, maxItems: 16,
+        items: object({
+          step: { type: 'string', enum: ['bias', 'location', 'setup', 'entry', 'stop', 'target'] },
+          skill: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$', description: 'The skill you read it with.' },
+          read: { type: 'string', minLength: 1, maxLength: 120, description: 'One form, e.g. "1h bos up", "at prior VAH", "15m rejected prior VAH up", "3m close top", "stop 15m low 21512.75", "target 1h swing 21598".' },
+          why: { type: 'string', maxLength: 400, description: 'Your reason, a sentence (kept to 160 characters).' },
+        }, ['step', 'skill', 'read']),
+      },
+      size: { type: 'integer', minimum: 1, maximum: 100, description: 'Contracts, from the sizing skills.' },
+    }, ['symbol', 'side', 'reads', 'size']),
+    args: i => ({ symbol: i.symbol, side: i.side, reads: i.reads, size: i.size }),
+    narrow: 'state fewer reads',
+  },
 ];
 
 const BY_NAME = new Map(TOOLS.map(t => [t.name, t]));

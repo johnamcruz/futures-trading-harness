@@ -1,4 +1,4 @@
-strategies (1): prop_portfolio
+strategies (2): prop_portfolio, trade_lifecycle
 strategy ext_reader: {
   "body": "965 chars sha256:5de2ee4a1c01e6cd",
   "compiledRules": "sha256:918e17a16c8a19fb",
@@ -705,6 +705,33 @@ strategy prop_portfolio: {
   "timeframe": "3m",
   "valid": true,
   "version": 2
+}
+strategy trade_lifecycle: {
+  "body": "1908 chars sha256:9b928571672fdbec",
+  "compiledRules": null,
+  "compiledStop": null,
+  "compiledTarget": null,
+  "description": "The trade lifecycle - each bar the model puts together its bias, location, setup, entry, stop, target and size from its skills, or passes; code verifies every read against the bar briefing and records the decision, so it learns from scored outcomes which combinations work. No combination is hard-coded.",
+  "errors": [],
+  "instruments": [
+    "MNQ",
+    "MES",
+    "MYM",
+    "M2K"
+  ],
+  "mtf": "trend",
+  "name": "trade_lifecycle",
+  "risk": {
+    "stop": "structure",
+    "min_rr": 2,
+    "max_risk_usd": 100
+  },
+  "signal": "composed",
+  "source": "the owner's trade-lifecycle design (the model learns which skills to combine from the market)",
+  "status": "active",
+  "timeframe": "3m",
+  "valid": true,
+  "version": 1
 }
 accounts (5): test_100k, test_50k, <name-43f416>, <name-aa1519>, <name-45bd4d>
 account test_100k: {
