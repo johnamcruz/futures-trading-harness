@@ -1,98 +1,22 @@
 ---
 name: strategy-library
-description: Find, read, and apply the harness strategies - STRATEGY.md files with code-checked frontmatter and an LLM-read body - and scan bars for strategy candidates with the harness tools. Use whenever choosing, checking, or tagging a trade, and to locate the harness root ($FTH_ROOT).
+description: Apply a harness strategy to a setup (its body, trigger, filters, skip rules, stop, tag) and the priority order that takes, skips or sizes every setup.
 ---
 
 # Strategy Library
 
 Strategies are Markdown documents, not code. Each lives at
 `strategies/<name>/STRATEGY.md` (plus any folder in `FTH_STRATEGIES_DIRS`).
+Reading a scan is the `strategy-scan` skill; what the order gate checks of a
+strategy is the `strategy-gate-checks` skill; finding `<root>` is the
+`harness-root` skill.
 
 ## When to Use
 
 - Before any plan: which strategies apply to this symbol, now?
-- When tagging an order: the tag `setup:<name>` must name an active strategy.
-- When a path in the harness is needed (a strategy file, the runner's logs):
-  find the harness root, written `<root>` below.
+- Before any trade: apply the strategy, then the priority order.
 
 ## How It Works
-
-### Find the harness root (`<root>`)
-
-The absolute path of the folder that contains `strategies/` and `scripts/`. In order:
-
-1. The autonomous prompt or the session briefing ("Harness root (FTH_ROOT): /abs/path").
-2. The `FTH_ROOT` environment variable (`echo $FTH_ROOT`).
-3. The parent of the `workspace/` folder you were started in, or two
-   directories above this skill's folder for a plugin install.
-
-Always write absolute paths (a bars file, a strategy file).
-
-### Read the library
-
-With the harness tools (the `harness-tools` skill):
-
-```text
-strategies_list {}                       name, status, signal, instruments
-strategies_show {"name": "orb"}          the full STRATEGY.md
-strategies_scan {"bars": "<bars file>", "symbol": "MNQ"}                 summary: candidates, then a line per strategy
-strategies_scan {"bars": "<bars file>", "symbol": "MNQ", "name": "orb"}   one strategy's full result
-strategies_list {"json": true}           machine-readable
-strategies_recent {"bars": "<bars file>", "symbol": "MNQ", "count": 5}   what fired on each of the last 5 bars
-```
-
-`recent` answers the skip rules about recent signals ("fired the other way
-in the last 5 bars"). A strategy's full scan result (`name`) has `detail`, the detectors' state:
-a CRT's candle (`c1Open`/`c1High`/`c1Low`/`c1Close`) and why it did or didn't
-fire, and cisd_ote's `cisd(15)`: the CISD level, the leg, the zone, the stop
-and the swept level.
-
-`strategies_scan` judges sessions at the current time (the harness clock: a
-replay broker's replayed time when `FTH_REPLAY_NOW` is set); it takes no time
-of its own (a person replaying a file runs the strategies script's scan with `--now`).
-With `FTH_REPLAY_NOW` set but no real replay broker, or not an ISO 8601 UTC
-time, the scan refuses (tell the user). It reads the
-signal on the file's last closed bar, and only for the strategies whose
-timeframe is the file's (the bars' spacing), as the runner does: on 3m bars
-the 1m strategies are not in the result at all (a 1m strategy's signal comes
-from 1m bars only). `name` on a strategy of another timeframe is refused,
-naming both timeframes; fetch bars on that strategy's timeframe to scan it.
-On bars no strategy trades (15m, say) the scan says so and lists the
-timeframes the strategies trade: that is not "no setup", it is the wrong bars.
-Read the result only when that last bar is fresh (no older than one bar plus
-a minute).
-
-The scan's summary gives the bar, the higher-timeframe trends, the
-candidates first (side, entry reference, stop distance, min R:R, exit,
-confluence), then one line per strategy: status, timeframe, direction,
-candidate, and why not (the rules that did not hold, outside its sessions,
-the regime, or what failed). The values that rules reading a broker field
-saw on the bar appear in two places only: a candidate's `values:` (its side's
-rules that held; for an `any(...)` group, the branches that held), and, when
-no rule set fired, next to each rule that did not hold, `[field("a.b")=0.42]`
-(`missing` when the bar has none; at most 6 per strategy, the rest counted).
-A strategy that fired but failed a filter shows none. A field's meaning and
-units are in the strategy's own document (`strategies_show`); never guess them. For one strategy's full result, call it with
-`name`; `detail: true` returns every strategy's (large). The scan runs
-market-snapshot with each strategy's `params`, and a full result reports:
-`direction` (mechanical signal on the last closed bar),
-`filtersFailed`, `inSession`, `regime` (the computed regime of these bars),
-`inRegime` (fits the strategy's `regimes`: the trend-following strategies,
-`orb`, `value_area_breakout` and `vwap_reclaim`, never trade a range, and the order gate refuses
-their entries there too), `confluence` (on a strategy
-that fired: the other strategies on its timeframe that fired the same side,
-`with`, and the other side, `against`), `mtf` (the trend rule: the 4h,
-1h, 15m trends, the `prevailing` one, and `longAllowed` / `shortAllowed` for
-this strategy's style; its `reason` names the side it blocks, e.g. "longs are
-against the prevailing 15m down trend …; shorts are with it"), `candidate`,
-and `stopDistance`. Read the flag for the side the strategy fired: a short
-with `shortAllowed: true` is with the trend, whatever the reason says about
-longs. A trend strategy that fires against the prevailing trend is never a
-candidate (`filtersFailed` says `mtf: ...`); only `mtf: reversal` strategies
-may fade it. `signal: rules`
-strategies also list each rule with `ok: true|false`, so you can explain why
-one did or didn't fire. Strategies with `signal: manual` are listed
-as candidates when in session; you evaluate their trigger from the body.
 
 ### Apply a strategy
 
@@ -143,54 +67,9 @@ steps halve, the size is halved once.
 
 Every other skill and role applies this order; none restates it.
 
-### What the code enforces (order gate and MCP gateway)
-
-Live entries are blocked unless `setup:<name>` names a valid strategy with
-`status: active`, the contract root is in `instruments`, and the time is inside
-`sessions`. A rules strategy trades one leg of a micro/mini family it lists:
-the selected contract (the runner's `symbols`, or `FTH_SYMBOLS`). Listing MNQ,
-it trades NQ when NQ is selected, and then never MNQ ("setup:orb trades NQ
-(the selected contract), not MNQ"): trade the selected contract, don't switch
-legs. With no leg selected it trades exactly what it lists (listing both legs
-of a family, neither until one is selected). A policy strategy trades the
-selected contract too: its verdict is sized in that leg only (MNQ selected: so
-many MNQ, never switched to NQ), and the other leg is refused; its `contracts`
-mode picks the leg only when none is selected. Every other check
-uses the contract ordered: its broker tick specs, and its size and
-`risk.max_risk_usd` in its own dollars (one NQ at a 40-tick stop risks
-$200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded.
-A retired strategy (`bos`, `keltner`, `ema_cross`, `supertrend`;
-strategies/README.md, "Retired strategies") is no setup: its tag is refused,
-saying so, and a position it opened is still exited and protected with
-`[exit]` or `[protect]`. While the runner's lane on a timeframe lists one, no
-entry on that timeframe goes, under any tag (`retired-lane`): that lane only
-manages what is open. A rules strategy
-enters only on its own trigger (`trigger-fired`): the signal record must show
-it fired on that side on a bar that closed at most 3 bars of the strategy's
-own timeframe ago and never more than 45 minutes ago (3 min on 1m, 9 min on
-3m, 45 min on 15m and 1h; the
-runner records every bar; interactively `strategies_scan` with `record: true`,
-whose `symbol` is a contract root such as `MNQ`; refused while the
-autonomous runner is running, which records the symbols it trades). The gate does
-**not** judge a manual strategy's trigger, the skip rules, or that the order
-is the plan's: those are yours and risk-manager's. It does refuse an order that contradicts its
-own rationale (`order-consistency`): write the side right after the tag
-(`setup:orb long ...`), the stop and target as prices on the tick, and
-brackets the same distance as those prices.
-While a prop attempt runs, only its policy strategy's verdict can enter.
-A policy trades only its `active` strategies: a `paper` one stays paper
-inside it (the runner passes over its setup, and the gate refuses an entry
-whose verdict names a strategy that isn't active or that it doesn't know,
-`[policy] ... has status "paper"`); the backtester's prop runs leave it out
-the same way, while still counting its signal as agreement or disagreement,
-as the live scan does.
-The trend rule is a hard gate check (`mtf-trend`): a trend strategy's entry
-against the recorded prevailing trend, or without a fresh record, is refused.
-
 ## Examples
 
 ```text
-strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stopDistance 5.25, minRR 1.5 (a candidate)
 strategies_show orb → skip rule "relative volume < 1.0x" → volume analyst reports 0.8x → no trade.
 
 strategies_scan → crt_1h short, a candidate, stopDistance 18.5 → read the

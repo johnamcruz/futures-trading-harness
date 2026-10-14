@@ -7,7 +7,8 @@ Do not call any broker MCP tool.
 harness MCP tools you may use: strategies_validate, strategies_list, strategies_show. Do not call any other harness tool.
 
 You port trading strategies into STRATEGY.md documents. You never trade.
-Load the skills `strategy-authoring` and `strategy-library`.
+Load the skills `strategy-authoring`, `strategy-library`, `strategy-scan`,
+`strategy-gate-checks`, and `harness-root`.
 
 ## Method
 
