@@ -509,6 +509,9 @@ test('the event log records cycles, account reads, managed positions, stops move
   assert.ok(moved.length >= 1 && moved.every(e => e.to > e.from), JSON.stringify(moved));
   const closed = shut.events.find(e => e.kind === 'position_closed');
   assert.ok(closed && /trail/.test(closed.why) && closed.peakR >= 2 && typeof closed.rNow === 'number', JSON.stringify(closed));
+  // The runner's own exit is kept for the decision history's real R (decision-history.js withPositions).
+  const own = shut.runner.state.runnerCloses && shut.runner.state.runnerCloses[closed.contractId];
+  assert.ok(own && Math.abs(own.r - closed.rNow) < 0.01 && Number.isFinite(Date.parse(own.at)), JSON.stringify(shut.runner.state.runnerCloses));
   // Every cycle is timed and carries its result line; the account read for it is logged.
   const end = trail.events.find(e => e.kind === 'cycle_end');
   assert.ok(end && end.ok === true && end.result === 'CYCLE RESULT: managed - trade' && typeof end.ms === 'number' && end.symbols[0] === 'MNQ', JSON.stringify(end));
@@ -847,15 +850,41 @@ test('an executed cycle\'s history entry reads the order it placed from the jour
   const [first, second] = r.runner.state.history;
   assert.deepStrictEqual([first.action, first.setup, first.side, first.stop, first.symbol, first.tick], ['entered', 'keltner', 'short', 6, 'MNQ', 0.25]);
   assert.deepStrictEqual([second.action, second.setup], ['managed', undefined]);
-  // The journal can't be read after the cycle: the entry keeps the bar's facts (no order's), and the runner says so.
+  // The journal can't be read after the cycle: the bar's facts, but no setup guessed; the runner says so.
   const logs = [];
   const failed = await simulate({
     cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market,
-    deps: { runCycle: async () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: executed - orb long' }), journalEntries: () => { throw new Error('journal locked'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+    deps: { runCycle: async () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: executed - orb long' }), journalEntries: () => { throw new Error('journal locked'); }, scanFor: () => [{ name: 'orb', direction: 'long', candidate: true, signal: 'rules', stopDistance: 2 }], log: (m, level = 'info') => logs.push(`${level} ${m}`) },
   });
   const kept = failed.runner.state.history[0];
-  assert.deepStrictEqual([kept.action, kept.symbol, kept.setup, Number.isFinite(kept.price)], ['entered', 'MNQ', undefined, true]);
-  assert.ok(logs.some(l => /error history: the journal unavailable \(journal locked\); the entry's facts from the scan only/.test(l)), logs.join('\n'));
+  assert.deepStrictEqual([kept.action, kept.symbol, kept.setup, kept.details, Number.isFinite(kept.price)], ['entered', 'MNQ', undefined, 'unavailable', true]);
+  assert.ok(logs.some(l => /error history: the journal unavailable \(journal locked\); the entry's details unavailable/.test(l)), logs.join('\n'));
+});
+
+test('an entered decision follows its real position across cycles: open from the fill with the broker trade\'s R, then closed once the account lists it no more', async () => {
+  const base = fakeMarket({ minutes: 3 });
+  // Flat until 10:02, a long from 0.5 (stop 0.25 below, 1R = 0.25) until 10:05, then flat.
+  const accountAt = c => ({
+    positions: c.t >= et(10, 2) && c.t < et(10, 5) ? [{ id: 7, contractId: 'MNQ', type: 1, size: 1, averagePrice: 0.5, creationTimestamp: new Date(et(10, 0, 40)).toISOString() }] : [],
+    orders: c.t >= et(10, 2) && c.t < et(10, 5) ? [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 0.25 }] : [],
+  });
+  const market = { client: (c, p) => ({ ...base.client(c, p), async activeContract(symbol) { return { id: symbol, tickSize: 0.25 }; }, async accountState() { return accountAt(c); }, async accountBalance() { return 100000; } }) };
+  let n = 0;
+  const seen = [];
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '7' }, from: et(10, 0), to: et(10, 10), market,
+    deps: {
+      runCycle: async (action, prompt) => { n += 1; seen.push(prompt); return { ok: true, timedOut: false, result: n === 1 ? 'CYCLE RESULT: executed - orb long' : 'CYCLE RESULT: managed - held' }; },
+      journalEntries: () => [{ ts: new Date(et(10, 0, 30)).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 0.25', data: { request: { side: 'buy', stopLossBracket: { ticks: 1 } }, result: { success: true } } }],
+    },
+  });
+  const prompts = seen;
+  assert.ok(prompts.some(p => /entered orb long @1: orb long; since 0t, open from 0\.5\./.test(p)), prompts.join('\n\n'));
+  // Gone at 10:05: the fake bars (low 0) went through its working stop 0.25 after it was last seen open.
+  assert.ok(prompts.some(p => /entered orb long @1: orb long; since 0t, closed -1R at its stop \|/.test(p)), prompts.join('\n\n'));
+  const entry = r.runner.state.history.find(h => h.action === 'entered');
+  assert.strictEqual(entry.trade.state, 'closed');
+  assert.strictEqual(entry.trade.fill, 0.5);
 });
 
 test('the trade prompt carries the last closed bars and the model\'s own last cycle results', async () => {

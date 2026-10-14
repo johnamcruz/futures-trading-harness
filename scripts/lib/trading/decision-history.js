@@ -21,13 +21,19 @@
  *   - the ticks moved from the decision's price to the last closed bar's close;
  *   - a skipped, no-trade or planned setup with a stop: whether price would have reached +1R or -1R from the
  *     decision's price first (a bar reaching both counts as -1R, the stop first), or neither yet;
- *   - an entered trade, bar by bar: its initial stop (-1R; "best +xR, then the initial stop" when it had reached
- *     +1R first), its target when known, else closed at a later flatten of the symbol, else its R now at the last
- *     close ("by day end" for an earlier day's) (from the decision's price and stop: the fill may differ).
+ *   - an entered trade: its real position, never the decision's price (withPositions): while the broker lists it,
+ *     "open from <fill>, now +xR" (the open trade's own R: fill and initial risk); once it is gone, "closed" with the
+ *     R of the runner's own exit, else of the working stop or target a bar reached after it was last seen open
+ *     (from the fill), else no R; "no position seen" while none was matched.
  * Only bars of the decision's trading day and contract count (the runner flattens at end of day; a roll changes
  * the prices); a decision from an earlier trading day carries its date. A setup is named only on a decision about
- * one (entered, skipped, planned); a manage, flatten or block names the symbol its reason names.
+ * one (entered, skipped, planned); a manage, flatten or block names the symbol its reason names. An executed cycle
+ * whose journal could not be read names no setup ("details unavailable"): it is not guessed from the scan.
  * An entry from before these fields (only { at, symbols, result }) renders with what it has.
+ *
+ *   withPositions(history, { trades, known, now, market, closes })   the entered entries with their real position:
+ *       `trades` the open trades (open-trades.js), `known` whether the account's positions were read this cycle (a
+ *       failed read closes nothing), `closes` the runner's own exits ({ [contractId]: { at, r } }).
  */
 
 const { et } = require('./session-context');
@@ -88,7 +94,7 @@ function placedSince(entries, sinceMs, startMs = sinceMs) {
 }
 
 /** The state.history entry for a cycle (see the module comment). */
-function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null }) {
+function decisionEntry({ at, symbols = [], result = null, items = [], entries = [], lanes = null, journalFailed = false }) {
   const base = { at, symbols, result, ...(Array.isArray(lanes) && lanes.length ? { lanes } : {}) };
   const list = (items || []).filter(x => x && x.bar && x.bar.t);
   if (!list.length) return base;
@@ -105,7 +111,9 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   const named = list.find(x => new RegExp(`\\b${String(x.symbol).replace(/[^A-Za-z0-9]/g, '')}\\b`, 'i').test(reason));
   const item = (placed && placed.root && list.find(x => rootOf(x) === placed.root))
     || (aboutSetup && ((named && setupOf(named) ? named : null) || list.find(x => setupOf(x)))) || named || list[0];
-  const setup = aboutSetup ? setupOf(item) : null;
+  // An entry whose order can't be read (the journal failed): its setup is not guessed from the scan.
+  const unknown = action0 === 'entered' && journalFailed;
+  const setup = aboutSetup && !unknown ? setupOf(item) : null;
   const tick = Number(item.tickSize) > 0 ? Number(item.tickSize) : null;
   const action = action0 === 'no-trade' && setup ? 'skipped' : action0;
   const same = setup && placed && setup.setup === placed.setup;
@@ -117,6 +125,7 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   return {
     ...base, symbol: item.symbol, tf: Number(item.minutes) || null, bar: item.bar.t, price: Number(item.bar.c), tick, ...(contract ? { contract } : {}), action,
     ...Object.fromEntries(Object.entries(facts).filter(([, x]) => x !== null && x !== undefined)), ...why,
+    ...(unknown ? { details: 'unavailable' } : {}),
   };
 }
 
@@ -129,16 +138,16 @@ function marketOf(items, timeframe) {
 }
 
 /**
- * What happened since entry `e`, from market `m`'s bars closed by m.asOf (and before `exit`, a later flatten of
- * the symbol: { at: its bar's close in ms, price }): '' when nothing can be said.
+ * What happened since entry `e` (not an entry's R: tradeText), from market `m`'s bars closed by m.asOf:
+ * '' when nothing can be said.
  */
-function outcome(e, m, exit = null) {
+function outcome(e, m) {
   if (!m || !Number.isFinite(e.price) || !(e.tick > 0) || !e.bar || !(m.minutes > 0) || !Number.isFinite(m.asOf)) return '';
   // Another contract (a roll since): its prices are not this decision's.
   if (e.contract && m.contractId && e.contract !== m.contractId) return '';
   const step = m.minutes * 60000;
   const from = Date.parse(e.bar) + (Number(e.tf) || m.minutes) * 60000;
-  const until = exit ? Math.min(m.asOf, exit.at) : m.asOf;
+  const until = m.asOf;
   // The decision's trading day only (the runner flattens at its end of day).
   const day = Number.isFinite(from) ? tradingDayKey(new Date(Date.parse(e.bar))) : null;
   const after = (Array.isArray(m.bars) ? m.bars : []).filter(b => {
@@ -157,26 +166,70 @@ function outcome(e, m, exit = null) {
     if (NOT_TAKEN.has(e.action)) {
       const first = after.find(b => hit(b, 1) || hit(b, -1));
       out.push(!first ? 'neither +1R nor -1R yet' : hit(first, -1) ? 'would hit -1R first' : 'would hit +1R first');
-    } else if (e.action === 'entered') {
-      const fmt = v => { const x = Math.round(v * 10) / 10; return `${x > 0 ? '+' : ''}${x}R`; };
-      const r = x => fmt(sign * (x - e.price) / R);
-      // Bar by bar: the initial stop first (conservative), then the target; the best excursion before either.
-      const T = Number(e.target) > 0 ? Number(e.target) / R : null;
-      let best = null;
-      let closed = null;
-      for (const b of after) {
-        if (hit(b, -1)) { closed = best !== null && best >= 1 ? `best ${fmt(best)}, then the initial stop -1R` : 'stopped -1R'; break; }
-        if (T !== null && hit(b, T)) { closed = `target ${fmt(T)}`; break; }
-        const v = sign * (Number(sign > 0 ? b.h : b.l) - e.price) / R;
-        best = best === null ? v : Math.max(best, v);
-      }
-      if (closed) out.push(closed);
-      else if (exit) out.push(`flattened ${r(exit.price)}`);
-      // An earlier day's trade: the runner flattened it at that day's end of day, so its R is "by day end", not now.
-      else out.push(`${tradingDayKey(new Date(m.asOf)) === day ? 'now' : 'by day end'} ${r(last)}`);
     }
   }
   return out.join(', ');
+}
+
+const fmtR = v => { const x = Math.round(Number(v) * 10) / 10; return `${x > 0 ? '+' : ''}${x}R`; };
+
+/** An entered trade's real position (withPositions), never measured from the decision's price. */
+function tradeText(e) {
+  const t = e.trade;
+  if (!t) return 'no position seen';
+  if (t.state === 'open') return `open from ${num(t.fill)}${Number.isFinite(t.rNow) ? `, now ${fmtR(t.rNow)}` : ''}`;
+  return `closed${Number.isFinite(t.r) ? ` ${fmtR(t.r)}` : ''}${t.how ? ` ${t.how}` : ''}`;
+}
+
+const rootOfId = id => { try { return contractRoot(id); } catch (_err) { return String(id || '').toUpperCase(); } };
+
+/**
+ * How a position last seen open (`tr`) closed by `nowMs`: the runner's own exit (`closes`), else the first bar,
+ * closed after it was last seen and by now, through its working stop (first) or target, from the fill.
+ */
+function closedTrade(tr, m, closes, nowMs) {
+  const seen = Date.parse(tr.seenAt);
+  const own = closes && tr.contractId ? closes[tr.contractId] : null;
+  if (own && Date.parse(own.at) > seen && Date.parse(own.at) <= nowMs && Number.isFinite(own.r)) return { ...tr, state: 'closed', r: own.r, how: 'by the runner\'s exit' };
+  const sign = tr.side === 'long' ? 1 : tr.side === 'short' ? -1 : 0;
+  const R = Number(tr.risk);
+  const done = (px, how) => ({ ...tr, state: 'closed', r: sign && R > 0 ? Math.round(sign * (px - tr.fill) / R * 100) / 100 : null, how });
+  if (m && m.minutes > 0 && sign) {
+    const step = m.minutes * 60000;
+    const until = Math.min(nowMs, Number.isFinite(m.asOf) ? m.asOf : nowMs);
+    for (const b of (Array.isArray(m.bars) ? m.bars : [])) {
+      const t = b && Date.parse(b.t);
+      if (!Number.isFinite(t) || t + step <= seen || t + step > until) continue;
+      if (Number.isFinite(tr.stop) && (sign > 0 ? Number(b.l) <= tr.stop : Number(b.h) >= tr.stop)) return done(tr.stop, 'at its stop');
+      if (Number.isFinite(tr.target) && (sign > 0 ? Number(b.h) >= tr.target : Number(b.l) <= tr.target)) return done(tr.target, 'at its target');
+    }
+  }
+  return { ...tr, state: 'closed', r: null, how: null };
+}
+
+/** The entered entries with their real position (see the module comment); the history is otherwise unchanged. */
+function withPositions(history, { trades = [], known = false, now, market = [], closes = {} } = {}) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const list = (history || []).slice();
+  const open = (trades || []).filter(t => t && t.contractId && Number.isFinite(Number(t.entry)))
+    .sort((a, b) => (Date.parse(b.openedAt) || 0) - (Date.parse(a.openedAt) || 0));
+  const claimed = new Set();
+  // Newest decision first: each open trade belongs to the latest entry on its root and side opened since it.
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const h = list[i];
+    if (!h || h.action !== 'entered' || !h.bar || (h.trade && h.trade.state === 'closed')) continue;
+    const root = rootOfId(h.contract || h.symbol);
+    const t = open.find(x => !claimed.has(x) && rootOfId(x.contractId) === root && (!h.side || x.side === h.side)
+      && (!x.openedAt || Date.parse(x.openedAt) >= Date.parse(h.bar))
+      && (!h.trade || !h.trade.openedAt || !x.openedAt || x.openedAt === h.trade.openedAt));
+    if (t) {
+      claimed.add(t);
+      list[i] = { ...h, trade: { state: 'open', contractId: t.contractId, side: t.side, fill: Number(t.entry), risk: t.risk, stop: t.stop, target: t.target, rNow: t.rNow, openedAt: t.openedAt || null, seenAt: new Date(nowMs).toISOString() } };
+    } else if (h.trade && h.trade.state === 'open' && known) {
+      list[i] = { ...h, trade: closedTrade(h.trade, marketFor(h, market), closes, nowMs) };
+    }
+  }
+  return list;
 }
 
 /** The market an entry's outcome reads: its symbol's lane, else any lane of the symbol. */
@@ -188,18 +241,17 @@ const marketFor = (e, market) => {
 /** One line per decision, oldest first (see the module comment). */
 function historyLines(history, market = []) {
   const list = (history || []).filter(h => h && typeof h === 'object');
-  const rows = list.map((h, i) => {
+  const rows = list.map(h => {
     const { word, reason } = parseResult(h.result);
     const action = h.action || (word ? ACTIONS[word] : null);
     // The lane: the lanes the cycle covered (several lanes), else the decision's bar's.
     const sym = `${h.symbol || (Array.isArray(h.symbols) ? h.symbols.join(',') : String(h.symbols || '?'))}${Array.isArray(h.lanes) && h.lanes.length ? ` ${h.lanes.join('+')}` : h.tf ? ` ${h.tf}m` : ''}`;
     const text = String(reason || h.why || '').replace(/\.$/, '');
     const why = text.length > REASON_CHARS ? `${text.slice(0, REASON_CHARS - 1)}…` : text;
-    // An entered trade's outcome stops at the symbol's next flatten.
-    const flat = h.action === 'entered' ? list.slice(i + 1).find(x => x.symbol === h.symbol && x.action === 'flattened' && x.bar && Number.isFinite(x.price)) : null;
-    const m = marketFor(h, market);
-    const exit = flat && m ? { at: Date.parse(flat.bar) + (Number(flat.tf) || m.minutes) * 60000, price: flat.price } : null;
-    return { h, action, sym, why, what: [action, h.setup, h.side].filter(Boolean).join(' '), since: outcome(h, m, exit) };
+    // An entered trade: the ticks since the decision, then its real position (never R from the decision's price).
+    const since = [outcome(h, marketFor(h, market)), h.action === 'entered' && h.bar ? tradeText(h) : ''].filter(Boolean).join(', ');
+    const what = [action, h.setup, h.side, h.details === 'unavailable' ? '(details unavailable)' : ''].filter(Boolean).join(' ');
+    return { h, action, sym, why, what, since };
   });
   // Consecutive identical no-trades (same symbol, lane and reason): one line, the first one's price and outcome.
   const runs = [];
@@ -224,4 +276,4 @@ function historyLines(history, market = []) {
   });
 }
 
-module.exports = { ACTIONS, parseResult, decisionEntry, marketOf, outcome, historyLines };
+module.exports = { ACTIONS, parseResult, decisionEntry, marketOf, outcome, historyLines, withPositions };

@@ -44,7 +44,7 @@
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
-const { decisionEntry, marketOf, parseResult } = require('./trading/decision-history');
+const { decisionEntry, marketOf, parseResult, withPositions } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
@@ -426,6 +426,8 @@ function createRunner(deps) {
       emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
         lastClose: last.c, rNow: (sign * (last.c - t.entry)) / t.risk, peakR, troughR, barsHeld });
       save({ ...t, peakR, troughR, barsHeld, lastBarT });
+      // The runner's own exit, for the decision history's real R (decision-history.js withPositions).
+      state = { ...state, runnerCloses: { ...(state.runnerCloses || {}), [cid]: { at: clock.now().toISOString(), r: Math.round(((sign * (last.c - t.entry)) / t.risk) * 100) / 100 } } };
       log(`${item.symbol}: ${why}; closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
       for (const o of orders.filter(x => x.contractId === cid)) {
         try {
@@ -1226,6 +1228,10 @@ function createRunner(deps) {
           // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
           const served = multi && fromCache ? { ...fromCache, roles: fromCache.reports.filter(live).map(r => r.role), reports: fromCache.reports.filter(live) } : fromCache;
+          // The entered decisions with their real positions (decision-history.js withPositions): an open trade's fill
+          // and R; a position gone since its last cycle, closed (a failed account read closes nothing).
+          const positionsKnown = Boolean(acct && !acct.error && !acct.openTradesError && Array.isArray(acct.positions));
+          state = { ...state, history: attempt('your entered decisions\' positions', () => withPositions((state && state.history) || [], { trades: tradeObjs, known: positionsKnown, now: cycleNow, market: marketOf(items, cfg.timeframe), closes: state.runnerCloses || {} }), (state && state.history) || []) };
           // Several lanes: the decisions of the lanes that closed (and the first lane's and each open trade's lane's
           // last few), never a fast lane's flood; one lane: the last 10, as before.
           const firstLane = `${lanes[0].timeframe}m`;
@@ -1276,15 +1282,17 @@ function createRunner(deps) {
           const base = { at: cycleNow.toISOString(), symbols: symbolsOf(run), result: (r && r.result) || null, ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`) } : {}) };
           let entry = base;
           let placed = [];
+          let journalFailed = false;
           if (parseResult(base.result).word === 'executed') {
             try {
               placed = journalEntries() || [];
             } catch (err) {
-              log(`history: the journal unavailable (${err.message}); the entry's facts from the scan only`, 'error');
+              journalFailed = true;
+              log(`history: the journal unavailable (${err.message}); the entry's details unavailable`, 'error');
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: run, entries: placed });
+            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

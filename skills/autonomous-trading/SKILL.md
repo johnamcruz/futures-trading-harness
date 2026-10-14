@@ -70,10 +70,10 @@ description: Rules for running the trading harness unattended (headless, schedul
    attempt line (e.g. it says no attempt is running and the prompt lists an
    active one), the prompt's facts win, and you say the earlier result was
    wrong. Each history line is one decision: time, symbol and lane, what
-   you did (entered, skipped, planned, managed, no-trade, flattened, blocked), the
+   you did (entered, skipped, planned, managed, no-trade, flattened, blocked, error), the
    setup and side, the price, your reason, and what happened since, from
    closed bars only: ticks moved, whether a skipped setup would have hit
-   +1R or -1R first, an entry's R now (or stopped, target, or flattened). Use it to
+   +1R or -1R first, an entry's real position (open from its fill with R now, or closed with its R). Use it to
    notice a pattern: the same setup skipped again and again while it keeps
    reaching +1R, or entries that keep getting stopped. Never chase the last
    outcome: one missed winner is not a reason to enter, and one stop is not

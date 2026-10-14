@@ -68,7 +68,7 @@ const OPTIONS = ({ account }) => ({
   history: [
     { at: '2026-04-27T14:15:05Z', symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
     decided(I - 4, 'CYCLE RESULT: no-trade - against the 15m trend', { action: 'skipped', setup: 'keltner', side: 'short', stop: 6 }),
-    decided(I - 3, 'CYCLE RESULT: executed - orb long 2 MNQ at 27420.25', { action: 'entered', setup: 'orb', side: 'long', stop: 10 }),
+    decided(I - 3, 'CYCLE RESULT: executed - orb long 2 MNQ at 27420.25', { action: 'entered', setup: 'orb', side: 'long', stop: 10, trade: { state: 'open', contractId: 'MNQ', side: 'long', fill: 27420.25, risk: 10, stop: 27410.25, target: 27440.25, rNow: 0.4, openedAt: '2026-04-27T14:21:00.000Z', seenAt: '2026-04-27T14:30:05.000Z' } }),
     decided(I - 2, 'CYCLE RESULT: managed - stop held', { action: 'managed' }),
     decided(I - 1, 'CYCLE RESULT: managed - stop held', { action: 'managed' }),
   ],
