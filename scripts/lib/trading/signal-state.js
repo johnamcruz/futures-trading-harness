@@ -91,7 +91,7 @@ function laneMark(home, root, tf) {
   return { names: rec.retiredLane };
 }
 
-const unreadableMessage = (lead, timeframe, root, why) => `${lead}, and the runner's ${timeframe} lane record for ${familyRoot(root)} is unreadable (${why}): it may say that lane lists a retired strategy, so no entry on it, under any setup tag. Exits and protective stops ([exit], [protect]) still go. The runner rewrites the record on its next bar on that lane.`;
+const unreadableMessage = (lead, timeframe, root, why) => `${lead}, and the runner's ${timeframe} lane record for ${familyRoot(root)} is unreadable (${why}): it may say that lane lists a retired strategy, so no entry on it, under any setup tag. Exits and protective stops ([exit], [protect]) still go. The runner rewrites the record on its next bar on that lane; if no lane runs on ${timeframe}, delete the file.`;
 
 const laneMessage = (lead, timeframe, names) => `${lead}, and the runner's ${timeframe} lane lists ${names.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. To trade on ${timeframe} again, remove the retired name from the runner config's lanes (or the lane) and restart the runner: its start clears this mark.`;
 
