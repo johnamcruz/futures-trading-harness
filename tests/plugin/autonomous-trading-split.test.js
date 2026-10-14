@@ -15,7 +15,7 @@ const assert = require('node:assert');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { units, differences, STRUCTURE } = require('./skill-split');
+const { units, count, differences, STRUCTURE } = require('./skill-split');
 const { orderErrors } = require('./skill-split-order');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 
@@ -43,11 +43,81 @@ const ALLOWED = [
     now: 'A rules strategy\'s signal expires as trade-session step 2 says (the trigger check), so a 1m setup can\'t wait.',
     reason: 'the expiry is trade-session step 2\'s trigger check ("The trigger is checked too"): a pointer, keeping the lane fact' },
   { old: 'Every entry carries its stop bracket; a refused entry (`success: false` with an `errorCode` other than 6 (`OrderPending`) or 7 (`UnknownError`), its brackets included) ends the cycle as `blocked` with the broker\'s message, journalled, and is never sent again without its bracket.',
-    now: 'A refused entry, or one whose reply was an error, is handled as trade-session step 6 says (a refusal ends the cycle `blocked`).',
+    now: 'A refused entry, or one whose reply was an error, is handled as trade-session step 6 says (a refusal ends the cycle `blocked`), and confirm it yourself: read positions and orders, and fix any position without a working stop first.',
     reason: 'trade-session step 6 teaches the refusal (cycle result `blocked`, never re-sent without its bracket): a pointer' },
   { old: 'Any other error on an entry (codes 6 and 7 included) is an unknown outcome, not a refusal: read positions and orders at once, protect or close any position without a covering stop first, and never re-send it.',
-    copies: 0, reason: 'trade-session step 6 teaches the unknown outcome; folded into the pointer above' },
+    copies: 0, reason: 'trade-session step 6 has the unknown outcome and never re-sending the entry, but gives the reads and the protecting to the trade-executor: the head trader\'s own check (read positions and orders, fix an unprotected position first) stays in the pointer above' },
+  { old: 'The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: see rule 1): read them, and don\'t reverse a recent decision without saying what changed.',
+    now: 'The prompt also carries the last 10 closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don\'t reverse a recent decision without saying what changed.',
+    reason: 'rule 1\'s per-lane text is now the runner-lanes skill: point straight to it' },
 ];
+
+// New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction
+// the head trader must always have without loading kill-switch (that skill keeps the details).
+const ADDED = [
+  { now: 'Several lanes ("Lanes closed this cycle"), analysts on their own timeframe, or a setup "skipped: lower priority": the `runner-lanes` skill.', reason: 'pointer to runner-lanes' },
+  { now: 'Why a setup did or didn\'t fire, and what earlier cycles saw: the `runner-logs` skill.', reason: 'pointer to runner-logs' },
+  { now: '**Kill switch and account lock.** On `[kill-switch]`, `[allowed-accounts]` or `[account-lock]`: manage, protect or flatten only, end `blocked`, and never retry or trade another account: the user resolves it.',
+    reason: 'kill-switch\'s reaction in one sentence, kept in the core so the head trader always has it; the details stay in kill-switch' },
+  { now: 'The details: the `kill-switch` skill.', reason: 'pointer to kill-switch' },
+];
+
+// Which home each old unit belongs to: the fixture's line ranges (1-based, inclusive) and single units that moved out
+// of a block that stays; every other unit belongs to the core (autonomous-trading).
+const MOVED = {
+  // Rule 1: several lanes, the policy priority, analysts on their own timeframe, the per-lane results.
+  'runner-lanes': { lines: [[22, 52]] },
+  // Rule 5: the kill switch, the allow-list, one runner per account.
+  'kill-switch': { lines: [[107, 132]] },
+  // Rule 3: the logs sentence, and the cycle's log.
+  'runner-logs': { units: [
+    'To see why a setup did or didn\'t fire, read that bar\'s record in `<FTH_HOME>/logs/scans-<day>.jsonl` (the runner\'s own log is `<FTH_HOME>/logs/autotrader-<day>.log`; your earlier cycles, with their prompts, tool calls, and skills loaded, are in `<FTH_HOME>/logs/cycles-<day>.jsonl` and `logs/cycles/<day>/`; the gate\'s decisions in `logs/gate-log.jsonl`; the runner records every decision point of the day in `<FTH_HOME>/sessions/<day>/`, as a replay is, with the broker field values the strategies read on each bar and an archive of the bars, for the adherence scorecard and training: the user\'s to score, not yours to edit).',
+    'The cycle\'s log (`logs/cycles/<day>/`) holds the prompt and what it was built from.'] },
+};
+
+/** The old units each home must hold: Map home -> Map unit -> count (the core takes every unit not moved). */
+function expectedHomes(beforeText) {
+  const lines = beforeText.split('\n');
+  const dropped = new Set(ALLOWED.filter(a => !a.copies && !a.now).map(a => a.old));
+  const rest = count(units(beforeText).filter(u => !STRUCTURE.includes(u) && !dropped.has(u)));
+  const out = new Map();
+  for (const [home, m] of Object.entries(MOVED)) {
+    const text = (m.lines || []).map(([a, b]) => lines.slice(a - 1, b).join('\n')).join('\n\n');
+    const want = count([...units(text), ...(m.units || [])].filter(u => !STRUCTURE.includes(u) && !dropped.has(u)));
+    for (const [u, n] of want) {
+      if ((rest.get(u) || 0) < n) throw new Error(`${home}: "${u}" is not in the old skill ${n} time(s)`);
+      rest.set(u, rest.get(u) - n);
+    }
+    out.set(home, want);
+  }
+  out.set(HOMES[0], new Map([...rest].filter(([, n]) => n > 0)));
+  return out;
+}
+
+/** Old units (a changed one by its old text) outside the home their old section maps to, or missing from it: [] when each is home. */
+function homeErrors(beforeText, texts) {
+  const expected = expectedHomes(beforeText);
+  const old = new Set(units(beforeText));
+  const nowToOld = new Map(ALLOWED.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
+  const bad = [];
+  HOMES.forEach((home, i) => {
+    const got = count(units(texts[i]).map(u => nowToOld.get(u) || u).filter(u => old.has(u) && !STRUCTURE.includes(u)));
+    const want = expected.get(home);
+    for (const u of new Set([...got.keys(), ...want.keys()])) {
+      if ((got.get(u) || 0) !== (want.get(u) || 0)) bad.push(`${home}: ${JSON.stringify(u)} ${got.get(u) || 0} time(s), its old section maps ${want.get(u) || 0} here`);
+    }
+  });
+  return bad;
+}
+
+/** New units in the core (neither old text nor an allowed change) beyond ADDED, or ADDED ones missing: [] when they match. */
+function addedErrors(beforeText, coreText) {
+  const old = new Set(units(beforeText));
+  const changed = new Set(ALLOWED.flatMap(a => [a.now || []].flat()));
+  const added = units(coreText).filter(u => !old.has(u) && !changed.has(u) && !STRUCTURE.includes(u));
+  const want = ADDED.map(a => a.now);
+  return [...added.filter(u => !want.includes(u)).map(u => `unlisted new text: ${u}`), ...want.filter(u => !added.includes(u)).map(u => `listed, not in the core: ${u}`)];
+}
 
 const homeTexts = () => HOMES.map(s => read(`skills/${s}/SKILL.md`));
 const at = name => HOMES.indexOf(name);
@@ -57,7 +127,32 @@ test('autonomous-trading split: every unit of the old skill is in exactly one ne
   assert.strictEqual(sha, BEFORE_SHA256, 'the fixture is the old skill, unchanged');
   assert.deepStrictEqual(differences(read(BEFORE), homeTexts(), ALLOWED), []);
   assert.deepStrictEqual(orderErrors(read(BEFORE), homeTexts(), HOMES, ALLOWED), [], 'moved text keeps its old order in each home');
-  for (const a of ALLOWED) assert.ok(a.reason, a.old);
+  assert.deepStrictEqual(homeErrors(read(BEFORE), homeTexts()), [], 'each unit is in the home its old section maps to');
+  assert.deepStrictEqual(addedErrors(read(BEFORE), homeTexts()[0]), [], 'the core\'s new text is exactly the listed pointers and summary');
+  for (const a of [...ALLOWED, ...ADDED]) assert.ok(a.reason, a.old || a.now);
+});
+
+test('autonomous-trading split: a unit moved to another home fails, though nothing is lost', () => {
+  const old = read(BEFORE);
+  const homes = homeTexts();
+  const swap = pairs => homes.map((h, i) => (pairs[HOMES[i]] !== undefined ? pairs[HOMES[i]] : h));
+  const addTo = (text, s) => text.replace('## Examples', `${s}\n\n## Examples`);
+  // Rule 6's "`blocked` only when ..." out of the core into runner-logs.
+  const B = /`blocked` only when the order gate, the gateway or the broker refused an\n {3}order this cycle; nothing fired, or you stood aside, is `no-trade`\.\n/.exec(homes[0])[0];
+  const out = swap({ 'autonomous-trading': homes[0].replace(B, ''), 'runner-logs': addTo(homes[3], B.trim()) });
+  assert.deepStrictEqual(differences(old, out, ALLOWED), [], 'a move loses nothing');
+  assert.notDeepStrictEqual(homeErrors(old, out), [], 'but leaves its home');
+  // A lane sentence from runner-lanes into the core.
+  const L = 'A symbol\'s second lane adds only its own bars and signals; its\ntrend line, plan and day are the first lane\'s.';
+  assert.ok(homes[1].includes(L));
+  const lane = swap({ 'runner-lanes': homes[1].replace(L, ''), 'autonomous-trading': addTo(homes[0], L) });
+  assert.deepStrictEqual(differences(old, lane, ALLOWED), []);
+  assert.notDeepStrictEqual(homeErrors(old, lane), []);
+  // A kill-switch sentence into the core.
+  const K = 'Preflight reports it as a failed `account lock` check.';
+  assert.notDeepStrictEqual(homeErrors(old, swap({ 'kill-switch': homes[2].replace(K, ''), 'autonomous-trading': addTo(homes[0], K) })), []);
+  // New, unlisted text in the core fails too.
+  assert.notDeepStrictEqual(addedErrors(old, addTo(homes[0], 'Retry a kill-switch refusal once.')), []);
 });
 
 test('autonomous-trading split: the comparison catches a lost, a doubled, an edited or a reordered sentence', () => {
@@ -105,7 +200,7 @@ test('autonomous-trading split: each skill has a short "Use when" index line, an
   // The moved jobs left the core: lanes, the kill switch and the lock, the logs.
   assert.doesNotMatch(core, /\*\*Several lanes\.\*\*|<FTH_HOME>\/STOP|One runner per broker account|scans-<day>\.jsonl|gate-log\.jsonl/);
   // Its rule numbers stay (rule 1, rule 4 are named in its text), and the result line is still its own.
-  assert.match(core, /5\. \*\*Kill switch and account lock\.\*\* An entry refused with `\[kill-switch\]`, `\[allowed-accounts\]` or `\[account-lock\]`: the `kill-switch` skill\./);
+  assert.match(core, /5\. \*\*Kill switch and account lock\.\*\* On `\[kill-switch\]`, `\[allowed-accounts\]` or `\[account-lock\]`: manage, protect or flatten only, end `blocked`, and never retry or trade another account: the user resolves it\. The details: the `kill-switch` skill\./);
   assert.match(core, /`CYCLE RESULT: <[^>]+> - <reason>`/);
 });
 

@@ -34,7 +34,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
      has been open that long.
    Don't loosen a stop it set. Why a setup did or didn't fire, and what
    earlier cycles saw: the `runner-logs` skill. The prompt also carries the last 10
-   closed bars and your last 10 cycle results (with several lanes, per lane: see rule 1): read them, and don't reverse a
+   closed bars and your last 10 cycle results (with several lanes, per lane: the `runner-lanes` skill): read them, and don't reverse a
    recent decision without saying what changed. Those results are your past
    conclusions, not facts: where one contradicts this prompt's account or
    attempt line (e.g. it says no attempt is running and the prompt lists an
@@ -66,8 +66,10 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    otherwise end the cycle. Never edit harness files, settings, environment,
    strategy status, blackouts (except adding them in premarket), or the journal
    file to get past a limit.
-5. **Kill switch and account lock.** An entry refused with `[kill-switch]`,
-   `[allowed-accounts]` or `[account-lock]`: the `kill-switch` skill.
+5. **Kill switch and account lock.** On `[kill-switch]`, `[allowed-accounts]`
+   or `[account-lock]`: manage, protect or flatten only, end `blocked`, and
+   never retry or trade another account: the user resolves it. The details:
+   the `kill-switch` skill.
 6. **Leave a trail.** Every cycle ends with a journal `note` (or plan, review)
    so the next cycle and the human can see what happened. **Your last line
    must be exactly:**
@@ -132,7 +134,8 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    ends (`executed` or `managed`, saying it is working); the next cycle checks
    the fill (the `order-mechanics` skill). A refused entry, or one whose
    reply was an error, is handled as trade-session step 6 says (a refusal
-   ends the cycle `blocked`).
+   ends the cycle `blocked`), and confirm it yourself: read positions and
+   orders, and fix any position without a working stop first.
 8. **Harness tools, not scripts.** Bars, scans, the snapshot, the
    multi-timeframe read, blackouts, the prop status, lessons, and reconcile
    are tools on the `harness` MCP server (the `harness-tools` skill): call
