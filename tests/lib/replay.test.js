@@ -615,6 +615,11 @@ test('driver: a step that can\'t run stops the run; failed cycles in a row stop 
   assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, SIM_DATA: '/other' }), 'the replay broker\'s settings are part of the run');
   assert.strictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_ROOT: '/x', FTH_AUTONOMOUS: '1', PATH: '/other/bin' }), 'where it was started from is not');
   assert.notStrictEqual(configHash(w.run, w.env), configHash(w.run, { ...w.env, FTH_HOOK_PROFILE: 'minimal' }), 'the hook profile is part of the run');
+  // The role-skills mode: a full run is another run than an index one; unset, blank and index are the same (the default).
+  const { FTH_ROLE_SKILLS: _mode, ...noMode } = w.env;
+  assert.notStrictEqual(configHash(w.run, noMode), configHash(w.run, { ...noMode, FTH_ROLE_SKILLS: 'full' }), 'the role-skills mode is part of the run');
+  assert.strictEqual(configHash(w.run, { ...noMode, FTH_ROLE_SKILLS: 'full' }), configHash(w.run, { ...noMode, FTH_ROLE_SKILLS: ' full ' }));
+  for (const v of ['', ' ', 'index', ' index ']) assert.strictEqual(configHash(w.run, { ...noMode, FTH_ROLE_SKILLS: v }), configHash(w.run, noMode), `"${v}" is the default`);
   // The node binary that starts an entry-based broker is not part of the run.
   const brokers = path.join(w.run.paths.runHome, 'brokers.json');
   const b = JSON.parse(fs.readFileSync(brokers, 'utf8'));

@@ -158,6 +158,16 @@ test('the runner\'s scripted replay: the report cache\'s hits, misses and keys p
   assert.ok(plain.written.every(f => f.every(b => !('ext' in b))));
   assertGolden('runner-replay-cache.txt', sequenceText(plain));
   assertGolden('runner-replay-prompts.txt', plain.cycles.map(c => `=== ${c.at} ${c.action} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+  // A stable prompt prefix (a local model server's prompt cache): every cycle starts with the same head, then its time;
+  // consecutive cycles share at least that head.
+  const marker = ' The cycle\'s time: ';
+  const heads = plain.cycles.map(c => c.prompt.slice(0, c.prompt.indexOf(marker)));
+  assert.ok(heads[0].length > 250 && heads.every(h => h === heads[0]), 'one head, before the time');
+  const common = (a, b) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n += 1; return n; };
+  for (let k = 1; k < plain.cycles.length; k += 1) {
+    const [a, b] = [plain.cycles[k - 1].prompt, plain.cycles[k].prompt];
+    assert.ok(common(a, b) >= heads[0].length + marker.length, `${plain.cycles[k].at}: ${common(a, b)} chars shared`);
+  }
 });
 
 test('one lane is the legacy timeframe: the same scripted replay gives the same cycles, cache keys and prompts, against the same goldens', async () => {
@@ -231,7 +241,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   for (const c of oneMin) assert.match(c.prompt, /MNQ: a 1-minute bar just closed .* MNQ [^.]*\(recorded for the order gate, which enforces it\)/);
 });
 
-test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss sequence and keys are pinned; 1m cycles reuse the 3m reports, no extra misses', async () => {
+test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss sequence and keys are pinned; in full mode 1m cycles reuse the 3m reports with no extra misses; in index mode a 1m setup runs the roles its lookups require', async () => {
   // A 1m rules strategy (a reversal: no trend rule) firing on a 1m bar that closes off the last one: in these bars,
   // the first minute of each 3m bar (1m-only closes), so the signal lane cycles between the 3m closes.
   const dir = path.join(tmpDir(), 'strategies', 'tick_up');
@@ -243,9 +253,20 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   ].join('\n'));
   const extraEnv = { FTH_STRATEGIES_DIRS: path.dirname(dir) };
   const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
-  const single = await replay(MNQ, { extraEnv });
-  const laned = await replay(MNQ, { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }], bars1, extraEnv });
+  const LANES = [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }];
   const isOneMin = c => Array.isArray(c.lanes) && c.lanes.length === 1 && c.lanes[0] === '1m';
+  // Index mode, the default (pinned in the golden below): a cycle whose 1m bar fired tick_up (a reversal, from the
+  // lane's signal record: no analyst reads 1m) runs every role a lookup is required of, as the gate requires them
+  // (skill-lookups.js cycleFacts); one without it (a 3m close) is served from the cache as in full mode.
+  const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv });
+  const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1], 'risk-manager'];
+  for (const c of indexed.cycles.filter(x => x.fired.includes('tick_up long') || x.fired.includes('tick_up short'))) {
+    for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a bar its lookups are required`);
+  }
+  assert.ok(indexed.cycles.some(c => !c.fired.some(f => f.startsWith('tick_up')) && c.served.includes(ANALYSTS[0])), 'a cycle without the lane\'s setup: served');
+  // Full mode: the lanes' caching rule alone (no lookups required).
+  const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
+  const laned = await replay(MNQ, { lanes: LANES, bars1, extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
   const threes = laned.cycles.filter(c => !isOneMin(c));
   const ones = laned.cycles.filter(isOneMin);
   assert.ok(ones.length >= 3, `1m signal cycles: ${ones.length}`);
@@ -268,10 +289,12 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
     const hits = list.reduce((n, c) => n + ['risk-manager', ...ANALYSTS.slice(0, 2)].filter(r => c.served.includes(r)).length, 0);
     return `${hits}/${list.length * 3} (${Math.round((100 * hits) / (list.length * 3))}%)`;
   };
-  const lanesText = laned.cycles.map((c, k) => `${(c.lanes || []).join('+')} ${sequenceText({ cycles: [c], keysAfter: [laned.keysAfter[k]] })}`).join('\n');
-  assertGolden('runner-replay-lanes-cache.txt', `hit rate (phase 1 and the two cacheable analysts): single 3m lane ${rate(single.cycles)}; 3m bar + 1m signal lanes ${rate(laned.cycles)}\n${lanesText}`);
+  // The golden is the default mode's (index); the full-mode rates beside it.
+  const singleIndexed = await replay(MNQ, { extraEnv });
+  const lanesText = indexed.cycles.map((c, k) => `${(c.lanes || []).join('+')} ${sequenceText({ cycles: [c], keysAfter: [indexed.keysAfter[k]] })}`).join('\n');
+  assertGolden('runner-replay-lanes-cache.txt', `hit rate (phase 1 and the two cacheable analysts): single 3m lane ${rate(singleIndexed.cycles)}; 3m bar + 1m signal lanes ${rate(indexed.cycles)}; full mode: single ${rate(single.cycles)}, lanes ${rate(laned.cycles)}\n${lanesText}`);
   // The prompts of the two lanes, the decision history of each (lane-cycle.js laneHistory) included.
-  assertGolden('runner-replay-lanes-prompts.txt', laned.cycles.map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+  assertGolden('runner-replay-lanes-prompts.txt', indexed.cycles.map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
 });
 
 test('the decision history: a runner restarted every pass (as a replay runs, one pass per process, its state from the file) shows the same history text as one live runner over the same bars; the text is in every prompt it names', async () => {
@@ -324,7 +347,10 @@ function framesText({ cycles, keysAfter }) {
 }
 
 test('analysts on 3m, 15m and 1h with a 1m signal lane: each reads its own timeframe\'s briefing; the hit/miss sequence and keys are pinned; slower analysts hit far more often', async () => {
-  const extraEnv = tickUp();
+  // Role skills full: the own-timeframe rule alone. In index mode, the default, a role a lookup is required of also
+  // runs on a bar where a setup fired (runner-wiring lookupRoles), pinned in runner-replay-cache.txt and
+  // runner-replay-lanes-cache.txt.
+  const extraEnv = { ...tickUp(), FTH_ROLE_SKILLS: 'full' };
   const one = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst });
   const multi = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst, agents: AGENT_TFS });
   assert.ok(multi.cycles.length >= 40, `cycles: ${multi.cycles.length}`);

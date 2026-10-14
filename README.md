@@ -693,6 +693,7 @@ those conditions are false, so `ofi` and `ofi_absorption` give no signal and
 | `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_SYMBOLS` | (unset; the runner sets it to its `symbols`) | The selected contracts, one per index (e.g. `NQ,MES`). A rules strategy trades only the selected leg of a micro/mini family it lists (listing MNQ covers a selected NQ; selecting NQ refuses MNQ). Unset: each strategy trades exactly its `instruments`, and a rules strategy listing both legs of a family trades neither. Invalid (two legs of one index), or unset in an autonomous run (`FTH_AUTONOMOUS=1`): every entry is refused |
+| `FTH_ROLE_SKILLS` | `index` | How opencode's role prompts carry their skills: `index` embeds each role's core skills and lists the rest, read with `skill_lookup` (the gate counts a role's report for an autonomous entry only with the lookups its bar requires); `full` embeds them all (regenerate with `FTH_ROLE_SKILLS=full node scripts/sync-harness.js`). The runner sets `full` for every other harness |
 | `FTH_AUTONOMOUS` | (unset) | `1` (set by the runner) ignores skip lists and hook disables for the gate |
 | `FTH_ORDER_GATE_SKIP` | (none) | Checks to turn off |
 | `FTH_GATE_LOG` | `~/.futures-trading-harness/logs/gate-log.jsonl` | Gate decisions (readable by autonomous agents) |

@@ -140,7 +140,8 @@ test('the runner\'s report cache: in index mode a role a lookup is required of o
   const now = new Date('2026-10-07T14:00:00Z');
   const b = data => ({ MNQ: { symbol: 'MNQ', sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data } } } });
   const index = { FTH_ROLE_SKILLS: 'index' };
-  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}), [], 'full mode: the cache as before');
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, { FTH_ROLE_SKILLS: 'full' }), [], 'full mode: the cache as before');
+  assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, {}).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst'], 'index is the default');
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'reversal' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
   assert.deepStrictEqual(lookupRoles(b(m3([{ trendRule: 'allows' }])), now, index).sort(), ['market-structure-analyst', 'risk-manager']);
   assert.deepStrictEqual(lookupRoles(b(m3([])), now, index), [], 'no candidate: the cache serves every role');
@@ -153,4 +154,63 @@ test('the head trader holds no skill_lookup: a lookup counts for the role it nam
   const keys = Object.keys(p);
   assert.strictEqual(p.harness_skill_lookup, 'deny');
   assert.ok(keys.indexOf('harness_skill_lookup') > keys.indexOf('harness_*'), 'after the wildcard: the last match wins');
+});
+
+test('cycleFacts: the runner\'s briefing with each closed lane\'s candidates (its briefing on its bar, else its signal record on its bar); neither, or no current briefing: null (every lookup)', () => {
+  const now = new Date('2026-10-07T14:00:00Z');
+  const first = { minutes: 3, sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data: m3([{ name: 'a', trendRule: 'allows' }]) } } };
+  const t = '2026-10-07T13:59:00.000Z';
+  const frame = (asOf, candidates) => () => ({ asOf, sections: { bar: { data: { candidates } } } });
+  // No lane: the runner's briefing, as before; not current: null.
+  assert.deepStrictEqual(L.cycleFacts({ first, now }), first.sections.m3.data);
+  assert.strictEqual(L.cycleFacts({ first, now: new Date('2026-10-07T14:03:00Z') }), null);
+  assert.strictEqual(L.cycleFacts({ first: null, now }), null);
+  // The first lane's own minutes are the briefing itself: skipped.
+  assert.deepStrictEqual(L.cycleFacts({ first, now, lanes: [{ minutes: 3, t }] }), first.sections.m3.data);
+  // A lane's briefing on its bar: its candidates are added.
+  const both = L.cycleFacts({ first, now, lanes: [{ minutes: 1, t }], readFrame: frame(t, [{ name: 'b', trendRule: 'reversal' }]) });
+  assert.deepStrictEqual(both.candidates.map(c => c.name), ['a', 'b']);
+  // Its briefing is another bar's: its signal record on the bar, each candidate under every trend rule.
+  const sig = L.cycleFacts({ first, now, lanes: [{ minutes: 1, t }], readFrame: frame('x', []), readSignal: () => ({ asOf: t, candidates: [{ name: 'c', direction: 'long' }] }) });
+  assert.deepStrictEqual(sig.candidates.filter(c => c.name === 'c').map(c => c.trendRule), ['reversal', 'allows', 'against']);
+  // Neither on the bar (an older record, an unreadable one, none): null.
+  for (const readSignal of [() => ({ asOf: 'older', candidates: [] }), () => ({ error: 'EACCES' }), () => null]) {
+    assert.strictEqual(L.cycleFacts({ first, now, lanes: [{ minutes: 1, t }], readSignal }), null);
+  }
+  // lanesFor: the config's { ROOT: { minutes: t } } for a root of the family.
+  assert.deepStrictEqual(L.lanesFor({ MNQ: { 1: t } }, 'MNQ'), [{ minutes: 1, t }]);
+  assert.deepStrictEqual(L.lanesFor({}, 'MNQ'), []);
+});
+
+test('the runner\'s report cache and the gate agree on a lane\'s candidates: lookupRoles reads the closed lanes too', () => {
+  const { lookupRoles } = require('../../scripts/lib/runner-wiring');
+  const { writeFrameBriefing } = require('../../scripts/lib/trading/briefing');
+  const { writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const home = tmpDir();
+  const now = new Date('2026-10-07T14:00:00Z');
+  const t = '2026-10-07T13:59:00.000Z';
+  const b = { MNQ: { symbol: 'MNQ', minutes: 3, sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data: m3([]) } } } };
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home }), [], 'no lane, no candidate: the cache serves every role');
+  // The 1m lane closed with a with-trend candidate (its briefing on the bar): those roles run.
+  writeFrameBriefing(home, { symbol: 'MNQ', minutes: 1, asOf: t, sections: { bar: { data: { candidates: [{ name: 'x', trendRule: 'allows' }] } } } });
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 1: t } } }).sort(), ['market-structure-analyst', 'risk-manager']);
+  assert.deepStrictEqual(lookupRoles(b, now, { FTH_ROLE_SKILLS: 'full' }, { home, laneBars: { MNQ: { 1: t } } }), [], 'full mode');
+  // No briefing on the lane's bar, its record shows nothing fired: nothing required; no record on the bar: every role.
+  const later = '2026-10-07T14:00:00.000Z';
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: later, closedAt: '2026-10-07T14:01:00.000Z', candidates: [] });
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 1: later } } }), []);
+  assert.deepStrictEqual(lookupRoles(b, now, {}, { home, laneBars: { MNQ: { 5: later } } }).sort(), ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst']);
+});
+
+test('cycleFacts: a lane\'s signal record gives its setups with their recorded trend rules; only an older record without them counts every trend rule', () => {
+  const now = new Date('2026-10-07T14:00:00Z');
+  const first = { minutes: 3, sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data: m3([]) } } };
+  const t = '2026-10-07T13:59:00.000Z';
+  const facts = rec => L.cycleFacts({ first, now, lanes: [{ minutes: 1, t }], readSignal: () => rec });
+  assert.deepStrictEqual(facts({ asOf: t, candidates: [{ name: 'x', direction: 'long' }], setups: [{ name: 'x', direction: 'long', trendRule: 'reversal' }] }).candidates, [{ name: 'x', direction: 'long', trendRule: 'reversal' }]);
+  assert.deepStrictEqual(facts({ asOf: t, candidates: [], setups: [{ name: 'm', direction: 'short' }] }).candidates, [{ name: 'm', direction: 'short', trendRule: null }], 'unknown, as the briefing says it');
+  assert.deepStrictEqual(facts({ asOf: t, candidates: [{ name: 'x', direction: 'long' }] }).candidates.map(c => c.trendRule), ['reversal', 'allows', 'against']);
+  assert.strictEqual(facts({ asOf: t }), null, 'neither list: unknown');
+  // briefingFacts with an unreadable lanes list (config.js null): null.
+  assert.strictEqual(L.briefingFacts(tmpDir(), 'MNQ', now, null), null);
 });

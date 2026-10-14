@@ -133,3 +133,46 @@ test('lastRecordedBar: the last recorded bar of the family and timeframe; fails 
   fs.writeFileSync(signalFile(home, 'MNQ', '3m'), '{ half a file');
   assert.match(lastRecordedBar(home, 'MNQ', '3m').error, /unreadable/);
 });
+
+test('signal record setups: every fired candidate the bar briefing lists, with the trend rule the briefing gives it (index mode reads a lane\'s setups from here)', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const bars = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'));
+  const pick = l => l.map(c => ({ name: c.name, direction: c.direction, trendRule: c.trendRule }));
+  // Synthetic results: each trend rule, an unknown one, a fired setup that isn't a rules strategy, one not fired.
+  const synthetic = [
+    { name: 'rev', candidate: true, direction: 'long', signal: 'rules', stopDistance: 10, mtf: { style: 'reversal' } },
+    { name: 'with', candidate: true, direction: 'short', signal: 'rules', stopDistance: 10, mtf: { style: 'trend', shortAllowed: true } },
+    { name: 'against', candidate: true, direction: 'long', signal: 'rules', stopDistance: 10, mtf: { style: 'trend', longAllowed: false } },
+    { name: 'unknown', candidate: true, direction: 'long', signal: 'rules', stopDistance: 10 },
+    { name: 'manual', candidate: true, direction: 'long', signal: 'manual', stopDistance: 10, mtf: { style: 'trend', longAllowed: true } },
+    { name: 'quiet', candidate: false, direction: null, signal: 'rules' },
+  ];
+  const rec = buildSignals(synthetic, { symbol: 'NQ', bar: { t: bars.at(-1).t }, stepMs: 180000 });
+  assert.deepStrictEqual(rec.setups.map(s => s.trendRule), ['reversal', 'allows', 'against', null, 'allows']);
+  assert.deepStrictEqual(rec.candidates.map(c => c.name), ['rev', 'with', 'against', 'unknown'], 'the gate\'s trigger record keeps rules strategies only');
+  const briefed = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan: synthetic });
+  assert.deepStrictEqual(pick(rec.setups), pick(briefed.sections.m3.data.candidates));
+});
+
+test('a fired result without the scan\'s trend read keeps its strategy\'s style: a reversal strategy\'s setup is "reversal" in the signal record and the briefing', () => {
+  const { withStyle } = require('../../scripts/lib/trading/strategies');
+  const { candidateTrendRule } = require('../../scripts/lib/trading/signal-state');
+  const B = require('../../scripts/lib/trading/briefing');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
+  const bare = { name: 'fade', candidate: true, direction: 'short', signal: 'rules', stopDistance: 8 };
+  assert.strictEqual(candidateTrendRule(bare), null, 'no read, no style: unknown');
+  assert.strictEqual(candidateTrendRule(bare, 'reversal'), 'reversal', 'the strategy file\'s style given');
+  const stamped = withStyle(bare, { name: 'fade', mtf: 'reversal' });
+  assert.deepStrictEqual(stamped.mtf, { style: 'reversal' });
+  assert.strictEqual(withStyle(bare, { name: 'fade' }).mtf.style, 'trend', 'no mtf key: trend, the default');
+  // The scan's own read wins; a result that didn't fire is left alone.
+  const read = { ...bare, mtf: { style: 'trend', shortAllowed: true } };
+  assert.strictEqual(withStyle(read, { mtf: 'reversal' }), read);
+  assert.strictEqual(withStyle({ ...bare, candidate: false }, { mtf: 'reversal' }).mtf, undefined);
+  const rec = buildSignals([stamped], { symbol: 'NQ', bar: { t: bars.at(-1).t }, stepMs: 180000 });
+  assert.strictEqual(rec.setups[0].trendRule, 'reversal');
+  assert.strictEqual(B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan: [stamped] }).sections.m3.data.candidates[0].trendRule, 'reversal');
+});

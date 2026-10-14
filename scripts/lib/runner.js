@@ -64,7 +64,7 @@ const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
 const { lanesOf, tfLabel, retiredLaneText } = require('./lanes');
-const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory } = require('./lane-cycle');
+const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory, laneBarsOf } = require('./lane-cycle');
 
 const IDLE_MS = 5000;
 const RESYNCS_BEFORE_REROLL = 3;
@@ -1324,7 +1324,7 @@ function createRunner(deps) {
             return current ? f.clock.lastBarT : x.bar.t;
           };
           const cacheSymbols = ordered.filter((x, i) => !items[i].repeat).map(x => ({ symbol: x.symbol, bar: briefingBar(x), contractId: x.bar.contractId || null }));
-          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow }), null) : null;
+          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {} }), null) : null;
           // Several lanes: an analyst's report is served only until its parts' time (`until`, the next 15m close): a
           // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();

@@ -1,7 +1,7 @@
 'use strict';
 
 // How a role's skills reach its opencode prompt (scripts/lib/role-skills.js): role-skills (the core, embedded) and
-// role-index (indexed in index mode), the FTH_ROLE_SKILLS switch (full by default), the situational lookups, and the
+// role-index (indexed in index mode), the FTH_ROLE_SKILLS switch (index by default), the situational lookups, and the
 // generated opencode.json in each mode.
 
 const test = require('node:test');
@@ -16,10 +16,14 @@ const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
 const ROOT = path.resolve(__dirname, '..', '..');
 const generated = mode => JSON.parse(HS.expectedFiles(ROOT, { mode })['workspace/opencode.json']);
 
-test('modeOf: full by default; index; anything else refused', () => {
-  assert.strictEqual(RS.modeOf({}), 'full');
-  assert.strictEqual(RS.modeOf({ FTH_ROLE_SKILLS: ' ' }), 'full');
+test('modeOf: index by default; full on request; anything else refused', () => {
+  assert.strictEqual(RS.DEFAULT_MODE, 'index');
+  assert.strictEqual(RS.modeOf({}), 'index');
+  assert.strictEqual(RS.modeOf({ FTH_ROLE_SKILLS: ' ' }), 'index');
   assert.strictEqual(RS.modeOf({ FTH_ROLE_SKILLS: 'index' }), 'index');
+  assert.strictEqual(RS.modeOf({ FTH_ROLE_SKILLS: 'full' }), 'full');
+  assert.strictEqual(RS.modeOf({ FTH_ROLE_SKILLS: ' full ' }), 'full');
+  assert.throws(() => RS.modeOf({ FTH_ROLE_SKILLS: 'FULL' }), /FTH_ROLE_SKILLS: one of full, index \(got "FULL"\)/);
   assert.throws(() => RS.modeOf({ FTH_ROLE_SKILLS: 'trimmed' }), /FTH_ROLE_SKILLS: one of full, index \(got "trimmed"\)/);
 });
 
@@ -76,8 +80,10 @@ test('the agents: role-index skills exist, aren\'t core, and the role holds skil
   assert.deepStrictEqual(RS.loadRoles(ROOT).map(a => [a.name, a.index]), agents.map(a => [a.name, a.index]));
 });
 
-test('opencode.json: the committed file is full; full embeds role-index skills too; index lists them, deterministically', () => {
+test('opencode.json: the committed file is index, the default; full embeds role-index skills too; index lists them, deterministically', () => {
   assert.strictEqual(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'), HS.expectedFiles(ROOT)['workspace/opencode.json']);
+  assert.strictEqual(HS.expectedFiles(ROOT)['workspace/opencode.json'], HS.expectedFiles(ROOT, { mode: 'index' })['workspace/opencode.json'], 'the default is index');
+  assert.notStrictEqual(HS.expectedFiles(ROOT)['workspace/opencode.json'], HS.expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
   const full = generated('full');
   const index = generated('index');
   assert.strictEqual(HS.expectedFiles(ROOT, { mode: 'index' })['workspace/opencode.json'], HS.expectedFiles(ROOT, { mode: 'index' })['workspace/opencode.json'], 'stable');

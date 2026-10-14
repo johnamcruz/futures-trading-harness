@@ -18,7 +18,7 @@
  *                loadState, saveState, killSwitchFile, log, event, onBarClosed, agents })   createRunner(...) with every
  *                                         dependency; onBarClosed(symbol, { bar, stale, action, contractId, values }) hears each closed bar the runner polls
  *                                         (barRecorder: its bars archived, the strategies' field values taken)
- *   reportCacheFor(home, cfg, frames)     the runner's report cache (report-cache.js), or null for a harness whose
+ *   reportCacheFor(home, cfg, frames, env) the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  *   briefingRecorder(home, cfg, now, env, { frames, dataDir, log })   the bar briefing of each bar, and of each
  *                                         analyst's own timeframe (frames: lanes.js analystFrames); on a lane's bar
@@ -311,17 +311,24 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
  * The report cache over the harness home: the briefings the runner recorded for this bar decide which analyst
  * reports still hold, the account decides phase 1's. Claude and opencode stream their cycle's tool results (each
  * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts. In index
- * mode (opencode, FTH_ROLE_SKILLS=index) a role a lookup is required of on the bar is never served (lookupRoles).
+ * mode (opencode, the default, FTH_ROLE_SKILLS not full) a role a lookup is required of on the bar is never served (lookupRoles).
  */
-/** Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). */
-function lookupRoles(briefingsBySymbol, now, env = process.env) {
+/**
+ * Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). Several
+ * lanes (`laneBars`, { ROOT: { minutes: "<bar open>" } }: the other lanes whose bar closed this cycle): their
+ * candidates count too, read as the gate reads them (trading/skill-lookups.js cycleFacts), so the cache and the gate agree.
+ */
+function lookupRoles(briefingsBySymbol, now, env = process.env, { home = null, laneBars = {} } = {}) {
   let mode;
   try { mode = require('./role-skills').modeOf(env); } catch (_err) { mode = 'index'; }
   if (mode !== 'index') return [];
-  const { requiredFor, needed } = require('./trading/skill-lookups');
-  const { current } = require('./trading/briefing');
+  const { requiredFor, needed, cycleFacts, lanesFor } = require('./trading/skill-lookups');
+  const { readSignals } = require('./trading/signal-state');
   const required = requiredFor(path.resolve(__dirname, '..', '..'));
-  const facts = Object.values(briefingsBySymbol).map(b => (b && current(b, now) && b.sections.m3 ? b.sections.m3.data || null : null));
+  const facts = Object.entries(briefingsBySymbol).map(([symbol, b]) => cycleFacts({
+    first: b, now, lanes: lanesFor(laneBars, symbol),
+    readFrame: m => (home ? readFrameBriefing(home, symbol, m) : null), readSignal: m => (home ? readSignals(home, symbol, `${m}m`) : null),
+  }));
   return [...required.keys()].filter(role => (facts.length ? facts : [null]).some(m3 => needed(role, required, m3).length));
 }
 
@@ -333,13 +340,14 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   const tfs = [...new Set(frames.map(f => f.minutes))];
   const own = symbols => ({ frames: roles, frameBriefings: Object.fromEntries(symbols.map(s => [s.symbol, Object.fromEntries(tfs.map(m => [m, readFrameBriefing(home, s.symbol, m)]))])) });
   return {
-    serve: ({ symbols, account, now }) => {
+    // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
+    serve: ({ symbols, account, now, laneBars = {} }) => {
       const b = briefings(symbols);
       const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
-      // Index mode (FTH_ROLE_SKILLS=index): a role a lookup is required of on this bar runs (the gate counts its report
+      // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar runs (the gate counts its report
       // only with that lookup made this cycle: trading/skill-lookups.js).
-      // Only opencode runs carry the mode (autotrader.js childEnv).
-      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env) : [];
+      // Only opencode runs index their roles (autotrader.js childEnv gives every other harness full).
+      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env, { home, laneBars }) : [];
       const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(r => !lookups.includes(r.role));
       return { roles: reports.map(r => r.role), reports };
     },
@@ -437,7 +445,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     recordBriefing: recorder,
     // A 1m lane's closed bars, noted before the pass's briefings: the runner's briefing builds 5m candles from them.
     recordFineBars: recorder.fine,
-    reportCache: reportCacheFor(home, cfg, frames),
+    reportCache: reportCacheFor(home, cfg, frames, env),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),

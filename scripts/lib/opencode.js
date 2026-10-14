@@ -41,9 +41,9 @@
  * its project from PWD, not the process's working directory.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
- *   agentPrompt(agent)           a role's prompt: its body and its skills in full (skillDocs: role-skills,
- *                                then role-index), or in index mode (skillPlan, FTH_ROLE_SKILLS=index:
- *                                role-skills.js) its core skills and an index of the rest (skill_lookup)
+ *   agentPrompt(agent)           a role's prompt: in index mode, the default (skillPlan: role-skills.js), its
+ *                                body, its core skills and an index of the rest (skill_lookup); in full mode
+ *                                (FTH_ROLE_SKILLS=full, or no skillPlan) its body and every skill in full
  *   agentConfig(agent)           a role as an opencode agent entry
  *   workspaceConfig(agents)      workspace/opencode.json's object
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch
@@ -162,7 +162,7 @@ function indexPrompt(agent, plan) {
     `Your other skills, not loaded. Read one only when this cycle's situation needs it: ${lookupCall(agent.name)} returns the whole skill. Don't look up what the cycle doesn't need.`,
     '', ...plan.indexed.map(d => `- ${d.name}: ${d.description}`), '');
   if (plan.required.length) {
-    out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up in this call, before your report; otherwise the order gate doesn\'t count your report for an entry.', '',
+    out.push('Required by the situation: when this bar\'s briefing shows it, or a setup the caller names as fired on another lane\'s bar this cycle shows it (that setup counts as one of the briefing\'s candidates, with the trend rule the caller gives), look the skill up in this call, before your report; otherwise the order gate doesn\'t count your report for an entry.', '',
       ...plan.required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
   }
   return out.join('\n');

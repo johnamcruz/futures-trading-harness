@@ -17,6 +17,7 @@ const { scratchDir } = require('./bars-fetch');
 const { SERVER_NAME, activeBroker } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { contractRoot } = require('./trading/journal');
+const { candidateTrendRule } = require('./trading/signal-state');
 const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
@@ -327,7 +328,7 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [] } = {}) {
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false } = {}) {
   // Manage-only is stated once, in the instruction's mode.
   if (manageOnly) return '';
   // No scan: the reason is in the "Context unavailable" line.
@@ -336,7 +337,9 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
-    return `${r.name} ${r.direction}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
+    // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).
+    const rule = lane ? candidateTrendRule(r) : null;
+    return `${r.name} ${r.direction}${rule ? ` (trend rule: ${rule})` : ''}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
   // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.
@@ -442,11 +445,22 @@ const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry'
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
+/**
+ * The start of every cycle's prompt (premarket, trade, end of day): what the cycle is and where the harness is, the
+ * same every cycle of a run, so it is the shared prefix of consecutive prompts. Nothing that changes between cycles
+ * (the time, the bar, the account) belongs in it.
+ */
+function stableHead(root = '') {
+  const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
+  return `Autonomous cycle. Follow the autonomous-trading skill. No user is present.${where}`;
+}
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
-  const where = root ? ` Harness root (FTH_ROOT): ${root}; its operations are the \`${HARNESS_SERVER}\` MCP server's tools, not scripts. Harness home (FTH_HOME): ${harnessHome()}; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.` : '';
+  // What every cycle's prompt starts with, the same each cycle (stableHead), then the cycle's time: consecutive prompts
+  // share this prefix, which a local model server's prompt cache reuses (nothing that changes between cycles before it).
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
-  const head = `Autonomous cycle at ${etStamp(now)} (${now.toISOString()}). Follow the autonomous-trading skill. No user is present.${where}`;
+  const head = `${stableHead(root)} The cycle's time: ${etStamp(now)} (${now.toISOString()}).`;
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.${RESULT_LINE}`,
     /**
@@ -465,7 +479,7 @@ function prompts(cfg, now, root = '') {
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
-        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [] }));
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe }));
       const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',
@@ -548,6 +562,15 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const briefed = context && context.cycleBars ? Object.entries(context.cycleBars).filter(([s, t]) => s && typeof t === 'string') : [];
   if (briefed.length) env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify(Object.fromEntries(briefed));
   else delete env.FTH_CYCLE_BRIEFING_BARS;
+  // Several lanes: each symbol's lanes whose bar closed this cycle ({"MNQ": {"1": "<bar open>"}}): in index mode the
+  // gate reads their candidates for the required lookups (trading/skill-lookups.js cycleFacts).
+  const laneBars = {};
+  for (const x of ((context && context.symbols) || [])) {
+    const m = x && x.symbol && x.bar && typeof x.bar.t === 'string' ? /^(\d+)m$/.exec(String(x.lane || '')) : null;
+    if (m) laneBars[x.symbol] = { ...(laneBars[x.symbol] || {}), [m[1]]: x.bar.t };
+  }
+  if (Object.keys(laneBars).length) env.FTH_CYCLE_LANE_BARS = JSON.stringify(laneBars);
+  else delete env.FTH_CYCLE_LANE_BARS;
   // An analyst on its own timeframe reads the briefing of that timeframe's bar holding at the cycle's start.
   if (context && typeof context.cycleAt === 'string') env.FTH_CYCLE_AT = context.cycleAt;
   else delete env.FTH_CYCLE_AT;
@@ -555,7 +578,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
-  delete env.FTH_ROLE_SKILLS;
+  // How the roles' prompts carry their skills (role-skills.js), which the gate reads (index mode enforces the lookups):
+  // only opencode embeds skills in its roles (its mode, index by default, below); every other harness's roles load
+  // all their skills as their body says, which is full.
+  env.FTH_ROLE_SKILLS = 'full';
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -563,8 +589,7 @@ function childEnv(cfg, root, base = process.env, context = null) {
   }
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
-    // How its roles' prompts carry their skills (role-skills.js): the gate enforces index mode's lookups. Only opencode
-    // embeds skills in its roles, so no other harness's run carries it.
+    // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups.
     env.FTH_ROLE_SKILLS = require('./role-skills').modeOf(base);
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
     return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context) });
@@ -830,6 +855,7 @@ function runnerArgv(argv) {
 
 module.exports = {
   loadList,
+  stableHead,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

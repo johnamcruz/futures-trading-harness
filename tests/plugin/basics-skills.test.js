@@ -444,12 +444,20 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   assert.match(read('skills/liquidity-concepts/SKILL.md'), /`levels-and-reactions` skill's[^]*the `breakout-vs-fakeout` skill/);
   assert.match(read('skills/vwap-volume-profile/SKILL.md'), /`momentum-and-volume` skill's[^]*the `absorption` skill/);
   assert.match(read('skills/trend-momentum-indicators/SKILL.md'), /`trend-vs-range` skill's/);
-  // The generated opencode roles carry them in full.
+  // The generated opencode roles carry them: in full mode (FTH_ROLE_SKILLS=full) embedded; in the committed file
+  // (index, the default) embedded when in the role's core (role-skills), else one line of its skill index.
+  const { expectedFiles, loadAgents } = require('../../scripts/lib/harness-sync');
+  const full = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
   const oc = JSON.parse(read('workspace/opencode.json'));
+  const core = Object.fromEntries(loadAgents(ROOT).map(a => [a.name, a.skills]));
   for (const [role, mine] of Object.entries(ROLES)) {
     for (const s of SKILLS) {
       const body = parseFrontmatter(read(file(s))).body.trim();
-      assert.strictEqual(oc.agent[role].prompt.includes(`<skill name="${s}">\n${body}\n</skill>`), mine.includes(s), `${role}: ${s}`);
+      const embedded = p => p.includes(`<skill name="${s}">\n${body}\n</skill>`);
+      assert.strictEqual(embedded(full.agent[role].prompt), mine.includes(s), `${role}: ${s} (full)`);
+      const prompt = oc.agent[role].prompt;
+      assert.strictEqual(embedded(prompt), mine.includes(s) && core[role].includes(s), `${role}: ${s} (index: embedded)`);
+      assert.strictEqual(prompt.includes(`\n- ${s}: `), mine.includes(s) && !core[role].includes(s), `${role}: ${s} (index: listed)`);
     }
   }
 });
@@ -717,12 +725,12 @@ test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use whe
   const step0 = flat(ts.slice(ts.indexOf('### 0. Load the skills'), ts.indexOf('### 1.')));
   assert.ok(!step0.includes('top-down-entry'));
   // What the head trader loads every cycle (trade-session step 0: the gated three, trader-process, htf-to-ltf), in
-  // bytes, is no more than at the split's merge (foundation batch B, on main at baa4b192, whose same load without htf-to-ltf
-  // was 58760): 55617.
+  // bytes, is no more than at the split's merge (foundation batch B, on main at 507adfbd, whose same load without htf-to-ltf
+  // was 58878): 55733.
   const loads = [...new Set([...step0.matchAll(/`([a-z][a-z-]+)`/g)].map(m => m[1]))].filter(x => skills.has(x));
   assert.deepStrictEqual(loads.sort(), ['htf-to-ltf', 'multi-timeframe-analysis', 'strategy-gate-checks', 'strategy-library', 'strategy-scan', 'trade-session', 'trader-process']);
   const bytes = loads.reduce((a, x) => a + Buffer.byteLength(read(file(x))), 0);
-  assert.ok(bytes <= 55617, `the head trader's per-cycle load: ${bytes} bytes`);
+  assert.ok(bytes <= 55733, `the head trader's per-cycle load: ${bytes} bytes`);
 });
 
 /** Every trade in an example: long or short at E, stop S (P pts = T ticks, $D per MNQ), on the tick and consistent; a target X (Q pts, RR) when given. */
