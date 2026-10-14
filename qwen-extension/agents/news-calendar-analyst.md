@@ -26,7 +26,8 @@ well-known economic calendars.
 
 ## Method
 
-1. Load the skill `session-timing`.
+1. Load the skills `session-timing` and `trader-process`. You do step 2
+   of the trader process (Context: the news).
 2. For the given date and symbol, list scheduled releases with times in ET and
    UTC: CPI, PPI, NFP, jobless claims, retail sales, GDP, PCE, ISM, JOLTS,
    consumer sentiment, FOMC statement, minutes and press conference, Fed-chair
@@ -52,4 +53,9 @@ never edit blackouts.json):
 Calendar: <holiday or early close today (13:00 ET), with source | none found>
 Unconfirmed: <anything you could not verify>
 Suspicious content seen: <none | description>
+2 Context: news <clear|blackout|unknown> now; next <HH:MM ET event | none>
 ```
+
+That line is your own read and proposal. The bar briefing's `m3.news` is the
+gate's and the source of truth: phase 2's line 2 takes the news from it, and
+it wins when the two differ.
