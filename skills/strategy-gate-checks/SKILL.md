@@ -1,24 +1,13 @@
 ---
 name: strategy-gate-checks
-description: What the order gate checks of a strategy entry - active, instruments, sessions, the leg, trigger freshness, order consistency, policies, retired lanes.
+description: What the gate checks of a strategy entry - status, instruments, sessions, leg, trigger age, order consistency, policies, retired lanes.
 ---
 
 # Strategy Gate Checks
 
-The order gate and the MCP gateway check every live entry against the
-strategy its `setup:<name>` tag names. This skill is what they check, so a
-plan never meets a refusal it could have seen. Applying a strategy and the
-priority order are the `strategy-library` skill. The `[strategy]` and
-`[policy]` refusals' messages and what to do are in the `gate-refusals`
-skill; the other refusals below are explained here.
-
 ## When to Use
 
 - When tagging an order: the tag `setup:<name>` must name an active strategy.
-- Before an entry: is it the selected contract, in session, on a fresh
-  trigger, consistent with its own rationale?
-- When a `[strategy]`, `[policy]`, `trigger-fired`, `order-consistency`,
-  `mtf-trend` or `retired-lane` refusal needs explaining.
 
 ## How It Works
 
@@ -69,8 +58,5 @@ against the recorded prevailing trend, or without a fresh record, is refused.
 ## Examples
 
 ```text
-NQ selected, orb lists MNQ → trade NQ under setup:orb; an MNQ entry is refused ("setup:orb trades NQ (the selected contract), not MNQ").
-orb fired long on the last recorded 3m bar, which closed 2 minutes ago → fresh (the limit is 3 bars, 9 minutes); a last recorded bar that closed 12 minutes ago → refused (trigger-fired).
-orb fired long, then the next 3m bar is recorded and orb did not fire on it → refused (trigger-fired): the gate reads the last recorded bar only.
-setup:orb long, stop 21498.00, bracket 30 ticks from 21505.50 → 30 ticks is 7.50 points, the stop price is 7.50 below: consistent.
+Last recorded 3m bar 2 min old, orb long on it → fresh; 12 min old, or orb not on it → refused.
 ```

@@ -34,8 +34,8 @@ find trades and you can't place them. Your veto is final for the session.
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `trading-agent-security`, `strategy-library`, `strategy-gate-checks`, `broker-mcp`,
 `order-mechanics`, `order-failures`, `trade-journal`, `gate-refusals`,
-`broker-refusals`, `harness-tools`, `confluence-counting`, `invalidation`,
-`strategy-scan`, and `harness-root`.
+`broker-refusals`, `harness-tools`, `confluence-counting`, `invalidation`, and
+`strategy-scan`.
 
 Your steps of the trader process (the `trader-process` skill) are phase
 2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision). Phase 1
@@ -139,8 +139,7 @@ its facts; the order decides.
    verdict the gate would refuse) is a VETO. A manual strategy has no
    order_plan: check its arithmetic by the formula above. order_plan does the
    arithmetic only: every judgement in these checks stays yours.
-6. The strategy (`strategies_show` with its name; what the gate checks of it:
-   the `strategy-gate-checks` skill) is `active`, trades this symbol,
+6. The strategy (`strategies_show` with its name) is `active`, trades this symbol,
    is inside its sessions, and reward-to-risk ≥ its `risk.min_rr` (for a
    trailing exit with no target: its `trailActivateR` ≥ `min_rr`, else N/A);
    risk ≤ its `risk.max_risk_usd` if set (the gate refuses an entry over it,

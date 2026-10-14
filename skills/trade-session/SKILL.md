@@ -129,9 +129,7 @@ never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min on 15m
 and 1h), per the signal record
 (the runner records every bar; interactively, `strategies_scan` with the
 bars file, `symbol`, and `record: true`). A different setup tag on the
-same trade is refused: enter only on the strategy that fired. Reading the
-scan (its candidates, why not, confluence) is the `strategy-scan` skill; what
-else the gate checks of a strategy entry, the `strategy-gate-checks` skill.
+same trade is refused: enter only on the strategy that fired.
 
 **Lean cycle** (the prompt says "lean"; used for 1-minute bars so a cycle
 fits inside one bar): no parallel analysts and no news fetch. Yourself, in

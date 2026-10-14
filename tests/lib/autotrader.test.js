@@ -159,12 +159,12 @@ test('a trade prompt names the roles its cycle runs before an entry, as the gate
   const now = new Date('2026-10-07T14:30:00Z');
   const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 21500, file: '/b/MNQ-3m.json', contractId: 'MNQ' } }];
   const full = prompts(validateConfig({}), now).trade(items);
-  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding/);
+  assert.match(full, /With your skill tool, load trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks \(the order gate refuses an entry without them\) before deciding/);
   // Codex has no skill tool (it carries the skills in AGENTS.md): it reads them, and its gate can't see them loaded.
   const cx = prompts(validateConfig({ harness: 'codex' }), now).trade(items);
   assert.match(cx, /Read the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding, then run/);
   assert.match(prompts(validateConfig({ harness: 'custom', command: ['x', '{prompt}'] }), now).trade(items), /Load the skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, and strategy-gate-checks before deciding, then run/);
-  assert.match(full, /strategy-gate-checks before deciding \(the order gate refuses an entry without them\)/);
+  assert.match(full, /strategy-gate-checks \(the order gate refuses an entry without them\) before deciding, then run/);
   assert.match(full, /Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager \(phase 1\) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   assert.match(prompts(validateConfig({ cycle: 'lean' }), now).trade(items), /Lean cycle: on a candidate, risk-manager phase 1, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves\./);
   // No entries possible: no roster.

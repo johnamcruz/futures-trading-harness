@@ -160,21 +160,27 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   assert.notDeepStrictEqual(differences(old, swap('harness-root', homes[at('harness-root')].replace('## Examples', '## Example'))), []);
 });
 
-test('strategy-library split: each skill answers one question in a short index line; strategy-library keeps the priority order and points to the rest', () => {
+test('strategy-library split: each skill answers one question in a short index line; strategy-library keeps the priority order; no prompt grows', () => {
   const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
   for (const s of HOMES) {
     const d = parseFrontmatter(read(`skills/${s}/SKILL.md`)).data.description;
     assert.ok(d.length <= 160, `${s}: description ${d.length} chars, over 160`);
   }
   const sl = read('skills/strategy-library/SKILL.md').replace(/\s+/g, ' ');
-  for (const s of HOMES.slice(1)) assert.match(sl, new RegExp(`the \`${s}\` skill`), `strategy-library points to ${s}`);
+  // No prompt grows (the owner's rule): the three pieces a trading role loads together are no larger than the old
+  // skill's body, so their new text (headings, a bullet, an example) fits in what harness-root took away.
+  const { parseFrontmatter: pf } = require('../../scripts/lib/frontmatter');
+  const body = t => pf(t).body.trim().length;
+  const pieces = ['strategy-library', 'strategy-scan', 'strategy-gate-checks'].reduce((n, x) => n + body(read(`skills/${x}/SKILL.md`)), 0);
+  assert.ok(pieces <= body(read(BEFORE)), `the three pieces are ${pieces} characters, over the old skill's ${body(read(BEFORE))}`);
   assert.match(sl, /### Apply a strategy/);
   assert.match(sl, /### The priority order: the rule for every setup/);
   assert.doesNotMatch(sl, /### (Read the library|What the code enforces|Find the harness root)|retired-lane|trigger-fired|FTH_ROOT|filtersFailed/);
   // The priority order is in strategy-library only (the content test holds the rest of the priority-order guard).
   for (const s of HOMES.slice(1)) assert.doesNotMatch(read(`skills/${s}/SKILL.md`), /\*\*Hard stops → no trade\*\*|floor\(size \/ 2\)/, s);
-  // The place the strategies_* tool rows land (the harness-tools split): strategy-scan's own section.
-  assert.match(read('skills/strategy-scan/SKILL.md'), /### The strategy tools/);
+  // The place the strategies_* tool rows land (the harness-tools split): strategy-scan's "Read the library", with the
+  // tool calls.
+  assert.match(read('skills/strategy-scan/SKILL.md'), /### Read the library\n\nWith the harness tools \(the `harness-tools` skill\):\n\n```text\nstrategies_list/);
 });
 
 test('strategy-library split: the head trader still loads all of the old skill (the gate requires the pieces; the prompt and trade-session name them)', () => {
@@ -192,6 +198,9 @@ test('strategy-library split: the head trader still loads all of the old skill (
   for (const s of REQUIRED_FOR_ENTRY) assert.match(step0, new RegExp(`\`${s}\``), `trade-session step 0 names ${s}`);
   const A = require('../../scripts/lib/autotrader');
   const prompt = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
-  const sentence = /load ([^.]*) before deciding/.exec(prompt)[1];
+  // The gate's list, then its parenthetical, then any skill it doesn't require (ALSO_LOAD): "load a, b, and c (the order
+  // gate refuses an entry without them), and d before deciding".
+  const sentence = /load ([^.(]*?)(?: \(the order gate refuses an entry without them\))?(?:, and [^.()]*?)? before deciding/.exec(prompt)[1];
+  assert.match(prompt, /\(the order gate refuses an entry without them\)/);
   for (const s of REQUIRED_FOR_ENTRY) assert.ok(sentence.split(/,\s*(?:and\s+)?|\s+and\s+/).includes(s), `the prompt names ${s}`);
 });

@@ -422,7 +422,7 @@ test('the priority order is written once, in strategy-library, and every role th
   for (const f of docs) for (const re of RULE) assert.doesNotMatch(read(f), re, `${f} restates the priority order (${re}): point to strategy-library instead`);
   // Who decides has it: the head trader loads strategy-library every cycle; the roles that judge a setup carry it.
   assert.match(read('skills/trade-session/SKILL.md'), /The priority order\*\* \(the `strategy-library` skill, "The priority order"\)/);
-  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /strategy-library, strategy-scan, and strategy-gate-checks before deciding/);
+  assert.match(require('../../scripts/lib/autotrader').prompts(require('../../scripts/lib/autotrader').validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]), /strategy-library, strategy-scan, and strategy-gate-checks \(the order gate refuses an entry without them\) before deciding/);
   for (const role of ['risk-manager', 'market-structure-analyst', 'trend-momentum-analyst']) {
     // Its core (role-skills): never only in its index (role-index).
     assert.match(read(`agents/${role}.md`), /^role-skills: \[[^\]]*\bstrategy-library\b/m, role);

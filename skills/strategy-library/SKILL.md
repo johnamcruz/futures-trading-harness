@@ -1,20 +1,16 @@
 ---
 name: strategy-library
-description: Apply a harness strategy to a setup (its body, trigger, filters, skip rules, stop, tag) and the priority order that takes, skips or sizes every setup.
+description: Apply a strategy to a setup (body, trigger, filters, skip rules, stop, tag) and the priority order that takes, skips or sizes it.
 ---
 
 # Strategy Library
 
 Strategies are Markdown documents, not code. Each lives at
 `strategies/<name>/STRATEGY.md` (plus any folder in `FTH_STRATEGIES_DIRS`).
-Reading a scan is the `strategy-scan` skill; what the order gate checks of a
-strategy is the `strategy-gate-checks` skill; finding `<root>` is the
-`harness-root` skill.
 
 ## When to Use
 
 - Before any plan: which strategies apply to this symbol, now?
-- Before any trade: apply the strategy, then the priority order.
 
 ## How It Works
 

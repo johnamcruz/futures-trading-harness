@@ -1,27 +1,15 @@
 ---
 name: strategy-scan
-description: Read the strategy scan, recent fires and a strategy's full result - candidates, why not, the trend flags and confluence - and when a scan is fresh.
+description: Read a strategy scan, recent fires and a full result - candidates, why not, trend flags, confluence, freshness.
 ---
 
 # Strategy Scan
 
-The scan reads the strategies on the last closed bar; this skill is how to
-read what it returns. Applying a candidate and the priority order are the
-`strategy-library` skill.
-
 ## When to Use
 
-- Reading `strategies_scan` or `strategies_recent` output, or a strategy's
-  full scan result, before a plan.
-- Explaining why a strategy did or didn't fire, or why the scan has no
-  candidate.
+- Reading a scan or recent fires.
 
 ## How It Works
-
-### The strategy tools
-
-The `harness-tools` skill's table lists the `strategies_*` tools, their
-arguments and the scripts they mirror.
 
 ### Read the library
 
@@ -56,8 +44,6 @@ On bars no strategy trades (15m, say) the scan says so and lists the
 timeframes the strategies trade: that is not "no setup", it is the wrong bars.
 Read the result only when that last bar is fresh (no older than one bar plus
 a minute).
-
-### The summary and a full result
 
 The scan's summary gives the bar, the higher-timeframe trends, the
 candidates first (side, entry reference, stop distance, min R:R, exit,
@@ -95,6 +81,4 @@ as candidates when in session; you evaluate their trigger from the body.
 
 ```text
 strategies_scan → orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none (a candidate)
-strategies_scan on 15m bars → no strategy trades 15m; it lists 1m and 3m → fetch 3m bars and scan those, not "no setup".
-strategies_scan name orb → filtersFailed ["mtf: ..."], mtf.longAllowed false → a trend long against the prevailing trend: never a candidate.
 ```
