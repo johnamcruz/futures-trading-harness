@@ -1,6 +1,6 @@
 ---
 name: end-of-day
-description: Use at the end of each session, from /eod, or when the runner reaches its end-of-day time - confirm flat, cancel leftovers, review trades, journal the day.
+description: Use at the end of each session, from /eod, or at the runner's end-of-day time - flatten and confirm flat, cancel leftovers, review trades, journal the day.
 ---
 
 # End of Day

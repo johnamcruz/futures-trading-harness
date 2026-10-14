@@ -1,6 +1,6 @@
 ---
 name: vwap-volume-profile
-description: Use when judging trend vs rotation day, a breakout's participation, pullback areas or targets from VWAP, value area, POC and volume nodes.
+description: Use when judging trend vs rotation day, a breakout's participation, pullback areas, targets, or the value area strategies - VWAP, value area, POC, nodes.
 ---
 
 # VWAP and Volume

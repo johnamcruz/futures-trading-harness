@@ -162,7 +162,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `contract-roll` (skills/contract-roll/SKILL.md): Use when a quarterly contract roll is near.
 - `daily-bias` (skills/daily-bias/SKILL.md): Use when setting today's bias - long, short or neutral, with confidence, reasons and what flips it - from the prior day, the open, 1h/4h structure.
 - `design-self-review` (skills/design-self-review/SKILL.md): Only for the training loop's proposer (FTH-SELF-REVIEW prompt) - review flagged decisions and propose skill or rule edits. Never in a trading cycle.
-- `end-of-day` (skills/end-of-day/SKILL.md): Use at the end of each session, from /eod, or when the runner reaches its end-of-day time - confirm flat, cancel leftovers, review trades, journal the day.
+- `end-of-day` (skills/end-of-day/SKILL.md): Use at the end of each session, from /eod, or at the runner's end-of-day time - flatten and confirm flat, cancel leftovers, review trades, journal the day.
 - `exchange-holidays` (skills/exchange-holidays/SKILL.md): Use when checking for an exchange holiday or an early close.
 - `fair-value-gaps` (skills/fair-value-gaps/SKILL.md): Use when an open or partly filled fair value gap is near price, ahead of a setup, or retested after a sweep. A location, never a trigger.
 - `fib-retracement` (skills/fib-retracement/SKILL.md): Use after an impulse to judge pullback depth, or for a CISD's OTE zone (0.62-0.79) - fib levels and a bounce on a completed candle. A read, never a veto.
@@ -176,7 +176,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `kill-switch` (skills/kill-switch/SKILL.md): Use when an entry is refused with [kill-switch], [allowed-accounts] or [account-lock].
 - `levels-and-reactions` (skills/levels-and-reactions/SKILL.md): Trader-process step 3 - which levels sit near price (prior day, overnight, OR/IB, VWAP, value, swings) and how price reacted there. A read, never a veto.
 - `live-session-records` (skills/live-session-records/SKILL.md): Use when reading or scoring a live trading day's records. User-run.
-- `market-snapshot` (skills/market-snapshot/SKILL.md): Use without a current bar briefing, or for a number it doesn't carry - compute indicators, levels and the regime from closed bars with market_snapshot.
+- `market-snapshot` (skills/market-snapshot/SKILL.md): Use without a current bar briefing, for a number it doesn't carry, or a reference stop distance - indicators, levels and the regime from market_snapshot.
 - `micro-mini-specs` (skills/micro-mini-specs/SKILL.md): Use when sanity-checking a contract's tick size and value, a micro against its mini.
 - `momentum-and-volume` (skills/momentum-and-volume/SKILL.md): Trader-process steps 3 and 5 - whether a move has push behind it from the trigger bar and the last few bars' range, close and volume. A read, never a veto.
 - `mtf-bias-filter` (skills/mtf-bias-filter/SKILL.md): Use when filtering a rules strategy by the higher-timeframe trend (mtf_bias in its rules, backtested).
@@ -223,7 +223,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `trend-momentum-indicators` (skills/trend-momentum-indicators/SKILL.md): Use when a strategy gates on ADX, an EMA, SuperTrend or Keltner, or to classify the regime (trend, range, volatility) for sizing and strategy choice.
 - `trend-vs-range` (skills/trend-vs-range/SKILL.md): Trader-process step 1 and the regime in step 2 - whether each timeframe trends, ranges or is in transition, before any setup. A read, never a veto.
 - `user-commands` (skills/user-commands/SKILL.md): Use when a person runs a script themselves.
-- `vwap-volume-profile` (skills/vwap-volume-profile/SKILL.md): Use when judging trend vs rotation day, a breakout's participation, pullback areas or targets from VWAP, value area, POC and volume nodes.
+- `vwap-volume-profile` (skills/vwap-volume-profile/SKILL.md): Use when judging trend vs rotation day, a breakout's participation, pullback areas, targets, or the value area strategies - VWAP, value area, POC, nodes.
 
 ## Agent roles
 

@@ -1,6 +1,6 @@
 ---
 name: market-snapshot
-description: Use without a current bar briefing, or for a number it doesn't carry - compute indicators, levels and the regime from closed bars with market_snapshot.
+description: Use without a current bar briefing, for a number it doesn't carry, or a reference stop distance - indicators, levels and the regime from market_snapshot.
 ---
 
 # Market Snapshot
