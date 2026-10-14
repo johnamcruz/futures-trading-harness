@@ -99,10 +99,11 @@ and months fails it, so judge a mechanical change on windows long enough.
 Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the
 same: the one ledger is where the budget lives.
 
-**Stub until its step lands.** The scorecard is section 10 step 2's
-(`replay/scorecard.js`, adapted in `scripts/lib/train/loop.js`). Either
-step can be replaced with `--steps steps.js` (a module exporting
-`scorecard` and/or `evaluator`).
+**The scorecard** is section 10 step 2's (`replay/scorecard.js`, read
+through an adapter in `scripts/lib/train/loop.js`), under the look's rules:
+tuning on the tuning windows, judging on held-out ones. Either step can be
+replaced with `--steps steps.js` (a module exporting `scorecard` and/or
+`evaluator`).
 
 ## Examples
 

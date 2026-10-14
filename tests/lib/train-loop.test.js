@@ -227,6 +227,20 @@ test('a strategy change the evaluator\'s streams don\'t read stays blocked; one 
   }
 });
 
+test('the scorecard is read under the look\'s rules: tuning on the tuning windows, judging (against the ledger before the look) held out', async () => {
+  const w = world({ proposals: [fix], loop: { heldOutWindows: [{ from: '2023-09-13', to: '2023-09-14' }] } });
+  const looks = [];
+  const score = w.steps.scorecard;
+  w.steps.scorecard = opts => { looks.push(opts.look); return score(opts); };
+  await run(w, { dryRun: true });
+  assert.ok(looks.length && looks.every(l => l.purpose === 'tuning' && l.candidate === 'l1' && Array.isArray(l.ledger)));
+  looks.length = 0;
+  const [kept] = readArchive(w.paths.archive);
+  await L.judgeHeldOut({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, proposalId: kept.proposalId, heldOutLook: true });
+  assert.ok(looks.length && looks.every(l => l.purpose === 'judging' && l.candidate === `l1/${kept.proposalId}`));
+  assert.ok(looks.every(l => !l.ledger.some(x => x.purpose === 'judging')), 'checked against the ledger as it was before this judging\'s own look');
+});
+
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {
   const w = world({ proposals: [fix], loop: { maxFlagged: 2, limits: { maxIterations: 2, maxModelCalls: 1000, maxWallMinutes: 30 } } });
   await run(w, { dryRun: true });

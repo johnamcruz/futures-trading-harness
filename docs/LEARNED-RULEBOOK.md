@@ -1196,10 +1196,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
     candidate alone, each scoring a judging look; with no `evaluator` in
     the loop config a strategy or rulebook change stays `blocked`.
     Not yet: Optuna over the agent's design (R30's categorical search; the
-    loop judges each proposal on its own), the scorecard's step 2
-    refinements (the loop reads today's `replay/scorecard.js` through an
-    adapter, behind the same interface), and the LLM-level estimate (R20)
-    as a verifier.
+    loop judges each proposal on its own), and the LLM-level estimate (R20)
+    as a verifier. The scorecard (step 2) is read through an adapter, under
+    the look's rules (tuning, or judging held out).
 15. Walk-forward re-learning (R17), run through the training loop.
 16. Strategy-change re-learning (R33): the fingerprint, staleness in code,
     the trigger, and paper until re-verified (enforced by the gate).

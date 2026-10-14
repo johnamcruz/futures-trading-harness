@@ -98,7 +98,8 @@ function defaultSteps({ root, env = process.env }) {
     seedRunHome: (run, opts) => driver.seedRunHome(run, opts),
     runReplay: opts => driver.runReplay(opts),
     // Step 2's scorecard (replay/scorecard.js) as decisions; a run still open is scored as it stands.
-    scorecard: ({ runDir, tree }) => scorecardDecisions(scoreRun(runDir, { strategies: loadStrategies(tree, env).strategies, accounts: loadAccounts(tree, env).accounts, unfinished: true }).records),
+    // look: the look the scorecard checks against the ledger's rules before it reads the run (tuning, or judging held out).
+    scorecard: ({ runDir, tree, look }) => scorecardDecisions(scoreRun(runDir, { strategies: loadStrategies(tree, env).strategies, accounts: loadAccounts(tree, env).accounts, unfinished: true, look: look || {} }).records),
     // Step 9's two-layer evaluator (train/evaluator.js): { available, blows, failures, windows }.
     evaluator: opts => E.evaluate({ ...opts, env }),
     propose: opts => proposer.propose(opts),
@@ -200,7 +201,7 @@ async function championRuns(ctx, { tag, windows, tree, look }) {
   }
   const decisions = await phase(ctx, `scorecard:${tag}`, path.join(ctx.paths.dir, `champion-${tag}-decisions.json`), async () => {
     const out = [];
-    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree })).map(d => ({ ...d, run: r.label })));
+    for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor() })).map(d => ({ ...d, run: r.label })));
     return out;
   });
   return { runs, decisions };
@@ -222,7 +223,7 @@ async function sideRuns(ctx, { side, dir, tree, panel, runs }) {
           run: r.run, checkpoint: D.checkpointOf(r.checkpoints, point.t), home, tree, point, followers, repeat: k, seed, baseEnv: ctx.env,
           stepDeps: ctx.steps.stepDeps, onCall: ctx.call,
         });
-        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree });
+        const decisions = result.error ? [] : await ctx.steps.scorecard({ runDir: result.runDir, tree, look: ctx.lookFor() });
         result.decisions = decisions.filter(d => result.times.includes(d.t)).map(d => ({ key: `${point.t}|${d.key}`, repeat: k, category: d.category, blow: d.blow === true }));
         writeJsonAtomic(resultFile, result);
       }
@@ -374,6 +375,8 @@ function promote(ctx, { entry, n, tree, dir }) {
 async function runLoop({ loop, env = process.env, root, steps, dryRun = false, log }) {
   const ctx = open({ loop, env, root, steps, log });
   ctx.dryRun = dryRun;
+  // The scorecard's look: tuning, checked against the ledger as it stands (tuning looks spend no budget).
+  ctx.lookFor = () => ({ purpose: 'tuning', candidate: loop.loopId, ledger: S.readLedger(ctx.paths.ledger) });
   try {
     // Every tuning window must be one the ledger allows a tuning look at, before anything runs.
     const v = checkLook({ candidate: `${loop.loopId}/plan`, purpose: 'tuning', ranges: loop.tuningWindows }, S.readLedger(ctx.paths.ledger));
@@ -434,6 +437,8 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     // The ledger as it was before this judging's one look: the evaluator checks the same look on copies of it, so a
     // judging spends one look, however many windows and scorings it holds.
     const before = path.join(ctx.paths.dir, `held-out-${proposalId}`, 'ledger-before.jsonl');
+    // The scorecard checks the same judging look against that snapshot: it reads, it never logs.
+    ctx.lookFor = () => ({ purpose: 'judging', candidate: `${loop.loopId}/${proposalId}`, ledger: S.readLedger(before) });
     if (!ctx.state.done[`look:${tag}`]) {
       fs.mkdirSync(path.dirname(before), { recursive: true });
       fs.writeFileSync(before, fs.existsSync(ctx.paths.ledger) ? fs.readFileSync(ctx.paths.ledger) : '');
