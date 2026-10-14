@@ -74,7 +74,7 @@ const ALLOWED = [
     now: "From the highest timeframe down, for each side (`m15.alignment`; read `read <side> <label>`):",
     reason: "the skill audit (fix/skills-concept-owners): the label's briefing field and its read form" },
   { old: "Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`, `value_area_reentry`) trade against the lower timeframes by design, and the trend rule lets them fade the prevailing trend.",
-    now: "A composed entry against the prevailing trend needs a true 15m or 1h CHoCH its way among its reads (`bos-vs-choch`; the priority order, step 2).",
+    now: "A composed entry against the prevailing trend needs a true CHoCH its way at or above the trend's frame (`trade-lifecycle`; the priority order, step 2).",
     reason: "the reversal strategies are retired (strategies/retired.json); owner decision D2: a composed entry against the trend needs a verified 15m or 1h CHoCH" },
   { old: "Judge the setup against the timeframe above its range candle (for `crt_1h`, the 4-hour trend; for `crt_4h`, the daily): against that one too, it is a `counter` reversal (the priority order, step 2, decides it: level, size, target).",
     copies: 0,

@@ -33,8 +33,8 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 For a composed trade the label is a reason in its plan, never a cut (the
 priority order, strategy-library).
 
-A composed entry against the prevailing trend needs a true 15m or 1h CHoCH
-its way among its reads (`bos-vs-choch`; the priority order, step 2).
+A composed entry against the prevailing trend needs a true CHoCH its way at
+or above the trend's frame (`trade-lifecycle`; the priority order, step 2).
 
 ### 2. Levels flow down
 

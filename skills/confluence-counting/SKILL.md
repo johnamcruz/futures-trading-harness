@@ -29,8 +29,8 @@ overrule it. A missing field is `unknown` and counts neutral.
 **Rules.**
 
 - **Other reads of the same fact count once** (item 6): a pattern on the
-  candle that made item 4's rejection, a candle's sweep that is that
-  rejection, a second timeframe of the same reaction.
+  candle that made item 4's rejection, a CISD or a sweep on that candle, a
+  second timeframe of the same reaction.
 - **Indicators together are one item**: EMA, ADX and SuperTrend readings
   count together in item 5, never separately.
 - **An HTF structure break is read in item 1**: a 15m or 1h break its way (`bos-vs-choch`;
@@ -48,7 +48,7 @@ Take: long: 6 neutral (15m pattern hammer, the candle of 4); 1 aligned, 2 15m ci
   4 15m rejected prior vah up, 5 momentum: for. 5 Confluence: for 5, against 0, neutral 1.
   Priority order: room -> take.
 Skip: long: 1 mixed, 4 none yet, 5 thin, 6: neutral; 2 3m choch down, 3 vwap below: against.
-  5 Confluence: for 0, against 2, neutral 4. Priority order (contradicting facts): skip.
+  5 Confluence: for 0, against 2, neutral 4. The priority order's rule, contradicting facts: skip.
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```
