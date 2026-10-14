@@ -214,6 +214,19 @@ its trades came from a 60m CISD. Its prop simulation (as before): 106
 attempts, 10.4% pass (11), 0% blow, 89.6% timeout, median 10 sessions to
 pass, average profit $187, 32.3 trades an attempt, expectancy -0.007R.
 
+5. **Not in chop: a measured variant, not shipped.** The owner: a CISD
+   works in a trend or a range, not in chop. The `cisd` skill names chop
+   from briefing fields. The rules can express part of it cheaply: the
+   computed regime (regime.js, the last 500 3m bars), as `regimes`. Written
+   here before it ran: **SC** = ST with `regimes: [trend, range]` (no entry
+   in a `transition` regime), on the same Train file, with the prop
+   simulation. Reported beside ST; shipped only if the owner says so.
+6. **Absorption at the OTE: a follow-up, not measured.** Absorption during
+   the retracement into the zone confirms the pullback (the
+   `fib-retracement` and `cisd` skills). Order-flow fields are not on the
+   Train file, so a flow-confirmed variant waits for recorded flow data
+   (replay or live NQ). No volume-only proxy was run.
+
 **Read plainly:** the shipped definition (S, and ST as shipped) has no edge on Train either:
 its mean is below zero with an interval straddling it, as the old port's
 (-0.001R) does, and it is still worse than the port by the mean. Its prop

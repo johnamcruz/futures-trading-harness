@@ -539,11 +539,14 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   const keys = new Set(entries.flatMap(x => [...Object.keys(x), ...Object.keys(x.leg || {})]));
   const skills = new Set(fs.readdirSync(path.join(ROOT, 'skills')));
   const STATUS = ['waiting', 'touched', 'bounced', 'void', 'expired', 'weak'];
+  // Values of other briefing fields it names (the regime, the swing pattern), each the code's.
+  const VALUES = { transition: 'scripts/lib/trading/regime.js', mixed: 'scripts/lib/trading/mtf.js', unclear: 'scripts/lib/trading/mtf.js' };
   const src = read('scripts/lib/trading/cisd.js');
   for (const m of read(file('cisd')).matchAll(/`([a-zA-Z]+)`/g)) {
     const w = m[1];
     if (skills.has(w) || w === 'unknown') continue;
-    if (STATUS.includes(w)) assert.ok(src.includes(`'${w}'`), `status ${w} is the code's`);
+    if (VALUES[w]) assert.ok(read(VALUES[w]).includes(`'${w}'`), `${w} is ${VALUES[w]}'s`);
+    else if (STATUS.includes(w)) assert.ok(src.includes(`'${w}'`), `status ${w} is the code's`);
     else assert.ok(keys.has(w), `cisd names \`${w}\`, not in the briefing's m3.cisd`);
   }
   for (const k of ['displacement', 'engulfing']) assert.ok(keys.has(k), k);

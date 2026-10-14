@@ -721,6 +721,9 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
     ...omit(base.data, SESSION_FIELDS),
     sessionLevels: `not in a ${minutes}m briefing: the session's facts (today so far: open, gap, opening range, IB, high and low; the overnight range; the RTH and session VWAP and price's side of it; the session profile and the prior day's nodes; where price is against them) are computed on the runner's ${first.minutes}m bars only, one value each: in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe); the prior RTH day and its profile are the [day] part below${lane ? `; the room and the setups' levels below include the runner's session levels (its values)` : ''}`,
     trendRule: `Trend rule: not in a ${minutes}m briefing (it would be up to a ${minutes}m bar old): the order gate's current rule is in the runner's ${first.minutes}m bar briefing and the cycle prompt`,
+    // The CISD per timeframe reads the session's key levels (its sweep) and the zone moves bar by bar: one value each,
+    // the runner's.
+    cisd: `not in a ${minutes}m briefing: the CISD per timeframe (3m, 5m, 15m, 1h) is computed on the runner's ${first.minutes}m bars, one value each: in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe)`,
   };
   if (!lane) {
     delete data.candidates;

@@ -7,7 +7,7 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 
 ## When to Use
 
-- Every trade cycle; each role for its steps.
+- Each cycle; each role for its steps.
 
 ## How It Works
 

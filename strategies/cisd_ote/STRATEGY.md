@@ -113,9 +113,16 @@ skill (`bos-vs-choch`), but this strategy doesn't trade it.
 
 ### Skip when (judgment: the mechanics take every signal)
 
-- Mid-range with no level near the CISD (the `cisd` skill: where it works).
+- Mid-range with no level near the CISD, or chop (the `cisd` skill: where
+  it works, avoid chop). A `regimes` filter for chop was measured, not
+  shipped (docs/research/cisd-ote-textbook.md).
 - The first level ahead of the bounce is closer than 1R (levels-and-reactions).
 - Risk to the origin is above the position-sizing budget at size 1.
+
+Absorption in the zone (the `absorption` skill) confirms the bounce; it is
+judgment, not a rule here. A flow-confirmed variant is a follow-up, to
+measure once order-flow fields are recorded (replay or live NQ): the rule
+is to use order flow where a bar carries it, never to infer it.
 
 ## What changed from version 3 (the port), and why
 

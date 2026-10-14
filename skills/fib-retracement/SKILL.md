@@ -43,16 +43,23 @@ zone (`candle-reading` reads the candle). Never anticipate it: a touch is
 not a bounce. A close through the origin, or well beyond 0.79, says the leg
 failed.
 
+**Confirmation** of a bounce at the zone: a rejection candle
+(`candle-reading`), or absorption at the zone (`absorption`): effort
+without result, heavy volume with little progress into the zone, or the
+broker's order-flow fields showing the other side absorbed, where a bar
+carries them (never derived from OHLCV).
+
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): buying a 0.5 or
 0.618 retrace with the 4h trend lost after costs (F5): depth alone is no
-edge. The OTE bounce after a CISD is under test
+edge. The OTE bounce after a CISD showed no edge on Train either
 (docs/research/cisd-ote-textbook.md).
 
 ## Examples
 
 ```text
 Take: bullish leg 21478.25 -> 21530.25; ote 21489.25-21498.00 (mid 21493.50);
-  a 3m bar to 21492.50 closes 21500.25 above the zone: bounced. crt_1h long
+  a 3m bar to 21492.50 closes 21500.25 above the zone: bounced, after V 1.9x into the zone
+  with little progress (absorption). crt_1h long
   fired with it. Priority order: aligned -> take.
 Skip: bearish leg 21560.00 -> 21500.00, price 21520.00 = 0.333, not in the
   zone (21537.25-21547.50); no candle closed back. No setup without a fired strategy.
