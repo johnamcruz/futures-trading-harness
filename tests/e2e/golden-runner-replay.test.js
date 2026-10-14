@@ -29,7 +29,7 @@ const ANALYSTS = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-
 // opencode's task events, as a cycle's output carries them (report-cache.test.js).
 const task = (role, report, [s, e]) => JSON.stringify({ type: 'tool_use', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: `<task id="s" state="completed">\n<task_result>\n${report}\n</task_result>\n</task>`, time: { start: s, end: e } } } });
 
-async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {} } = {}) {
+async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {}, restart = false } = {}) {
   const home = tmpDir();
   // The prompt names the harness home from the process's environment (autotrader.js prompts): this run's home.
   const savedHome = process.env.FTH_HOME;
@@ -70,20 +70,23 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
     ].join('\n');
     const cache = RC.readCache(home);
     // `lanes`: several lanes, the lanes this cycle covers (the context the cycle log records).
-    cycles.push({ at: now().toISOString(), action, prompt: paths(prompt), served, fired: (ctx.symbols || []).flatMap(s => s.fired.map(f => `${f.name} ${f.direction}`)), before: cache, ...(ctx.lanes ? { lanes: ctx.lanes } : {}) });
+    cycles.push({ at: now().toISOString(), action, prompt: paths(prompt), history: ctx.historyLines || [], served, fired: (ctx.symbols || []).flatMap(s => s.fired.map(f => `${f.name} ${f.direction}`)), before: cache, ...(ctx.lanes ? { lanes: ctx.lanes } : {}) });
     clockRef.t += 20000;
     return { ok: true, timedOut: false, result: 'CYCLE RESULT: no-trade - golden replay', transcript: output };
   };
-  const runner = wireRunner({
+  // `restart`: a new runner every pass from the state it saved (as JSON), as a replay runs one pass per process.
+  let saved = state;
+  const make = () => wireRunner({
     cfg, root: G.ROOT, home, env, client: closedBarsOnly(broker, now), dataDir: cfg.dataDir, now, runCycle,
-    loadState: () => state, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {},
+    loadState: () => (restart ? saved : state), saveState: s => { if (restart) saved = JSON.parse(JSON.stringify(s)); }, killSwitchFile: path.join(home, 'STOP'), log: () => {}, event: () => {},
   });
+  const runner = make();
   const keysAfter = [];
   let guard = 0;
   try {
     while (clockRef.t < end) {
       const before = cycles.length;
-      clockRef.t += await runner.step();
+      clockRef.t += await (restart ? make() : runner).step();
       if (cycles.length > before) {
         const c = RC.readCache(home);
         keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.versions])), phase1: c.phase1 && { account: c.phase1.account, day: c.phase1.day }, symbols: c.symbols } : null);
@@ -243,4 +246,18 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   assertGolden('runner-replay-lanes-cache.txt', `hit rate (phase 1 and the two cacheable analysts): single 3m lane ${rate(single.cycles)}; 3m bar + 1m signal lanes ${rate(laned.cycles)}\n${lanesText}`);
   // The prompts of the two lanes, the decision history of each (lane-cycle.js laneHistory) included.
   assertGolden('runner-replay-lanes-prompts.txt', laned.cycles.map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+});
+
+test('the decision history: a runner restarted every pass (as a replay runs, one pass per process, its state from the file) shows the same history text as one live runner over the same bars; the text is in every prompt it names', async () => {
+  // Two lanes: a restarted runner keeps each lane's clock in its state (laneClocks), as a replay pass reads it.
+  const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
+  const opts = { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }], bars1, end: Date.parse('2026-04-27T14:50:30Z') };
+  const live = await replay(MNQ, opts);
+  const replayed = await replay(MNQ, { ...opts, restart: true });
+  assert.ok(live.cycles.length >= 10, `cycles: ${live.cycles.length}`);
+  assert.deepStrictEqual(replayed.cycles.map(c => c.history), live.cycles.map(c => c.history));
+  // Not vacuous: the later cycles show their decisions with the price and what happened since.
+  assert.ok(live.cycles.slice(1).every(c => c.history.length && c.history.every(l => /@[\d.]+: .*; since [+-]?\d+t/.test(l))), live.cycles.map(c => c.history.join(' | ')).join('\n'));
+  // The recorded lines are exactly the prompt's: all of them, in order, and nothing else.
+  for (const c of live.cycles) if (c.history.length) assert.ok(c.prompt.includes(`): ${c.history.join(' | ')}. Don't flip-flop`), `${c.at}: the prompt shows ${c.history.join(' | ')}`);
 });

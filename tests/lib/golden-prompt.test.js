@@ -55,12 +55,22 @@ function state({ ext = false } = {}) {
   return { items, account };
 }
 
+/** A history entry for the cycle on MNQ bar k (its close 5 s after the bar closed). */
+const decided = (k, result, facts) => ({
+  at: new Date(Date.parse(MNQ[k].t) + 3 * 60000 + 5000).toISOString(), symbols: ['MNQ'], result,
+  symbol: 'MNQ', tf: 3, bar: MNQ[k].t, price: MNQ[k].c, tick: 0.25, ...facts,
+});
+
 const OPTIONS = ({ account }) => ({
   state: account,
+  // The decisions on MNQ's last bars (decision-history.js entries; the first in the old format, from before the
+  // decision facts): what happened since is read from the item's closed bars.
   history: [
-    { at: '2026-04-27T14:21:00Z', symbols: ['MNQ'], result: 'CYCLE RESULT: executed - orb long 2 MNQ at 27420.25' },
-    { at: '2026-04-27T14:24:00Z', symbols: ['MNQ'], result: 'CYCLE RESULT: managed - stop held' },
-    { at: '2026-04-27T14:27:00Z', symbols: ['MNQ'], result: 'CYCLE RESULT: managed - stop held' },
+    { at: '2026-04-27T14:15:05Z', symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
+    decided(I - 4, 'CYCLE RESULT: no-trade - against the 15m trend', { action: 'skipped', setup: 'keltner', side: 'short', stop: 6 }),
+    decided(I - 3, 'CYCLE RESULT: executed - orb long 2 MNQ at 27420.25', { action: 'entered', setup: 'orb', side: 'long', stop: 10 }),
+    decided(I - 2, 'CYCLE RESULT: managed - stop held', { action: 'managed' }),
+    decided(I - 1, 'CYCLE RESULT: managed - stop held', { action: 'managed' }),
   ],
   lessons: ['skip keltner in a range (0.7)', 'wait for the 15m close at a level (0.6)'],
   trades: ['orb long +1.2R', 'bos short -1R', 'keltner long +2R'],

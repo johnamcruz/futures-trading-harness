@@ -69,7 +69,15 @@ description: Rules for running the trading harness unattended (headless, schedul
    conclusions, not facts: where one contradicts this prompt's account or
    attempt line (e.g. it says no attempt is running and the prompt lists an
    active one), the prompt's facts win, and you say the earlier result was
-   wrong. It carries today's premarket
+   wrong. Each history line is one decision: time, symbol and lane, what
+   you did (entered, skipped, planned, managed, no-trade, flattened, blocked), the
+   setup and side, the price, your reason, and what happened since, from
+   closed bars only: ticks moved, whether a skipped setup would have hit
+   +1R or -1R first, an entry's R now (or stopped, target, or flattened). Use it to
+   notice a pattern: the same setup skipped again and again while it keeps
+   reaching +1R, or entries that keep getting stopped. Never chase the last
+   outcome: one missed winner is not a reason to enter, and one stop is not
+   a reason to skip; this bar's setup and rules decide. It carries today's premarket
    plan (when today's premarket run failed, the "Context unavailable" line
    says "premarket plan unavailable": there is no plan yet, so trade from
    the bars and your skills; the runner retries the premarket between

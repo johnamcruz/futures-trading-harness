@@ -826,6 +826,38 @@ test('every scanned bar records its bar briefing after the scan; a failed briefi
   assert.ok(logs.some(l => /error MNQ: no bar briefing this bar \(disk full\); the roles read the tools themselves/.test(l)), logs.join('\n'));
 });
 
+test('an executed cycle\'s history entry reads the order it placed from the journal; a failed journal read keeps the result line only', async () => {
+  const base = fakeMarket({ minutes: 3 });
+  const market = { client: (c, p) => ({ ...base.client(c, p), async activeContract(symbol) { return { id: symbol, tickSize: 0.25 }; } }) };
+  let n = 0;
+  let placedAt = null;
+  const runCycle = async () => {
+    n += 1;
+    return { ok: true, timedOut: false, result: n === 1 ? 'CYCLE RESULT: executed - keltner short MNQ' : 'CYCLE RESULT: managed - stop held' };
+  };
+  // The broker journals the entry during the first cycle (after its bar closed); an older order is not it.
+  const journal = () => (placedAt === null ? [] : [
+    { ts: new Date(placedAt - 600000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long', data: { request: { side: 'buy', stopLossBracket: { ticks: 40 } }, result: { success: true } } },
+    { ts: new Date(placedAt).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:keltner short, stop 21510', data: { request: { side: 'sell', stopLossBracket: { ticks: 24 } }, result: { success: true } } },
+  ]);
+  const r = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 7), market,
+    deps: { runCycle: async (...a) => { if (placedAt === null) placedAt = et(10, 0, 30); return runCycle(...a); }, journalEntries: journal },
+  });
+  const [first, second] = r.runner.state.history;
+  assert.deepStrictEqual([first.action, first.setup, first.side, first.stop, first.symbol, first.tick], ['entered', 'keltner', 'short', 6, 'MNQ', 0.25]);
+  assert.deepStrictEqual([second.action, second.setup], ['managed', undefined]);
+  // The journal can't be read after the cycle: the entry keeps the bar's facts (no order's), and the runner says so.
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market,
+    deps: { runCycle: async () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: executed - orb long' }), journalEntries: () => { throw new Error('journal locked'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  const kept = failed.runner.state.history[0];
+  assert.deepStrictEqual([kept.action, kept.symbol, kept.setup, Number.isFinite(kept.price)], ['entered', 'MNQ', undefined, true]);
+  assert.ok(logs.some(l => /error history: the journal unavailable \(journal locked\); the entry's facts from the scan only/.test(l)), logs.join('\n'));
+});
+
 test('the trade prompt carries the last closed bars and the model\'s own last cycle results', async () => {
   let n = 0;
   const r = await simulate({
@@ -840,7 +872,7 @@ test('the trade prompt carries the last closed bars and the model\'s own last cy
   const bars = Array.from({ length: 12 }, (_, k) => ({ t: new Date(et(9, 30) + k * 180000).toISOString(), o: 100 + k, h: 101 + k, l: 99 + k, c: 100.5 + k, v: 10 + k }));
   const p = prompts(cfg, new Date(et(10, 6)), '/r').trade([{ symbol: 'MNQ', bar: { t: bars[11].t, c: 111.5, file: '/f', contractId: 'C', recent: bars.slice(-10) } }], { history: r.runner.state.history });
   assert.match(p, /MNQ last 10 closed 3m bars \(ET open time, oldest first\): 09:36 O 102 H 103 L 101 C 102\.5 V 12 \(\+0\.5\);/);
-  assert.match(p, /Your last \d cycle\(s\), oldest first \(not facts\): .*MNQ: no-trade - reason 1 \| .*Don't flip-flop/);
+  assert.match(p, /Your last \d cycle\(s\), oldest first, ET \(not facts; "since" is from bars closed by now\): .*MNQ 3m no-trade @[\d.]+: reason 1(; since [+-]?\d+t)? \| .*Don't flip-flop/);
 });
 
 test('a failed strategy scan is named in the prompt; end-of-day and premarket cycles log their context', async () => {
