@@ -1,0 +1,24 @@
+{
+  "loopId": "nq-skills-1",
+  "replay": "replay.example.json",
+  "tuningWindows": [
+    { "from": "2022-03-07", "to": "2022-03-12" },
+    { "from": "2022-10-03", "to": "2022-10-08" }
+  ],
+  "heldOutWindows": [
+    { "from": "2023-09-11", "to": "2023-09-16" }
+  ],
+  "proposer": {
+    "harness": "opencode",
+    "model": "",
+    "symbols": ["MNQ"],
+    "timeframe": 3,
+    "cycleTimeoutMinutes": 15
+  },
+  "repeats": 3,
+  "seed": 1,
+  "maxFlagged": 12,
+  "controlPoints": 12,
+  "maxProposals": 2,
+  "limits": { "maxIterations": 1, "maxModelCalls": 400, "maxWallMinutes": 720 }
+}

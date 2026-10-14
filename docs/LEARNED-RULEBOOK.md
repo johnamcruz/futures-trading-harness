@@ -1168,6 +1168,30 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
 14. The training loop (R24-R28, R30): the proposer, Optuna over the agent's
     design with the decision-point replay mode and paired tests, the
     verifiers, the archive, and promotion as a reviewed pull request.
+    **Status: skeleton built** (`scripts/train-loop.js`,
+    `scripts/lib/train/`, the `training-loop` and `design-self-review`
+    skills). Built: the orchestrator (resumable, one loop at a time, refused
+    while a live runner runs, limits on iterations, model calls and wall
+    time, a dry run); the decision-point replay mode in its simplest form
+    (the champion's continuous replay checkpointed before each trade
+    decision, each point re-run from its checkpoint with the champion's or a
+    candidate's tree, a point in a trade run on to the day's end); the
+    proposer (the runner config's harness CLI, a prompt template short
+    enough for a small local model, structured edits to skills, strategies
+    and rulebooks only, validated, applied and synced in a copy; an external
+    model only as a manual import a person approves); the paired test (the
+    same points, seeds and repeats; an exact McNemar test with a minimum
+    pair count, discordant count and effect, a per-category harm check with
+    a tolerance, zero blows; frozen, a config may only tighten it); the
+    archive; every look logged through `prop/looks.js`, tuning windows only,
+    held-out judging a separate step that spends the budget; a kept change
+    written as a local branch and a pull request body draft, never pushed.
+    Not yet: Optuna over the agent's design (R30's categorical search; the
+    loop judges each proposal on its own), the evaluator as a verifier (step
+    9: until then a strategy or rulebook change is `blocked`, never kept),
+    the scorecard's step 2 refinements (the loop reads today's
+    `replay/scorecard.js` through an adapter), and the LLM-level estimate
+    (R20) as a verifier.
 15. Walk-forward re-learning (R17), run through the training loop.
 16. Strategy-change re-learning (R33): the fingerprint, staleness in code,
     the trigger, and paper until re-verified (enforced by the gate).
