@@ -379,6 +379,26 @@ test('order gate blocks unknown strategies and instruments the strategy does not
   assert.match(mes.stderr, /does not trade MES/);
 });
 
+test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
+  const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);
+  assert.strictEqual(old.code, 2);
+  assert.match(old.stderr, /\[strategy\] setup:bos is not a known strategy \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\): no new entries from it/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the bos long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  // The runner's 3m lane lists a retired strategy (its signal record says so): the manual anytime (3m) is refused too.
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  writeSignals(env.FTH_HOME, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T14:24:00.000Z' }, stepMs: 180000, now: new Date(TEST_NOW), retiredLane: ['keltner'] }));
+  const lane = gate(orderPayload(ORDER), env);
+  assert.strictEqual(lane.code, 2);
+  assert.match(lane.stderr, /\[retired-lane\] setup:anytime trades 3m bars, and the runner's 3m lane lists keltner \(retired on 2026-10-13/);
+  assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), env).code, 0, 'exits still go');
+  // A hard rule: the gate's skip list can't switch it off.
+  const skipped = gate(orderPayload(ORDER), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane' });
+  assert.strictEqual(skipped.code, 2);
+  assert.match(skipped.stderr, /\[retired-lane\]/);
+});
+
 test('order gate fails closed on malformed input', () => {
   const { env } = setup([]);
   const r = gate('{not json', env);

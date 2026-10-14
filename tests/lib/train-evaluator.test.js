@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { tmpDir, TEST_ACCOUNTS, listPolicies } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, listPolicies, FX_STRATEGIES } = require('../helpers');
 const E = require('../../scripts/lib/train/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
@@ -94,7 +94,7 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   fs.mkdirSync(strat, { recursive: true });
   fs.writeFileSync(path.join(strat, 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
     .replace(/^name: prop_portfolio$/m, 'name: eval_fixture').replace(/^instruments: .*$/m, 'instruments: [MNQ, NQ]')
-    .replace(/^strategies: .*$/m, 'strategies: [ema_cross, supertrend, keltner, bos, orb]').replace(/^account: .*$/m, 'account: eval_acct').replace(/^contracts: .*$/m, 'contracts: micro'));
+    .replace(/^strategies: .*$/m, 'strategies: [fx_cross, fx_break, orb]').replace(/^account: .*$/m, 'account: eval_acct').replace(/^contracts: .*$/m, 'contracts: micro'));
   const acct = path.join(home, 'accounts', 'eval_acct');
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
@@ -102,7 +102,8 @@ test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree a
   // Its rulebook (the fixture's, renamed), listing the policy (section 10 step 7: one place for its numbers).
   fs.writeFileSync(path.join(acct, 'RULEBOOK.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'RULEBOOK.md'), 'utf8').replace(/^name: test_50k$/m, 'name: eval_acct'));
   listPolicies(acct, ['eval_fixture']);
-  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_STRATEGIES_DIRS: path.join(home, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
+  // Its components: orb and the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV.
+  const env = { PATH: process.env.PATH, HOME: home, FTH_HOME: home, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_STRATEGIES}`, FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   const to = new Date(Date.parse(`${sessions[sessions.length - 1]}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
   const cfg = E.resolveEvaluator({ prop: 'eval_fixture', data: { MNQ: data }, paths: 100, reps: 100 });

@@ -149,9 +149,9 @@ test('a backtest on finer bars that carry broker fields: refused when a strategy
   for (let k = 0; k < 600; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });
   fs.writeFileSync(file, JSON.stringify({ bars }));
   const run = (strategies, logs = []) => runBacktest({ symbols: ['MNQ'], timeframe: 3, data: { MNQ: file }, strategies, gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, log: m => logs.push(m) });
-  assert.throws(() => run(['value_area', 'bos']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
+  assert.throws(() => run(['value_area', 'orb']), /one\.json: its 1-minute bars carry the broker's own fields \(flow\), which the harness can't combine into 3-minute bars, and value_area reads broker fields: fetch 3-minute bars from the broker instead \(backtest\.js fetch --contract <symbol> --timeframe 3/);
   const logs = [];
-  run(['bos'], logs);
+  run(['orb'], logs);
   assert.ok(logs.some(l => /^warning: .*one\.json: building 3-minute bars from 1-minute ones drops the broker's own fields \(flow\): no strategy here reads them/.test(l)), logs.join('\n'));
 });
 
@@ -177,11 +177,11 @@ test('a backtest on the broker\'s 1-minute bars trades from their flow fields, a
 
 test('a prop run on finer bars with broker fields: a paper strategy the policy leaves out reads them, and nothing is refused', () => {
   const dir = tmpDir();
-  // va_paper: a paper copy of value_area (it reads the broker's flow), listed by an active policy with bos.
+  // va_paper: a paper copy of value_area (it reads the broker's flow), listed by an active policy with orb.
   const strategies = path.join(dir, 'strategies');
   const write = (name, text) => { fs.mkdirSync(path.join(strategies, name), { recursive: true }); fs.writeFileSync(path.join(strategies, name, 'STRATEGY.md'), text); };
   write('va_paper', fs.readFileSync(path.join(ROOT, 'strategies', 'value_area', 'STRATEGY.md'), 'utf8').replace(/^name: value_area$/m, 'name: va_paper').replace(/^status: active\b.*$/m, 'status: paper'));
-  write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, bos]'));
+  write('prop_mixed', fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8').replace(/^name: prop_portfolio$/m, 'name: prop_mixed').replace(/^strategies: .*$/m, 'strategies: [va_paper, orb]'));
   const file = path.join(dir, 'one.json');
   const bars = [];
   for (let k = 0; k < 3 * 1500; k += 1) bars.push({ t: new Date(T0 + k * M).toISOString(), o: 20000, h: 20001, l: 19999, c: 20000 + (k % 2 ? 0.25 : 0), v: 100, flow: { ofiTrade: 0.1 } });

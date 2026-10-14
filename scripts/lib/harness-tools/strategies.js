@@ -27,7 +27,7 @@
 
 const fs = require('fs');
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan: scanStrategies, recentSignals, barsStepMs, onTimeframe, barsTimeframe } = require('../trading/strategies');
+const { loadStrategies, scan: scanStrategies, recentSignals, barsStepMs, onTimeframe, barsTimeframe, retiredNote } = require('../trading/strategies');
 const { buildSignals, writeSignals } = require('../trading/signal-state');
 const { normalizeBars } = require('../trading/indicators');
 const { harnessHome } = require('../paths');
@@ -54,7 +54,7 @@ function list({ json = false, compact = false } = {}, ctx) {
 function show({ name } = {}, ctx) {
   const { strategies } = load(context(ctx));
   const s = strategies.find(x => x.name === name);
-  if (!s) throw new Error(`unknown strategy "${name}" (known: ${strategies.map(x => x.name).join(', ')})`);
+  if (!s) throw new Error(`unknown strategy "${name}"${retiredNote(name)} (known: ${strategies.map(x => x.name).join(', ')})`);
   return { text: fs.readFileSync(s.file, 'utf8') };
 }
 

@@ -98,7 +98,7 @@ node scripts/combine.js status
   prop_portfolio size budget: cushion_frac x the cushion, at most cap_usd,
   halved while the balance is drawdown_halve_usd or more below its peak.
 
-A verdict: prop_portfolio long setup from supertrend: full, multiplier 1,
+A verdict: prop_portfolio long setup from orb: full, multiplier 1,
   at most 4 NQ with a 40-tick stop. A multiplier item whose fact is missing
   would make it a skip.
 ```

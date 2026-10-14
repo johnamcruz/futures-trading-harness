@@ -32,7 +32,7 @@
  */
 
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan, rootRefusal } = require('../trading/strategies');
+const { loadStrategies, scan, rootRefusal, retiredNote } = require('../trading/strategies');
 const { selectedSymbols } = require('../trading/contracts');
 const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, timeframeMs } = require('../trading/evaluator');
@@ -149,7 +149,7 @@ function plan({ file, symbol, strategy: name, side, accountId } = {}, ctx) {
   if (accountId !== undefined && accountId !== null && !(Number.isInteger(accountId) && accountId >= 1)) throw new Error(`accountId: the broker account's id, a whole number (got ${accountId})`);
   const { strategies } = loadStrategies(c.root, c.env);
   const s = strategies.find(x => x.name === name);
-  if (!s) throw new Error(`unknown strategy "${name}" (known: ${strategies.map(x => x.name).join(', ')})`);
+  if (!s) throw new Error(`unknown strategy "${name}"${retiredNote(name)} (known: ${strategies.map(x => x.name).join(', ')})`);
   if (!s.valid) throw new Error(`strategies/${name}/STRATEGY.md is invalid (${s.errors[0]})`);
   // The leg the user selected (FTH_SYMBOLS), as the gate checks it.
   const selected = selectedSymbols(c.env);

@@ -24,7 +24,7 @@ const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict } = require('./prop-state');
 const { checkTrend } = require('./mtf-state');
-const { checkTrigger } = require('./signal-state');
+const { checkTrigger, retiredLaneRefusal } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
 const { checkRolesRan } = require('./roles-ran');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
@@ -272,6 +272,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       const v = latestVerdict(config.home, named.name, root);
       judge = (v && strategies.find(x => x.name === v.component)) || { name: named.name, mtf: 'trend' };
     }
+    // Hard rule: no entry, under any setup tag, on a timeframe whose runner lane lists a retired strategy (lanes.js
+    // retireLanes: that lane enters nothing). A policy's entry is checked on its own timeframe.
+    const retiredMsg = retiredLaneRefusal(config.home, { root, strategy: named.name, timeframe: named.timeframe });
+    if (retiredMsg) violations.push({ check: 'retired-lane', message: retiredMsg });
     const msg = checkTrend(config.home, { root, side: input.side, style: judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a

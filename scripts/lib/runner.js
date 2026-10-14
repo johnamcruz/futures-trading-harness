@@ -63,7 +63,7 @@ const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKE
 const inSession = (cfg, now) => inMarketHours(now) && parseWindows(cfg.sessions.join(',')).windows.some(w => inWindow(now, w));
 const { exitPlan } = require('./trading/strategies');
 const { timeframeMs } = require('./trading/evaluator');
-const { lanesOf, tfLabel } = require('./lanes');
+const { lanesOf, tfLabel, retiredLaneText } = require('./lanes');
 const { cycleTimeoutMin, settleCollisions, skippedVerdict, lanesLine, LOWER_PRIORITY, boundHistory, laneHistory } = require('./lane-cycle');
 
 const IDLE_MS = 5000;
@@ -178,6 +178,12 @@ function createRunner(deps) {
       // logging is best effort
     }
   }
+  // A lane that lists a retired strategy (lanes.js retireLanes): said loudly at start, in the log and the event log.
+  lanes.forEach((l, i) => {
+    if (!l.retired) return;
+    log(`lanes[${i}] (${l.timeframe}m) ${retiredLaneText(l)}`, 'error');
+    emit('lane_retired', { lane: i, timeframe: `${l.timeframe}m`, retired: l.retired });
+  });
 
   /**
    * The account's fills since `sinceMs` for the decision history's outcomes (decision-history.js withPositions), or
@@ -632,7 +638,8 @@ function createRunner(deps) {
 
   async function wanted(item, manageOnly) {
     // Each lane's own trigger (one lane: the config's).
-    if ((multi ? lanes[item.lane].trigger : cfg.trigger) === 'bar' && !manageOnly) {
+    // A lane that lists a retired strategy (lanes.js retireLanes) enters nothing: no cycle per bar, only to manage.
+    if ((multi ? lanes[item.lane].trigger : cfg.trigger) === 'bar' && !manageOnly && !lanes[item.lane].retired) {
       // Every bar runs a cycle with what fired; a policy still records its verdicts for the gate.
       const results = scanItem(item);
       if (results) {
@@ -651,6 +658,14 @@ function createRunner(deps) {
         logScan(item, screened, { run: true, reason: 'bar closed' });
       }
       return { run: true, reason: 'bar closed' };
+    }
+    // A retired lane with no account to see positions: a manage cycle every bar, as its bar trigger ran before (the
+    // scan is empty, so it offers nothing to enter and the gate refuses any entry on it).
+    if (lanes[item.lane].retired && !cfg.account && !manageOnly) {
+      const results = scanItem(item);
+      const decision = { run: true, reason: 'manage only: this lane lists a retired strategy and enters nothing; no account is configured to see positions, so every bar' };
+      if (results) logScan(item, results, decision);
+      return decision;
     }
     if (!cfg.account) return { run: false, reason: 'cap reached and no account configured to check positions' };
     let net;

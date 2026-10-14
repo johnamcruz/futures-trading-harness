@@ -85,8 +85,8 @@ test('the scan is the same with one lane as with the legacy timeframe, on the sh
   const bars = G.load(s).slice(0, 1300);
   const now = new Date(Date.parse(bars.at(-1).t) + 180000);
   const rulesOnly = all.filter(x => x.signal !== 'policy');
-  const narrowed = validateConfig({ ...BASE, lanes: [{ timeframe: 3, strategies: ['ema_cross', 'orb'] }] });
-  assert.deepStrictEqual(runnerScan(rulesOnly, narrowed, s.symbol, bars, now).map(r => r.name).sort(), ['ema_cross', 'orb']);
+  const narrowed = validateConfig({ ...BASE, lanes: [{ timeframe: 3, strategies: ['cisd_ote', 'orb'] }] });
+  assert.deepStrictEqual(runnerScan(rulesOnly, narrowed, s.symbol, bars, now).map(r => r.name).sort(), ['cisd_ote', 'orb']);
 });
 
 test('lanes are checked: timeframe 1 to 60 and once each, known keys, trigger bar or signal, name lists', () => {

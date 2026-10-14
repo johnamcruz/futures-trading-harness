@@ -51,7 +51,7 @@ function firstFire(s) {
 test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
   // value_area is active (the owner's decision after order flow moved to the broker servers): on this fixture, which
   // carries no flow, it fires on its range-expansion confirmation.
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['bos', 'cisd_ote', 'crt_1h', 'crt_4h', 'ema_cross', 'keltner', 'orb', 'supertrend', 'value_area']);
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['cisd_ote', 'crt_1h', 'crt_4h', 'orb', 'value_area']);
   assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
   // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
   const ev = createEvaluator(BARS);

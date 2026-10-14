@@ -194,6 +194,31 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
+test('retired-lane is a hard rule: FTH_ORDER_GATE_SKIP=retired-lane does not skip it', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  const home = trendHome();
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW, retiredLane: ['bos'] }));
+  const skipping = { ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  assert.ok(skipping.skipChecks.has('retired-lane'), 'the skip is asked for');
+  const r = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: skipping, strategies });
+  assert.ok(r.violations.some(v => v.check === 'retired-lane'), JSON.stringify(r.violations));
+});
+
+test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  for (const name of ['bos', 'keltner', 'ema_cross', 'supertrend']) {
+    const r = evaluateOrder({ input: entryOrder({ rationale: `setup:${name} long, stop 21480` }), entries: [plan(1)], now: NOW, config, strategies });
+    const v = r.violations.find(x => x.check === 'strategy');
+    assert.ok(v, name);
+    assert.match(v.message, new RegExp(`setup:${name} is not a known strategy \\(retired on 2026-10-13: strategies/README\\.md, "Retired strategies"\\): no new entries from it`));
+    const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: `[exit] close the ${name} long`, stopLossBracket: undefined }), entries: [], now: NOW, config, strategies });
+    assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
+  }
+});
+
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   // The bundled orb has no session gate (as in the original bot); give it one here.

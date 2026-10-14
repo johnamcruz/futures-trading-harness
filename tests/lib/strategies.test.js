@@ -8,7 +8,7 @@ const { compileRules } = require('../../scripts/lib/trading/rules');
 const { loadStrategies, validateStrategy, scan, strategyDirs, checkStrategyForOrder, tradesRoot, rootRefusal, recentSignals } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { run } = require('../../scripts/strategies');
-const { tmpDir, shippedPolicy, rootWithPolicies } = require('../helpers');
+const { tmpDir, shippedPolicy, rootWithPolicies, FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BODY = '## When to Use\n## How It Works\n## Examples\n';
@@ -34,9 +34,13 @@ test('bundled strategies are all valid Markdown rules, the ported ones included'
   assert.deepStrictEqual([...portfolio.strategies].sort(), threeMinute, 'prop_portfolio trades every 3-minute rules strategy');
   assert.deepStrictEqual(strategies.find(s => s.name === 'prop_flow_1m').strategies.sort(), strategies.filter(s => s.signal === 'rules' && s.timeframe === '1m').map(s => s.name).sort());
   assert.strictEqual(portfolio.account, 'topstep_100k');
-  for (const port of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
+  for (const port of ['orb', 'cisd_ote']) assert.ok(strategies.some(s => s.name === port), `no strategy for ${port}`);
   const old = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'orb', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
-  assert.ok(old.some(e => /no longer a code detector/.test(e)));
+  assert.ok(old.some(e => /no longer a code detector; write the trigger as rules \(copy the rules block from strategies\/orb\/STRATEGY\.md\)/.test(e)), old.join('; '));
+  // A retired port's signal: the hint never points at a strategy document that is gone.
+  const retired = validateStrategy({ name: 'x', description: 'x'.repeat(40), status: 'paper', instruments: ['MNQ'], timeframe: '3m', signal: 'bos', risk: { stop: 'atr:0.5', min_rr: 2 } }, '## When to Use\n## How It Works\n## Examples', 'x');
+  assert.ok(retired.some(e => /signal: bos is no longer a code detector; .*the bos strategy was retired/.test(e)), retired.join('; '));
+  assert.ok(!retired.some(e => /strategies\/bos\/STRATEGY\.md/.test(e)));
 });
 
 test('the template parses and only fails on its placeholder name', () => {
@@ -143,15 +147,15 @@ test('a rules strategy written only in Markdown validates and fires in scan', ()
 });
 
 test('scan marks strategies out of regime and never makes them candidates', () => {
-  const regimes = { bos: ['trend'], cisd_ote: ['range', 'transition'] };
+  const regimes = { orb: ['trend'], cisd_ote: ['range', 'transition'] };
   const strategies = loadStrategies(ROOT, {}).strategies.map(s => (regimes[s.name] ? { ...s, regimes: regimes[s.name] } : s));
   const t = i => new Date(Date.UTC(2026, 9, 7, 13, 30) + i * 180000).toISOString();
   const ranging = Array.from({ length: 160 }, (_, k) => { const c = 100 + Math.sin(k / 2) * 2; return { t: t(k), o: c, h: c + 1, l: c - 1, c, v: 1 }; });
   const results = scan(strategies, { bars: ranging }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 9, 7, 15, 0)) });
-  const bos = results.find(r => r.name === 'bos');
-  assert.strictEqual(bos.regime, 'range');
-  assert.strictEqual(bos.inRegime, false);
-  assert.strictEqual(bos.candidate, false);
+  const orb = results.find(r => r.name === 'orb');
+  assert.strictEqual(orb.regime, 'range');
+  assert.strictEqual(orb.inRegime, false);
+  assert.strictEqual(orb.candidate, false);
   assert.strictEqual(results.find(r => r.name === 'cisd_ote').inRegime, true);
 });
 
@@ -284,13 +288,13 @@ test('order check: a rules strategy trades the selected leg only; an unreadable 
 
 test('scan and recent signals follow the selected leg: NQ selected, NQ\'s bars get the micro-listed rules strategies and MNQ\'s none', () => {
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
-  // Bars where bos and ema_cross fired long (the parity bar, tests/e2e/mock-trading-e2e.test.js).
+  // Bars where the fixtures fx_break and fx_cross fired long (the parity bar, tests/e2e/mock-trading-e2e.test.js).
   const parity = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv')).filter(x => Date.parse(x.t) <= Date.parse('2026-04-28T04:09:00.000Z'));
-  const { strategies } = loadStrategies(ROOT, {});
+  const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES });
   const at = new Date(Date.parse(parity.at(-1).t) + 180000);
   const strip = rs => rs.map(r => JSON.stringify(r));
   const micro = scan(strategies, parity, { symbol: 'MNQ', now: at, selected: ['MNQ'] });
-  assert.ok(micro.find(r => r.name === 'bos').candidate, 'bos fired');
+  assert.ok(micro.find(r => r.name === 'fx_break').candidate, 'fx_break fired');
   assert.deepStrictEqual(strip(scan(strategies, parity, { symbol: 'NQ', now: at, selected: ['NQ'] })), strip(micro));
   assert.deepStrictEqual(strip(scan(strategies, parity, { symbol: 'MNQ', now: at })), strip(micro), 'unknown selection: its list');
   // The leg not selected: only the policy strategies (which list both legs; their sizing picks one).
@@ -300,7 +304,7 @@ test('scan and recent signals follow the selected leg: NQ selected, NQ\'s bars g
   assert.ok(policyOnly(scan(strategies, parity, { symbol: 'NQ', now: at })), 'unknown selection: no micro-listed rules strategy on NQ');
   assert.deepStrictEqual(scan(strategies, parity, { symbol: 'GC', now: at, selected: ['GC'] }), [], 'no bundled strategy lists gold');
   const recentMicro = recentSignals(strategies, parity, { symbol: 'MNQ', count: 3, selected: ['MNQ'] });
-  assert.ok(recentMicro.at(-1).fired.includes('bos long'), JSON.stringify(recentMicro));
+  assert.ok(recentMicro.at(-1).fired.includes('fx_break long'), JSON.stringify(recentMicro));
   assert.deepStrictEqual(recentSignals(strategies, parity, { symbol: 'NQ', count: 3, selected: ['NQ'] }), recentMicro);
   for (const [symbol, selected] of [['NQ', ['MNQ']], ['MNQ', ['NQ']], ['NQ', null], ['GC', ['GC']]]) {
     assert.ok(recentSignals(strategies, parity, { symbol, count: 3, selected }).every(x => x.fired.length === 0), `${symbol} ${selected}`);
@@ -351,7 +355,7 @@ test('policy strategies: the prop keys live only on them, and their strategies m
   };
   const head = n => [`name: ${n}`, `description: ${'x'.repeat(40)}`, 'status: paper', 'instruments: [MNQ, NQ]', 'signal: policy', 'account: topstep_100k',
     'risk:', '  stop: strategy', '  min_rr: 2'];
-  write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [ema_cross, keltner]'].join('\n'));
+  write('p_ok', [...head('p_ok'), 'timeframe: 3m', 'strategies: [orb, cisd_ote]'].join('\n'));
   write('p_tf', [...head('p_tf'), 'timeframe: 3m', 'strategies: [ofi]'].join('\n'));
   write('p_none', [...head('p_none'), 'timeframe: 3m', 'strategies: [nope]'].join('\n'));
   write('p_es', [...head('p_es'), 'timeframe: 3m', 'strategies: [vwap_reclaim]'].join('\n').replace('instruments: [MNQ, NQ]', 'instruments: [MYM, YM]'));
@@ -379,7 +383,7 @@ test('mtf: trend (the default) or reversal; a policy strategy takes it from its 
   const { strategies } = loadStrategies(ROOT, {});
   const byName = Object.fromEntries(strategies.map(s => [s.name, s]));
   for (const n of ['crt_1h', 'crt_4h', 'cisd_ote', 'ofi_absorption']) assert.strictEqual(byName[n].mtf, 'reversal', n);
-  for (const n of ['orb', 'ema_cross', 'keltner', 'supertrend', 'bos', 'vwap_reclaim', 'ofi']) assert.strictEqual(byName[n].mtf, 'trend', n);
+  for (const n of ['orb', 'vwap_reclaim', 'ofi', 'value_area_breakout']) assert.strictEqual(byName[n].mtf, 'trend', n);
   assert.strictEqual(byName.prop_portfolio.mtf, undefined);
 });
 
@@ -439,10 +443,10 @@ test('scan: each strategy that fired lists the others firing with it and against
 test('recent: what fired on each of the last bars, as the scan judged each at its close', () => {
   const { recentSignals } = require('../../scripts/lib/trading/strategies');
   const out = [];
-  run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--bars', '3'], { out: s => out.push(s) });
+  run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--symbol', 'MNQ', '--bars', '3'], { env: { FTH_STRATEGIES_DIRS: FX_STRATEGIES }, out: s => out.push(s) });
   const rows = JSON.parse(out.join(''));
   assert.strictEqual(rows.length, 3);
-  assert.deepStrictEqual(rows[1], { bar: '2026-04-28T04:09:00.000Z', fired: ['bos long', 'ema_cross long'] });
+  assert.deepStrictEqual(rows[1], { bar: '2026-04-28T04:09:00.000Z', fired: ['fx_break long', 'fx_cross long'] });
   assert.ok(typeof recentSignals === 'function');
   assert.throws(() => run(['recent', path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'), '--bars', '99'], { out: () => {} }), /--bars: 1 to 50/);
 });

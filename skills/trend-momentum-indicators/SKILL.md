@@ -42,9 +42,11 @@ Regime: trend, range or transition, by the rule the code applies, is the
 ## Examples
 
 ```text
-3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. EMA-cross
-and Keltner strategies are gated off (their ADX gate fails anyway).
+3m: ADX 16.4 falling, EMA 9/20 crossed 3 times in 40 bars → range. The
+regime-gated trend strategies (orb, value_area_breakout, vwap_reclaim) are
+gated off.
 
-3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → keltner
-signal "long" is valid; check the keltner strategy skip rules.
+3m: ADX 23 rising (+4 over 5 bars), close above upper Keltner → expansion:
+a trend setup's long (orb, value_area_breakout) has momentum behind it;
+check that strategy's skip rules.
 ```

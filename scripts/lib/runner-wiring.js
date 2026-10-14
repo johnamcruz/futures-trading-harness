@@ -42,8 +42,8 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./trading/
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan } = require('./trading/strategies');
-const { lanesOf, laneStrategies, analystFrames } = require('./lanes');
+const { loadStrategies, scan, retiredCopies } = require('./trading/strategies');
+const { lanesOf, laneStrategies, analystFrames, retireLanes } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
@@ -51,7 +51,7 @@ const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { createExitMemory } = require('./trading/exit-memory');
 const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-state');
 const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBriefing, wholeBars, readFrameBriefing, writeFrameBriefing, removeFrameBriefing } = require('./trading/briefing');
-const { buildSignals, writeSignals } = require('./trading/signal-state');
+const { buildSignals, writeSignals, syncRetiredMarks } = require('./trading/signal-state');
 const RC = require('./trading/report-cache');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
@@ -321,8 +321,22 @@ function dayLine(sym, bars) {
 /** A replay pass (FTH_REPLAY_NOW: one step per process) holds no cycle for a late lane; the live loop keeps the default. */
 const passHold = env => (env.FTH_REPLAY_NOW ? { coalesceHoldMs: 0 } : {});
 
+/** The signal record of a lane's closed bar (signal-state.js), marked when the lane lists a retired strategy (lanes.js retireLanes). */
+const laneSignals = (cfg, item, results, at) => buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: (item.minutes || cfg.timeframe) * 60000, now: at, retiredLane: (lanesOf(cfg)[item.lane || 0] || {}).retired || null });
+
 function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null }) {
   const strategies = () => loadStrategies(root, env).strategies;
+  // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
+  try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
+  // Before any cycle: the retired-lane mark on exactly the retired lanes' timeframes (signal-state.js syncRetiredMarks).
+  // Not written: no new entries (the kill switch), since an older unmarked record could let one through.
+  try {
+    retireLanes(cfg, strategies()); // as the start's checks did (idempotent): the lanes the marks follow
+    for (const c of syncRetiredMarks(home, { symbols: cfg.symbols, lanes: lanesOf(cfg), now: now() })) log(`signal record ${c.timeframe}: ${c.marked ? `marked: its runner lane lists ${c.marked.join(', ')} (retired), so no entry on ${c.timeframe}` : 'retired-lane mark cleared (no runner lane lists a retired strategy there now)'}`, c.marked ? 'error' : undefined);
+  } catch (err) {
+    log(`the retired-lane signal marks could not be written (${err.message}): kill switch on, no new entries until it is fixed`, 'error');
+    try { armKillSwitch(killSwitchFile, `retired-lane signal marks not written (${err.message})`); } catch (e) { log(`could not write the kill switch (${e.message})`, 'error'); }
+  }
   // The analysts on a timeframe of their own (lanes.js; refused at start when it can't be given): none, as before.
   const frames = analystFrames(cfg, agents || loadAgents(root));
   // An open position keeps its strategy's exit plan if the strategy stops loading (trading/exit-memory.js).
@@ -375,7 +389,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     reportCache: reportCacheFor(home, cfg, frames),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
-    recordSignals: (item, results) => writeSignals(home, buildSignals(results, { symbol: item.symbol, bar: item.bar, stepMs: (item.minutes || cfg.timeframe) * 60000, now: now() })),
+    recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),
     // The scan of a closed bar (`lane`: several lanes, the lane whose bar it is); the session record takes the field
     // values of the strategies it scanned.
     scanFor: (symbol, bars, lane) => {
@@ -399,4 +413,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { laneSignals, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

@@ -57,8 +57,8 @@ description: Measure whether each futures setup has an edge - win rate, average 
 ## Examples
 
 ```text
-setup:ema_cross  n=34  p=0.41  W=2.1R  L=1.0R  E=+0.27R  sd=1.4  band ±0.48 → unproven
-setup:orb        n=41  p=0.46  W=1.9R  L=1.0R  E=+0.33R  sd=1.3  band ±0.41 → unproven
-setup:keltner    n=22  p=0.27  W=1.8R  L=1.0R  E=-0.24R → restricted to ADX>25 mornings
+setup:vwap_reclaim         n=34  p=0.41  W=2.1R  L=1.0R  E=+0.27R  sd=1.4  band ±0.48 → unproven
+setup:orb                  n=41  p=0.46  W=1.9R  L=1.0R  E=+0.33R  sd=1.3  band ±0.41 → unproven
+setup:value_area_breakout  n=22  p=0.27  W=1.8R  L=1.0R  E=-0.24R → restricted to ADX>25 mornings
   by regime: trend n=12 E=+0.21R | transition n=10 E=-0.78R → propose regimes: [trend]
 ```

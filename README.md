@@ -173,10 +173,6 @@ strategy loses, add one where it works.
 ```text
 strategies/
   orb/STRATEGY.md            opening range breakout
-  ema_cross/STRATEGY.md      EMA 9/20 cross
-  keltner/STRATEGY.md        Keltner breakout
-  supertrend/STRATEGY.md     SuperTrend flip
-  bos/STRATEGY.md            break of structure
   cisd_ote/STRATEGY.md       CISD + fib zone
   vwap_reclaim/STRATEGY.md   VWAP reclaim, active
   ofi/STRATEGY.md            1m order-flow imbalance, active
@@ -190,8 +186,11 @@ strategies/
 ```
 
 Every strategy's trigger is written as rules in its frontmatter (`signal:
-rules`); none is code. The six ported strategies reproduce its signals bar
-for bar (`tests/lib/parity.test.js`).
+rules`); none is code. The two ported strategies (`orb`, `cisd_ote`)
+reproduce its signals bar for bar (`tests/lib/parity.test.js`). Four
+strategies (`bos`, `keltner`, `ema_cross`, `supertrend`) were retired on
+2026-10-13 (`strategies/README.md`, "Retired strategies"); the indicators
+and structure breaks they read stay in the briefing as confluence.
 
 Each file has code-checked frontmatter and a body the agents follow:
 
@@ -248,8 +247,8 @@ rules:
 To add a strategy, copy `_template/` (or use the `strategy-authoring` skill or
 `/new-strategy`), keep `status: paper` until it has a record, validate, and
 promote it to `active`. Private strategies can live outside the repo:
-`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. The six bundled
-strategies are ported from an earlier Python trading bot.
+`FTH_STRATEGIES_DIRS=~/.futures-trading-harness/strategies`. Two bundled
+strategies (`orb`, `cisd_ote`) are ported from an earlier Python trading bot.
 
 ## What's inside
 
@@ -455,8 +454,12 @@ More runner settings:
   disagrees with the first lane's is refused. A `policies` list that leaves
   out another policy on the lane's timeframe with a running prop attempt is
   refused at start too: that policy owns its strategies' setups, which the
-  lane would never trade. `node scripts/preflight.js` lists each lane with
-  its strategies and policies.
+  lane would never trade. A lane that lists a retired strategy
+  (`strategies/README.md`, "Retired strategies") is the exception: the
+  runner starts, logs it as an error (and a `lane_retired` event), and that
+  lane enters nothing while every open position is still managed; remove
+  the name. `node scripts/preflight.js` lists each lane with its strategies
+  and policies, and fails on a retired one.
 
   Several lanes cycle together: a bar clock per symbol and lane, and the
   lanes whose bars close at the same time go into ONE cycle (each 3m close is
@@ -622,7 +625,7 @@ skipped), and its trail exits every trade
 signal: policy
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account, one position at a time
 timeframe: 3m                # the one bar-size setting: every listed strategy trades it
-strategies: [ema_cross, supertrend, keltner, bos, cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
+strategies: [cisd_ote, orb, vwap_reclaim, crt_1h, crt_4h, value_area, value_area_reentry, value_area_breakout]   # every 3-minute strategy
 account: topstep_100k        # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 # sizing, exit, multipliers: in the account's rulebook (accounts/<account>/RULEBOOK.md, policies.prop_portfolio), the one place for them
 contracts: auto              # micro | mini | auto: live, only with no contract selected (the verdict is sized in the selected one); a backtest sizes by this mode

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { fromReport, writeRecord, readRecord, liveRecord, describeRecord, MIN_SLICE } = require('../../scripts/lib/trading/track-record');
-const { tmpDir } = require('../helpers');
+const { tmpDir, FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 // A trade entered at `et` (HH:MM New York, EDT) in `regime` with result r.
@@ -59,17 +59,17 @@ test('live record: the journal\'s reviewed trades of the setup, paper excluded, 
 test('backtest --record writes each strategy\'s own record (run alone), and only on plain runs', () => {
   const home = tmpDir();
   const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
-  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home } });
-  const joint = run(['--strategy', 'ema_cross,supertrend', '--record', '--out', path.join(home, 'joint')]);
+  const run = args => spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
+  const joint = run(['--strategy', 'fx_cross,fx_break', '--record', '--out', path.join(home, 'joint')]);
   assert.strictEqual(joint.status, 0, joint.stderr);
-  const alone = run(['--strategy', 'ema_cross', '--out', path.join(home, 'alone')]);
+  const alone = run(['--strategy', 'fx_cross', '--out', path.join(home, 'alone')]);
   assert.strictEqual(alone.status, 0, alone.stderr);
   const aloneTrades = fs.readFileSync(path.join(home, 'alone', 'trades.jsonl'), 'utf8').trim().split('\n').filter(Boolean).length;
-  const rec = readRecord(home, 'ema_cross');
+  const rec = readRecord(home, 'fx_cross');
   assert.strictEqual(rec.summary.trades, aloneTrades, 'the record is the strategy alone, not its share of the joint run');
-  assert.ok(readRecord(home, 'supertrend'));
+  assert.ok(readRecord(home, 'fx_break'));
   assert.ok(rec.byRegime && Object.keys(rec.byRegime).every(k => k !== 'unknown'), 'trades carry their regime');
-  const wf = run(['--strategy', 'ema_cross', '--record', '--walk-forward', '--grid', 'emaFast=9']);
+  const wf = run(['--strategy', 'fx_cross', '--record', '--walk-forward', '--grid', 'emaFast=9']);
   assert.notStrictEqual(wf.status, 0);
   assert.match(wf.stderr + wf.stdout, /record: plain runs only/);
 });
@@ -112,8 +112,8 @@ test('a record from another version of the strategy is flagged stale', () => {
 test('--record with min-confluence still records each strategy alone, with its trades', () => {
   const home = tmpDir();
   const csv = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--strategy', 'ema_cross', '--min-confluence', '2', '--record', '--out', path.join(home, 'bt')], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home } });
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'backtest.js'), '--data', csv, '--symbol', 'MNQ', '--strategy', 'fx_cross', '--min-confluence', '2', '--record', '--out', path.join(home, 'bt')], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, FTH_HOME: home, FTH_STRATEGIES_DIRS: FX_STRATEGIES } });
   assert.strictEqual(r.status, 0, r.stderr);
-  assert.ok(readRecord(home, 'ema_cross').summary.trades > 0, 'alone, confluence is not required');
-  assert.ok(readRecord(home, 'ema_cross').definition, 'fingerprinted');
+  assert.ok(readRecord(home, 'fx_cross').summary.trades > 0, 'alone, confluence is not required');
+  assert.ok(readRecord(home, 'fx_cross').definition, 'fingerprinted');
 });
