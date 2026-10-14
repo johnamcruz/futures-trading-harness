@@ -1,10 +1,10 @@
 strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
 strategy cisd_ote: {
-  "body": "5864 chars sha256:a77b2738861b6619",
-  "compiledRules": "sha256:e8a7cfbe4ba091ce",
+  "body": "7655 chars sha256:db990f12ac9a8a0a",
+  "compiledRules": "sha256:22c22c3f06d68e2e",
   "compiledStop": "sha256:c5497faa7f3507dd",
   "compiledTarget": null,
-  "description": "Textbook CISD + OTE reversal - after a sweep of a key level, a completed 15-minute candle closes through the open of the run that swept it (a change in state of delivery); enter on the 3-minute bounce from the displacement leg's OTE zone, stop beyond the sweep extreme. Paper until its census and the owner promote it.",
+  "description": "Textbook CISD + OTE displacement and pullback - a strong completed 15-minute or 60-minute candle closes through the open of the run before it (a change in state of delivery); enter on the 3-minute bounce from the displacement leg's OTE zone, stop beyond the leg's origin. A prior key-level sweep is confluence, never required. Paper until a census and the owner promote it.",
   "errors": [],
   "instruments": [
     "MNQ",
@@ -19,7 +19,10 @@ strategy cisd_ote: {
     "cisdMaxWait": 6,
     "cisdExpiry": 12,
     "cisdVoidTol": 0.05,
-    "cisdBufferAtr": 0.1
+    "cisdBufferAtr": 0.1,
+    "cisdMinBody": 0.6,
+    "cisdMinRangeAtr": 1,
+    "cisdHigherMinutes": 60
   },
   "risk": {
     "stop": "cisd_risk(15)",
@@ -27,12 +30,10 @@ strategy cisd_ote: {
   },
   "rules": {
     "long": [
-      "cisd_entry(15) > 0",
-      "cisd_sweep(15) > 0"
+      "cisd_entry(15) > 0"
     ],
     "short": [
-      "cisd_entry(15) < 0",
-      "cisd_sweep(15) > 0"
+      "cisd_entry(15) < 0"
     ]
   },
   "signal": "rules",

@@ -158,3 +158,49 @@ the promotion gate asks for.
 - N1's shorts (-0.19R) did worse than its longs (-0.01R) over a period
   that rose then fell; the code is symmetric (tests/lib/cisd.test.js), so
   this is the sample, not the rules.
+
+### After the census: the owner's decisions, and the shipped definition (post-registration)
+
+Everything in this section came after the results above and was not
+pre-registered: read it as description, not as a test.
+
+1. **Replace anyway.** Shown that the textbook version scored worse than
+   the old port on Train, the owner chose to replace the port with it.
+2. **No sweep requirement.** The owner chose a basic displacement and
+   pullback: the pre-registered variant N3 (15m CISD, no sweep rule). The
+   sweep stays in the facts and the `cisd` skill as confluence. N3's prop
+   simulation, run afterwards as a labelled follow-up the same way as N1's:
+   106 attempts, 6.6% pass (7), 0% blow, 93.4% timeout, median 9 sessions
+   to pass, average profit -$1,166, 73.8 trades an attempt, expectancy
+   -0.054R.
+3. **A strong displacement, on 15m or 60m.** The CISD candle must be a
+   strong displacement before its leg is measured (body at least 0.6 of its
+   range, the close in its extreme third, and a range of at least 1.0 x
+   ATR(14) of that timeframe's candles or a body engulfing the prior one;
+   a weak CISD has no zone), and a 60m CISD is taken too, the 60m one first
+   when both bounce on the same bar (`cisdHigherMinutes: 60`).
+
+The review of the first commit also changed the detector before these runs:
+a CISD counts only from the bar its candle is known complete (a candle
+whose last bar is missing counts from the next bar), and the sweep reads
+the key levels as they stood at the run's first bar. N1-N3 and OLD above
+ran on the code before those fixes; S and S15 below on the code after them.
+
+| Variant (post-registration) | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | one-sided p |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **S (shipped: strong, 15m + 60m, no sweep)** | 1180 | -0.031 [-0.107, 0.046] | 0.98 | 36% | 45.4 | 371 / -0.019 | 809 / -0.036 | 538 / -0.033 | 642 / -0.028 | -0.08 / 0.01 / -0.03 | 0.78 |
+| S15 (the same, 15m only) | 1035 | -0.051 [-0.132, 0.028] | 0.93 | 34% | 39.8 | 317 / -0.044 | 718 / -0.054 | 472 / -0.048 | 563 / -0.054 | -0.08 / -0.01 / -0.09 | 0.90 |
+
+S's exits: 335 at the 2R target, 721 at the stop, 124 at end of day (median
+stop 25.5 points); 253 of its trades came from a 60m CISD.
+
+S's prop simulation (the same set-up as N1's): 106 attempts, 14.2% pass
+(15), 0% blow, 85.8% timeout, median 14 sessions to pass, average profit
+$142, 48.1 trades an attempt, expectancy -0.023R.
+
+**Read plainly:** the shipped definition (S) has no edge on Train either:
+its mean is below zero with an interval straddling it, as the old port's
+(-0.001R) does, and it is still worse than the port by the mean. Its prop
+pass rate (14.2%) is above the port's (8.5%) and N1's (0%), far below the
+40% the promotion gate asks for. It was defined after the census results
+above, so none of this is a pre-registered test. `cisd_ote` stays `paper`.

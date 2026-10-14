@@ -1,5 +1,5 @@
 M2K 3m: 1499 bars as the broker serves them, decided from bar 100 (2025-02-19T05:51:00.000Z) to 2025-02-24T06:57:00.000Z
-cisd_ote: fired 0, candidates 0, every result sha256:d8c1c2bc9b7045e3
+cisd_ote: fired 7, candidates 7, every result sha256:31c89a37f9f963c9
 crt_1h: fired 5, candidates 0, every result sha256:3b89b9e70bfa9477
 crt_4h: fired 10, candidates 4, every result sha256:8d4be85f957665f9
 ext_reader: fired 155, candidates 99, every result sha256:f37aae106b84a77b
@@ -34,6 +34,7 @@ Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules
 2025-02-19T12:15:00.000Z ext_reader short - stop=1.203 regime=transition session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
 2025-02-19T12:42:00.000Z ext_reader short - stop=1.1434 regime=transition session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
 2025-02-19T12:54:00.000Z ext_reader short - stop=1.0899 regime=transition session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
+2025-02-19T13:00:00.000Z cisd_ote long CANDIDATE stop=2.7207 regime=transition session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-19T13:18:00.000Z ext_reader short - stop=1.1764 regime=trend-down session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
 2025-02-19T13:30:00.000Z ext_reader short - stop=1.2095 regime=trend-down session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
 2025-02-19T13:57:00.000Z ext_reader short - stop=1.1456 regime=trend-down session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)]
@@ -49,6 +50,7 @@ Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules
 2025-02-19T16:54:00.000Z ext_reader short CANDIDATE stop=1.7688 regime=trend-up session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-19T17:06:00.000Z crt_4h short CANDIDATE stop=4.5237 target=10.1 regime=range session=in rules[crt_dir(240) < 0] fails[]
 2025-02-19T17:06:00.000Z ext_reader short CANDIDATE stop=1.6949 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
+2025-02-19T17:24:00.000Z cisd_ote long CANDIDATE stop=4.4556 regime=transition session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-19T17:42:00.000Z ext_reader short CANDIDATE stop=1.4658 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-19T17:57:00.000Z ext_reader short CANDIDATE stop=1.4384 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-19T18:09:00.000Z ext_reader short CANDIDATE stop=1.4507 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
@@ -84,6 +86,7 @@ Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules
 2025-02-20T08:36:00.000Z ext_reader short CANDIDATE stop=0.6262 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T08:51:00.000Z ext_reader long CANDIDATE stop=0.5914 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[]
 2025-02-20T09:54:00.000Z ext_reader long CANDIDATE stop=0.7351 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[]
+2025-02-20T10:09:00.000Z cisd_ote short CANDIDATE stop=2.9715 regime=range session=in rules[cisd_entry(15) < 0] fails[]
 2025-02-20T10:12:00.000Z crt_1h short - stop=1.3761 target=3.3 regime=range session=out rules[crt_dir(60) < 0] fails[]
 2025-02-20T10:27:00.000Z ext_reader short CANDIDATE stop=0.6173 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T10:42:00.000Z ext_reader short CANDIDATE stop=0.5747 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
@@ -94,7 +97,9 @@ Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules
 2025-02-20T11:57:00.000Z ext_reader short CANDIDATE stop=0.7448 regime=transition session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T12:00:00.000Z ext_reader long CANDIDATE stop=0.8076 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[]
 2025-02-20T13:00:00.000Z ext_reader short - stop=0.9311 regime=trend-up session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: against the prevailing 1h up trend: only a reversal strategy (mtf: reversal) may fade it]
+2025-02-20T13:09:00.000Z cisd_ote long CANDIDATE stop=2.7916 regime=transition session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-20T13:36:00.000Z ext_reader short - stop=0.9116 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: against the prevailing 1h up trend: only a reversal strategy (mtf: reversal) may fade it]
+2025-02-20T13:45:00.000Z cisd_ote long CANDIDATE stop=1.8012 regime=range session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-20T14:39:00.000Z ext_reader short - stop=1.5566 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[mtf: against the prevailing 1h up trend: only a reversal strategy (mtf: reversal) may fade it]
 2025-02-20T15:06:00.000Z ext_reader short CANDIDATE stop=2.6188 regime=trend-down session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T15:09:00.000Z ext_reader long - stop=2.6929 regime=trend-down session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[mtf: against the prevailing 15m down trend: only a reversal strategy (mtf: reversal) may fade it]
@@ -116,12 +121,14 @@ Fired (bar open, strategy, side, candidate, stop, target, regime, session, rules
 2025-02-20T20:09:00.000Z ext_reader short CANDIDATE stop=1.4808 regime=trend-up session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T20:21:00.000Z ext_reader short CANDIDATE stop=1.485 regime=transition session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T20:24:00.000Z ext_reader long - stop=1.4658 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[mtf: against the prevailing 1h down trend: only a reversal strategy (mtf: reversal) may fade it]
+2025-02-20T20:36:00.000Z cisd_ote long CANDIDATE stop=3.0404 regime=range session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-20T21:12:00.000Z ext_reader short CANDIDATE stop=1.5929 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T21:27:00.000Z ext_reader long - stop=1.3291 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[mtf: against the prevailing 1h down trend: only a reversal strategy (mtf: reversal) may fade it]
 2025-02-20T21:48:00.000Z ext_reader short CANDIDATE stop=1.061 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-20T23:30:00.000Z ext_reader long - stop=0.9376 regime=range session=in rules[field("ext.a") >= 0.5 & field("ext.a")[1] < 0.5 & field("ext.b.flag") >= 1 & close > close[1]] fails[mtf: against the prevailing 1h down trend: only a reversal strategy (mtf: reversal) may fade it]
 2025-02-21T00:03:00.000Z ext_reader short CANDIDATE stop=0.7956 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-21T00:18:00.000Z ext_reader short CANDIDATE stop=0.6923 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
+2025-02-21T00:27:00.000Z cisd_ote long CANDIDATE stop=1.6674 regime=range session=in rules[cisd_entry(15) > 0] fails[]
 2025-02-21T00:54:00.000Z ext_reader short CANDIDATE stop=0.6048 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-21T01:06:00.000Z ext_reader short CANDIDATE stop=0.6191 regime=range session=in rules[field("ext.a") <= -0.5 & field("ext.a")[1] > -0.5 & field("ext.b.flag") < 1 & close < close[1]] fails[]
 2025-02-21T01:36:00.000Z crt_4h long - stop=2.5632 target=9.1 regime=trend-down session=out rules[crt_dir(240) > 0] fails[]
