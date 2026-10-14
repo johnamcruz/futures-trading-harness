@@ -210,6 +210,23 @@ test('the evaluator verifies on equal terms: the champion\'s and the candidate\'
   }
 });
 
+test('a strategy change the evaluator\'s streams don\'t read stays blocked; one they read is screened', async () => {
+  for (const covers of [['strategies/other/STRATEGY.md'], ['strategies/orb/STRATEGY.md']]) {
+    const w = world({ proposals: [{ targets: ['wrong stated reason'], expects: 'x', edits: [{ file: 'strategies/orb/STRATEGY.md', find: 'stop: a', replace: 'stop: b' }] }], loop: { evaluator: { prop: 'p', data: { MNQ: '/bars.csv' } } } });
+    const make = w.steps.makeTree;
+    w.steps.makeTree = dir => { const c = make(dir); fs.mkdirSync(path.join(dir, 'strategies', 'orb'), { recursive: true }); fs.writeFileSync(path.join(dir, 'strategies', 'orb', 'STRATEGY.md'), '---\nname: orb\nstop: a\n---\n'); return c; };
+    const base = w.steps.stepDeps;
+    w.steps.stepDeps = (r, tree) => {
+      const d = base(r, tree);
+      return { ...d, step: async p => (fs.readFileSync(path.join(tree, 'strategies', 'orb', 'STRATEGY.md'), 'utf8').includes('stop: b') ? { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: p.kind, ran: [{ action: 'trade', ok: true, result: 'planted fix' }] })}` } : d.step(p)) };
+    };
+    w.steps.evaluator = async () => ({ available: true, covers, blows: 0, failures: [] });
+    await run(w, { dryRun: true });
+    const [e] = readArchive(w.paths.archive);
+    assert.strictEqual(e.verdict, covers[0].includes('orb') ? 'kept' : 'blocked', JSON.stringify(e.reasons));
+  }
+});
+
 test('a change judged before is never re-judged: the next iteration archives it as a duplicate', async () => {
   const w = world({ proposals: [fix], loop: { maxFlagged: 2, limits: { maxIterations: 2, maxModelCalls: 1000, maxWallMinutes: 30 } } });
   await run(w, { dryRun: true });

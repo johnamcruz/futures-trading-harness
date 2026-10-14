@@ -21,10 +21,13 @@
  *   resolveEvaluator(raw, baseDir)        the validated config (bar files resolved), or null when none
  *   summarize(result)                     what the archive keeps of a result
  *   compare(champion, candidate)          [failure] of a candidate against the champion on one window
- *   evaluate({ cfg, windows, champion, candidate, seed, env, look, ledger, run })
- *                                         { available, blows, failures, windows: [{ from, to, champion, candidate }] }
+ *   evaluate({ cfg, windows, champion, candidate, seed, env, look, ledger, scratchLedger, run, coversOf })
+ *                                         { available, covers, blows, failures, windows: [{ from, to, champion, candidate }] }
+ *                                         covers: the strategy files its streams read; a change to any other strategy
+ *                                         or to a rulebook is not screened by it (the verdict stays blocked)
  */
 
+const fs = require('fs');
 const path = require('path');
 const { expandHome } = require('../paths');
 const { gateFailures } = require('../prop/promotion');
@@ -60,28 +63,49 @@ function compare(champion, candidate) {
   if (candidate.blown > 0) out.push(`${candidate.blown} blow(s) over the attempts scored (R8: a single blow rejects)`);
   const had = new Set(champion.gate.map(kind));
   for (const f of candidate.gate) if (!had.has(kind(f)) && kind(f) !== 'blows') out.push(`a gate failure the champion doesn't have: ${f}`);
-  if (champion.lowerBound !== null && (candidate.lowerBound === null || candidate.lowerBound < champion.lowerBound)) {
-    out.push(`the pass-rate lower bound fell from ${champion.lowerBound} to ${candidate.lowerBound}`);
+  if (champion.lowerBound !== null && candidate.lowerBound !== null) {
+    if (candidate.lowerBound < champion.lowerBound) out.push(`the pass-rate lower bound fell from ${champion.lowerBound} to ${candidate.lowerBound}`);
+  } else if (champion.lowerBound !== null || candidate.lowerBound !== null) {
+    out.push(`no pass-rate bound to compare (champion ${champion.lowerBound}, candidate ${candidate.lowerBound})`);
+  } else {
+    // Neither has a bound: the passes over the attempts, and a change in what was scored, decide.
+    const r = x => (x.attempts ? Math.round((x.passed / x.attempts) * 10000) / 10000 : null);
+    if (champion.attempts !== candidate.attempts) out.push(`the attempts scored changed (${champion.attempts} to ${candidate.attempts}) where no pass-rate bound compares them`);
+    else if (r(candidate) !== null && r(champion) !== null && r(candidate) < r(champion)) out.push(`the pass rate fell from ${r(champion)} to ${r(candidate)}`);
   }
   return out;
 }
 
 const runDefault = (raw, opts) => require('../prop/evaluate-run').runEvaluation(raw, opts);
 
+/** The documents the evaluator's streams read: the policy strategy and the strategies it counts (no rulebook yet). */
+function coversDefault(root, prop, env) {
+  const p = require('../backtest/run').policyStrategy(root, prop, env);
+  return [p.strategy, ...p.counted].map(s => `strategies/${s.name}/STRATEGY.md`);
+}
+
 /**
  * The verifier over the windows. champion: the champion's tree (null: held-out, the candidate alone). look and
  * ledger: the look the evaluator checks and logs for a window outside Train (tuning or judging) and the ledger
  * file. Every run gets the same seed: the config's, else the loop's.
  */
-async function evaluate({ cfg, windows, champion = null, candidate, seed, env = process.env, look = null, ledger = null, run = runDefault, log = () => {} }) {
+async function evaluate({ cfg, windows, champion = null, candidate, seed, env = process.env, look = null, ledger = null, scratchLedger = null, run = runDefault, coversOf = coversDefault, log = () => {} }) {
   if (!cfg) return { available: false, why: UNAVAILABLE };
   const { seed: own, ...rest } = cfg;
   const s = Number.isInteger(own) ? own : seed;
-  const out = { available: true, seed: s, blows: 0, failures: [], windows: [] };
+  const covers = [...new Set([...coversOf(candidate, cfg.prop, env), ...(champion ? coversOf(champion, cfg.prop, env) : [])])].sort();
+  const out = { available: true, seed: s, covers, blows: 0, failures: [], windows: [] };
   for (const w of windows) {
-    const raw = { ...rest, seed: s, from: w.from, to: w.to, ...(look && ledger ? { look, ledger } : {}) };
-    const champ = champion ? summarize(run(raw, { root: champion, env, log })) : null;
-    const cand = summarize(run(raw, { root: candidate, env, log }));
+    // scratchLedger: a copy of the ledger as it was before the caller's own look (held-out judging), made fresh for
+    // each scoring, so the evaluator checks the same look and logs nothing more: one judging, one look.
+    const fresh = () => {
+      if (scratchLedger) fs.copyFileSync(ledger, scratchLedger.file);
+      return scratchLedger ? scratchLedger.file : ledger;
+    };
+    const raw = { ...rest, seed: s, from: w.from, to: w.to, ...(look && ledger ? { look } : {}) };
+    const at = r => (look && ledger ? { ...r, ledger: fresh() } : r);
+    const champ = champion ? summarize(run(at(raw), { root: champion, env, log })) : null;
+    const cand = summarize(run(at(raw), { root: candidate, env, log }));
     const failures = champ ? compare(champ, cand) : [...(cand.blown > 0 ? [`${cand.blown} blow(s) over the attempts scored (R8: a single blow rejects)`] : []), ...cand.gate.filter(f => kind(f) !== 'blows')];
     out.blows += cand.blown;
     out.failures.push(...failures.map(f => `${w.from}..${w.to}: ${f}`));

@@ -35,6 +35,10 @@ test('pairUp: one pair per decision, repeats collapsed to the majority (a tie to
   const q = pairUp([r('a', 0, 'right'), r('a', 1, 'right'), r('a', 2, 'bad size')], [r('a', 0, 'right'), r('a', 1, 'bad size'), r('a', 2, 'right', true)]);
   assert.deepStrictEqual(q.map(x => [x.key, x.base.category, x.cand.category, x.cand.blow, x.cand.agree]), [['a', 'right', 'right', true, 2]]);
   assert.strictEqual(collapse([r('a', 0, 'right'), r('a', 1, 'bad size')]).category, 'bad size', 'a tie is a failure');
+  assert.strictEqual(collapse([r('a', 0, 'right'), r('a', 1, 'bad size')], { tieTo: 'right' }).category, 'right');
+  // A champion split 1:1 is right (never a fix); a candidate split 1:1 is a failure (broken).
+  const split = pairUp([r('a', 0, 'wrong stated reason'), r('a', 1, 'right')], [r('a', 0, 'right'), r('a', 1, 'bad size')]);
+  assert.deepStrictEqual([split[0].base.category, split[0].cand.category], ['right', 'bad size']);
   assert.strictEqual(pairUp([r('a', 0, 'right'), r('a', 1, 'right')], [r('a', 0, 'right')])[0].cand.category, NO_DECISION, '1 of 2 missing: a tie, so the failure');
 });
 
@@ -107,6 +111,10 @@ test('judge: a mechanical change waits for the evaluator; an evaluator\'s blow o
   assert.strictEqual(judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, evaluator: { available: true, blows: 1 } }).verdict, 'rejected');
   assert.strictEqual(judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, evaluator: { available: true, blows: 0, failures: ['pass-rate bound'] } }).verdict, 'rejected');
   assert.throws(() => judge({ pairs: good, targets: [], failures: FAILURES }), /names the failure categories/);
+  // A strategy or rulebook the evaluator's streams never read is not screened.
+  const un = judge({ pairs: good, targets: ['wrong stated reason'], failures: FAILURES, mechanical: true, evaluator: { available: true, blows: 0, failures: [], uncovered: ['rulebooks/x/RULEBOOK.md'] } });
+  assert.strictEqual(un.verdict, 'blocked');
+  assert.match(un.reasons[0], /scored no stream that reads rulebooks\/x\/RULEBOOK\.md/);
 });
 
 test('judge: a candidate that stops deciding never reads as a fix', () => {

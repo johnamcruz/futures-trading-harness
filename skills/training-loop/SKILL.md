@@ -91,8 +91,13 @@ when the config names one (`"evaluator": { "prop", "data": { "MNQ":
 "<bar file>" }, ... }`, any `scripts/evaluate.js` setting): the champion
 and the candidate on the same bar files and seed; a blow, a gate failure
 the champion lacks or a lower pass-rate bound rejects. Without one, a
-strategy or rulebook change stays `blocked`. On held-out windows it scores
-the candidate alone, and each scoring is a judging look in the ledger.
+strategy or rulebook change stays `blocked`, and so does a change to a
+strategy its streams don't read, or to a rulebook (it reads none yet). On
+held-out windows it scores the candidate alone against the promotion gate,
+inside the judging's one look; a window too short for the gate's attempts
+and months fails it, so judge a mechanical change on windows long enough.
+Keep `scripts/evaluate.js --ledger` on the same ledger file and `HOME` the
+same: the one ledger is where the budget lives.
 
 **Stub until its step lands.** The scorecard is section 10 step 2's
 (`replay/scorecard.js`, adapted in `scripts/lib/train/loop.js`). Either

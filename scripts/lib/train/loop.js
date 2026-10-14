@@ -69,6 +69,13 @@ const { checkLook } = require('../prop/looks');
 
 class Stop extends Error {}
 
+/** The evaluator's result with the proposal's strategy and rulebook files it did not score (judge keeps those blocked). */
+function withUncovered(evaluator, proposal) {
+  if (!evaluator || !evaluator.available) return evaluator;
+  const covers = new Set(evaluator.covers || []);
+  return { ...evaluator, uncovered: [...new Set(proposal.edits.map(e => e.file))].filter(f => ['strategy', 'rulebook'].includes(P.kindOf(f)) && !covers.has(f)) };
+}
+
 /** The scorecard's records as decisions: key, time, category, whether in a trade, and what the proposer reads. */
 function scorecardDecisions(records) {
   return records.map(r => ({
@@ -325,7 +332,7 @@ async function iteration(ctx, n, { champion, champ }) {
     const v = await phase(ctx, `${n}:verdict:${x.id}`, path.join(dir, `verdict-${x.id}.json`), async () => {
       // Paired: the champion's tree and the candidate's, the same windows, bar files and seed.
       const evaluator = await ctx.steps.evaluator({ cfg: ctx.loop.evaluator, champion: champion.dir, candidate: cand.tree, proposal: x.proposal, windows: ctx.loop.tuningWindows, seed: ctx.loop.seed, look: { candidate: `${ctx.loop.loopId}/iter-${n}/${x.id}`, purpose: 'tuning' }, ledger: ctx.paths.ledger, log: ctx.log });
-      return { ...judge({ pairs: pairUp(baseline, cand.decisions), targets: x.proposal.targets, failures: P.FAILURES, rule: ctx.loop.rule, mechanical: P.isMechanical(x.proposal), evaluator }), evaluator };
+      return { ...judge({ pairs: pairUp(baseline, cand.decisions), targets: x.proposal.targets, failures: P.FAILURES, rule: ctx.loop.rule, mechanical: P.isMechanical(x.proposal), evaluator: withUncovered(evaluator, x.proposal) }), evaluator };
     });
     verdicts.push({ x, cand, v });
   }
@@ -424,6 +431,13 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
       if (used.length) throw new Error(`held-out months already used for judging: ${[...new Set(used)].sort().join(', ')}; each held-out month judges once`);
     }
     const champion = await championTree(ctx);
+    // The ledger as it was before this judging's one look: the evaluator checks the same look on copies of it, so a
+    // judging spends one look, however many windows and scorings it holds.
+    const before = path.join(ctx.paths.dir, `held-out-${proposalId}`, 'ledger-before.jsonl');
+    if (!ctx.state.done[`look:${tag}`]) {
+      fs.mkdirSync(path.dirname(before), { recursive: true });
+      fs.writeFileSync(before, fs.existsSync(ctx.paths.ledger) ? fs.readFileSync(ctx.paths.ledger) : '');
+    }
     const champ = await championRuns(ctx, { tag, windows: loop.heldOutWindows, tree: champion.dir, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging', ranges: loop.heldOutWindows, what: 'training loop: held-out judging of a kept change' } });
     const dir = path.join(ctx.paths.dir, `held-out-${proposalId}`);
     const work = path.join(W(ctx), `held-out-${proposalId}`);
@@ -435,8 +449,11 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: proposalId, dir: work, tree: tree.dir, panel, runs: champ.runs }) };
     });
     // The candidate alone, a judging look the evaluator logs before it reads a bar (each scoring is a look).
-    const evaluator = await ctx.steps.evaluator({ cfg: loop.evaluator, champion: null, candidate: cand.tree, proposal: entry.proposal, windows: loop.heldOutWindows, seed: loop.seed, look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging' }, ledger: ctx.paths.ledger, log: ctx.log });
-    const v = judge({ pairs: pairUp(baseline, cand.decisions), targets: entry.proposal.targets, failures: P.FAILURES, rule: loop.rule, mechanical: P.isMechanical(entry.proposal), evaluator });
+    const evaluator = await phase(ctx, `${tag}evaluator`, path.join(dir, 'evaluator.json'), () => ctx.steps.evaluator({
+      cfg: loop.evaluator, champion: null, candidate: cand.tree, proposal: entry.proposal, windows: loop.heldOutWindows, seed: loop.seed,
+      look: { candidate: `${loop.loopId}/${proposalId}`, purpose: 'judging' }, ledger: before, scratchLedger: { file: path.join(dir, 'ledger-scratch.jsonl') }, log: ctx.log,
+    }));
+    const v = judge({ pairs: pairUp(baseline, cand.decisions), targets: entry.proposal.targets, failures: P.FAILURES, rule: loop.rule, mechanical: P.isMechanical(entry.proposal), evaluator: withUncovered(evaluator, entry.proposal) });
     A.appendEntry(ctx.paths.archive, { phase: 'held-out', iteration: entry.iteration, proposalId, windows: loop.heldOutWindows, seed: loop.seed, repeats: loop.repeats, baseCommit: champion.baseCommit, verdict: v.verdict, reasons: v.reasons, tests: v.tests, evaluator });
     return v;
   } catch (err) {

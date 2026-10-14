@@ -40,23 +40,43 @@ test('compare: a blow, a new gate failure or a lower pass-rate bound fails the c
 test('evaluate: both trees on every window with one seed; held-out scores the candidate alone with the look; unavailable without a config', async () => {
   assert.deepStrictEqual(await E.evaluate({ cfg: null, windows: [], candidate: 'c' }), { available: false, why: E.UNAVAILABLE });
   const calls = [];
+  const coversOf = () => ['strategies/p/STRATEGY.md', 'strategies/orb/STRATEGY.md'];
   const run = (raw, opts) => { calls.push({ raw, root: opts.root }); return opts.root === 'cand' ? result({ lb: 0.3, seed: raw.seed }) : result({ seed: raw.seed }); };
   const cfg = E.resolveEvaluator({ prop: 'p', data: { MNQ: '/b.csv' }, paths: 10 });
   const windows = [{ from: '2022-03-07', to: '2022-03-12' }, { from: '2022-10-03', to: '2022-10-08' }];
-  const v = await E.evaluate({ cfg, windows, champion: 'champ', candidate: 'cand', seed: 5, run, look: { candidate: 'l/iter-1/x', purpose: 'tuning' }, ledger: '/ledger' });
+  const v = await E.evaluate({ cfg, windows, champion: 'champ', candidate: 'cand', seed: 5, run, coversOf, look: { candidate: 'l/iter-1/x', purpose: 'tuning' }, ledger: '/ledger' });
+  assert.deepStrictEqual(v.covers, ['strategies/orb/STRATEGY.md', 'strategies/p/STRATEGY.md']);
   assert.deepStrictEqual(calls.map(c => [c.root, c.raw.from, c.raw.seed, c.raw.paths, c.raw.look.purpose]), [['champ', '2022-03-07', 5, 10, 'tuning'], ['cand', '2022-03-07', 5, 10, 'tuning'], ['champ', '2022-10-03', 5, 10, 'tuning'], ['cand', '2022-10-03', 5, 10, 'tuning']]);
   assert.strictEqual(v.failures.length, 2);
   assert.match(v.failures[0], /^2022-03-07\.\.2022-03-12: the pass-rate lower bound fell/);
   // The config's own seed wins over the loop's.
   calls.length = 0;
-  await E.evaluate({ cfg: { ...cfg, seed: 11 }, windows: windows.slice(0, 1), champion: 'champ', candidate: 'cand', seed: 5, run });
+  await E.evaluate({ cfg: { ...cfg, seed: 11 }, windows: windows.slice(0, 1), champion: 'champ', candidate: 'cand', seed: 5, run, coversOf });
   assert.deepStrictEqual(calls.map(c => c.raw.seed), [11, 11]);
   // Held-out: the candidate alone, its gate failures absolute.
   calls.length = 0;
-  const h = await E.evaluate({ cfg, windows: windows.slice(0, 1), candidate: 'cand', seed: 5, run: (raw, o) => { calls.push({ raw, root: o.root }); return result({ attempts: 8 }); }, look: { candidate: 'l/x', purpose: 'judging' }, ledger: '/ledger' });
-  assert.deepStrictEqual(calls.map(c => [c.root, c.raw.look.purpose, c.raw.ledger]), [['cand', 'judging', '/ledger']]);
+  // The ledger as it was before the caller's own look, copied fresh for each scoring: one judging, one look.
+  const dir = tmpDir();
+  const before = path.join(dir, 'before.jsonl');
+  fs.writeFileSync(before, '{"candidate":"x","purpose":"tuning","ranges":[{"from":"2022-03-07","to":"2022-03-12"}]}\n');
+  const scratch = path.join(dir, 'scratch.jsonl');
+  const h = await E.evaluate({
+    cfg, windows: windows.slice(0, 1), candidate: 'cand', seed: 5, coversOf, look: { candidate: 'l/x', purpose: 'judging' }, ledger: before, scratchLedger: { file: scratch },
+    run: (raw, o) => { calls.push({ raw, root: o.root, held: fs.readFileSync(raw.ledger, 'utf8') }); fs.appendFileSync(raw.ledger, 'logged\n'); return result({ attempts: 8 }); },
+  });
+  assert.deepStrictEqual(calls.map(c => [c.root, c.raw.look.purpose, c.raw.ledger, c.held]), [['cand', 'judging', scratch, fs.readFileSync(before, 'utf8')]]);
+  assert.doesNotMatch(fs.readFileSync(before, 'utf8'), /logged/, 'the ledger snapshot is never written');
   assert.match(h.failures.join(), /too small an out-of-sample test/);
   assert.strictEqual(h.windows[0].champion, null);
+});
+
+test('compare: with no two bounds, the passes over the attempts and the attempts scored decide', () => {
+  const s = r => E.summarize(r);
+  const nob = o => ({ ...result(o), objective: { lowerBound: null } });
+  assert.match(E.compare(s(nob({ passed: 10 })), s(nob({ passed: 4 }))).join(), /the pass rate fell from 0\.3333 to 0\.1333/);
+  assert.match(E.compare(s(nob({ attempts: 30 })), s(nob({ attempts: 0, passed: 0 }))).join(), /the attempts scored changed \(30 to 0\)/);
+  assert.match(E.compare(s(result()), s(nob())).join(), /no pass-rate bound to compare \(champion 0\.35, candidate null\)/);
+  assert.deepStrictEqual(E.compare(s(nob()), s(nob())), []);
 });
 
 test('evaluate: the real two-layer evaluator on the CSV fixture; the same tree and seed give the same scores', async () => {

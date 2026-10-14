@@ -65,13 +65,15 @@ function mcnemar(b, c) {
 }
 
 /**
- * A decision's outcome over its repeats: the category most repeats gave (a tie goes to a failure, never to
- * right), and a blow if any repeat blew. Repeats measure the model's noise; they are not independent pairs.
+ * A decision's outcome over its repeats: the category most repeats gave, and a blow if any repeat blew. Repeats
+ * measure the model's noise; they are not independent pairs. A tie goes against the candidate both ways: on its
+ * side to a failure, on the champion's (`tieTo: 'right'`) to right, so a split champion is never "fixed".
  */
-function collapse(records) {
+function collapse(records, { tieTo = 'failure' } = {}) {
   const count = new Map();
   for (const r of records) count.set(r.category, (count.get(r.category) || 0) + 1);
-  const [category] = [...count].sort((a, b) => b[1] - a[1] || (a[0] === 'right') - (b[0] === 'right') || String(a[0]).localeCompare(String(b[0])))[0];
+  const favour = tieTo === 'right' ? (a, b) => (b[0] === 'right') - (a[0] === 'right') : (a, b) => (a[0] === 'right') - (b[0] === 'right');
+  const [category] = [...count].sort((a, b) => b[1] - a[1] || favour(a, b) || String(a[0]).localeCompare(String(b[0])))[0];
   return { key: records[0].key, category, blow: records.some(r => r.blow === true), repeats: records.length, agree: count.get(category) };
 }
 
@@ -88,7 +90,7 @@ function pairUp(baseline, candidate) {
   for (const [key, recs] of byKey((baseline || []).filter(r => r && r.category && r.category !== NO_DECISION))) {
     const mine = cand.get(key) || [];
     const c = recs.map(r => mine.find(x => x.repeat === r.repeat) || { key, repeat: r.repeat, category: NO_DECISION, blow: false });
-    out.push({ key, base: collapse(recs), cand: collapse(c) });
+    out.push({ key, base: collapse(recs, { tieTo: 'right' }), cand: collapse(c) });
   }
   return out;
 }
@@ -139,6 +141,8 @@ function judge({ pairs, targets, failures, rule = DECISION_RULE, mechanical = fa
   }
   if (reasons.length) return { verdict: 'rejected', reasons, tests };
   if (evaluator && evaluator.available) {
+    // A strategy or rulebook the evaluator never scored is not screened (R28): blocked, never kept.
+    if (mechanical && (evaluator.uncovered || []).length) return { verdict: 'blocked', reasons: [`the evaluator scored no stream that reads ${evaluator.uncovered.join(', ')}: not screened (R28)`], tests };
     if ((evaluator.blows || 0) > 0) return { verdict: 'rejected', reasons: [`the evaluator found ${evaluator.blows} blow(s)`], tests };
     if ((evaluator.failures || []).length) return { verdict: 'rejected', reasons: evaluator.failures.map(f => `evaluator: ${f}`), tests };
   } else if (mechanical) {

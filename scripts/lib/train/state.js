@@ -100,7 +100,7 @@ function acquireLock(paths, { loopId, pid = process.pid, now = new Date() }) {
     }
     throw new Error(`could not lock ${paths.lock}`);
   } finally {
-    fs.unlinkSync(tmp);
+    try { fs.unlinkSync(tmp); } catch (_err) { /* gone: never hides the error above */ }
   }
 }
 
