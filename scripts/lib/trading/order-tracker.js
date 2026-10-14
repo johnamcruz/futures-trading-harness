@@ -99,7 +99,10 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
       // Its record carries the contract by its month in the gate's naming (canon, ledgerName), so exits and stops
       // count it, and a root that means another month from the next trading day never moves it. A root not yet
       // resolvable (no front month recorded today) is resolved again once the call has gone out (pinName).
-      const name = () => require('./account-gate').ledgerName(canon(args));
+      // The naming taken once, when the record is written: a rename after the trading day changed fails its guard
+      // and keeps the root (as recordSent does), never naming it by the next day's front month.
+      const checked = canon(args);
+      const name = () => require('./account-gate').ledgerName(checked);
       const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: name() });
       if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
