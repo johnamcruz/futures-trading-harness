@@ -481,6 +481,23 @@ test('order gate: an entry tagged with a retired strategy is refused, saying so;
   assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' }).code, 0, 'exits still go');
 });
 
+test('order gate: an unreadable runner lane record refuses an entry (it may hold the retired mark), named or not; exits and stops go', () => {
+  const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
+  const { signalFile } = require('../../scripts/lib/trading/signal-state');
+  fs.mkdirSync(path.dirname(signalFile(env.FTH_HOME, 'MNQ', '3m')), { recursive: true });
+  fs.writeFileSync(signalFile(env.FTH_HOME, 'MNQ', '3m'), '{ half a file');
+  const skip = { ...env, FTH_ORDER_GATE_SKIP: 'retired-lane,strategy' };
+  const named = gate(orderPayload(ORDER), skip);
+  assert.strictEqual(named.code, 2);
+  assert.match(named.stderr, /\[retired-lane\] setup:anytime trades 3m bars, and the runner's 3m lane record for MNQ is unreadable/);
+  const unknown = gate(orderPayload({ ...ORDER, rationale: 'setup:nosuch long, stop 21480' }), skip);
+  assert.strictEqual(unknown.code, 2);
+  assert.match(unknown.stderr, /\[retired-lane\] setup:nosuch names no known strategy, so no timeframe of its own, and the runner's 3m lane record for MNQ is unreadable/);
+  for (const rationale of ['[exit] flatten', '[protect] stop to 21480']) {
+    assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale }), skip).code, 0, rationale);
+  }
+});
+
 test('order gate fails closed on malformed input', () => {
   const { env } = setup([]);
   const r = gate('{not json', env);

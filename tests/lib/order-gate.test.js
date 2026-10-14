@@ -238,6 +238,59 @@ test('retired-lane: an entry naming no known strategy is checked against every l
   assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
 });
 
+test('retired-lane fails closed: an unreadable lane record refuses an entry, named or not, even with the checks skipped; exits go', () => {
+  const fs = require('fs');
+  const { buildSignals, writeSignals, signalFile } = require('../../scripts/lib/trading/signal-state');
+  const strategies = [{ name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'manual', mtf: 'trend', timeframe: '3m' }];
+  const skipping = home => ({ ...loadConfig({ FTH_ORDER_GATE_SKIP: 'retired-lane,strategy,setup-tag' }), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 });
+  const order = (home, input) => evaluateOrder({ input, entries: [plan()], now: NOW, config: skipping(home), strategies });
+  const lane = (home, rationale) => order(home, entryOrder({ rationale })).violations.find(v => v.check === 'retired-lane');
+  const tags = ['setup:orb long, stop 21480', 'setup:nosuch long, stop 21480', 'long, stop 21480 (no tag)'];
+  const home = trendHome();
+  // A readable record with no mark refuses nothing (so the refusals below come from the unreadable record).
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, stepMs: 180000, now: NOW }));
+  for (const t of tags) assert.strictEqual(lane(home, t), undefined, t);
+  const corrupts = ['{ half a file', 'null', '[]', '"MNQ"', JSON.stringify({ symbol: 'MNQ', timeframe: '3m', candidates: [], retiredLane: 'bos' })];
+  for (const corrupt of corrupts) {
+    fs.writeFileSync(signalFile(home, 'MNQ', '3m'), corrupt);
+    const named = lane(home, tags[0]);
+    assert.ok(named, `named: ${corrupt}`);
+    assert.match(named.message, /^setup:orb trades 3m bars, and the runner's 3m lane record for MNQ is unreadable \(.+\): it may say that lane lists a retired strategy, so no entry on it/);
+    for (const t of tags.slice(1)) {
+      const v = lane(home, t);
+      assert.ok(v, `${t}: ${corrupt}`);
+      assert.match(v.message, /names no known strategy, so no timeframe of its own, and the runner's 3m lane record for MNQ is unreadable/);
+    }
+    // Exits and protective stops are never held by it.
+    for (const r of ['[exit] close the long', '[protect] move the stop']) {
+      const x = order(home, entryOrder({ side: 'sell', rationale: r, stopLossBracket: undefined }));
+      assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], `${r}: ${corrupt}`);
+    }
+  }
+  // A directory where the record should be: unreadable too.
+  fs.rmSync(signalFile(home, 'MNQ', '3m'));
+  fs.mkdirSync(signalFile(home, 'MNQ', '3m'));
+  for (const t of tags) assert.match(lane(home, t).message, /3m lane record for MNQ is unreadable/, t);
+  // Another contract's unreadable record isn't this one's.
+  const other = trendHome();
+  fs.mkdirSync(require('path').dirname(signalFile(other, 'MES', '3m')), { recursive: true });
+  fs.writeFileSync(signalFile(other, 'MES', '3m'), '{ half a file');
+  for (const t of tags) assert.strictEqual(lane(other, t), undefined, t);
+});
+
+test('retired-lane: a 1h strategy is checked on the runner\'s 60m lane record (the runner names its lanes in minutes)', () => {
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const hourly = { name: 'orb', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'manual', mtf: 'trend', timeframe: '1h' };
+  const home = trendHome();
+  const lane = () => evaluateOrder({ input: entryOrder({ rationale: 'setup:orb long, stop 21480' }), entries: [plan()], now: NOW, config: { ...config, home }, strategies: [hourly] })
+    .violations.find(v => v.check === 'retired-lane');
+  assert.strictEqual(lane(), undefined, 'no 60m record: nothing to refuse');
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:00:00.000Z' }, stepMs: 3600000, now: NOW, retiredLane: ['bos'] }));
+  const v = lane();
+  assert.ok(v, 'the 60m lane is marked');
+  assert.match(v.message, /^setup:orb trades 1h bars, and the runner's 60m lane lists bos \(retired on 2026-10-13/);
+});
+
 test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
