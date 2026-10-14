@@ -118,14 +118,15 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 });
 
 // Each role's skills as main loads them (its role-skills before role-index existed): no default behaviour changes.
+// Added since: bos-vs-choch (core) for the market-structure and trend-momentum analysts.
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'harness-tools'],
+  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'harness-tools'],
   'news-calendar-analyst': ['session-timing', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools'],
   'strategy-researcher': ['strategy-authoring', 'strategy-library'],
   'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
-  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'momentum-and-volume', 'pullback-vs-reversal', 'harness-tools'],
+  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'harness-tools'],
   'volume-liquidity-analyst': ['vwap-volume-profile', 'liquidity-concepts', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'harness-tools'],
 };
 
