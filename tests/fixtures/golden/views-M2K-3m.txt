@@ -113,6 +113,7 @@ Summary (M2K 3m, 12:33 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): VWAP (rth) 2264.77 (1.07 pts, 1.07R), round number 2270 (6.3 pts, 6.28R), opening range low 2274.5 (10.8 pts, 10.77R).
 - Room below (R = the 3m reference stop): last 3m swing high 2262.7 (1 pts, 1R), last 3m swing low 2260.9 (2.8 pts, 2.79R), session VAL 2260.1 (3.59 pts, 3.58R).
+- This bar's close: 20+ closes in a row below prior value.
 - 3m (closed 12:33): none, close top third, range 1.07 ATR, vol 0.98x; traded beyond the previous 3m high, closed above its high; broke above previous 3m high, touched CRT 4h range low.
 - 15m (closed 12:30): none, close top third, range 0.43 ATR, vol 0.65x; traded beyond the previous 15m high, closed above its high; broke above previous 15m high.
 - 1h (closed 12:00): none, close middle third, range 0.92 ATR, vol 2.79x; swept the previous 1h low, closed back inside; rejected IB low (closed back below), rejected session VAL (closed back below), rejected previous 1h low (closed back above), rejected round number 2260 (closed back below).
@@ -201,6 +202,7 @@ Summary (M2K 3m, 09:51 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): overnight low 2262.5 (1.3 pts, 1.03R), opening range low 2265.7 (4.5 pts, 3.58R), prior POC 2266.8 (5.64 pts, 4.48R).
 - Room below (R = the 3m reference stop): round number 2260 (1.2 pts, 0.95R), prior VAL 2257.9 (3.25 pts, 2.58R), prior RTH low / untested 1h swing low 2254.4 (6.8 pts, 5.41R).
+- This bar's close: crossed below the opening range low; 5 closes in a row back inside prior value (the RTH open was above it).
 - 3m (closed 09:51): bearish engulfing, close bottom third, range 2.77 ATR, vol 2.04x; traded beyond the previous 3m low, closed below its low; broke below prior RTH close, broke below opening range low, broke below prior POC, broke below 1h swing low 2265.6, +6 more.
 - 15m (closed 09:45): bearish engulfing, close bottom third, range 7.52 ATR, vol 17.01x; traded beyond the previous 15m low, closed below its low; broke below session POC, broke below CRT 1h range high, broke below CRT 4h range high, broke below previous 15m low, +10 more.
 - 1h (closed 09:00): displacement up, close top third, range 1.89 ATR, vol 1.22x; traded beyond the previous 1h high, closed above its high; broke above session VAH, broke above 15m swing high 2275.4, broke above CRT 4h range high, broke above previous 1h high, +1 more.
@@ -289,6 +291,7 @@ Summary (M2K 3m, 10:06 ET):
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): prior RTH low 2254.4 (0.9 pts, 0.64R), prior VAL 2257.9 (4.45 pts, 3.18R), round number 2260 (6.5 pts, 4.65R).
 - Room below (R = the 3m reference stop): day low / session low 2253.1 (0.4 pts, 0.29R), round number 2250 (3.5 pts, 2.5R).
+- This bar's close: 2 closes in a row below prior value.
 - 3m (closed 10:06): none, close bottom third, range 0.93 ATR, vol 1.21x; traded beyond the previous 3m low, closed below its low; broke below previous 3m low, touched prior RTH low.
 - 15m (closed 10:00): none, close bottom third, range 2.76 ATR, vol 4.97x; traded beyond the previous 15m low, closed below its low; rejected prior RTH close (closed back below), rejected prior VAH (closed back below), rejected prior POC (closed back below), rejected session VAL (closed back below), +9 more.
 - 1h (closed 10:00): displacement down, close bottom third, range 4.62 ATR, vol 8.64x; traded beyond the previous 1h high and low, closed below its low; rejected session VAH (closed back below), rejected session POC (closed back below), rejected previous 1h high (closed back below), rejected round number 2260 (closed back above), +17 more.

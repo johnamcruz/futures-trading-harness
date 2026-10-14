@@ -183,6 +183,7 @@ Summary (MNQ 1m, 22:19 ET):
 - News: no blackout ahead.
 - Room above (R = the 1m reference stop): session high / overnight high 27542.5 (4.5 pts, 1.63R), round number 27600 (62 pts, 22.51R).
 - Room below (R = the 1m reference stop): round number 27500 (38 pts, 13.8R), session VAH 27473 (64.89 pts, 23.56R), prior RTH high 27462.5 (75.5 pts, 27.41R).
+- This bar's close: 20+ closes in a row above prior value.
 - 3m (closed 22:18): none, close top third, range 0.71 ATR, vol 0.4x; traded beyond the previous 3m high, closed above its high; touched previous 3m high.
 - 5m (closed 22:15): none, close middle third, range 0.56 ATR, vol 0.44x; swept the previous 5m high, closed back inside; touched previous 5m high.
 - 15m (closed 22:15): none, close middle third, range 0.71 ATR, vol 0.61x; swept the previous 15m high, closed back inside; rejected overnight high (closed back below), rejected CRT 1h range high (closed back below), rejected CRT 4h range high (closed back below), rejected previous 15m high (closed back below).
