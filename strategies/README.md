@@ -121,20 +121,20 @@ enforces.
 
 ## Retired strategies
 
-Removed on 2026-10-13, the owner's decision: in the Train edge census they
-were reliably negative after costs, with the whole 95% confidence interval of
-their mean R below 0, RTH-only included. Their documents stay in the
+Removed on 2026-10-13, the owner's decision: negative after costs on Train
+in the 2026-10-13 edge census (the owner's reading: the whole 95% confidence
+interval of mean R below 0, RTH-only included). Their documents stay in the
 repository's history. The concepts they traded stay in the skills (trend and
 momentum indicators, market structure, order flow) for confluence; only the
 strategies are gone.
 
-| Strategy | Signal | Census mean R (after costs) |
-|---|---|---|
-| `bos` | break of structure (3m) | -0.34R |
-| `keltner` | Keltner channel breakout (3m) | -0.33R |
-| `ema_cross` | EMA 9/20 cross (3m) | -0.24R |
-| `supertrend` | SuperTrend flip (3m) | -0.27R |
-| `ofi` | 1m order-flow imbalance that moves price | -0.40R |
+| Strategy | Signal |
+|---|---|
+| `bos` | break of structure (3m) |
+| `keltner` | Keltner channel breakout (3m) |
+| `ema_cross` | EMA 9/20 cross (3m) |
+| `supertrend` | SuperTrend flip (3m) |
+| `ofi` | 1m order-flow imbalance that moves price |
 
 ## Commands
 

@@ -17,7 +17,7 @@ const { spawnSync } = require('child_process');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { gateFailures } = require('../../scripts/lib/prop/promotion');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
-const { tmpDir, TEST_ACCOUNTS } = require('../helpers');
+const { tmpDir, TEST_ACCOUNTS, FX_STRATEGIES } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CSV = path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv');
@@ -29,12 +29,13 @@ function setup() {
   const lines = ['datetime,open,high,low,close,volume', ...bars.map(b => `${new Date(Date.parse(b.t) - SHIFT).toISOString()},${b.o},${b.h},${b.l},${b.c},${b.v}`)];
   const data = path.join(home, 'NQ-3m-train.csv');
   fs.writeFileSync(data, `${lines.join('\n')}\n`);
+  // Its components: orb and the fixtures fx_cross and fx_break (tests/fixtures/strategies-fx), which fire on this CSV.
   const strat = path.join(home, 'strategies', 'eval_fixture');
   fs.mkdirSync(strat, { recursive: true });
   const policy = fs.readFileSync(path.join(ROOT, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
     .replace(/^name: prop_portfolio$/m, 'name: eval_fixture')
     .replace(/^instruments: .*$/m, 'instruments: [MNQ, NQ]')
-    .replace(/^strategies: .*$/m, 'strategies: [ema_cross, supertrend, keltner, bos, orb]')
+    .replace(/^strategies: .*$/m, 'strategies: [fx_cross, fx_break, orb]')
     .replace(/^account: .*$/m, 'account: eval_acct')
     .replace(/^contracts: .*$/m, 'contracts: micro');
   fs.writeFileSync(path.join(strat, 'STRATEGY.md'), policy);
@@ -42,7 +43,7 @@ function setup() {
   fs.mkdirSync(acct, { recursive: true });
   fs.writeFileSync(path.join(acct, 'ACCOUNT.md'), fs.readFileSync(path.join(TEST_ACCOUNTS, 'test_50k', 'ACCOUNT.md'), 'utf8')
     .replace(/^name: test_50k$/m, 'name: eval_acct').replace(/^sessions: 30\b/m, 'sessions: 2').replace(/^profit_target: 3000\b/m, 'profit_target: 300'));
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || '', FTH_HOME: home, FTH_STRATEGIES_DIRS: path.join(home, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR || '', FTH_HOME: home, FTH_STRATEGIES_DIRS: `${path.join(home, 'strategies')},${FX_STRATEGIES}`, FTH_ACCOUNTS_DIRS: path.join(home, 'accounts') };
   const sessions = [...new Set(bars.map(b => tradingDayKey(new Date(Date.parse(b.t) - SHIFT))))];
   return { home, data, env, sessions };
 }
