@@ -2010,6 +2010,100 @@ test('index mode is the default: with no FTH_ROLE_SKILLS set an autonomous entry
   assert.deepStrictEqual(run(entryOrder()).violations, []);
 });
 
+test('index mode, several lanes: a closed lane\'s candidates require the lookups too (its briefing on its bar, else its signal record on its bar, else every lookup); exits never held', () => {
+  const { writeBriefing, writeFrameBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup, lookupsFile } = require('../../scripts/lib/trading/skill-lookups');
+  const { writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const dir = require('../helpers').tmpDir();
+  const home = trendHome();
+  const file = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const T = 1.8e12;
+  const timed = (subagent_type, start, end) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type }, output: 'VERDICT: APPROVE - size 1', time: { start: T + start, end: T + end } } } });
+  fs.writeFileSync(file, [...ocSkills, timed('market-structure-analyst', 10, 20), timed('trend-momentum-analyst', 10, 20), timed('volume-liquidity-analyst', 10, 20),
+    timed('risk-manager', 10, 18), timed('risk-manager', 30, 40)].join('\n'));
+  // The 3m (runner's) briefing: no candidate. The 1m lane's bar, which closed this cycle, at 13:59.
+  writeBriefing(home, { symbol: 'MNQ', minutes: 3, sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [], news: { inBlackout: false } } } } });
+  const lane = '2026-10-07T13:59:00.000Z';
+  const frame = (asOf, candidates) => writeFrameBriefing(home, { symbol: 'MNQ', minutes: 1, asOf, closedAt: NOW.toISOString(), sections: { bar: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates } } } });
+  // The gate's config as the runner's environment gives it (FTH_CYCLE_LANE_BARS from the cycle's lanes), default mode.
+  const env = { FTH_HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_CYCLE_LANE_BARS: JSON.stringify({ MNQ: { 1: lane, 3: '2026-10-07T13:57:00.000Z' } }) };
+  const fromEnv = loadConfig(env);
+  assert.deepStrictEqual(fromEnv.cycleLaneBars, { MNQ: { 1: lane, 3: '2026-10-07T13:57:00.000Z' } });
+  const cfg = { ...config, ...fromEnv, killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home };
+  const run = (input, c = cfg) => {
+    const r = evaluateOrder({ input, entries: [plan()], now: NOW, config: c });
+    return { ...r, violations: r.violations.filter(v => v.check !== 'phase2-facts') };
+  };
+  const exits = () => {
+    assert.deepStrictEqual(run(entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations, []);
+    assert.deepStrictEqual(run(entryOrder({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long', stopLossBracket: undefined })).violations, []);
+  };
+  // The reviewer's repro: the 1m lane's briefing on its bar shows a reversal candidate; no lookups: refused.
+  frame(lane, [{ name: 'tick_up', direction: 'long', trendRule: 'reversal' }]);
+  const refused = run(entryOrder());
+  assert.deepStrictEqual(checks(refused), ['roles-ran']);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  // Without the lane (one lane, or the lane's bar didn't close this cycle): the 3m briefing alone, nothing required.
+  assert.deepStrictEqual(run(entryOrder(), { ...cfg, cycleLaneBars: {} }).violations, []);
+  exits();
+  // The lookups made during the roles' calls: the entry goes.
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
+  const all = () => {
+    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'pullback-vs-reversal', 12);
+    look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
+    look('risk-manager', 'confluence-counting', 31);
+    look('risk-manager', 'invalidation', 32);
+  };
+  all();
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  fs.unlinkSync(lookupsFile(file));
+  // The lane's briefing is another bar's (or none: no analyst reads 1m): its signal record on the bar decides. A
+  // candidate there carries no trend rule, so every trend rule's lookups are required.
+  frame('2026-10-07T13:58:00.000Z', []);
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [{ name: 'tick_up', direction: 'long' }] });
+  const viaSignal = run(entryOrder());
+  assert.match(viaSignal.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, breakout-vs-fakeout, mtf-rejection, mtf-breakout/);
+  // Nothing fired on the lane's bar (its record says so): nothing more is required.
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: lane, closedAt: NOW.toISOString(), candidates: [] });
+  assert.deepStrictEqual(run(entryOrder()).violations, []);
+  // Neither on the lane's bar (the record is an older bar's): every situational lookup is required (fails closed).
+  writeSignals(home, { symbol: 'MNQ', timeframe: '1m', asOf: '2026-10-07T13:58:00.000Z', closedAt: '2026-10-07T13:59:00.000Z', candidates: [] });
+  const closed = run(entryOrder());
+  assert.match(closed.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
+  assert.match(closed.violations[0].message, /volume-liquidity-analyst|market-structure-analyst reported without looking up/);
+  exits();
+  // An unreadable FTH_CYCLE_LANE_BARS is none (the 3m briefing alone), never a crash.
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: 'not json' }).cycleLaneBars, {});
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_LANE_BARS: JSON.stringify({ MNQ: { x: lane, 5: 7 }, MES: [] }) }).cycleLaneBars, {});
+});
+
+test('a session that isn\'t autonomous: no situational skill is required of the head trader, in the default (index) mode too', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  const home = trendHome();
+  const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
+  fs.writeFileSync(file, ocSkills.join('\n'));
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(NOW.getTime() + 60000).toISOString(), data: { candidates: [{ name: 'orb', direction: 'long', trendRule: 'reversal' }], news: { inBlackout: false } } } } });
+  // A situational skill marked for the head trader (none ships yet): what the guard keeps out of interactive sessions.
+  const entry = { when: 'candidate', skill: 'session-timing', head: true };
+  SITUATIONAL.push(entry);
+  try {
+    const interactive = { ...config, ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home };
+    assert.strictEqual(interactive.roleSkills, 'index');
+    assert.strictEqual(interactive.autonomous, false);
+    const run = c => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: c, transcriptPath: file }).violations;
+    assert.deepStrictEqual(run(interactive), [], 'interactive: the head skill is not required');
+    // The same table in an autonomous cycle requires it (the table works; only the guard keeps it out above).
+    const auto = run({ ...interactive, autonomous: true, cycle: null });
+    assert.ok(auto.some(v => v.check === 'skills-loaded' && /session-timing/.test(v.message)), JSON.stringify(auto));
+  } finally {
+    SITUATIONAL.splice(SITUATIONAL.indexOf(entry), 1);
+  }
+});
+
 test('account gate across a contract roll: an [exit], [protect] or partial close matches the position\'s contract exactly, named from one read of today\'s front month; never by a stale root alias', () => {
   const { evaluateAccount, evaluateAccountChange } = require('../../scripts/lib/trading/account-gate');
   const { canonicalName } = require('../../scripts/lib/broker/translator');

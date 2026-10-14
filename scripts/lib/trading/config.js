@@ -55,6 +55,23 @@ function cycleBarsOf(raw) {
   }
 }
 
+/** FTH_CYCLE_LANE_BARS ({"MNQ": {"1": "<bar open>"}}): the lanes' bars that closed this cycle, by family root and minutes. */
+function cycleLaneBarsOf(raw) {
+  try {
+    const o = JSON.parse(raw || '{}');
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    const out = {};
+    for (const [k, lanes] of Object.entries(o)) {
+      if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) continue;
+      const ok = Object.entries(lanes).filter(([m, t]) => /^[1-9]\d{0,3}$/.test(m) && typeof t === 'string');
+      if (ok.length) out[familyRoot(k)] = { ...(out[familyRoot(k)] || {}), ...Object.fromEntries(ok) };
+    }
+    return out;
+  } catch (_err) {
+    return {};
+  }
+}
+
 function intEnv(env, name, fallback, { min = 0 } = {}) {
   const raw = env[name];
   if (raw === undefined || String(raw).trim() === '') return fallback;
@@ -125,6 +142,9 @@ function loadConfig(env = process.env) {
     // The bar each symbol's cycle decides (FTH_CYCLE_BARS, set by the runner: {"MNQ": "<bar open time>"}), keyed by
     // family root: phase 2's facts are checked against that bar's briefing (fact-claims.js). Unreadable: none.
     cycleBars: cycleBarsOf(env.FTH_CYCLE_BARS),
+    // Several lanes (FTH_CYCLE_LANE_BARS, set by the runner): each symbol's lanes whose bar closed this cycle, by minutes,
+    // { ROOT: { minutes: "<bar open>" } }: in index mode their candidates trigger lookups too (skill-lookups.js).
+    cycleLaneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS),
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
     // Unset in an autonomous run, the selection is lost: an error, every entry refused.

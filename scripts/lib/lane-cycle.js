@@ -25,9 +25,23 @@
  *   boundHistory(history, first)        the runner's decision history kept to 10 entries per lane (not 10 in all)
  *   laneHistory(history, { closed, first, open })   the decisions a cycle's prompt shows: each closed lane's last 10,
  *                                       plus the first lane's last 3 when it didn't close and each open trade's lane's
+ *   laneBarsOf(items)                   the other lanes' bars that closed this cycle, { ROOT: { minutes: "<bar open>" } }
+ *                                       (items with lane > 0): index mode's lookups read their candidates
+ *                                       (trading/skill-lookups.js cycleFacts), in the report cache and the gate alike
  */
 
 const { tfMinutes } = require('./lanes');
+const { familyRoot } = require('./trading/contracts');
+
+function laneBarsOf(items) {
+  const out = {};
+  for (const x of items || []) {
+    if (!x || !(x.lane > 0) || !x.symbol || !Number.isInteger(x.minutes) || !x.bar || typeof x.bar.t !== 'string') continue;
+    const root = familyRoot(x.symbol);
+    out[root] = { ...(out[root] || {}), [x.minutes]: x.bar.t };
+  }
+  return out;
+}
 
 const SLOW_FROM_MIN = 3; // "3m and slower" goes first on a tie
 const LOWER_PRIORITY = 'lower priority';
@@ -131,4 +145,4 @@ function laneHistory(history, { closed = [], first, open = [], keep = HISTORY_PE
   return list.filter(h => picked.has(h));
 }
 
-module.exports = { HISTORY_PER_LANE, SLOWER_CONTEXT, boundHistory, laneHistory, LOWER_PRIORITY, laneBudgetMin, cycleTimeoutMin, policyRank, settleCollisions, skippedVerdict, lanesLine };
+module.exports = { laneBarsOf, HISTORY_PER_LANE, SLOWER_CONTEXT, boundHistory, laneHistory, LOWER_PRIORITY, laneBudgetMin, cycleTimeoutMin, policyRank, settleCollisions, skippedVerdict, lanesLine };

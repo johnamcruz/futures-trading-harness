@@ -558,6 +558,15 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const briefed = context && context.cycleBars ? Object.entries(context.cycleBars).filter(([s, t]) => s && typeof t === 'string') : [];
   if (briefed.length) env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify(Object.fromEntries(briefed));
   else delete env.FTH_CYCLE_BRIEFING_BARS;
+  // Several lanes: each symbol's lanes whose bar closed this cycle ({"MNQ": {"1": "<bar open>"}}): in index mode the
+  // gate reads their candidates for the required lookups (trading/skill-lookups.js cycleFacts).
+  const laneBars = {};
+  for (const x of ((context && context.symbols) || [])) {
+    const m = x && x.symbol && x.bar && typeof x.bar.t === 'string' ? /^(\d+)m$/.exec(String(x.lane || '')) : null;
+    if (m) laneBars[x.symbol] = { ...(laneBars[x.symbol] || {}), [m[1]]: x.bar.t };
+  }
+  if (Object.keys(laneBars).length) env.FTH_CYCLE_LANE_BARS = JSON.stringify(laneBars);
+  else delete env.FTH_CYCLE_LANE_BARS;
   // An analyst on its own timeframe reads the briefing of that timeframe's bar holding at the cycle's start.
   if (context && typeof context.cycleAt === 'string') env.FTH_CYCLE_AT = context.cycleAt;
   else delete env.FTH_CYCLE_AT;

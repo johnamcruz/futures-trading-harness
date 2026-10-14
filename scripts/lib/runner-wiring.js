@@ -313,15 +313,22 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
  * role's report) to the runner; other harnesses run every role every cycle. A lean cycle runs no analysts. In index
  * mode (opencode, the default, FTH_ROLE_SKILLS not full) a role a lookup is required of on the bar is never served (lookupRoles).
  */
-/** Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). */
-function lookupRoles(briefingsBySymbol, now, env = process.env) {
+/**
+ * Index mode: the roles a situational lookup is required of on these briefings' bars (none in full mode). Several
+ * lanes (`laneBars`, { ROOT: { minutes: "<bar open>" } }: the other lanes whose bar closed this cycle): their
+ * candidates count too, read as the gate reads them (trading/skill-lookups.js cycleFacts), so the cache and the gate agree.
+ */
+function lookupRoles(briefingsBySymbol, now, env = process.env, { home = null, laneBars = {} } = {}) {
   let mode;
   try { mode = require('./role-skills').modeOf(env); } catch (_err) { mode = 'index'; }
   if (mode !== 'index') return [];
-  const { requiredFor, needed } = require('./trading/skill-lookups');
-  const { current } = require('./trading/briefing');
+  const { requiredFor, needed, cycleFacts, lanesFor } = require('./trading/skill-lookups');
+  const { readSignals } = require('./trading/signal-state');
   const required = requiredFor(path.resolve(__dirname, '..', '..'));
-  const facts = Object.values(briefingsBySymbol).map(b => (b && current(b, now) && b.sections.m3 ? b.sections.m3.data || null : null));
+  const facts = Object.entries(briefingsBySymbol).map(([symbol, b]) => cycleFacts({
+    first: b, now, lanes: lanesFor(laneBars, symbol),
+    readFrame: m => (home ? readFrameBriefing(home, symbol, m) : null), readSignal: m => (home ? readSignals(home, symbol, `${m}m`) : null),
+  }));
   return [...required.keys()].filter(role => (facts.length ? facts : [null]).some(m3 => needed(role, required, m3).length));
 }
 
@@ -333,13 +340,14 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   const tfs = [...new Set(frames.map(f => f.minutes))];
   const own = symbols => ({ frames: roles, frameBriefings: Object.fromEntries(symbols.map(s => [s.symbol, Object.fromEntries(tfs.map(m => [m, readFrameBriefing(home, s.symbol, m)]))])) });
   return {
-    serve: ({ symbols, account, now }) => {
+    // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
+    serve: ({ symbols, account, now, laneBars = {} }) => {
       const b = briefings(symbols);
       const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
       // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar runs (the gate counts its report
       // only with that lookup made this cycle: trading/skill-lookups.js).
       // Only opencode runs index their roles (autotrader.js childEnv gives every other harness full).
-      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env) : [];
+      const lookups = cfg.harness === 'opencode' ? lookupRoles(b, now, env, { home, laneBars }) : [];
       const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(r => !lookups.includes(r.role));
       return { roles: reports.map(r => r.role), reports };
     },

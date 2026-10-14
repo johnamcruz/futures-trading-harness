@@ -253,9 +253,20 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   ].join('\n'));
   const extraEnv = { FTH_STRATEGIES_DIRS: path.dirname(dir) };
   const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
-  const single = await replay(MNQ, { extraEnv });
-  const laned = await replay(MNQ, { lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }], bars1, extraEnv });
+  const LANES = [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }];
   const isOneMin = c => Array.isArray(c.lanes) && c.lanes.length === 1 && c.lanes[0] === '1m';
+  // Index mode, the default (pinned in the golden below): a cycle whose 1m bar fired tick_up (a reversal, from the
+  // lane's signal record: no analyst reads 1m) runs every role a lookup is required of, as the gate requires them
+  // (skill-lookups.js cycleFacts); one without it (a 3m close) is served from the cache as in full mode.
+  const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv });
+  const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1], 'risk-manager'];
+  for (const c of indexed.cycles.filter(x => x.fired.includes('tick_up long') || x.fired.includes('tick_up short'))) {
+    for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a bar its lookups are required`);
+  }
+  assert.ok(indexed.cycles.some(c => !c.fired.some(f => f.startsWith('tick_up')) && c.served.includes(ANALYSTS[0])), 'a cycle without the lane\'s setup: served');
+  // Full mode: the lanes' caching rule alone (no lookups required).
+  const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
+  const laned = await replay(MNQ, { lanes: LANES, bars1, extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
   const threes = laned.cycles.filter(c => !isOneMin(c));
   const ones = laned.cycles.filter(isOneMin);
   assert.ok(ones.length >= 3, `1m signal cycles: ${ones.length}`);
@@ -278,10 +289,12 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
     const hits = list.reduce((n, c) => n + ['risk-manager', ...ANALYSTS.slice(0, 2)].filter(r => c.served.includes(r)).length, 0);
     return `${hits}/${list.length * 3} (${Math.round((100 * hits) / (list.length * 3))}%)`;
   };
-  const lanesText = laned.cycles.map((c, k) => `${(c.lanes || []).join('+')} ${sequenceText({ cycles: [c], keysAfter: [laned.keysAfter[k]] })}`).join('\n');
-  assertGolden('runner-replay-lanes-cache.txt', `hit rate (phase 1 and the two cacheable analysts): single 3m lane ${rate(single.cycles)}; 3m bar + 1m signal lanes ${rate(laned.cycles)}\n${lanesText}`);
+  // The golden is the default mode's (index); the full-mode rates beside it.
+  const singleIndexed = await replay(MNQ, { extraEnv });
+  const lanesText = indexed.cycles.map((c, k) => `${(c.lanes || []).join('+')} ${sequenceText({ cycles: [c], keysAfter: [indexed.keysAfter[k]] })}`).join('\n');
+  assertGolden('runner-replay-lanes-cache.txt', `hit rate (phase 1 and the two cacheable analysts): single 3m lane ${rate(singleIndexed.cycles)}; 3m bar + 1m signal lanes ${rate(indexed.cycles)}; full mode: single ${rate(single.cycles)}, lanes ${rate(laned.cycles)}\n${lanesText}`);
   // The prompts of the two lanes, the decision history of each (lane-cycle.js laneHistory) included.
-  assertGolden('runner-replay-lanes-prompts.txt', laned.cycles.map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
+  assertGolden('runner-replay-lanes-prompts.txt', indexed.cycles.map(c => `=== ${c.at} ${c.action} ${(c.lanes || []).join('+')} ===\n${c.prompt.split('. ').join('.\n  ')}`).join('\n'));
 });
 
 test('the decision history: a runner restarted every pass (as a replay runs, one pass per process, its state from the file) shows the same history text as one live runner over the same bars; the text is in every prompt it names', async () => {

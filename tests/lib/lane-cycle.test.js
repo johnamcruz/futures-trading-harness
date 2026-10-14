@@ -203,3 +203,15 @@ test('boundHistory / laneHistory: 10 decisions kept per lane; a cycle shows each
   assert.ok(!LC.laneHistory(withFive, { closed: ['1m'], first: '15m' }).some(x => x.lanes[0] === '5m'), 'no open trade: not shown');
   assert.deepStrictEqual(LC.laneHistory([], { closed: ['1m'], first: '3m' }), []);
 });
+
+test('laneBarsOf: the other lanes\' bars that closed this cycle, by family root and minutes; the first lane\'s are its briefing', () => {
+  const items = [
+    { symbol: 'MNQ', lane: 0, minutes: 3, bar: { t: '2026-10-07T13:57:00.000Z' } },
+    { symbol: 'MNQ', lane: 1, minutes: 1, bar: { t: '2026-10-07T13:59:00.000Z' } },
+    { symbol: 'MES', lane: 2, minutes: 5, bar: { t: '2026-10-07T13:55:00.000Z' } },
+    { symbol: 'MES', lane: 1, minutes: 1, bar: {} },
+  ];
+  assert.deepStrictEqual(LC.laneBarsOf(items), { MNQ: { 1: '2026-10-07T13:59:00.000Z' }, MES: { 5: '2026-10-07T13:55:00.000Z' } });
+  assert.deepStrictEqual(LC.laneBarsOf([]), {});
+  assert.deepStrictEqual(LC.laneBarsOf(null), {});
+});

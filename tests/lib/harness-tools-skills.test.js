@@ -68,28 +68,32 @@ test('preflight: an opencode run\'s opencode.json must be the one generated for 
   const { roleSkillsMismatch } = require('../../scripts/lib/harness-tools/preflight');
   const { expectedFiles } = require('../../scripts/lib/harness-sync');
   const dir = tmpDir();
-  const oc = { PWD: dir, OPENCODE_CONFIG_CONTENT: '{}' };
-  assert.strictEqual(roleSkillsMismatch(ROOT, { PWD: dir }), null, 'not an opencode run (no FTH_ROLE_SKILLS)');
-  // Another harness's run (the runner sets full for it, no opencode run config): its workspace's opencode.json isn't its.
+  const oc = { PWD: dir };
+  assert.strictEqual(roleSkillsMismatch(ROOT, { PWD: dir }, 'opencode'), null, 'no FTH_ROLE_SKILLS');
+  // Another harness's run (the runner sets full for it): its workspace's opencode.json isn't its, whatever the
+  // environment holds (an OPENCODE_CONFIG_CONTENT inherited from the user's shell included). The runner config decides.
   fs.writeFileSync(path.join(dir, 'opencode.json'), expectedFiles(ROOT)['workspace/opencode.json']);
-  assert.strictEqual(roleSkillsMismatch(ROOT, { PWD: dir, FTH_ROLE_SKILLS: 'full' }), null, 'not an opencode run');
+  for (const harness of ['claude', 'codex', 'qwen', null]) {
+    assert.strictEqual(roleSkillsMismatch(ROOT, { PWD: dir, FTH_ROLE_SKILLS: 'full', OPENCODE_CONFIG_CONTENT: '{}' }, harness), null, `not an opencode run: ${harness}`);
+  }
+  assert.match(roleSkillsMismatch(ROOT, { PWD: dir, FTH_ROLE_SKILLS: 'full' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=full/, 'opencode, without its run config in the env: still checked');
   fs.unlinkSync(path.join(dir, 'opencode.json'));
   // Full (on request): whatever the file (a missing or hand-edited one included), but an index-mode one.
-  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }), null);
+  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), null);
   // The committed file is the default, index: an index run takes it as is; a full run refuses it.
   fs.writeFileSync(path.join(dir, 'opencode.json'), expectedFiles(ROOT)['workspace/opencode.json']);
   assert.strictEqual(expectedFiles(ROOT)['workspace/opencode.json'], expectedFiles(ROOT, { mode: 'index' })['workspace/opencode.json']);
-  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }), null);
-  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }), /not the one generated for FTH_ROLE_SKILLS=full/);
+  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }, 'opencode'), null);
+  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=full/);
   // A full-mode file: a full run takes it; an index run refuses it.
   fs.writeFileSync(path.join(dir, 'opencode.json'), expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
-  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }), null);
-  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }), /run FTH_ROLE_SKILLS=index node scripts\/sync-harness\.js/);
+  assert.strictEqual(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), null);
+  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }, 'opencode'), /run FTH_ROLE_SKILLS=index node scripts\/sync-harness\.js/);
   // An index-mode file from another checkout (not byte for byte this one's) is refused in either mode.
   fs.writeFileSync(path.join(dir, 'opencode.json'), expectedFiles(ROOT, { mode: 'index' })['workspace/opencode.json'].replace('"autoupdate": false', '"autoupdate": false '));
-  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }), /not the one generated for FTH_ROLE_SKILLS=full/);
-  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }), /not the one generated for FTH_ROLE_SKILLS=index/);
-  assert.throws(() => roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'bogus' }), /one of full, index/);
+  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'full' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=full/);
+  assert.match(roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'index' }, 'opencode'), /not the one generated for FTH_ROLE_SKILLS=index/);
+  assert.throws(() => roleSkillsMismatch(ROOT, { ...oc, FTH_ROLE_SKILLS: 'bogus' }, 'opencode'), /one of full, index/);
 });
 
 test('the runner: an opencode run carries its FTH_ROLE_SKILLS (index by default); every other harness\'s run carries full', () => {

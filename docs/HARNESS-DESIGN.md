@@ -87,7 +87,10 @@ necessary (`SITUATIONAL`, `scripts/lib/trading/skills-loaded.js`), the order
 gate counts the role's report for an entry only if the role looked it up
 during that call: the harness tool records each lookup with the role it names
 (`scripts/lib/trading/skill-lookups.js`), since a subagent's own tool calls
-are not in the session's transcript. Such a role is never served from the
+are not in the session's transcript. With several lanes, the candidates of
+each other lane whose bar closed this cycle count too (that lane's briefing on
+its bar, else its signal record on its bar, with every trend rule; neither:
+every lookup is required). Such a role is never served from the
 report cache on that bar, and with no current briefing every situational
 lookup of its index is required (fails closed). Exits are never held. Permissions follow opencode's rule (the last matching rule wins;
 headless, anything not allowed is refused): the session denies everything,

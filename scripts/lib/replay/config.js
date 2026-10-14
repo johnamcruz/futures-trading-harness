@@ -71,7 +71,9 @@ const STRIPPED = Object.keys(PINNED);
 const GATE_ENV = ['FTH_LOSS_COOLDOWN_MIN', 'FTH_MAX_CONSECUTIVE_LOSSES', 'FTH_MAX_CORRELATED_POSITIONS', 'FTH_MAX_DAILY_LOSSES', 'FTH_MAX_ENTRIES_PER_DAY',
   'FTH_MIN_CONFLUENCE', 'FTH_MTF_MAX_AGE_MIN', 'FTH_PLAN_MAX_AGE_MIN', 'FTH_SIGNAL_MAX_AGE_MIN', 'FTH_SIGNAL_MAX_AGE_BARS', 'FTH_ENTRY_HOURS', 'FTH_NO_ENTRY_WINDOWS',
   'FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_STRATEGIES_DIRS', 'FTH_ACCOUNTS_DIRS', 'FTH_DISABLED_HOOKS', 'FTH_HOOKS_ENABLED',
-  'FTH_HOOK_PROFILE', 'FTH_LANE_TIMEOUT_MS', 'FTH_UNKNOWN_ORDER_GRACE_MS'];
+  'FTH_HOOK_PROFILE', 'FTH_LANE_TIMEOUT_MS', 'FTH_UNKNOWN_ORDER_GRACE_MS',
+  // How the roles' prompts carry their skills (role-skills.js): an index run and a full run are different runs.
+  'FTH_ROLE_SKILLS'];
 // A live broker's variable in a replay process: set (so no .env file fills it) and useless.
 const DISABLED = 'disabled-by-fth-replay';
 // Runner fields the driver owns: where the run's files go, and alerts (a replay pages no one).
@@ -235,6 +237,9 @@ function brokerErrors(env, run) {
 function configHash(run, base = process.env) {
   const env = replayEnv(base, run, { at: run.start });
   const gate = Object.fromEntries(GATE_ENV.filter(k => base[k] !== undefined && base[k] !== '').map(k => [k, base[k]]));
+  // The role-skills mode as the runner reads it (unset or blank is index, the default): one mode, one hash.
+  if (gate.FTH_ROLE_SKILLS !== undefined && String(gate.FTH_ROLE_SKILLS).trim() === 'index') delete gate.FTH_ROLE_SKILLS;
+  else if (gate.FTH_ROLE_SKILLS !== undefined) gate.FTH_ROLE_SKILLS = String(gate.FTH_ROLE_SKILLS).trim();
   const b = activeBroker(env);
   // The variables the driver sets are the run's own; maxDailyLoss is only when it sets it (a combine replay):
   // otherwise the user's value is a broker setting of the run, so a change makes it another run.

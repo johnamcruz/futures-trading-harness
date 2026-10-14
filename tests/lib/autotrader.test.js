@@ -1051,3 +1051,17 @@ test('loadList: the gate\'s skills, its parenthetical when the harness is gated,
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.strictEqual(loadList(false), `${REQUIRED_FOR_ENTRY.slice(0, -1).join(', ')}, and ${REQUIRED_FOR_ENTRY[REQUIRED_FOR_ENTRY.length - 1]}`);
 });
+
+test('childEnv: several lanes, the gate learns each symbol\'s lanes whose bar closed this cycle (FTH_CYCLE_LANE_BARS); one lane or a manual run: none', () => {
+  const ctx = { symbols: [
+    { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, lane: '3m' },
+    { symbol: 'MNQ', bar: { t: '2026-10-07T13:59:00.000Z' }, lane: '1m' },
+  ] };
+  const env = childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"stale":1}' }, ctx);
+  assert.deepStrictEqual(JSON.parse(env.FTH_CYCLE_LANE_BARS), { MNQ: { 3: '2026-10-07T13:57:00.000Z', 1: '2026-10-07T13:59:00.000Z' } });
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  assert.deepStrictEqual(loadConfig(env).cycleLaneBars, { MNQ: { 1: '2026-10-07T13:59:00.000Z', 3: '2026-10-07T13:57:00.000Z' } });
+  // One lane (no lane on the items) or no context: an inherited value is dropped.
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }, { symbols: [{ symbol: 'MNQ', bar: { t: 'x' } }] }).FTH_CYCLE_LANE_BARS, undefined);
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }).FTH_CYCLE_LANE_BARS, undefined);
+});

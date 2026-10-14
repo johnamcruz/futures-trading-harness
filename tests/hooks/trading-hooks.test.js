@@ -2409,3 +2409,35 @@ test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a rol
   const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, index);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
+
+test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s candidate requires the lookups in the default mode; with them it goes; an exit is never held', () => {
+  const { writeBriefing, writeFrameBriefing } = require('../../scripts/lib/trading/briefing');
+  const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');
+  const lane = '2026-10-07T14:29:00.000Z';
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_LANE_BARS: JSON.stringify({ MNQ: { 1: lane } }) });
+  // The runner's 3m briefing: no candidate. The 1m lane's briefing on the bar that closed this cycle: a with-trend one.
+  writeBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 3, sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [] } } } });
+  writeFrameBriefing(env.FTH_HOME, { symbol: 'MNQ', minutes: 1, asOf: lane, closedAt: '2026-10-07T14:30:00.000Z', sections: { bar: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'allows' }] } } } });
+  const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
+  const T = 1.8e12;
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ev('skill', { name })),
+    ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
+      .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[roles-ran\][^\n]*market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  assert.match(r.stderr, /risk-manager reported without looking up confluence-counting, invalidation/);
+  // Without the lane in the environment, the 3m briefing alone: nothing required.
+  const { FTH_CYCLE_LANE_BARS: _lanes, ...oneLane } = env;
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, oneLane).stderr, /roles-ran/);
+  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+  const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
+  look('market-structure-analyst', 'breakout-vs-fakeout', 15);
+  look('market-structure-analyst', 'mtf-breakout', 15);
+  look('risk-manager', 'confluence-counting', 31);
+  look('risk-manager', 'invalidation', 31);
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
+});
