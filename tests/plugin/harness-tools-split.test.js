@@ -162,8 +162,8 @@ const OP_BEFORE_SHA256 = '6d319c1504ba47d0c7bcae2931a69f48f720225000dacb946959ae
 const OP_HOMES = ['position-sizing', 'order-plan'];
 const OP_ALLOWED = [
   { old: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows it: the stop in points and whole ticks, the risk per contract, the size and where it came from (1 for a rules strategy, the size-1 rule; the verdict\'s, within the attempt\'s budget, for a policy strategy), and the dollar risk.',
-    now: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill).',
-    reason: 'what it shows is the order_plan row (stop and target in points and whole ticks, how the size was derived, $ risk) plus order-plan\'s "Its working includes the risk per contract."' },
+    now: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows its working (the `order-plan` skill); for a composed trade, the compose record (its `maxSize`: the most `risk.max_risk_usd` allows).',
+    reason: 'what it shows is the order_plan row (stop and target in points and whole ticks, how the size was derived, $ risk) plus order-plan\'s "Its working includes the risk per contract."; a composed trade\'s numbers are its compose record\'s (the skill audit, X2)' },
 ];
 
 test('harness-tools retired: every unit of the old skill is in exactly one new home, the one its old lines map to, byte-for-byte', () => {
@@ -366,7 +366,8 @@ test('trade-session step 4 is main\'s, byte for byte (in trade-plan); the head t
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');
   const tp = skill('trade-plan');
   const body = tp.slice(tp.indexOf('## How It Works\n\n') + '## How It Works\n\n'.length, tp.indexOf('## Examples'));
-  assert.strictEqual(`### 4. Plan\n\n${body}`, read(STEP4), 'step 4 byte-equal to main');
+  // Byte for byte, after the edits made since, each with its reason (trade-plan-edits.js): no other change.
+  assert.strictEqual(`### 4. Plan\n\n${body}`, require('./trade-plan-edits').edited(read(STEP4)), 'step 4 byte-equal to main, with its listed edits');
   assert.match(skill('trade-session'), /### 4\. Plan\n\nThe `trade-plan` skill/);
   // order-plan is referenced, not loaded every cycle: not in the gate's list, nor in the prompt's.
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');

@@ -26,6 +26,10 @@ description: Use when a position is open - its stop, the plan's management, the 
   market (time stop). Each stop move and close goes through the
   trade-executor role, as all management does. The strategy bodies' "don't move the stop yourself"
   means: not while the runner trails it.
+- **A composed trade** (`setup:trade_lifecycle`): its bracket holds the
+  compose record's stop and target; under `prop_portfolio` the rulebook's
+  trail manages it, which the runner moves. Never loosen the stop; it moves
+  toward the market only.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO

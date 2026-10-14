@@ -290,7 +290,7 @@ test('the skills say an autonomous entry waits for its roles, and what the plan 
     /the refused `trade-executor` call itself ends the round, so\s+report the block and end the cycle \(step 6\)/,
     /in an autonomous\s+run there is no stand-in: without the roles' reports, no entry/,
     /until\s+`risk-manager` has returned twice this cycle \(phase 1 and phase 2\)/,
-    /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way \(the candidate's `inTheWay` in the briefing's\s+`m3` `candidates`: the first level in its direction in points and R, where\s+1R is its own stop/,
+    /structure bias and the level the entry and stop sit against/, /the VWAP side, the value area or POC, the nearest\s+liquidity in the trade's way \(`inTheWay`, the compose record's or a\s+candidate's: the first level in its direction in points and R, where 1R is\s+its own stop/,
     /multi-timeframe alignment for the side \(aligned, pullback, mixed, counter\)\s+and the size it implies/, /A plan\s+that can't name them isn't ready/,
   ]) assert.match(ts, re);
   assert.match(read('skills/gate-refusals-cycle/SKILL.md'), /\| `\[roles-ran\] … not returned yet: <roles>` \|[^\n]*End the cycle \(trade-session step 6\): the refused `trade-executor` call ends the round/);
@@ -327,7 +327,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(read('skills/htf-to-ltf/SKILL.md'), /\| `mixed` \|[^\n]*Step 4 of the priority order \(strategy-library\) sets the size/);
   assert.match(read('skills/strategy-library/SKILL.md'), /Wherever a step halves, half is `floor\(size \/ 2\)`, and 0 means no trade \(so\s+at size 1 every halving is a skip\)\./);
   assert.match(read('skills/strategy-library/SKILL.md'), /`pullback` → no trade until the trigger timeframe turns back with the\s+bias \(a shift, a reclaim\), then full; `mixed` → half;/);
-  assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target\./);
+  assert.match(read('skills/strategy-library/SKILL.md'), /fade it only at a higher-timeframe level, at half size and the nearest\s+target; a composed one needs a 15m or 1h CHoCH its way\./);
   for (const a of ['trend-momentum-analyst', 'volume-liquidity-analyst']) assert.match(read(`agents/${a}.md`), /\nBias: long \| short \| neutral \(confidence: low \| medium \| high\)\n/, a);
   assert.match(rm, /^tools: .*mcp__harness__bar_briefing/m);
   assert.match(rm, /The market facts come from the bar briefing[^]*?don't fetch bars or run\s+`strategies_scan`, `market_snapshot` or `mtf_read` again for what they hold/);
@@ -401,7 +401,8 @@ test('the order-flow activation says what holds: one runner per broker account, 
     const t = read(f).replace(/\s+/g, ' ');
     assert.match(t, /Within one runner \(one harness home\) the gate holds one cushion and one position at a time across the account/, f);
     assert.match(t, /second runner on the same broker account must not be started|never start a second runner on the same broker account/, f);
-    assert.match(t, /a per-account lock is coming/, f);
+    // The account lock (account-lock.js) is built: the skill says it refuses a second runner; the README still says coming.
+    assert.match(t, f.startsWith('skills/') ? /the account lock refuses one/ : /a per-account lock is coming/, f);
   }
   // Without flow the flow conditions are false; value_area can still confirm by range expansion.
   for (const f of ['README.md', 'docs/ORDER-FLOW.md', 'docs/HARNESS-DESIGN.md']) {

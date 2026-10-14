@@ -29,8 +29,8 @@ From the highest timeframe down, for each side:
 | `mixed` | timeframes disagree without a clear pullback | Step 4 of the priority order (strategy-library) sets the size. Target the nearest opposing level; skip in a quiet session |
 | `counter` | the highest timeframe is against it | Step 4 of the priority order (strategy-library); a reversal at a higher-timeframe level is its step 2, and the plan says why |
 
-A policy strategy's verdict is a ceiling: the read halves or skips it like
-any setup (the priority order, strategy-library).
+For a composed trade the label is a reason in its plan, never a cut (the
+priority order, strategy-library).
 
 Reversal strategies (`crt_1h`, `crt_4h`, `ofi_absorption`,
 `value_area_reentry`) trade

@@ -52,11 +52,13 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    `risk.max_risk_usd` if it sets one (its components' caps don't apply). Everything else (stop first, protective
    stop always working) still applies.
 7. **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there. Never round a half up.
+   trade, computed as it says there. Never round a half up. A composed
+   trade is never halved: its size is the one you state, under the caps.
 8. **The arithmetic from `order_plan`.** For a scan candidate (or a policy
    verdict), the harness tool `order_plan` does steps 2 and 4's arithmetic
    for the strategy and side you chose and shows its working (the
-   `order-plan` skill). Use its numbers
+   `order-plan` skill); for a composed trade, the compose record (its
+   `maxSize`: the most `risk.max_risk_usd` allows). Use its numbers
    instead of computing them by hand. The budget (step 3) and the caps are
    still your judgement: a budget below its risk is a skip, and a size you
    are allowed to raise (30+ reviewed trades) changes only `size`, with the
@@ -71,7 +73,7 @@ remainingBeforeLimit $600 → 25% = $150; plan risk $75; cushion $1,800 → 10% 
 budget = $75 → size = floor(75 / 35) = 2 → capped to 1 (setup has 12 reviews)
 Plan: 1 MNQ, risk $35.
 
-order_plan for an orb long on MNQ, stop distance 5.25 pts:
-stop 5.25 pts = 21 ticks ($10.50/MNQ contract), size 1, risk $10.50 = 1 x 21 ticks x $0.50/tick
-(the same distance on MES: 21 ticks x $1.25 = $26.25)
+compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):
+risk.max_risk_usd $100 -> maxSize 1; size 1, risk $55.50 = 1 x 111 ticks x $0.50/tick
+(the same stop on MES: 111 ticks x $1.25 = $138.75, over $100: maxSize 0)
 ```

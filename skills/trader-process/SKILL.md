@@ -16,9 +16,8 @@ It adds no filter and no veto:
 - **The priority order decides** (strategy-library, "The priority
   order"): take, skip and size. Only its hard stops and the gate's end a
   plan early.
-- **No setup without a fired strategy.** VWAP, value, levels, higher
-  timeframes and broker fields are confluence only: they never make a
-  trade on their own.
+- **A setup is a combination of reads** you state, step by step, and
+  `compose_check` verifies (`trade_lifecycle`); no one read makes a trade.
 - **Management always runs.** Protecting, managing and exiting an open
   position, and the end-of-day flatten, go ahead whatever steps 1-8 say;
   a no-entry window or a wait never blocks an exit or a risk reduction.
@@ -34,17 +33,14 @@ It adds no filter and no veto:
    Attempt lines).
 3. **Location.** Price vs VWAP, value, nearest levels, sweeps.
    Read: `levels-and-reactions`, `breakout-vs-fakeout`.
-4. **Setup.** Which strategy fired, which side. Continuation is a strategy
-   without `mtf: reversal`, with the Trend rule's prevailing trend;
-   reversal is one with it (a fade). Its STRATEGY.md and the
-   priority order judge it, not this label. Read: `pullback-vs-reversal`, `cisd`;
-   setups: `rejection`, `breakout`.
-5. **Confluence.** Count the six items of `confluence-counting`; the
-   candidate's own `values` are always neutral.
-6. **Entry.** Its trigger fired on a closed bar; never anticipate.
+4. **Setup.** The setup reads and the side (`trade_lifecycle`), with the
+   trend or against it. Read: `pullback-vs-reversal`, `cisd`; setups:
+   `rejection`, `breakout`.
+5. **Confluence.** Count the six items of `confluence-counting`.
+6. **Entry.** A closed bar's entry reads; never anticipate.
    Read: `candle-reading`.
-7. **Risk.** Stop and size (`order_plan`, the priority order); its exit
-   (target or trail); the room.
+7. **Risk.** Stop (`invalidation`), size, exit (target or trail), the
+   room; the numbers from `order_plan` or the compose record.
 8. **Decision.** Take, skip or wait, decided with the priority order;
    write its ONE main reason. The counts never overrule it.
 9. **Management.** What invalidates the trade; its exit. Never loosen the
@@ -70,26 +66,25 @@ writes no PLAN line.
 
 Your reasoning, not a claim list. If your role's instructions give a
 fact-claim line, state facts only there, in its forms. Fields are the
-briefing's (`m3`, `m15`, `h1`, and a `candidate` in `m3.candidates`):
-on your own timeframe's briefing `m3` is its `bar`; `rule`, `vwap`,
-`location` are the runner's; candidates and `nearestLiquidity`, the
-briefing's of the lane trading them.
+briefing's (`m3`, `m15`, `h1`): on your own timeframe's briefing `m3` is
+its `bar`; `rule`, `vwap`, `location` are the runner's; `nearestLiquidity`,
+the briefing's of the lane trading.
 
 ```text
 PLAN:
 1 HTF: 4h <h1.h4.trend>, 1h <h1.h1.trend>, 15m <m15.frame.trend>, bias <long|short|neutral>, rule <m3.trendRule>
 2 Context: window <m3.window>, entries <m3.windowEntries>, news <clear|blackout: m3.news.inBlackout>, regime <m3.regime.primary>, account <phase 1 Budget, Attempt>
 3 Location: vwap <m3.vwap.side>, value <m3.location.priorValue>, nearest <m3.nearestLiquidity>
-4 Setup: <candidate.name candidate.direction continuation|reversal | none>
+4 Setup: <side, the setup reads | none>
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
-6 Entry: trigger <fired|none>
-7 Risk: stop <order_plan ticks>, size <n>, exit <target R|trail>, room <candidate.inTheWay.R vs candidate.needR>
+6 Entry: <the entry reads | none>
+7 Risk: stop <ticks>, size <n>, exit <target R|trail>, room <the first level in the way, R>
 8 Decision: <take|skip|wait> - <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
 
-A null `candidate.inTheWay` with a stop (`stopPoints`) means nothing in
-its way: room enough, not `unknown`. The cycle result's reason is line 8's.
+No level in the way (a null `inTheWay`) with a stop means room enough,
+not `unknown`. The cycle result's reason is line 8's.
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
 close 9; excessive abstention 8; wrong stated reason the false line's;
@@ -102,10 +97,10 @@ PLAN:
 1 HTF: 4h up, 1h up, 15m up, bias long, rule prevailing trend 4h up
 2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
-4 Setup: vwap_reclaim long continuation
+4 Setup: long, 15m rejected prior vah up
 5 Confluence: for 4, against 0, neutral 2: aligned, VWAP, level, momentum
-6 Entry: trigger fired
-7 Risk: stop from order_plan, size 1, exit trail, room enough
-8 Decision: take - aligned continuation with room (priority order: full)
+6 Entry: 3m close top, 3m momentum up
+7 Risk: stop 111 ticks, size 1, exit target 2.08R, room enough
+8 Decision: take - aligned continuation with room, compose_check OK
 9 Manage: flat
 ```

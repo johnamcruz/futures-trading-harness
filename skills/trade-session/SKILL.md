@@ -94,10 +94,10 @@ prompt states the recorded rule; interactively, `bars_fetch` with `record`
 (or `mtf_read` with `record` and `symbol`) records it (the gate refuses
 trend entries unless the recorded bar closed less than 15 minutes ago: fetch
 fresh bars, re-recording an old file doesn't help). Never
-argue a trend strategy into a counter-trend trade. The read for the candidate's side
-sets its size by the priority order (strategy-library, step 4). Put the read in the plan entry.
-A policy verdict (below) is a ceiling: the priority order halves or skips it
-like any setup.
+argue a trend strategy into a counter-trend trade; a composed one goes
+against it only with a true 15m or 1h CHoCH its way among its reads
+(`bos-vs-choch`). Put the read for the side in the plan entry. A policy
+verdict is a ceiling, never an order.
 
 **The trigger is checked too.** The scan's `candidate` is the trigger: the
 gate refuses a rules strategy's entry unless that strategy fired, on that
@@ -106,7 +106,8 @@ never more than 45 minutes ago (3 min on 1m, 9 min on 3m, 45 min on 15m
 and 1h), per the signal record
 (the runner records every bar; interactively, `strategies_scan` with the
 bars file, `symbol`, and `record: true`). A different setup tag on the
-same trade is refused: enter only on the strategy that fired.
+same trade is refused: enter only on the strategy that fired. A composed
+entry's trigger is this bar's compose record (`trade_lifecycle`).
 
 **Lean cycle** (the prompt says "lean"): the `lean-cycle` skill.
 
@@ -121,13 +122,11 @@ its PLAN block before your result line; the checks below fill its lines.
 It orders the thinking and adds no filter: the priority order decides.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
-  the rule for every setup, a policy verdict too. Apply its steps in order;
-  the size is the smaller of the verdict's (or position-sizing's) and what
-  they allow.
+  the rule for every setup, a policy verdict too. Apply its steps in order.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.
-- No candidate, a failed skip rule, an event within 15 minutes, or an
+- No setup (no candidate, no `compose_check` OK), a failed skip rule, an event within 15 minutes, or an
   unanswered red flag → **no trade**: journal a short `note` with the reason
   and what would change it, and end.
 
@@ -158,10 +157,9 @@ to watch next. After the position closes, run trade-review.
 ## Examples
 
 ```text
-Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium, scan: orb
-candidate long), volume long (rel-vol 1.6x), no events until 14:00, risk budget
-$40/trade. orb skip rules clear. Plan (numbers from order_plan): long 21503.25,
-stop 21498.00 (1R = 5.25 pts = 21 ticks = $10.50), 1 MNQ; exit: trail from +2R
-(21513.75), giving back 0.5R.
-Verdict APPROVE. Executed with a stop bracket only, stop working.
+Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium), volume
+long (rel-vol 1.6x), no events until 14:00. compose_check long OK. Plan (numbers
+from the record): limit long 21540.25, stop 21512.50 (111 ticks = $55.50),
+target 21598.00 (231 ticks, 2.08R), 1 MNQ.
+Verdict APPROVE. Executed with stop and target brackets, stop working.
 ```

@@ -18,29 +18,24 @@ P&L, and for a prop attempt the cushion and size budget), skip rules checked,
 analyst agreement, and what each role reported that the plan rests on: the
 structure bias and the level the entry and stop sit against
 (market structure); the VWAP side, the value area or POC, the nearest
-liquidity in the trade's way (the candidate's `inTheWay` in the briefing's
-`m3` `candidates`: the first level in its direction in points and R, where
-1R is its own stop; with `order_plan`'s stop, check there is room to the
-target or the trail's activation, and a level closer than 1R is a skip under
-the skip rules that name it), and the session window (the briefing's `m3`
+liquidity in the trade's way (`inTheWay`, the compose record's or a
+candidate's: the first level in its direction in points and R, where 1R is
+its own stop: check there is room to the target or the trail's
+activation), and the session window (the briefing's `m3`
 `windowText`: whether entries are allowed and until when; volume-liquidity, session-timing); the regime and momentum (trend-momentum); the
 multi-timeframe alignment for the side (aligned, pullback, mixed, counter)
 and the size it implies; and risk-manager phase 1's budget and pace. A plan
 that can't name them isn't ready. Add the
 tag `paper` in plan-only mode.
 
-The exit follows the strategy's `exit` (shown in the scan):
+The exit: a composed trade's target is the record's level (`trade_lifecycle`);
+a policy's or a rules strategy's follows its `exit` (the rulebook, the scan):
 
 - **Trailing:** stop only, no target order. The runner (or you, without one)
   trails it from `trailActivateR` with `trailGivebackR` give-back; read both
-  from the scan's `exit`, don't assume them.
+  from its `exit`, don't assume them.
 - **Target:** stop and target at `targetR` (or `risk.min_rr`) times the stop
   distance.
-- **Target level:** with `exit.target` the scan gives `targetDistance`: the
-  target is the signal bar's close ± that distance (e.g. a CRT range's far
-  side).
-- **Time stop:** with `maxBars`, close at market after that many bars in the
-  trade if neither the stop nor the target has filled.
 
 Tick sizes and values are the broker's: the harness records them when
 `search_contracts` or `get_contract` returns the contract, and the gate,
@@ -54,10 +49,11 @@ target toward it; bracket ticks = `ceil(distance / tickSize)`, the same
 numbers in the rationale and the brackets. The scan's distances are price
 points, not ticks: its summary shows both (`stop 5.25 pts = 21 ticks`).
 
-**The exact numbers come from `order_plan`**, not from your own arithmetic:
-once you have chosen the strategy and the side (the steps above: the trigger,
-the trend rule, the skip rules, the account), call it with them, e.g.
-`order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "orb", "side": "long"}`.
+**The exact numbers come from `order_plan`** (a rules strategy, a policy
+verdict) **or the compose record** (`trade_lifecycle`),
+not from your own arithmetic: once you have chosen the strategy and the
+side, call it with them, e.g.
+`order_plan {"bars": "<bars file>", "symbol": "MNQ", "strategy": "<name>", "side": "long"}`.
 It is a calculator, not a second opinion: it doesn't choose the setup, the
 side, or whether to trade. It shows its working (the entry reference, the
 stop and target in points and in whole ticks, the stop below a long's entry
@@ -74,16 +70,14 @@ a verdict for an older bar than the last one recorded: no entry until the
 next setup's verdict. Its size is the starting size:
 1 for a rules strategy (position-sizing's size-1 rule) and, for a policy,
 the verdict's cut to the attempt's size budget now, which is the most a
-policy entry may have. A different size from
-your plan changes only `size`, and the risk scales with it: smaller for a
-`mixed` read or a reversal fade, and, for a rules strategy, larger only as
-position-sizing allows (a setup with 30+ reviewed trades and positive
-expectancy, within the budget and caps). A manual
+policy entry may have; a composed trade's is the size you stated, at most
+the record's `maxSize`. A different size from
+your plan changes only `size`, and the risk scales with it. A manual
 strategy has no order_plan (its stop is your read of STRATEGY.md): work its
 numbers by the rules above and position-sizing.
 
 ## Examples
 
 ```text
-plan: orb long, stop and size from order_plan
+plan: trade_lifecycle long, stop 111 ticks, target 231 ticks, size 1 from the compose record
 ```

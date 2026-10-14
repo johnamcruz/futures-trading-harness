@@ -176,7 +176,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].
 - `harness-root` (skills/harness-root/SKILL.md): Find the harness root (<root>) for absolute paths.
 - `htf-to-ltf` (skills/htf-to-ltf/SKILL.md): Use when timeframes disagree - alignment labels, reversals, HTF levels.
-- `invalidation` (skills/invalidation/SKILL.md): Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong and what makes management exit. Never moves a stop; never a veto.
+- `invalidation` (skills/invalidation/SKILL.md): Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong, the stop read, what makes management exit; never a veto.
 - `kill-switch` (skills/kill-switch/SKILL.md): Use when an entry is refused with [kill-switch], [allowed-accounts] or [account-lock].
 - `lean-cycle` (skills/lean-cycle/SKILL.md): Use when the prompt says lean - a 1-minute cycle with no parallel analysts.
 - `leftover-orders` (skills/leftover-orders/SKILL.md): Use when flat with working orders - cancel leftovers, keep only a bracketed planned entry.

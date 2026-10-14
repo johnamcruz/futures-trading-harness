@@ -106,7 +106,9 @@ const PINS = {
   ],
   invalidation: [
     'This skill never moves, widens or replaces it.',
-    'a fact, never a reason to change the stop.',
+    'a fact, never a reason to change the stop;',
+    // The stop read is this skill's (step stop): its forms and the code's placement and floor (trade-lifecycle.js).
+    'Code places the stop one tick beyond it, at least the larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never widened',
     'acting on it is management\'s call under trade-session, never a wider stop.',
     'Stops move toward the market only.',
     'weighs by its timeframe against the trade\'s own: on the trade\'s timeframe or higher',
@@ -378,8 +380,8 @@ function stopsNeverWiden(text) {
 test('basics skills: no example moves a stop away from risk', () => {
   for (const s of SKILLS) assert.ok(stopsNeverWiden(read(file(s))), s);
   const inv = read(file('invalidation'));
-  assert.ok(!stopsNeverWiden(inv.replace('stopped at 21499.00', 'stopped at 21497.00')));
-  assert.ok(!stopsNeverWiden(inv.replace('traded through the swing low', 'the stop moved to 21497.00 and traded through the swing low')));
+  assert.ok(!stopsNeverWiden(inv.replace('stopped at 21512.50', 'stopped at 21510.50')));
+  assert.ok(!stopsNeverWiden(inv.replace('traded through the 15m low', 'the stop moved to 21510.50 and traded through the 15m low')));
   assert.ok(!stopsNeverWiden(inv.replace('in one move', 'in one move; the stop was widened')));
 });
 
@@ -464,8 +466,8 @@ test('basics skills: each role carries exactly its own, says to load them, and t
   const tp = read('skills/trader-process/SKILL.md');
   const step = n => tp.slice(tp.indexOf(`${n}. **`), tp.indexOf(`${n + 1}. **`) > 0 ? tp.indexOf(`${n + 1}. **`) : tp.indexOf('### Roles'));
   const POINTERS = { 1: ['trend-vs-range'], 3: ['levels-and-reactions', 'breakout-vs-fakeout'], 4: ['pullback-vs-reversal', 'cisd'], 6: ['candle-reading'], 9: ['invalidation'] };
-  // Step 5 counts confluence-counting's six items, and the candidate's own values are always neutral.
-  assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`; the candidate\'s own `values` are always neutral.'));
+  // Step 5 counts confluence-counting's six items.
+  assert.ok(flat(step(5)).includes('Count the six items of `confluence-counting`.'));
   for (const [n, list] of Object.entries(POINTERS)) for (const s of list) assert.match(step(Number(n)), new RegExp(`Read: [^\\n]*\`${s}\``), `step ${n}: ${s}`);
   assert.match(flat(step(4)), /setups: `rejection`, `breakout`\./);
   // One home per topic: the older skills point to the new ones instead of restating them.

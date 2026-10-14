@@ -17,8 +17,8 @@ with no profile: the `prop-pacing-judgment` skill.
 ### Harness-tracked attempts (a policy strategy)
 
 A policy strategy (`signal: policy`, e.g. `prop_portfolio`) is the prop
-challenge as a strategy: it trades the setups of the rules strategies it
-lists on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
+challenge as a strategy: it trades its component's setups
+(`trade_lifecycle`) on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup gets the largest size its
@@ -44,13 +44,15 @@ it:
   blocked, and each policy strategy's live verdict. Read it before planning;
   quote it in the `plan` entry. The size budget is per policy strategy (each
   has its own `sizing`); the gate checks the verdict's size against it.
-- At each setup the runner records a verdict: the strategy that fired, the
-  side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
+- Entries under an attempt go through `prop_portfolio`'s verdict on
+  `trade_lifecycle`: `compose_check` asks for it, with the record's side
+  and stop (`trade_lifecycle`), and records it at the record's bar: the
+  strategy, the side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
   size, the stop in ticks, and its multiplier: the share of the budget the
   rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is
   an item whose fact is missing or stale). The size is already sized at it. **A verdict is a ceiling, never an order**:
-  take it only when the priority order (the strategy-library skill) says so (it may
-  skip it or halve it), and then exactly as given: rationale
+  take it only when the priority order (the strategy-library skill) says so,
+  and then exactly as given: rationale
   `setup:<policy strategy> ...`, that contract and side, at most that size,
   `stopLossBracket.ticks` equal to its stop ticks (`order_plan` with the
   policy strategy's name, the bars file and its `symbol`, the micro whose
@@ -58,8 +60,7 @@ it:
   gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
   timeframe (the runner records each bar it scans). Once a newer bar is recorded
-  without a verdict for its setup (for example the component fired again and
-  no new verdict came), the old one is refused (`[policy] ... the latest
+  without a verdict for its setup, the old one is refused (`[policy] ... the latest
   verdict is for the 3m bar opened X; the setup on the bar opened Y has no
   verdict yet`), as is a verdict that names no bar: stand aside until the
   next setup's verdict. A verdict permits one
@@ -67,25 +68,18 @@ it:
   or route around it. Once in, the policy strategy's own exit (its trail)
   manages the trade; nothing closes it early past the ratchet.
 - **Before the first live entry** (the user's steps, not an agent's): the
-  policy strategy must be `active` (`prop_portfolio` and `prop_flow_1m` are;
-  their sizing rules decide each verdict), and the user starts the attempt
+  policy strategy must be `active` (`prop_portfolio` is; its sizing rules
+  decide each verdict), and the user starts the attempt
   with `combine.js start`. A policy strategy at `paper` stays so until the
   user activates it, and every verdict entry is refused
   (`[strategy] ... status "paper"`): report it and stand aside.
-- **Two policies, one account.** `prop_portfolio` (3-minute) and
-  `prop_flow_1m` (1-minute) both trade the same account (the `account` both
-  name). The runner trades one
-  timeframe, so only one of them has setups in a run: enter only as the
-  policy its verdict names (`setup:<that policy>`). Both draw on the one
-  attempt. Within one runner (one harness home) the gate holds one cushion
-  and one position at a time across the account; it does not see another
-  runner's entries, so a second runner on the same broker account must not
-  be started (a per-account lock is coming). If you see one, report it and
-  stand aside.
-- **A policy trades only its active strategies.** A `paper` strategy stays
-  paper inside a policy: the runner passes over its setup (it takes the next
-  active strategy that fired; with none, the policy has no setup that bar),
-  and the gate refuses an entry whose latest verdict names a strategy that
+- **One runner per account.** Within one runner (one harness home) the
+  gate holds one cushion and one position at a time across the account; it
+  does not see another runner's entries, so a second runner on the same
+  broker account must not be started (the account lock refuses one). If you see one, report it and stand
+  aside.
+- **A policy trades only its active strategies.** A `paper` component stays
+  paper inside a policy: the gate refuses an entry whose latest verdict names a strategy that
   isn't active, or none it knows (`[policy] setup:<policy>: the latest
   verdict's setup is from <name>: <name> has status "paper": ...`; it can't
   be skipped). Stand aside: activating a strategy is the user's call. Exits
@@ -128,7 +122,7 @@ combine_status {}
 my_100k: active, balance $101250 (floor $98000, cushion $3250), profit $1250 of $6000,
 day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries allowed
 
-prop_portfolio: long setup from orb: full, at most 4 NQ with a 40-tick stop
+prop_portfolio: long setup from trade_lifecycle: full, at most 4 NQ with a 40-tick stop
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
 prop_portfolio's sizing (its numbers are in the account's RULEBOOK.md, the
@@ -136,6 +130,5 @@ one place for them): cushion_frac x $3250 = $975 (under cap_usd; no
 drawdown from the peak). A 40-tick stop plus a tick of expected slippage
 risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
 $21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
-$207.80 each, $831.20 in all). Halved by the priority order: 22 micros, 2 NQ.
-With MNQ selected the verdict is 45 MNQ ($955.80), halved 22 MNQ.
+$207.80 each, $831.20 in all). With MNQ selected the verdict is 45 MNQ ($955.80).
 ```

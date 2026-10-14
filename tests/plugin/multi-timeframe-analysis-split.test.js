@@ -67,6 +67,9 @@ const ALLOWED = [
     '`/home/u/.futures-trading-harness/bars/MNQ-3m.json`; no `~`) or a `bars_fetch` file (the `tool-arguments` skill says which files it reads).',
     'The briefing shows: the 15m and 1h swing highs and lows against price (`m3` `htfLevels`), the 1h swings not yet traded back to (`m3` `untested1hSwings`), each frame\'s last-20-candle range high, low and mid (`m15` `frame.range`, `h1` `h1.range` and `h4.range`), and the prior RTH day\'s high and low (`day` `priorRth`).',
   ].map(old => ({ old, copies: 0, reason: 'a restatement of bar-briefing (its m3, m15, h1 and day fields; its mtf_read row and example; tool-arguments names the files): the pointer above replaces it' })),
+  { old: "A policy strategy's verdict is a ceiling: the read halves or skips it like any setup (the priority order, strategy-library).",
+    now: "For a composed trade the label is a reason in its plan, never a cut (the priority order, strategy-library).",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade, the policy's one component, is never halved by the read" },
 ];
 // The units dropped outright (copies 0, no new text): no home holds them.
 const DROPPED = new Set(ALLOWED.filter(a => a.copies === 0 && !a.now).map(a => a.old));
@@ -194,7 +197,9 @@ test('multi-timeframe-analysis split: the head trader loads htf-to-ltf every cyc
   // a plan's alignment is the briefing's (never the daily) is in a skill the head trader loads every cycle.
   const old = units(read(BEFORE));
   const loaded = new Set(loads.flatMap(s => units(read(`skills/${s}/SKILL.md`))));
-  for (const i of [35, ...Array.from({ length: 21 }, (_, k) => 63 + k).filter(i => i !== 81)]) assert.ok(loaded.has(old[i]), `the head trader reads: ${old[i]}`);
+  // An edited unit (an allow-list `now`) is read as its new text.
+  const nowOf = u => { const a = ALLOWED.find(x => x.old === u); return a ? [a.now || []].flat() : [u]; };
+  for (const i of [35, ...Array.from({ length: 21 }, (_, k) => 63 + k).filter(i => i !== 81)]) for (const u of nowOf(old[i])) assert.ok(loaded.has(u), `the head trader reads: ${u}`);
   // Self-test: the instruction, not the name, counts; step 0 saying never to load it fails.
   const never = ts.replace(/Load `htf-to-ltf` every cycle as\s+well/, 'Never load `htf-to-ltf`');
   assert.notStrictEqual(never, ts);

@@ -68,6 +68,24 @@ const ALLOWED = [
   // strategy-tools'.
   { old: 'With the harness tools (the `harness-tools` skill):', now: 'With the harness tools (`strategy-tools`):',
     reason: 'the tool skill is retired; the strategies tools\' rows are in strategy-tools' },
+  { old: "Stop from `risk.stop`: `atr:<k>` or a distance expression (e.g. cisd_ote's `cisd_risk(15)`) → the scan's `stopDistance`; `structure`/`swing` → beyond the level the body names.",
+    now: "Stop from `risk.stop`: `atr:<k>` or a distance expression → the scan's `stopDistance`; `structure`/`swing` → beyond the level the body names.",
+    reason: "the skill audit (fix/skills-composed-process): cisd_ote is retired" },
+  { old: "**The trend rule**: a trend strategy against the prevailing trend → no trade (the scan and the gate refuse it anyway).",
+    now: "**The trend rule**: a trend strategy against the prevailing trend → no trade.",
+    reason: "the parenthesis restated the gate (multi-timeframe-analysis owns the trend rule); room for D2 below without growing a prompt" },
+  { old: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target.",
+    now: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs a 15m or 1h CHoCH its way.",
+    reason: "owner decision D2 (fix/skills-composed-process): a composed entry against the trend needs a 15m or 1h CHoCH its way" },
+  { old: "strategies_show orb → skip rule \"relative volume < 1.0x\" → volume analyst reports 0.8x → no trade.",
+    now: "trade_lifecycle long, read long mixed → its stated size.",
+    reason: "owner decision D1 (fix/skills-composed-process): a composed trade is never halved; orb is retired" },
+  { old: "strategies_scan → crt_1h short, a candidate, stopDistance 18.5 → read the",
+    now: "trade_lifecycle short, 1h up, no 15m or 1h CHoCH down → step 2: no trade.",
+    reason: "owner decision D2: the trend rule for a composed trade; crt_1h is retired" },
+  { old: "body's skip rules → none apply → plan it.",
+    copies: 0,
+    reason: "the second line of the crt_1h example (retired)" },
 ];
 
 /** What differs between the old skill and the new homes, beyond the allowed exceptions: [] when nothing does. */
@@ -148,7 +166,7 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
   const lib = homes[at('strategy-library')];
   const ROOM = /3\. \*\*Room\*\*[^]*?\(`needR`\) → no trade\.\n/.exec(lib)[0];
-  const TREND = /2\. \*\*The trend rule\*\*[^]*?nearest\n {3}target\.\n/.exec(lib)[0];
+  const TREND = /2\. \*\*The trend rule\*\*[^]*?its way\.\n/.exec(lib)[0];
   const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
   assert.notStrictEqual(swapped, lib);
   assert.deepStrictEqual(differences(old, swap('strategy-library', swapped)), [], 'a swap loses nothing');
@@ -193,7 +211,9 @@ test('strategy-library split: a rules entry still needs all of the old skill (th
   const asOld = new Map(ALLOWED.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
   const loaded = new Set(REQUIRED_FOR_ENTRY.filter(s => HOMES.includes(s)).flatMap(s => units(read(`skills/${s}/SKILL.md`))).map(u => asOld.get(u) || u));
   const rootOnly = new Set(units(read('skills/harness-root/SKILL.md')));
-  const lost = units(read(BEFORE)).filter(u => !STRUCTURE.includes(u) && !loaded.has(u) && !rootOnly.has(u));
+  // A unit the allow-list drops (no `now`, no copies) is in no skill by design.
+  const dropped = new Set(ALLOWED.filter(a => !a.now && !a.copies).map(a => a.old));
+  const lost = units(read(BEFORE)).filter(u => !STRUCTURE.includes(u) && !loaded.has(u) && !rootOnly.has(u) && !dropped.has(u));
   assert.deepStrictEqual(lost, [], 'the main session loads every section of the old strategy-library');
   assert.deepStrictEqual(HOMES.filter(s => !REQUIRED_FOR_ENTRY.includes(s)), ['harness-root']);
   // trade-session's step 0 names each required skill; the autonomous prompt does too.
