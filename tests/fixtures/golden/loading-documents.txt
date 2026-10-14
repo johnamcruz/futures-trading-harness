@@ -1,6 +1,6 @@
 strategies (12): cisd_ote, crt_1h, crt_4h, ofi, ofi_absorption, orb, prop_flow_1m, prop_portfolio, value_area, value_area_breakout, value_area_reentry, vwap_reclaim
 strategy cisd_ote: {
-  "body": "8644 chars sha256:40b6159da220a7f5",
+  "body": "9046 chars sha256:379522650b4a03a9",
   "compiledRules": "sha256:22c22c3f06d68e2e",
   "compiledStop": "sha256:c5497faa7f3507dd",
   "compiledTarget": null,

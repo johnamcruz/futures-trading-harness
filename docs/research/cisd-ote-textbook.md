@@ -221,6 +221,18 @@ pass, average profit $187, 32.3 trades an attempt, expectancy -0.007R.
    here before it ran: **SC** = ST with `regimes: [trend, range]` (no entry
    in a `transition` regime), on the same Train file, with the prop
    simulation. Reported beside ST; shipped only if the owner says so.
+   Result:
+
+| Variant (post-registration) | n | mean net R [95% CI] | PF | win | per month | RTH n / mean | ON n / mean | long n / mean | short n / mean | 2021 / 2022 / 2023 | one-sided p |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SC (ST, not in a `transition` regime) | 479 | 0.044 [-0.072, 0.166] | 1.05 | 39% | 18.4 | 175 / 0.074 | 304 / 0.027 | 246 / 0.003 | 233 / 0.087 | 0.01 / 0.11 / -0.02 | 0.25 |
+
+   SC's prop simulation: 106 attempts, 14.2% pass (15), 0% blow, 85.8%
+   timeout, median 15 sessions to pass, average profit $1,167, 21.6 trades
+   an attempt, expectancy 0.096R. The first mean above zero here, on fewer
+   trades, its interval straddling zero (p 0.25), and 2023 below zero:
+   not a finding, and chosen after the results above. A candidate to
+   pre-register for Select if the owner wants it; not shipped.
 6. **Absorption at the OTE: a follow-up, not measured.** Absorption during
    the retracement into the zone confirms the pullback (the
    `fib-retracement` and `cisd` skills). Order-flow fields are not on the
