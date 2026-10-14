@@ -194,7 +194,7 @@ test('prop and sizing splits: each new skill answers one question in a short ind
   assert.match(rm, /^role-skills: \[position-sizing, prop-challenge-pacing, prop-pacing-judgment,/m);
   assert.match(rm, /^role-index: \[[^\]]*\bmicro-mini-specs\b/m);
   assert.doesNotMatch(rm, /^role-index: \[[^\]]*\bprop-pacing-judgment\b/m);
-  assert.match(rm.replace(/\s+/g, ' '), /no running attempt \(`combine_status` lists none[^.]*the `prop-pacing-judgment` skill/);
+  assert.match(rm.replace(/\s+/g, ' '), /no running attempt \(`combine_status` lists none\), pace by the `prop-pacing-judgment` skill\./);
   for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) assert.doesNotMatch(read(`agents/${f}`), /prop-evaluator/, f);
 });
 
