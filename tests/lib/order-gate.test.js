@@ -1826,7 +1826,7 @@ test('phase2-facts and roles-ran judge ONE phase-2 report: the latest-ending one
   const lookAll = () => {
     try { fs.unlinkSync(lookupsFile(file)); } catch (_err) { /* none */ }
     const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + at);
-    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'rejection', 11);
     look('market-structure-analyst', 'pullback-vs-reversal', 12);
     look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
     // The risk manager looks up during A (phase 1) and B, never during C.
@@ -1891,13 +1891,13 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   const refused = run(entryOrder());
   assert.deepStrictEqual(checks(refused), ['roles-ran']);
   assert.match(refused.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, risk-manager phase 1/);
-  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, mtf-rejection/);
+  assert.match(refused.violations[0].message, /market-structure-analyst reported without looking up pullback-vs-reversal, rejection/);
   assert.match(refused.violations[0].message, /risk-manager reported without looking up confluence-counting, invalidation/);
   // Full mode (the default): no lookup is required.
   assert.deepStrictEqual(run(entryOrder(), { ...index, roleSkills: 'full' }).violations, []);
   // Each role looked its own up during one of its calls (phase 2 for the risk manager): counted.
   const all = () => {
-    look('market-structure-analyst', 'mtf-rejection', 11);
+    look('market-structure-analyst', 'rejection', 11);
     look('market-structure-analyst', 'pullback-vs-reversal', 12);
     look('trend-momentum-analyst', 'pullback-vs-reversal', 11);
     look('risk-manager', 'confluence-counting', 31);
@@ -1908,18 +1908,18 @@ test('skill lookups: in index mode an entry counts a role\'s report only with th
   // One missing (a lookup outside its calls, or under another role's name, doesn't count): that role alone.
   reset();
   all();
-  fs.writeFileSync(lookupsFile(file), fs.readFileSync(lookupsFile(file), 'utf8').split('\n').filter(l => !l.includes('"mtf-rejection"')).join('\n'));
-  look('market-structure-analyst', 'mtf-rejection', 25);
-  look('trend-momentum-analyst', 'mtf-rejection', 15);
+  fs.writeFileSync(lookupsFile(file), fs.readFileSync(lookupsFile(file), 'utf8').split('\n').filter(l => !l.includes('"rejection"')).join('\n'));
+  look('market-structure-analyst', 'rejection', 25);
+  look('trend-momentum-analyst', 'rejection', 15);
   const one = run(entryOrder());
-  assert.match(one.violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up mtf-rejection/);
+  assert.match(one.violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up rejection/);
   // A with-trend candidate requires the breakout skills of the structure analyst instead.
   reset();
   brief([{ name: 'orb', direction: 'long', trendRule: 'allows' }]);
   look('risk-manager', 'confluence-counting', 31);
   look('risk-manager', 'invalidation', 32);
-  assert.match(run(entryOrder()).violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
-  look('market-structure-analyst', 'mtf-breakout', 11);
+  assert.match(run(entryOrder()).violations[0].message, /not returned yet: market-structure-analyst \(market-structure-analyst reported without looking up breakout-vs-fakeout, breakout(?![\w-])/);
+  look('market-structure-analyst', 'breakout', 11);
   look('market-structure-analyst', 'breakout-vs-fakeout', 11);
   assert.deepStrictEqual(run(entryOrder()).violations, []);
   // No trigger (no candidate on the bar): nothing is required.

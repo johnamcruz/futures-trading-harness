@@ -91,7 +91,7 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   const rule = () => L.lookupRule({ home, transcript: file, contractId: 'MNQ', now });
   const look = (role, skill) => L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + 1.5);
   look('market-structure-analyst', 'pullback-vs-reversal');
-  look('market-structure-analyst', 'mtf-rejection');
+  look('market-structure-analyst', 'rejection');
   look('risk-manager', 'confluence-counting');
   look('risk-manager', 'invalidation');
   assert.match(checkRolesRan(file, 'full', [], rule()), /not returned yet: trend-momentum-analyst \(trend-momentum-analyst reported without looking up pullback-vs-reversal/);
@@ -100,7 +100,7 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
   // An old briefing (expired at the order's time): every situational skill of each index is required (fails closed).
   const stale = L.lookupRule({ home, transcript: file, contractId: 'MNQ', now: new Date('2026-10-07T15:00:00Z') });
-  assert.match(checkRolesRan(file, 'full', [], stale), /market-structure-analyst reported without looking up breakout-vs-fakeout, mtf-breakout/);
+  assert.match(checkRolesRan(file, 'full', [], stale), /market-structure-analyst reported without looking up breakout-vs-fakeout, breakout(?![\w-])/);
   assert.deepStrictEqual(stale.needs('risk-manager'), ['confluence-counting', 'invalidation']);
   assert.strictEqual(L.briefingFacts(home, 'MES', now), null, 'another root has no briefing');
   // A role served from the report cache made no lookup this cycle: not counted where one is required of it.
@@ -110,7 +110,7 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   fs.writeFileSync(onlyP2, task('risk-manager', 3, 4));
   const cached = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
   assert.match(checkRolesRan(onlyP2, 'full', cached, L.lookupRule({ home, transcript: onlyP2, contractId: 'MNQ', now })),
-    /not returned yet: market-structure-analyst, trend-momentum-analyst[^]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, mtf-rejection/);
+    /not returned yet: market-structure-analyst, trend-momentum-analyst[^]*market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal, rejection/);
   assert.strictEqual(checkRolesRan(onlyP2, 'full', cached), null, 'full mode: the cache counts as before');
 });
 

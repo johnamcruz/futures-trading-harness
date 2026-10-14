@@ -59,10 +59,10 @@ const SITUATIONAL = [
   { when: 'candidate', skill: 'confluence-counting' },
   { when: 'candidate', skill: 'invalidation' },
   // A fade at a level (a strategy with mtf: reversal): the rejection setup, and pullback or reversal (step 4).
-  { when: 'candidate.trendRule=reversal', skill: 'mtf-rejection' },
+  { when: 'candidate.trendRule=reversal', skill: 'rejection' },
   { when: 'candidate.trendRule=reversal', skill: 'pullback-vs-reversal' },
   // A with-trend setup: the breakout setup, and accepted or a fakeout (step 3).
-  { when: 'candidate.trendRule=allows', skill: 'mtf-breakout' },
+  { when: 'candidate.trendRule=allows', skill: 'breakout' },
   { when: 'candidate.trendRule=allows', skill: 'breakout-vs-fakeout' },
 ];
 

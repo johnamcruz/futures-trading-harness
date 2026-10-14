@@ -29,8 +29,8 @@ hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle, named with its
 timeframe. 15m and 60m weigh more at a higher-timeframe level (a 60m
-rejection of the prior day's high outweighs a 3m one); 3m and 5m time the
-entry.
+rejection of the prior day's high outweighs a 3m one: `rejection`,
+`breakout`); 3m and 5m time the entry.
 
 - 3m: `m3.bar.o`, `m3.bar.h`, `m3.bar.l`, `m3.bar.c`, `m3.bar.rangeAtr`,
   and the cycle prompt's last 10 bars line (closed 3m bars:
@@ -63,13 +63,13 @@ against ATR (`m3.bar.rangeAtr`: small under about 0.5, large over about
 The stack counts once (`confluence-counting`, item 4).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, and none is measured in our data yet. Confirmation only.
+general, none measured in our data yet. Confirmation only.
 
 ## Examples
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 60m close (a bars_fetch file) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  on the 60m close (bars_fetch) a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   crt_1h short. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); the 15m still forming.
   orb long; candidate.inTheWay session VAH at 0.4R. Priority order (step 3, room): skip.
