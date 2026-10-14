@@ -15,8 +15,9 @@
  * in the harness home). The front month is looked up once per trading day, so
  * a name never changes meaning during a session (the harness is flat overnight):
  * the first one recorded for a day stays for that day, across processes. A
- * contract the broker marks active in any contract answer refreshes a front
- * month recorded on an earlier day. Only today's front month names a contract
+ * contract the broker marks active in a search_contracts or get_contract
+ * answer (the agent's or the translator's own) refreshes a front month
+ * recorded on an earlier day; list_available_contracts never does. Only today's front month names a contract
  * by its root: when today's lookup fails, a result is named by its month.
  * Each contract the broker describes also records its root's tick spec there
  * (`specs`: { tickSize, tickValue, name, description, id, readAt }), the one
@@ -54,6 +55,8 @@ const TICKER = /^((?=[A-Z0-9]*?[A-Z])[A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$/;
 const { tradingDayKey } = require('../trading/clock');
 // Tools whose result lists contracts: their `id` is a contract id too.
 const CONTRACT_TOOLS = new Set(['search_contracts', 'get_contract', 'list_available_contracts']);
+// Contract answers whose activeContract the interface defines: the ones that may refresh a front month.
+const FRONT_TOOLS = new Set(['search_contracts', 'get_contract']);
 // Tools whose contractId input is the agent's own label, never a broker id (the journal).
 const KEEP_ARGS = new Set(['journal_add', 'journal_read']);
 
@@ -186,9 +189,37 @@ function canonicalName(id, cache, day) {
   const std = parseStandardName(id);
   const known = std ? std.month && { root: std.root, month: std.month } : cache.ids[id];
   if (!known) return id;
-  const front = cache.front[known.root];
-  if (front && front.day === day && (front.month === known.month || front.id === id)) return known.root;
+  if (frontMonth(cache, known.root, day) === known.month) return known.root;
   return `${known.root}:${known.month}`;
+}
+
+/**
+ * The month (YYYY-MM) of a root's front month recorded for trading day `day`, from the id the translator sends the
+ * root to (cache.ids[front.id]), or null: none recorded that day, its id unknown, or a file whose front month says
+ * another root or month than its id (a corrupt file never merges two months).
+ */
+function frontMonth(cache, root, day) {
+  const front = cache.front[root];
+  if (!front || front.day !== day) return null;
+  const known = cache.ids[front.id];
+  if (!idEntry(known) || known.root !== root || (front.month !== undefined && front.month !== known.month)) return null;
+  return known.month;
+}
+
+/**
+ * The month name (ROOT:YYYY-MM) of a contract named any way: a root is the front month recorded for trading day
+ * `day` (as it is when the name is resolved), a broker id the cache knows is its month. Anything else comes back as
+ * given. What the gateway's ledger and order records keep, so a root never changes meaning under them. Local.
+ */
+function monthName(id, cache, day) {
+  if (typeof id !== 'string') return id;
+  const std = parseStandardName(id);
+  if (std && !std.month) {
+    const m = frontMonth(cache, std.root, day);
+    return m ? `${std.root}:${m}` : id;
+  }
+  const known = std || cache.ids[id];
+  return idEntry(known) ? `${known.root}:${known.month}` : id;
 }
 
 /** The root of a broker id, from the cache (local; no lookup), or null. */
@@ -261,6 +292,11 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
   }
 
   const frontFresh = root => Boolean(cache.front[root]) && cache.front[root].day === tradingDayKey(now());
+  // A contract the broker marks active (search_contracts, get_contract) is its root's front month: it replaces one
+  // recorded on an earlier day (yesterday's, before a roll). Within a trading day the front month stays fixed.
+  const refreshFront = (root, id, month) => {
+    if (!frontFresh(root)) cache.front[root] = { id, month, day: tradingDayKey(now()) };
+  };
 
   /**
    * Today's front month of a root. Another process (gateway or runner) may have
@@ -302,6 +338,7 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
         c = null; // a failed lookup is tried again next time
       }
       known = c ? remember(c) : null;
+      if (known && c.activeContract === true) refreshFront(known.root, c.id, known.month);
       if (known) save();
       else if (c) notTicker.add(id);
     }
@@ -361,13 +398,11 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
         const t = remember(c, at);
         if (t) learned = true;
         else notTicker.add(c.id);
-        if (t && c.activeContract === true && (!active[t.root] || t.month < active[t.root].month)) active[t.root] = { id: c.id, month: t.month };
+        if (t && FRONT_TOOLS.has(tool) && c.activeContract === true && (!active[t.root] || t.month < active[t.root].month)) active[t.root] = { id: c.id, month: t.month };
       }
-      // A contract the broker marks active is its front month: it refreshes a root whose recorded front month is
-      // another trading day's (yesterday's, before a roll). Within a trading day the front month stays fixed.
-      for (const [root, f] of Object.entries(active)) {
-        if (!frontFresh(root)) cache.front[root] = { ...f, day: tradingDayKey(now()) };
-      }
+      // Only the answers whose activeContract the interface defines refresh a front month: a root's nearest active
+      // month, as a lookup takes it.
+      for (const [root, f] of Object.entries(active)) refreshFront(root, f.id, f.month);
       if (learned) save();
     }
     return walk(data, contractList);
@@ -378,5 +413,5 @@ function createTranslator({ call, cacheFile, now = () => new Date() }) {
 
 module.exports = {
   CONTRACT_TOOLS, TranslationError,
-  isStandardName, parseStandardName, parseTicker, readCache, serverLimits, standardRoot, canonicalName, createTranslator,
+  isStandardName, parseStandardName, parseTicker, readCache, serverLimits, standardRoot, canonicalName, frontMonth, monthName, createTranslator,
 };

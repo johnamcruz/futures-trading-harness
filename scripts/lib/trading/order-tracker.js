@@ -82,8 +82,9 @@ function createOrderTracker({ env, graceMs, searchOrders, onError = () => {}, ca
         return risk ? { args } : { refuse: { check: 'account-required', message: 'place_order needs an accountId: the gateway tracks each order\'s outcome per account.' } };
       }
       const inUse = t => [...tagOf.values()].some(x => x.tag === t && String(x.accountId) === String(args.accountId));
-      // Its record carries the contract by the gate's own name (canon), so exits and stops count it.
-      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: canon(args).contractId });
+      // Its record carries the contract by its month in the gate's naming (canon, ledgerName), so exits and stops
+      // count it, and a root that means another month from the next trading day never moves it.
+      const prep = markers.prepareSend({ env, args, risk, observed, inUse, now, contractId: require('./account-gate').ledgerName(canon(args)) });
       if (prep.refuse) return { refuse: { check: 'order-pending', message: prep.refuse } };
       if (prep.error) onError(`could not record ${prep.tag} before sending it: ${prep.error}`);
       if (id !== undefined) tagOf.set(id, { accountId: args.accountId, tag: prep.tag });

@@ -99,8 +99,10 @@ by asking that same server:
 - a name to an id: `search_contracts` with the root; the front month is the
   contract the server marks `activeContract`, fixed for the trading day (the
   first one recorded that day stays, in every process; a contract marked
-  active in any contract answer replaces a front month recorded on an earlier
-  day); a name with a month always means that month;
+  `activeContract` in a `search_contracts` or `get_contract` answer, the
+  agent's or the translator's own, replaces a front month recorded on an
+  earlier day; `list_available_contracts` never does); a name with a month
+  always means that month;
 - an id to a name: from those answers, else `get_contract`. Only the trading
   day's own front month is named by its root: when that day's lookup fails, a
   contract is named by its month, never by an earlier day's front month.

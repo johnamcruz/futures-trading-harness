@@ -186,7 +186,7 @@ function canonicalArgs(args, env = process.env) {
   if (!args || typeof args !== 'object') return args;
   try {
     const { activeBroker, contractsCacheFile } = require('../broker/config');
-    const { readCache, canonicalName } = require('../broker/translator');
+    const { readCache, canonicalName, monthName } = require('../broker/translator');
     const { tradingDayKey } = require('./clock');
     const { RENAME } = require('./account-gate');
     const clock = require('./harness-now').resolveClock(env);
@@ -197,7 +197,9 @@ function canonicalArgs(args, env = process.env) {
       const at = tradingDayKey(clock.now());
       if (at !== day) throw new Error(`the trading day changed while the call was checked (${day} to ${at}); send it again`);
       const cache = readCache(file);
-      return id => (typeof id === 'string' ? canonicalName(id, cache, day) : id);
+      const names = id => (typeof id === 'string' ? canonicalName(id, cache, day) : id);
+      // The month a ledger entry or an order record keeps (account-gate.js ledgerName), from the same read.
+      return Object.assign(names, { month: id => monthName(id, cache, day) });
     };
     // A call without a contract (cancel_order, modify_order) still names the positions and orders it is checked
     // against from that one read: a lookup that failed for one list and not the other never splits a contract in two.
@@ -221,13 +223,15 @@ function canonicalArgs(args, env = process.env) {
 function closeLedgerEntry(tool, args, positions, now) {
   if (!Array.isArray(positions)) return null;
   const { contractNet, netPosition, renamed } = require('./account-gate');
-  ({ args, positions } = renamed(args, positions)); // named again with the positions (canonicalArgs)
+  const r = renamed(args, positions); // named again with the positions (canonicalArgs)
+  const kept = r.names && r.names.month ? r.names.month(args.contractId) : args.contractId; // by its month (ledgerName)
+  ({ args, positions } = r);
   const { contractRoot } = require('./journal');
   const net = contractNet(positions, args.contractId);
   const size = tool === 'partial_close_position' ? Math.min(Number(args.size) || 0, Math.abs(net)) : Math.abs(net);
   if (!(size > 0)) return null;
   const at = now.getTime();
-  return { contractId: args.contractId, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at, unconfirmed: true };
+  return { contractId: kept, root: contractRoot(args.contractId), sign: -Math.sign(net), size, netBefore: net, rootNetBefore: netPosition(positions, args.contractId), at, sentAt: at, unconfirmed: true };
 }
 
 /** A tool reply's JSON body (content[0].text), or null. */

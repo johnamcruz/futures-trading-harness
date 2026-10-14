@@ -827,13 +827,14 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
 // front month it recorded and the day it did. December is the front month before the roll, March after it.
 const ROLL_IDS = { 'sim-Z6': { root: 'MNQ', month: '2026-12' }, 'sim-H7': { root: 'MNQ', month: '2027-03' } };
 const rollContracts = active => JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-Z6' }, { id: 'sim-H7', name: 'MNQH7', tickSize: 0.25, tickValue: 0.5, activeContract: active === 'sim-H7' }]);
-async function liveRollRun({ now, front, active, position, messages, extra = {} }) {
+// `dir`: a home an earlier run used (its contract cache and order records are kept).
+async function liveRollRun({ now, front, active, position, messages, extra = {}, dir: given = null, waitMs = 40000 }) {
   const { spawn } = require('child_process');
-  const dir = tmpDir();
+  const dir = given || tmpDir();
   const home = path.join(dir, '.futures-trading-harness');
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(dir, []), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS' } } }));
-  fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: ROLL_IDS, front: front ? { MNQ: { id: front.id, month: ROLL_IDS[front.id].month, day: front.day } } : {} }));
+  if (!given) fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: ROLL_IDS, front: front ? { MNQ: { id: front.id, month: ROLL_IDS[front.id].month, day: front.day } } : {} }));
   const argsFile = path.join(dir, 'args.jsonl');
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
     PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: now, NODE_ENV: 'test',
@@ -845,13 +846,13 @@ async function liveRollRun({ now, front, active, position, messages, extra = {} 
   const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
   for (const m of messages) {
     gw.stdin.write(`${JSON.stringify(m)}\n`);
-    for (let t = 0; t < 1600 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
+    for (let t = 0; t < waitMs / 25 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
   }
   gw.stdin.end();
   await new Promise(r => gw.on('close', r));
   const texts = Object.fromEntries(replies().map(r => [r.id, r.result.content[0].text.slice(0, 400)]));
   const sent = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => /place_order|close/.test(c.name)).map(c => `${c.name} ${c.args.contractId}`) : [];
-  return { texts, sent, cache: JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')) };
+  return { texts, sent, dir, cache: JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')) };
 }
 const rollExit = (id, contractId, side = 'sell') => call(id, 'place_order', { ...EXIT_BASE, contractId, side, rationale: '[exit] flatten' });
 const rollPartial = (id, contractId) => call(id, 'partial_close_position', { accountId: 1, contractId, size: 1 });
@@ -914,6 +915,25 @@ test('MCP gateway wiring, live: crossing 18:00 ET starts a new trading day, so t
   assert.deepStrictEqual([post.cache.front.MNQ.id, post.cache.front.MNQ.day], ['sim-H7', '2026-10-08']);
   const partial = await liveRollRun({ ...before, now: '2026-10-07T22:01:00.000Z', messages: [rollPartial(1, 'MNQ:2027-03')] });
   assert.deepStrictEqual(partial.sent, ['partial_close_position sim-H7'], partial.texts[1]);
+});
+
+test('MCP gateway wiring, live: an exit of unknown outcome sent by the root before 18:00 ET is kept by its month, so after 18:00 (a new front month) it is never counted against the new month\'s position', async () => {
+  // 17:59:30 ET, December the front month (looked up today), long 1 December: an [exit] by the root gets no reply.
+  const first = await liveRollRun({ now: '2026-10-07T21:59:30.000Z', front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-Z6', position: 'sim-Z6',
+    extra: { FAKE_DROP: 'place_order', FTH_LANE_TIMEOUT_MS: '300' }, waitMs: 1500, messages: [rollExit(1, 'MNQ')] });
+  assert.deepStrictEqual(first.sent, ['place_order sim-Z6']);
+  const records = fs.readdirSync(path.join(first.dir, '.futures-trading-harness'), { recursive: true }).map(String).filter(f => /pending|marker|order/i.test(f) && f.endsWith('.json'));
+  const kept = records.map(f => fs.readFileSync(path.join(first.dir, '.futures-trading-harness', f), 'utf8')).join('\n');
+  assert.match(kept, /"contractId": ?"MNQ:2026-12"/, `the record keeps December by its month: ${records.join(', ')}`);
+  // 18:00:30 ET, the broker marks March active; long 1 March: its protective stop and a partial close go (counted
+  // under the root, the December exit would make March look closed and refuse both).
+  const protect = (id, contractId) => call(id, 'place_order', { ...EXIT_BASE, contractId, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the March long' });
+  const later = await liveRollRun({ dir: first.dir, now: '2026-10-07T22:00:30.000Z', active: 'sim-H7', position: 'sim-H7', extra: { FTH_LANE_TIMEOUT_MS: '300' },
+    messages: [call(1, 'list_open_positions', { accountId: 1 }), protect(2, 'MNQ')] });
+  assert.match(later.texts[1], /"contractId": "MNQ"/, 'March is MNQ now');
+  assert.deepStrictEqual(later.sent, [...first.sent, 'place_order sim-H7'], later.texts[2]);
+  const partial = await liveRollRun({ dir: first.dir, now: '2026-10-07T22:00:40.000Z', active: 'sim-H7', position: 'sim-H7', extra: { FTH_LANE_TIMEOUT_MS: '300' }, messages: [rollPartial(1, 'MNQ')] });
+  assert.ok(partial.sent.includes('partial_close_position sim-H7'), partial.texts[1]);
 });
 
 test('MCP gateway wiring, live: a late, errored or lost broker reply on the first call after a roll never sends an exit to the wrong month, and close_position always goes', { timeout: 120000 }, async () => {

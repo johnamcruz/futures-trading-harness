@@ -155,7 +155,7 @@ test('contract lists are learned from their own tickers, one pass, no lookup per
   const listed = await t.translateResult('list_available_contracts', CONTRACTS);
   assert.deepStrictEqual(listed.map(c => c.id), ['MNQ', 'MNQ:2027-03', 'NQ', 'b-301']);
   assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0);
-  assert.strictEqual(calls.filter(c => c[0] === 'search_contracts').length, 0, 'the contracts the list marks active are their roots\' front months: no search');
+  assert.strictEqual(calls.filter(c => c[0] === 'search_contracts').length, 2, 'one search per root, for its front month (a list never sets one)');
   await t.translateResult('list_open_positions', [{ contractId: 'b-301' }, { contractId: 'b-301' }]);
   assert.strictEqual(calls.filter(c => c[0] === 'get_contract').length, 0, 'a contract known not to be a ticker isn\'t looked up again');
 });
@@ -466,4 +466,43 @@ test('the front month across a roll: refreshed from the broker\'s active contrac
   await late.toBroker('MNQ:2026-12'); // a lookup by month (December active in this answer) never moves the day's front month
   assert.strictEqual(await late.toBroker('MNQ'), 'b-102');
   assert.strictEqual(readJson(raced).front.MNQ.id, 'b-102');
+});
+
+test('only search_contracts and get_contract answers refresh a front month: a list_available_contracts marking every month active never does, and the translator\'s own get_contract does', async () => {
+  const readJson = f => JSON.parse(fs.readFileSync(f, 'utf8'));
+  const cacheFile = path.join(tmpDir(), 'contracts-fake.json');
+  const ids = { 'b-101': { root: 'MNQ', month: '2026-12' }, 'b-102': { root: 'MNQ', month: '2027-03' } };
+  fs.writeFileSync(cacheFile, JSON.stringify({ ids, front: { MNQ: { id: 'b-102', month: '2027-03', day: '2026-10-06' } } }));
+  const down = async () => ({ content: [{ type: 'text', text: 'down' }], isError: true });
+  const t = createTranslator({ call: down, cacheFile, now: () => NOW });
+  // Every month marked active (the list's fields are not the interface's): the expiring month is never pinned.
+  await t.translateResult('list_available_contracts', CONTRACTS.slice(0, 2).map(c => ({ ...c, activeContract: true })));
+  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-102', month: '2027-03', day: '2026-10-06' });
+  // The translator's own get_contract of an unseen id marked active refreshes it, as the agent's would.
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  const own = createTranslator({ call: async (name, a) => (name === 'get_contract' ? reply({ id: a.contractId, name: 'MNQM7', tickSize: 0.25, tickValue: 0.5, activeContract: true }) : down()), cacheFile, now: () => NOW });
+  assert.strictEqual(await own.toStandard('b-103'), 'MNQ');
+  assert.deepStrictEqual(readJson(cacheFile).front.MNQ, { id: 'b-103', month: '2027-06', day: '2026-10-07' });
+});
+
+test('canonicalName and monthName take the front month from the id the root is sent to: a cache file whose front month contradicts its id merges no months', () => {
+  const { monthName } = require('../../scripts/lib/broker/translator');
+  const day = '2026-10-07';
+  const ids = { 'b-101': { root: 'MNQ', month: '2026-12' }, 'b-102': { root: 'MNQ', month: '2027-03' } };
+  // Says December, but the root is sent to the March id.
+  const corrupt = { ids, front: { MNQ: { id: 'b-102', month: '2026-12', day } } };
+  assert.strictEqual(canonicalName('MNQ:2026-12', corrupt, day), 'MNQ:2026-12');
+  assert.strictEqual(canonicalName('MNQ:2027-03', corrupt, day), 'MNQ:2027-03');
+  assert.strictEqual(canonicalName('b-102', corrupt, day), 'MNQ:2027-03');
+  assert.strictEqual(monthName('MNQ', corrupt, day), 'MNQ', 'no month the root can be trusted to mean');
+  // A front id the file doesn't know, or of another root: no front month.
+  for (const front of [{ id: 'b-999', month: '2026-12', day }, { id: 'b-101', month: '2026-12', day, root: 'x' }]) {
+    const c = { ids: front.root ? { 'b-101': { root: 'NQ', month: '2026-12' } } : ids, front: { MNQ: front } };
+    assert.strictEqual(canonicalName('MNQ:2026-12', c, day), 'MNQ:2026-12');
+  }
+  // A consistent file: the root and its month are one name; monthName gives the month back.
+  const good = { ids, front: { MNQ: { id: 'b-102', month: '2027-03', day } } };
+  assert.strictEqual(canonicalName('MNQ:2027-03', good, day), 'MNQ');
+  assert.deepStrictEqual(['MNQ', 'MNQ:2026-12', 'b-102', 'MNQ:2027-03', 'x-1'].map(n => monthName(n, good, day)), ['MNQ:2027-03', 'MNQ:2026-12', 'MNQ:2027-03', 'MNQ:2027-03', 'x-1']);
+  assert.strictEqual(monthName('MNQ', good, '2026-10-08'), 'MNQ', 'another day: the root is unresolved');
 });

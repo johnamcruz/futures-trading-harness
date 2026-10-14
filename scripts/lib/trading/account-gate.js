@@ -32,6 +32,8 @@ const POSITION_SIGN = { 1: 1, 2: -1 };
 // (accountFacts), for the ledger.
 const RENAME = Symbol.for('fth.gate.rename');
 const NAMES = Symbol.for('fth.gate.names');
+// The call's contract by its month (ROOT:YYYY-MM), set with NAMES: what its ledger entry and order record keep.
+const MONTH = Symbol.for('fth.gate.month');
 // Equity index families (by their micro root): one direction-correlated bet.
 const EQUITY_INDEX = new Set(['MNQ', 'MES', 'MYM', 'M2K']);
 const STOP_TYPES = new Set([3, 4, 5]); // stop_limit, stop, trailing_stop
@@ -449,7 +451,10 @@ async function accountFacts(args, caller, withTrades = true) {
   // The call itself (in place: the gateway judges and records this object) and the account, named from one read
   // of the contract cache taken now, after the reads that may have looked the front month up (a new day, a roll).
   const r = renamed(args, positions, orders);
-  if (r.names) Object.assign(args, { ...(typeof args.contractId === 'string' ? { contractId: r.args.contractId } : {}), [NAMES]: r.names });
+  if (r.names) {
+    const month = typeof args.contractId === 'string' && typeof r.names.month === 'function' ? { [MONTH]: r.names.month(args.contractId) } : {};
+    Object.assign(args, { ...(typeof args.contractId === 'string' ? { contractId: r.args.contractId } : {}), [NAMES]: r.names, ...month });
+  }
   return { positions: r.positions, orders: r.orders, trades };
 }
 
@@ -466,11 +471,29 @@ function renamed(args, positions, orders = []) {
   return { args: { ...args, contractId: names(args.contractId) }, positions: each(positions), orders: each(orders), names };
 }
 
+/**
+ * The name a ledger entry or an order record keeps for a call's contract: its month (ROOT:YYYY-MM), as the account
+ * check resolved it (MONTH), else resolved now from the call's naming (RENAME), else the name as given. Never a root
+ * when its month is known: a root may mean another month from the next trading day, and an entry kept under it would
+ * then be counted against that month's position (the last stop of a position the ledger shows closed could go).
+ */
+function ledgerName(args) {
+  if (!args || typeof args.contractId !== 'string') return args ? args.contractId : undefined;
+  if (typeof args[MONTH] === 'string') return args[MONTH];
+  if (typeof args[RENAME] === 'function') {
+    try {
+      const names = args[RENAME]();
+      if (typeof names.month === 'function') return names.month(args.contractId);
+    } catch (_err) { /* the trading day changed: the name as given */ }
+  }
+  return args.contractId;
+}
+
 /** The gate's ledger named as the call was (NAMES, set by accountFacts), else as given. */
 const ledgerNamed = (input, ledger) => (input && typeof input[NAMES] === 'function' && Array.isArray(ledger)
   ? ledger.map(e => (e && typeof e.contractId === 'string' ? { ...e, contractId: input[NAMES](e.contractId) } : e)) : ledger);
 
 module.exports = {
-  RENAME, renamed, accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
+  RENAME, renamed, ledgerName, accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
   evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
 };

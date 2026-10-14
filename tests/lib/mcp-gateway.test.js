@@ -138,8 +138,10 @@ test('canonicalArgs on a replayed day: the call, the positions, the orders and t
   const ledger = [{ contractId: 'MNQ:2026-12', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() }];
   assert.match(AG.evaluateAccount({ input: exit, ...facts, config, now, ledger })[0].message, /once recent orders fill/);
   assert.match(AG.evaluateAccountChange('partial_close_position', { input: { ...exit, size: 1 }, positions: facts.positions, orders: facts.orders, config, now, ledger })[0].message, /once recent orders fill/);
-  // The close lane's ledger entry: named with the positions too.
-  assert.strictEqual(closeLedgerEntry('close_position', close, [{ contractId: 'MNQ', type: 1, size: 1 }], now).contractId, 'MNQ');
+  // The close lane's ledger entry: kept by its month, which the gate names as the positions are.
+  const entry = closeLedgerEntry('close_position', close, [{ contractId: 'MNQ', type: 1, size: 1 }], now);
+  assert.strictEqual(entry.contractId, 'MNQ:2026-12');
+  assert.strictEqual(entry.netBefore, 1, 'measured against the position, named alike');
 });
 
 test('canonicalArgs live, the first call after a roll: yesterday\'s cached front month never names a month; the call, the positions and the ledger are named again after the account reads looked today\'s up', async () => {
@@ -179,7 +181,15 @@ test('canonicalArgs live, the first call after a roll: yesterday\'s cached front
   assert.match(AG.evaluateAccountChange('partial_close_position', { input: b, ...factsB, config, now, ledger })[0].message, /once recent orders fill/);
   // The close lane's entry, too.
   fs.writeFileSync(file, JSON.stringify({ ids, front: { MNQ: { id: 'sim-H7', month: '2027-03', day: '2026-10-07' } } }));
-  assert.strictEqual(closeLedgerEntry('close_position', canonicalArgs({ accountId: 1, contractId: 'MNQ:2027-03' }, env), [{ contractId: 'MNQ', type: 1, size: 1 }], now).contractId, 'MNQ');
+  const kept = closeLedgerEntry('close_position', canonicalArgs({ accountId: 1, contractId: 'MNQ' }, env), [{ contractId: 'MNQ', type: 1, size: 1 }], now);
+  assert.deepStrictEqual([kept.contractId, kept.netBefore], ['MNQ:2027-03', 1], 'a close by the root is kept by its month');
+  // What a ledger entry and an order record keep: the month, resolved when the call is checked, never the root.
+  const { ledgerName } = AG;
+  const byRoot = canonicalArgs(exitOn('MNQ'), env);
+  assert.strictEqual(ledgerName(byRoot), 'MNQ:2027-03', 'resolved from the call\'s naming');
+  await AG.accountFacts(byRoot, caller);
+  assert.deepStrictEqual([byRoot.contractId, ledgerName(byRoot)], ['MNQ', 'MNQ:2027-03'], 'as the account check resolved it');
+  assert.strictEqual(ledgerName({ contractId: 'MNQ' }), 'MNQ', 'no naming (a server from the command line): as given');
 });
 
 test('canonicalArgs for a call without a contract (cancel_order, modify_order): the positions and orders are named from one read, so the last stop of a position is never cancelled because two lists named it two ways', async () => {
