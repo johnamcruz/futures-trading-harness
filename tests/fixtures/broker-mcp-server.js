@@ -22,8 +22,14 @@
 
 const fs = require('fs');
 const { TOOLS } = require('../../scripts/lib/broker/interface');
+const { tradingDayStart } = require('../../scripts/lib/trading/clock');
 
 const MNQ = 'fake:MNQ:Z26';
+// The server's clock: its replayed time (FAKE_REPLAY_NOW), else the wall clock.
+const clock = () => (process.env.FAKE_REPLAY_NOW ? new Date(process.env.FAKE_REPLAY_NOW) : new Date());
+// Its one fill is in the trading day the server starts in (at its start time), never a fixed calendar date:
+// a dated fill ages out of the windows the harness reads (the trading day, a week back) as the calendar moves on.
+const FILL_AT = clock().toISOString();
 const drop = new Set(String(process.env.FAKE_DROP || '').split(',').filter(Boolean));
 const state = {
   accounts: [{ id: 7, name: 'FAKE-50K', balance: Number(process.env.FAKE_BALANCE || 50000), canTrade: true, mcpTradingAllowed: true }],
@@ -33,7 +39,7 @@ const state = {
   ].map(c => ({ ...c, ...JSON.parse(process.env.FAKE_TICK || '{}') })),
   positions: process.env.FAKE_FLAT ? [] : [{ id: 1, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', type: 1, size: 1, averagePrice: 21500 }],
   orders: process.env.FAKE_FLAT ? [] : [{ id: 9, accountId: 7, contractId: MNQ, status: 1, type: 4, side: 1, size: 1, stopPrice: 21480, limitPrice: null }],
-  fills: [{ id: 3, orderId: 8, accountId: 7, contractId: MNQ, creationTimestamp: '2026-10-07T14:01:00Z', price: 21500, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false }],
+  fills: [{ id: 3, orderId: 8, accountId: 7, contractId: MNQ, creationTimestamp: FILL_AT, price: 21500, profitAndLoss: null, fees: 0.37, side: 0, size: 1, voided: false }],
   calls: [],
 };
 // n bars of the requested size (default one minute), the newest opening at 13:00 + n - 1 minutes on 2026-10-07:
@@ -81,7 +87,12 @@ const HANDLERS = {
   list_open_positions: () => state.positions,
   list_open_orders: () => state.orders,
   search_orders: () => state.orders,
-  search_trades: () => state.fills,
+  // As the interface says: the fills from startTimestamp (default: the trading day start, by its clock) to endTimestamp.
+  search_trades: a => {
+    const from = a.startTimestamp ? Date.parse(a.startTimestamp) : tradingDayStart(clock()).getTime();
+    const to = a.endTimestamp ? Date.parse(a.endTimestamp) : Infinity;
+    return state.fills.filter(f => Date.parse(f.creationTimestamp) >= from && Date.parse(f.creationTimestamp) <= to);
+  },
   get_performance: () => ({ window: { start: '2026-10-06T22:00:00Z', end: 'now' }, overall: { fills: 0 }, byContract: {} }),
   place_order: a => {
     journal({ kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { result: { ...ok, orderId: 101 } } });

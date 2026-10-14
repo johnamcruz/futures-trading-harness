@@ -273,6 +273,30 @@ test('the conformance checker: search_trades must honour a past startTimestamp (
   assert.match((await verdict(() => [older, fill(0, '2026-09-01T15:00:00Z'), ...today])).problems.join(), /startTimestamp is ignored/);
 });
 
+test('the fake broker conforms at any clock: around the 18:00 ET reopen, at midnight, on a Sunday open and across both DST changes (no dated fixture ages out)', async () => {
+  // 17:59 / 18:00 / 18:03 / 23:59 ET (EDT), Sunday 18:00 ET, and the days after DST ends and begins.
+  const times = ['2026-10-14T21:59:00Z', '2026-10-14T22:00:00Z', '2026-10-14T22:03:00Z', '2026-10-15T03:59:00Z', '2026-10-18T22:00:00Z', '2026-11-02T00:30:00Z', '2027-03-15T13:00:00Z', '2030-01-02T15:00:00Z'];
+  for (const at of times) {
+    const mcp = fake({ FAKE_REPLAY_NOW: at });
+    try {
+      const r = await checkConformance(mcp, { accountId: 7 });
+      assert.ok(r.ok, `${at}: ${JSON.stringify(r.results.filter(x => !x.ok))}`);
+      assert.ok(r.results.some(x => /past startTimestamp is honoured/.test(x.check) && x.ok), at);
+    } finally {
+      mcp.close();
+    }
+  }
+  // It honours startTimestamp both ways: none after its fill, the fill from a week back.
+  const mcp = fake({ FAKE_REPLAY_NOW: '2026-10-14T22:03:00Z' });
+  try {
+    assert.strictEqual((await mcp.call('search_trades', { accountId: 7 })).length, 1, 'the trading day');
+    assert.strictEqual((await mcp.call('search_trades', { accountId: 7, startTimestamp: '2026-10-07T22:00:00Z' })).length, 1, 'a week back');
+    assert.strictEqual((await mcp.call('search_trades', { accountId: 7, startTimestamp: '2026-10-14T22:04:00Z' })).length, 0, 'after it');
+  } finally {
+    mcp.close();
+  }
+});
+
 test('the contract translator dates its front-month lookups by the harness clock: a replay broker\'s replayed day', async () => {
   const day = async (env) => {
     const home = tmpDir();
