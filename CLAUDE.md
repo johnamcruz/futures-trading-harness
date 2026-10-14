@@ -50,7 +50,12 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   situational ones a bar's briefing triggers (`SITUATIONAL` in
   `scripts/lib/trading/skills-loaded.js`; `scripts/lib/trading/skill-lookups.js`); `full`, on
   request, embeds both lists. The runner passes opencode's mode to its run and `full` to every
-  other harness's (their roles load every skill as their body says).
+  other harness's (their roles load every skill as their body says). In index mode opencode's
+  head trader has a prompt of its own (`scripts/lib/head-prompt.js`): its per-cycle skills embedded,
+  any other read with `skill_lookup`, no skill tool; the gate counts the embedded ones as loaded
+  only on the runner's attestation (`FTH_HEAD_PROMPT`), checked against the run's `opencode.json`.
+  `workspace/AGENTS.md` keeps the skill catalog (Codex's only list); `QWEN.md`, which
+  `workspace/CLAUDE.md` imports, leaves it out (Claude Code and Qwen Code list skills themselves).
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
   `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
   `commands/` are thin shims that say "Use the `<skill>` skill".

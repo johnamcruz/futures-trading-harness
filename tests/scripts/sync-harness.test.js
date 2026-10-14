@@ -56,6 +56,25 @@ test('the Qwen extension embeds every always-on rule in QWEN.md (its rules are n
   assert.strictEqual(JSON.parse(files['qwen-extension/qwen-extension.json']).contextFileName, 'QWEN.md');
 });
 
+test('the skill catalog: in AGENTS.md (Codex\'s only list, opencode\'s head trader\'s index), not in QWEN.md or CLAUDE.md (they list skills themselves)', () => {
+  const files = expectedFiles(ROOT);
+  const skills = fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md')));
+  const line = s => new RegExp(`^- \`${s}\` \\(skills/${s}/SKILL\\.md\\): `, 'm');
+  for (const s of skills) assert.match(files['workspace/AGENTS.md'], line(s), s);
+  for (const f of ['workspace/QWEN.md', 'qwen-extension/QWEN.md']) {
+    for (const s of skills) assert.doesNotMatch(files[f], line(s), `${f}: ${s}`);
+    assert.match(files[f], /## Skills\n\nYour harness lists every skill \(its skill tool\); each is `<root>\/skills\/<name>\/SKILL\.md`\.\n/);
+    // Otherwise the same instructions: AGENTS.md with its catalog cut out.
+    const agents = files['workspace/AGENTS.md'];
+    assert.strictEqual(files[f].slice(0, files[f].indexOf('## Skills\n')), agents.slice(0, agents.indexOf('## Skills\n')), f);
+    assert.strictEqual(files[f].slice(files[f].indexOf('## Agent roles\n')), agents.slice(agents.indexOf('## Agent roles\n')), f);
+  }
+  // Claude Code reads CLAUDE.md, which imports the catalog-less instructions (its plugin lists every skill).
+  assert.match(files['workspace/CLAUDE.md'], /^@QWEN\.md$/m);
+  assert.doesNotMatch(files['workspace/CLAUDE.md'], /@AGENTS\.md/);
+  assert.ok(Buffer.byteLength(files['workspace/QWEN.md']) < Buffer.byteLength(files['workspace/AGENTS.md']) / 2);
+});
+
 test('qwen commands use {{args}}', () => {
   assert.match(qwenCommandMd('---\ndescription: x\n---\nRun for: $ARGUMENTS\n'), /Run for: \{\{args\}\}/);
 });

@@ -56,7 +56,7 @@ read-only calls.
 | Skills | plugin `skills/` | plugin `skills/` | extension `skills/` | `skills.paths`: `{env:FTH_ROOT}/skills` | read `skills/*/SKILL.md` |
 | Agent roles | `agents/*.md` | `.codex/agents/*.toml` + `[agents.*]` (installer) | `qwen-extension/agents/*.md` (tool ids translated) | `agent.<role>` in `workspace/opencode.json` (subagents, permission keys translated) | play roles from `agents/*.md` |
 | Commands | `commands/` | (use skills) | `qwen-extension/commands/` (`{{args}}`) | (use skills) | n/a |
-| Instructions | `workspace/CLAUDE.md` → `AGENTS.md` | `workspace/AGENTS.md` | `workspace/QWEN.md`, extension `QWEN.md` | `workspace/AGENTS.md` | `workspace/AGENTS.md` |
+| Instructions | `workspace/CLAUDE.md` → `QWEN.md` (no skill catalog: the plugin lists skills) | `workspace/AGENTS.md` (with the skill catalog) | `workspace/QWEN.md`, extension `QWEN.md` (no skill catalog: Qwen Code lists skills) | `workspace/AGENTS.md`, and in index mode the head trader's own prompt | `workspace/AGENTS.md` |
 | Hooks | plugin `hooks/hooks.json` | plugin `hooks/hooks.json` (Codex sets CLAUDE_PLUGIN_ROOT; exit 2 blocks) | extension `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}` substituted) | none | none |
 | Order gate | hook + gateway | hook + gateway | hook + gateway | gateway | gateway |
 | Headless | `claude -p --plugin-dir`, tool allowlist | `codex exec`, workspace-write sandbox, broker tools pre-approved | `qwen -p --approval-mode default`, workspace allowlist | `opencode run --format json --dir <workspace>`, the project's permissions plus the runner's per-run config | custom argv |
@@ -115,12 +115,38 @@ call, and `skill_lookup` reads any skill. A role without `skill_lookup`
 (`trade-executor`, `news-calendar-analyst`, `strategy-researcher`,
 `trade-reviewer`) keeps the tool: it is its only way to a skill its embedded
 skills name but its prompt doesn't carry (`gate-refusals-limits` for the
-executor). Full mode and the head trader, which loads its skills with it, keep
-it too (`deniesSkillTool`). Language servers,
+executor). Full mode keeps it too (`deniesSkillTool`). In index mode the head
+trader is denied it as well and holds `skill_lookup` (below); in full mode it has
+no prompt of its own and loads its skills with the tool, as before. Language servers,
 formatters and snapshots are off. The roles live in the one file, not
 in `.opencode/agents/`: opencode installs npm packages into every `.opencode/`
 folder it loads (running its `package.json`), so the harness keeps none, and
 the workspace guard fingerprints `.opencode/` whole (absent).
+
+The head trader (`scripts/lib/head-prompt.js`). In index mode its entry in
+`workspace/opencode.json` carries a prompt of its own, in place of opencode's
+default one: the skills it reads every cycle (`CORE`: the order gate's
+`REQUIRED_FOR_ENTRY` and `REQUIRED_AT_ENTRY`, then `autonomous-trading`,
+`trader-process`, `htf-to-ltf`, `bar-briefing`, `role-round` and
+`day-context`) embedded whole, the same text a load returns, so they are part
+of its fixed prefix that a prompt cache reuses across cycles instead of about a
+dozen skill-load turns after each cycle's prompt. Any other skill
+(`manage-position`, `leftover-orders`, `lean-cycle`, `entry-outcome`, ...) it
+reads whole with `skill_lookup` (no role), from the Skills list of
+`AGENTS.md`, which opencode puts in its prompt; it is denied opencode's skill
+tool, so opencode's listing of every skill (about 26 KB) is gone from it. The
+cycle prompt says the skills are already loaded. The order gate counts an
+embedded skill as loaded only on the runner's attestation: for an opencode run
+in index mode the runner sets `FTH_HEAD_PROMPT` (never inherited, never for
+another harness) to the run's `opencode.json`, its head prompt's SHA-256 and the
+skills it embeds; at each entry the gate (`attestedSkills`) reads that file
+again and counts a skill only if the file's head prompt still hashes to the
+attested value and embeds the skill's current text whole, and only on the
+runner's opencode cycle transcript. Without that (an interactive session, a
+hook's transcript, another harness, a missing, malformed or forged
+attestation, a changed file or skill) nothing embedded counts: the transcript
+decides, as before. A `skill_lookup` the head trader makes naming a role is
+its own, never that role's (`sessionLookups`).
 
 The runner passes per run (`OPENCODE_CONFIG_CONTENT`, merged last) every
 permission again (the session's, the head trader's, each role's), so a run is
@@ -210,7 +236,7 @@ is the authoritative layer. A blocked call never reaches the server.
 | `mtf-trend` | The multi-timeframe trend rule: a trend strategy (anything without `mtf: reversal`; a policy strategy is judged by the component its verdict trades) never enters against the prevailing trend (the highest of 4h, 1h, 15m with one) in `<FTH_HOME>/mtf/<ROOT>.json`, which the runner writes every bar and `mtf.js --record` interactively; a missing record, or one more than `FTH_MTF_MAX_AGE_MIN` (15) past its bar's close, refuses trend entries. Hard: not skippable. The scan and the backtester apply the same rule to candidates | yes | yes |
 | `trigger-fired` | A rules strategy enters only on its own trigger: the signal record (`<FTH_HOME>/signals/<ROOT>-<minutes>m.json`, written by the runner every bar and by `strategies.js scan --record`) shows it fired on the ordered side, on a bar that closed at most `FTH_SIGNAL_MAX_AGE_BARS` (3) bars of the strategy's own timeframe ago, never more than 45 minutes (3 min on 1m, 9 min on 3m, 45 min on 15m and 1h; a timeframe it can't read counts as 1 minute, the strictest; `FTH_SIGNAL_MAX_AGE_MIN`, when set, only shortens it). A relabelled setup tag or a stale signal is refused. Hard | yes | yes |
 | `combine`, `policy` | A strategy that trades an account (a policy strategy): a started attempt, a fresh account snapshot, the account's own blocks, one position at a time, and a size within the budget for the order's stop (`combine`); and a verdict the runner recorded at the setup for this contract (`<FTH_HOME>/policy-verdicts.jsonl`), unexpired, not used for an entry yet, on the bar the setup is on now (the verdict's `bar` is the last bar of the strategy's timeframe signal record, `<FTH_HOME>/signals/<ROOT>-<minutes>m.json`, compared as instants; a verdict that names no bar, one for an older or a newer bar, and a missing or unreadable record are refused), saying `full` with a multiplier above 0 and at most 1 (the rulebook's enforced items; the budget is checked at it; `skip` and any other action, `half` included, are refused, as is a missing or out-of-range multiplier), with the order's side, contract, stop ticks, and at most its size (`policy`). Hard: not skippable; `[exit]`/`[protect]` orders are never held by them | yes | yes |
-| `skills-loaded` | The session transcript (the hook's `transcript_path`, and its main session's for a Claude subagent) shows the skill tool loaded `trade-session`, `multi-timeframe-analysis`, `strategy-library`, `strategy-scan`, and `strategy-gate-checks` before an entry: a Claude Code `Skill` call, or in Qwen Code's chat file a `skill` call that its answer shows loaded (a failed load doesn't count). opencode's `skill` events count too. The gateway reads the runner's live cycle transcript (`FTH_CYCLE_TRANSCRIPT`, a file per run) for Claude Code and opencode cycles. Codex passes no transcript: not applicable | yes | yes, autonomous Claude Code and opencode cycles |
+| `skills-loaded` | The session transcript (the hook's `transcript_path`, and its main session's for a Claude subagent) shows the skill tool loaded `trade-session`, `multi-timeframe-analysis`, `strategy-library`, `strategy-scan`, and `strategy-gate-checks` before an entry: a Claude Code `Skill` call, or in Qwen Code's chat file a `skill` call that its answer shows loaded (a failed load doesn't count). opencode's `skill` events count too, and `skill_lookup` calls that returned the skill; for opencode's head trader in index mode, the skills embedded in its prompt, on the runner's verified attestation (`FTH_HEAD_PROMPT`, `head-prompt.js`). The gateway reads the runner's live cycle transcript (`FTH_CYCLE_TRANSCRIPT`, a file per run) for Claude Code and opencode cycles. Codex passes no transcript: not applicable | yes | yes, autonomous Claude Code and opencode cycles |
 | `roles-ran` | An autonomous cycle's entry (`FTH_CYCLE`: full or lean) waits for its roles: a full cycle's `market-structure-analyst`, `trend-momentum-analyst`, `volume-liquidity-analyst` and `risk-manager` phase 1, then phase 2 (a second risk-manager call started after phase 1 and the analysts returned); a lean cycle's risk-manager phase 1, then phase 2. Calls count when they returned in the foreground without an error, since the last `trade-executor` call (`roles-ran.js`), in the same transcripts as `skills-loaded`; a transcript the runner named that can't be read refuses. Codex and the custom harness: not applicable | yes | yes, autonomous Claude Code and opencode cycles |
 | `phase2-facts` | An autonomous cycle's entry: the `FACTS:` line of the phase-2 report that approved it (`roles-ran.js` approvedPhase2), each claim in its closed form (window, entries, news, trend, read, 15m/1h/4h, vwap, value, room) checked in code against the cycle bar's briefing for the order's root (`fact-claims.js`; the learned-rulebook design's R29). A claim the briefing contradicts refuses the entry, naming it; stated claims it can't check (no current briefing for the cycle's bar, an unreadable transcript, the check failing) refuse too (fails closed). With a current briefing an approval must state at least 2 distinct claims it checks (owner's decision); a pinned cycle bar (`FTH_CYCLE_BARS`) whose briefing is missing, corrupt or another bar's refuses whatever was stated; with no bar pinned and no current briefing, no FACTS line or `FACTS: none` passes. More than 20 items refuse. A report naming another cycle symbol and not the order's is refused (one symbol per report). A claim in no known form, or about a fact the briefing doesn't hold, is unchecked and recorded, never guessed, and doesn't count. Never skippable; exits and protective orders never reach it. Every phase-2 report's check is recorded in the cycle log (`factCheck`) | yes | yes, autonomous Claude Code and opencode cycles |
 | `order-consistency` | The order agrees with its rationale: the side named after the tag (`long`/`short`/`buy`/`sell`) is the order side; the stop and target sit on the right sides of a limit or stop entry's price and of each other; known-contract prices are on the tick; bracket ticks are whole and match the rationale's prices within a tick (a market order: stop + target ticks within two of the stop-to-target distance) | yes | yes |

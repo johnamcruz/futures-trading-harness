@@ -124,7 +124,14 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   assert.deepStrictEqual(roleSkill(index), Object.fromEntries(roles.map(a => [a.name, a.tools.includes('mcp__harness__skill_lookup') ? 'deny' : 'allow'])));
   assert.deepStrictEqual(roleSkill(full), Object.fromEntries([...roleNames].map(r => [r, 'allow'])));
   const withRoleSkill = (c, v) => ({ ...c, agent: Object.fromEntries(Object.entries(c.agent).map(([n, a]) => [n, roleNames.has(n) ? { ...a, permission: { ...a.permission, skill: v } } : a])) });
-  assert.strictEqual(strip(withRoleSkill(index, 'allow')), strip(full));
+  // And the head trader's (and the session's) two skill keys: index mode embeds its skills in its own prompt and gives it
+  // skill_lookup for the rest, the skill tool denied (head-prompt.js); full mode has no prompt of its own and the tool.
+  const head = c => [c.permission.skill, c.permission.harness_skill_lookup, c.agent['fth-head-trader'].permission.skill, c.agent['fth-head-trader'].permission.harness_skill_lookup];
+  assert.deepStrictEqual(head(index), ['deny', 'allow', 'deny', 'allow']);
+  assert.deepStrictEqual(head(full), ['allow', 'deny', 'allow', 'deny']);
+  assert.ok(index.agent['fth-head-trader'].prompt && !('prompt' in full.agent['fth-head-trader']));
+  const fullHead = c => ({ ...c, permission: { ...c.permission, skill: 'allow', harness_skill_lookup: 'deny' }, agent: { ...c.agent, 'fth-head-trader': { ...c.agent['fth-head-trader'], permission: { ...c.agent['fth-head-trader'].permission, skill: 'allow', harness_skill_lookup: 'deny' } } } });
+  assert.strictEqual(strip(fullHead(withRoleSkill(index, 'allow'))), strip(full));
 });
 
 test('agentPrompt: the one load sentence (core and index) stays one in full mode and becomes two in index mode', () => {

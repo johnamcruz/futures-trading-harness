@@ -27,7 +27,8 @@ const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal } = require('./signal-state');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
-const { lookupRule, briefingFacts } = require('./skill-lookups');
+const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
+const { attestedSkills, parseAttestation } = require('../head-prompt');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
@@ -336,9 +337,14 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const situational = !(config.autonomous && config.roleSkills === 'index') ? []
     : config.cycleLaneBars === null ? headSituationalSkills()
       : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars));
-  add('skills-loaded', checkSkillsLoaded(transcript, [...REQUIRED_FOR_ENTRY, ...situational.filter(s => !REQUIRED_FOR_ENTRY.includes(s))]));
+  // opencode's head trader in index mode: the skills its prompt embeds count as loaded, only on the runner's attestation
+  // (FTH_HEAD_PROMPT) checked now against the run's config file and the skills' current text (head-prompt.js), and only
+  // for the runner's own cycle transcript (a hook's transcript is another harness's session). Anything off: none.
+  const embedded = config.autonomous && config.roleSkills === 'index' && !transcriptPath && config.headPromptAttestation
+    ? attestedSkills(parseAttestation(config.headPromptAttestation), HARNESS_ROOT, { transcript }) : [];
+  add('skills-loaded', checkSkillsLoaded(transcript, [...REQUIRED_FOR_ENTRY, ...situational.filter(s => !REQUIRED_FOR_ENTRY.includes(s))], embedded));
   // And, read before an entry only, how to judge the setup and write its plan (REQUIRED_AT_ENTRY; unreadable: refused).
-  add('skills-at-entry', checkSkillsAtEntry(transcript));
+  add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, embedded));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, laneBars: config.cycleLaneBars }) : null;

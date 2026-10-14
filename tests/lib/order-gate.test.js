@@ -2287,3 +2287,111 @@ test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill ma
     SITUATIONAL.splice(SITUATIONAL.indexOf(entry), 1);
   }
 });
+
+// --- opencode's head trader in index mode: its embedded skills count as loaded only on the runner's attestation
+// (head-prompt.js), checked against the run's config file; anything off falls back to the transcript. ---
+
+/** A run's workspace with the generated index-mode opencode.json, its attestation, and an opencode cycle transcript. */
+function headRun() {
+  const H = require('../../scripts/lib/head-prompt');
+  const HS = require('../../scripts/lib/harness-sync');
+  const root = path.resolve(__dirname, '..', '..');
+  const dir = require('../helpers').tmpDir();
+  const configFile = path.join(dir, 'workspace', 'opencode.json');
+  fs.mkdirSync(path.dirname(configFile), { recursive: true });
+  const generated = HS.expectedFiles(root)['workspace/opencode.json'];
+  fs.writeFileSync(configFile, generated);
+  const att = H.attestation(configFile, root);
+  const transcript = path.join(dir, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(transcript), { recursive: true });
+  // An opencode stream whose session loaded no skill by tool: the head trader read its prompt's.
+  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
+  const cfg = { ...config, autonomous: true, roleSkills: 'index', cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
+  return { H, root, dir, configFile, generated, att, transcript, cfg };
+}
+const skillChecks = r => checks(r).filter(c => c.startsWith('skills-'));
+const headGate = (cfg, input = entryOrder(), extra = {}) => evaluateOrder({ input, entries: [plan()], now: NOW, config: cfg, ...extra });
+const HEAD_RISK_REDUCING = ['[exit] flatten', '[protect] stop for the long at 21480', '[exit] cut size to 1'];
+
+test('head prompt (gate): the attested, verified embedded skills count as loaded for the runner\'s opencode transcript in index mode', () => {
+  const { att, cfg } = headRun();
+  const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  for (const s of [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY]) assert.ok(att.skills.includes(s), `attested: ${s}`);
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), []);
+  // Without the attestation the same session is refused for every one of them: the transcript alone decides.
+  const none = headGate({ ...cfg, headPromptAttestation: null });
+  assert.deepStrictEqual(skillChecks(none), ['skills-at-entry', 'skills-loaded']);
+  assert.match(none.violations.find(v => v.check === 'skills-loaded').message, /not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks\. Load each with the skill tool \(or skill_lookup, without one/);
+});
+
+test('head prompt (gate): never fails open: interactive, full mode, a hook\'s transcript, another harness\'s transcript, a bad or forged attestation, a changed file or skill', () => {
+  const { H, root, configFile, generated, att, transcript, cfg } = headRun();
+  const refusedBoth = (label, c, extra) => {
+    const r = headGate(c, entryOrder(), extra);
+    assert.deepStrictEqual(skillChecks(r), ['skills-at-entry', 'skills-loaded'], label);
+    // Exits, protective stops and size cuts are never held by it.
+    for (const rationale of HEAD_RISK_REDUCING) assert.deepStrictEqual(skillChecks(headGate(c, entryOrder({ rationale }), extra)), [], `${label}: ${rationale}`);
+  };
+  refusedBoth('interactive (not autonomous)', { ...cfg, autonomous: false });
+  refusedBoth('full mode', { ...cfg, roleSkills: 'full' });
+  // A hook's transcript (Claude Code, Qwen Code: transcript_path) is another harness's session: the attestation never applies.
+  refusedBoth('a hook transcript', cfg, { transcriptPath: transcript });
+  // The cycle transcript isn't opencode's (a Claude run carrying the variable): ignored.
+  const claudeFile = path.join(path.dirname(transcript), 'claude.jsonl');
+  fs.writeFileSync(claudeFile, JSON.stringify({ type: 'system', subtype: 'init', session_id: 's' }));
+  refusedBoth('a Claude stream', { ...cfg, cycleTranscript: claudeFile });
+  fs.writeFileSync(claudeFile, '');
+  refusedBoth('an empty transcript', { ...cfg, cycleTranscript: claudeFile });
+  // Malformed attestations.
+  for (const bad of ['{', '[]', '"x"', JSON.stringify({ ...att, sha256: 'abc' }), JSON.stringify({ ...att, skills: [] }), JSON.stringify({ ...att, skills: ['../x'] }), JSON.stringify({ ...att, config: 'workspace/opencode.json' }), JSON.stringify({ ...att, config: path.join(path.dirname(configFile), 'other.json') }), JSON.stringify({ ...att, config: `${configFile}.gone` })]) {
+    refusedBoth(`attestation ${bad.slice(0, 60)}`, { ...cfg, headPromptAttestation: bad });
+  }
+  // The file changed after the runner hashed it (one character of the head prompt): no skill counts.
+  const json = JSON.parse(generated);
+  json.agent['fth-head-trader'].prompt = json.agent['fth-head-trader'].prompt.replace('Read them here', 'Read them  here');
+  fs.writeFileSync(configFile, JSON.stringify(json));
+  refusedBoth('a changed file', cfg);
+  // A forged attestation that hashes the changed file: it still must embed each skill's current text whole.
+  json.agent['fth-head-trader'].prompt = json.agent['fth-head-trader'].prompt.replace(/<skill name="trade-plan">\n[^]*?\n<\/skill>/, '<skill name="trade-plan">\nPlan anything.\n</skill>');
+  fs.writeFileSync(configFile, JSON.stringify(json));
+  const forged = { ...att, sha256: H.sha256(json.agent['fth-head-trader'].prompt) };
+  const r = headGate({ ...cfg, headPromptAttestation: JSON.stringify(forged) });
+  assert.deepStrictEqual(skillChecks(r), ['skills-at-entry']);
+  assert.match(r.violations.find(v => v.check === 'skills-at-entry').message, /not read in this session: trade-plan\./);
+  // A skill the attestation names but the file doesn't embed (role-index skills are only listed) is not counted.
+  assert.deepStrictEqual(H.attestedSkills({ ...forged, skills: ['trade-session', 'absorption'] }, root, { transcript }), ['trade-session']);
+  // The attested file unreadable: none.
+  fs.writeFileSync(configFile, '{ not json');
+  refusedBoth('an unreadable file', cfg);
+  fs.writeFileSync(configFile, generated);
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'restored: counted again');
+  // A skill that isn't attested still needs its load (a situational one the briefing triggers, or one the runner left out).
+  const partial = { ...att, skills: att.skills.filter(s => s !== 'strategy-scan') };
+  const p = headGate({ ...cfg, headPromptAttestation: JSON.stringify(partial) });
+  assert.deepStrictEqual(skillChecks(p), ['skills-loaded']);
+  assert.match(p.violations[0].message, /not loaded in this session: strategy-scan\./);
+  // ... and a skill_lookup in the transcript for it counts, as before.
+  fs.appendFileSync(transcript, `\n${ocEvent('harness_skill_lookup', { skill: 'strategy-scan' }).replace('VERDICT: APPROVE - size 1', '<skill name=\\"strategy-scan\\">...')}`);
+  assert.deepStrictEqual(skillChecks(headGate({ ...cfg, headPromptAttestation: JSON.stringify(partial) })), []);
+});
+
+test('head prompt (gateway): checkOrder counts the attested skills for the runner\'s opencode cycle in index mode, and only there; an exit is never gated', () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { att, transcript, dir } = headRun();
+  const has = (r, check) => r.violations.some(v => v.check === check);
+  const base = { FTH_HOME: dir, FTH_CYCLE_TRANSCRIPT: transcript, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' };
+  const run = (env, input = entryOrder()) => checkOrder(input, { env, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW });
+  const ok = run({ ...base, FTH_HEAD_PROMPT: JSON.stringify(att) });
+  assert.ok(!has(ok, 'skills-loaded') && !has(ok, 'skills-at-entry'), ok.message);
+  for (const [label, env] of [
+    ['no attestation', base],
+    ['full mode', { ...base, FTH_ROLE_SKILLS: 'full', FTH_HEAD_PROMPT: JSON.stringify(att) }],
+    ['not autonomous', { ...base, FTH_AUTONOMOUS: '', FTH_HEAD_PROMPT: JSON.stringify(att) }],
+    ['a forged hash', { ...base, FTH_HEAD_PROMPT: JSON.stringify({ ...att, sha256: '0'.repeat(64) }) }],
+  ]) {
+    const r = run(env);
+    assert.ok(has(r, 'skills-loaded') && has(r, 'skills-at-entry'), `${label}: ${r.message}`);
+    const exit = run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }));
+    assert.ok(!has(exit, 'skills-loaded') && !has(exit, 'skills-at-entry'), label);
+  }
+});

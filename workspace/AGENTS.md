@@ -15,8 +15,8 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
   multi-timeframe read, blackouts, the prop status, lessons, reconcile) are
   tools on the `harness` MCP server (the `tool-arguments` skill). Use the tools;
   the scripts in `<root>/scripts/` are for people (`user-commands`).
-- Before trading, load the skill you need yourself (your skill tool, or read
-  `<root>/skills/<name>/SKILL.md` if your harness has none), never through a
+- Before trading, load the skill you need yourself (your skill tool; without one,
+  the `skill_lookup` tool or `<root>/skills/<name>/SKILL.md`), never through a
   role: a role's call is its own analysis. Start with `trade-session`,
   `premarket`, `end-of-day`, or `autonomous-trading`.
 - Strategies are Markdown files: the `strategies_list` tool lists them.

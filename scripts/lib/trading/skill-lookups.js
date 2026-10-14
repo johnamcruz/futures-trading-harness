@@ -27,7 +27,8 @@
  *   briefingFacts(home, root, now, laneBars)    the cycle's facts for the root (cycleFacts over the home), or null
  *   cycleFacts({ first, now, lanes, readFrame, readSignal })   the runner's briefing's m3 with the closed lanes' candidates
  *   unmetLookups(call, { records, required, m3, calls })   the required skills its role didn't look up in its calls
- *   lookupRule({ root, home, transcript, contractId, now, laneBars })   (call) -> unmet skills, for checkRolesRan
+ *   sessionLookups(transcript)                  the (role, skill) pairs the session looked up itself in a role's name
+ *   lookupRule({ root, home, transcript, contractId, now, laneBars })   (call) -> unmet skills, for checkRolesRan (those pairs left out)
  *   lookupStats({ calls, records, required, m3 })   per cycle: lookups, by role, calls with a requirement, met
  */
 
@@ -138,6 +139,38 @@ function unmetLookups(call, { records = [], required = new Map(), m3 = null, cal
   return need.filter(r => !records.some(x => x.role === call.role && x.skill === r.skill && windows.some(c => x.at >= c.start && x.at <= c.end))).map(r => r.skill);
 }
 
+/**
+ * The (role, skill) pairs the session itself looked up naming a role: opencode's transcript holds the main session's
+ * own tool calls only (a subagent's are not in it), so a skill_lookup there is the head trader's (it may use the tool
+ * in index mode: head-prompt.js), never the role's, whatever role it names. An unreadable or too large transcript:
+ * none (the lookups decide as before; roles-ran refuses a transcript it can't read).
+ */
+function sessionLookups(transcript) {
+  const out = new Set();
+  let text;
+  try {
+    if (!transcript || fs.statSync(transcript).size > 50 * 1024 * 1024) return out;
+    text = fs.readFileSync(transcript, 'utf8');
+  } catch (_err) {
+    return out;
+  }
+  for (const line of text.split('\n')) {
+    if (!line.includes('skill_lookup')) continue;
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    const part = ev && typeof ev === 'object' && ev.part && typeof ev.part === 'object' ? ev.part : null;
+    const input = part && part.state && typeof part.state === 'object' ? part.state.input : null;
+    if (ev.type === 'tool_use' && /(^|_)skill_lookup$/.test(String(part.tool || '')) && input && typeof input.role === 'string') out.add(`${input.role}\t${input.skill}`);
+  }
+  return out;
+}
+
+/** The lookups file's records but those the session made itself in a role's name (sessionLookups): not the role's. */
+const rolesOwn = (records, transcript) => {
+  const own = sessionLookups(transcript);
+  return own.size ? records.filter(r => !own.has(`${r.role}\t${r.skill}`)) : records;
+};
+
 const cache = new Map();
 function requiredFor(root) {
   if (!cache.has(root)) cache.set(root, requiredByRole(root, 'index'));
@@ -150,7 +183,7 @@ function requiredFor(root) {
  */
 function lookupRule({ root = PLUGIN_ROOT, home, transcript, contractId, now = new Date(), laneBars = {} }) {
   const required = requiredFor(root);
-  const records = readLookups(transcript);
+  const records = rolesOwn(readLookups(transcript), transcript);
   const m3 = briefingFacts(home, contractRoot(contractId || ''), now, laneBars);
   const rule = (call, calls) => unmetLookups(call, { records, required, m3, calls });
   rule.needs = role => needed(role, required, m3).map(r => r.skill);
@@ -171,4 +204,4 @@ function lookupStats({ calls = [], records = [], required = new Map(), m3 = null
   return { lookups: records.length, byRole, requiredCalls, met };
 }
 
-module.exports = { PLUGIN_ROOT, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, needed, unmetLookups, requiredFor, lookupRule, lookupStats };
+module.exports = { PLUGIN_ROOT, sessionLookups, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, needed, unmetLookups, requiredFor, lookupRule, lookupStats };
