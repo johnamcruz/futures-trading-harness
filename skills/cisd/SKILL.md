@@ -41,8 +41,8 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side. Mid-range is a skip.
-- **Weaker**: mid-range with no level; against a strong HTF trend with
-  no HTF break (`bos-vs-choch`).
+- **Weaker**: against a strong HTF trend with no HTF break
+  (`bos-vs-choch`).
 - **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
   (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
   `mixed` or `unclear` with overlapping small bars. A CISD there is
