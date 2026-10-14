@@ -1,7 +1,7 @@
 'use strict';
 
 // Every skill is indexed somewhere: a role's lists (role-skills, role-index), the head trader's load list
-// (REQUIRED_FOR_ENTRY, trade-session step 0, the autonomous runner's prompts), a command shim, or the reasoned
+// (REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, trade-session step 0, the autonomous runner's prompts), a command shim, or the reasoned
 // allow-list below of skills only a user or a maintenance tool reaches. skill_lookup's catalog
 // (scripts/lib/harness-tools/skills.js) lists every skill on demand, so a role's prompt never carries the whole list;
 // this keeps each skill reachable from the place that is meant to use it. The catalog and the index lines are the
@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { loadRoles } = require('../../scripts/lib/role-skills');
-const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
 const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
 const { spawnSync } = require('child_process');
 
@@ -46,6 +46,16 @@ const ALLOWED = {
   'timeframe-sources': 'without a current briefing: where each timeframe\'s bars come from (multi-timeframe-analysis, trade-session and premarket point to it)',
   'mtf-bias-filter': 'the trend as a rules filter, for writing a strategy (multi-timeframe-analysis points to it); never read in a cycle',
   'top-down-entry': 'referenced, never embedded: the structure analyst\'s setup step names it and looks it up (basics-skills.test.js)',
+  // The trade-session split's pieces (trade-session-split.test.js): the head trader reads each when the core's step names
+  // it, never on the per-cycle load list (the cycle's load doesn't grow); setup-judgment and trade-plan are indexed by
+  // REQUIRED_AT_ENTRY (the gate requires them before an entry).
+  'role-round': 'trade-session step 2 points to it for every full cycle (the roles, cached reports, [roles-ran]); not on the load list',
+  'lean-cycle': 'trade-session step 2 points to it when the prompt says lean; not on the load list',
+  'manage-position': 'trade-session steps 1 and 3 point to it while a position is open; not on the load list',
+  'leftover-orders': 'trade-session step 1 points to it when flat with working orders; not on the load list',
+  'day-context': 'trade-session step 3 points to it for every decision (the premarket plan, the news, the day so far); not on the load list',
+  'entry-outcome': 'trade-session step 6 points to it after an entry is placed; not on the load list',
+  'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
 };
 
 // Descriptions over the limit when the limit came in (skill-descriptions.pins.json: skill -> its length): each pin
@@ -80,6 +90,7 @@ function coverage() {
     for (const s of r.index) add(s, `${r.name} role-index`);
   }
   for (const s of REQUIRED_FOR_ENTRY) add(s, 'REQUIRED_FOR_ENTRY');
+  for (const s of REQUIRED_AT_ENTRY) add(s, 'REQUIRED_AT_ENTRY');
   const ts = fs.readFileSync(path.join(ROOT, 'skills', 'trade-session', 'SKILL.md'), 'utf8');
   const step0 = ts.split(/^### 0\. /m)[1];
   assert.ok(step0, 'trade-session has its step 0');

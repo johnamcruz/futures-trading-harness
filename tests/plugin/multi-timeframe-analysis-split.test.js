@@ -209,6 +209,7 @@ test('multi-timeframe-analysis split: the market-structure analyst loads what it
   for (const s of ['timeframe-sources', 'mtf-bias-filter']) assert.ok(![...data['role-skills'], ...data['role-index']].includes(s), s);
   assert.match(read('skills/premarket/SKILL.md').replace(/\s+/g, ' '), /see the `timeframe-sources` and `daily-bias` skills/);
   assert.match(read('skills/trade-session/SKILL.md'), /\(`mtf_read` with the bars file, the `timeframe-sources` skill\)/);
-  assert.match(read('skills/trade-session/SKILL.md').replace(/\s+/g, ' '), /the alignment table in `htf-to-ltf`/);
+  // In setup-judgment since the trade-session split (trade-session-split.test.js).
+  assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /the alignment table in `htf-to-ltf`/);
   assert.match(read('skills/pullback-vs-reversal/SKILL.md'), /shift or reclaim of `htf-to-ltf`/);
 });

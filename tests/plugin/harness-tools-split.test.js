@@ -355,11 +355,14 @@ function skillRefs(rel, text, quotesOld = false) {
 const STEP4 = 'tests/fixtures/skill-split/trade-session-step4.before.txt';
 const STEP4_SHA256 = '392cb9fcf88ec97ef5a747e08c6770c01db8029d363671f01ce4eb968b4749b7';
 
-test('trade-session step 4 is main\'s, byte for byte; the head trader\'s load list is unchanged', () => {
+// Step 4 is the trade-plan skill's body now (the trade-session split, tests/plugin/trade-session-split.test.js): its How It
+// Works is the fixture without its heading, byte for byte; trade-session keeps the heading and a pointer.
+test('trade-session step 4 is main\'s, byte for byte (in trade-plan); the head trader\'s load list is unchanged', () => {
   assert.strictEqual(sha(STEP4), STEP4_SHA256, 'the fixture is main\'s step 4, unchanged');
-  const ts = skill('trade-session');
-  const step4 = ts.slice(ts.indexOf('### 4. Plan'), ts.indexOf('### 5. Verdict'));
-  assert.strictEqual(step4, read(STEP4), 'step 4 byte-equal to main');
+  const tp = skill('trade-plan');
+  const body = tp.slice(tp.indexOf('## How It Works\n\n') + '## How It Works\n\n'.length, tp.indexOf('## Examples'));
+  assert.strictEqual(`### 4. Plan\n\n${body}`, read(STEP4), 'step 4 byte-equal to main');
+  assert.match(skill('trade-session'), /### 4\. Plan\n\nThe `trade-plan` skill/);
   // order-plan is referenced, not loaded every cycle: not in the gate's list, nor in the prompt's.
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.ok(!REQUIRED_FOR_ENTRY.includes('order-plan'));

@@ -318,7 +318,34 @@ test('order gate: with a Claude transcript, an entry needs the trading skills lo
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: multi-timeframe-analysis, strategy-library/);
-  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill).join('\n'));
+  fs.writeFileSync(transcript, ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill).join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(ok.code, 0, ok.stderr);
+});
+
+test('order gate (hook): an entry needs setup-judgment and trade-plan read (REQUIRED_AT_ENTRY); exits, protective stops, stop moves and cancels never wait for them', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
+  const transcript = path.join(dir, 'session.jsonl');
+  const EVERY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  fs.writeFileSync(transcript, [...EVERY, 'setup-judgment'].map(skill).join('\n'));
+  const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[skills-at-entry\] Read how to judge the setup and write its plan before an entry; not read in this session: trade-plan\./);
+  assert.doesNotMatch(r.stderr, /\[skills-loaded\]/, 'its own check, apart from the per-cycle list');
+  for (const order of [{ ...ORDER, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
+    const ok = gate({ ...orderPayload(order), transcript_path: transcript }, env);
+    assert.strictEqual(ok.code, 0, ok.stderr);
+  }
+  for (const [tool, input] of [['modify_order', { accountId: ORDER.accountId, orderId: 7, stopPrice: 21490 }], ['cancel_order', { accountId: ORDER.accountId, orderId: 7 }]]) {
+    const ok = gate({ tool_name: `mcp__broker__${tool}`, tool_input: input, transcript_path: transcript }, env);
+    assert.strictEqual(ok.code, 0, `${tool}: ${ok.stderr}`);
+  }
+  // A transcript named but unreadable: refused (fails closed).
+  const gone = gate({ ...orderPayload(), transcript_path: path.join(dir, 'gone.jsonl') }, env);
+  assert.strictEqual(gone.code, 2);
+  assert.match(gone.stderr, /\[skills-at-entry\] The session's transcript can't be read/);
+  fs.writeFileSync(transcript, [...EVERY, 'setup-judgment', 'trade-plan'].map(skill).join('\n'));
   const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
@@ -327,7 +354,7 @@ test('order gate (hook): strategy-library was split; an entry without any one of
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
   const transcript = path.join(dir, 'session.jsonl');
-  const ALL = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+  const ALL = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'];
   for (const missing of ['strategy-library', 'strategy-scan', 'strategy-gate-checks']) {
     fs.writeFileSync(transcript, ALL.filter(s => s !== missing).map(skill).join('\n'));
     const r = gate({ ...orderPayload(), transcript_path: transcript }, env);
@@ -357,7 +384,7 @@ test('order gate: with a Qwen Code chat transcript (parts format), the skills lo
   const failed = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(failed.code, 2);
   assert.match(failed.stderr, /\[skills-loaded\] .*not loaded in this session: strategy-library\./);
-  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...load('e', 'strategy-scan'), ...load('f', 'strategy-gate-checks'), ...failedLoad, ...load('d', 'strategy-library')].join('\n'));
+  fs.writeFileSync(transcript, [...load('a', 'trade-session'), ...load('b', 'multi-timeframe-analysis'), ...load('e', 'strategy-scan'), ...load('f', 'strategy-gate-checks'), ...failedLoad, ...load('d', 'strategy-library'), ...load('g', 'setup-judgment'), ...load('h', 'trade-plan')].join('\n'));
   const ok = gate({ ...orderPayload(), transcript_path: transcript }, env);
   assert.strictEqual(ok.code, 0, ok.stderr);
   assert.doesNotMatch(ok.stderr, /skills-loaded/);
@@ -2076,7 +2103,7 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'VERDICT: APPROVE - size 1' }] } })];
   const transcript = path.join(dir, 'session.jsonl');
@@ -2126,7 +2153,7 @@ test('order gate hook: a room fact is about the order\'s own setup tag (phase2-f
     ] } },
   } });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })];
   const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
@@ -2150,7 +2177,7 @@ test('order gate: in an autonomous cycle, an entry approved on a fact the bar br
     m15: { version: 'b', validUntil: '2026-10-07T14:30:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
   } });
   const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
-  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
   const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
   const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
@@ -2378,7 +2405,7 @@ test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a rol
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
-  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ev('skill', { name })),
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
     ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
       .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
   // The default: no FTH_ROLE_SKILLS in the hook's environment is index mode.
@@ -2422,7 +2449,7 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
-  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'].map(name => ev('skill', { name })),
+  fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
     ...[['market-structure-analyst', 10, 20], ['trend-momentum-analyst', 10, 20], ['volume-liquidity-analyst', 10, 20], ['risk-manager', 10, 18], ['risk-manager', 30, 40]]
       .map(([subagent_type, s, e]) => ev('task', { subagent_type }, { start: T + s, end: T + e }))].join('\n'));
   const r = gate({ ...orderPayload(), transcript_path: transcript }, env);

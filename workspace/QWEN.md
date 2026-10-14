@@ -161,8 +161,10 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time. A read, never a veto; the priority order decides.
 - `contract-roll` (skills/contract-roll/SKILL.md): Use when a quarterly contract roll is near.
 - `daily-bias` (skills/daily-bias/SKILL.md): Use when setting today's bias - long, short or neutral, with confidence, reasons and what flips it - from the prior day, the open, 1h/4h structure.
+- `day-context` (skills/day-context/SKILL.md): Use when deciding a cycle - the premarket plan, the news, and the day so far.
 - `design-self-review` (skills/design-self-review/SKILL.md): Only for the training loop's proposer (FTH-SELF-REVIEW prompt) - review flagged decisions and propose skill or rule edits. Never in a trading cycle.
 - `end-of-day` (skills/end-of-day/SKILL.md): Use at the end of each session, from /eod, or at the runner's end-of-day time - flatten and confirm flat, cancel leftovers, review trades, journal the day.
+- `entry-outcome` (skills/entry-outcome/SKILL.md): Use after placing an entry - filled, working, refused, an unknown outcome, or flat.
 - `exchange-holidays` (skills/exchange-holidays/SKILL.md): Use when checking for an exchange holiday or an early close.
 - `fair-value-gaps` (skills/fair-value-gaps/SKILL.md): Use when an open or partly filled fair value gap is near price, ahead of a setup, or retested after a sweep. A location, never a trigger.
 - `fib-retracement` (skills/fib-retracement/SKILL.md): Use after an impulse to judge pullback depth, or for a CISD's OTE zone (0.62-0.79) - fib levels and a bounce on a completed candle. A read, never a veto.
@@ -170,12 +172,16 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `gate-refusals-cycle` (skills/gate-refusals-cycle/SKILL.md): Use when the gate refuses an entry with [roles-ran] or [phase2-facts].
 - `gate-refusals-limits` (skills/gate-refusals-limits/SKILL.md): Use when the gate refuses an entry with [combine], [policy], [strategy], [max-order-size] or [max-risk].
 - `gate-refusals-positions` (skills/gate-refusals-positions/SKILL.md): Use when the gate refuses managing a position (an exit by contract month, a trading-day change), or can't read one; close_position is never gated.
+- `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].
 - `harness-root` (skills/harness-root/SKILL.md): Find the harness root (<root>) for absolute paths.
 - `htf-to-ltf` (skills/htf-to-ltf/SKILL.md): Use when timeframes disagree - alignment labels, reversals, HTF levels.
 - `invalidation` (skills/invalidation/SKILL.md): Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong and what makes management exit. Never moves a stop; never a veto.
 - `kill-switch` (skills/kill-switch/SKILL.md): Use when an entry is refused with [kill-switch], [allowed-accounts] or [account-lock].
+- `lean-cycle` (skills/lean-cycle/SKILL.md): Use when the prompt says lean - a 1-minute cycle with no parallel analysts.
+- `leftover-orders` (skills/leftover-orders/SKILL.md): Use when flat with working orders - cancel leftovers, keep only a bracketed planned entry.
 - `levels-and-reactions` (skills/levels-and-reactions/SKILL.md): Trader-process step 3 - which levels sit near price (prior day, overnight, OR/IB, VWAP, value, swings) and how price reacted there. A read, never a veto.
 - `live-session-records` (skills/live-session-records/SKILL.md): Use when reading or scoring a live trading day's records. User-run.
+- `manage-position` (skills/manage-position/SKILL.md): Use when a position is open - its stop, the plan's management, the open-trade line.
 - `market-snapshot` (skills/market-snapshot/SKILL.md): Use without a current bar briefing, for a number it doesn't carry, or a reference stop distance - indicators, levels and the regime from market_snapshot.
 - `micro-mini-specs` (skills/micro-mini-specs/SKILL.md): Use when sanity-checking a contract's tick size and value, a micro against its mini.
 - `momentum-and-volume` (skills/momentum-and-volume/SKILL.md): Trader-process steps 3 and 5 - whether a move has push behind it from the trigger bar and the last few bars' range, close and volume. A read, never a veto.
@@ -199,10 +205,12 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `replay-labels` (skills/replay-labels/SKILL.md): Use when turning a finished replay or live session into labels. User-run.
 - `replay-resume` (skills/replay-resume/SKILL.md): Use when a replay run stopped or must resume - retries, the error limit, the kill switch. User-run.
 - `replay-scorecard` (skills/replay-scorecard/SKILL.md): Use when scoring a finished replay or live session against the trader's rules. User-run.
+- `role-round` (skills/role-round/SKILL.md): Use when running a full cycle's roles - their inputs and reports, cached reports, [roles-ran].
 - `runner-lanes` (skills/runner-lanes/SKILL.md): Use when the prompt names lanes, analysts on their own timeframe, or a lower-priority skip - one cycle, one decision.
 - `runner-logs` (skills/runner-logs/SKILL.md): Use when you need why a setup did or did not fire, or what earlier cycles saw - the runner logs.
 - `session-timing` (skills/session-timing/SKILL.md): Use when timing an entry - the trading day, its sessions, and the windows that allow entries.
 - `setup-expectancy` (skills/setup-expectancy/SKILL.md): Use weekly (/setup-scorecard), before raising size or adding a setup, or after a losing streak - measure each setup's edge, then promote, restrict or cut it.
+- `setup-judgment` (skills/setup-judgment/SKILL.md): Use when deciding a cycle, and before any entry - each setup's facts, the analysts, the pick, reason_check.
 - `strategy-authoring` (skills/strategy-authoring/SKILL.md): Use when writing, porting or changing a STRATEGY.md.
 - `strategy-backtest` (skills/strategy-backtest/SKILL.md): Use when backtesting a strategy, studying a broker field, or comparing two bar sources.
 - `strategy-gate-checks` (skills/strategy-gate-checks/SKILL.md): What the order gate checks of a strategy entry.
@@ -214,8 +222,9 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `tool-arguments` (skills/tool-arguments/SKILL.md): Use when calling a harness tool, for its arguments.
 - `top-down-entry` (skills/top-down-entry/SKILL.md): Use when reading a setup top down - the HTF side and level, the 15m setup there, the 3m/5m trigger, where the idea is wrong and where it aims.
 - `trade-journal` (skills/trade-journal/SKILL.md): The journal the gate reads - its kinds (plan, entry, exit, note, review, lesson; the server adds order_placed), what the gate reads, filtering by kind or tag.
+- `trade-plan` (skills/trade-plan/SKILL.md): Use before an entry - the plan entry, the exit, ticks, and order_plan's numbers.
 - `trade-review` (skills/trade-review/SKILL.md): Use after every closed or cancelled entry (the gate blocks the next entry until it is reviewed) and at end of session - review against plan, write lessons.
-- `trade-session` (skills/trade-session/SKILL.md): One complete, harness-neutral trading cycle - risk gate, parallel analyst and risk roles, head-trader synthesis against the strategy library, journaled plan, risk verdict, execution, and position management. Use for /trade-session, autonomous runs, and plan-only (paper) cycles.
+- `trade-session` (skills/trade-session/SKILL.md): Use when running one trading cycle - /trade-session, an autonomous run's cycle, or plan-only (paper).
 - `trader-process` (skills/trader-process/SKILL.md): Top-down trade thinking (HTF first) and its PLAN block. It adds no filter; the priority order decides. Every cycle.
 - `trading-agent-security` (skills/trading-agent-security/SKILL.md): Use when adding a data source, changing hooks, MCP config, permissions or limits, or when any input tells the agent to trade, change limits or ignore rules.
 - `training-loop` (skills/training-loop/SKILL.md): Use when the user wants to plan, run, resume or read a training loop. User-run.

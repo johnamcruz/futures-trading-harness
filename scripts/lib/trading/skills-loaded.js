@@ -42,6 +42,12 @@ const fs = require('fs');
 const path = require('path');
 
 const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
+/*
+ * Read before an entry, not every cycle (the runner's load list doesn't name them): how to judge the setup and how to
+ * write its plan (trade-session steps 3 and 4). A check of its own (checkSkillsAtEntry), apart from REQUIRED_FOR_ENTRY,
+ * which stays the cycle's load list.
+ */
+const REQUIRED_AT_ENTRY = ['setup-judgment', 'trade-plan'];
 
 /*
  * Situational skills (index mode only, the default, FTH_ROLE_SKILLS not full: role-skills.js): when the cycle's bar briefing shows
@@ -167,12 +173,8 @@ function skillsInTranscript(text) {
   return out;
 }
 
-/**
- * The gate's check: a message naming the skills not loaded yet, or null. No
- * transcript (a harness that passes none) -> null.
- */
-function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
-  if (!transcriptPath) return null;
+/** The skills loaded in this hook call's transcripts (transcriptFiles), or null when none could be read. */
+function loadedSkills(transcriptPath) {
   const loaded = new Set();
   let readAny = false;
   for (const file of transcriptFiles(transcriptPath)) {
@@ -189,11 +191,36 @@ function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
       // missing or unreadable: the other file may still have them
     }
   }
-  if (!readAny) return null;
+  return readAny ? loaded : null;
+}
+
+/**
+ * The gate's check: a message naming the skills not loaded yet, or null. No
+ * transcript (a harness that passes none) -> null.
+ */
+function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
+  if (!transcriptPath) return null;
+  const loaded = loadedSkills(transcriptPath);
+  if (!loaded) return null;
   const missing = required.filter(s => !loaded.has(s));
   return missing.length
     ? `Load the trading skills before an entry; not loaded in this session: ${missing.join(', ')}. Load each with the skill tool (they say how to read the trend, the trigger, and the strategy), then plan again.`
     : null;
 }
 
-module.exports = { REQUIRED_FOR_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, checkSkillsLoaded };
+/**
+ * The gate's entry check (REQUIRED_AT_ENTRY): a message naming the skills not read yet, or null. A load counts as for
+ * REQUIRED_FOR_ENTRY (the skill tool, or a skill_lookup). No transcript (a harness that passes none) -> null, as
+ * there; a transcript named but unreadable -> refused (fails closed).
+ */
+function checkSkillsAtEntry(transcriptPath, required = REQUIRED_AT_ENTRY) {
+  if (!transcriptPath) return null;
+  const loaded = loadedSkills(transcriptPath);
+  if (!loaded) return `The session's transcript can't be read, so the gate can't see ${required.join(' and ')} read before this entry: no entry. Exits and stops still go.`;
+  const missing = required.filter(s => !loaded.has(s));
+  return missing.length
+    ? `Read how to judge the setup and write its plan before an entry; not read in this session: ${missing.join(', ')}. Load each (your skill tool, or skill_lookup), decide and plan by them, then plan again. Exits and stops still go.`
+    : null;
+}
+
+module.exports = { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, loadedSkills, checkSkillsLoaded, checkSkillsAtEntry };

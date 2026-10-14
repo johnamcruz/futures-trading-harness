@@ -33,8 +33,7 @@ const HOMES = ['autonomous-trading', 'runner-lanes', 'kill-switch', 'runner-logs
 // requires it), so what it already teaches is a pointer here, never a second copy.
 const ALLOWED = [
   { old: '**Analysts on their own timeframe.** When the prompt says "Each analyst reads its own timeframe" (e.g. trend-momentum-analyst on 15m, volume-liquidity-analyst on 1h), pass each named analyst its timeframe with the symbol (trade-session step 2).',
-    now: '**Analysts on their own timeframe.** When the prompt says "Each analyst reads its own timeframe", run them as trade-session step 2 says ("An analyst on its own timeframe").',
-    reason: 'trade-session step 2 ("An analyst on its own timeframe") teaches it: a pointer' },
+    copies: 0, reason: 'trade-session step 2\'s own paragraph ("An analyst on its own timeframe") teaches it, and is in runner-lanes now (the trade-session split, tests/plugin/trade-session-split.test.js), so the pointer to it went' },
   { old: 'Its cached report says "(15m, from 10:45 ET, holds until 11:00 ET)": it rests on its own bar and may be up to one of its bars old, so this bar\'s facts come from the bar briefing.',
     copies: 0, reason: 'trade-session step 2: such a report holds until its own next bar close, and this bar\'s facts come from the briefing' },
   { old: 'Merge every analyst\'s latest report and decide once.',
@@ -208,15 +207,19 @@ test('autonomous-trading split: each skill has a short "Use when" index line, an
   assert.match(core, /`CYCLE RESULT: <[^>]+> - <reason>`/);
 });
 
-test('autonomous-trading split: the pointers are true (trade-session step 2 and step 6 hold what was dropped)', () => {
+// What these pointers named moved again in the trade-session split (tests/plugin/trade-session-split.test.js): the
+// own-timeframe paragraph into runner-lanes, the trigger check stays in trade-session step 2, and step 6's refusal and
+// unknown outcome into entry-outcome.
+test('autonomous-trading split: the pointers are true (runner-lanes, trade-session step 2 and entry-outcome hold what was dropped)', () => {
   const ts = read('skills/trade-session/SKILL.md');
   const step = n => flat(new RegExp(`### ${n}\\. [^]*?(?=\\n### |\\n## )`).exec(ts)[0]);
-  const s2 = step(2);
-  assert.match(s2, /\*\*An analyst on its own timeframe\.\*\* When the prompt says "Each analyst reads its own timeframe"/);
-  assert.match(s2, /holds until its own timeframe's next bar close, so it may be up to one of its bars old/);
-  assert.match(s2, /You merge every analyst's latest report and decide once for the cycle\./);
-  assert.match(s2, /\*\*The trigger is checked too\.\*\*[^]*?3 bars of its own timeframe ago, and never more than 45 minutes ago \(3 min on 1m, 9 min on 3m/);
-  const s6 = step(6);
+  const lanes = flat(read('skills/runner-lanes/SKILL.md'));
+  assert.match(lanes, /\*\*An analyst on its own timeframe\.\*\* When the prompt says "Each analyst reads its own timeframe"/);
+  assert.match(lanes, /holds until its own timeframe's next bar close, so it may be up to one of its bars old/);
+  assert.match(lanes, /You merge every analyst's latest report and decide once for the cycle\./);
+  assert.match(step(2), /\*\*The trigger is checked too\.\*\*[^]*?3 bars of its own timeframe ago, and never more than 45 minutes ago \(3 min on 1m, 9 min on 3m/);
+  assert.match(step(6), /After placing: the `entry-outcome` skill\./);
+  const s6 = flat(read('skills/entry-outcome/SKILL.md'));
   assert.match(s6, /`success: false` with an `errorCode` other than 6 \(`OrderPending`\) or 7 \(`UnknownError`\), its brackets included[^]*?\(cycle result `blocked`\); never send the entry again without its bracket/);
   assert.match(s6, /Any other error \(codes 6 and 7 included[^)]*\) is an unknown outcome, not a refusal[^]*?protects or closes any position without a covering stop first, and never re-sends the entry/);
 });
