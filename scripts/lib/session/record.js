@@ -9,7 +9,8 @@
  *   passTap()                                   the pass collector: log(fn) and event(fn) wrap the runner's
  *       log and event sinks, bar(symbol, { bar, stale, action }) notes a polled closed bar; begin() starts a
  *       pass, summary(symbols) is { ran, events, errors, bars, values, closed } (the "REPLAY STEP" fields and
- *       the closed bars), events() the raw events
+ *       the closed bars; each ran cycle carries the history lines its prompt showed, `history`, when it had any),
+ *       events() the raw events
  *   fieldValues(strategies, bars, i)            { strategy: { path: value | null } }: the broker field values each
  *                                               strategy reads on bar i (rules.js valuesFor), only those that read one
  *   failedRun(r)                                a ran cycle that counts as a failed run (not a premarket's, as live)
@@ -67,7 +68,7 @@ function passTap() {
     },
     events: () => events.slice(),
     summary: symbols => ({
-      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null, ...(e.agentError ? { agentError: true } : {}), ...(e.premarketRetry ? { premarketRetry: true } : {}) })),
+      ran: events.filter(e => e.kind === 'cycle_end').map(e => ({ action: e.action, ok: e.ok, timedOut: e.timedOut, result: e.result, symbols: e.symbols || null, ...(Array.isArray(e.history) ? { history: e.history } : {}), ...(e.agentError ? { agentError: true } : {}), ...(e.premarketRetry ? { premarketRetry: true } : {}) })),
       events: [...new Set(events.map(e => e.kind))],
       errors: errors.slice(),
       bars: symbols.map(s => ({ symbol: s.symbol, lastBarT: (s.clock && s.clock.lastBarT) || null })),

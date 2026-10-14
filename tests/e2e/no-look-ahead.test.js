@@ -10,7 +10,8 @@
  *      its clock): at each decision time every bar the runner wrote, the scan logged, the cycle's context
  *      named, the bar briefing holds, and the agent's own tools read (bars_fetch, strategies_scan,
  *      market_snapshot, mtf_read) closes no later than the replay clock; a file with a later bar is
- *      refused by every bars tool. The replay wiring moves the broker's clock (its clock file), and a
+ *      refused by every bars tool; the decision history's outcomes ("since") read only the bars closed by
+ *      the cycle's bar, and the session record keeps them as shown. The replay wiring moves the broker's clock (its clock file), and a
  *      conforming server cuts its bars there.
  *   2. The harness tools under a replay clock refuse a bars file with a bar after it (each tool, the
  *      same way), bars_fetch writes only what had closed, a later bar's briefing is not served; live
@@ -26,6 +27,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
+const { historyLines } = require('../../scripts/lib/trading/decision-history');
 const { createMcpClient } = require('../../scripts/lib/broker/mcp-client');
 const exchange = require('../fixtures/mock-exchange');
 
@@ -110,6 +112,18 @@ test('replay: at each decision time, nothing the runner, the scan, the briefing,
     for (const [name, res] of Object.entries(seen.planted)) {
       assert.strictEqual(res.error, true, `${name} read a bar after the clock: ${res.text}`);
       assert.ok(res.text.includes(`1 bar(s) close after the replay clock (${r.t})`), `${name}: ${res.text}`);
+    }
+    // The decision history's "since" (decision-history.js): read from the bars closed by this cycle's bar only. The
+    // lines the prompt showed are the session record's, and the same entries over every bar the server had (the
+    // future too) give the same lines; over the bars a few closes on, different ones (the cut matters).
+    const shown = cycle.context.historyLines || [];
+    assert.deepStrictEqual(r.ran[0].history || [], shown, `${r.t}: the session record keeps the lines as shown`);
+    if (recs.indexOf(r) > 0) {
+      assert.ok(shown.length && shown.every(l => /; since [+-]?\d+t/.test(l)), `${r.t}: ${shown.join(' | ')}`);
+      const asOf = closeOf(cycle.context.symbols[0].bar.t);
+      const lines = upTo => historyLines(cycle.context.history, [{ symbol: 'MNQ', minutes: 3, bars: BARS, asOf: upTo }]);
+      assert.deepStrictEqual(lines(asOf), shown, `${r.t}: the same lines from every bar, cut at the cycle's bar`);
+      assert.notDeepStrictEqual(lines(asOf + 10 * STEP), shown, `${r.t}: later bars would change the lines (not vacuous)`);
     }
   }
   // Every bar the runner scanned and logged closed by the time it was scanned.

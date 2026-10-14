@@ -610,8 +610,9 @@ test('cycle history in the prompt: repeated results collapse into one, long ones
     { at: at(12), symbols: ['MNQ'], result: `CYCLE RESULT: executed - orb long ${'x'.repeat(400)}` },
     { at: at(15), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - nothing fired' },
   ];
+  // Old-format entries (only at, symbols, result: a state saved before the decision facts) render with what they have.
   const t = historyText(h);
-  assert.match(t, /Your last 6 cycle\(s\), oldest first \(not facts\): 10:00-10:09 ET \(4 cycles\) MNQ: no-trade - nothing fired \| 10:12 ET MNQ: executed - orb long x+… \| 10:15 ET MNQ: no-trade - nothing fired\. Don't flip-flop without a new reason\.$/);
+  assert.match(t, /Your last 6 cycle\(s\), oldest first, ET \(not facts; "since" is from bars closed by now\): 10:00-10:09 MNQ no-trade ×4: nothing fired \| 10:12 MNQ entered: orb long x+… \| 10:15 MNQ no-trade: nothing fired\. Don't flip-flop without a new reason\.$/);
   assert.ok(t.length < 400, `${t.length} chars`);
   assert.strictEqual(historyText([]), '');
 });
@@ -646,7 +647,7 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   if (savedHome === undefined) delete process.env.FTH_HOME; else process.env.FTH_HOME = savedHome;
   assert.ok(p.length < 4900, `the prompt grew to ${p.length} characters`);
   // The context is there; the noise is not.
-  for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /\(\d cycles\)/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
+  for (const want of [/MNQ day: opened/, /orb long with ema_cross \[orb track record/, /Your last 10 cycle\(s\)/, /no-trade ×\d @|no-trade ×\d:/, /Your last 10 reviewed trade/, /Your recurring mistakes and lessons/]) assert.match(p, want);
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
 });
 

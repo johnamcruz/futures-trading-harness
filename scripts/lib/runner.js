@@ -43,7 +43,8 @@
 
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
-const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt } = require('./autotrader');
+const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
+const { decisionEntry, marketOf, parseResult } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
@@ -1195,6 +1196,8 @@ function createRunner(deps) {
             symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [],
             bar: { ...x.bar, plan: entries && !repeat(x) ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
             ...(multi ? { minutes: x.minutes, repeat: repeat(x) } : {}),
+            // The closed bars, for what happened since each recent decision (decision-history.js; never in the prompt).
+            bars: x.bars,
           }));
           const symbolsOf = list => (multi ? [...new Set(list.map(x => x.symbol))] : list.map(x => x.symbol));
           for (const k of skipped.filter(x => x.unrecorded)) unavailable.push(`${k.symbol} ${k.policy}'s skip for ${k.by} could not be recorded for the gate (${k.unrecorded}): this cycle is manage-only, no entry`);
@@ -1230,6 +1233,8 @@ function createRunner(deps) {
           const shownHistory = multi
             ? laneHistory((state && state.history) || [], { closed: closedLanes.map(l => `${l.timeframe}m`), first: firstLane, open: openLanes })
             : (state && state.history) || [];
+          // The recent decisions as the prompt shows them (its own call builds the same lines), for the session record.
+          const historyShown = attempt('your recent decisions', () => historyShownLines(shownHistory, multi, marketOf(items, cfg.timeframe)), []);
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
@@ -1251,7 +1256,7 @@ function createRunner(deps) {
             attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
             eodAt: (() => { const eod = endOfDayAt(cfg, cycleNow); return eod ? new Date(tradingDayStart(cycleNow).getTime() + sessionMinuteOf(eod, cycleNow) * 60000).toISOString() : null; })(),
             cyclesLeft,
-            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)),
+            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             action: again.action, cachedRoles: served ? served.roles : [],
             // Several lanes: the lanes that closed, and the setups skipped for a higher-priority policy (labels see them).
@@ -1259,14 +1264,30 @@ function createRunner(deps) {
           };
           recover = false;
           if (acct) emit('account', accountEvent(acct));
-          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}) });
+          const r = await timedCycle(again.action, prompt, { timeoutMs, context }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
           if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: served ? served.roles : [] }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).
-          const entry = { at: cycleNow.toISOString(), symbols: symbolsOf(run), result: (r && r.result) || null, ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`) } : {}) };
+          // Each with the facts at the decision (decision-history.js): the action, the setup, the price; an entry reads
+          // the order it placed from the journal.
+          const base = { at: cycleNow.toISOString(), symbols: symbolsOf(run), result: (r && r.result) || null, ...(multi ? { lanes: closedLanes.map(l => `${l.timeframe}m`) } : {}) };
+          let entry = base;
+          let placed = [];
+          if (parseResult(base.result).word === 'executed') {
+            try {
+              placed = journalEntries() || [];
+            } catch (err) {
+              log(`history: the journal unavailable (${err.message}); the entry's facts from the scan only`, 'error');
+            }
+          }
+          try {
+            entry = decisionEntry({ ...base, items: run, entries: placed });
+          } catch (err) {
+            log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
+          }
           const history = [...((state && state.history) || []), entry];
           state = { ...state, history: multi ? boundHistory(history, firstLane) : history.slice(-10) };
           saveState(state);

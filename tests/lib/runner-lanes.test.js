@@ -613,12 +613,12 @@ test('lanes: the prompt\'s decision history: 20 1m cycles never push the 15m dec
   const at = hhmm => cycles.find(c => c.start >= Date.parse(`2026-10-07T${hhmm}:00Z`) && c.start < Date.parse(`2026-10-07T${hhmm}:30Z`));
   // The 10:45 cycle (15m + 1m): the 15m decisions of 10:00, 10:15, 10:30 are there, past 40 1m cycles.
   const p45 = at('14:45').prompt;
-  for (const t of ['14:00', '14:15', '14:30']) assert.match(p45, new RegExp(`15m\\+1m: managed - 15m\\+1m at ${t}`), t);
+  for (const t of ['14:00', '14:15', '14:30']) assert.match(p45, new RegExp(`15m\\+1m managed @[\\d.]+: 15m\\+1m at ${t}`), t);
   // A 1m-only cycle: its own lane's last 10, and the 15m lane's last 3.
   const p44 = at('14:44').prompt;
   assert.match(p44, /Your last \d+ cycle\(s\) on the lanes that closed/);
-  for (const t of ['14:00', '14:15', '14:30']) assert.match(p44, new RegExp(`managed - 15m\\+1m at ${t}`), t);
-  assert.doesNotMatch(p44, /managed - 1m at 14:2\d/, 'older 1m decisions are not shown');
+  for (const t of ['14:00', '14:15', '14:30']) assert.match(p44, new RegExp(`managed @[\\d.]+: 15m\\+1m at ${t}`), t);
+  assert.doesNotMatch(p44, /: 1m at 14:2\d/, 'older 1m decisions are not shown');
   // Kept in the state: at most 10 per lane, the 15m ones included.
   const kept = state.value.history;
   assert.ok(kept.filter(h => h.lanes.length === 1 && h.lanes[0] === '1m').length <= 10);
@@ -649,8 +649,9 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
   const oneMin = prompts.find(p => p.lanes.length === 1 && p.lanes[0] === '1m');
   assert.ok(oneMin, prompts.map(p => p.lanes.join('+')).join(','));
   // The 15m lane's last 3 (its third is the 10:30 cycle, a 3m and 15m close).
-  for (const k of [1, 2]) assert.match(oneMin.prompt, new RegExp(`planned - slow ${k}`));
-  assert.match(oneMin.prompt, /10:30 ET MNQ 3m\+15m: managed - x/);
+  // Old-format entries (no decision facts) render with what they have.
+  for (const k of [1, 2]) assert.match(oneMin.prompt, new RegExp(`MNQ 15m planned: slow ${k}`));
+  assert.match(oneMin.prompt, /10:30 MNQ 3m\+15m managed @[\d.]+: x/);
   // A position whose entry the journal doesn't name (no lane known): a 1m-only prompt shows no 15m (not the first lane)
   // decisions.
   const r2 = { t: et(10, 30, 50) };
@@ -665,5 +666,5 @@ test('lanes: a 1m-only prompt also shows the last decisions of the lane an open 
   while (r2.t < et(10, 32, 30)) r2.t += await runner2.step();
   const flat1 = flat.find(p => p.lanes.length === 1 && p.lanes[0] === '1m');
   assert.ok(flat1);
-  assert.doesNotMatch(flat1.prompt, /planned - slow/);
+  assert.doesNotMatch(flat1.prompt, /planned: slow/);
 });

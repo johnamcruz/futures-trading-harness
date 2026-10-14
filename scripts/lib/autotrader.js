@@ -21,6 +21,7 @@ const { sessionsText } = require('./trading/combine');
 const { loadConfig: loadGateConfig } = require('./trading/config');
 const { parseWindows, inWindow, tradingDayKey, tradingDayStart, inMarketHours, sessionMinute, sessionMinuteOf, MARKET_TZ, MARKET_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./trading/clock');
 const { et: etTime, etStamp } = require('./trading/session-context');
+const { historyLines, marketOf } = require('./trading/decision-history');
 const { documents, isOpencodeEvent } = require('./transcript');
 const opencode = require('./opencode');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
@@ -343,26 +344,30 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
 
-/** Your last cycles' results, oldest first: what you decided and why, so this cycle builds on them. */
-const HISTORY_RESULT_CHARS = 160;
+/** The decisions a prompt shows: the last RECENT_IN_PROMPT, or (`all`: several lanes, chosen per lane) every one. */
+const shownDecisions = (history, all = false) => (all ? (history || []) : (history || []).slice(-RECENT_IN_PROMPT));
 
-// `all`: several lanes, the runner already chose the entries (lane-cycle.js laneHistory): every one is shown, each
-// with its lanes.
-function historyText(history, all = false) {
-  const list = all ? (history || []) : (history || []).slice(-RECENT_IN_PROMPT);
+/** The history lines a prompt shows (historyText's), for the session record. */
+const historyShownLines = (history, all = false, market = []) => historyLines(shownDecisions(history, all), market);
+
+/**
+ * Your last cycles' decisions, oldest first, one compact line each (trading/decision-history.js): the time, symbol
+ * and lane, the action, the setup and side, the price, the reason, and what happened since, from the bars closed by
+ * this cycle (`market`: decision-history marketOf). Repeated no-trades collapse into one line.
+ * `all`: several lanes, the runner already chose the entries (lane-cycle.js laneHistory): every one is shown.
+ */
+function historyText(history, all = false, market = []) {
+  const list = shownDecisions(history, all);
   if (!list.length) return '';
-  // Repeats ("no-trade - nothing fired" every bar) say one thing once: runs of the same result collapse.
-  const runs = [];
-  for (const h of list) {
-    const text = String(h.result || 'no result').replace(/^CYCLE RESULT:\s*/, '').replace(/\s+/g, ' ').trim();
-    const short = text.length > HISTORY_RESULT_CHARS ? `${text.slice(0, HISTORY_RESULT_CHARS - 1)}…` : text;
-    const sym = `${(h.symbols || []).join(',')}${Array.isArray(h.lanes) && h.lanes.length ? ` ${h.lanes.join('+')}` : ''}`;
-    const last = runs[runs.length - 1];
-    if (last && last.text === short && last.sym === sym) { last.n += 1; last.to = h.at; } else runs.push({ text: short, sym, n: 1, from: h.at, to: h.at });
+  let lines;
+  try {
+    lines = historyLines(list, market);
+  } catch (err) {
+    // A corrupt entry never costs the cycle its prompt: the section is named as unavailable.
+    return ` Your last cycles: unavailable this cycle (${err.message}).`;
   }
-  const when = r => (r.n > 1 ? `${etTime(r.from).replace(' ET', '')}-${etTime(r.to)} (${r.n} cycles)` : etTime(r.from));
   // Past conclusions, not facts (autonomous-trading skill): a wrong one must not steer later cycles against the facts.
-  return ` Your last ${list.length} cycle(s)${all ? ' on the lanes that closed (with the first lane\'s last few, and those of the lane an open trade was entered on)' : ''}, oldest first (not facts): ${runs.map(r => `${when(r)} ${r.sym}: ${r.text}`).join(' | ')}. Don't flip-flop without a new reason.`;
+  return ` Your last ${list.length} cycle(s)${all ? ' on the lanes that closed (with the first lane\'s last few, and those of the lane an open trade was entered on)' : ''}, oldest first, ET (not facts; "since" is from bars closed by now): ${lines.join(' | ')}. Don't flip-flop without a new reason.`;
 }
 
 // The roles a cycle runs before an entry (trade-session skill), which the order gate checks (roles-ran.js): each
@@ -462,7 +467,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} trade-session, multi-timeframe-analysis, and strategy-library before deciding${ROLES_CHECKED.has(cfg.harness) ? ' (the order gate refuses an entry without them)' : ''}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [])}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -792,6 +797,7 @@ module.exports = {
   cycleOutcome,
   accountText,
   historyText,
+  historyShownLines,
   endOfDayAt,
   marketHoursErrors,
   historyBars,
