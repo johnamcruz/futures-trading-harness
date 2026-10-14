@@ -40,18 +40,20 @@
  * the project file. It names the directory (--dir, and PWD): opencode reads
  * its project from PWD, not the process's working directory.
  *
- * In index mode (role-skills.js, the default) the roles are denied opencode's
- * skill tool: their skills are in their prompts (the core) or read with
- * skill_lookup (the index), and while an agent may use the tool opencode puts
- * every skill's name and description in its system prompt (about 29 KB a
- * call). Full mode keeps it. The head trader keeps it in both: it loads its
- * skills with it.
+ * In index mode (role-skills.js, the default) a role that holds skill_lookup
+ * is denied opencode's skill tool: its skills are in its prompt (the core) or
+ * read with skill_lookup (which reads any skill), and while an agent may use
+ * the tool opencode puts every skill's name and description in its system
+ * prompt (about 29 KB a call). A role without skill_lookup keeps the tool (its
+ * way to a skill its embedded ones name), as do full mode and the head trader,
+ * which loads its skills with it.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
+ *   deniesSkillTool(tools, mode) whether a role is denied the skill tool (index mode, holds skill_lookup)
  *   agentPrompt(agent)           a role's prompt: in index mode, the default (skillPlan: role-skills.js), its
  *                                body, its core skills and an index of the rest (skill_lookup); in full mode
  *                                (FTH_ROLE_SKILLS=full, or no skillPlan) its body and every skill in full
- *   agentPermission(tools, mode) a role's permissions; in index mode the skill tool denied
+ *   agentPermission(tools, mode) a role's permissions (the skill tool denied where deniesSkillTool says)
  *   agentConfig(agent)           a role as an opencode agent entry (its mode: skillPlan's)
  *   workspaceConfig(agents)      workspace/opencode.json's object
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch;
@@ -105,17 +107,23 @@ const MCP_KEYS = () => [
 ];
 
 /**
+ * Whether a role is denied opencode's skill tool: in index mode (`mode`, role-skills.js), when it holds skill_lookup,
+ * which reads any skill. opencode lists every skill in the system prompt of an agent that may use the tool; a role
+ * without skill_lookup keeps it, its only way to a skill its prompt names but doesn't embed.
+ */
+const deniesSkillTool = (tools, mode) => mode === 'index' && permissionKeys(tools).includes(`${HARNESS_SERVER}_skill_lookup`);
+
+/**
  * A role's permissions: everything denied, then each broker and harness tool by name (its own allowed,
- * the rest denied, so a user's rule for the role can't grant one), then its other tools. In index mode
- * (`mode`, role-skills.js) the skill tool is denied: the role's skills reach it through its prompt and
- * skill_lookup, and opencode lists every skill in the system prompt of an agent that may use the tool.
+ * the rest denied, so a user's rule for the role can't grant one), then its other tools; the skill tool
+ * denied where deniesSkillTool says.
  */
 function agentPermission(tools, mode = null) {
   const own = permissionKeys(tools);
   const permission = { '*': 'deny', ...Object.fromEntries(ROLE_DENIED.map(k => [k, 'deny'])) };
   for (const k of MCP_KEYS()) permission[k] = own.includes(k) ? 'allow' : 'deny';
   for (const k of own) if (!(k in permission)) permission[k] = k === 'read' ? { ...READ } : 'allow';
-  if (mode === 'index') permission.skill = 'deny';
+  if (deniesSkillTool(tools, mode)) permission.skill = 'deny';
   return permission;
 }
 
@@ -127,9 +135,9 @@ const skillList = names => {
   return q.length < 3 ? q.join(' and ') : `${q.slice(0, -1).join(', ')}, and ${q[q.length - 1]}`;
 };
 
-/** Not loading the embedded skills again: with the skill tool (full mode), or at all (index mode denies the tool). */
-const NOT_AGAIN = "Read them here; don't load them again with the skill tool.";
-const NOT_AGAIN_INDEX = "Read them here; don't load them again.";
+/** Not loading the embedded skills again: with the skill tool, or at all for a role denied it (deniesSkillTool). */
+const notAgain = (agent, plan) => (plan && deniesSkillTool(agent.tools || [], plan.mode)
+  ? "Read them here; don't load them again." : "Read them here; don't load them again with the skill tool.");
 
 /**
  * A role's prompt: its body, with its "Load the skills" sentence saying they are below, then its skills in full
@@ -142,13 +150,12 @@ function agentPrompt(agent) {
   if (plan && plan.indexed.length) return indexPrompt(agent, plan);
   const docs = plan ? plan.docs : (agent.skillDocs || []);
   if (!docs.length) return `${agent.body}\n`;
-  const again = plan && plan.mode === 'index' ? NOT_AGAIN_INDEX : NOT_AGAIN;
   return [
     agent.body.replace(LOAD_SENTENCE, (_m, list) => `Your skills ${list} are below, already loaded (Your skills, at the end).`),
     '',
     '## Your skills (already loaded)',
     '',
-    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${again}`,
+    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${notAgain(agent, plan)}`,
     '',
     ...docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']),
   ].join('\n');
@@ -175,7 +182,7 @@ function indexPrompt(agent, plan) {
   ];
   if (plan.docs.length) {
     out.push('## Your skills (already loaded)', '',
-      `The skills this role uses every call (${plan.docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${NOT_AGAIN_INDEX}`,
+      `The skills this role uses every call (${plan.docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${notAgain(agent, plan)}`,
       '', ...plan.docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']));
   }
   out.push('## Your skill index', '',
@@ -351,4 +358,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
+module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
