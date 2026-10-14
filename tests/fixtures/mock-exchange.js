@@ -204,6 +204,9 @@ function closeOrder(s, contractId, partial) {
 /** A result the server never sends (the reply is lost). */
 const NO_REPLY = { noReply: true };
 
+// The order fields a broker server journals with order_placed (with the position before it).
+const REQUEST_FIELDS = ['side', 'type', 'size', 'limitPrice', 'stopPrice', 'trailPrice', 'stopLossBracket', 'takeProfitBracket'];
+
 const HANDLERS = {
   get_server_config: (s, a, env) => ({ ...(env.MOCK_REPLAY === '1' ? { replay: true } : {}), tradingEnabled: true, maxOrderSize: 5, maxPositionSize: 5, maxDailyLoss: 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
   list_accounts: s => {
@@ -228,6 +231,7 @@ const HANDLERS = {
   place_order: (s, a, env) => {
     const c = contractOf(a.contractId);
     if (!c) return fail(8, 'ContractNotFound');
+    const before = netOf(s, a.contractId);
     const o = {
       id: s.nextId++, accountId: ACCOUNT, contractId: a.contractId, creationTimestamp: iso(s.nowMs), updateTimestamp: iso(s.nowMs), status: 1, type: TYPE[a.type],
       side: a.side === 'buy' ? 0 : 1, size: Number(a.size), limitPrice: a.limitPrice ?? null, stopPrice: a.stopPrice ?? null, fillVolume: 0, filledPrice: null,
@@ -237,8 +241,10 @@ const HANDLERS = {
     s.orders.push(o);
     if (o.type === 2) fillOrder(s, o, s.prices[a.contractId]);
     else match(s);
-    // As the interface's journal says: data = { request, result } (broker/interface.js).
-    journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { request: a, result: { ...OK, orderId: o.id } } });
+    // As the live server journals it (parity is one way: the mock matches live): data = { request, result }, the request
+    // being the order's fields and the position before it, the order id at the top level.
+    const request = { ...Object.fromEntries(REQUEST_FIELDS.filter(k => a[k] !== undefined && a[k] !== null).map(k => [k, a[k]])), positionBefore: before, sizeBefore: Math.abs(before) };
+    journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, orderId: o.id, data: { request, result: { ...OK, orderId: o.id } } });
     if (s.loseEntryReply) return NO_REPLY;
     return { orderId: o.id, ...OK };
   },

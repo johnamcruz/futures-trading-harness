@@ -17,7 +17,7 @@ function deps(home, run, over = {}) {
   const logged = [];
   return {
     out, err, logged,
-    deps: { root: ROOT, home, env: { FTH_HOME: home, HOME: home, PATH: process.env.PATH }, run, out: t => out.push(t), err: t => err.push(t), appendLog: (now, t) => logged.push(t), now: () => AT, ...over },
+    deps: { root: ROOT, home, env: { FTH_HOME: home, HOME: home, PATH: process.env.PATH }, run, out: t => out.push(t), err: t => err.push(t), appendLog: (now, t) => logged.push(t), now: () => AT, guard: () => true, ...over },
   };
 }
 
@@ -70,8 +70,20 @@ test('cycle run: a dry run prints the argv only; a tripped workspace guard runs 
   const eod = await runCycle(cfg, 'eod', 'p', {}, {}, tripped.deps);
   assert.strictEqual(runs, 1);
   assert.strictEqual(eod.ok, true, 'end of day runs and counts, the guard aside');
-  const d = deps(home, run);
+  // Full mode: the head trader loads its skills with the skill tool (none embedded), so an entry without them is said.
+  const d = deps(home, run, { env: { FTH_HOME: home, HOME: home, PATH: process.env.PATH, FTH_ROLE_SKILLS: 'full' } });
   const r = await runCycle(cfg, 'trade', 'p', {}, {}, d.deps);
   assert.strictEqual(r.ok, true);
   assert.match(d.err.join(''), /an entry was sent without loading trade-session, multi-timeframe-analysis/);
+});
+
+test('cycle run: the workspace guard is required (never defaulted open), and the runner CLI passes its own', async () => {
+  const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const d = deps(tmpDir(), async () => assert.fail('no run without a guard'), { guard: undefined });
+  await assert.rejects(runCycle(cfg, 'trade', 'p', {}, {}, d.deps), /deps\.guard \(the workspace guard\) is required/);
+  await assert.rejects(runCycle(cfg, 'trade', 'p', { dryRun: true }, {}, d.deps), /is required/, 'a dry run too');
+  // scripts/autotrader.js wires its workspace guard (guardWorkspace) into every cycle.
+  const cli = fs.readFileSync(path.join(ROOT, 'scripts', 'autotrader.js'), 'utf8');
+  assert.match(cli, /runCycleWith\(cfg, action, prompt, opts, limits, \{[\s\S]*?\bguard: \(killSwitchFile, when\) => guardWorkspace\(cfg, killSwitchFile, when\)/);
+  assert.match(cli, /^function guardWorkspace\(cfg, killSwitchFile, when\) \{/m);
 });

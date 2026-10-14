@@ -11,7 +11,9 @@
  * The expectations other branches in flight will change are kept here, each in one place, so a rebase is one edit:
  *   REQUIRED_LOOKUPS   the lookups each role's index requires on the fired bar (runner-wiring lookups, risk-manager skills)
  *   RESULT_ACTION      the decision history's action for a result word (the cycle-result mapping)
- *   headLoads()        what the head trader loads before deciding (its prompt and the gate attestation)
+ *   headLoads(w)       what the head trader loads with the skill tool before deciding: in index mode (the default) none,
+ *                      its per-cycle skills are embedded in its prompt on the runner's attestation (head-prompt.js);
+ *                      in full mode (FTH_ROLE_SKILLS=full) the gate's lists and the others it reads every cycle
  *   CACHE_SERVED       the roles the report cache serves on the fired bar (the cache's lookups rule)
  *   SETUP              the setup on the table: the one strategy-specific fact (a test-only fixture strategy)
  */
@@ -58,13 +60,15 @@ const REQUIRED_LOOKUPS = {
 // The decision history's action for a cycle's result word with a setup on the table (decision-history.js ACTIONS).
 const RESULT_ACTION = { executed: 'entered', 'no-trade': 'skipped', blocked: 'blocked', managed: 'managed' };
 // What the head trader loads every cycle before deciding (trade-session step 0; the gate's REQUIRED_FOR_ENTRY).
-const headLoads = () => [...REQUIRED_FOR_ENTRY];
+const headLoads = w => (w.mode === 'full' ? [...REQUIRED_FOR_ENTRY, 'trader-process', 'htf-to-ltf'] : []);
+// What it reads before an entry (setup-judgment, trade-plan): loaded in full mode, embedded in index mode.
+const entryLoads = w => (w.mode === 'full' ? [...REQUIRED_AT_ENTRY] : []);
 // The roles the report cache serves on the fired bar after a quiet bar, in index mode (the default): none today
 // (report-cache.js serves no role in index mode). Whatever it serves, never a role whose bar requires a lookup.
 const CACHE_SERVED = [];
 
 /** A harness home on a replay mock exchange serving the parity bars; the runner's config and state file. */
-function world() {
+function world({ mode = 'index' } = {}) {
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   const state = path.join(home, 'exchange.json');
@@ -82,9 +86,11 @@ function world() {
     MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_CLOCK_FILE: clock, MOCK_REPLAY: '1', MOCK_ALLOWED_ACCOUNTS: '7',
     FTH_ENTRY_HOURS: '', FTH_NO_ENTRY_WINDOWS: '', FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'),
     FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'), FTH_STRATEGIES_DIRS: FX_STRATEGIES, FTH_ACCOUNTS_DIRS: path.join(home, 'no-accounts'),
+    // The roles' and the head trader's skills: index (the default, no variable) or full, as the runner reads it.
+    ...(mode === 'full' ? { FTH_ROLE_SKILLS: 'full' } : {}),
   };
   const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 1400 });
-  return { home, state, journal, clock, env, cfg, stateFile: path.join(home, 'runner-state.json') };
+  return { home, state, journal, clock, env, cfg, mode, stateFile: path.join(home, 'runner-state.json') };
 }
 
 /**
@@ -107,7 +113,7 @@ async function pass(w, at, script) {
     const runner = wireRunner({
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
       runCycle: async (action, prompt, limits) => {
-        const r = await runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: model });
+        const r = await runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: model, guard: () => true });
         ran.push({ action, prompt, context: limits && limits.context, ...r });
         return r;
       },
@@ -149,7 +155,7 @@ function roleStep(o, name, report, phase = null) {
  */
 function roundSteps(w, o = {}) {
   const skip = new Set(o.skip || []);
-  const loads = [...headLoads(), 'trader-process', 'htf-to-ltf'].filter(s => !skip.has(s));
+  const loads = headLoads(w).filter(s => !skip.has(s));
   return [
     ...loads.map(s => ({ load: s })),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
@@ -159,7 +165,7 @@ function roundSteps(w, o = {}) {
 }
 
 /** The model reads the bar and passes (no plan, no phase 2): `CYCLE RESULT: no-trade - <why>`. */
-const passCycle = (w, why, o = {}) => [...roundSteps(w, o), ...REQUIRED_AT_ENTRY.map(s => ({ load: s })), { result: `CYCLE RESULT: no-trade - ${why}` }];
+const passCycle = (w, why, o = {}) => [...roundSteps(w, o), ...entryLoads(w).map(s => ({ load: s })), { result: `CYCLE RESULT: no-trade - ${why}` }];
 
 /**
  * The full cycle that enters the setup on the fired bar (order_plan's arguments, sent as they are), every piece
@@ -170,6 +176,7 @@ const passCycle = (w, why, o = {}) => [...roundSteps(w, o), ...REQUIRED_AT_ENTRY
  *   facts: (w) => FACTS text           verdict: 'APPROVE' | 'VETO'          act: a step before the executor
  *   rationale: (plan) => text          plan: false (no journal plan)        manual: true (no order_plan: the model's
  *   own arguments, manualArgs)         lookups: the required lookups to make (default REQUIRED_LOOKUPS)
+ *   pre: a step before anything else
  *   size: the order's size (default order_plan's)          result: the result line
  */
 function entryCycle(w, o = {}) {
@@ -179,9 +186,10 @@ function entryCycle(w, o = {}) {
   const plan = ctx => (o.manual ? { args: manualArgs(`setup:${SETUP.strategy} ${SETUP.side}, stop 27423.00`), stopPrice: 27423 } : planOf(ctx.results.order_plan));
   const rationale = o.rationale || (p => p.args.rationale);
   return [
+    ...(o.pre ? [{ act: o.pre }] : []),
     ...roundSteps(w, o),
     ...Object.entries(o.outside || {}).flatMap(([as, skills]) => skills.map(s => ({ lookup: s, as }))),
-    ...REQUIRED_AT_ENTRY.filter(s => !(o.skip || []).includes(s)).map(s => ({ load: s })),
+    ...entryLoads(w).filter(s => !(o.skip || []).includes(s)).map(s => ({ load: s })),
     ...(o.manual ? [] : [{ harness: 'order_plan', args: ctx => ({ bars: path.join(ctx.env.FTH_BARS_DIR, 'MNQ-3m.json'), symbol: 'MNQ', strategy: SETUP.strategy, side: SETUP.side, accountId: 7 }) }]),
     ...(o.plan === false ? [] : [{ broker: 'journal_add', args: ctx => ({ kind: 'plan', contractId: 'MNQ', tags: [`setup:${SETUP.strategy}`, 'MNQ'], text: `${SETUP.strategy} ${SETUP.side}, stop ${plan(ctx).stopPrice}` }) }]),
     ...roleStep(o, 'risk-manager', () => `Phase 2 on the ${SETUP.strategy} ${SETUP.side} plan for MNQ.\nVERDICT: ${verdict} - size 1\nFACTS: ${facts()}`, 'phase2'),
@@ -211,6 +219,6 @@ const working = w => exchange.read(w.state).orders.filter(o => o.status === 1 &&
 const placedAtBroker = w => exchange.read(w.state).calls.filter(c => c.tool === 'place_order');
 
 module.exports = {
-  ROOT, SETUP, MNQ_ID, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, decisionAt, world, pass, m3Of, trueFacts, flip,
+  ROOT, SETUP, MNQ_ID, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, trueFacts, flip,
   entryCycle, passCycle, roundSteps, manualArgs, planOf, gateLog, cycleLines, position, working, placedAtBroker,
 };

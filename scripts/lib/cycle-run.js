@@ -11,7 +11,8 @@
  *     opts:   { dryRun }: print the argv only
  *     limits: { timeoutMs, context } (runner.js)
  *     deps:   { root, home, env, run (runHarness), onChild, out(text), err(text), appendLog(now, text),
- *               guard(killSwitchFile, when) (the workspace guard: false when it tripped), now() }
+ *               guard(killSwitchFile, when) (the workspace guard: false when it tripped; required, never defaulted
+ *               open), now() }
  */
 
 const path = require('path');
@@ -29,10 +30,12 @@ function runOnce(cfg, argv, timeoutMs, context, deps) {
 }
 
 async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null } = {}, deps = {}) {
+  // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
+  if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
+  const { guard } = deps;
   const env = deps.env || process.env;
   const out = deps.out || (() => {});
   const err = deps.err || (() => {});
-  const guard = deps.guard || (() => true);
   const now = (deps.now || (() => new Date()))();
   const argv = buildCommand(cfg, prompt, deps.root, env);
   if (opts && opts.dryRun) {
