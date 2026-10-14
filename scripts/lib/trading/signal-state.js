@@ -62,14 +62,36 @@ function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source =
 
 /**
  * The gate's check for any strategy's entry (rules, manual or policy) on `timeframe`: refused while the latest
- * record of that timeframe says the runner's lane there lists a retired strategy (it enters nothing). A message, or null.
+ * record of that timeframe (named as the runner names its lanes, in minutes: 1h is its 60m lane, 1d its 1440m) says
+ * the runner's lane there lists a retired strategy (it enters nothing), and while that record can't be read (it may
+ * hold the mark). A message, or null.
  */
 function retiredLaneRefusal(home, { root, strategy, timeframe }) {
   if (!home || !timeframe) return null;
-  const rec = readSignals(home, root, timeframe);
-  if (!rec || rec.error || !Array.isArray(rec.retiredLane) || !rec.retiredLane.length) return null;
-  return laneMessage(`setup:${strategy} trades ${timeframe} bars`, timeframe, rec.retiredLane);
+  const lead = `setup:${strategy} trades ${timeframe} bars`;
+  const days = /^([1-9]\d*)d$/.exec(String(timeframe || ''));
+  const tf = recordTimeframe(timeframe) || (days ? `${Number(days[1]) * 1440}m` : null);
+  if (!tf) return `${lead}, which names no runner lane (minutes, hours or days, e.g. 3m, 1h, 1d), so the gate can't tell whether that lane enters: no entry. Exits and protective stops ([exit], [protect]) still go.`;
+  const mark = laneMark(home, root, tf);
+  if (mark.unreadable) return unreadableMessage(lead, tf, root, mark.unreadable);
+  return mark.names.length ? laneMessage(lead, tf, mark.names) : null;
 }
+
+/**
+ * A lane record's retired mark: { names } (empty: no mark), or { unreadable: why } when the record exists but can't be
+ * read (not JSON, not a record, a mark that isn't a list): it may hold the mark, so the gate treats it as marked.
+ */
+function laneMark(home, root, tf) {
+  const rec = readSignals(home, root, tf);
+  if (rec === null) return fs.existsSync(signalFile(home, root, tf)) ? { unreadable: 'not a record' } : { names: [] };
+  if (typeof rec !== 'object' || Array.isArray(rec)) return { unreadable: 'not a record' };
+  if (rec.error) return { unreadable: String(rec.error) };
+  if (rec.retiredLane === undefined) return { names: [] };
+  if (!Array.isArray(rec.retiredLane)) return { unreadable: 'its retiredLane is not a list' };
+  return { names: rec.retiredLane };
+}
+
+const unreadableMessage = (lead, timeframe, root, why) => `${lead}, and the runner's ${timeframe} lane record for ${familyRoot(root)} is unreadable (${why}): it may say that lane lists a retired strategy, so no entry on it, under any setup tag. Exits and protective stops ([exit], [protect]) still go. The runner rewrites the record on its next bar on that lane.`;
 
 const laneMessage = (lead, timeframe, names) => `${lead}, and the runner's ${timeframe} lane lists ${names.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. To trade on ${timeframe} again, remove the retired name from the runner config's lanes (or the lane) and restart the runner: its start clears this mark.`;
 
@@ -80,16 +102,19 @@ const laneMessage = (lead, timeframe, names) => `${lead}, and the runner's ${tim
  */
 function retiredLaneRefusalAny(home, { root, label }) {
   if (!home) return null;
+  const lead = `${label ? `setup:${label}` : 'This entry'} names no known strategy, so no timeframe of its own`;
   let files;
-  try { files = fs.readdirSync(path.join(home, 'signals')); } catch (_err) { return null; }
+  try { files = fs.readdirSync(path.join(home, 'signals')); } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    return `${lead}, and the runner's lane records (signals/) can't be read (${err.code || err.message}): any of them may say its lane lists a retired strategy, so no entry. Exits and protective stops ([exit], [protect]) still go.`;
+  }
   const prefix = `${familyRoot(root)}-`;
   const timeframes = files.filter(f => f.startsWith(prefix) && /^\d+m\.json$/.test(f.slice(prefix.length)))
     .map(f => f.slice(prefix.length, -'.json'.length)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
   for (const timeframe of timeframes) {
-    const rec = readSignals(home, root, timeframe);
-    if (rec && !rec.error && Array.isArray(rec.retiredLane) && rec.retiredLane.length) {
-      return laneMessage(`${label ? `setup:${label}` : 'This entry'} names no known strategy, so no timeframe of its own`, timeframe, rec.retiredLane);
-    }
+    const mark = laneMark(home, root, timeframe);
+    if (mark.unreadable) return unreadableMessage(lead, timeframe, root, mark.unreadable);
+    if (mark.names.length) return laneMessage(lead, timeframe, mark.names);
   }
   return null;
 }

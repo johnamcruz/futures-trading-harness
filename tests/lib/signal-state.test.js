@@ -176,3 +176,28 @@ test('a fired result without the scan\'s trend read keeps its strategy\'s style:
   assert.strictEqual(rec.setups[0].trendRule, 'reversal');
   assert.strictEqual(B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan: [stamped] }).sections.m3.data.candidates[0].trendRule, 'reversal');
 });
+
+test('retiredLaneRefusal reads the lane the runner names (1h: 60m, 1d: 1440m) and fails closed on a timeframe or record it can\'t read', () => {
+  const { retiredLaneRefusal, retiredLaneRefusalAny } = require('../../scripts/lib/trading/signal-state');
+  const home = tmpDir();
+  const refusal = timeframe => retiredLaneRefusal(home, { root: 'MNQ', strategy: 'x', timeframe });
+  for (const tf of ['3m', '1h', '1d']) assert.strictEqual(refusal(tf), null, `${tf}: no record, no mark`);
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T13:00:00.000Z' }, stepMs: 3600000, now, retiredLane: ['bos'] }));
+  assert.match(refusal('1h'), /^setup:x trades 1h bars, and the runner's 60m lane lists bos/);
+  assert.match(refusal('60m'), /the runner's 60m lane lists bos/, 'the same lane, named in minutes');
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar: { t: '2026-10-07T00:00:00.000Z' }, stepMs: 86400000, now, retiredLane: ['bos'] }));
+  assert.match(refusal('1d'), /the runner's 1440m lane lists bos/);
+  assert.match(refusal('1w'), /^setup:x trades 1w bars, which names no runner lane/);
+  // An unreadable record may hold the mark: refused, on the named lane and on any lane.
+  fs.writeFileSync(signalFile(home, 'MNQ', '3m'), '{ half a file');
+  assert.match(refusal('3m'), /the runner's 3m lane record for MNQ is unreadable/);
+  const any = tmpDir();
+  fs.mkdirSync(path.dirname(signalFile(any, 'MNQ', '3m')), { recursive: true });
+  fs.writeFileSync(signalFile(any, 'MNQ', '3m'), '{ half a file');
+  assert.match(retiredLaneRefusalAny(any, { root: 'MNQ', label: 'nosuch' }), /^setup:nosuch names no known strategy, so no timeframe of its own, and the runner's 3m lane record for MNQ is unreadable/);
+  assert.strictEqual(retiredLaneRefusalAny(tmpDir(), { root: 'MNQ', label: null }), null, 'no records at all: nothing to refuse');
+  // A signals path that can't be listed (here a file, not a folder): refused.
+  const notDir = tmpDir();
+  fs.writeFileSync(path.join(notDir, 'signals'), '');
+  assert.match(retiredLaneRefusalAny(notDir, { root: 'MNQ', label: null }), /^This entry names no known strategy, so no timeframe of its own, and the runner's lane records \(signals\/\) can't be read \(ENOTDIR\)/);
+});
