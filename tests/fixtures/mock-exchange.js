@@ -237,7 +237,8 @@ const HANDLERS = {
     s.orders.push(o);
     if (o.type === 2) fillOrder(s, o, s.prices[a.contractId]);
     else match(s);
-    journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { result: { ...OK, orderId: o.id } } });
+    // As the interface's journal says: data = { request, result } (broker/interface.js).
+    journal(env, { kind: 'order_placed', text: a.rationale, accountId: a.accountId, contractId: a.contractId, data: { request: a, result: { ...OK, orderId: o.id } } });
     if (s.loseEntryReply) return NO_REPLY;
     return { orderId: o.id, ...OK };
   },

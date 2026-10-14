@@ -45,7 +45,7 @@ require('./lib/env-file').loadEnvForCli('autotrader');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { validateConfig, prompts, buildCommand, childEnv, decide, runResult, cycleOutcome, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
+const { validateConfig, prompts, childEnv, decide, dayKey, claudeOrderToolConflicts, resolveDataDir: dataDirFor, runnerArgv } = require('./lib/autotrader');
 const { startPreflight } = require('./lib/harness-tools/preflight');
 const { openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, replayUnattested, closedBarsOnly } = require('./lib/runner-wiring');
 const { createPropHooks } = require('./lib/prop/live-runner');
@@ -61,7 +61,7 @@ const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFile
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
-const { writeCycleLog } = require('./lib/cycle-log');
+const { runCycle: runCycleWith } = require('./lib/cycle-run');
 const { lockHolderAlive } = require('./lib/runner-lock');
 const { passTap, noDecision } = require('./lib/session/record');
 const { createLiveSession } = require('./lib/session/live');
@@ -115,11 +115,6 @@ function appendLog(now, text) {
   }
 }
 
-function runOnce(cfg, argv, timeoutMs, context = null) {
-  const env = childEnv(cfg, ROOT, process.env, context);
-  return runHarness(argv, { cwd: path.resolve(ROOT, cfg.workdir), env, timeoutMs, liveFile: env.FTH_CYCLE_TRANSCRIPT, onChild: c => { activeChild = c; } }).then(r => ({ ...r, transcript: env.FTH_CYCLE_TRANSCRIPT || null, roleSkills: env.FTH_ROLE_SKILLS || null, headPrompt: env.FTH_HEAD_PROMPT || null }));
-}
-
 let workspaceBaseline = null;
 // The files as they were when the guard last tripped: already reported, so
 // they don't trip it again once the operator has looked and cleared the kill switch.
@@ -152,27 +147,12 @@ function guardWorkspace(cfg, killSwitchFile, when) {
   return false;
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null } = {}) {
-  const now = new Date();
-  const argv = buildCommand(cfg, prompt, ROOT);
-  if (opts.dryRun) {
-    process.stdout.write(`${JSON.stringify(argv)}\n`);
-    return { ok: true, timedOut: false };
-  }
-  const killSwitchFile = loadConfig(process.env).killSwitchFile;
-  if (!guardWorkspace(cfg, killSwitchFile, 'between runs') && action !== 'eod') return { ok: false, timedOut: false };
-  process.stdout.write(`[autotrader] ${now.toISOString()} ${action}: ${argv[0]} ...\n`);
-  const res = await runOnce(cfg, argv, timeoutMs, context);
-  const result = runResult(res);
-  // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
-  const { summary, file: cycleFile } = writeCycleLog(HOME_DIR, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt });
-  process.stdout.write(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
-  if (summary.missingSkills.length) process.stderr.write(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
-  appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
-  process.stdout.write(`[autotrader] ${result}\n`);
-  const intact = guardWorkspace(cfg, killSwitchFile, `during a ${action} run`);
-  // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
-  return cycleOutcome(res, { result, intact, action });
+/** One cycle: the harness run with the cycle's environment, its log and outcome (lib/cycle-run.js). */
+function runCycle(cfg, action, prompt, opts, limits) {
+  return runCycleWith(cfg, action, prompt, opts, limits, {
+    root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: c => { activeChild = c; },
+    out: t => process.stdout.write(t), err: t => process.stderr.write(t), appendLog, guard: (killSwitchFile, when) => guardWorkspace(cfg, killSwitchFile, when),
+  });
 }
 
 function loadState(cfg) {
