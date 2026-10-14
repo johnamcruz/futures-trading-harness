@@ -2,7 +2,7 @@
 name: trade_lifecycle
 description: The trade lifecycle - each bar the model puts together its bias, location, setup, entry, stop, target and size from its skills, or passes; code verifies every read against the bar briefing and records the decision, so it learns from scored outcomes which combinations work. No combination is hard-coded.
 version: 1
-status: active                # the owner's call; the order gate refuses its entries until its reads check is wired in the gate
+status: active                # the owner's call; the order gate enters it only on its compose record, every read re-checked (composed-reads)
 instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rules strategy
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it

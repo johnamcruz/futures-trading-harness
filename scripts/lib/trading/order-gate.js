@@ -26,7 +26,7 @@ const { propViolations, runningAttempts, latestVerdict } = require('./prop-state
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
-const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, situationalSkills, headSituationalSkills } = require('./skills-loaded');
+const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2 } = require('./roles-ran');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
@@ -35,6 +35,7 @@ const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
+const { composedName, composedRefusal } = require('./lifecycle-gate');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -93,11 +94,14 @@ function isStopBracket(b) {
 
 /**
  * The order's own setup for the facts check (fact-claims.js): { strategy, side } from its setup tag and side; a policy
- * strategy's is the component its latest verdict trades. strategy null when the order names none.
+ * strategy's is the component its latest verdict trades. strategy null when the order names none. A composed entry's
+ * carries its own room (`room`: the record's plan against the briefing's nearest levels, lifecycle-gate.js).
  */
-function factsOrder(input, setup, named, home) {
+function factsOrder(input, setup, named, home, composedCheck = null) {
   const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
   if (!setup) return { strategy: null, side };
+  // A composed entry: its room fact is about its own plan (the record's target against its stop), never a scan's.
+  if (composedCheck && composedCheck.room) return { strategy: setup[1].toLowerCase(), side, room: composedCheck.room };
   if (named && named.signal === 'policy') {
     const v = latestVerdict(home, named.name, contractRoot(input.contractId));
     return { strategy: v && v.component ? v.component : null, side };
@@ -318,6 +322,20 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     const anyLane = retiredLaneRefusalAny(config.home, { root: contractRoot(input.contractId), label: setup ? setup[1].toLowerCase() : null });
     if (anyLane) violations.push({ check: 'retired-lane', message: anyLane });
   }
+  // Hard rule, keyed on the order (its tag, or a policy whose verdict trades it), outside the skippable checks and
+  // whether or not the strategy document loads: a trade_lifecycle entry goes only on its compose record for this
+  // cycle's bar and side, every read re-checked now (lifecycle-gate.js). It stands in for trigger-fired.
+  const composed = setup ? composedName({ setupName: setup[1].toLowerCase(), named, strategies, home: config.home, root: contractRoot(input.contractId) }) : null;
+  let composedCheck = null;
+  if (composed) {
+    const doc = strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
+    // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf });
+    if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message });
+  }
+  // D2: a composed entry against the higher-timeframe trend stands only on a verified CHoCH its way (the checker marks
+  // such a read `reversal`); then the trend rule is judged as a reversal's.
+  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedCheck.check && composedCheck.check.reads.some(r => r.reversal === true));
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.
@@ -332,7 +350,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // retireLanes: that lane enters nothing). A policy's entry is checked on its own timeframe.
     const retiredMsg = retiredLaneRefusal(config.home, { root, strategy: named.name, timeframe: named.timeframe });
     if (retiredMsg) violations.push({ check: 'retired-lane', message: retiredMsg });
-    const msg = checkTrend(config.home, { root, side: input.side, style: judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
+    const msg = checkTrend(config.home, { root, side: input.side, style: composedReversal ? 'reversal' : judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
     // recent bar (signal-state.js): no relabelled setup tag, no stale signal (age in bars of its own timeframe).
@@ -376,15 +394,19 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
   // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
   const factsBar = briefingBarOf(config, contractRoot(input.contractId));
+  // The composed triggers (the head trader's own reads) apply to a composed entry only.
+  const table = composed ? SITUATIONAL : SITUATIONAL.filter(e => !e.taughtIn);
   const situational = !(config.autonomous && config.roleSkills === 'index') ? []
-    : config.cycleLaneBars === null ? headSituationalSkills()
-      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar));
+    : config.cycleLaneBars === null ? headSituationalSkills(table)
+      : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar), table);
+  // A composed entry reads trade-lifecycle in place of the strategy skills (no scan fired for it).
+  const required = composed ? REQUIRED_FOR_COMPOSED : REQUIRED_FOR_ENTRY;
   // opencode's head trader in index mode: the skills its prompt embeds count as loaded, only on the runner's attestation
   // (FTH_HEAD_PROMPT) checked now against the run's config file and the skills' current text (head-prompt.js), and only
   // for the runner's own cycle transcript (a hook's transcript is another harness's session). Anything off: none.
   const embedded = config.autonomous && config.roleSkills === 'index' && !transcriptPath && config.headPromptAttestation
     ? attestedSkills(parseAttestation(config.headPromptAttestation), HARNESS_ROOT, { transcript }) : [];
-  add('skills-loaded', checkSkillsLoaded(transcript, [...REQUIRED_FOR_ENTRY, ...situational.filter(s => !REQUIRED_FOR_ENTRY.includes(s))], embedded));
+  add('skills-loaded', checkSkillsLoaded(transcript, [...required, ...situational.filter(s => !required.includes(s))], embedded));
   // And, read before an entry only, how to judge the setup and write its plan (REQUIRED_AT_ENTRY; unreadable: refused).
   add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, embedded));
   // An autonomous cycle's roles reported before its entry: the analysts' and risk-manager's skills reached the plan.
@@ -398,7 +420,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The cycle's bar per root as the briefing is on it (several lanes: FTH_CYCLE_BRIEFING_BARS, the first lane's, over
   // FTH_CYCLE_BARS, which names the lane bar that closed): the briefing the facts are checked against.
   const factsBars = { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) };
-  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home) }) : null;
+  const factsMsg = config.autonomous ? factsRefusal({ report: () => approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups), home: config.home, root: contractRoot(input.contractId), cycleBars: factsBars, now, order: factsOrder(input, setup, named, config.home, composedCheck) }) : null;
   if (factsMsg) violations.push({ check: 'phase2-facts', message: factsMsg });
   // Hard rule: no entry on stale data (the owner's "data accurate and not stale"): the briefing's bar closed more than
   // the signal age limit of its own bars ago, however long the cycle ran (briefingAgeRefusal).

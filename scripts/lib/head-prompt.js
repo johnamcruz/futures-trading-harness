@@ -66,8 +66,10 @@ function headPlan(root, mode) {
 }
 
 /** The situational skills the head trader must read when the bar shows them (SITUATIONAL entries marked head). */
-const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))]
-  .map(skill => ({ skill, when: table.filter(e => e.head === true && e.skill === skill).map(e => parseTrigger(e.when)) }));
+// An entry taught in a skill (`taughtIn`: trade-lifecycle) is listed there, not here: the prompt doesn't grow for it.
+const listed = e => e.head === true && !e.taughtIn;
+const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(listed).map(e => e.skill))]
+  .map(skill => ({ skill, when: table.filter(e => listed(e) && e.skill === skill).map(e => parseTrigger(e.when)) }));
 
 function headPrompt(plan, table = SITUATIONAL) {
   const names = plan.docs.map(d => d.name);

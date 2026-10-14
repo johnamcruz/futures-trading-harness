@@ -471,3 +471,116 @@ const COMPOSED = [
   'composed, scenario 2 facts: the 4h candle that swept the prior 4h low and closed back, the 5m structure shift, the open 5m FVG and its retest, and the 4h high as a target are briefing fields',
 ];
 for (const t of COMPOSED) test.todo(t);
+
+// ---- trade_lifecycle, end to end: the model's own composed trade on the fired bar's real facts ----
+// The reads are scenario 1's shape on the parity bar (price 27427.50): bias 4h up and the trend rule allows the long,
+// location value above, setup the 15m candle rejected the prior VAH up, entry the 3m candle closed at its top, stop the last swing low 27404.75 (one tick beyond: 92
+// ticks, $46.00 a micro), target the 1h swing 27512.00 (338 ticks, 3.67R). The head trader calls compose_check (the real
+// harness tool); a tampered record (expired, another plan) is the latest one appended after it.
+const TL = require('../../scripts/lib/trading/trade-lifecycle');
+const LC_READS = [
+  { step: 'bias', skill: 'multi-timeframe-analysis', read: '4h up', why: 'the 4h trend is up' },
+  { step: 'location', skill: 'vwap-volume-profile', read: 'value above', why: 'above the prior value area' },
+  { step: 'bias', skill: 'htf-to-ltf', read: 'trend long allowed', why: 'the trend rule takes the long' },
+  { step: 'setup', skill: 'rejection', read: '15m rejected prior VAH up', why: 'the 15m dipped under the prior VAH and closed back above' },
+  { step: 'entry', skill: 'candle-reading', read: '3m close top', why: 'the 3m bar closed at its high' },
+  { step: 'stop', skill: 'invalidation', read: 'stop swing low 27404.75', why: 'under the last swing low it is wrong' },
+  { step: 'target', skill: 'top-down-entry', read: 'target 1h swing 27512.00', why: 'the next 1h swing high' },
+];
+// The first read of a step swapped for another.
+const lcSwap = (step, read) => LC_READS.map((x, i) => (i === LC_READS.findIndex(y => y.step === step) ? { ...x, read } : x));
+const lcTamper = (ctx, tamper) => {
+  const rec = TL.readRecords(ctx.env.FTH_HOME, 'MNQ').at(-1);
+  TL.appendRecord(ctx.env.FTH_HOME, { ...rec, ...tamper(rec) });
+};
+const lcOrder = (o = {}) => ({ accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 27427.5, size: o.size || 1, stopLossBracket: { ticks: 92, type: 'stop' }, takeProfitBracket: { ticks: 338, type: 'limit' }, rationale: 'setup:trade_lifecycle long, 4h up, value above, stop 27404.50, target 27512.00', ...(o.order || {}) });
+/** The head trader's composed cycle: the round, its lookups (trade-lifecycle and the composed ones), the record, the plan, phase 2, the executor. */
+function composedCycle(w, o = {}) {
+  return [
+    ...D.roundSteps(w),
+    ...D.entryLoads(w).map(s => ({ load: s })),
+    ...['trade-lifecycle', 'confluence-counting', 'invalidation', 'rejection'].filter(s => !(o.skip || []).includes(s)).map(s => ({ lookup: s })),
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: o.reads || LC_READS, size: o.size || 1 } },
+    ...(o.tamper ? [{ act: ctx => lcTamper(ctx, o.tamper) }] : []),
+    ...(o.before ? [{ act: o.before }] : []),
+    { broker: 'journal_add', args: { kind: 'plan', contractId: 'MNQ', tags: ['setup:trade_lifecycle', 'MNQ'], text: 'composed long 4h up, value above, stop 27404.50, target 27512.00' } },
+    { role: 'risk-manager', lookups: [], report: () => `Phase 2 on the trade_lifecycle long plan for MNQ.\nVERDICT: APPROVE - size ${o.size || 1}\nFACTS: ${D.trueFacts(w).join('; ')}` },
+    { executor: [{ broker: 'place_order', args: lcOrder(o) }] },
+    { result: o.result || `CYCLE RESULT: executed - trade_lifecycle long MNQ ${o.size || 1}` },
+  ];
+}
+
+test('decision path, trade_lifecycle: the model composes the whole trade with compose_check; its limit entry goes with the record\'s brackets and size', async () => {
+  const w = D.world();
+  const r = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w));
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+  const sent = D.placedAtBroker(w)[0].args;
+  assert.deepStrictEqual([sent.type, sent.limitPrice, sent.size, sent.stopLossBracket.ticks, sent.takeProfitBracket.ticks], ['limit', 27427.5, 1, 92, 338]);
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.deepStrictEqual([rec.ok, rec.bar, rec.plan.stop.price, rec.plan.target.price, rec.plan.rr], [true, FIRED_BAR, 27404.5, 27512, 3.67], JSON.stringify(rec.problems));
+  assert.match(r.ctx.results.compose_check, /^compose_check MNQ long/);
+  assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
+});
+
+const LC_REFUSALS = [
+  ['a false read (the 1h trend is a range, not up)', { reads: lcSwap('bias', '1h up') }, /false by the briefing: "1h up"/],
+  ['a true read for the other side (the 15m trend is down)', { reads: lcSwap('bias', '15m down') }, /against the long: "15m down"/],
+  ['an unverifiable read (no 5m candle in a 3m runner\'s briefing)', { reads: lcSwap('entry', '5m close top') }, /unverifiable: "5m close top"/],
+  ['a record that expired', { tamper: () => ({ expiresAt: '2026-04-28T04:12:00.000Z' }) }, /expired at 2026-04-28T04:12:00.000Z/],
+  ['a record whose plan is not its reads\'', { tamper: rec => ({ plan: { ...rec.plan, stop: { ...rec.plan.stop, ticks: 60 } } }) }, /record's plan \(60-tick stop/],
+  ['a record already used', { before: ctx => fs.appendFileSync(ctx.env.MOCK_JOURNAL, `${JSON.stringify({ ts: new Date(Date.parse(ctx.env.FTH_REPLAY_NOW) + 1000).toISOString(), kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } })}\n`) }, /already used for an entry/],
+  ['an order off the record (a market order)', { order: { type: 'market', limitPrice: undefined } }, /a market order/],
+  ['an order off the record (another size)', { order: { size: 2 } }, /size 2 is not the size the record states \(1\)/],
+];
+for (const [name, o, message] of LC_REFUSALS) {
+  test(`decision path, trade_lifecycle refused: ${name} -> [composed-reads]; nothing reaches the broker`, async () => {
+    const w = D.world();
+    await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { ...o, result: BLOCKED }));
+    const e = lastEntry(w);
+    assert.strictEqual(e.decision, 'blocked');
+    assert.ok(e.checks.includes('composed-reads'), e.messages);
+    assert.match(e.messages, message);
+    assert.deepStrictEqual(D.placedAtBroker(w), []);
+  });
+}
+
+test('decision path, trade_lifecycle refused: a stated size over the dollar cap ([max-risk]), and trade-lifecycle not read ([skills-loaded])', async () => {
+  // 3 x 92 ticks x $0.50 = $138 over max_risk_usd $100: compose_check says NOT OK, and sent anyway, the plan check and
+  // the cap both refuse it.
+  let w = D.world();
+  const r3 = await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { size: 3, result: BLOCKED }));
+  assert.match(r3.ctx.results.compose_check, /NOT OK/);
+  let e = lastEntry(w);
+  assert.deepStrictEqual([e.decision, e.checks], ['blocked', ['composed-reads', 'max-risk']], e.messages);
+  w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { skip: ['trade-lifecycle', 'invalidation'], result: BLOCKED }));
+  e = lastEntry(w);
+  assert.deepStrictEqual([e.decision, e.checks], ['blocked', ['skills-loaded']], e.messages);
+  assert.match(e.messages, /not loaded in this session: trade-lifecycle, invalidation\./);
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
+});
+
+test('decision path, trade_lifecycle: with the position open, the stop moves and the exit go with no record, briefing or transcript', async () => {
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w));
+  const stop = D.working(w).find(o => o.type === 4);
+  assert.ok(stop, 'the stop bracket is working');
+  const gone = ctx => {
+    fs.unlinkSync(ctx.liveFile);
+    fs.mkdirSync(ctx.liveFile);
+    fs.unlinkSync(path.join(ctx.env.FTH_HOME, 'briefing', 'MNQ.json'));
+    fs.rmSync(path.join(ctx.env.FTH_HOME, 'composed'), { recursive: true, force: true });
+  };
+  const r = await D.pass(w, decisionAt(NEXT_BAR), [
+    { act: gone },
+    { executor: [
+      { broker: 'modify_order', args: { accountId: 7, orderId: stop.id, stopPrice: stop.stopPrice + 0.5 } },
+      { broker: 'place_order', args: lcOrder() },
+      { broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] the composed long out' } },
+    ] },
+    { result: 'CYCLE RESULT: managed - stop tightened, then out' },
+  ]);
+  assert.deepStrictEqual(r.ctx.calls.map(c => [c.tool, c.ok]), [['modify_order', true], ['place_order', false], ['place_order', true]]);
+  assert.match(r.ctx.calls[1].text, /\[composed-reads\]/);
+  assert.strictEqual(D.position(w), null, 'flat');
+});

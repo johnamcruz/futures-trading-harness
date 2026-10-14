@@ -324,12 +324,13 @@ function lookupNeeds(briefingsBySymbol, now, env = process.env, { home = null, l
   let mode;
   try { mode = require('./role-skills').modeOf(env); } catch (_err) { mode = 'index'; }
   if (mode !== 'index') return {};
-  const { requiredFor, needed, cycleFacts, lanesFor } = require('./trading/skill-lookups');
+  const { requiredFor, needed, cycleFacts, lanesFor, composedAt } = require('./trading/skill-lookups');
   const { readSignals } = require('./trading/signal-state');
   const required = requiredFor(path.resolve(__dirname, '..', '..'));
   const facts = Object.entries(briefingsBySymbol).map(([symbol, b]) => cycleFacts({
     first: b, now, lanes: lanesFor(laneBars, symbol),
     readFrame: m => (home ? readFrameBriefing(home, symbol, m) : null), readSignal: m => (home ? readSignals(home, symbol, `${m}m`) : null),
+    composed: home && b ? composedAt(home, symbol, b.asOf) : [],
   }));
   const out = {};
   for (const role of required.keys()) {
@@ -352,8 +353,9 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   // The facts key the cycle's lookup requirement comes from (skill-lookups.js factsKey): one-symbol cycles only (an
   // analyst's report is cached in those alone); else null, under which no cached lookup counts.
   const keyOf = (b, symbols, now, laneBars) => {
-    const { factsKey, lanesFor } = require('./trading/skill-lookups');
-    return symbols.length === 1 ? factsKey(b[symbols[0].symbol], now, lanesFor(laneBars, symbols[0].symbol)) : null;
+    const { factsKey, lanesFor, composedAt } = require('./trading/skill-lookups');
+    const first = symbols.length === 1 ? b[symbols[0].symbol] : null;
+    return first !== null ? factsKey(first, now, lanesFor(laneBars, symbols[0].symbol), null, first ? composedAt(home, symbols[0].symbol, first.asOf) : []) : null;
   };
   return {
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).

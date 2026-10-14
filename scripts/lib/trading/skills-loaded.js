@@ -47,6 +47,11 @@ const path = require('path');
 
 const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
 /*
+ * A trade_lifecycle (composed) entry's list in place of REQUIRED_FOR_ENTRY: no scan and no strategy fired for it, so
+ * the strategy skills give way to trade-lifecycle (how to compose the trade with compose_check, and its refusals).
+ */
+const REQUIRED_FOR_COMPOSED = ['trade-session', 'multi-timeframe-analysis', 'trade-lifecycle'];
+/*
  * Read before an entry, not every cycle (the runner's load list doesn't name them): how to judge the setup and how to
  * write its plan (trade-session steps 3 and 4). A check of its own (checkSkillsAtEntry), apart from REQUIRED_FOR_ENTRY,
  * which stays the cycle's load list.
@@ -66,6 +71,13 @@ const REQUIRED_AT_ENTRY = ['setup-judgment', 'trade-plan'];
  *   candidate.name=<strategy>      a candidate of that strategy
  *   candidate.blocked              a candidate blocked now (a no-entry window, a news blackout)
  *   news.inBlackout                a news blackout in force (m3.news.inBlackout)
+ *   composed                       the head trader composed a trade on the bar: a compose record for the bar (m3.composed,
+ *                                  added by skill-lookups.js cycleFacts from the records; never in the briefing itself)
+ *   composed.relation=<rel>        a composed read of a candle's relation to a level (rejected | broke | touched)
+ *
+ * An entry with `taughtIn: <skill>` is the head trader's alone and is taught in that skill (which it reads before a
+ * composed entry): no role's index requires it (role-skills.js requiredOf) and the head prompt doesn't list it
+ * (head-prompt.js), so the requirement adds nothing to a prompt.
  */
 const SITUATIONAL = [
   // A setup fired: what counts as confluence (trader-process step 5) and what proves it wrong (steps 7 and 9).
@@ -77,9 +89,16 @@ const SITUATIONAL = [
   // A with-trend setup: the breakout setup, and accepted or a fakeout (step 3).
   { when: 'candidate.trendRule=allows', skill: 'breakout' },
   { when: 'candidate.trendRule=allows', skill: 'breakout-vs-fakeout' },
+  // A composed trade (trade_lifecycle) on the bar: the same reading, keyed on the head trader's own reads.
+  { when: 'composed', skill: 'confluence-counting', head: true, taughtIn: 'trade-lifecycle' },
+  { when: 'composed', skill: 'invalidation', head: true, taughtIn: 'trade-lifecycle' },
+  { when: 'composed.relation=rejected', skill: 'rejection', head: true, taughtIn: 'trade-lifecycle' },
+  { when: 'composed.relation=broke', skill: 'breakout', head: true, taughtIn: 'trade-lifecycle' },
 ];
 
 const TREND_RULES = ['reversal', 'against', 'allows'];
+const RELATIONS = ['rejected', 'broke', 'touched'];
+const composedOf = m3 => (m3 && Array.isArray(m3.composed) ? m3.composed.filter(c => c && typeof c === 'object') : []);
 const cands = m3 => (m3 && Array.isArray(m3.candidates) ? m3.candidates.filter(c => c && typeof c === 'object') : []);
 const TRIGGERS = {
   candidate: { value: false, test: m3 => cands(m3).length > 0, text: () => 'a setup fired (the briefing lists a candidate)' },
@@ -87,6 +106,8 @@ const TRIGGERS = {
   'candidate.name': { value: v => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(v), test: (m3, v) => cands(m3).some(c => c.name === v), text: v => `a ${v} candidate fired` },
   'candidate.blocked': { value: false, test: m3 => cands(m3).some(c => Boolean(c.blocked)), text: () => 'a candidate is blocked now (a no-entry window or a news blackout)' },
   'news.inBlackout': { value: false, test: m3 => Boolean(m3 && m3.news && m3.news.inBlackout === true), text: () => 'a news blackout is in force' },
+  composed: { value: false, test: m3 => composedOf(m3).length > 0, text: () => 'you composed a trade on the bar (a compose record)' },
+  'composed.relation': { value: v => RELATIONS.includes(v), test: (m3, v) => composedOf(m3).some(c => Array.isArray(c.relations) && c.relations.includes(v)), text: v => `a composed read says a candle ${v} a level` },
 };
 
 /** "candidate.trendRule=reversal" -> { key, value }; throws on anything outside the vocabulary. */
@@ -103,7 +124,8 @@ function parseTrigger(text) {
 const fires = (trigger, m3) => TRIGGERS[trigger.key].test(m3 || {}, trigger.value);
 const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
 /** Every situational skill marked for the head trader: what an entry needs when the cycle's facts can't be read. */
-const headSituationalSkills = (table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
+// By default the ones the head prompt lists (a `taughtIn` entry is a composed entry's: the gate passes the whole table then).
+const headSituationalSkills = (table = SITUATIONAL.filter(e => !e.taughtIn)) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
 /** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -227,4 +249,4 @@ function checkSkillsAtEntry(transcriptPath, required = REQUIRED_AT_ENTRY, embedd
     : null;
 }
 
-module.exports = { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, loadedSkills, checkSkillsLoaded, checkSkillsAtEntry };
+module.exports = { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, loadedSkills, checkSkillsLoaded, checkSkillsAtEntry };

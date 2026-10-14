@@ -453,12 +453,13 @@ test('order gate blocks unknown strategies and instruments the strategy does not
   assert.match(mes.stderr, /does not trade MES/);
 });
 
-test('order gate: a trade-lifecycle entry (signal: composed) is refused until the gate checks its reads; its exit goes', () => {
+test('order gate: a trade-lifecycle entry (signal: composed) outside a runner cycle is refused ([composed-reads]); its exit goes', () => {
   // The shipped strategies, trade_lifecycle among them.
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies') });
   const entry = gate(orderPayload({ ...ORDER, rationale: 'setup:trade_lifecycle long, stop 21480' }), env);
   assert.strictEqual(entry.code, 2);
-  assert.match(entry.stderr, /\[strategy\] setup:trade_lifecycle is the trade lifecycle \(signal: composed\): the order gate doesn't check its reads yet, so it places no entries/);
+  assert.match(entry.stderr, /\[composed-reads\] setup:trade_lifecycle: no cycle bar for MNQ/);
+  assert.doesNotMatch(entry.stderr, /\[strategy\]/);
   const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
@@ -2646,4 +2647,90 @@ test('order gate hook, briefing-age: an autonomous entry on a bar briefing older
   assert.strictEqual(exit.code, 0, exit.stderr);
   brief(1);
   assert.doesNotMatch(gate(orderPayload(), env).stderr, /briefing-age/);
+});
+
+// ---- trade_lifecycle (composed-reads) wiring: the hook and the gateway ----
+const LC = require('../fixtures/lifecycle');
+const LC_AT = '2026-10-07T14:00:02.000Z';
+// A plugin root whose only strategy is the shipped trade_lifecycle, for the hook.
+const LC_ROOT = (() => {
+  const root = tmpDir();
+  fs.symlinkSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'));
+  fs.mkdirSync(path.join(root, 'strategies'));
+  fs.symlinkSync(path.join(REPO, 'strategies', 'trade_lifecycle'), path.join(root, 'strategies', 'trade_lifecycle'));
+  return root;
+})();
+const lcPlan = { ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'composed long, stop 21512.50, target 21598.00' };
+
+test('order gate (hook): a trade_lifecycle entry is judged on its compose record ([composed-reads]); an exit always goes', () => {
+  const home = trendHome();
+  const lc = (entries, input, extra = {}) => gate(orderPayload(input), setup(entries, { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), ...extra }).env);
+  // No record yet: refused by composed-reads, and by it alone.
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, LC.briefing());
+  let r = lc([lcPlan], LC.order());
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[composed-reads\] setup:trade_lifecycle: no compose record for the MNQ bar opened 2026-10-07T13:57:00.000Z/);
+  assert.doesNotMatch(r.stderr, /\[strategy\]/);
+  // The record: the entry goes.
+  LC.writeScenario(home, { write: false });
+  r = lc([lcPlan], LC.order());
+  assert.strictEqual(r.code, 0, r.stderr);
+  // The record's side is long: a short is refused naming it.
+  assert.match(lc([lcPlan], LC.order({ side: 'sell', limitPrice: 21540.25, rationale: 'setup:trade_lifecycle short' })).stderr, /\[composed-reads\] setup:trade_lifecycle: the compose record for this bar is for a long, not this short/);
+  // Not in a runner's cycle (no FTH_CYCLE_BARS): refused.
+  assert.match(lc([lcPlan], LC.order(), { FTH_CYCLE_BARS: '' }).stderr, /\[composed-reads\] .*no cycle bar for MNQ/);
+  // An exit and a protective stop go with nothing: no record, no briefing, no cycle bar.
+  fs.unlinkSync(path.join(home, 'briefing', 'MNQ.json'));
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    assert.strictEqual(lc([], { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale }, { FTH_CYCLE_BARS: '' }).code, 0, rationale);
+  }
+});
+
+test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to the broker; a record for the other side or a false read never reaches it; an exit goes', async () => {
+  const { spawn } = require('child_process');
+  const run = async (prepare, messages, extra = {}) => {
+    const dir = tmpDir();
+    const home = path.join(dir, '.futures-trading-harness');
+    fs.mkdirSync(home, { recursive: true });
+    trendHome(home, { specs: false });
+    fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: [process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], journal: writeJournal(dir, [lcPlan]), allowedAccountsEnv: 'SIM_ALLOWED_ACCOUNTS', replay: true } } }));
+    prepare(home);
+    const argsFile = path.join(dir, 'args.jsonl');
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js')], { env: {
+      PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', NODE_ENV: 'test',
+      SIM_ALLOWED_ACCOUNTS: '1,7', FAKE_ARGS: argsFile, FTH_REPLAY_NOW: LC_AT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }),
+      FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: LC_AT, replay: true }),
+      FAKE_CONTRACTS: JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]), ...extra,
+    } });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    const replies = () => out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+    for (const m of messages) {
+      gw.stdin.write(`${JSON.stringify(m)}\n`);
+      for (let t = 0; t < 400 && !replies().some(r => r.id === m.id); t += 1) await new Promise(r => setTimeout(r, 25));
+    }
+    gw.stdin.end();
+    await new Promise(r => gw.on('close', r));
+    const texts = Object.fromEntries(replies().map(r => [r.id, r.result.content[0].text]));
+    const sent = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => c.name === 'place_order') : [];
+    return { texts, sent };
+  };
+  const msgs = input => [call(0, 'search_contracts', { searchText: 'MNQ' }), call(1, 'place_order', input)];
+  // The record, every read true: the entry reaches the broker as the record says (a limit at 21540.25, 111 / 231 ticks).
+  const ok = await run(home => LC.writeScenario(home), msgs(LC.order()));
+  assert.strictEqual(ok.sent.length, 1, ok.texts[1]);
+  assert.deepStrictEqual([ok.sent[0].args.type, ok.sent[0].args.limitPrice, ok.sent[0].args.stopLossBracket.ticks, ok.sent[0].args.takeProfitBracket.ticks], ['limit', 21540.25, 111, 231]);
+  // Only a short record: refused, never sent.
+  const other = await run(home => LC.writeScenario(home, { side: 'short' }), msgs(LC.order()));
+  assert.deepStrictEqual(other.sent, []);
+  assert.match(other.texts[1], /\[composed-reads\] setup:trade_lifecycle: the compose record for this bar is for a short/);
+  // A false read now: the briefing on disk says the 1h trend is down, whatever the record says.
+  const down = LC.briefing();
+  down.sections.h1.data.h1.trend = 'down';
+  const falseRead = await run(home => { LC.writeScenario(home); require('../../scripts/lib/trading/briefing').writeBriefing(home, down); }, msgs(LC.order()));
+  assert.deepStrictEqual(falseRead.sent, []);
+  assert.match(falseRead.texts[1], /\[composed-reads\] .*false by the briefing: "1h up"/);
+  // An exit with no record and no briefing goes.
+  const exit = await run(() => {}, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });
+  assert.strictEqual(exit.sent.length, 1, exit.texts[1]);
 });

@@ -306,15 +306,15 @@ test('strategy check: an entry tagged with a retired strategy is refused, saying
   }
 });
 
-test('strategy check: the trade lifecycle (signal: composed) places no entry until the gate checks its reads; its exit goes', () => {
+test('strategy check: the trade lifecycle (signal: composed) enters only on its compose record ([composed-reads], lifecycle-gate.js); its exit goes', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
   assert.strictEqual(strategies.find(s => s.name === 'trade_lifecycle').status, 'active');
   for (const side of ['buy', 'sell']) {
     const r = evaluateOrder({ input: entryOrder({ side, rationale: `setup:trade_lifecycle ${side === 'buy' ? 'long' : 'short'}, stop 21480` }), entries: [plan(1)], now: NOW, config, strategies });
-    const v = r.violations.find(x => x.check === 'strategy');
-    assert.ok(v, JSON.stringify(r.violations));
-    assert.match(v.message, /^setup:trade_lifecycle is the trade lifecycle \(signal: composed\): the order gate doesn't check its reads yet, so it places no entries/);
+    const v = r.violations.find(x => x.check === 'composed-reads');
+    assert.ok(v && !r.violations.some(x => x.check === 'strategy'), JSON.stringify(r.violations));
+    assert.match(v.message, /^setup:trade_lifecycle: no cycle bar for MNQ/);
   }
   const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the trade_lifecycle long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies });
   assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
@@ -2665,4 +2665,133 @@ test('briefing-age: an autonomous entry on a bar briefing older than 3 of its ba
   // Not skippable (FTH_ORDER_GATE_SKIP lists only the skippable checks).
   brief(3, 30);
   assert.strictEqual(run({ FTH_ORDER_GATE_SKIP: 'briefing-age' }).length, 1);
+});
+
+// ---- trade_lifecycle: the composed-reads check (lifecycle-gate.js) as the gate runs it ----
+const LC = require('../fixtures/lifecycle');
+const { loadStrategies: loadLC } = require('../../scripts/lib/trading/strategies');
+const LC_REGISTRY = loadLC(path.resolve(__dirname, '..', '..'), {}).strategies;
+const LC_NOW = new Date('2026-10-07T14:00:02Z');
+const lcHome = (o = {}) => { const home = trendHome(); LC.writeScenario(home, o); return home; };
+const lcEval = (home, input = LC.order(), o = {}) => evaluateOrder({
+  input, entries: o.entries || [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: o.now || LC_NOW, transcriptPath: o.transcript || null,
+  config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...(o.config || {}) }, strategies: 'strategies' in o ? o.strategies : LC_REGISTRY,
+});
+
+test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it is refused ([strategy]), as any paper strategy', () => {
+  const home = lcHome();
+  assert.deepStrictEqual(lcEval(home).violations, []);
+  // Several lanes: the briefing's bar (FTH_CYCLE_BRIEFING_BARS, the first lane's) over the lane bar that closed.
+  assert.deepStrictEqual(lcEval(home, LC.order(), { config: { cycleBars: { MNQ: '2026-10-07T13:59:00.000Z' }, cycleBriefingBars: { MNQ: LC.BAR } } }).violations, []);
+  const paper = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, status: 'paper' } : s));
+  const r = lcEval(home, LC.order(), { strategies: paper });
+  assert.deepStrictEqual(checks(r), ['strategy']);
+  assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
+});
+
+test('trade_lifecycle: composed-reads refuses a false, unverifiable or other-side read, and a missing, expired, used or mismatched record', () => {
+  const swap = (i, read) => LC.READS.map((x, j) => (j === i ? { ...x, read } : x));
+  const only = r => r.violations.filter(v => v.check === 'composed-reads').map(v => v.message);
+  // A false read now (the record says ok).
+  let home = lcHome();
+  const down = LC.briefing();
+  down.sections.h1.data.h1.trend = 'down';
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, down);
+  assert.match(only(lcEval(home))[0], /false by the briefing: "1h up"/);
+  assert.match(only(lcEval(lcHome({ reads: swap(3, '5m close top') })))[0], /unverifiable/);
+  assert.match(only(lcEval(lcHome({ reads: swap(0, 'trend short allowed'), b: LC.briefing({ m3: { trendRule: 'Trend rule: no trend on 1h, 4h' } }) })))[0], /against the long/);
+  assert.match(only(lcEval(lcHome({ side: 'short' })))[0], /for a short, not this long/);
+  assert.match(only(lcEval(lcHome(), LC.order(), { now: new Date(LC.EXPIRES) }))[0], /expired/);
+  const used = { ts: '2026-10-07T14:00:01Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:trade_lifecycle long', data: { result: { success: true } } };
+  assert.match(only(lcEval(lcHome(), LC.order(), { entries: [plan(1, { ts: '2026-10-07T13:59:30Z' }), used] }))[0], /already used/);
+  home = trendHome();
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, LC.briefing());
+  assert.match(only(lcEval(home))[0], /no compose record/);
+  assert.match(only(lcEval(lcHome(), LC.order({ stopLossBracket: { ticks: 100, type: 'stop' }, rationale: 'setup:trade_lifecycle long' })))[0], /stopLossBracket.ticks 100 is not the record's 111/);
+  assert.match(only(lcEval(lcHome(), LC.order({ type: 'market', limitPrice: undefined })))[0], /a market order/);
+  // No cycle bar (not a runner's cycle): refused.
+  assert.match(only(lcEval(lcHome(), LC.order(), { config: { cycleBars: {} } }))[0], /no cycle bar/);
+});
+
+test('trade_lifecycle: composed-reads runs keyed on the tag even with no strategy registry or an invalid document, and a skip list can\'t skip it', () => {
+  const home = lcHome();
+  const none = lcEval(home, LC.order(), { strategies: null });
+  assert.deepStrictEqual(checks(none), ['composed-reads']);
+  assert.match(none.violations[0].message, /states no risk.max_risk_usd/);
+  const invalid = LC_REGISTRY.map(s => (s.name === 'trade_lifecycle' ? { ...s, valid: false, errors: ['broken'] } : s));
+  assert.ok(checks(lcEval(home, LC.order(), { strategies: invalid })).includes('composed-reads'));
+  const skipping = lcEval(lcHome({ side: 'short' }), LC.order(), { config: { skipChecks: new Set(['composed-reads', 'strategy', 'trigger-fired']) } });
+  assert.ok(checks(skipping).includes('composed-reads'), 'a hard check');
+});
+
+test('trade_lifecycle: the stated size goes only within the ceilings: over the risk cap is refused ([max-risk]), at it goes', () => {
+  // Size 2 x 111 ticks x $0.50 = $111 over max_risk_usd $100: the record states it, the cap refuses it.
+  // compose_check's plan refuses it too (trade-lifecycle.js planOf), so composed-reads, re-planning it, does.
+  const r = lcEval(lcHome({ size: 2 }), LC.order({ size: 2 }));
+  assert.deepStrictEqual(checks(r), ['composed-reads', 'max-risk']);
+  assert.match(r.violations[1].message, /risk \$111\.00 .* over setup:trade_lifecycle's risk\.max_risk_usd \$100\.00/);
+  // Over the broker's max order size too.
+  assert.ok(checks(lcEval(lcHome({ size: 60 }), LC.order({ size: 60 }))).includes('max-order-size'));
+  // An order above the record's stated size is refused by composed-reads even under every cap.
+  assert.ok(checks(lcEval(lcHome({ size: 1 }), LC.order({ size: 2 }))).includes('composed-reads'));
+});
+
+test('trade_lifecycle: exits, protective stops and stop moves go with no record, no briefing and no cycle bar', () => {
+  const home = trendHome();
+  for (const rationale of ['[exit] flatten the composed long', '[protect] stop for the composed long']) {
+    const r = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21512.5, size: 1, rationale }, { config: { cycleBars: {} }, entries: [] });
+    assert.deepStrictEqual([r.intent, r.violations], ['risk-reducing', []], rationale);
+  }
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, stopPrice: 21520 }, config }).violations, []);
+});
+
+test('trade_lifecycle: a composed entry reads trade-lifecycle in place of the strategy skills', () => {
+  const file = path.join(tmpDir(), 'session.jsonl');
+  const skillEvent = name => JSON.stringify({ message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });
+  fs.writeFileSync(file, ['trade-session', 'multi-timeframe-analysis', 'trade-lifecycle', 'setup-judgment', 'trade-plan'].map(skillEvent).join('\n'));
+  const home = lcHome();
+  assert.deepStrictEqual(lcEval(home, LC.order(), { transcript: file }).violations, [], 'no strategy-library, strategy-scan or strategy-gate-checks needed');
+  fs.writeFileSync(file, ['trade-session', 'multi-timeframe-analysis', 'setup-judgment', 'trade-plan'].map(skillEvent).join('\n'));
+  const r = lcEval(home, LC.order(), { transcript: file });
+  assert.deepStrictEqual(checks(r), ['skills-loaded']);
+  assert.match(r.violations[0].message, /not loaded in this session: trade-lifecycle\./);
+  const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED } = require('../../scripts/lib/trading/skills-loaded');
+  assert.ok(!REQUIRED_FOR_ENTRY.includes('trade-lifecycle') && REQUIRED_FOR_COMPOSED.includes('trade-lifecycle'));
+});
+
+test('trade_lifecycle, index mode: the head trader\'s compose records trigger its lookups (a rejected read: rejection), for a composed entry only', () => {
+  const { SITUATIONAL, situationalSkills, headSituationalSkills } = require('../../scripts/lib/trading/skills-loaded');
+  const { briefingFacts } = require('../../scripts/lib/trading/skill-lookups');
+  const home = trendHome();
+  LC.writeScenario(home, { reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
+  const m3 = briefingFacts(home, 'MNQ', LC_NOW, {});
+  assert.deepStrictEqual(m3.composed.map(c => [c.side, c.relations]), [['long', ['rejected']]]);
+  assert.deepStrictEqual(situationalSkills(m3).sort(), ['confluence-counting', 'invalidation', 'rejection']);
+  assert.deepStrictEqual(situationalSkills(m3, SITUATIONAL.filter(e => !e.taughtIn)), [], 'not for another entry');
+  assert.deepStrictEqual(headSituationalSkills(), [], 'the prompt-listed head entries: none of the composed ones');
+  assert.deepStrictEqual(headSituationalSkills(SITUATIONAL).sort(), ['breakout', 'confluence-counting', 'invalidation', 'rejection']);
+  // The gate, autonomous in index mode: the composed entry needs them; a legacy entry on the same bar doesn't.
+  const file = path.join(tmpDir(), 'session.jsonl');
+  fs.writeFileSync(file, ocSkills.join('\n'));
+  const auto = { ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home, autonomous: true, cycle: null, cycleLaneBars: {}, cycleBars: { MNQ: LC.BAR } };
+  const loaded = (input, c = auto) => evaluateOrder({ input, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW, config: c, transcriptPath: file, strategies: LC_REGISTRY }).violations.filter(v => v.check === 'skills-loaded').map(v => v.message);
+  const msg = loaded(LC.order())[0];
+  for (const s of ['trade-lifecycle', 'confluence-counting', 'invalidation', 'rejection']) assert.match(msg, new RegExp(`\\b${s}\\b`));
+  assert.doesNotMatch(msg, /strategy-library|breakout/);
+  assert.deepStrictEqual(loaded(entryOrder()), [], 'a legacy entry: neither trade-lifecycle nor the composed lookups');
+  // Unreadable lanes: every head entry, the composed ones only for a composed entry.
+  assert.match(loaded(LC.order(), { ...auto, cycleLaneBars: null })[0], /breakout/);
+  assert.deepStrictEqual(loaded(entryOrder(), { ...auto, cycleLaneBars: null }), []);
+});
+
+test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the first level ahead in its R), never a scan candidate', () => {
+  const { factsOrder } = require('../../scripts/lib/trading/order-gate');
+  const { checkClaim, parseClaim } = require('../../scripts/lib/trading/fact-claims');
+  const room = { stopPoints: 27.75, needR: 2.08, inTheWay: { name: 'prior VAH', R: 1.07 } };
+  const order = factsOrder(LC.order(), /^\s*setup:([a-z0-9_-]+)/.exec('setup:trade_lifecycle long'), null, tmpDir(), { room });
+  assert.deepStrictEqual(order, { strategy: 'trade_lifecycle', side: 'long', room });
+  const b = LC.briefing({ m3: { candidates: [{ name: 'trade_lifecycle', direction: 'long', stopPoints: 10, needR: 1, inTheWay: null }] } });
+  assert.deepStrictEqual([checkClaim(parseClaim('room long short'), b, order).check, checkClaim(parseClaim('room long enough'), b, order).check], [true, false]);
+  // Without the record's plan (refused), no room is assumed: the order's own setup has none on the scan.
+  assert.strictEqual(checkClaim(parseClaim('room long enough'), LC.briefing(), { strategy: 'trade_lifecycle', side: 'long' }).check, 'unchecked');
 });

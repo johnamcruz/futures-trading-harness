@@ -39,7 +39,9 @@
  *   rolesOwn(records, transcript)               the records but the session's own
  *   lookupRule({ root, home, transcript, contractId, now, cycleBar, laneBars, cachedLookups })   (call) -> unmet skills, for checkRolesRan (the session's own lookups left out)
  *   lookupsInCall(records, role, call)          the skills the role looked up inside the call's times, sorted
- *   factsKey(first, now, lanes, cycleBar), briefingFactsKey(home, root, now, laneBars, cycleBar)   what the requirement comes from, one key
+ *   factsKey(first, now, lanes, cycleBar, composed), briefingFactsKey(home, root, now, laneBars, cycleBar)   what the requirement comes from, one key
+ *   composedAt(home, root, bar)                 the head trader's compose records on the bar, as the triggers read them
+ *                                               ([{ id, side, kinds, relations }]: m3.composed in cycleFacts)
  *   lookupStats({ calls, records, required, m3 })   per cycle: lookups, by role, calls with a requirement, met
  */
 
@@ -51,6 +53,8 @@ const { readBriefing, readFrameBriefing, current } = require('./briefing');
 const { readSignals } = require('./signal-state');
 const { contractRoot } = require('./journal');
 const { familyRoot } = require('./contracts');
+const { recordsAt, readsOf } = require('./lifecycle-gate');
+const { parseRead } = require('./composed-reads');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -104,9 +108,11 @@ const briefingHolds = (first, now, cycleBar) => Boolean(first && first.sections 
  * older record without them, its candidates under every trend rule). null, so every situational lookup is required
  * (fails closed): no current runner briefing, or a closed lane with neither on its bar.
  */
-function cycleFacts({ first, now, cycleBar = null, lanes = [], readFrame = () => null, readSignal = () => null }) {
-  const m3 = briefingHolds(first, now, cycleBar) ? first.sections.m3.data || null : null;
-  if (!m3) return null;
+function cycleFacts({ first, now, cycleBar = null, lanes = [], readFrame = () => null, readSignal = () => null, composed = [] }) {
+  const base = briefingHolds(first, now, cycleBar) ? first.sections.m3.data || null : null;
+  if (!base) return null;
+  // The head trader's compose records on this bar (composedAt): the composed triggers read them (skills-loaded.js).
+  const m3 = Array.isArray(composed) && composed.length ? { ...base, composed } : base;
   const extra = [];
   for (const { minutes, t } of lanes) {
     if (!Number.isInteger(minutes) || minutes === first.minutes) continue;
@@ -135,9 +141,24 @@ const lanesFor = (laneBars, root) => Object.entries((laneBars || {})[familyRoot(
  */
 function briefingFacts(home, root, now, laneBars = {}, cycleBar = null) {
   if (laneBars === null) return null;
+  const first = readBriefing(home, root);
   return cycleFacts({
-    first: readBriefing(home, root), now, cycleBar, lanes: lanesFor(laneBars, root),
+    first, now, cycleBar, lanes: lanesFor(laneBars, root),
     readFrame: m => readFrameBriefing(home, root, m), readSignal: m => readSignals(home, root, `${m}m`),
+    composed: first ? composedAt(home, root, first.asOf) : [],
+  });
+}
+
+/**
+ * The compose records (trade-lifecycle.js) on the bar opened at `bar` for `root`, as the composed triggers read them:
+ * [{ id, side, kinds: the reads' kinds, relations: the relation reads' rel }] (the reads parsed again by the checker,
+ * never a field the record states about itself). None: [].
+ */
+function composedAt(home, root, bar) {
+  if (!home || !bar) return [];
+  return recordsAt(home, root, bar).map(r => {
+    const parsed = readsOf(r).map(x => parseRead(x.read));
+    return { id: String(r.id || ''), side: r.side, kinds: [...new Set(parsed.map(p => p.kind))].sort(), relations: [...new Set(parsed.filter(p => p.kind === 'relation' && p.rel).map(p => p.rel))].sort() };
   });
 }
 
@@ -148,17 +169,20 @@ function briefingFacts(home, root, now, laneBars = {}, cycleBar = null) {
  * cycle that made them (lookupRule, runner-wiring.js): a candidate on a later bar or another lane's bar needs its own.
  * null (nothing counts): no briefing of this cycle (briefingHolds), no m3 version, or unreadable lanes.
  */
-function factsKey(first, now, lanes = [], cycleBar = null) {
+function factsKey(first, now, lanes = [], cycleBar = null, composed = []) {
   const v = briefingHolds(first, now, cycleBar) ? first.sections.m3.version : null;
   if (typeof v !== 'string' || !v) return null;
   const others = (lanes || []).filter(l => Number.isInteger(l.minutes) && l.minutes !== first.minutes).map(l => `${l.minutes}@${l.t}`).sort();
-  return [v, ...others].join('|');
+  // The compose records on the bar are facts the triggers read too (cycleFacts): another record, another key.
+  const ids = (Array.isArray(composed) ? composed : []).map(c => `c:${c.id}`).sort();
+  return [v, ...others, ...ids].join('|');
 }
 
 /** factsKey over the harness home for `root` (the gate's view, as briefingFacts). */
 function briefingFactsKey(home, root, now, laneBars = {}, cycleBar = null) {
   if (laneBars === null) return null;
-  return factsKey(readBriefing(home, root), now, lanesFor(laneBars, root), cycleBar);
+  const first = readBriefing(home, root);
+  return factsKey(first, now, lanesFor(laneBars, root), cycleBar, first ? composedAt(home, root, first.asOf) : []);
 }
 
 /** A call with the opencode transcript's wall-clock times (ms), not line positions. */
@@ -278,4 +302,4 @@ function lookupStats({ calls = [], records = [], required = new Map(), m3 = null
   return { lookups: records.length, byRole, requiredCalls, met };
 }
 
-module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, factsKey, briefingFactsKey, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };
+module.exports = { PLUGIN_ROOT, sessionLookups, rolesOwn, lookupsFile, recordLookup, readLookups, cycleFacts, lanesFor, briefingFacts, composedAt, factsKey, briefingFactsKey, needed, unmetLookups, requiredFor, lookupRule, lookupsInCall, lookupStats };

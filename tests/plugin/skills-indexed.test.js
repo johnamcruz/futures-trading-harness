@@ -59,6 +59,7 @@ const ALLOWED = {
   'day-context': 'trade-session step 3 points to it for every decision (the premarket plan, the news, the day so far); not on the load list',
   'entry-outcome': 'trade-session step 6 points to it after an entry is placed; not on the load list',
   'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
+  'trade-lifecycle': 'the head trader reads it with skill_lookup before a composed entry (the gate requires it: skills-loaded.js REQUIRED_FOR_COMPOSED); found by its index line (workspace/AGENTS.md), so no prompt grows',
 };
 
 // Descriptions over the limit when the limit came in (skill-descriptions.pins.json: skill -> its length): each pin

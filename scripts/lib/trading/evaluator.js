@@ -136,6 +136,8 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       return { ...base, regime: regime ? regime.primary : null, regimes: s.regimes || null, inRegime: regimeFits(s.regimes, regime) };
     };
     const head = { name: s.name, status: s.status, timeframe: s.timeframe, inSession: session };
+    // Nothing fires for a composed strategy (trade_lifecycle): the model composes its trade, never a scan.
+    if (s.signal === 'composed') return { ...head, signal: 'composed', candidate: false, note: 'composed by the model (compose_check)' };
     if (s.signal === 'manual') {
       const base = withRegime(head);
       // The side is the LLM's call; the summary says which sides the trend rule leaves open (the gate enforces it).

@@ -262,8 +262,10 @@ function checkClaim(claim, b, order = null) {
     if (claim.side !== order.side || (strategy && strategy !== order.strategy)) return unmatched(`it is about ${strategy ? `${strategy} ` : ''}${claim.side}, the order is ${order.strategy} ${order.side}`);
     strategy = order.strategy;
   }
-  if (!Array.isArray(m3.candidates)) return res('unchecked', 'what fired is unknown (no scan for the bar)');
-  const side = m3.candidates.filter(c => isObj(c) && c.direction === claim.side);
+  // A composed entry (trade_lifecycle): its own plan's room (order-gate.js factsOrder), never a scan candidate's.
+  const own = order && isObj(order.room) ? [{ name: order.strategy, direction: order.side, ...order.room }] : null;
+  if (!own && !Array.isArray(m3.candidates)) return res('unchecked', 'what fired is unknown (no scan for the bar)');
+  const side = (own || m3.candidates).filter(c => isObj(c) && c.direction === claim.side);
   const on = strategy ? side.filter(c => c.name === strategy) : side;
   if (!strategy && on.length > 1) return unmatched(`${on.length} ${claim.side} setups (${on.map(c => c.name).join(', ')}): name the strategy, room <strategy> ${claim.side} ...`);
   if (!on.length) return res('unchecked', `no ${strategy ? `${strategy} ` : ''}setup on the ${claim.side} side`);

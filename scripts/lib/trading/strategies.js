@@ -594,9 +594,6 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
   }
   if (!s.valid) return `strategies/${name}/STRATEGY.md is invalid (${s.errors[0]}). Fix it before trading it.`;
   if (s.status !== 'active') return `setup:${name} has status "${s.status}"; only active strategies may place live entries.`;
-  // Fails closed until the gate re-checks a composed entry's reads against the cycle bar's briefing: until then a
-  // composed strategy places no entry, whatever its status (its exits and protection never reach this check).
-  if (s.signal === 'composed') return `setup:${name} is the trade lifecycle (signal: composed): the order gate doesn't check its reads yet, so it places no entries. compose_check records the plan; no order.`;
   const notTraded = rootRefusal(s, contractRoot, selection ? selection.symbols : null);
   if (notTraded) return `setup:${name} ${notTraded}.`;
   if (!inSessions(s, now)) return `setup:${name} is outside its sessions (${s.sessions.join(', ')}).`;

@@ -224,6 +224,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `tool-arguments` (skills/tool-arguments/SKILL.md): Use when calling a harness tool, for its arguments.
 - `top-down-entry` (skills/top-down-entry/SKILL.md): Use when reading a setup top down - the HTF side and level, the 15m setup there, the 3m/5m trigger, where the idea is wrong and where it aims.
 - `trade-journal` (skills/trade-journal/SKILL.md): The journal the gate reads - its kinds (plan, entry, exit, note, review, lesson; the server adds order_placed), what the gate reads, filtering by kind or tag.
+- `trade-lifecycle` (skills/trade-lifecycle/SKILL.md): Use before a trade_lifecycle entry - compose the trade as reads with compose_check, send it as the record says, and what the gate refuses.
 - `trade-plan` (skills/trade-plan/SKILL.md): Use before an entry - the plan entry, the exit, ticks, and order_plan's numbers.
 - `trade-review` (skills/trade-review/SKILL.md): Use after every closed or cancelled entry (the gate blocks the next entry until it is reviewed) and at end of session - review against plan, write lessons.
 - `trade-session` (skills/trade-session/SKILL.md): Use when running one trading cycle - /trade-session, an autonomous run's cycle, or plan-only (paper).

@@ -98,7 +98,7 @@ test('the tool: its schema takes the reads and a size and refuses the rest', () 
   }
 });
 
-test('the trade_lifecycle strategy: signal composed, active, max_risk_usd required; the gate places no entry from it yet', () => {
+test('the trade_lifecycle strategy: signal composed, active, max_risk_usd required; the strategy check takes it (the gate\'s composed-reads check judges its entries)', () => {
   const s = loadStrategies(ROOT, {}).strategies.find(x => x.name === 'trade_lifecycle');
   assert.ok(s && s.valid, s && s.errors.join('; '));
   assert.strictEqual(s.signal, 'composed');
@@ -109,8 +109,8 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   assert.ok(validateStrategy({ ...base, risk: { stop: 'structure', min_rr: 2 } }, body, 'x').some(e => /max_risk_usd: required for signal: composed/.test(e)));
   assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:0.5', min_rr: 2, max_risk_usd: 100 } }, body, 'x').some(e => /risk.stop: structure/.test(e)));
   assert.ok(validateStrategy({ ...base, exit: { target_r: 2 } }, body, 'x').some(e => /exit: not for signal: composed/.test(e)));
-  // Fails closed until the gate checks its reads: the strategy check refuses it.
-  assert.match(checkStrategyForOrder([s], 'trade_lifecycle', 'MNQ', new Date('2026-04-23T15:00:05Z'), 'buy'), /doesn't check its reads yet, so it places no entries/);
+  // The strategy check passes it; composed-reads (lifecycle-gate.js) judges the entry on its record.
+  assert.strictEqual(checkStrategyForOrder([s], 'trade_lifecycle', 'MNQ', new Date('2026-04-23T15:00:05Z'), 'buy'), null);
 });
 
 test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {
