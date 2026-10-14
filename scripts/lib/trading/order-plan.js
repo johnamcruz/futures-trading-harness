@@ -17,6 +17,7 @@
  *   targetTicks(distance, tickSize)        whole ticks (floor), or null below one tick
  *   distanceText(points, ticks, root, spec) "8.4579 pts = 34 ticks ($17.00/MNQ contract)"
  *   ticksText(ticks, root, spec)           "34 ticks ($17.00/MNQ contract)"
+ *   sideTarget(target, side)               a strategy's target level for one side: its own formula, or null
  *   buildPlan({...})                       { plan, args, line } (throws on anything it can't plan)
  */
 
@@ -49,6 +50,18 @@ const ticksText = (ticks, root, spec) => `${ticks} ticks (${usd(ticks * spec.tic
 function distanceText(points, ticks, root, spec) {
   if (!spec || !ticks) return `${pts(points)} pts`;
   return `${pts(points)} pts = ${ticksText(ticks, root, spec)}`;
+}
+
+/**
+ * A strategy's target level (`exit.target`, a distance expression) for one
+ * side: a per-side target ({ long, short }) gives that side's own, a single one
+ * is both sides'. Null without one or without a known side.
+ */
+function sideTarget(target, side) {
+  if (target === null || target === undefined) return null;
+  if (typeof target !== 'object') return String(target);
+  const own = side === 'long' || side === 'short' ? target[side] : undefined;
+  return own === null || own === undefined ? null : String(own);
 }
 
 /**
@@ -128,4 +141,4 @@ function buildPlan({ name, side, contract, spec, entryRef, stop, stopDistance = 
   };
 }
 
-module.exports = { stopTicks, targetTicks, ticksText, distanceText, targetFor, buildPlan };
+module.exports = { stopTicks, targetTicks, ticksText, distanceText, targetFor, sideTarget, buildPlan };

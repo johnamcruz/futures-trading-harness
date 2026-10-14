@@ -91,8 +91,9 @@ const TOOLS = [
     inputSchema: object({
       bars: BARS,
       params: { type: 'object', properties: Object.fromEntries(Object.entries(PARAMS).map(([k, d]) => [k, { type: 'number', description: `default ${d}` }])), additionalProperties: false, description: 'Indicator settings to override (known names only, numbers).' },
+      symbol: { ...SYMBOL, description: `${SYMBOL.description} The volume profile's levels come on its tick (two decimals without it).` },
     }, ['bars']),
-    args: i => ({ ...pick(i, { bars: 'file' }), params: i.params || {}, compact: true }),
+    args: i => ({ ...pick(i, { bars: 'file', symbol: 'symbol' }), params: i.params || {}, compact: true }),
     bars: ['bars'],
     narrow: 'pass a bars file with fewer bars, or smaller vpRows',
   },

@@ -24,7 +24,7 @@
 
 const { whyNoSpec } = require('../trading/broker-specs');
 const { valuesText, sideValuesText, VALUES_PER_STRATEGY } = require('../trading/rules');
-const { stopTicks, targetTicks, ticksText, distanceText, targetFor } = require('../trading/order-plan');
+const { stopTicks, targetTicks, ticksText, distanceText, targetFor, sideTarget } = require('../trading/order-plan');
 
 const num = x => (Number.isFinite(x) ? String(Math.round(x * 1e4) / 1e4) : '-');
 
@@ -96,9 +96,11 @@ function stopAndTarget(r, symbol, specOf) {
 /** One candidate, with what a plan needs from it. */
 function candidateLine(r, symbol = '', specOf = () => null) {
   const x = r.exit || {};
+  // A level target is the fired side's own (a per-side target names a formula per side).
+  const level = sideTarget(x.target, r.direction);
   const exit = [
     x.targetR !== null && x.targetR !== undefined ? `target ${x.targetR}R` : '',
-    x.target ? `target ${x.target}` : '',
+    level ? `target level ${level}` : '',
     x.trailActivateR !== null && x.trailActivateR !== undefined ? `trail from ${x.trailActivateR}R giving back ${x.trailGivebackR ?? '-'}R` : '',
     x.maxBars ? `at most ${x.maxBars} bars` : '',
   ].filter(Boolean).join(', ');

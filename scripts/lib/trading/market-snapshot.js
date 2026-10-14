@@ -7,10 +7,11 @@
  */
 
 const ind = require('./indicators');
-const { classifyRegime } = require('./regime');
+const { classifyRegime, vwapCrosses: crossesOf, REGIME_PARAMS } = require('./regime');
 const { zonedParts } = require('./clock');
 const vp = require('./volume-profile');
 const dayContext = require('./day-context');
+const { onTick } = require('./contracts');
 
 const PARAMS = {
   emaFast: 9, emaSlow: 20, adxPeriod: 14, adxSlopeBars: 5,
@@ -123,23 +124,46 @@ function participation(bars, orbMinutes) {
   };
 }
 
-/** Closes crossing a VWAP over the last `n` bars (where it has a value): many crosses = rotation, few = trend. */
-function vwapCrosses(bars, vwap, n = 30) {
-  let crosses = 0;
-  let side = 0;
-  for (let i = Math.max(0, bars.length - n); i < bars.length; i += 1) {
-    if (!Number.isFinite(vwap[i])) continue;
-    const s2 = Math.sign(bars[i].c - vwap[i]);
-    if (s2 !== 0 && side !== 0 && s2 !== side) crosses += 1;
-    if (s2 !== 0) side = s2;
+/**
+ * Closes crossing a VWAP over the last 30 bars: counted as the regime counts them (regime.js), so the session
+ * VWAP's count is the regime's own `sessionVwapCrosses`.
+ */
+const vwapCrosses = (bars, vwap) => crossesOf(bars, vwap, bars.length - REGIME_PARAMS.crossBars);
+
+/**
+ * The fair value gaps of the last `n` bars (3-bar gaps: bar 1's high under bar 3's low, bullish, or bar 1's low
+ * over bar 3's high, bearish), by what the bars since have done to them: open (not traded back into), partly filled
+ * (traded into, not through: low-high is the part still unfilled, gapLow-gapHigh the whole gap), and filled (traded
+ * through: dropped). Oldest first.
+ */
+function fairValueGaps(bars, n = 60) {
+  const open = [];
+  const partly = [];
+  for (let j = Math.max(2, bars.length - n); j < bars.length; j += 1) {
+    const a = bars[j - 2];
+    const c = bars[j];
+    const later = bars.slice(j + 1);
+    const at = bars[j - 1].t;
+    if (a.h < c.l) {
+      // Bullish: price comes back down into it; the deepest low since is how far it filled.
+      const deepest = later.length ? Math.min(...later.map(b => b.l)) : Infinity;
+      if (deepest >= c.l) open.push({ side: 'bullish', low: a.h, high: c.l, at });
+      else if (deepest > a.h) partly.push({ side: 'bullish', low: a.h, high: deepest, gapLow: a.h, gapHigh: c.l, at });
+    }
+    if (a.l > c.h) {
+      // Bearish: price comes back up into it; the highest high since is how far it filled.
+      const highest = later.length ? Math.max(...later.map(b => b.h)) : -Infinity;
+      if (highest <= c.h) open.push({ side: 'bearish', low: c.h, high: a.l, at });
+      else if (highest < a.l) partly.push({ side: 'bearish', low: highest, high: a.l, gapLow: c.h, gapHigh: a.l, at });
+    }
   }
-  return crosses;
+  return { open, partly };
 }
 
 /**
  * Liquidity: the last 4 confirmed swing highs and lows, equal highs and lows
- * among them (within 0.1 x ATR(14): resting stops), and the open fair value
- * gaps of the last 60 bars (3-bar gaps price hasn't traded back through).
+ * among them (within 0.1 x ATR(14): resting stops), and the fair value gaps
+ * of the last 60 bars still open and partly filled (fairValueGaps).
  */
 function liquidity(bars, k, atrNow) {
   const highs = [];
@@ -167,21 +191,15 @@ function liquidity(bars, k, atrNow) {
   };
   const recentHighs = highs.slice(-12);
   const recentLows = lows.slice(-12);
-  const fvgs = [];
-  for (let j = Math.max(2, bars.length - 60); j < bars.length; j += 1) {
-    const a = bars[j - 2];
-    const c = bars[j];
-    const later = bars.slice(j + 1);
-    if (a.h < c.l && !later.some(b => b.l <= a.h)) fvgs.push({ side: 'bullish', low: a.h, high: c.l, at: bars[j - 1].t });
-    if (a.l > c.h && !later.some(b => b.h >= a.l)) fvgs.push({ side: 'bearish', low: c.h, high: a.l, at: bars[j - 1].t });
-  }
+  const { open, partly } = fairValueGaps(bars);
   return {
     swingHighs: highs.slice(-4),
     swingLows: lows.slice(-4),
     equalHighs: equal(recentHighs),
     equalLows: equal(recentLows),
-    openFvgs: fvgs.slice(-3),
-    note: 'equal = within 0.1 x ATR(14); open FVG = a 3-bar gap price has not traded back into since (last 60 bars)',
+    openFvgs: open.slice(-3),
+    partlyFilledFvgs: partly.slice(-3),
+    note: 'equal = within 0.1 x ATR(14); open FVG = a 3-bar gap price has not traded back into since; partly filled FVG = traded into, not through: low-high is the part still unfilled, gapLow-gapHigh the whole gap (last 60 bars)',
   };
 }
 
@@ -237,11 +255,11 @@ function context(bars, series, atrNow) {
  * (developing), and the last vpLookback bars' (rolling), each with POC,
  * value area, nodes, and where price is (scripts/lib/trading/volume-profile.js).
  */
-function volumeProfile(bars, p, atrNow) {
+function volumeProfile(bars, p, atrNow, level) {
   const i = bars.length - 1;
   const options = vp.optionsFromParams(p);
   const r = x => round(x, 2);
-  const one = (kind, length) => vp.describe(vp.profileAt(bars, kind, i, { length, options }), bars[i].c, atrNow, r);
+  const one = (kind, length) => vp.describe(vp.profileAt(bars, kind, i, { length, options }), bars[i].c, atrNow, r, level);
   return {
     priorRth: one('prior_rth'),
     session: one('session'),
@@ -250,8 +268,14 @@ function volumeProfile(bars, p, atrNow) {
   };
 }
 
+/**
+ * The snapshot of `input` (bars, or { bars, tickSize }): with the contract's tickSize, the volume profile's levels
+ * (row centers, off the grid) are given on its tick; without it, to two decimals.
+ */
 function snapshot(input, overrides = {}) {
   const bars = ind.normalizeBars(input);
+  const tickSize = input && !Array.isArray(input) && input.tickSize > 0 ? input.tickSize : null;
+  const level = x => (x === null || x === undefined ? null : tickSize ? onTick(x, tickSize) : round(x, 2));
   if (bars.length < 3) throw new Error(`need at least 3 bars, got ${bars.length}`);
   const series = signalSeries(bars, overrides);
   const { p, closes, emaFast, emaSlow, adx, atrStop, st, kc, sw, or } = series;
@@ -296,11 +320,14 @@ function snapshot(input, overrides = {}) {
       rthCrossesLast30: vwapCrosses(bars, vwapRth),
       sessionCrossesLast30: vwapCrosses(bars, vwapSession),
     },
-    volumeProfile: volumeProfile(bars, p, at(atr14, i)),
+    volumeProfile: volumeProfile(bars, p, at(atr14, i), level),
     // The day so far: the open against the prior day, the opening type, the initial balance, the day type, the range against the ADR.
     day: (() => {
       const d = dayContext.dayContextSeries(bars, { adrDays: p.adrDays, params: p }).day[i];
-      return d ? { ...d, line: dayContext.describeDay(d) } : null;
+      if (!d) return null;
+      // The prior day's profile levels on the tick, as the volume profile's (its high, low and close are traded prices).
+      const day = d.prior && tickSize ? { ...d, prior: { ...d.prior, ...Object.fromEntries(['val', 'poc', 'vah'].filter(k => Number.isFinite(d.prior[k])).map(k => [k, level(d.prior[k])])) } } : d;
+      return { ...day, line: dayContext.describeDay(day, tickSize ? { round: level } : {}) };
     })(),
     participation: participation(bars, p.orbMinutes),
     context: context(bars, series, at(atr14, i)),
@@ -316,4 +343,4 @@ function snapshot(input, overrides = {}) {
   };
 }
 
-module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile };
+module.exports = { PARAMS, snapshot, signalSeries, levels, volumeProfile, fairValueGaps };

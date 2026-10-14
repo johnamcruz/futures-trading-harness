@@ -36,6 +36,10 @@ const TAGS = [...PRIMARY, 'trend', 'high-vol', 'normal-vol', 'low-vol'];
 const finite = v => (Number.isFinite(v) ? v : null);
 const round = (x, d = 3) => (x === null ? null : Math.round(x * 10 ** d) / 10 ** d);
 
+/**
+ * Closes crossing a VWAP from bar `from` on (each bar against the one before; bars without a VWAP skipped): many
+ * crosses = rotation, few = trend. The regime counts them on the session VWAP; the snapshot shows its counts with it.
+ */
 function vwapCrosses(bars, vwap, from) {
   let crosses = 0;
   for (let i = Math.max(1, from); i < bars.length; i += 1) {
@@ -81,7 +85,7 @@ function classifyRegime(bars, overrides = {}) {
     volatility,
     tags,
     metrics: {
-      adx: round(adxNow, 2), ema20SlopeAtr: round(slope), vwapCrosses: crosses,
+      adx: round(adxNow, 2), ema20SlopeAtr: round(slope), sessionVwapCrosses: crosses,
       atrRatio: round(volRatio), closeAboveEma50: above50,
     },
   };
@@ -94,4 +98,4 @@ function regimeFits(strategyRegimes, regime) {
   return strategyRegimes.some(r => regime.tags.includes(r));
 }
 
-module.exports = { REGIME_PARAMS, PRIMARY, TAGS, classifyRegime, regimeFits };
+module.exports = { REGIME_PARAMS, PRIMARY, TAGS, classifyRegime, regimeFits, vwapCrosses };

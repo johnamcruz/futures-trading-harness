@@ -308,14 +308,14 @@ function accountText(state) {
 
 const RECENT_IN_PROMPT = 10;
 
-/** The last closed bars, oldest first, compact: "09:33 O 21500.25 H 21504 L 21498.5 C 21503.75 V 1200 (+3.5)". */
+/** The last closed bars, oldest first, compact: "09:33 O 21500.25 H 21504 L 21498.5 C 21503.75 V 1200 c-o +3.5" (close minus open). */
 function recentBarsText(symbol, bars, timeframe) {
   const list = (bars || []).slice(-RECENT_IN_PROMPT);
   if (!list.length) return '';
   const { zonedParts } = require('./trading/clock');
   const hhmm = t => { const p = zonedParts(new Date(t), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`; };
   const num = x => (Number.isFinite(x) ? Number(x.toFixed(4)) : '?');
-  const rows = list.map(b => `${hhmm(b.t)} O ${num(b.o)} H ${num(b.h)} L ${num(b.l)} C ${num(b.c)} V ${b.v ?? '?'} (${b.c >= b.o ? '+' : ''}${num(b.c - b.o)})`);
+  const rows = list.map(b => `${hhmm(b.t)} O ${num(b.o)} H ${num(b.h)} L ${num(b.l)} C ${num(b.c)} V ${b.v ?? '?'} c-o ${b.c >= b.o ? '+' : ''}${num(b.c - b.o)}`);
   return ` ${symbol} last ${list.length} closed ${timeframe}m bars (ET open time, oldest first): ${rows.join('; ')}.`;
 }
 

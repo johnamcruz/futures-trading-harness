@@ -71,7 +71,8 @@ const { mtfRead, candles } = require('./mtf');
 const { normalizeBars } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
-const { familyRoot, specFor } = require('./contracts');
+const { familyRoot, tickOf, onTick } = require('./contracts');
+const { sideTarget } = require('./order-plan');
 const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
 const { sideValuesText } = require('./rules');
 
@@ -144,9 +145,9 @@ const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 // A higher-timeframe read (mtf.js): its EMAs are EMA20 and EMA50 (named so: the 3m and 15m indicators are EMA9/EMA20),
 // its swing pattern, and its dealing range with the 50%. Swing levels against price are in m3 (they move with price).
-const brief = f => (f ? {
+const brief = (f, level = round2) => (f ? {
   trend: f.trend, bias: f.bias, swingPattern: f.votes && f.votes.structure, close: f.close, ema20: f.emaFast, ema50: f.emaSlow, adx: f.adx, atr: f.atr,
-  range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: round2((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
+  range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
 /** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
@@ -158,7 +159,9 @@ const omit = (o, keys) => Object.fromEntries(Object.entries(o).filter(([k]) => !
 const EQUAL_K = 2; // the snapshot's swing confirmation (bars after the pivot)
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick }) {
+function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null }) {
+  // A price level the model reads, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't list).
+  const level = x => (grid ? onTick(x, grid) : round2(x));
   const t = snap.trend || {};
   const vp = snap.volumeProfile || {};
   const lv = snap.levels || {};
@@ -245,7 +248,9 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         trend: { ema9: round2(t.emaFast), ema20: round2(t.emaSlow), ema50: round2(t.ema50), ema200: round2(t.ema200), adx: t.adx, adxSlope: t.adxSlope, supertrend: t.supertrend ? { direction: t.supertrend.direction, line: round2(t.supertrend.line) } : null, keltner: t.keltner ? { upper: round2(t.keltner.upper), mid: round2(t.keltner.mid), lower: round2(t.keltner.lower) } : null },
         priceVsEma9: side(price, t.emaFast),
         atr14: round2(atr14),
-        vwap: { applies, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr, crossesLast30: applies === 'rth' ? (snap.vwap || {}).rthCrossesLast30 : (snap.vwap || {}).sessionCrossesLast30 },
+        vwap: { applies, session: round2(lv.vwapSession), rth: round2(lv.vwapRth), side: side(price, vwapRef), distanceAtr: (snap.vwap || {}).distanceAtr,
+          // Closes crossing each VWAP in the last 30 bars, labeled by the VWAP: the session one is the regime's sessionVwapCrosses.
+          rthCrossesLast30: (snap.vwap || {}).rthCrossesLast30 ?? null, sessionCrossesLast30: (snap.vwap || {}).sessionCrossesLast30 ?? null },
         participation: snap.participation ? omit(snap.participation, ['note']) : null,
         // The counters the strategies' skip rules name (EMA crosses, ADX falling, Keltner squeeze and band-close streak,
         // SuperTrend flips, the last 5 bars' range in ATR).
@@ -273,7 +278,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
         // Today so far and the developing levels: they move bar by bar.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null },
         overnight: lv.overnight || null,
-        sessionProfile: sess.poc ? { poc: round2(sess.poc), vah: round2(sess.vah), val: round2(sess.val), hvnAbove: sess.hvnAbove, hvnBelow: sess.hvnBelow, lvnAbove: sess.lvnAbove, lvnBelow: sess.lvnBelow } : null,
+        sessionProfile: sess.poc ? { poc: level(sess.poc), vah: level(sess.vah), val: level(sess.val), hvnAbove: sess.hvnAbove, hvnBelow: sess.hvnBelow, lvnAbove: sess.lvnAbove, lvnBelow: sess.lvnBelow } : null,
         priorProfileNodes: prior.poc ? { hvnAbove: prior.hvnAbove, hvnBelow: prior.hvnBelow, lvnAbove: prior.lvnAbove, lvnBelow: prior.lvnBelow } : null,
         // Where price is against the levels.
         location: {
@@ -290,7 +295,7 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     m15: {
       validUntil: nextClose(closedAt, 15),
       data: {
-        frame: brief(f15),
+        frame: brief(f15, level),
         alignment: read15.alignment,
         lastBreak: atClose(lastBreaks(c15), 15),
         // The 15m candles' own indicators (completed candles only): EMA9 and EMA20, as on the trigger bars.
@@ -305,14 +310,14 @@ function computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, s
     },
     h1: {
       validUntil: nextClose(closedAt, 60),
-      data: { h1: brief(f60), h4: brief(frameOf(readH1, 240)), lastBreak: atClose(lastBreaks(c60), 60) },
+      data: { h1: brief(f60, level), h4: brief(frameOf(readH1, 240), level), lastBreak: atClose(lastBreaks(c60), 60) },
     },
     day: {
       // The prior RTH day changes at the RTH close (16:00 ET).
       validUntil: nextRthRoll(new Date(closedAt.getTime() - step), minutes),
       data: {
         priorRth: lv.priorRth || null,
-        priorProfile: prior.poc ? { poc: round2(prior.poc), vah: round2(prior.vah), val: round2(prior.val), hvn: prior.hvn, lvn: prior.lvn } : null,
+        priorProfile: prior.poc ? { poc: level(prior.poc), vah: level(prior.vah), val: level(prior.val), hvn: (prior.hvn || []).map(level), lvn: (prior.lvn || []).map(level) } : null,
       },
     },
   };
@@ -335,7 +340,7 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const inTheWay = R > 0 ? ahead[0] || null : null;
   // Its target: a level target's distance (the scan's targetDistance), else targetR x its stop.
   const targetPoints = Number.isFinite(r.targetDistance) ? r.targetDistance : Number.isFinite(exit.targetR) && R > 0 ? exit.targetR * R : null;
-  const target = targetPoints !== null ? { level: exit.target || null, points: round2(targetPoints), R: R > 0 ? round2(targetPoints / R) : null } : null;
+  const target = targetPoints !== null ? { level: sideTarget(exit.target, r.direction), points: round2(targetPoints), R: R > 0 ? round2(targetPoints / R) : null } : null;
   // The room it needs: to its trail activation, else its target, else its min R:R, else 2R.
   const needR = exit.trailActivateR ?? (target && target.R) ?? r.minRR ?? 2;
   const mtf = r.mtf || {};
@@ -398,7 +403,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
   const closedAt = new Date(Date.parse(last.t) + minutes * 60000);
-  const snap = snapshot({ bars });
+  // The contract's tick (contracts.js): the volume profile's levels are given on it.
+  const grid = tickOf(symbol);
+  const snap = snapshot({ bars, tickSize: grid });
   const read = mtfRead(bars);
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
@@ -416,8 +423,8 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, prev = n
   const c60 = done(60);
   const snap15 = c15.length >= 30 ? snapshot15(c15) : null;
   // Levels within a tick are one level: the contract's tick (contracts.js), 0.25 for a root it doesn't list.
-  const tick = (specFor(String(symbol || '').split(':')[0]) || {}).tickSize || 0.25;
-  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick });
+  const tick = grid || 0.25;
+  const fresh = computeSections({ bars, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -507,7 +514,7 @@ function summaryLines(b, et) {
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
     alignment,
-    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away, ${vw.crossesLast30 ?? '?'} crosses in 30 bars.`,
+    `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} ATR away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
     `- Room above (R = the reference stop): ${(room.above || []).map(lvl).join(', ') || 'none found'}.`,
     `- Room below (R = the reference stop): ${(room.below || []).map(lvl).join(', ') || 'none found'}.`,

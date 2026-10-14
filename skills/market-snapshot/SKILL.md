@@ -36,10 +36,11 @@ doesn't hold.
    strategies).
 2. (The file is the broker's `get_bars` JSON; a CSV file works too. The
    tools read only JSON and CSV.)
-3. Call the harness tool `market_snapshot` with the file:
+3. Call the harness tool `market_snapshot` with the file and the contract
+   root (`symbol`: the volume profile's levels then come on its tick):
 
    ```text
-   market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json"}
+   market_snapshot {"bars": "/home/u/.futures-trading-harness/bars-scratch/MNQ-3m.json", "symbol": "MNQ"}
    ```
 
    Override parameters with `params`, e.g. `{"orbMinutes": 30, "emaSlow": 50}`,
@@ -57,7 +58,8 @@ doesn't hold.
      anchor), vwapRth (09:30 ET anchor; null before today's 09:30 ET open
      and after 16:00 ET: use vwapSession then, as the strategy filters do).
    - `vwap`: which VWAP applies now (`rth` or `session`), the distance in
-     ATR(14), and the RTH and session crosses in the last 30 bars.
+     ATR(14), and the closes crossing each VWAP in the last 30 bars
+     (`rthCrossesLast30`, `sessionCrossesLast30`; read the one that applies).
    - `participation`: relative volume of the last bar and the last 3 vs the
      opening-range average, the 20 bars before, and the same time the
      previous trading day (orb's skip rule reads `relVolLastVsOpeningRange`).
@@ -71,8 +73,9 @@ doesn't hold.
      bars). Each: `poc`, `vah`, `val`, `price` (above, inside, or below
      value), `fromPocAtr` ((price - POC) / ATR(14)), the nearest high and low
      volume nodes (`hvnAbove`, `hvnBelow`, `lvnAbove`, `lvnBelow`), and all of
-     them (`hvn`, `lvn`). With the default 100 rows levels fall between ticks:
-     round to `tickSize` before using one as an order price. Bar-based: say so.
+     them (`hvn`, `lvn`). With `symbol` the levels are on its tick; without
+     it they are to two decimals and fall between ticks: round to `tickSize`
+     before using one as an order price. Bar-based: say so.
    - `day` (RTH only, else null): the open against the prior RTH day
      (`openVs`: inside the prior value area, outside value inside the range,
      or outside the range), the `gap` from the prior close, the `openType`
@@ -84,7 +87,9 @@ doesn't hold.
      0.35 ADR; neutral: both sides), and the `range` against the average daily range (`adr`, over
      `adrDays`, default 10). `line` is the same as the prompt's "day:" line.
    - `liquidity`: the last 4 swing highs and lows, equal highs/lows (within
-     0.1 x ATR), and open fair value gaps.
+     0.1 x ATR), open fair value gaps (`openFvgs`: not traded back into) and
+     partly filled ones (`partlyFilledFvgs`: traded into, not through; `low`
+     to `high` is the part still unfilled, `gapLow` to `gapHigh` the whole gap).
    - `context`: the numbers the strategies' skip rules name: EMA 9/20
      crosses in the last 30 bars, bars of falling ADX, Keltner width vs its
      20-bar average (a squeeze is under 1), the band-close streak, SuperTrend
@@ -93,7 +98,9 @@ doesn't hold.
      (`volVsAvg60`). Read a skip rule's number here; never estimate it.
    - `regime`: primary (trend-up, trend-down, range, transition), volatility
      (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope
-     in ATRs, VWAP crosses in 30 bars, ATR vs its average).
+     in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the
+     last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its
+     average).
    - `referenceStop`: distance and long/short stop prices. Round to `tickSize`.
 5. Check the last bar's time (`last.t`, UTC): older than one bar of the timeframe
    (plus a minute) at the time you read it means stale data; say so and
