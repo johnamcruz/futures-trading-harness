@@ -245,7 +245,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {
   const { data, body } = parseFrontmatter(read('agents/trade-executor.md'));
-  assert.deepStrictEqual(data['role-skills'], ['broker-mcp']);
+  assert.deepStrictEqual(data['role-skills'], ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals']);
   assert.ok(body.includes("You execute. You don't analyse, re-plan, or second-guess."));
   assert.ok(flat(body).includes('- Entry: enter only on the approved verdict and its fired trigger; never anticipate.'));
   assert.ok(flat(body).includes('- Management: protect and exit, always; move stops or scale out as the plan says.'));

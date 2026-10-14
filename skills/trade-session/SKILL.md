@@ -76,7 +76,7 @@ its checklist is the order you decide in. Load the others as a step names them.
   `stopLossBracket` when the bracket went with it); step 6's note on a
   working entry adds context. An entry without one, or with no such record,
   is cancelled first, the cancel
-  confirmed (broker-mcp skill, Order mechanics), and a `result:nofill` review journalled: cancelling an
+  confirmed (the `order-mechanics` skill), and a `result:nofill` review journalled: cancelling an
   entry only reduces risk. New entries wait until no order is working in the
   contract. The runner also cancels leftovers before each bar.
 - **Flat, with an earlier entry today that has no review** (it closed or was
@@ -449,7 +449,7 @@ message says a position was opened or closed, or `search_trades` shows any
 fill for the order, the usual review of a closed trade. If it can't be told
 yet (fills can be reported late), no review this cycle: the next cycle's
 flat-with-an-unreviewed-entry step decides from `search_trades`.
-Never wait or poll for the fill (broker-mcp skill, Order mechanics).
+Never wait or poll for the fill (the `order-mechanics` skill).
 
 ### 7. Report
 

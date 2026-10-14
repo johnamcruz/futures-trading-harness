@@ -19,7 +19,7 @@ impact first.
 - **Cost:** a server must map its broker's errors onto another broker's numbers.
 - **Fix:** make `errorName` the contract, from a short neutral set
   (`AccountLocked`, `OutsideTradingHours`, `Rejected`, `NotFound`, `Pending`,
-  `Unknown`); keep `errorCode` as broker detail. Update the broker-mcp skill.
+  `Unknown`); keep `errorCode` as broker detail. Update the order-mechanics and broker-refusals skills.
 
 ### 2. Order types include the first server's own ones
 

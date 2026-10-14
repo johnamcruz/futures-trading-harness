@@ -256,7 +256,7 @@ strategies are ported from an earlier Python trading bot.
 | Path | Contents |
 |---|---|
 | `agents/` | 8 roles: 4 analysts, risk manager, executor, reviewer, strategy researcher (canonical, Claude format) |
-| `skills/` | 21 skills: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis, risk, review |
+| `skills/` | One skill per folder: workflows (trade-session, premarket, end-of-day, autonomous-trading), strategy library and authoring, market analysis and trading basics, the broker server and order handling, risk, review |
 | `strategies/` | Strategy documents and the template |
 | `accounts/` | Prop account profiles (`ACCOUNT.md`): Topstep 50K, 100K, 150K combines |
 | `commands/` | Thin shims onto skills: `/trade-session`, `/premarket`, `/eod`, `/trade-review`, `/setup-scorecard`, `/new-strategy`, `/combine-status`, `/mtf` |
