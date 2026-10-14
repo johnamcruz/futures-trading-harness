@@ -331,13 +331,18 @@ node scripts/evaluate.js --prop prop_portfolio --data MNQ=data/MNQ-3m.jsonl \
 - **Blows.** The result's top-level `blown` counts every blow on every path
   scored, so the gate's zero-blow rule and R8's constraint read one number.
 - **The gate.** `gateFailures` (`prop/promotion.js`) reads the result
-  directly. `promotion.failures` is its verdict, plus "no covered attempt"
+  directly. Its minimum attempt count is counted on the effective sample
+  size (`ess`, non-overlapping attempts), never on the overlapping daily
+  starts; a result without `ess` fails closed. `promotion.failures` is its verdict, plus "no covered attempt"
   for a policy with a field branch.
 - **Splits and looks.** The window lies in one unit of the schedule
   (`prop/splits.js`). Train runs freely. Any other unit needs
   `--look-candidate`, `--look-purpose tuning|judging` and `--ledger <file>`.
   The ledger must allow the look (`prop/looks.js`), and the look is appended
-  to it before any bar is read. The ledger file must exist; start a new one
+  to it before any bar is read. The ledger file is the scorecard's too
+  (`prop/ledger-file.js`: JSON lines, one look per line; a file in the
+  scorecard's earlier JSON-list format still reads and is rewritten as lines
+  on its next look), so their looks spend one budget. The ledger file must exist; start a new one
   only on purpose, with `--new-ledger`. A run holds `<ledger>.lock` while it
   checks and logs, and a leftover lock is refused, never broken. A reasoning-fix look is refused: a mechanical
   score is a market claim.

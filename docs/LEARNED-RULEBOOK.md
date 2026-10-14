@@ -431,8 +431,10 @@ Outcomes are pass, blow or timeout, plus days to pass.
 
 Attempts that start on neighbouring days share almost all their sessions,
 so every report states the **effective sample size** (non-overlapping
-attempts). For scale, at `sessions` = 21: the 12 out-of-sample months hold
-about 12 independent attempts, and train about 26 (8 and 18 at 30 sessions).
+attempts). For scale, at `sessions` = 21: the 12 out-of-sample months
+(2024-07 to 2025-07, 251 sessions) give the evaluator 230 start days
+(sessions minus `sessions`), which hold 11 independent attempts; train
+(627 sessions, 606 starts) holds 29. At 30 sessions: 8 and 20.
 
 A candidate is scored in two ways:
 
@@ -660,7 +662,12 @@ these:
 
 - zero blows in every month;
 - a pass rate of at least 40% (target 40-50%);
-- at least 20 attempts over at least 2 months;
+- at least 20 independent attempts (the effective sample size, R7:
+  attempts that share no session) over at least 2 months. Overlapping
+  daily starts are one observation, not many: 21 daily starts of a
+  21-session attempt count as 1. At `sessions` = 21 the 12 out-of-sample
+  months hold 11 (R7), so this rule can't pass on one year of
+  out-of-sample until it is longer or the attempts shorter;
 - a block-bootstrap lower bound on the pass rate (blocks of at least
   `sessions`), at 90% confidence; blows stay at zero.
 
@@ -693,7 +700,7 @@ search and the training loop.
 Zero blows in every month mostly tests the worst one or two weeks in the
 window (in this window: August 2024 and April 2025, seen on the
 back-adjusted files). The bounds exist
-because about 12 independent attempts can't separate a 25% rulebook from a
+because about 11 independent attempts can't separate a 25% rulebook from a
 40% one.
 
 **Old evidence is historical.** Results measured on the back-adjusted
@@ -707,7 +714,7 @@ the candidate, the date and the result. The ledger is kept with the
 rulebook's evidence. A window is retired after a set number of looks
 (3, the owner's decision), and the reserve (Recent first, then the reserved
 half-years) becomes the next out-of-sample window. Reserved half-years
-accumulate until they hold at least 12 months (about 12 independent
+accumulate until they hold at least 12 months (about 11 independent
 21-session attempts, or 8 at 30 sessions, as the current window does) before they become one. Because they
 alternate with walk-forward half-years, the window after Recent is ready
 only in mid-2028 (2027-H1 and 2028-H1). The look budget has to last until

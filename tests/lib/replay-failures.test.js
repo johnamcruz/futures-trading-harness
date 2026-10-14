@@ -12,6 +12,7 @@ const path = require('path');
 const { tmpDir } = require('../helpers');
 const F = require('../../scripts/lib/replay/failures');
 const { scoreRun, writeScorecard, checkReasons, classify, expectedDecision, withChecks, lookAt, takeLook } = require('../../scripts/lib/replay/scorecard');
+const { readLedger } = require('../../scripts/lib/prop/ledger-file');
 
 // A strategy whose rules read broker fields (neutral names: the harness knows no field's meaning).
 const FIELDS = {
@@ -246,13 +247,25 @@ test('takeLook: an allowed look is appended to the ledger file before anything i
   const ledgerFile = path.join(path.dirname(dir), 'ledger.json');
   assert.throws(() => takeLook(dir, { purpose: 'judging', ledgerFile }), /can't be read .*no look without it/);
   fs.writeFileSync(ledgerFile, '{}');
-  assert.throws(() => takeLook(dir, { purpose: 'judging', ledgerFile }), /is not a list/);
+  assert.throws(() => takeLook(dir, { purpose: 'judging', ledgerFile }), /refused: the ledger can't be read/);
+  fs.writeFileSync(ledgerFile, '');
+  assert.throws(() => takeLook(dir, { purpose: 'judging', ledgerFile }), /can't be read .*is empty/, 'an empty (maybe truncated) ledger is refused');
+  assert.ok(!fs.existsSync(`${ledgerFile}.lock`));
+  fs.writeFileSync(ledgerFile, '"x"');
+  assert.throws(() => takeLook(dir, { purpose: 'judging', ledgerFile }), /can't be read .*not a JSON look/);
+  // The earlier format (one JSON list) still reads; the first append rewrites it as the evaluator's JSON lines.
   fs.writeFileSync(ledgerFile, '[]');
   for (let i = 1; i <= 3; i += 1) takeLook(dir, { purpose: 'judging', candidate: `c${i}`, ledgerFile }, new Date('2026-12-01T00:00:00Z'));
-  const ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+  const ledger = readLedger(ledgerFile);
+  assert.strictEqual(fs.readFileSync(ledgerFile, 'utf8').split('\n').filter(Boolean).length, 3, 'one look per line');
   assert.deepStrictEqual(ledger.map(e => [e.candidate, e.purpose, e.ranges, e.at]).slice(0, 1), [['c1', 'judging', [{ from: '2026-11-02', to: '2026-11-03' }], '2026-12-01T00:00:00.000Z']]);
   assert.throws(() => takeLook(dir, { purpose: 'judging', candidate: 'c4', ledgerFile }), /budget has used its 3 looks/);
-  assert.strictEqual(JSON.parse(fs.readFileSync(ledgerFile, 'utf8')).length, 3, 'a refused look is not recorded');
+  assert.strictEqual(readLedger(ledgerFile).length, 3, 'a refused look is not recorded');
+  assert.ok(!fs.existsSync(`${ledgerFile}.lock`), 'the lock is released after a refusal');
+  // A run holding the ledger's lock (the evaluator) refuses the scorecard's look rather than racing it.
+  fs.writeFileSync(`${ledgerFile}.lock`, '');
+  assert.throws(() => takeLook(dir, { purpose: 'judging', candidate: 'c5', ledgerFile }), /locked by another run/);
+  fs.rmSync(`${ledgerFile}.lock`);
   // An unfinished run written without --out is refused before its look is recorded.
   const fresh = path.join(path.dirname(dir), 'ledger2.json');
   fs.writeFileSync(fresh, '[]');

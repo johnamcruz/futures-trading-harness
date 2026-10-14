@@ -43,13 +43,17 @@ const round4 = x => (x === null || !Number.isFinite(x) ? null : Math.round(x * 1
  * The circular moving block bootstrap interval of a rate over a sequence of 0/1 outcomes in time order
  * (neighbouring attempts share sessions, so they are resampled in blocks of `block` consecutive outcomes):
  * { rate, lo, hi, level, block, reps }. `level` is two-sided (0.9: lo is the 5th percentile). Empty: nulls.
+ * Fewer than two whole blocks (n < 2 x block) is one independent observation or less: resampling it would
+ * only rotate the same outcomes and give a zero-width interval, a false certainty. The interval is then
+ * [0, 1], no information, with `degenerate: true`, and reps 0.
  */
 function blockBootstrap(outcomes, { block, reps = 2000, level = 0.9, rand }) {
   const n = outcomes.length;
   if (!Number.isInteger(block) || block < 1) throw new Error(`block: a whole number of outcomes, not ${String(block)}`);
   if (!n) return { rate: null, lo: null, hi: null, level, block, reps: 0 };
   const sum = outcomes.reduce((a, x) => a + x, 0);
-  const b = Math.min(block, n);
+  if (n < 2 * block) return { rate: round4(sum / n), lo: 0, hi: 1, level, block, reps: 0, degenerate: true };
+  const b = block;
   const blocks = Math.ceil(n / b);
   const means = new Array(reps);
   for (let r = 0; r < reps; r += 1) {

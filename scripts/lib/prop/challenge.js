@@ -62,6 +62,9 @@ function runAttempt(env, startMs, endMs) {
   };
 }
 
+/** A trade's net R: its net dollars (after fees) over the dollars it risked; 0 when either is unknown. */
+const netR = t => (Number.isFinite(t.net) && t.riskUsd > 0 ? t.net / t.riskUsd : 0);
+
 /** Attempts from each start. Aggregate and per-month (by the attempt's start) results. */
 function evaluate(env, starts, endMs) {
   const months = new Map();
@@ -76,8 +79,9 @@ function evaluate(env, starts, endMs) {
     agg.trades += o.trades.length;
     agg.wins += o.trades.filter(t => t.net > 0).length;
     agg.losses += o.trades.filter(t => t.net < 0).length;
+    // Net R (after fees and slippage, as wins and losses are counted): net dollars over the dollars at risk.
     for (const t of o.trades) {
-      const r = Number.isFinite(t.r) ? t.r : 0;
+      const r = netR(t);
       agg.sumR += r;
       if (t.net > 0) agg.winR += r;
       else if (t.net < 0) agg.lossR += r;
@@ -102,7 +106,7 @@ function evaluate(env, starts, endMs) {
     // Winning trades (after fees) over all trades.
     winRate: a.trades ? Math.round((a.wins / a.trades) * 1000) / 1000 : null,
     losses: a.losses,
-    // Average R of the winning trades, of the losing ones, and of every trade (expectancy).
+    // Average net R (after fees) of the winning trades, of the losing ones, and of every trade (expectancy).
     avgWinR: a.wins ? Math.round((a.winR / a.wins) * 1000) / 1000 : null,
     avgLossR: a.losses ? Math.round((a.lossR / a.losses) * 1000) / 1000 : null,
     expectancyR: a.trades ? Math.round((a.sumR / a.trades) * 1000) / 1000 : null,
@@ -110,4 +114,4 @@ function evaluate(env, starts, endMs) {
   return { ...finish(all), months: Object.fromEntries([...months].map(([k, v]) => [k, finish(v)])) };
 }
 
-module.exports = { tradingDays, createEnv, runAttempt, evaluate };
+module.exports = { tradingDays, createEnv, runAttempt, evaluate, netR };

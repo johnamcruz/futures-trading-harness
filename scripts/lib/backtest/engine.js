@@ -212,6 +212,8 @@ function runEngine(markets, strategies, opts = {}) {
       symbol: book.symbol, contract: p.contract, strategy: p.strategy, direction: p.sign > 0 ? 'long' : 'short',
       entryTime: p.entryTime, entry: p.entry, initialStop: p.initialStop, exitTime: new Date(bar.ms + tfMs(book)).toISOString(),
       exit: price, size: p.size, risk: p.risk,
+      // The dollars at risk (stop distance x size x tick value): net / riskUsd is the trade's net R.
+      riskUsd: round2((p.risk / book.tickSize) * p.tickValue * p.size),
       r: Math.round(((p.sign * (price - p.entry)) / p.risk) * 1000) / 1000,
       mfeR: Math.round(p.peakR * 1000) / 1000,
       maeR: Math.round(p.troughR * 1000) / 1000,
