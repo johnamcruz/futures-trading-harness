@@ -38,14 +38,15 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 **Where it works**:
 
 - **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the OTE bounce is the entry.
-- **Range**: at an extreme (range high or low, value-area edge, prior
-  day), a CISD back toward the middle, aiming at the other side.
+- **Range** (`range`): at an extreme (range high or low, value-area
+  edge, prior day), a CISD back toward the middle, aiming at the other
+  side. Mid-range is a skip.
 - **Weaker**: mid-range with no level; against a strong HTF trend with
   no HTF break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition` with 5+
-  crosses in `m3.vwap.sessionCrossesLast30`, `m3.trend.adx` under 18 and
-  flat (`m3.trend.adxSlope`), or `m15.frame.swingPattern` `mixed` or
-  `unclear`; overlapping small bars. A CISD there is usually noise.
+- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
+  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
+  `mixed` or `unclear` with overlapping small bars. A CISD there is
+  usually noise.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`). The
 CISD usually comes first: an early sign, not yet a change of structure.
@@ -65,7 +66,7 @@ Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21
   a 3m close 21525.75 above it. vwap_reclaim long; Priority order: aligned -> take.
 Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, engulfing; into the ote
   V 2.1x with little progress (absorption), then a 3m bounce 21492.25. value_area_reentry long. Priority order -> take.
-Skip: transition, 7 session-VWAP crosses, ADX 14 flat, 15m mixed: chop; 3m bearish CISD at 21640.00.
+Skip: transition (ADX 19, 3 crosses, EMA20 flat), 15m mixed: chop; 3m bearish CISD at 21640.00.
   crt_1h short; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   crt_1h long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);

@@ -540,7 +540,16 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   const skills = new Set(fs.readdirSync(path.join(ROOT, 'skills')));
   const STATUS = ['waiting', 'touched', 'bounced', 'void', 'expired', 'weak'];
   // Values of other briefing fields it names (the regime, the swing pattern), each the code's.
-  const VALUES = { transition: 'scripts/lib/trading/regime.js', mixed: 'scripts/lib/trading/mtf.js', unclear: 'scripts/lib/trading/mtf.js' };
+  const VALUES = { transition: 'scripts/lib/trading/regime.js', range: 'scripts/lib/trading/regime.js', mixed: 'scripts/lib/trading/mtf.js', unclear: 'scripts/lib/trading/mtf.js' };
+  // Its dotted briefing paths resolve on a real briefing, and the regime values it names are regime.js's.
+  const bs = briefings();
+  const dotted = pathsIn(read(file('cisd')));
+  assert.ok(dotted.includes('m3.regime.primary') && dotted.includes('m15.frame.swingPattern'), dotted.join(', '));
+  for (const pth of dotted) assert.ok(bs.some(b => resolves(b, pth)), `cisd names ${pth}`);
+  const { PRIMARY } = require('../../scripts/lib/trading/regime');
+  for (const v of ['transition', 'range']) assert.ok(PRIMARY.includes(v), v);
+  // Chop is the measured filter (a transition regime), never the range regime's own conditions (ADX under 18, 5+ crosses).
+  assert.doesNotMatch(flat(read(file('cisd'))), /under 18|5\+ crosses|adxSlope/);
   const src = read('scripts/lib/trading/cisd.js');
   for (const m of read(file('cisd')).matchAll(/`([a-zA-Z]+)`/g)) {
     const w = m[1];

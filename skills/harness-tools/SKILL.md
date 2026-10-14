@@ -100,7 +100,7 @@ strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "s
     orb long | active, 3m, rules, mtf trend | entryRef 21503.25, stop 5.25 pts = 21 ticks ($10.50/MNQ contract), minRR 2, exit: trail from 2R giving back 0.5R | with: none; against: none
   Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
   Every strategy (name | status | timeframe | direction | candidate | why not):
-    cisd_ote | paper | 3m | - | no | no rule set fired (long: cisd_entry(15) > 0, cisd_sweep(15) > 0; short: cisd_entry(15) < 0, cisd_sweep(15) > 0)
+    cisd_ote | paper | 3m | - | no | no rule set fired (long: cisd_entry(15) > 0; short: cisd_entry(15) < 0)
     ...
 strategies_scan {"bars": "/home/u/.futures-trading-harness/bars/MNQ-3m.json", "symbol": "MNQ", "name": "orb"}
 → orb's full result as JSON

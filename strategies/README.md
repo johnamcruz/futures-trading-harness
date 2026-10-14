@@ -26,7 +26,7 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 | Strategy | Signal | Status |
 |---|---|---|
 | `orb` | opening range breakout | active |
-| `cisd_ote` | Textbook CISD on 15m after a key sweep + 3m bounce from the OTE zone (rewritten from the port, version 4) | paper |
+| `cisd_ote` | Textbook CISD on 15m (and 60m), a strong displacement, no sweep required, + 3m bounce from the OTE zone; a trend strategy (`mtf: trend`), rewritten from the port (version 4) | paper |
 | `vwap_reclaim` | rules (written in Markdown) | active |
 | `ofi` | rules: 1m order-flow imbalance at 1, 3 and 5 minutes that moves price | active |
 | `ofi_absorption` | rules: 1m heavy flow that fails to move price, then a turn | active |
