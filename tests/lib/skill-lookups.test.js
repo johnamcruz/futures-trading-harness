@@ -55,6 +55,8 @@ test('skillsInTranscript: a whole-skill skill_lookup in the session\'s transcrip
     ev('harness_skill_lookup', { skill: 'trade-session' }, 'Every skill of the harness (44); <skill name="trade-session">'),
   ];
   assert.deepStrictEqual([...SL.skillsInTranscript(none.join('\n'))], []);
+  // The skill's reply after leading whitespace (a newline, spaces) is still the skill: it counts.
+  assert.deepStrictEqual([...SL.skillsInTranscript(ev('harness_skill_lookup', { skill: 'invalidation' }, `\n  ${read('invalidation')}`))], ['invalidation']);
 });
 
 test('through the MCP tool: a listing with a role and a required skill\'s name as query records nothing and meets no lookup', async () => {
