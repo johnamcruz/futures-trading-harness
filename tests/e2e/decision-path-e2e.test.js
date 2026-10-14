@@ -50,6 +50,15 @@ test('decision path: the fired bar\'s briefing holds the facts each step reads, 
   assert.ok(['inside', 'above', 'below'].includes(m3.location.priorValue));
   assert.deepStrictEqual([m3.window, m3.windowEntries], ['asia', 'allowed']);
   assert.strictEqual(m3.bar.t, FIRED_BAR);
+  // Where it aims (the take-profit skill): the next swing per timeframe, and the last completed 1h (and 4h, when one has
+  // completed) candle's high, mid and low, each a price on its side with points and R, closed by the fired bar's close.
+  assert.ok([...m3.swingTargets.above, ...m3.swingTargets.below].length > 0, 'a swing target');
+  assert.ok(!m3.rangeTargets['1h'].unavailable, 'a completed hour');
+  for (const [tf, x] of Object.entries(m3.rangeTargets).filter(([, v]) => !v.unavailable)) {
+    assert.ok(Date.parse(x.closedAt) <= Date.parse(FIRED_BAR) + 3 * 60000, `${tf}: completed`);
+    for (const k of ['high', 'mid', 'low']) assert.ok(Number.isFinite(x[k].price) && ['above', 'below', 'at'].includes(x[k].side) && Number.isFinite(x[k].R), `${tf} ${k}`);
+    assert.ok(x.low.price <= x.mid.price && x.mid.price <= x.high.price, tf);
+  }
   // The lookups each role must make on this bar, as the gate computes them (role-skills.js, skills-loaded.js SITUATIONAL).
   const req = requiredFor(D.ROOT);
   for (const role of Object.keys(D.REQUIRED_LOOKUPS)) {
