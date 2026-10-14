@@ -379,7 +379,8 @@ fills). One label per decision time and symbol:
   attempt's budget needs its whole state at t, which the run doesn't
   record: without `--budget` the step is null and counted), with the
   order's own contract's tick value (NQ on an MNQ run) as the run's broker
-  reported it (`contracts-<broker>.json` in the run home), else the static
+  reported it (`contracts-<broker>.json` in the run home, or its replayed
+  days' `contracts-<broker>.<YYYY-MM-DD>.json`), else the static
   table; a broker spec unlike the table is measured with the table and
   flagged, as live refuses entries on it (`provenance.specs`: broker, table
   or mismatch); the raw orders. The

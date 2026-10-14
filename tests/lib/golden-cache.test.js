@@ -22,6 +22,7 @@ const { ANALYSTS } = require('../../scripts/lib/trading/roles-ran');
 const { createTranslator, readCache } = require('../../scripts/lib/broker/translator');
 const { recordNow } = require('../../scripts/lib/trading/harness-now');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
+const { contractsCacheFile } = require('../../scripts/lib/broker/config');
 
 const MNQ = G.load(G.SERIES[0]);
 const N = 1246; // MNQ bar 1246 (10:36 ET) and the next one, 10:39 ET: the same 15m candle
@@ -167,23 +168,33 @@ test('translator cache: the front month is keyed on the replayed trading day, ne
   assertGolden('translator-replay-cache.txt', steps.join('\n'));
 });
 
-// Finding (not fixed here): the cache file keeps the front month of the LATEST trading day it has seen (mergeCache:
-// "the later trading day wins"), which assumes the clock only moves forward. A replay that goes back to an earlier
-// day over the same cache file (a rerun in a reused home) looks the front month up on every call and answers with
-// the later day's front month, which is the wrong contract if a roll lies between the two days. Replay runs start in
-// a fresh home (replay/driver.js seedRunHome) and move forward, so it doesn't bite today.
-test('translator cache: a rerun of an earlier replayed day keys the front month on that day and hits after one lookup', { todo: 'the cache keeps the latest day\'s front month (mergeCache): an earlier replayed day re-searches on every call and answers with the later day\'s front month' }, async () => {
+// The cache file keeps the front month of the latest trading day it has seen, so under a replay clock each replayed
+// day has its own file (broker/config.js contractsCacheFile): a rerun of an earlier day over the same home looks its
+// front month up once and answers with that day's, never a later day's (the wrong contract across a roll).
+test('translator cache: a rerun of an earlier replayed day keys the front month on that day and hits after one lookup', async () => {
   const { home, env } = replayHome();
-  const cacheFile = path.join(home, 'contracts-sim.json');
   const calls = [];
-  const call = async (name, args) => { calls.push(name); return reply(CONTRACTS.filter(c => c.name.startsWith(args.searchText))); };
-  const toBroker = replayNow => createTranslator({ call, cacheFile, now: () => recordNow({ ...env, FTH_REPLAY_NOW: replayNow }) }).toBroker('MNQ');
-  await toBroker('2026-06-03T14:00:00Z');
-  await toBroker('2026-06-02T14:00:00Z');
+  // The replay broker answers as of its clock: the roll to the September contract on 2026-06-12.
+  let day = null;
+  const call = async (name, args) => {
+    calls.push(name);
+    return reply(CONTRACTS.filter(c => c.name.startsWith(args.searchText)).map(c => ({ ...c, activeContract: (c.id === 'r-2') === (day >= '2026-06-12') })));
+  };
+  const toBroker = replayNow => {
+    const e = { ...env, FTH_REPLAY_NOW: replayNow };
+    day = tradingDayKey(recordNow(e));
+    return createTranslator({ call, cacheFile: contractsCacheFile('sim', e), now: () => recordNow(e) }).toBroker('MNQ');
+  };
+  assert.strictEqual(await toBroker('2026-06-15T14:00:00Z'), 'r-2', 'after the roll');
+  assert.strictEqual(await toBroker('2026-06-02T14:00:00Z'), 'r-1', 'the earlier day: its own front month, not the later day\'s');
   const before = calls.length;
-  await toBroker('2026-06-02T15:00:00Z');
+  assert.strictEqual(await toBroker('2026-06-02T15:00:00Z'), 'r-1');
   assert.strictEqual(calls.length, before, 'the same replayed day again: a cache hit');
-  assert.strictEqual(readCache(cacheFile).front.MNQ.day, '2026-06-02');
+  assert.strictEqual(await toBroker('2026-06-15T19:00:00Z'), 'r-2');
+  assert.strictEqual(calls.length, before, 'the later day too');
+  const file = d => path.join(home, `contracts-sim.${d}.json`);
+  assert.deepStrictEqual([readCache(file('2026-06-02')).front.MNQ, readCache(file('2026-06-15')).front.MNQ].map(f => [f.id, f.day]), [['r-1', '2026-06-02'], ['r-2', '2026-06-15']]);
+  assert.ok(!fs.existsSync(path.join(home, 'contracts-sim.json')), 'the live file is untouched');
 });
 
 test('translator process (scripts/contract-translator.js) under a replay clock keys its cache on the replayed day', () => {
@@ -193,11 +204,23 @@ test('translator process (scripts/contract-translator.js) under a replay clock k
     input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_contract', arguments: { contractId: 'MNQ' } } })}\n`,
     encoding: 'utf8', timeout: 30000,
   });
+  // Day files more than 30 days before the replayed day are pruned when a translator starts; nearer, later and
+  // live files are kept (by the replayed clock, never the wall clock).
+  const dayFile = d => path.join(home, `contracts-sim.${d}.json`);
+  for (const d of ['2026-04-01', '2026-05-02', '2026-05-04', '2026-09-01']) fs.writeFileSync(dayFile(d), JSON.stringify({ ids: {}, front: {}, specs: {} }));
+  fs.writeFileSync(path.join(home, 'contracts-sim.json'), JSON.stringify({ ids: {}, front: {} }));
+  // A live start (no replay clock) never prunes.
+  assert.strictEqual(run('').status, 0);
+  assert.deepStrictEqual(['2026-04-01', '2026-05-02', '2026-05-04', '2026-09-01'].map(d => fs.existsSync(dayFile(d))), [true, true, true, true]);
   const r = run('2026-06-02T14:00:00Z');
   assert.strictEqual(r.status, 0, r.stderr);
-  const cache = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8'));
+  assert.deepStrictEqual(['2026-04-01', '2026-05-02', '2026-05-04', '2026-09-01'].map(d => fs.existsSync(dayFile(d))), [false, false, true, true]);
+  assert.ok(fs.existsSync(path.join(home, 'contracts-sim.json')), 'the live file is never pruned');
+  // One cache file per replayed day (broker/config.js contractsCacheFile).
+  const cache = JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.2026-06-02.json'), 'utf8'));
   assert.strictEqual(cache.front.MNQ.day, '2026-06-02', 'the replayed trading day');
   assert.strictEqual(JSON.parse(r.stdout.trim().split('\n').pop()).id, 1);
   assert.strictEqual(run('2026-06-03T14:00:00Z').status, 0);
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.json'), 'utf8')).front.MNQ.day, '2026-06-03');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.2026-06-03.json'), 'utf8')).front.MNQ.day, '2026-06-03');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'contracts-sim.2026-06-02.json'), 'utf8')).front.MNQ.day, '2026-06-02', 'the earlier day\'s file keeps its own');
 });

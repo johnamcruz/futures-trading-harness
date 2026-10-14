@@ -32,7 +32,17 @@
  * serverCommand(broker)       [command, ...args], or throws when no server is set
  * translatedCommand(broker)   the server behind the contract translator (scripts/contract-translator.js):
  *                             how the harness always starts it, so it only ever sees standard contract names
- * contractsCacheFile(name, env)  the translator's lookups for a broker (contracts-<name>.json)
+ * contractsCacheFile(name, env)  the translator's lookups for a broker (contracts-<name>.json); under a replay
+ *                             clock (FTH_REPLAY_NOW, as harness-now.js accepts it) one file per replayed trading
+ *                             day, contracts-<name>.<YYYY-MM-DD>.json (a name never holds a '.', so no broker's
+ *                             file is another's day file), so a replayed day sees only its own lookups
+ *                             (its own front month), as a fresh home would. The translator, the gateway, the
+ *                             journal and the tick specs all take the path from here.
+ * contractsCacheFiles(name, env)  every such file of a broker in the harness home: the live one, its id index
+ *                             (contracts-<name>.ids.json: the ids of the day files pruned), then each day's
+ * pruneReplayCaches(name, env, { keepDays })  under a replay clock, removes the day files more than keepDays (30)
+ *                             before the replayed day, their ids kept in the id index; never live, never that day's,
+ *                             a later one or the live file
  * fingerprintNames(broker)    { names, refused }: its fingerprintEnv, the credential-like names refused
  * fingerprintSettings(broker, env)   { name, settings: { VAR: digest | null }, refused }: the allowlisted settings,
  *                             each value as an HMAC keyed on the home's salt (valueDigest), never the value
@@ -122,8 +132,33 @@ function translatedCommand(broker) {
   return [process.execPath, path.join(ROOT, 'scripts', 'contract-translator.js'), '--broker', broker.name, '--', ...serverCommand(broker)];
 }
 
+const cacheBase = name => `contracts-${String(name || 'default').replace(/[^a-z0-9_-]/gi, '_')}`;
+const DAY_FILE = /^\.(\d{4}-\d{2}-\d{2})\.json$/; // after the broker's base name, exactly
+
+/** The replayed trading day (YYYY-MM-DD) when the harness clock is a replay clock, else null (live). */
+function replayDay(env) {
+  if (!env.FTH_REPLAY_NOW) return null; // live: no replay clock to resolve
+  const clock = require('../trading/harness-now').resolveClock(env); // lazy: harness-now reads this module
+  return clock.replay ? require('../trading/clock').tradingDayKey(clock.now()) : null;
+}
+
 function contractsCacheFile(name, env = process.env) {
-  return path.join(harnessHome(env), `contracts-${String(name || 'default').replace(/[^a-z0-9_-]/gi, '_')}.json`);
+  const day = replayDay(env);
+  return path.join(harnessHome(env), `${cacheBase(name)}${day ? `.${day}` : ''}.json`);
+}
+
+/** Every translator cache file of a broker in the harness home: the live one and the id index first, then each replayed day's, by day. */
+function contractsCacheFiles(name, env = process.env) {
+  const home = harnessHome(env);
+  const base = cacheBase(name);
+  let names;
+  try {
+    names = fs.readdirSync(home);
+  } catch (_err) {
+    return [];
+  }
+  const days = names.filter(n => n.startsWith(base) && DAY_FILE.test(n.slice(base.length))).sort();
+  return [...names.filter(n => n === `${base}.json` || n === `${base}.ids.json`).sort(), ...days].map(n => path.join(home, n));
 }
 
 /**
@@ -189,4 +224,118 @@ function fingerprintSettings(broker, env = process.env, { salt = null } = {}) {
   return { name: (broker && broker.name) || null, settings: Object.fromEntries(names.map(k => [k, valueDigest(env[k], key)])), refused };
 }
 
-module.exports = { fingerprintNames, fingerprintSettings, fingerprintSalt, valueDigest, CREDENTIAL, translatedCommand, contractsCacheFile, SERVER_NAME, DEFAULTS_FILE, loadBrokers, activeBroker, serverCommand, BrokerConfigError };
+const pruneWarned = new Set();
+
+/**
+ * Under a replay clock, remove a broker's replayed-day cache files more than keepDays before the replayed day, so
+ * day files don't pile up and reads stay small; live (no replay clock) never prunes, as main. The replayed day
+ * itself, later days (a rerun of an earlier day) and the live file are kept. A day file's broker ids (each a
+ * standard root and month, as the translator recorded them) are first added to the broker's id index
+ * (contracts-<name>.ids.json, never pruned), so no mapping is ever lost. Provably safe over losing anything:
+ * - one prune at a time: an exclusive lock (<index>.lock, made with O_EXCL) around read, merge, write and delete;
+ *   a lock already there means another prune runs (or one crashed: remove the lock by hand), and this one does
+ *   nothing, saying so once; a lock that can't be written is removed at once;
+ * - the index is synced to disk (its data, then the directory) before any day file is removed;
+ * - an index that exists but can't be read, or can't be replaced: nothing is pruned (said once on stderr);
+ * - a day file that can't be read is never deleted.
+ * The removed paths.
+ */
+function pruneReplayCaches(name, env = process.env, { keepDays = 30 } = {}) {
+  const day = replayDay(env);
+  if (!day) return []; // live: never
+  const home = harnessHome(env);
+  const base = cacheBase(name);
+  const oldest = Date.parse(`${day}T00:00:00Z`) - keepDays * 86400000;
+  const old = contractsCacheFiles(name, env).filter(file => {
+    const d = DAY_FILE.exec(path.basename(file).slice(base.length));
+    return Boolean(d) && path.basename(file).startsWith(base) && Date.parse(`${d[1]}T00:00:00Z`) < oldest;
+  });
+  if (!old.length) return [];
+  const indexFile = path.join(home, `${base}.ids.json`);
+  const warn = why => {
+    if (pruneWarned.has(why)) return;
+    pruneWarned.add(why);
+    process.stderr.write(`[contract-translator] not pruning old replay day files: ${why}\n`);
+  };
+  const lock = `${indexFile}.lock`;
+  let fd;
+  try {
+    fd = fs.openSync(lock, 'wx');
+  } catch (err) {
+    warn(err.code === 'EEXIST'
+      ? `${lock} exists: another translator is pruning, or one stopped mid-prune; if no replay is running in this home, remove that file to prune again`
+      : `${lock} can't be made (${err.code || err.message})`);
+    return []; // another prune holds it (or a crashed one left it): nothing this time
+  }
+  try {
+    fs.writeSync(fd, String(process.pid));
+    fs.closeSync(fd);
+  } catch (err) {
+    try { fs.closeSync(fd); } catch (_e) { /* closed */ }
+    try { fs.unlinkSync(lock); } catch (_e) { /* gone */ }
+    warn(`${lock} can't be written (${err.code || err.message})`);
+    return []; // the lock we just made is removed: no stale lock left behind
+  }
+  try {
+    const parse = file => JSON.parse(fs.readFileSync(file, 'utf8'));
+    const entry = v => Boolean(v) && typeof v === 'object' && typeof v.root === 'string' && typeof v.month === 'string';
+    let ids = {};
+    if (fs.existsSync(indexFile)) {
+      let index;
+      try {
+        index = parse(indexFile);
+      } catch (_err) {
+        index = null;
+      }
+      if (!index || !index.ids || typeof index.ids !== 'object' || Array.isArray(index.ids)) {
+        warn(`${indexFile} can't be read: fix or remove it by hand`);
+        return [];
+      }
+      ids = { ...index.ids };
+    }
+    const folded = [];
+    for (const file of old) {
+      let data;
+      try {
+        data = parse(file);
+      } catch (_err) {
+        continue; // unreadable: never deleted
+      }
+      for (const [id, v] of Object.entries(data && data.ids && typeof data.ids === 'object' ? data.ids : {})) if (entry(v) && !ids[id]) ids[id] = { root: v.root, month: v.month };
+      folded.push(file);
+    }
+    if (!folded.length) return [];
+    const tmp = `${indexFile}.${process.pid}.tmp`;
+    try {
+      // Durable before any day file goes: the index's data, then its name in the directory.
+      const out = fs.openSync(tmp, 'w');
+      try {
+        fs.writeSync(out, `${JSON.stringify({ ids }, null, 2)}\n`);
+        fs.fsyncSync(out);
+      } finally {
+        fs.closeSync(out);
+      }
+      fs.renameSync(tmp, indexFile);
+      try {
+        const dir = fs.openSync(home, 'r');
+        try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+      } catch (_err) { /* best effort: a platform without a directory fsync */ }
+    } catch (err) {
+      try { fs.unlinkSync(tmp); } catch (_e) { /* never written */ }
+      warn(`${indexFile} can't be written (${err.code || err.message})`);
+      return [];
+    }
+    const removed = [];
+    for (const file of folded) {
+      try {
+        fs.unlinkSync(file);
+        removed.push(file);
+      } catch (_err) { /* gone already */ }
+    }
+    return removed;
+  } finally {
+    try { fs.unlinkSync(lock); } catch (_err) { /* removed by hand */ }
+  }
+}
+
+module.exports = { fingerprintNames, fingerprintSettings, fingerprintSalt, valueDigest, CREDENTIAL, translatedCommand, contractsCacheFile, contractsCacheFiles, pruneReplayCaches, SERVER_NAME, DEFAULTS_FILE, loadBrokers, activeBroker, serverCommand, BrokerConfigError };

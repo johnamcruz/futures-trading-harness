@@ -59,13 +59,14 @@ function tmpDir() {
  * leaves them as they are (none in a new file). With no `broker`: for the tests' fake broker
  * (FTH_BROKERS_FILE=FAKE_BROKERS) and for the shipped default (an env that names no brokers file).
  */
-function recordBrokerSpecs(home, { roots = null, broker = null, specs = {}, server } = {}) {
+function recordBrokerSpecs(home, { roots = null, broker = null, specs = {}, server, day = null } = {}) {
   if (!broker) {
-    for (const b of new Set([FAKE_BROKER, shippedBroker().name])) recordBrokerSpecs(home, { roots, broker: b, specs, server });
+    for (const b of new Set([FAKE_BROKER, shippedBroker().name])) recordBrokerSpecs(home, { roots, broker: b, specs, server, day });
     return path.join(home, `contracts-${FAKE_BROKER}.json`);
   }
   const { CONTRACT_SPECS } = require('../scripts/lib/trading/contracts');
-  const file = path.join(home, `contracts-${broker}.json`);
+  // `day`: a replayed day's file (broker/config.js contractsCacheFile under a replay clock).
+  const file = path.join(home, `contracts-${broker}${day ? `.${day}` : ''}.json`);
   let data = { ids: {}, front: {} };
   try {
     data = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -78,6 +79,8 @@ function recordBrokerSpecs(home, { roots = null, broker = null, specs = {}, serv
     data.specs[r] = { tickSize: t.tickSize, tickValue: t.tickValue, name: `${r}Z6`, description: null, id: brokerId(r), readAt: '2026-10-07T13:00:00.000Z', ...(specs[r] || {}) };
   }
   for (const [r, sp] of Object.entries(specs)) if (!data.specs[r]) data.specs[r] = { name: `${r}Z6`, id: brokerId(r), readAt: '2026-10-07T13:00:00.000Z', ...sp };
+  // A replayed day's file also records that day's front month of each root, as a lookup of the root does.
+  if (day) for (const r of roots || Object.keys(CONTRACT_SPECS)) data.front = { ...(data.front || {}), [r]: { id: brokerId(r), month: '2026-12', day } };
   if (server !== false && (server !== undefined || !data.server)) data.server = { maxOrderSize: 50, readAt: '2026-10-07T13:00:00.000Z', ...(server || {}) };
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data));

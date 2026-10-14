@@ -27,7 +27,7 @@ const { checkTrend } = require('./mtf-state');
 const { checkTrigger } = require('./signal-state');
 const { checkSkillsLoaded } = require('./skills-loaded');
 const { checkRolesRan } = require('./roles-ran');
-const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit } = require('./broker-specs');
+const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -280,6 +280,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // Hard rule: an entry is checked and sized with the broker's tick specs; none recorded (or unlike the table), no entry.
   const specRoot = contractRoot(input.contractId);
   if (!specOf(specRoot)) violations.push({ check: 'contract-specs', message: `${whyNoSpec(specOf, specRoot)}.` });
+  else if (dayFrontMissing(contractsFile, specRoot)) violations.push({ check: 'contract-specs', message: `${dayFrontMissing(contractsFile, specRoot)}.` });
   // Hard rules: the size within the broker server's own max order size (its get_server_config answer, as the
   // translator recorded it; none recorded, no entry), and the dollar risk within the named strategy's
   // risk.max_risk_usd where it sets one (for a policy strategy, its own; order-limits.js).

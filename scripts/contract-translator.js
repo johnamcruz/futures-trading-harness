@@ -17,7 +17,7 @@
 const { spawn } = require('child_process');
 const { childCaller, lineSplitter } = require('./lib/trading/mcp-gateway');
 const { createTranslator } = require('./lib/broker/translator');
-const { contractsCacheFile } = require('./lib/broker/config');
+const { contractsCacheFile, pruneReplayCaches } = require('./lib/broker/config');
 const { recordNow } = require('./lib/trading/harness-now');
 
 const TOOL = name => String(name || '').replace(/^.*__/, '');
@@ -37,6 +37,7 @@ function main(argv) {
   const toChild = line => { if (child.stdin.writable) child.stdin.write(`${line}\n`); };
   const write = msg => process.stdout.write(`${typeof msg === 'string' ? msg : JSON.stringify(msg)}\n`);
   const caller = childCaller(toChild, { prefix: 'fth-tr-' });
+  pruneReplayCaches(broker, process.env); // under a replay clock: the day files more than 30 days before the replayed day
   const translator = createTranslator({ call: (name, args) => caller.call(name, args), cacheFile: contractsCacheFile(broker, process.env), now: () => recordNow(process.env) });
   const toolOf = new Map(); // request id -> tool name, for the answer
 

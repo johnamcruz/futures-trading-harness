@@ -105,6 +105,42 @@ test('canonicalArgs: the gate sees one name per contract, from the configured br
   assert.deepStrictEqual(canonicalArgs(args, { FTH_HOME: home, FTH_BROKER: 'nope' }), args, 'no broker config: as given');
 });
 
+test('canonicalArgs on a replayed day: the call, the positions, the orders and the ledger are named again from one read of the day\'s file after the account reads (a lookup failed, then the reads looked the front month up: the exit of the position\'s own month goes)', async () => {
+  const AG = require('../../scripts/lib/trading/account-gate');
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { command: ['node', 'x.js'], replay: true } } }));
+  const env = { FTH_HOME: home, FTH_REPLAY_NOW: '2026-10-05T14:30:00Z' };
+  const dayFile = path.join(home, 'contracts-sim.2026-10-05.json');
+  // Nothing looked up that day yet (a lookup failed): the exit and a close are named by their month.
+  const exit = canonicalArgs({ accountId: 1, contractId: 'MNQ:2026-12', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten' }, env);
+  const close = canonicalArgs({ accountId: 1, contractId: 'MNQ:2026-12' }, env);
+  assert.strictEqual(exit.contractId, 'MNQ:2026-12');
+  assert.strictEqual(JSON.stringify(exit).includes('rename'), false, 'the mark never reaches a log or the wire');
+  // The account reads then succeed: the translator looked the front month (December) up and lists the long as MNQ.
+  const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
+  const caller = { call: async name => {
+    fs.writeFileSync(dayFile, JSON.stringify({ ids: { 'sim-Z6': { root: 'MNQ', month: '2026-12' } }, front: { MNQ: { id: 'sim-Z6', month: '2026-12', day: '2026-10-05' } } }));
+    return reply(name === 'list_open_positions' ? [{ contractId: 'MNQ', type: 1, size: 1 }] : name === 'list_open_orders' ? [{ id: 9, contractId: 'MNQ:2026-12', type: 4, side: 1, size: 1, stopPrice: 20990 }] : []);
+  } };
+  const facts = await AG.accountFacts(exit, caller);
+  assert.strictEqual(exit.contractId, 'MNQ', 'named again after the reads, as the positions were');
+  assert.deepStrictEqual(facts.orders.map(o => o.contractId), ['MNQ']);
+  const config = loadConfig({});
+  const now = new Date('2026-10-05T14:30:00Z');
+  assert.deepStrictEqual(AG.evaluateAccount({ input: exit, ...facts, config, now }), [], 'the long\'s own exit goes');
+  // A close sent moments ago under the month's name still counts for the exit (the ledger is named alike).
+  const ledger = [{ contractId: 'MNQ:2026-12', root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() }];
+  assert.match(AG.evaluateAccount({ input: exit, ...facts, config, now, ledger })[0].message, /once recent orders fill/);
+  assert.match(AG.evaluateAccountChange('partial_close_position', { input: { ...exit, size: 1 }, positions: facts.positions, orders: facts.orders, config, now, ledger })[0].message, /once recent orders fill/);
+  // The close lane's ledger entry: named with the positions too.
+  assert.strictEqual(closeLedgerEntry('close_position', close, [{ contractId: 'MNQ', type: 1, size: 1 }], now).contractId, 'MNQ');
+  // Live: nothing is named again (main's naming).
+  const live = canonicalArgs({ accountId: 1, contractId: 'MNQ:2026-12' }, { FTH_HOME: home });
+  assert.strictEqual(live[AG.RENAME], undefined);
+  assert.deepStrictEqual(AG.renamed(live, [{ contractId: 'MNQ' }]).positions, [{ contractId: 'MNQ' }]);
+});
+
 test('closeLedgerEntry: a close counts from the account before it, capped at the position; nothing to close is no entry', () => {
   const now = new Date('2026-10-07T14:00:00Z');
   const long2 = [{ contractId: 'MNQ', type: 1, size: 2 }, { contractId: 'MNQ:2027-03', type: 2, size: 1 }];

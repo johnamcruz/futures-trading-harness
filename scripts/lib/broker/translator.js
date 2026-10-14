@@ -32,6 +32,12 @@
  *
  * isStandardName(s), parseStandardName(s), parseTicker(name, now)
  * readCache(file), standardRoot(id, file)  for local readers (hooks): the root of an id, or null
+ *
+ * Under a replay clock each replayed day has its own file (contracts-<broker>.<YYYY-MM-DD>.json; broker/config.js
+ * contractsCacheFile). A day file's front month, tick specs and server limits are that day's alone; its ids also
+ * include those its sibling files recorded (the live file, the id index and the days within 30 of it), since a broker id's root and
+ * month never change, except a contract whose month is already over on the day. Another day's front month is
+ * never read.
  */
 
 const fs = require('fs');
@@ -78,15 +84,45 @@ function parseTicker(name, now = new Date()) {
 }
 
 const plainObject = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+const DAY_FILE = /^(contracts-[a-z0-9_-]+)\.(\d{4}-\d{2}-\d{2})\.json$/i; // broker/config.js contractsCacheFile
+const SIBLING_DAYS = 30; // a day file reads the ids of the days this near it (and the live file's)
+const dayMs = d => Date.parse(`${d}T00:00:00Z`);
+const idEntry = v => Boolean(v) && typeof v === 'object' && typeof v.root === 'string' && typeof v.month === 'string';
+
+/** The ids a day file's siblings recorded (the live file, the id index, the days near it), or {} for any other file. */
+function siblingIds(file) {
+  const m = DAY_FILE.exec(path.basename(String(file || '')));
+  if (!m) return {};
+  const dir = path.dirname(file);
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (_err) {
+    return {};
+  }
+  const out = {};
+  const month = m[2].slice(0, 7); // a contract whose month is over on this day is expired: its id isn't reused
+  const mine = path.basename(file);
+  const near = n => { const d = DAY_FILE.exec(n); return Boolean(d) && d[1] === m[1] && Math.abs(dayMs(d[2]) - dayMs(m[2])) <= SIBLING_DAYS * 86400000; };
+  // By name, exactly: the live file, the id index (the ids of the day files pruned) and the days near it; no other file is read.
+  const siblings = names.filter(n => n !== mine && (n === `${m[1]}.json` || n === `${m[1]}.ids.json` || near(n))).sort();
+  for (const n of siblings) {
+    try {
+      for (const [id, v] of Object.entries(plainObject(JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')).ids))) if (idEntry(v) && v.month >= month) out[id] = { root: v.root, month: v.month };
+    } catch (_err) { /* unreadable: no ids from it */ }
+  }
+  return out;
+}
 
 function readCache(file) {
+  const shared = siblingIds(file);
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
     // A file from before specs (or the server's limits) were recorded has none: every root then has no spec.
     const server = data.server && typeof data.server === 'object' && !Array.isArray(data.server) ? data.server : null;
-    return { ids: plainObject(data.ids), front: plainObject(data.front), specs: plainObject(data.specs), server };
+    return { ids: { ...shared, ...plainObject(data.ids) }, front: plainObject(data.front), specs: plainObject(data.specs), server };
   } catch (_err) {
-    return { ids: {}, front: {}, specs: {}, server: null };
+    return { ids: shared, front: {}, specs: {}, server: null };
   }
 }
 

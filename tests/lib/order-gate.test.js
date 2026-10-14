@@ -1525,3 +1525,35 @@ test('allowed accounts: the gateway\'s server check - paper only when the server
   const none = createServerAttestation({ env: { FTH_BROKER: 'nope', FTH_HOME: tmpDir() }, call: async () => answer });
   assert.match((await none.violations({ accountId: 1 }, false))[0].message, /unknown broker "nope"/);
 });
+
+test('contract-specs: a replayed day whose file has tick specs but no front month (only a lookup by month succeeded) refuses entries, saying why; exits go; the live file is as before', () => {
+  const home = trendHome(undefined, { specs: false });
+  const cfg = { ...config, home };
+  const day = path.join(home, 'contracts-fake.2026-10-07.json');
+  const write = front => fs.writeFileSync(day, JSON.stringify({
+    ids: { 'fake:MNQ:Z26': { root: 'MNQ', month: '2026-12' } }, front,
+    specs: { MNQ: { tickSize: 0.25, tickValue: 0.5, name: 'MNQZ6', id: 'fake:MNQ:Z26', readAt: '2026-10-07T13:00:00.000Z' } }, server: { maxOrderSize: 50, readAt: '2026-10-07T13:00:00.000Z' },
+  }));
+  write({});
+  const r = evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: day } });
+  assert.deepStrictEqual(checks(r), ['contract-specs']);
+  assert.strictEqual(r.violations[0].message, 'the replayed day\'s MNQ front month (2026-10-07) is not looked up yet, so its tick specs and contract can\'t be trusted for an entry: call search_contracts for MNQ first (the harness records that day\'s front month and tick specs), then try again.');
+  assert.deepStrictEqual(checks(evaluate(entryOrder({ contractId: 'MNQ:2026-12' }), [plan()], { config: { ...cfg, contractsFile: day } })), ['contract-specs'], 'by month too');
+  // Not skippable, like every contract-specs refusal.
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: day, skipChecks: new Set(['contract-specs']) } })), ['contract-specs']);
+  // Exits and stops never wait on it.
+  for (const rationale of ['[exit] flatten the long', '[protect] stop for the long at 21480']) {
+    assert.deepStrictEqual(evaluate(entryOrder({ rationale, side: 'sell', type: 'stop', stopPrice: 21480 }), [], { config: { ...cfg, contractsFile: day } }).violations, [], rationale);
+  }
+  // Another root's front month is not this one's.
+  write({ MES: { id: 'fake:MES:Z26', month: '2026-12', day: '2026-10-07' } });
+  assert.deepStrictEqual(checks(evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: day } })), ['contract-specs']);
+  // The day's front month looked up: the entry goes.
+  write({ MNQ: { id: 'fake:MNQ:Z26', month: '2026-12', day: '2026-10-07' } });
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: day } }).violations, []);
+  // The live file never needs one (main's behaviour).
+  const live = path.join(home, 'contracts-fake.json');
+  fs.writeFileSync(live, fs.readFileSync(day, 'utf8').replace(/"front":\{[^}]*\}\}/, '"front":{}'));
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(live, 'utf8')).front, {});
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: { ...cfg, contractsFile: live } }).violations, []);
+});

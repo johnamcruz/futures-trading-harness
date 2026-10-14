@@ -100,17 +100,29 @@ const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const round = (x, d = 4) => (x === null ? null : Number(x.toFixed(d)));
 /**
- * The run's translator cache (contracts-<broker>.json), read once: { root(id) } a broker id's standard root,
- * { spec(root) } the broker spec it recorded for a root (broker-specs.js brokerSpecFor, once per root).
+ * The run's translator cache, read once: the broker's files in the run home (contracts-<broker>.json and, under the
+ * replay clock, one per replayed day: broker/config.js contractsCacheFiles), or one file given. { root(id) } a
+ * broker id's standard root (any file: ids never change), { spec(root, day) } the broker spec recorded for a root
+ * (broker-specs.js brokerSpecFor): the one the trade's own replayed day recorded (`day`, YYYY-MM-DD), else the
+ * live file's, else the latest day's that has one.
  */
-function translatorCache(file) {
-  const { ids } = readCache(file);
+function translatorCache(files) {
+  const list = Array.isArray(files) ? files : [files];
+  const ids = Object.assign({}, ...list.map(f => readCache(f).ids));
+  const dayOf = f => (/\.(\d{4}-\d{2}-\d{2})\.json$/.exec(path.basename(String(f))) || [])[1] || null;
+  const live = list.filter(f => !dayOf(f));
+  const days = list.filter(dayOf).sort((a, b) => (dayOf(a) < dayOf(b) ? -1 : 1));
   const specs = new Map();
+  const specIn = (f, root) => {
+    const k = `${f}|${root}`;
+    if (!specs.has(k)) specs.set(k, brokerSpecFor(f, root));
+    return specs.get(k);
+  };
   return {
     root: id => (Object.prototype.hasOwnProperty.call(ids, String(id ?? '')) && isObj(ids[String(id)]) ? ids[String(id)].root || null : null),
-    spec: root => {
-      if (!specs.has(root)) specs.set(root, brokerSpecFor(file, root));
-      return specs.get(root);
+    spec: (root, day = null) => {
+      const own = day ? days.filter(f => dayOf(f) === day) : [];
+      return [...own, ...live, ...days.slice().reverse()].map(f => specIn(f, root)).find(Boolean) || null;
     },
   };
 }
@@ -138,13 +150,14 @@ const sign = side => (side === 'buy' ? 1 : side === 'sell' ? -1 : 0);
 /**
  * A contract's tick specs { tickSize, tickValue, source } from its standard name (MNQ, NQ:2026-03), else
  * the fallback's (the label's symbol): the broker's, as the run recorded them (`specsFile`, the run home's
- * contracts-<broker>.json through translatorCache: what the run's gate and sizing traded with), else the static table ('table').
+ * contracts-<broker>.json through translatorCache: what the run's gate and sizing traded with; `day`, the trading day
+ * it traded on, picks that day's), else the static table ('table').
  * The one place specs are looked up.
  */
-function contractSpec(contractId, fallback = null, specsFile = null) {
+function contractSpec(contractId, fallback = null, specsFile = null, day = null) {
   const rootOf = id => (id ? (specsFile && specsFile.root(String(id))) || (parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root : null);
   for (const root of [rootOf(contractId), rootOf(fallback)].filter(Boolean)) {
-    const broker = specsFile ? specsFile.spec(root) : null;
+    const broker = specsFile ? specsFile.spec(root, day) : null;
     const table = specFor(root);
     // As live (broker-specs.js brokerSpecs): a broker spec unlike the static table can't be trusted (live
     // refuses entries on it); measured with the table, flagged.
@@ -262,7 +275,7 @@ function outcomeOf(rt, stopTicks, specsFile = null) {
   if (!rt) return null;
   const first = rt.opens[0] || null;
   const entry = first && first.entry && typeof first.entry === 'object' ? first.entry : {};
-  const spec = contractSpec(rt.contractId, null, specsFile) || {};
+  const spec = contractSpec(rt.contractId, null, specsFile, num(rt.openMs ?? rt.closeMs) !== null ? tradingDayKey(new Date(rt.openMs ?? rt.closeMs)) : null) || {};
   const ticks = num(entry.stopTicks) || num(stopTicks);
   const tickValue = num(entry.tickValue) || num(spec.tickValue);
   const risk = ticks && tickValue ? ticks * tickValue * (rt.openSize || 1) : null;
@@ -666,7 +679,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   };
   const fills = allFills(lines);
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
-  const contractCache = translatorCache(path.join(home, `contracts-${manifest.broker || ''}.json`));
+  const contractCache = translatorCache(require('../broker/config').contractsCacheFiles(manifest.broker || '', { FTH_HOME: home }));
   const trips = roundTrips(fills, contractCache);
   const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'), id => {
     const root = id ? contractCache.root(id) || (parseStandardName(String(id)) || {}).root : null;
@@ -851,7 +864,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
   const labels = [];
   for (const d of drafts) {
     const { rec } = d;
-    const spec = contractSpec(d.symbol, d.fam, contractCache);
+    const tday = tradingDayKey(new Date(d.t)); // the replayed trading day: its own cache file's spec
+    const spec = contractSpec(d.symbol, d.fam, contractCache, tday);
     let usedSpec = spec;
     let teacher = null;
     let gate = { decision: 'none', checks: [] };
@@ -864,7 +878,7 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], outcomeBars = nul
       const isEntry = d.decision === 'flat' && o;
       const rt = isEntry ? entryOf.get(d) || null : null;
       // Decision-time fields read only the order and what was there at t (never its fill).
-      const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache) : spec;
+      const ospec = isEntry ? contractSpec(o.contractId, d.symbol, contractCache, tday) : spec;
       usedSpec = ospec;
       if (ospec && ospec.source === 'mismatch') reasons.push('broker spec mismatch');
       // ATR from the replayed data when given (--bars), else the run home's: bars closed by t either way.
