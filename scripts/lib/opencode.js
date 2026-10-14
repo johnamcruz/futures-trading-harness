@@ -40,13 +40,24 @@
  * the project file. It names the directory (--dir, and PWD): opencode reads
  * its project from PWD, not the process's working directory.
  *
+ * In index mode (role-skills.js, the default) a role that holds skill_lookup
+ * is denied opencode's skill tool: its skills are in its prompt (the core) or
+ * read with skill_lookup (which reads any skill), and while an agent may use
+ * the tool opencode puts every skill's name and description in its system
+ * prompt (about 26 KB a call). A role without skill_lookup keeps the tool (its
+ * way to a skill its embedded ones name), as do full mode and the head trader,
+ * which loads its skills with it.
+ *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
+ *   deniesSkillTool(tools, mode) whether a role is denied the skill tool (index mode, holds skill_lookup)
  *   agentPrompt(agent)           a role's prompt: in index mode, the default (skillPlan: role-skills.js), its
  *                                body, its core skills and an index of the rest (skill_lookup); in full mode
  *                                (FTH_ROLE_SKILLS=full, or no skillPlan) its body and every skill in full
- *   agentConfig(agent)           a role as an opencode agent entry
+ *   agentPermission(tools, mode) a role's permissions (the skill tool denied where deniesSkillTool says)
+ *   agentConfig(agent)           a role as an opencode agent entry (its mode: skillPlan's)
  *   workspaceConfig(agents)      workspace/opencode.json's object
- *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch
+ *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch;
+ *                                `mode`: the run's role-skills mode (FTH_ROLE_SKILLS)
  *   runEnv(base, { ... })        the run's environment for opencode
  *   denyTools(env, keys)         the run's environment with tools denied everywhere (the headless probe)
  *   badExtraArgs(args)           runner extraArgs opencode runs may not take
@@ -96,14 +107,23 @@ const MCP_KEYS = () => [
 ];
 
 /**
- * A role's permissions: everything denied, then each broker and harness tool by name (its own allowed,
- * the rest denied, so a user's rule for the role can't grant one), then its other tools.
+ * Whether a role is denied opencode's skill tool: in index mode (`mode`, role-skills.js), when it holds skill_lookup,
+ * which reads any skill. opencode lists every skill in the system prompt of an agent that may use the tool; a role
+ * without skill_lookup keeps it, its only way to a skill its prompt names but doesn't embed.
  */
-function agentPermission(tools) {
+const deniesSkillTool = (tools, mode) => mode === 'index' && permissionKeys(tools).includes(`${HARNESS_SERVER}_skill_lookup`);
+
+/**
+ * A role's permissions: everything denied, then each broker and harness tool by name (its own allowed,
+ * the rest denied, so a user's rule for the role can't grant one), then its other tools; the skill tool
+ * denied where deniesSkillTool says.
+ */
+function agentPermission(tools, mode = null) {
   const own = permissionKeys(tools);
   const permission = { '*': 'deny', ...Object.fromEntries(ROLE_DENIED.map(k => [k, 'deny'])) };
   for (const k of MCP_KEYS()) permission[k] = own.includes(k) ? 'allow' : 'deny';
   for (const k of own) if (!(k in permission)) permission[k] = k === 'read' ? { ...READ } : 'allow';
+  if (deniesSkillTool(tools, mode)) permission.skill = 'deny';
   return permission;
 }
 
@@ -114,6 +134,10 @@ const skillList = names => {
   const q = names.map(n => `\`${n}\``);
   return q.length < 3 ? q.join(' and ') : `${q.slice(0, -1).join(', ')}, and ${q[q.length - 1]}`;
 };
+
+/** Not loading the embedded skills again: with the skill tool, or at all for a role denied it (deniesSkillTool). */
+const notAgain = (agent, plan) => (plan && deniesSkillTool(agent.tools || [], plan.mode)
+  ? "Read them here; don't load them again." : "Read them here; don't load them again with the skill tool.");
 
 /**
  * A role's prompt: its body, with its "Load the skills" sentence saying they are below, then its skills in full
@@ -131,7 +155,7 @@ function agentPrompt(agent) {
     '',
     '## Your skills (already loaded)',
     '',
-    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. Read them here; don't load them again with the skill tool.`,
+    `The skills this role uses (${docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${notAgain(agent, plan)}`,
     '',
     ...docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']),
   ].join('\n');
@@ -158,7 +182,7 @@ function indexPrompt(agent, plan) {
   ];
   if (plan.docs.length) {
     out.push('## Your skills (already loaded)', '',
-      `The skills this role uses every call (${plan.docs.map(d => d.name).join(', ')}) are below in full: they are loaded. Read them here; don't load them again with the skill tool.`,
+      `The skills this role uses every call (${plan.docs.map(d => d.name).join(', ')}) are below in full: they are loaded. ${notAgain(agent, plan)}`,
       '', ...plan.docs.flatMap(d => [`<skill name="${d.name}">`, d.body, '</skill>', '']));
   }
   out.push('## Your skill index', '',
@@ -176,7 +200,7 @@ function agentConfig(agent) {
     description: agent.description,
     mode: 'subagent',
     prompt: agentPrompt(agent),
-    permission: agentPermission(agent.tools),
+    permission: agentPermission(agent.tools, agent.skillPlan ? agent.skillPlan.mode : null),
   };
 }
 
@@ -257,7 +281,7 @@ function externalDirs({ root, dataDir, stateDir }) {
  * run whose directory has no opencode.json, or another one, is still locked down: merged last, they
  * replace the project's in place), and reading the runner's directories for all of them.
  */
-function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [] }) {
+function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = null }) {
   const external = externalDirs({ root, dataDir, stateDir });
   const roles = agents.map(a => a.name);
   return {
@@ -266,7 +290,7 @@ function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [] }) {
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
       [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, deniedRoles), external_directory: { ...external } } },
-      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...agentPermission(a.tools), external_directory: { ...external } } }])),
+      ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...agentPermission(a.tools, mode), external_directory: { ...external } } }])),
     },
   };
 }
@@ -287,7 +311,7 @@ const UNSAFE_ENV = ['OPENCODE_PERMISSION', 'OPENCODE_DISABLE_PROJECT_CONFIG', 'O
  * directory from PWD before its working directory, and a PWD inherited from the runner would load
  * another project's config.
  */
-function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [] }) {
+function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [], mode = null }) {
   const env = { ...base };
   for (const k of UNSAFE_ENV) delete env[k];
   return {
@@ -299,7 +323,7 @@ function runEnv(base, { root, dataDir, stateDir, agents, dir, deniedRoles = [] }
     OPENCODE_DISABLE_CLAUDE_CODE: '1',
     OPENCODE_DISABLE_EXTERNAL_SKILLS: '1',
     OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
-    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents, deniedRoles })),
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(runConfig({ root, dataDir, stateDir, agents, deniedRoles, mode })),
   };
 }
 
@@ -334,4 +358,4 @@ function badExtraArgs(args) {
   return bad;
 }
 
-module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };
+module.exports = { LOAD_SENTENCE, SCHEMA, BUILTIN_AGENTS, DISABLED_AGENTS, HEAD_AGENT, READ, DENIED, ROLE_DENIED, TOOL_KEYS, UNSAFE_ENV, EXTRA_ARGS, permissionKeys, deniesSkillTool, agentPermission, agentPrompt, agentConfig, sessionPermission, headAgent, workspaceConfig, externalDirs, runConfig, runEnv, denyTools, badExtraArgs };

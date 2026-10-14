@@ -268,3 +268,76 @@ test('a run\'s denied roles and the head trader\'s place_order deny hold through
   for (const r of ['trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'trade-executor']) assert.strictEqual(decide(head, 'task', r), 'allow', r);
   for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_partial_close_position', 'broker_modify_order', 'broker_get_bars']) assert.strictEqual(decide(head, t), 'allow', t);
 });
+
+test('index mode (the default): a role holding skill_lookup is denied opencode\'s skill tool; the others, the head trader and full mode keep it', () => {
+  const full = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
+  // A role's skills are in its prompt and behind skill_lookup (any skill): while an agent may use the skill tool,
+  // opencode puts every skill's name and description in its system prompt. Without skill_lookup the tool is its only way
+  // to a skill its prompt names but doesn't embed.
+  const lookup = agents.filter(a => a.tools.includes('mcp__harness__skill_lookup')).map(a => a.name);
+  assert.ok(lookup.length > 0 && lookup.length < agents.length, 'both kinds of role exist');
+  for (const a of agents) {
+    assert.ok(a.tools.includes('Skill'), `${a.name}: its Claude tools hold Skill (the other adapters load its skills with it)`);
+    const denied = lookup.includes(a.name);
+    assert.strictEqual(oc.deniesSkillTool(a.tools, 'index'), denied, a.name);
+    assert.strictEqual(oc.deniesSkillTool(a.tools, 'full'), false, a.name);
+    assert.strictEqual(decide([...rules(config.permission), ...rules(config.agent[a.name].permission)], 'skill', 'market-structure'), denied ? 'deny' : 'allow', `index: ${a.name}`);
+    assert.strictEqual(decide([...rules(full.permission), ...rules(full.agent[a.name].permission)], 'skill', 'market-structure'), 'allow', `full: ${a.name}`);
+    // Nothing in a denied role's prompt sends it to a tool it can't use; the others' prompts are as before.
+    if (denied) assert.doesNotMatch(config.agent[a.name].prompt, /skill tool/i, `index: ${a.name}`);
+    else assert.match(config.agent[a.name].prompt, /don't load them again with the skill tool/, `index: ${a.name}`);
+    assert.match(full.agent[a.name].prompt, /don't load them again with the skill tool/, `full: ${a.name}`);
+  }
+  for (const c of [config, full]) {
+    assert.strictEqual(decide(headRules(c), 'skill', 'trade-session'), 'allow', 'the head trader loads its skills with the tool');
+    assert.strictEqual(c.permission.skill, 'allow');
+  }
+  // Full mode is the permission set as before: no mode is full mode.
+  for (const a of agents) {
+    assert.deepStrictEqual(oc.agentPermission(a.tools, 'full'), oc.agentPermission(a.tools), a.name);
+    assert.deepStrictEqual(full.agent[a.name].permission, oc.agentPermission(a.tools), a.name);
+  }
+  // Index mode changes the skill key alone, in its place.
+  const tools = agents.find(a => a.name === 'risk-manager').tools;
+  assert.deepStrictEqual(oc.agentPermission(tools, 'index'), { ...oc.agentPermission(tools), skill: 'deny' });
+  assert.deepStrictEqual(Object.keys(oc.agentPermission(tools, 'index')), Object.keys(oc.agentPermission(tools)));
+  // Derived from the tools: skill_lookup alone decides, Skill or not.
+  assert.strictEqual(oc.agentPermission(['mcp__harness__skill_lookup'], 'index').skill, 'deny');
+  assert.deepStrictEqual(oc.agentPermission(['Read', 'Skill'], 'index'), oc.agentPermission(['Read', 'Skill']));
+  assert.ok(!('skill' in oc.agentPermission(['Read'], 'index')));
+});
+
+test('index mode: every skill a role\'s prompt names is embedded in it, or reachable by it through skill_lookup or the skill tool', () => {
+  const skillNames = new Set(fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md'))));
+  for (const a of agents) {
+    const entry = config.agent[a.name];
+    const role = [...rules(config.permission), ...rules(entry.permission)];
+    const embedded = new Set([...entry.prompt.matchAll(/<skill name="([a-z0-9-]+)">/g)].map(m => m[1]));
+    const named = new Set([...entry.prompt.matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]).filter(s => skillNames.has(s)));
+    assert.ok(named.size > 0, a.name);
+    for (const s of named) {
+      if (embedded.has(s)) continue;
+      const reachable = decide(role, 'harness_skill_lookup') === 'allow' || decide(role, 'skill', s) === 'allow';
+      assert.ok(reachable, `${a.name}: names \`${s}\`, which it neither embeds nor can read (skill_lookup or the skill tool)`);
+    }
+  }
+});
+
+test('the run\'s config denies the skill tool to the roles holding skill_lookup in index mode, the same every run, over the project file and a hostile user config', () => {
+  const user = { permission: { skill: 'allow' }, agent: { 'risk-manager': { permission: { skill: 'allow', '*': 'allow' } } } };
+  const index = oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, mode: 'index' });
+  const full = oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, mode: 'full' });
+  // The same mode, the same roles' permissions every cycle, whichever roles a cycle denies the head trader.
+  assert.deepStrictEqual(oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, mode: 'index', deniedRoles: ['strategy-researcher'] }).agent['risk-manager'], index.agent['risk-manager']);
+  assert.deepStrictEqual(oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents }), full, 'no mode: as before (full)');
+  for (const merged of [merge(config, index), index, merge(merge(user, config), index), merge(user, index)]) {
+    for (const a of agents) assert.strictEqual(decide([...rules(merged.permission), ...rules(merged.agent[a.name].permission)], 'skill', 'x'), a.tools.includes('mcp__harness__skill_lookup') ? 'deny' : 'allow', a.name);
+    assert.strictEqual(decide(headRules(merged), 'skill', 'trade-session'), 'allow');
+  }
+  // A full-mode run over a project file generated for index (the runner's start check refuses that mismatch): the run decides.
+  const over = merge(config, full);
+  for (const r of roles) assert.strictEqual(decide([...rules(over.permission), ...rules(over.agent[r].permission)], 'skill', 'x'), 'allow', r);
+  // runEnv passes the mode through.
+  const env = oc.runEnv({}, { root: '/r', dataDir: '/d', stateDir: '/s', agents, dir: '/r/workspace', mode: 'index' });
+  assert.deepStrictEqual(JSON.parse(env.OPENCODE_CONFIG_CONTENT), index);
+});

@@ -589,10 +589,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
   }
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
-    // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups.
+    // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups,
+    // and index mode denies the roles opencode's skill tool (opencode.js agentPermission).
     env.FTH_ROLE_SKILLS = require('./role-skills').modeOf(base);
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context) });
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
   }
   return env;
 }

@@ -863,6 +863,10 @@ test('opencode: the run\'s environment locks it down and lets it read the runner
   assert.deepStrictEqual(Object.keys(run.permission.external_directory), ['*', '/r/*', '/data/bars/*', '/srv/fth/logs/*', '/srv/fth/bars-scratch/*']);
   assert.strictEqual(run.permission.bash, 'deny');
   assert.strictEqual(run.agent['risk-manager'].permission.external_directory['/data/bars/*'], 'allow');
+  // Index mode (the default) denies the roles opencode's skill tool; the head trader keeps it; full mode keeps it for the roles.
+  assert.deepStrictEqual([run.agent['risk-manager'].permission.skill, run.agent['fth-head-trader'].permission.skill, run.permission.skill], ['deny', 'allow', 'allow']);
+  const full = JSON.parse(childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), '/r', { FTH_HOME: '/srv/fth', FTH_ROLE_SKILLS: 'full' }).OPENCODE_CONFIG_CONTENT);
+  assert.strictEqual(full.agent['risk-manager'].permission.skill, 'allow');
   // Other harnesses get none of it.
   assert.ok(!Object.keys(childEnv(validateConfig({ harness: 'claude' }), '/r', {})).some(k => k.startsWith('OPENCODE_')));
 });
