@@ -54,7 +54,7 @@ test('a setup not taken: vetoed when the cycle\'s phase-2 report is a veto, else
       JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `t${n}`, content: text }] } }),
     ].join('\n');
   };
-  const entry = output => D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100, { scan: [fired('orb', 'long', 2)] })], output });
+  const entry = (output, o = {}) => D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100, { scan: [fired('orb', 'long', 2)] })], output, ...o });
   const phase1 = role('risk-manager', 'Phase 1: flat, budget 1 trade');
   const veto = role('risk-manager', 'Phase 2 on orb long.\nVERDICT: VETO - no room');
   const approve = role('risk-manager', 'Phase 2 on orb long.\nVERDICT: APPROVE - size 1');
@@ -65,11 +65,26 @@ test('a setup not taken: vetoed when the cycle\'s phase-2 report is a veto, else
   assert.strictEqual(entry(phase1).action, 'skipped', 'no phase 2: the model passed');
   assert.strictEqual(entry('').action, 'skipped', 'no transcript (a harness that shows no reports): a pass, as before');
   assert.strictEqual(entry('{"not": "a transcript"').action, 'skipped');
+  // Phase 1 is never the phase-2 report, whatever it says: a phase 1 written as a verdict or with a capital VETO.
+  assert.strictEqual(entry(role('risk-manager', 'Phase 1 on orb long: VERDICT: VETO - budget spent')).action, 'skipped');
+  assert.strictEqual(entry([role('risk-manager', 'Phase 1 orb long. VETO'), approve].join('\n')).action, 'skipped');
+  // Phase 1 served from the report cache: the cycle's one risk-manager call is phase 2.
+  assert.strictEqual(entry(veto, { cached: ['risk-manager'] }).action, 'vetoed');
+  // A lean or an unknown cycle kind: the gate's phase-2 test as the cycle runs (a lean cycle needs no analysts).
+  assert.strictEqual(entry([phase1, veto].join('\n'), { cycle: 'lean' }).action, 'vetoed');
   // A veto with nothing on the table stays a plain no-trade; an analyst's "VETO" is no phase-2 report.
-  assert.strictEqual(D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100)], output: veto }).action, 'no-trade');
-  assert.strictEqual(entry(role('market-structure-analyst', 'VERDICT: VETO')).action, 'skipped');
+  assert.strictEqual(D.decisionEntry({ at: at(3), symbols: ['MNQ'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100)], output: [phase1, veto].join('\n') }).action, 'no-trade');
+  assert.strictEqual(entry([phase1, role('market-structure-analyst', 'VERDICT: VETO orb')].join('\n')).action, 'skipped');
+  // The veto is this decision's only when it names its setup, or, naming none of the cycle's setups, its symbol.
+  assert.strictEqual(entry([phase1, role('risk-manager', 'Phase 2 on the MNQ plan.\nVERDICT: VETO')].join('\n')).action, 'vetoed', 'its symbol');
+  assert.strictEqual(entry([phase1, role('risk-manager', 'Phase 2.\nVERDICT: VETO - no plan')].join('\n')).action, 'skipped', 'names nothing of it');
+  // Several setups on the table: a veto of the other one (vwap on MES) leaves this pass (orb on MNQ) a pass.
+  const two = (text, o = {}) => D.decisionEntry({ at: at(3), symbols: ['MNQ', 'MES'], result: 'CYCLE RESULT: no-trade - x', items: [item(3, 100, { scan: [fired('orb', 'long', 2)] }), { ...item(3, 50, { scan: [fired('vwap', 'short', 1)] }), symbol: 'MES', contractId: 'MES' }], output: [phase1, role('risk-manager', text)].join('\n'), ...o });
+  assert.deepStrictEqual([two('Phase 2 on vwap short MES.\nVERDICT: VETO').setup, two('Phase 2 on vwap short MES.\nVERDICT: VETO').action], ['orb', 'skipped']);
+  assert.strictEqual(two('Phase 2 on vwap short, MNQ next.\nVERDICT: VETO').action, 'skipped', 'names a setup of the cycle, not this one: the symbol does not count');
+  assert.strictEqual(two('Phase 2 on orb long.\nVERDICT: VETO').action, 'vetoed');
   // Shown as vetoed, with whether it would have hit +1R or -1R first.
-  const v = entry(veto);
+  const v = entry([phase1, veto].join('\n'));
   const up = [bar(3, 99, 100, 99, 100), bar(4, 100, 102.5, 99.5, 102)];
   assert.deepStrictEqual(D.historyLines([v], market(up, 4)), ['10:12 MNQ 3m vetoed orb long @100: x; since +8t, would hit +1R first']);
 });

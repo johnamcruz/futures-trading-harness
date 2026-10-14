@@ -405,4 +405,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null) {
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, verdictMatches, verdictLines, decisionLines, verdictProblem };
