@@ -13,6 +13,9 @@ const assert = require('node:assert');
 const { assertGolden } = require('../golden');
 const G = require('../fixtures/golden-bars');
 const { prompts, validateConfig, RESULT_TEMPLATE, CYCLE_OUTCOMES, outcomeOf } = require('../../scripts/lib/autotrader');
+const { withPositions } = require('../../scripts/lib/trading/decision-history');
+// No positions read (no account, or its read failed): as the runner passes the history then.
+const blind = history => withPositions(history, { known: false, now: NOW });
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { runnerScan } = require('../../scripts/lib/runner-wiring');
 
@@ -102,8 +105,8 @@ function render(ext = false) {
     ['trade: qwen, full, no cache', p(CFG({ harness: 'qwen' })).trade(st.items, { ...opts, cached: null })],
     ['trade: codex, manage-only', p(CFG({ harness: 'codex' })).trade(st.items, { ...opts, manageOnly: true })],
     ['trade: paper mode, recovered', p(CFG({ paper: true })).trade(st.items, { ...opts, recovered: true })],
-    ['trade: no account configured, no journal read', p(CFG({ account: '' })).trade([st.items[0]], { ...opts, state: null, journalRead: false, trades: [], lessons: [] })],
-    ['trade: the account unreadable', p(CFG()).trade([st.items[0]], { ...opts, state: { id: '7', error: 'HTTP 502' } })],
+    ['trade: no account configured, no journal read', p(CFG({ account: '' })).trade([st.items[0]], { ...opts, history: blind(opts.history), state: null, journalRead: false, trades: [], lessons: [] })],
+    ['trade: the account unreadable', p(CFG()).trade([st.items[0]], { ...opts, history: blind(opts.history), state: { id: '7', error: 'HTTP 502' } })],
     ['trade: a failed scan', p(CFG()).trade([{ ...st.items[0], scan: null }], { ...opts, unavailable: ['MNQ strategy scan (need at least 3 bars, got 2): what fired is unknown'] })],
     ['premarket', p(CFG()).premarket('MNQ', { state: st.account })],
     ['eod', p(CFG()).eod({ state: st.account })],

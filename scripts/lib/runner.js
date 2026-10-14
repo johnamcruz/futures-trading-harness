@@ -44,7 +44,7 @@
 const { openTrades, describeOpenTrade } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
-const { decisionEntry, marketOf, parseResult, withPositions } = require('./trading/decision-history');
+const { decisionEntry, marketOf, parseResult, withPositions, exitRecords, appendExit, fillsNeededSince } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
@@ -176,6 +176,25 @@ function createRunner(deps) {
       event({ at: clock.now().toISOString(), kind, ...data });
     } catch (_err) {
       // logging is best effort
+    }
+  }
+
+  /**
+   * The account's fills since `sinceMs` for the decision history's outcomes (decision-history.js withPositions), or
+   * null: none needed (no unresolved decision), no live account, or the read failed (logged; outcomes stay unknown).
+   * The prop hooks' read is reused only when this pass's snapshot made it (`snapshotAt`, its time) and it covers
+   * `sinceMs`; else one adapter read.
+   */
+  async function historyFills(sinceMs, snapshotAt) {
+    if (sinceMs === null || !cfg.account || cfg.paper || typeof client.fillsSince !== 'function') return null;
+    const read = prop && typeof prop.recentFills === 'function' ? prop.recentFills() : null;
+    if (read && Array.isArray(read.fills) && snapshotAt !== null && read.atMs === snapshotAt && read.sinceMs <= sinceMs) return read.fills;
+    try {
+      const fills = await client.fillsSince(cfg.account, new Date(sinceMs));
+      return Array.isArray(fills) ? fills : null;
+    } catch (err) {
+      log(`history: the fills could not be read (${err.message}); closed entries' outcomes stay unknown`, 'error');
+      return null;
     }
   }
 
@@ -431,8 +450,9 @@ function createRunner(deps) {
       emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
         lastClose: last.c, rNow: (sign * (last.c - t.entry)) / t.risk, peakR, troughR, barsHeld });
       save({ ...t, peakR, troughR, barsHeld, lastBarT });
-      // The runner's own exit, for the decision history's real R (decision-history.js withPositions).
-      state = { ...state, runnerCloses: { ...(state.runnerCloses || {}), [cid]: { at: clock.now().toISOString(), r: Math.round(((sign * (last.c - t.entry)) / t.risk) * 100) / 100 } } };
+      // The runner's own exit, one record per position (append-only, the last few kept), for the decision history's
+      // real R (decision-history.js withPositions).
+      state = { ...state, runnerExits: appendExit(state.runnerExits, { contractId: cid, side: sign > 0 ? 'long' : 'short', openedAt: new Date(t.since).toISOString(), size: Number(p.size), at: clock.now().toISOString(), r: Math.round(((sign * (last.c - t.entry)) / t.risk) * 100) / 100 }) };
       log(`${item.symbol}: ${why}; closed ${t.setup} at market (peak ${peakR.toFixed(2)}R)`);
       for (const o of orders.filter(x => x.contractId === cid)) {
         try {
@@ -1118,10 +1138,13 @@ function createRunner(deps) {
         try { barClosed(x.symbol, { bar: x.bar.t, stale: Boolean(x.stale), action: d.action, contractId: x.contractId, bars: x.bars, ...(multi ? { minutes: x.minutes } : {}) }); } catch (_err) { /* recording never stops the pass */ }
       }
       if (state.trails) saveState(state);
-      // The account balance for the gate's prop-challenge checks, before any cycle.
+      // The account balance for the gate's prop-challenge checks, before any cycle. `snapshotAt`: this pass's
+      // snapshot time, so the decision history reuses only a fills read made by this pass's snapshot.
+      let snapshotAt = null;
       if (prop && cfg.account && !cfg.paper) {
         try {
-          await prop.snapshot(clock.now());
+          snapshotAt = clock.now().getTime();
+          await prop.snapshot(new Date(snapshotAt));
         } catch (err) {
           log(`account balance unavailable (${err.message}); the gate refuses prop entries once the snapshot is 10 min old`, 'error');
         }
@@ -1243,7 +1266,10 @@ function createRunner(deps) {
           // The entered decisions with their real positions (decision-history.js withPositions): an open trade's fill
           // and R; a position gone since its last cycle, closed (a failed account read closes nothing).
           const positionsKnown = Boolean(acct && !acct.error && !acct.openTradesError && Array.isArray(acct.positions));
-          state = { ...state, history: attempt('your entered decisions\' positions', () => withPositions((state && state.history) || [], { trades: tradeObjs, known: positionsKnown, now: cycleNow, market: marketOf(items, cfg.timeframe), closes: state.runnerCloses || {} }), (state && state.history) || []) };
+          // Their closing fills (search_trades), read once a cycle and only while a decision of today's is unresolved:
+          // the prop hooks' read of this pass when it covers them, else the adapter's. Unread: their R stays unknown.
+          const fills = positionsKnown ? await historyFills(fillsNeededSince((state && state.history) || [], cycleNow), snapshotAt) : null;
+          state = { ...state, history: attempt('your entered decisions\' positions', () => withPositions((state && state.history) || [], { trades: tradeObjs, known: positionsKnown, now: cycleNow, exits: exitRecords(state.runnerExits, state.runnerCloses), fills }), (state && state.history) || []) };
           // Several lanes: the decisions of the lanes that closed (and the first lane's and each open trade's lane's
           // last few), never a fast lane's flood; one lane: the last 10, as before.
           const firstLane = `${lanes[0].timeframe}m`;
@@ -1310,7 +1336,7 @@ function createRunner(deps) {
             }
           }
           try {
-            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed });
+            entry = decisionEntry({ ...base, items: run, entries: placed, journalFailed, positions: acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null });
           } catch (err) {
             log(`history: the decision's facts unavailable (${err.message}); its result line only`, 'error');
           }

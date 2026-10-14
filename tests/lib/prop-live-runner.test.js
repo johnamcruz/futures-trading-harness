@@ -261,8 +261,9 @@ test('a paper strategy stays paper inside a policy: the screen passes over a com
 test('the prop hooks have no in-trade decision: an open trade is left to the policy strategy\'s exit', () => {
   const { hooks } = setup();
   assert.strictEqual(hooks.position, undefined);
-  // supersede records a verdict (a setup skipped for a higher-priority policy) and openVerdicts reads them: no in-trade decision either.
-  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'openVerdicts', 'owners', 'screen', 'snapshot', 'summaries', 'supersede']);
+  // supersede records a verdict (a setup skipped for a higher-priority policy) and openVerdicts reads them; recentFills
+  // hands the decision history the fills a snapshot read: no in-trade decision either.
+  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'openVerdicts', 'owners', 'recentFills', 'screen', 'snapshot', 'summaries', 'supersede']);
 });
 
 test('combine CLI: start an attempt and read its status', () => {
@@ -358,6 +359,8 @@ test('each bar the snapshot checks the broker\'s balance against its fills since
   client.fills = [{ creationTimestamp: '2026-10-07T14:00:00Z', profitAndLoss: null, fees: 0.37 }, { creationTimestamp: '2026-10-07T14:02:00Z', profitAndLoss: -40.5, fees: 0.37 }];
   await hooks.snapshot(t('14:03:00'));
   assert.strictEqual(client.fillsFrom, '2026-10-07T13:30:00.000Z', 'the fills since the anchor');
+  // The decision history reuses that read (recentFills): what was read, from when, and when.
+  assert.deepStrictEqual(hooks.recentFills(), { sinceMs: Date.parse('2026-10-07T13:30:00Z'), atMs: Date.parse('2026-10-07T14:03:00Z'), fills: client.fills });
   assert.match(prop.combineBlock(home, account.name, t('14:03:30')), /doesn't reconcile: the broker reports \$50250, .* gives \$50208\.76/);
   // A position open: not checked (and not read).
   client.fillsFrom = undefined;
@@ -365,6 +368,15 @@ test('each bar the snapshot checks the broker\'s balance against its fills since
   await hooks.snapshot(t('14:06:00'));
   assert.strictEqual(client.fillsFrom, undefined);
   client.open = [];
+  // A broker that returns no list: nothing kept for the history (the earlier read stays, with its own time).
+  const kept = hooks.recentFills();
+  const saved = client.fillsSince;
+  let asked = 0;
+  client.fillsSince = async () => { asked += 1; return undefined; };
+  await hooks.snapshot(t('14:07:30'));
+  assert.strictEqual(asked, 1);
+  assert.deepStrictEqual(hooks.recentFills(), kept);
+  client.fillsSince = saved;
   // search_trades fails: entries wait, the runner goes on.
   client.fillsSince = async () => { throw new Error('search_trades: 503'); };
   await hooks.snapshot(t('14:09:00'));

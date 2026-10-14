@@ -80,7 +80,7 @@ description: Rules for running the trading harness unattended (headless, schedul
    you did (entered, skipped, planned, managed, no-trade, flattened, blocked, error), the
    setup and side, the price, your reason, and what happened since, from
    closed bars only: ticks moved, whether a skipped setup would have hit
-   +1R or -1R first, an entry's real position (open from its fill with R now, or closed with its R). Use it to
+   +1R or -1R first, an entry's real position (open from its fill with R now, closed with its R, or "unknown" or "unavailable": then you don't know, so don't guess). Use it to
    notice a pattern: the same setup skipped again and again while it keeps
    reaching +1R, or entries that keep getting stopped. Never chase the last
    outcome: one missed winner is not a reason to enter, and one stop is not
