@@ -530,6 +530,21 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));
   // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing.
   assert.ok(c.includes(`body at least ${cisd.PARAMS.minBody} of the range, the close in the top third, and a range of at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of that timeframe or a body engulfing the prior one`));
+  // Every bare field the cisd skill names is in a real briefing's m3.cisd entry (or its leg), and every status it names
+  // is one the code sets: a field the briefing drops fails.
+  const entries = briefings().flatMap(b => Object.values(b.sections.m3.data.cisd || {}).filter(x => x && typeof x === 'object'));
+  assert.ok(entries.length, 'a CISD in the briefings');
+  const keys = new Set(entries.flatMap(x => [...Object.keys(x), ...Object.keys(x.leg || {})]));
+  const skills = new Set(fs.readdirSync(path.join(ROOT, 'skills')));
+  const STATUS = ['waiting', 'touched', 'bounced', 'void', 'expired', 'weak'];
+  const src = read('scripts/lib/trading/cisd.js');
+  for (const m of read(file('cisd')).matchAll(/`([a-zA-Z]+)`/g)) {
+    const w = m[1];
+    if (skills.has(w) || w === 'unknown') continue;
+    if (STATUS.includes(w)) assert.ok(src.includes(`'${w}'`), `status ${w} is the code's`);
+    else assert.ok(keys.has(w), `cisd names \`${w}\`, not in the briefing's m3.cisd`);
+  }
+  for (const k of ['displacement', 'engulfing']) assert.ok(keys.has(k), k);
   // fib-retracement stays generic: no displacement-strength rules (they are the cisd skill's).
   assert.doesNotMatch(text, /displacement|engulf|doji|\bstrong\b|\bweak\b/i, 'fib-retracement names no displacement rule');
   assert.match(flat(read(file('cisd'))), /strong/);

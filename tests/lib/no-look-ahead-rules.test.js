@@ -134,8 +134,8 @@ test('the backtest engine fills an entry decided at bar t at bar t+1\'s open plu
 });
 
 test('the backtest engine\'s entries through bar T are the same with or without the bars after T', () => {
-  // The shipped 3m rules strategies, and the fixture ones (fx_break, fx_cross) so the file has entries before each cut
-  // (the textbook cisd_ote, which needs a 15m CISD after a key sweep, takes none in it).
+  // The shipped 3m rules strategies (cisd_ote, paper, included), and the fixture ones (fx_break, fx_cross), so the file
+  // has entries before each cut whichever strategies fire in it.
   const { strategies } = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_STRATEGIES });
   const rulesStrategies = strategies.filter(s => s.valid && s.signal === 'rules' && s.timeframe === '3m');
   const entries = (bars, last) => runEngine(market(bars), rulesStrategies, { timeframe: 3, gate: false }).trades

@@ -337,3 +337,26 @@ test('cisdHigherMinutes: cisd_entry(m) also takes the higher timeframe\'s bounce
   assert.deepStrictEqual(g('cisd_entry(15)'), want);
   assert.ok(e60.some(x => x !== 0) || e15.some(x => x !== 0), 'the fixture has a bounce');
 });
+
+test('engulfing needs the prior candle the opposite colour; a candle never confirms both ways', () => {
+  // A bullish candle covering a prior BULLISH body is not engulfing (and, small, not strong).
+  const same = [K(100, 100.75, 99.75, 100.5), K(99.75, 101, 99.5, 100.75)];
+  const d = cisd.displacementOf(same, 1, 1, [NaN, 10]);
+  assert.deepStrictEqual([d.engulfing, d.strong], [false, false]);
+  // The same candle after a bearish one: engulfing, and so strong.
+  const opp = [K(100.5, 100.75, 99.75, 100), K(99.75, 101, 99.5, 100.75)];
+  assert.deepStrictEqual([cisd.displacementOf(opp, 1, 1, [NaN, 10]).engulfing, cisd.displacementOf(opp, 1, 1, [NaN, 10]).strong], [true, true]);
+  // Both references live at once can't both confirm on one candle (a second run's first candle uses the first run's
+  // reference up, or can't reach it): over random candles, never two CISDs on one candle.
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  let p = 100;
+  const cs = Array.from({ length: 5000 }, () => {
+    const o = p + (rnd() - 0.5) * 3; const c = o + (rnd() - 0.5) * 4;
+    p = c;
+    return K(o, Math.max(o, c) + rnd(), Math.min(o, c) - rnd(), c);
+  });
+  const ev = cisd.findCisds(cs, { minRun: 1 });
+  assert.ok(ev.length > 100);
+  assert.strictEqual(new Set(ev.map(e => e.confirm)).size, ev.length);
+});

@@ -188,7 +188,7 @@ function cisdBlock(bars, level) {
     if (f.unavailable) { out[f.tf] = `unavailable (${f.unavailable})`; continue; }
     if (f.none) { out[f.tf] = 'none in these bars'; continue; }
     out[f.tf] = {
-      dir: f.dir, level: f.level, confirmedClose: f.confirmedClose, sweep: f.sweep, leg: { origin: f.leg.origin, extreme: f.leg.extreme },
+      dir: f.dir, level: f.level, confirmedClose: f.confirmedClose, displacement: f.displacement, engulfing: f.engulfing, sweep: f.sweep, leg: { origin: f.leg.origin, extreme: f.leg.extreme },
       ote: f.ote, status: f.status, priceInOte: f.priceInOte, retracement: f.retracement,
     };
   }
@@ -640,8 +640,9 @@ function cisdLine(block, et) {
   if (!block || typeof block !== 'object') return null;
   const parts = Object.entries(block).filter(([, x]) => !(typeof x === 'string' && x.startsWith('unavailable'))).map(([tf, x]) => {
     if (typeof x === 'string') return `${tf} none`;
-    const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}` : `zone ${x.status}`;
-    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}`;
+    const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}`
+      : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
+    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement}${x.engulfing ? ', engulfing' : ''})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}`;
   });
   return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
