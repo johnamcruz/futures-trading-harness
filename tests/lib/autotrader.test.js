@@ -71,6 +71,28 @@ test('prompts name the skill, symbol, account, and paper mode', () => {
   assert.match(p.eod(), /end-of-day skill on account 123 for the trading day ending \d{4}-\d\d-\d\d, on \d+-minute bars \(the reconcile tool with day \d{4}-\d\d-\d\d and timeframe \d+\): flatten/);
 });
 
+test('stable prompt prefix: every cycle\'s prompt starts with the same head, the time after it, so consecutive prompts share it (a local model server\'s prompt cache)', () => {
+  const { stableHead } = require('../../scripts/lib/autotrader');
+  const common = (a, b) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n += 1; return n; };
+  const c = validateConfig({ account: '123' });
+  const head = stableHead('/fth');
+  assert.match(head, /^Autonomous cycle\. Follow the autonomous-trading skill\. No user is present\. Harness root \(FTH_ROOT\): \/fth;/);
+  // Nothing that changes between cycles in it: no time, no date, no account, no symbol.
+  assert.doesNotMatch(head, /\d\d:\d\d|\d{4}-\d\d-\d\d|123|MNQ/);
+  const bar = (t, close) => [{ symbol: 'MNQ', bar: { t, c: close, file: '/b/MNQ-3m.json', contractId: 'MNQ', recent: [{ t, o: close - 1, h: close + 1, l: close - 2, c: close, v: 100 }] } }];
+  const state = (balance, at) => ({ id: '123', at, balance, positions: [], workingOrders: 0 });
+  // Two consecutive trade cycles, a different bar, time and balance: they share the head and the time's leading digits.
+  const p1 = prompts(c, et(10, 3), '/fth').trade(bar('2026-10-07T14:00:00Z', 21500), { state: state(50000, et(10, 3).toISOString()) });
+  const p2 = prompts(c, et(10, 6), '/fth').trade(bar('2026-10-07T14:03:00Z', 21510.25), { state: state(49950, et(10, 6).toISOString()) });
+  for (const p of [p1, p2]) assert.ok(p.startsWith(`${head} The cycle's time: 2026-10-07 10:0`), p.slice(0, head.length + 40));
+  assert.ok(common(p1, p2) >= head.length, `${common(p1, p2)} < ${head.length}`);
+  // The premarket and end-of-day prompts start with the same head.
+  const p = prompts(c, et(9, 0), '/fth');
+  for (const q of [p.premarket('MNQ'), p.eod()]) assert.ok(q.startsWith(`${head} The cycle's time: `));
+  // The time is still stated once, New York time with UTC.
+  assert.match(p1, /The cycle's time: 2026-10-07 10:03:00 ET \(2026-10-07T14:03:00\.000Z\)\./);
+});
+
 test('schedule: premarket, then trade cycles at the interval, then end of day once', () => {
   let { action, state } = decide(cfg, null, et(8, 30));
   assert.strictEqual(action, null);
@@ -1028,4 +1050,18 @@ test('loadList: the gate\'s skills, its parenthetical when the harness is gated,
   // The default is the gate's own list (skills-loaded.js REQUIRED_FOR_ENTRY) and nothing more yet.
   const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
   assert.strictEqual(loadList(false), `${REQUIRED_FOR_ENTRY.slice(0, -1).join(', ')}, and ${REQUIRED_FOR_ENTRY[REQUIRED_FOR_ENTRY.length - 1]}`);
+});
+
+test('childEnv: several lanes, the gate learns each symbol\'s lanes whose bar closed this cycle (FTH_CYCLE_LANE_BARS); one lane or a manual run: none', () => {
+  const ctx = { symbols: [
+    { symbol: 'MNQ', bar: { t: '2026-10-07T13:57:00.000Z' }, lane: '3m' },
+    { symbol: 'MNQ', bar: { t: '2026-10-07T13:59:00.000Z' }, lane: '1m' },
+  ] };
+  const env = childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"stale":1}' }, ctx);
+  assert.deepStrictEqual(JSON.parse(env.FTH_CYCLE_LANE_BARS), { MNQ: { 3: '2026-10-07T13:57:00.000Z', 1: '2026-10-07T13:59:00.000Z' } });
+  const { loadConfig } = require('../../scripts/lib/trading/config');
+  assert.deepStrictEqual(loadConfig(env).cycleLaneBars, { MNQ: { 1: '2026-10-07T13:59:00.000Z', 3: '2026-10-07T13:57:00.000Z' } });
+  // One lane (no lane on the items) or no context: an inherited value is dropped.
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }, { symbols: [{ symbol: 'MNQ', bar: { t: 'x' } }] }).FTH_CYCLE_LANE_BARS, undefined);
+  assert.strictEqual(childEnv(cfg, '/r', { FTH_HOME: '/srv/fth', FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"x"}}' }).FTH_CYCLE_LANE_BARS, undefined);
 });

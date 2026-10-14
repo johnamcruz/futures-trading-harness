@@ -39,6 +39,8 @@ test('codex block wires the gateway and every agent role', () => {
   // The runner's exchange calendar reaches the gateway (Codex forwards only listed variables).
   const gatewayVars = JSON.parse(/^env_vars = (\[.*\])$/m.exec(block.slice(block.indexOf('[mcp_servers.broker]')))[1]);
   for (const v of ['FTH_CLOSED_DATES', 'FTH_EARLY_CLOSE_DATES', 'FTH_AUTONOMOUS', 'FTH_REPLAY_NOW', 'FTH_HOME', 'FTH_SYMBOLS']) assert.ok(gatewayVars.includes(v), `gateway: ${v}`);
+  // The run's role-skills mode (the runner sets full for Codex): its gateway reads it as the rest of its run does.
+  assert.ok(gatewayVars.includes('FTH_ROLE_SKILLS'), 'gateway: FTH_ROLE_SKILLS');
   assert.match(block, /config_file = ".*\/\.codex\/agents\/trade-executor\.toml"/);
 });
 

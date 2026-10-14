@@ -72,6 +72,13 @@ strategies read with `field(...)` (a warning when missing), market hours (a
 warning when closed) and the kill switch. Exit 0: ready (warnings allowed);
 exit 1: fix every `FAIL` line first. `--json` prints the report as JSON.
 
+With opencode, the live gate requires the roles' skill lookups by default
+(`FTH_ROLE_SKILLS` unset is index mode: a role's report counts for an entry only
+with the lookups its bar requires). The runner's start check turns trading off
+on a workspace generated for another mode: for full mode set `FTH_ROLE_SKILLS=full` and run
+`FTH_ROLE_SKILLS=full node scripts/sync-harness.js`; back to the default with
+`node scripts/sync-harness.js`.
+
 ## 5. Start the runner
 
 ```bash

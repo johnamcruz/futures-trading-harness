@@ -31,7 +31,13 @@ other "skipped: lower priority": never enter it (the gate refuses it),
 and say in your result which one you traded. A rules strategy's signal
 expires as trade-session step 2 says (the trigger check), so a 1m setup
 can't wait. A cycle with only a 1m bar reuses the analysts' cached reports of the
-last 3m bar (served under "Cached reports"): don't launch them again.
+last 3m bar (served under "Cached reports"): don't launch them again. A role
+whose report the prompt doesn't give runs: another lane's setup can require
+its skill lookups. When you launch the analysts and `risk-manager`,
+name every other lane's setup that fired this cycle with its trend rule, as
+the prompt shows it (e.g. "MNQ 1m: tick_up short, trend rule reversal"): the
+order gate counts their reports for an entry only with the lookups that setup
+requires, as if it were in the bar briefing.
 
 **Analysts on their own timeframe.** When the prompt says "Each analyst
 reads its own timeframe", run them as trade-session step 2 says ("An

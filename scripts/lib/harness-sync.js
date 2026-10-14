@@ -11,7 +11,7 @@
  *   workspace/opencode.json                   opencode project config: MCP servers, roles as
  *                                             subagents, permissions (scripts/lib/opencode.js); its role
  *                                             prompts in the FTH_ROLE_SKILLS mode (role-skills.js; the
- *                                             committed file is the default, full)
+ *                                             committed file is the default, index)
  *   qwen-extension/                           Qwen Code extension (install with
  *     qwen-extension.json, QWEN.md            `qwen extensions link`): generated
  *     agents/<role>.md, commands/<name>.md    Qwen-format agents and commands, plus
@@ -218,9 +218,9 @@ function checkRoleSkills(root) {
 
 /**
  * workspace/opencode.json: the opencode adapter (scripts/lib/opencode.js), its role prompts in `mode`
- * (role-skills.js: full, the default, or index).
+ * (role-skills.js: index, the default, or full).
  */
-function opencodeJson(root, { mode = 'full' } = {}) {
+function opencodeJson(root, { mode = roleSkills.DEFAULT_MODE } = {}) {
   const agents = loadAgents(root).map(a => {
     const skillDocs = agentSkills(root, a);
     return { ...a, skillDocs, skillPlan: roleSkills.skillPlan(a, skillDocs, mode) };
@@ -234,7 +234,7 @@ const QWEN_LINKS = ['skills', 'scripts', 'strategies', 'hooks', 'accounts'];
 const QWEN_STALE_LINKS = ['rules', 'models'];
 
 /** Map of relative path -> expected file content. */
-function expectedFiles(root, { mode = 'full' } = {}) {
+function expectedFiles(root, { mode = roleSkills.DEFAULT_MODE } = {}) {
   checkRoleSkills(root);
   const files = {};
   const agentsMd = workspaceAgentsMd(root);
@@ -291,7 +291,7 @@ function removeStaleLinks(root, check, stale) {
   }
 }
 
-function syncHarness(root, { check = false, mode = 'full' } = {}) {
+function syncHarness(root, { check = false, mode = roleSkills.DEFAULT_MODE } = {}) {
   const expected = expectedFiles(root, { mode });
   const stale = [];
   for (const [rel, content] of Object.entries(expected)) {

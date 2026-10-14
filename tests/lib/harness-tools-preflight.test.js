@@ -42,6 +42,10 @@ test('startPreflight: a manual trade run is refused, a manual end of day warns, 
   const warned = [];
   const warn = s => warned.push(s);
   assert.strictEqual(await startPreflight({ root: ROOT, env: {}, once: 'trade', killSwitchFile, warn, check: ok }), 'ok');
+  // The runner config's harness reaches the check (roleSkillsMismatch decides an opencode run by it).
+  const seen = [];
+  await startPreflight({ root: ROOT, env: {}, harness: 'opencode', once: 'trade', killSwitchFile, warn, check: async a => { seen.push(a.harness); return 1; } });
+  assert.deepStrictEqual(seen, ['opencode']);
   await assert.rejects(() => startPreflight({ root: ROOT, env: {}, once: 'trade', killSwitchFile, warn, check: fail }), /boom/);
   await assert.rejects(() => startPreflight({ root: ROOT, env: {}, once: 'premarket', killSwitchFile, warn, check: fail }), /boom/);
   assert.ok(!fs.existsSync(killSwitchFile));

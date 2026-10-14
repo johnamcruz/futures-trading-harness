@@ -44,12 +44,13 @@ Which live and replay broker servers are configured is in `mcp-configs/brokers.j
   skills it looks up only as needed in index mode (its body's load sentence names `role-skills` and
   `role-index` together, kept equal, so every adapter that reads the body loads them all as before;
   the role then holds `mcp__harness__skill_lookup`). `FTH_ROLE_SKILLS` (`scripts/lib/role-skills.js`)
-  picks opencode's prompts: `full` (the default, committed) embeds both lists; `index` embeds
-  `role-skills` and lists `role-index` one line per skill, read with `skill_lookup` (the prompt's
-  load sentence becomes two: the core below, "Look up as needed: ..." for the index), and the
-  gate requires the situational ones a bar's briefing triggers (`SITUATIONAL` in
-  `scripts/lib/trading/skills-loaded.js`; `scripts/lib/trading/skill-lookups.js`). Index mode stays
-  off until a paired replay proves it.
+  picks opencode's prompts: `index` (the default, committed) embeds `role-skills` and lists
+  `role-index` one line per skill, read with `skill_lookup` (the prompt's load sentence becomes
+  two: the core below, "Look up as needed: ..." for the index), and the gate requires the
+  situational ones a bar's briefing triggers (`SITUATIONAL` in
+  `scripts/lib/trading/skills-loaded.js`; `scripts/lib/trading/skill-lookups.js`); `full`, on
+  request, embeds both lists. The runner passes opencode's mode to its run and `full` to every
+  other harness's (their roles load every skill as their body says).
 - `skills/<name>/SKILL.md`: frontmatter `name` (= folder) and `description`, then
   `## When to Use`, `## How It Works`, `## Examples`. Workflows are skills;
   `commands/` are thin shims that say "Use the `<skill>` skill".

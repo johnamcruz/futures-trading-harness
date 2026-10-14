@@ -145,8 +145,9 @@ test('the runner\'s report cache (runner-wiring reportCacheFor): opencode and Cl
   rev.sections.m3.data.candidates = [{ name: 'x', direction: 'long', trendRule: 'reversal' }];
   B.writeBriefing(home, rev);
   const index = { FTH_ROLE_SKILLS: 'index' };
-  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], {}).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager'], 'full mode: as before');
+  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], { FTH_ROLE_SKILLS: 'full' }).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager'], 'full mode: as before');
   assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], index).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, []);
+  assert.deepStrictEqual(reportCacheFor(home, { harness: 'opencode', cycle: 'full' }, [], {}).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [], 'index is the default');
   assert.deepStrictEqual(reportCacheFor(home, { harness: 'claude', cycle: 'full' }, [], index).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [ANALYSTS[0], 'risk-manager'], 'not an opencode run: no index mode');
   B.writeBriefing(home, b);
   const lean = reportCacheFor(home, { harness: 'claude', cycle: 'lean' });

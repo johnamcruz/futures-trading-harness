@@ -26,7 +26,7 @@
  * A harness that passes no transcript (Codex) carries the skills in the
  * workspace instructions (AGENTS.md); for it the check doesn't apply.
  *
- * In index mode (FTH_ROLE_SKILLS=index, opencode only) the situational skills
+ * In index mode (the default, FTH_ROLE_SKILLS not full, opencode only) the situational skills
  * (SITUATIONAL) marked for the head trader that the bar briefing triggers are
  * required as well (the gate adds them to the list it checks), and a
  * skill_lookup in the session's transcript counts as a load.
@@ -44,7 +44,7 @@ const path = require('path');
 const REQUIRED_FOR_ENTRY = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
 
 /*
- * Situational skills (index mode only, FTH_ROLE_SKILLS=index: role-skills.js): when the cycle's bar briefing shows
+ * Situational skills (index mode only, the default, FTH_ROLE_SKILLS not full: role-skills.js): when the cycle's bar briefing shows
  * the situation, the skill is read before an entry by each role whose `role-index` lists it (skill_lookup naming its
  * role during one of its calls this cycle: skill-lookups.js; a subagent's own tool calls, skill loads included, are
  * not in the session's transcript, so the harness tool records them), and, for an entry marked `head`, by the head
@@ -92,6 +92,8 @@ function parseTrigger(text) {
 
 const fires = (trigger, m3) => TRIGGERS[trigger.key].test(m3 || {}, trigger.value);
 const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
+/** Every situational skill marked for the head trader: what an entry needs when the cycle's facts can't be read. */
+const headSituationalSkills = (table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
 /** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
 const MAX_BYTES = 50 * 1024 * 1024;
@@ -192,4 +194,4 @@ function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
     : null;
 }
 
-module.exports = { REQUIRED_FOR_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, skillName, transcriptFiles, skillsInTranscript, checkSkillsLoaded };
+module.exports = { REQUIRED_FOR_ENTRY, SITUATIONAL, TRIGGERS, parseTrigger, fires, describeTrigger, situationalSkills, headSituationalSkills, skillName, transcriptFiles, skillsInTranscript, checkSkillsLoaded };

@@ -186,7 +186,8 @@ for its result (not left running in the background), and always run
 `risk-manager` phase 2 and `trade-executor` in the foreground. Without
 subagents (interactively), play each role yourself in turn; in an autonomous
 run there is no stand-in: without the roles' reports, no entry. Pass symbol,
-contractId, and the current time.
+contractId, and the current time, and with several lanes every other lane's
+setup that fired this cycle with its trend rule (the `runner-lanes` skill).
 
 **Cached reports.** The autonomous runner keeps each role's last report and
 gives it again under "Cached reports" in the prompt while what it rests on

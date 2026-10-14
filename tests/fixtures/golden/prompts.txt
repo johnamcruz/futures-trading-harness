@@ -1,7 +1,8 @@
 === trade: opencode, full cycle, two symbols, cached reports ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -41,9 +42,10 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: claude, lean cycle ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -83,9 +85,10 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: qwen, full, no cache ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -115,9 +118,10 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: codex, manage-only ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -143,9 +147,10 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: paper mode, recovered ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   The previous cycle was stopped before it finished: first confirm every open position has a working protective stop (list_open_positions, list_open_orders) and fix that before anything else.
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
@@ -175,9 +180,10 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: no account configured, no journal read ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -208,9 +214,10 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: the account unreadable ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -243,9 +250,10 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === trade: a failed scan ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file for the 3-minute timeframe instead of fetching it.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
   Premarket plan: long above 27431.75 on volume, short below 27398.25; avoid 10:00 ET data.
@@ -279,9 +287,10 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === premarket ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
@@ -289,9 +298,10 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === eod ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.
@@ -299,9 +309,10 @@ Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === eod catch-up ===
-Autonomous cycle at 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
+Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   Account 7 at 10:33 ET: balance $50,413; 1 open position (below); 2 working orders.
   MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.
   mini attempt (active): floor $48,413, cushion $2,000, profit +$413 of $3,000, day +$113, 26 sessions left; prop_portfolio size budget $400.

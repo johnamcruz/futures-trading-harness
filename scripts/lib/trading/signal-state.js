@@ -30,6 +30,17 @@ const FUTURE_TOLERANCE_MIN = 1;
 const signalFile = (home, root, timeframe) => path.join(home, 'signals', `${familyRoot(root)}-${timeframe}.json`);
 const tfOf = stepMs => `${Math.round(stepMs / 60000)}m`;
 
+/**
+ * A fired scan result's trend rule, as the bar briefing names it (briefing.js candidate): 'reversal' (a strategy with
+ * mtf: reversal), 'allows' or 'against' (the trend rule for its side), or null (unknown). Its style is the scan's
+ * (strategies.js withStyle stamps the strategy file's on every fired result), else `style` when given.
+ */
+function candidateTrendRule(r, style = null) {
+  const mtf = { ...(style ? { style } : {}), ...((r && r.mtf) || {}) };
+  const allowed = r && r.direction === 'long' ? mtf.longAllowed : mtf.shortAllowed;
+  return mtf.style === 'reversal' ? 'reversal' : allowed === false ? 'against' : allowed === true ? 'allows' : null;
+}
+
 /** The record for scan `results` on the bar `bar` ({ t }) of `symbol`, `stepMs` long. */
 function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source = null, retiredLane = null }) {
   return {
@@ -41,6 +52,9 @@ function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source =
     source,
     candidates: (results || []).filter(r => r.candidate && r.direction && r.signal === 'rules')
       .map(r => ({ name: r.name, direction: r.direction, stopDistance: r.stopDistance ?? null, ...(r.confluence ? { confluence: r.confluence } : {}) })),
+    // Every setup that fired, as the bar briefing lists them (any signal type), with its trend rule: in index mode a
+    // lane's setups decide the roles' required lookups as the briefing's candidates do (skill-lookups.js cycleFacts).
+    setups: (results || []).filter(r => r.candidate && r.direction).map(r => ({ name: r.name, direction: r.direction, trendRule: candidateTrendRule(r) })),
     // The runner's lane on this timeframe lists a retired strategy (lanes.js retireLanes): it enters nothing.
     ...(Array.isArray(retiredLane) && retiredLane.length ? { retiredLane } : {}),
   };
@@ -195,4 +209,4 @@ function lastRecordedBar(home, root, timeframe) {
   return { bar: rec.asOf, timeframe: tf };
 }
 
-module.exports = { retiredLaneRefusal, syncRetiredMarks, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
+module.exports = { candidateTrendRule, retiredLaneRefusal, syncRetiredMarks, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };

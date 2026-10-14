@@ -55,6 +55,29 @@ function cycleBarsOf(raw) {
   }
 }
 
+/**
+ * FTH_CYCLE_LANE_BARS ({"MNQ": {"1": "<bar open>"}}): the lanes' bars that closed this cycle, by family root and
+ * minutes. Unset or blank: {} (one lane). Set but not that shape: null, which the lookups read as unknown lanes, so
+ * every situational lookup is required (fails closed).
+ */
+function cycleLaneBarsOf(raw) {
+  if (raw === undefined || String(raw).trim() === '') return {};
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+    const out = {};
+    for (const [k, lanes] of Object.entries(o)) {
+      if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) return null;
+      const entries = Object.entries(lanes);
+      if (entries.some(([m, t]) => !/^[1-9]\d{0,3}$/.test(m) || typeof t !== 'string')) return null;
+      out[familyRoot(k)] = { ...(out[familyRoot(k)] || {}), ...Object.fromEntries(entries) };
+    }
+    return out;
+  } catch (_err) {
+    return null;
+  }
+}
+
 function intEnv(env, name, fallback, { min = 0 } = {}) {
   const raw = env[name];
   if (raw === undefined || String(raw).trim() === '') return fallback;
@@ -114,16 +137,20 @@ function loadConfig(env = process.env) {
     // The cycle's transcript as the harness streams it (FTH_CYCLE_TRANSCRIPT, set by the runner): the gateway's
     // view of which skills loaded and which roles ran (a hook passes its own transcript_path instead).
     cycleTranscript: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null,
-    // How the roles' prompts carry their skills (FTH_ROLE_SKILLS, role-skills.js; the runner sets it for opencode):
-    // in index mode a role's report counts only with the lookups the bar requires (skill-lookups.js). A value that
-    // isn't a mode is read as index, the strictest.
-    roleSkills: ['', 'full'].includes(String(env.FTH_ROLE_SKILLS || '').trim()) ? 'full' : 'index',
+    // How the roles' prompts carry their skills (FTH_ROLE_SKILLS, role-skills.js; the runner sets it for every harness:
+    // opencode's mode, full for the others, whose roles load every skill as their body says): in index mode, the
+    // default, a role's report counts only with the lookups the bar requires (skill-lookups.js). Only an explicit
+    // full is full: unset, blank or a value that isn't a mode is read as index, the strictest.
+    roleSkills: String(env.FTH_ROLE_SKILLS || '').trim() === 'full' ? 'full' : 'index',
     // The roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js): roles-ran
     // counts them as returned. Only role names the cache can hold; anything else is ignored.
     cycleCached: String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x)),
     // The bar each symbol's cycle decides (FTH_CYCLE_BARS, set by the runner: {"MNQ": "<bar open time>"}), keyed by
     // family root: phase 2's facts are checked against that bar's briefing (fact-claims.js). Unreadable: none.
     cycleBars: cycleBarsOf(env.FTH_CYCLE_BARS),
+    // Several lanes (FTH_CYCLE_LANE_BARS, set by the runner): each symbol's lanes whose bar closed this cycle, by minutes,
+    // { ROOT: { minutes: "<bar open>" } }: in index mode their candidates trigger lookups too (skill-lookups.js).
+    cycleLaneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS),
     // The contracts the user selected (FTH_SYMBOLS; the runner sets it from its symbols): a rules
     // strategy trades only the selected leg of a micro/mini family (strategies.js rootRefusal).
     // Unset in an autonomous run, the selection is lost: an error, every entry refused.

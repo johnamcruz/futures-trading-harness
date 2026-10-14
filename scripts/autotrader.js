@@ -311,7 +311,7 @@ async function main(rawArgv) {
   checkClaudeSettings(cfg);
   writeQwenSettings(cfg, dataDir, opts);
   // The harness tools server the cycles use answers with the registry's tools; else no trading (harness-tools/preflight.js).
-  const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), once, killSwitchFile });
+  const preflight = once => startPreflight({ root: ROOT, env: childEnv(cfg, ROOT), harness: cfg.harness, once, killSwitchFile });
   // A replay step is a pass of the live loop: like it, a failure turns trading off and end of day still runs.
   if (!opts.dryRun && arg(argv, '--once')) await preflight(resolveClock(process.env, { testClock: false }).replay ? null : arg(argv, '--once'));
   // Codex may write the blackouts directory from its sandbox, but can't create it.

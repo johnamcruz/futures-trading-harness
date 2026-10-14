@@ -72,18 +72,26 @@ environment. Each role's prompt is its agent body followed by the skills its
 every call without a skill-load turn, as part of its fixed prompt prefix that
 a local model server caches, and its "Load the skills" sentence says they are
 below. A role's optional `role-index` (skills its "Load the skills" sentence
-names with the core: Claude Code, Codex and Qwen Code load them all) is
-embedded in full too by default; with `FTH_ROLE_SKILLS=index` (generated with
-`FTH_ROLE_SKILLS=index node scripts/sync-harness.js`; the runner's start check
-refuses a workspace generated for another mode) it becomes one line per skill
-(its description), which the role reads with the harness tool `skill_lookup`
-only when the cycle needs it, and the prompt's load sentence becomes two (the
-core below; "Look up as needed: ..." for the index). Where a bar's briefing makes an indexed skill
+names with the core: Claude Code, Codex and Qwen Code load them all) is, by
+default (`FTH_ROLE_SKILLS` unset or `index`, the committed file), one line per
+skill (its description), which the role reads with the harness tool
+`skill_lookup` only when the cycle needs it, and the prompt's load sentence
+becomes two (the core below; "Look up as needed: ..." for the index). With
+`FTH_ROLE_SKILLS=full` (generated with `FTH_ROLE_SKILLS=full node
+scripts/sync-harness.js`; the runner's start check refuses a workspace
+generated for another mode) the index is embedded in full too. The runner
+passes opencode's mode to its run and `full` to every other harness's run,
+whose roles load all their skills as their body says, so the gate never waits
+on a lookup those roles don't make. Where a bar's briefing makes an indexed skill
 necessary (`SITUATIONAL`, `scripts/lib/trading/skills-loaded.js`), the order
 gate counts the role's report for an entry only if the role looked it up
 during that call: the harness tool records each lookup with the role it names
 (`scripts/lib/trading/skill-lookups.js`), since a subagent's own tool calls
-are not in the session's transcript. Such a role is never served from the
+are not in the session's transcript. With several lanes, the candidates of
+each other lane whose bar closed this cycle count too (that lane's briefing on
+its bar, else its signal record on its bar, whose setups carry their trend
+rule; neither, or an unreadable list of the cycle's lanes: every lookup is
+required). The cycle prompt shows each lane setup's trend rule. Such a role is never served from the
 report cache on that bar, and with no current briefing every situational
 lookup of its index is required (fails closed). Exits are never held. Permissions follow opencode's rule (the last matching rule wins;
 headless, anything not allowed is refused): the session denies everything,
