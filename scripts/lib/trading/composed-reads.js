@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The trade-lifecycle reads checker (docs/COMPOSED-ENTRY.md section 3.2): the model's combination, stated as reads,
+ * The trade-lifecycle reads checker (the trade-lifecycle design, its read vocabulary): the model's combination, stated as reads,
  * checked in code against the cycle bar's briefing. Pure: no files, no clock; the caller hands it the briefing
  * (fact-claims.js briefingFor with the cycle bar) and the skill names.
  *
@@ -196,7 +196,7 @@ function sourcePrices(kind, source, b, base) {
 function checkRead(p, b, { tick = 0.25 } = {}) {
   const res = (check, fact, extra = {}) => ({ check, fact, field: null, value: null, dir: null, ...extra });
   if (p.kind === 'ambiguous') return res(false, 'a negation, a bracket or a character outside plain ASCII: state each read plainly');
-  if (p.kind === 'unknown') return res('unchecked', p.why || 'not a form this check knows (docs/COMPOSED-ENTRY.md section 3.2)');
+  if (p.kind === 'unknown') return res('unchecked', p.why || 'not a form this check knows (the forms: trading/composed-reads.js)');
   const m3 = data(b, 'm3');
   if (!m3) return res('unchecked', 'no bar briefing');
   const base = num(b.minutes) ? (b.minutes % 60 === 0 ? `${b.minutes / 60}h` : `${b.minutes}m`) : null;
@@ -412,8 +412,9 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     if (!STEPS.includes(step)) return bad(`step must be one of ${STEPS.join(', ')}`);
     if (!skill || !SKILL.test(skill)) return bad('skill must be a skill folder name');
     if (known && !known.has(skill)) return bad(`no skill named ${skill}`);
-    if ((step === 'stop') !== (p.kind === 'stop') && (p.kind === 'stop' || step === 'stop')) return bad('a stop read is "stop <source> <price>", in the stop step only');
-    if ((step === 'target') !== (p.kind === 'target') && (p.kind === 'target' || step === 'target')) return bad('a target read is "target <source> <price>", in the target step only');
+    // A stop or target read only in its own step, and that step holds only its own form.
+    const own = ['stop', 'target'].find(k => (step === k) !== (p.kind === k));
+    if (own) return bad(`a ${own} read is "${own} <source> <price>", in the ${own} step only`);
     const c = checkRead(p, briefing, { tick });
     return { ...row, ...c, agrees: true };
   });

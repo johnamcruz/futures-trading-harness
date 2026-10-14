@@ -2,7 +2,7 @@
 
 // The trade-lifecycle reads checker (scripts/lib/trading/composed-reads.js): the model's reads parsed into closed forms
 // and checked against the bar briefing, side agreement, the uncapped candle relations, and the canonical signatures.
-// The owner's scenario 1 (docs/COMPOSED-ENTRY.md section 1) on a briefing shaped as buildBriefing writes it, then on
+// The owner's scenario 1 (the trade-lifecycle design) on a briefing shaped as buildBriefing writes it, then on
 // briefings built from the parity fixture bars.
 
 const test = require('node:test');
