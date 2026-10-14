@@ -233,7 +233,9 @@ test('live loop: a harness tools server that fails the start check turns trading
   };
   const first = start();
   try {
-    await waitFor('the kill switch', 30000, () => fs.existsSync(killSwitch) || first.runner.exitCode !== null);
+    // Its whole reason written (the file can be seen created before its line is in it; the gate needs only that it exists).
+    const written = () => { try { return fs.readFileSync(killSwitch, 'utf8').endsWith('\n'); } catch { return false; } };
+    await waitFor('the kill switch', 30000, () => written() || first.runner.exitCode !== null);
     assert.strictEqual(first.runner.exitCode, null, `the runner keeps running:\n${first.io.out}`);
     const reason = fs.readFileSync(killSwitch, 'utf8');
     assert.match(reason, /^the harness tools server \(.*harness-tools-mcp\.js\) does not offer the harness's tools .*Fix it, then remove this file to resume trading\.\n$/);

@@ -142,4 +142,4 @@ function createMcpClient({ command, args = [], env = process.env, cwd = undefine
   };
 }
 
-module.exports = { createMcpClient, McpError, PROTOCOL_VERSION };
+module.exports = { createMcpClient, McpError, PROTOCOL_VERSION, DEFAULT_TIMEOUT_MS };

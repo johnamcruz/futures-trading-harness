@@ -731,7 +731,9 @@ test('MCP gateway: the configured server sits behind the contract translator: st
     call(4, 'get_bars', { contractId: 'ES', unit: 'minute', unitNumber: 1, limit: 5 }),
     call(5, 'close_position', { accountId: 7, contractId: 'fake:MNQ:Z26' }),
   ].join('\n')}\n`);
-  await new Promise(r => setTimeout(r, 2500));
+  // Every reply in (not a fixed sleep: a loaded machine can take longer than any guess), then the end of input.
+  const answered = () => new Set(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l).id));
+  for (const until = Date.now() + 30000; [1, 2, 3, 4, 5].some(id => !answered().has(id)) && Date.now() < until;) await new Promise(r => setTimeout(r, 25));
   gw.stdin.end();
   await new Promise(resolve => gw.on('close', resolve));
   const byId = Object.fromEntries(out.trim().split('\n').map(l => JSON.parse(l)).map(r => [r.id, r]));
@@ -857,9 +859,13 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
     } });
     let out = '';
     gw.stdout.on('data', c => { out += c; });
+    // The clock starts once the gateway, the translator and the server are up (an initialize answered from the server):
+    // the exit's own cost is timed, not three processes starting on a loaded machine.
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } })}\n`);
+    for (const until = Date.now() + 20000; !out.includes('"id":0');) { assert.ok(Date.now() < until, `the gateway never answered initialize: ${out}`); await new Promise(r => setTimeout(r, 25)); }
     const t0 = Date.now();
     gw.stdin.write(`${JSON.stringify(call(1, 'place_order', { ...exitBase, contractId: 'MNQ:2026-12', side: 'sell', rationale: '[exit] flatten' }))}\n`);
-    while (!out.includes('"id":1')) await new Promise(r => setTimeout(r, 25));
+    for (const until = Date.now() + 40000; !out.includes('"id":1');) { assert.ok(Date.now() < until, 'no answer to the exit'); await new Promise(r => setTimeout(r, 25)); }
     const took = Date.now() - t0;
     gw.stdin.end();
     await new Promise(r => gw.on('close', r));
@@ -872,7 +878,9 @@ test('MCP gateway wiring: on a replayed day a hung or slow front-month lookup co
   const hung = await run({ FAKE_DROP: 'search_contracts' });
   assert.match(hung.text, /the order gate could not run \((list_open_positions|list_open_orders|search_trades) timed out\)/, 'whichever account read times out first');
   assert.deepStrictEqual(hung.sent, []);
-  assert.ok(hung.took < 17000, `${hung.took} ms`);
+  // One call timeout (15 s), timed from the gateway being up: under the translator's lookup timeout (20 s), so waiting on
+  // the lookup before the account reads (or a second timeout) fails it, and a loaded machine's late timer does not.
+  assert.ok(hung.took < require(path.join(REPO, 'scripts', 'lib', 'trading', 'mcp-gateway')).LOOKUP_TIMEOUT_MS, `${hung.took} ms`);
   // A slow broker (every lookup and order reply 1.5 s late): a few seconds, never a timeout's worth.
   const slow = await run({ FAKE_DELAY_MS: '1500' });
   assert.deepStrictEqual(slow.sent, ['sim-Z6'], slow.text);
