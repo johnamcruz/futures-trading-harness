@@ -55,17 +55,21 @@ const REQUIRED_LOOKUPS = {
   'market-structure-analyst': ['breakout-vs-fakeout', 'breakout'],
   'trend-momentum-analyst': [],
   'volume-liquidity-analyst': [],
-  'risk-manager': ['confluence-counting', 'invalidation'],
+  // The risk manager embeds its situational skills (confluence-counting, invalidation) in its core: none to look up.
+  'risk-manager': [],
 };
 // The decision history's action for a cycle's result word with a setup on the table (decision-history.js ACTIONS).
+// `blocked` is scored as written only when the cycle made an order call or launched the trade-executor (autotrader.js
+// scoreRun); a `blocked` without one is scored as no-trade, so skipped with a setup on the table.
 const RESULT_ACTION = { executed: 'entered', 'no-trade': 'skipped', blocked: 'blocked', managed: 'managed' };
 // What the head trader loads every cycle before deciding (trade-session step 0; the gate's REQUIRED_FOR_ENTRY).
 const headLoads = w => (w.mode === 'full' ? [...REQUIRED_FOR_ENTRY, 'trader-process', 'htf-to-ltf'] : []);
 // What it reads before an entry (setup-judgment, trade-plan): loaded in full mode, embedded in index mode.
 const entryLoads = w => (w.mode === 'full' ? [...REQUIRED_AT_ENTRY] : []);
-// The roles the report cache serves on the fired bar after a quiet bar, in index mode (the default): none today
-// (report-cache.js serves no role in index mode). Whatever it serves, never a role whose bar requires a lookup.
-const CACHE_SERVED = [];
+// The roles the report cache serves on the fired bar after a quiet bar, in index mode (the default): risk-manager phase 1
+// (the account unchanged; no lookup is required of it). The analysts' reports here name no briefing versions, so none is
+// cached; a cached analyst is served only with lookups made under the same facts key (the e2e's cache cases).
+const CACHE_SERVED = ['risk-manager'];
 
 /** A harness home on a replay mock exchange serving the parity bars; the runner's config and state file. */
 function world({ mode = 'index' } = {}) {
@@ -128,6 +132,9 @@ async function pass(w, at, script) {
   }
 }
 
+/** The bar briefing's m3 version: the facts key of a pass without other lanes (skill-lookups.js factsKey). */
+const m3Version = w => { const b = readBriefing(w.home, 'MNQ'); return b && b.sections && b.sections.m3 ? b.sections.m3.version : null; };
+
 /** The bar briefing's m3 part as the runner wrote it for this pass. */
 const m3Of = w => { const b = readBriefing(w.home, 'MNQ'); return b && b.sections && b.sections.m3 ? b.sections.m3.data : null; };
 
@@ -149,9 +156,13 @@ function roleStep(o, name, report, phase = null) {
   return [{ role: name, lookups: (o.lookups || REQUIRED_LOOKUPS)[name].filter(s => !leave.includes(s)), report, ...(o.untimed ? { timed: false } : {}) }];
 }
 
+/** A report's Data line naming the bar briefing's current versions: what the report cache keys an analyst's report on. */
+const dataLine = w => { const b = readBriefing(w.home, 'MNQ'); return `Data: bar_briefing ${['m3', 'm15', 'h1', 'day'].map(p => b.sections[p].version).join(', ')}`; };
+
 /**
  * The head trader's cycle on a bar up to its decision: the loads, the bar briefing, the analysts and risk-manager
- * phase 1, each role's required lookups made inside its own call. What follows is the caller's.
+ * phase 1, each role's required lookups made inside its own call (`o.cacheable`: the analysts' reports name the
+ * briefing's versions, so the report cache keeps them). What follows is the caller's.
  */
 function roundSteps(w, o = {}) {
   const skip = new Set(o.skip || []);
@@ -159,7 +170,7 @@ function roundSteps(w, o = {}) {
   return [
     ...loads.map(s => ({ load: s })),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-    ...ANALYSTS.flatMap(a => roleStep(o, a, `${a}: Bias: long. Data: bar_briefing`)),
+    ...ANALYSTS.flatMap(a => roleStep(o, a, o.cacheable ? () => `${dataLine(w)}\nBias: long` : `${a}: Bias: long. Data: bar_briefing`)),
     ...roleStep(o, 'risk-manager', 'Phase 1: flat, budget 1 trade, no daily stop', 'phase1'),
   ];
 }
@@ -219,6 +230,6 @@ const working = w => exchange.read(w.state).orders.filter(o => o.status === 1 &&
 const placedAtBroker = w => exchange.read(w.state).calls.filter(c => c.tool === 'place_order');
 
 module.exports = {
-  ROOT, SETUP, MNQ_ID, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, trueFacts, flip,
+  ROOT, SETUP, MNQ_ID, STEP, BARS, FIRED_BAR, QUIET_BAR, NEXT_BAR, ANALYSTS, REQUIRED_LOOKUPS, RESULT_ACTION, CACHE_SERVED, headLoads, entryLoads, decisionAt, world, pass, m3Of, m3Version, trueFacts, flip,
   entryCycle, passCycle, roundSteps, manualArgs, planOf, gateLog, cycleLines, position, working, placedAtBroker,
 };

@@ -292,6 +292,54 @@ test('decision path, report cache: a role whose bar requires a lookup is run, no
   }
 });
 
+test('decision path, report cache: a cached analyst whose own call made the lookups is served again under the same facts key, and the gate counts its lookups for the entry', async () => {
+  const w = D.world();
+  const ms = 'market-structure-analyst';
+  // The fired bar, the analysts making the lookups it requires, their reports cacheable; then the same bar again (a
+  // rerun of its decision: the runner's state cleared, its report cache kept).
+  await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, 'looking', { cacheable: true }));
+  const cache = JSON.parse(fs.readFileSync(path.join(w.home, 'report-cache.json'), 'utf8'));
+  const key = D.m3Version(w);
+  assert.deepStrictEqual([cache.analysts[ms].lookups, cache.analysts[ms].lookupsKey], [[...D.REQUIRED_LOOKUPS[ms]].sort(), key]);
+  fs.unlinkSync(w.stateFile);
+  const r = await D.pass(w, decisionAt(FIRED_BAR), D.entryCycle(w, { cacheable: true, dropRole: ms, lookups: { ...D.REQUIRED_LOOKUPS, [ms]: [] } }));
+  const ctx = r.ran[0].context;
+  assert.ok(ctx.cachedRoles.includes(ms), `served: ${ctx.cachedRoles}`);
+  assert.deepStrictEqual(ctx.cachedLookups[ms], { skills: [...D.REQUIRED_LOOKUPS[ms]].sort(), key });
+  // The entry goes: the gate counts the cached report's lookups (FTH_CYCLE_CACHED_LOOKUPS) under the same key.
+  const e = lastEntry(w);
+  assert.deepStrictEqual([e.decision, e.checks], ['allowed', []], e.messages);
+  assert.strictEqual(D.placedAtBroker(w).length, 1);
+});
+
+test('decision path, report cache: lookups made under another facts key (a quiet bar) are not credited to the fired bar\'s new candidate: the analyst runs again', async () => {
+  const w = D.world();
+  const ms = 'market-structure-analyst';
+  // The quiet bar: the structure analyst looks up the breakout skills anyway; its report is cached with them, under the quiet bar's key.
+  const none = Object.fromEntries(Object.keys(D.REQUIRED_LOOKUPS).map(role => [role, []]));
+  await D.pass(w, decisionAt(QUIET_BAR), D.passCycle(w, 'nothing fired', { cacheable: true, lookups: { ...none, [ms]: D.REQUIRED_LOOKUPS[ms] } }));
+  const cache = JSON.parse(fs.readFileSync(path.join(w.home, 'report-cache.json'), 'utf8'));
+  assert.deepStrictEqual(cache.analysts[ms].lookups, [...D.REQUIRED_LOOKUPS[ms]].sort());
+  const quietKey = cache.analysts[ms].lookupsKey;
+  // The fired bar: a new candidate, a new key; the analyst is not served, those that need no lookup are.
+  const r = await D.pass(w, decisionAt(FIRED_BAR), D.passCycle(w, 'looking', { cacheable: true }));
+  assert.notStrictEqual(D.m3Version(w), quietKey);
+  const served = r.ran[0].context.cachedRoles || [];
+  assert.ok(!served.includes(ms), `${ms} served on a new candidate: ${served}`);
+  assert.deepStrictEqual(r.ran[0].context.cachedLookups || {}, {});
+  assert.ok(served.includes('trend-momentum-analyst') && served.includes('volume-liquidity-analyst'), `served: ${served}`);
+});
+
+test('decision path, result: a cycle that reports blocked with no order call or executor launch is scored as no-trade (skipped, the setup on the table); its own line kept', async () => {
+  const w = D.world();
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [...D.roundSteps(w), { result: 'CYCLE RESULT: blocked - the trend rule' }]);
+  assert.deepStrictEqual([r.ran[0].result, r.ran[0].reportedResult], ['CYCLE RESULT: no-trade - the trend rule', 'CYCLE RESULT: blocked - the trend rule']);
+  assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION['no-trade']);
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual([line.result, line.reportedResult], ['CYCLE RESULT: no-trade - the trend rule', 'CYCLE RESULT: blocked - the trend rule']);
+  assert.ok(r.logs.some(l => /the agent wrote "CYCLE RESULT: blocked - the trend rule"/.test(l)), r.logs.join('\n'));
+});
+
 // The composed (model-originated) entry: designed (docs/COMPOSED-ENTRY.md), not built. These define "done".
 const COMPOSED = [
   // The reads: each trader-process step stated by the model and checked by code.
