@@ -153,13 +153,19 @@ it), while an `[exit]` or `[protect]` order for a position it opened still
 goes and the runner keeps trailing that position by its remembered exit
 plan. A runner lane that lists one doesn't stop the runner: it starts and
 says so loudly (its log, a `lane_retired` event, and preflight), and that
-lane enters nothing while its bars, the trailing stops, end of day and
-every open position's management go on (`scripts/lib/lanes.js`
-`retireLanes`; remove the name from the runner config). A name that never
-existed still stops the runner at start (`scripts/lib/trading/strategies.js`
-`RETIRED`; `tests/lib/retired-strategies.test.js`). A private copy under
-one of these names in a folder of your own (`FTH_STRATEGIES_DIRS`) is
-yours, not a shipped strategy: it loads and trades as any user strategy.
+lane enters nothing: it scans no strategy, records no verdict, and the
+order gate refuses any entry on its timeframe under any tag
+(`retired-lane`). Its bars, the trailing stops, end of day and every open
+position's management go on: it runs a manage cycle while a position or
+order is open, and every bar when no account is configured to see them
+(`scripts/lib/lanes.js` `retireLanes`; remove the name from the runner
+config). A name that never existed still stops the runner at start
+(`scripts/lib/trading/strategies.js` `RETIRED`;
+`tests/lib/retired-strategies.test.js`). A private copy under one of
+these names in a folder of your own (`FTH_STRATEGIES_DIRS`) is yours, not
+a shipped strategy: it loads and trades as any user strategy, and the
+runner's start and preflight (a warning) name it with its file, so a stale
+copy is noticed.
 
 ## Commands
 

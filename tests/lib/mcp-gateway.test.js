@@ -166,3 +166,19 @@ test('closeRefused: only a body saying success: false is a refusal; an error rep
   assert.strictEqual(closeRefused({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'invalid params' } }), true);
   assert.strictEqual(closeRefused(null), false);
 });
+
+test('the gateway with the real gate: an entry tagged with a retired strategy is answered with the refusal; its exit is forwarded', async () => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { FAKE_BROKERS, writeJournal, entryOrder } = require('../helpers');
+  const home = tmpDir();
+  const env = { FTH_HOME: home, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_JOURNAL: writeJournal(home, []), NODE_ENV: 'test', FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_KILL_SWITCH_FILE: path.join(home, 'STOP') };
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const check = (args, tool) => checkOrder(args, { env, pluginRoot: ROOT, tool });
+  const entry = JSON.stringify(call(1, 'place_order', entryOrder({ rationale: 'setup:supertrend long, stop 21480' })));
+  const r = await handleClientLine(entry, check);
+  assert.strictEqual(r.forward, null);
+  assert.match(r.respond[0].result.content[0].text, /setup:supertrend is not a known strategy \(retired on 2026-10-13: strategies\/README\.md, "Retired strategies"\): no new entries from it/);
+  const { stopLossBracket: _sl, ...exitArgs } = entryOrder({ side: 'sell', rationale: '[exit] close the supertrend long' });
+  const exit = JSON.stringify(call(2, 'place_order', exitArgs));
+  assert.strictEqual((await handleClientLine(exit, check)).forward, exit, 'the exit goes to the broker (its account checks are the gateway\'s next step)');
+});

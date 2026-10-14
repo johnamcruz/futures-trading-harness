@@ -194,6 +194,19 @@ test('FTH_ORDER_GATE_SKIP turns off named checks only', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
+test('strategy check: an entry tagged with a retired strategy is refused, saying it was retired; an exit for its position goes', () => {
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const strategies = loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+  for (const name of ['bos', 'keltner', 'ema_cross', 'supertrend']) {
+    const r = evaluateOrder({ input: entryOrder({ rationale: `setup:${name} long, stop 21480` }), entries: [plan(1)], now: NOW, config, strategies });
+    const v = r.violations.find(x => x.check === 'strategy');
+    assert.ok(v, name);
+    assert.match(v.message, new RegExp(`setup:${name} is not a known strategy \\(retired on 2026-10-13: strategies/README\\.md, "Retired strategies"\\): no new entries from it`));
+    const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: `[exit] close the ${name} long`, stopLossBracket: undefined }), entries: [], now: NOW, config, strategies });
+    assert.deepStrictEqual([exit.intent, exit.violations], ['risk-reducing', []]);
+  }
+});
+
 test('strategy check: known, active, instrument, and session', () => {
   const { loadStrategies } = require('../../scripts/lib/trading/strategies');
   // The bundled orb has no session gate (as in the original bot); give it one here.

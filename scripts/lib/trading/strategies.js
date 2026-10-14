@@ -47,6 +47,12 @@ const STOP = /^(atr:\d+(\.\d+)?|structure|swing|manual|strategy)$/;
 // folder defines is refused as retired, saying so, wherever an old record, config or document still names it.
 const RETIRED = { bos: '2026-10-13', keltner: '2026-10-13', ema_cross: '2026-10-13', supertrend: '2026-10-13' };
 /** " (retired on <date>: strategies/README.md, \"Retired strategies\")" for a retired name, else "". */
+/**
+ * The loaded strategies under a retired name: a user's own copy (no shipped folder holds one). It loads and trades
+ * as their strategy; preflight and the runner's start name each with its file, so a stale copy is noticed.
+ */
+const retiredCopies = strategies => (strategies || []).filter(s => s && Object.hasOwn(RETIRED, s.name))
+  .map(s => `${s.name} (${s.file}) is your own strategy under a name retired on ${RETIRED[s.name]} (strategies/README.md, "Retired strategies"): it loads and trades as yours; remove it if it is a stale copy`);
 const retiredNote = name => (Object.hasOwn(RETIRED, name) ? ` (retired on ${RETIRED[name]}: strategies/README.md, "Retired strategies")` : '');
 
 function expandHome(p) {
@@ -562,6 +568,7 @@ function checkStrategyForOrder(strategies, name, contractRoot, now, side = null,
 module.exports = {
   RETIRED,
   retiredNote,
+  retiredCopies,
   exitPlan,
   exitErrors,
   STATUSES,

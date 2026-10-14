@@ -659,6 +659,14 @@ function createRunner(deps) {
       }
       return { run: true, reason: 'bar closed' };
     }
+    // A retired lane with no account to see positions: a manage cycle every bar, as its bar trigger ran before (the
+    // scan is empty, so it offers nothing to enter and the gate refuses any entry on it).
+    if (lanes[item.lane].retired && !cfg.account && !manageOnly) {
+      const results = scanItem(item);
+      const decision = { run: true, reason: 'manage only: this lane lists a retired strategy and enters nothing; no account is configured to see positions, so every bar' };
+      if (results) logScan(item, results, decision);
+      return decision;
+    }
     if (!cfg.account) return { run: false, reason: 'cap reached and no account configured to check positions' };
     let net;
     let working;

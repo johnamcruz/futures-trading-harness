@@ -35,7 +35,7 @@ const { liveRunBlocked, createAdapter } = require('./broker/adapter');
 const { lockExemption, lockStatus, lockRefusal, serverIdentities, lockDir, lockDirProblem, lockDirWritable, apiUrlEnvProblem, normApi } = require('./account-lock');
 const { createMcpClient } = require('./broker/mcp-client');
 const { checkConformance } = require('./broker/conformance');
-const { loadStrategies } = require('./trading/strategies');
+const { loadStrategies, retiredCopies } = require('./trading/strategies');
 const { lanesOf, lanePolicies, retireLanes, laneStrategyErrors, signalLaneErrors, describeLane, agentTimeframes, agentErrors, omittedPolicyErrors } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { loadAccounts } = require('./trading/accounts');
@@ -183,11 +183,13 @@ function propProfiles(strategies, accounts, cfg) {
 function laneChecks(cfg, strategies, home = null) {
   // A lane listing a retired strategy: the runner starts, but the lane enters nothing (lanes.js retireLanes): a failure here.
   const retired = retireLanes(cfg, strategies);
+  // A user's own strategy under a retired name loads and trades (the owner's call): named, so a stale copy is noticed.
+  const copies = retiredCopies(strategies);
   const lanes = lanesOf(cfg);
   const out = lanes.map((l, i) => r(`lane ${l.timeframe}m`, 'ok', `${describeLane(l, strategies)}${i === 0 && !cfg.lanes ? ' (from timeframe and trigger)' : ''}`));
   const running = a => Boolean(home && readAttempt(home, a));
   const why = [...laneStrategyErrors(lanes, strategies), ...signalLaneErrors(lanes, strategies), ...omittedPolicyErrors(cfg, strategies, running)];
-  return [...out, ...(retired.length ? [r('retired strategies in lanes', 'fail', retired.join('; '))] : []), ...(why.length ? [r('lane strategies', 'fail', why.join('; '))] : [])];
+  return [...out, ...(copies.length ? [r('retired-name copies', 'warn', copies.join('; '))] : []), ...(retired.length ? [r('retired strategies in lanes', 'fail', retired.join('; '))] : []), ...(why.length ? [r('lane strategies', 'fail', why.join('; '))] : [])];
 }
 
 /** Each agent role's effective timeframe (its config override, its agent file's, else the lane's); lanes.js agentErrors decides which fail. */

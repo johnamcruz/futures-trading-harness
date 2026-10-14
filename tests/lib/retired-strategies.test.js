@@ -239,3 +239,114 @@ test('an open position from a retired lane keeps trailing after an upgrade with 
   // Nothing scanned on the lane: no setup could fire, so nothing new is entered (the gate refuses one on its timeframe).
   assert.ok(scans.every(r => r.length === 0), JSON.stringify(scans.slice(0, 2)));
 });
+
+/** A runner over 10:00-10:12 ET on one 3m lane (`lanes`), its account `account` holding `positions`; what it did. */
+async function runLane({ lanes, account = '7', positions = [] }) {
+  const DAY = Date.UTC(2026, 9, 7);
+  const et = (h, m, sec = 0) => DAY + ((h + 4) * 60 + m) * 60000 + sec * 1000;
+  const iso = ms => new Date(ms).toISOString();
+  const clockRef = { t: et(9, 59, 50) };
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', account, symbols: ['MNQ'], lanes });
+  assert.deepStrictEqual(startErrors(cfg, SHIPPED, loadAgents(ROOT)), []);
+  const cycles = [];
+  const logs = [];
+  const client = {
+    async activeContract() { return { id: 'MNQ', tickSize: 0.25 }; },
+    async closedBars(contractId, { minutes, limit }) {
+      const step = minutes * 60000;
+      const lastOpen = Math.floor((clockRef.t - 1000) / step) * step - step;
+      return Array.from({ length: Math.min(limit, 5) }, (_, k) => ({ t: iso(lastOpen - (4 - k) * step), o: 21500, h: 21501, l: 21499, c: 21500, v: 1 }));
+    },
+    async accountState() { return { positions, orders: [] }; },
+    async netPosition() { return positions.length; },
+    async workingOrders() { return 0; },
+    async modifyStop() {},
+    async closePosition() {},
+    async cancelOrder() {},
+  };
+  const runner = createRunner({
+    cfg, root: '/r', client, clock: { now: () => new Date(clockRef.t) },
+    runCycle: async action => { cycles.push(action); return { ok: true, timedOut: false }; },
+    isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {}, writeBars: () => '/b.json',
+    scanFor: (symbol, bars, lane) => runnerScan(SHIPPED, cfg, symbol, bars, new Date(clockRef.t), lane || undefined),
+    entryOrders: () => [], strategyNamed: () => null, event: () => {}, log: (m, level) => logs.push({ m, level }),
+  });
+  while (clockRef.t < et(10, 12)) clockRef.t += await runner.step();
+  return { cycles, logs };
+}
+
+test('a retired lane runs no cycle per bar while flat (it enters nothing); the same lane without the retired name does', async () => {
+  const retired = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['bos', 'orb'] }] });
+  assert.strictEqual(retired.cycles.length, 0, 'flat: nothing to manage, nothing to enter');
+  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }] });
+  assert.ok(plain.cycles.length >= 3, `a bar lane cycles every bar: ${plain.cycles.length}`);
+});
+
+test('an open position on a retired lane with no account configured gets a manage cycle every bar, said as such', async () => {
+  const pos = [{ id: 77, contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500, creationTimestamp: '2026-10-07T13:59:55.000Z' }];
+  const r = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }], account: '', positions: pos });
+  const plain = await runLane({ lanes: [{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }], account: '', positions: pos });
+  assert.ok(r.cycles.length >= 3 && r.cycles.length === plain.cycles.length, `retired ${r.cycles.length} vs plain ${plain.cycles.length}`);
+  assert.ok(r.logs.some(l => /cycle \(manage only: this lane lists a retired strategy and enters nothing; no account is configured to see positions, so every bar\)/.test(l.m)), JSON.stringify(r.logs.map(l => l.m).slice(0, 8)));
+  assert.ok(!r.logs.some(l => /cap reached/.test(l.m)), 'no misleading reason');
+});
+
+test('a retired lane listing policies is no refusal even where the policies list leaves out one with a running attempt', () => {
+  const agents = loadAgents(ROOT);
+  // A 1m lane listing only a retired name under policies: prop_flow_1m (1m, running attempt) is left out of it.
+  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: ['bos'] }]);
+  assert.deepStrictEqual(startErrors(cfg, SHIPPED, agents, () => true), []);
+  // The omission check itself still holds for a lane that isn't retired (its policies list leaving prop_flow_1m out).
+  const { omittedPolicyErrors } = require('../../scripts/lib/lanes');
+  const plain = cfgWith([{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal', policies: ['bos'] }]);
+  assert.match(omittedPolicyErrors(plain, SHIPPED, () => true).join(), /lanes\[1\]\.policies: leaves out prop_flow_1m/, 'before retireLanes marks it');
+});
+
+test('the gate refuses any entry, of any strategy kind, on a timeframe whose runner lane is retired; exits still go', () => {
+  const { buildSignals, writeSignals } = require('../../scripts/lib/trading/signal-state');
+  const { laneSignals } = require('../../scripts/lib/runner-wiring');
+  const home = trendHome();
+  const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
+  const manual = { name: 'disc', valid: true, errors: [], status: 'active', signal: 'manual', instruments: ['MNQ'], timeframe: '3m', sessions: [], compiledRules: null };
+  const registry = [...SHIPPED, manual];
+  const entry = tag => evaluateOrder({ input: entryOrder({ rationale: `setup:${tag} long, stop 21480` }), entries: [plan()], now: NOW, config, strategies: registry });
+  const bar = { t: '2026-10-07T13:57:00.000Z' };
+  // The runner's record of a retired lane's bar carries the mark (laneSignals: the wiring's record).
+  const cfg = cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['bos'] }]);
+  retireLanes(cfg, SHIPPED);
+  const rec = laneSignals(cfg, { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW);
+  assert.deepStrictEqual(rec.retiredLane, ['bos']);
+  assert.strictEqual(laneSignals(cfgWith([{ timeframe: 3, trigger: 'bar', strategies: ['orb'] }]), { symbol: 'MNQ', bar, minutes: 3, lane: 0 }, [], NOW).retiredLane, undefined);
+  assert.ok(!entry('disc').violations.some(x => x.check === 'retired-lane'), 'no mark yet: a manual entry is not refused for it');
+  writeSignals(home, rec);
+  for (const tag of ['disc', 'orb', 'prop_portfolio']) {
+    const v = entry(tag).violations.find(x => x.check === 'retired-lane');
+    assert.ok(v, `${tag}: ${JSON.stringify(entry(tag).violations)}`);
+    assert.match(v.message, /the runner's 3m lane lists bos \(retired on 2026-10-13.*that lane enters nothing, under any setup tag/);
+  }
+  const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] close the long', stopLossBracket: undefined }), entries: [], now: NOW, config, strategies: registry });
+  assert.deepStrictEqual(exit.violations, []);
+  // The lane's next record without the mark (the config fixed) clears it.
+  writeSignals(home, buildSignals([], { symbol: 'MNQ', bar, stepMs: 180000, now: NOW }));
+  assert.ok(!entry('disc').violations.some(x => x.check === 'retired-lane'));
+});
+
+test('a user\'s own strategy under a retired name is named at the runner\'s start and in preflight (a warning), and still loads', () => {
+  const { wireRunner } = require('../../scripts/lib/runner-wiring');
+  const own = tmpDir();
+  fs.mkdirSync(path.join(own, 'ema_cross'));
+  fs.writeFileSync(path.join(own, 'ema_cross', 'STRATEGY.md'), fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'strategies-fx', 'fx_cross', 'STRATEGY.md'), 'utf8').replace(/^name: fx_cross$/m, 'name: ema_cross'));
+  const env = { FTH_STRATEGIES_DIRS: own };
+  const mine = loadStrategies(ROOT, env).strategies;
+  assert.ok(mine.find(s => s.name === 'ema_cross').valid, 'it loads');
+  const file = path.join(own, 'ema_cross', 'STRATEGY.md');
+  const row = laneChecks(cfgWith([{ timeframe: 3, trigger: 'bar' }]), mine).find(x => x.check === 'retired-name copies');
+  assert.ok(row && row.status === 'warn', 'preflight warns');
+  assert.ok(row.detail.includes(`ema_cross (${file}) is your own strategy under a name retired on 2026-10-13`), row.detail);
+  assert.strictEqual(laneChecks(cfgWith([{ timeframe: 3, trigger: 'bar' }]), SHIPPED).find(x => x.check === 'retired-name copies'), undefined);
+  const home = tmpDir();
+  const logs = [];
+  wireRunner({ cfg: cfgWith([{ timeframe: 3, trigger: 'bar' }]), root: ROOT, home, env: { ...env, FTH_HOME: home }, client: {}, dataDir: path.join(home, 'bars'), now: () => NOW,
+    runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: path.join(home, 'STOP'), log: (m, level) => logs.push({ m, level }), event: () => {} });
+  assert.ok(logs.some(l => l.level === 'error' && l.m.includes(`ema_cross (${file}) is your own strategy under a name retired`)), JSON.stringify(logs));
+});

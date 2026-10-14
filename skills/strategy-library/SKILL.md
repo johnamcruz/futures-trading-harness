@@ -157,7 +157,13 @@ many MNQ, never switched to NQ), and the other leg is refused; its `contracts`
 mode picks the leg only when none is selected. Every other check
 uses the contract ordered: its broker tick specs, and its size and
 `risk.max_risk_usd` in its own dollars (one NQ at a 40-tick stop risks
-$200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded. A rules strategy
+$200.00; one MNQ, $20.00). Exits and protective stops on either leg always go. `paper` strategies can only be paper-traded.
+A retired strategy (`bos`, `keltner`, `ema_cross`, `supertrend`;
+strategies/README.md, "Retired strategies") is no setup: its tag is refused,
+saying so, and a position it opened is still exited and protected with
+`[exit]` or `[protect]`. While the runner's lane on a timeframe lists one, no
+entry on that timeframe goes, under any tag (`retired-lane`): that lane only
+manages what is open. A rules strategy
 enters only on its own trigger (`trigger-fired`): the signal record must show
 it fired on that side on a bar that closed at most 3 bars of the strategy's
 own timeframe ago and never more than 45 minutes ago (3 min on 1m, 9 min on

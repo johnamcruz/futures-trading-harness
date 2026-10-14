@@ -31,7 +31,7 @@ const signalFile = (home, root, timeframe) => path.join(home, 'signals', `${fami
 const tfOf = stepMs => `${Math.round(stepMs / 60000)}m`;
 
 /** The record for scan `results` on the bar `bar` ({ t }) of `symbol`, `stepMs` long. */
-function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source = null }) {
+function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source = null, retiredLane = null }) {
   return {
     symbol: String(symbol || '').toUpperCase(),
     timeframe: tfOf(stepMs),
@@ -41,7 +41,20 @@ function buildSignals(results, { symbol, bar, stepMs, now = new Date(), source =
     source,
     candidates: (results || []).filter(r => r.candidate && r.direction && r.signal === 'rules')
       .map(r => ({ name: r.name, direction: r.direction, stopDistance: r.stopDistance ?? null, ...(r.confluence ? { confluence: r.confluence } : {}) })),
+    // The runner's lane on this timeframe lists a retired strategy (lanes.js retireLanes): it enters nothing.
+    ...(Array.isArray(retiredLane) && retiredLane.length ? { retiredLane } : {}),
   };
+}
+
+/**
+ * The gate's check for any strategy's entry (rules, manual or policy) on `timeframe`: refused while the latest
+ * record of that timeframe says the runner's lane there lists a retired strategy (it enters nothing). A message, or null.
+ */
+function retiredLaneRefusal(home, { root, strategy, timeframe }) {
+  if (!home || !timeframe) return null;
+  const rec = readSignals(home, root, timeframe);
+  if (!rec || rec.error || !Array.isArray(rec.retiredLane) || !rec.retiredLane.length) return null;
+  return `setup:${strategy} trades ${timeframe} bars, and the runner's ${timeframe} lane lists ${rec.retiredLane.map(n => `${n}${require('./strategies').retiredNote(n)}`).join(', ')}: that lane enters nothing, under any setup tag. Exits and protective stops ([exit], [protect]) still go. Remove the name from the runner config's lanes; the lane's next bar record then clears this.`;
 }
 
 function writeSignals(home, record) {
@@ -150,4 +163,4 @@ function lastRecordedBar(home, root, timeframe) {
   return { bar: rec.asOf, timeframe: tf };
 }
 
-module.exports = { DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
+module.exports = { retiredLaneRefusal, DEFAULT_MAX_AGE_BARS, MAX_AGE_CEILING_MIN, signalMaxAgeMin, FUTURE_TOLERANCE_MIN, signalFile, buildSignals, writeSignals, readSignals, checkTrigger, barMs, sameBar, recordTimeframe, lastRecordedBar };
