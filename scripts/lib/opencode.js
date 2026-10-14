@@ -44,7 +44,7 @@
  * is denied opencode's skill tool: its skills are in its prompt (the core) or
  * read with skill_lookup (which reads any skill), and while an agent may use
  * the tool opencode puts every skill's name and description in its system
- * prompt (about 29 KB a call). A role without skill_lookup keeps the tool (its
+ * prompt (about 26 KB a call). A role without skill_lookup keeps the tool (its
  * way to a skill its embedded ones name), as do full mode and the head trader,
  * which loads its skills with it.
  *

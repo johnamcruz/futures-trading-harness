@@ -110,7 +110,7 @@ tools (Claude names translated: `mcp__broker__x` → `broker_x`, `Read` →
 granted, so only `trade-executor` holds order tools. In index mode a role
 that holds `skill_lookup` (today the three analysts and `risk-manager`) is
 denied opencode's `skill` tool too: while an agent may use the tool, opencode
-lists every skill's name and description in its system prompt, about 29 KB a
+lists every skill's name and description in its system prompt, about 26 KB a
 call, and `skill_lookup` reads any skill. A role without `skill_lookup`
 (`trade-executor`, `news-calendar-analyst`, `strategy-researcher`,
 `trade-reviewer`) keeps the tool: it is its only way to a skill its embedded
