@@ -309,8 +309,16 @@ decide whether to trade.
   time in force (`broker/interface.js:74-76`), so the runner cancels a
   working composed limit at the record's `expiresAt`.
 - **Target.** A real level on the winning side: a swing target
-  (`m3.swingTargets`) or a named key level, floored toward the entry. The new
-  skill for take-profit targets (in flight) teaches how the model picks it.
+  (`m3.swingTargets`, `target <tf> swing [high|low] <price>`), the prior
+  completed 1h or 4h candle's high, mid or low (`m3.rangeTargets`,
+  `target prior 1h|4h high|mid|low <price>`; an off-tick mid is the price on
+  the tick toward the entry), a fair value gap's edge (`m3.fvgs`, `target
+  <tf> fvg high|low <price>`: an open gap's edges, a partly filled one's
+  unfilled part), or a named key level, floored toward the entry. A prior
+  candle's side the candle forming has already taken is spent: no target.
+  The `take-profit` skill teaches how the model picks the swing and
+  prior-candle targets (an off-tick mid's distance to the tick toward price,
+  as the briefing's `ticks`); no skill teaches a gap's edge as a target yet.
 - **Checks.** R:R at least the composed document's `risk.min_rr`; the first
   level in the way and its R are recorded and are what a phase-2 room fact
   is checked against (section 3.6).

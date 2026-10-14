@@ -41,7 +41,11 @@
  *   stop <source> <price>                   step stop only: <tf> low|high (a completed candle), [<tf>] swing
  *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), or <level>; the
  *                                           source's price within one tick of <price>    below price long
- *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), or <level>;
+ *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
+ *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
+ *                                           mid is the price on the tick toward price; a side the candle forming
+ *                                           has taken is spent: false), <tf> fvg high|low (m3.fvgs:
+ *                                           an unfilled gap's edge, a partly filled one's unfilled part), or <level>;
  *                                           within one tick                              above price long
  *
  * Each read is true, false or 'unchecked' (a form this checker doesn't know, a fact the briefing doesn't hold, a
@@ -180,8 +184,19 @@ const DEAD_CISD = new Set(['void', 'expired', 'weak']);
 
 const within = (a, b, tick) => Math.abs(a - b) <= tick + 1e-9;
 
-/** The prices a stop or target source names (a source the briefing doesn't hold: none). */
-function sourcePrices(kind, source, b, base) {
+/** A price on the tick toward the reference (a target rounds toward the entry); a price on the tick is unchanged. */
+function towardRef(p, ref, tick) {
+  const q = p / tick;
+  if (!(tick > 0) || Math.abs(q - Math.round(q)) < 1e-9) return p;
+  return Number(((ref !== null && p < ref ? Math.ceil(q) : Math.floor(q)) * tick).toFixed(10));
+}
+
+/**
+ * The prices a stop or target source names (a source the briefing doesn't hold: none): { field, prices, why?, spent?,
+ * note? } (why: what the briefing says instead; spent: the briefing holds it and says it is no target; note: how a
+ * price was put on the tick).
+ */
+function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
   const m3 = data(b, 'm3') || {};
   const w = source.split(' ');
   const candles = isObj(m3.candles) ? m3.candles : {};
@@ -207,6 +222,32 @@ function sourcePrices(kind, source, b, base) {
       const t = isObj(m3.swingTargets) ? m3.swingTargets : {};
       const list = [...(t.above || []), ...(t.below || [])].filter(x => isObj(x) && levelName(x.frame) === swing[1]);
       return { field: 'm3.swingTargets', prices: list.map(x => num(x.price)).filter(x => x !== null) };
+    }
+    // The prior completed 1h or 4h candle's high, mid or low (m3.rangeTargets); an off-tick mid on the tick toward price.
+    const range = /^prior (1h|4h) (high|mid|low)$/.exec(source);
+    if (range) {
+      const [, tf, part] = range;
+      const r = isObj(m3.rangeTargets) ? m3.rangeTargets[tf] : null;
+      const field = `m3.rangeTargets.${tf}.${part}`;
+      if (isObj(r) && r.unavailable) return { field, prices: [], why: `the prior ${tf} candle is unavailable (${r.unavailable})` };
+      const exact = isObj(r) && isObj(r[part]) ? num(r[part].price) : null;
+      if (exact === null) return { field, prices: [] };
+      // A side the candle forming has already traded beyond is spent as a target (the take-profit skill).
+      if (part !== 'mid' && isObj(r.taken) && r.taken.side === part) return { field, prices: [], spent: `the prior ${tf} ${part} ${exact} is taken by the candle forming: spent as a target` };
+      const p = part === 'mid' ? towardRef(exact, ref, tick) : exact;
+      return { field, prices: [p], note: p === exact ? '' : ` (the mid ${exact} on the tick toward price)` };
+    }
+    // A fair value gap's edge on a timeframe (m3.fvgs): the edges of what is left of it (an open gap's low and high, a
+    // partly filled one's unfilled part; a filled gap is gone).
+    const fvg = /^(\S+) fvg (high|low)$/.exec(source);
+    if (fvg && TFS.has(fvg[1])) {
+      const [, tf, edge] = fvg;
+      const v = isObj(m3.fvgs) ? m3.fvgs[tf] : undefined;
+      const field = `m3.fvgs.${tf}`;
+      if (typeof v === 'string') return { field, prices: [], why: `the ${tf} gaps are ${v}` };
+      const left = g => (!isObj(g) ? null : g.state === 'open' ? [g.low, g.high] : g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null);
+      const prices = (Array.isArray(v) ? v : []).map(left).filter(Boolean).map(e => num(e[edge === 'low' ? 0 : 1])).filter(x => x !== null);
+      return { field, prices, ...(Array.isArray(v) && !prices.length ? { why: `no unfilled ${tf} gap in the briefing` } : {}) };
     }
   }
   return { field: 'the briefing\'s levels', prices: levelIndex(b).get(source) || [] };
@@ -364,12 +405,13 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
     case 'stop':
     case 'target': {
       const ref = num(m3.price);
-      const { field, prices } = sourcePrices(p.kind, p.source, b, base);
-      if (!prices.length) return res('unchecked', `the briefing has no ${p.source} for a ${p.kind}`, { field });
+      const { field, prices, why, spent, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
+      if (spent) return res(false, spent, { field });
+      if (!prices.length) return res('unchecked', why || `the briefing has no ${p.source} for a ${p.kind}`, { field });
       const hit = prices.find(x => within(x, p.price, tick));
-      if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });
+      if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}${note}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });
       const dir = ref === null || hit === ref ? null : (p.kind === 'stop') === (hit < ref) ? 'long' : 'short';
-      return res(true, `${p.source} is ${hit}; price ${ref}`, { field, value: hit, price: hit, dir });
+      return res(true, `${p.source} is ${hit}${note}; price ${ref}`, { field, value: hit, price: hit, dir });
     }
     default:
       return res('unchecked', 'not a form this check knows');

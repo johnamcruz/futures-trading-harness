@@ -376,3 +376,225 @@ test('edges: one tick, the momentum thresholds, pattern none, taken pools, an un
   const long = CR.checkReads({ reads: [{ step: 'bias', skill: `a${'b'.repeat(200)}`, read: `1h bos up ${'x'.repeat(500)}`, why: 'y' }], side: 'long', briefing: b });
   assert.ok(long.reads[0].read.length <= 120 && long.reads[0].skill.length <= 64);
 });
+
+// Scenario 1 with the targets the take-profit skill teaches: the prior completed 1h and 4h candle's high, mid and low
+// (m3.rangeTargets) and the per-timeframe fair value gaps (m3.fvgs), shaped as buildBriefing writes them. Price 21540.25.
+function withTargetSources() {
+  const b = scenario1();
+  Object.assign(b.sections.m3.data, {
+    rangeTargets: {
+      // The 1h mid (21580 + 21540.25) / 2 = 21560.125 sits between ticks, above price; the low is at price.
+      '1h': { t: '2026-04-23T13:00:00.000Z', closedAt: '2026-04-23T14:00:00.000Z', high: { price: 21580, side: 'above' }, mid: { price: 21560.125, side: 'above' }, low: { price: 21540.25, side: 'at' } },
+      // The 4h mid (21530 + 21499.75) / 2 = 21514.875 sits between ticks, below price.
+      '4h': { t: '2026-04-23T10:00:00.000Z', closedAt: '2026-04-23T14:00:00.000Z', high: { price: 21530, side: 'below' }, mid: { price: 21514.875, side: 'below' }, low: { price: 21499.75, side: 'below' } },
+    },
+    fvgs: {
+      '5m': 'unavailable (not whole 3m bars; no 1m bars configured)',
+      '15m': [
+        { side: 'bearish', low: 21552.5, high: 21558, at: '2026-04-23T13:30:00.000Z', state: 'open', retest: null },
+        { side: 'bullish', low: 21500, high: 21510.25, at: '2026-04-23T12:30:00.000Z', state: 'partly', unfilled: [21500, 21506.5], retest: null },
+      ],
+      '1h': [],
+    },
+  });
+  return b;
+}
+
+const withTargetRead = (read, skill = 'top-down-entry') => SCENARIO_1.map(x => (x.step === 'target' ? { ...x, skill, read } : x));
+
+test('target prior 1h|4h high|mid|low: the prior completed candle\'s range, within one tick, on the winning side', () => {
+  const b = withTargetSources();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  assert.strictEqual(CR.parseRead('target prior 60m mid 21560.125').form, 'target prior 1h mid 21560.125');
+  assert.strictEqual(CR.parseRead('target prior 4h high 21530').slug, 'prior-4h-high');
+  // True, with the side the level is on.
+  assert.deepStrictEqual([one('target prior 1h high 21580').check, one('target prior 1h high 21580').dir], [true, 'long']);
+  assert.strictEqual(one('target prior 1h high 21580').field, 'm3.rangeTargets.1h.high');
+  assert.deepStrictEqual([one('target prior 4h low 21499.75').check, one('target prior 4h low 21499.75').dir], [true, 'short']);
+  assert.strictEqual(one('target prior 1h high 21580.25').check, true, 'within one tick');
+  // False: another price, another frame's level.
+  assert.strictEqual(one('target prior 1h high 21590').check, false);
+  assert.match(one('target prior 1h high 21590').fact, /prior 1h high is 21580, not 21590/);
+  assert.strictEqual(one('target prior 4h high 21580').check, false, 'the 1h high, not the 4h');
+  // A level at price is on neither side: it agrees with no order.
+  assert.strictEqual(one('target prior 1h low 21540.25').dir, null);
+  for (const side of ['long', 'short']) {
+    const r = CR.checkReads({ reads: withTargetRead('target prior 1h low 21540.25'), side, briefing: b });
+    assert.strictEqual(r.reads.find(x => x.step === 'target').agrees, false, side);
+  }
+  // The other side: the long's reads with a target below price.
+  const other = CR.checkReads({ reads: withTargetRead('target prior 4h high 21530'), side: 'long', briefing: b });
+  assert.strictEqual(other.reads.find(x => x.step === 'target').check, true);
+  assert.strictEqual(other.ok, false);
+  const ok = CR.checkReads({ reads: withTargetRead('target prior 1h high 21580'), side: 'long', briefing: b });
+  assert.strictEqual(ok.ok, true, CR.renderCheck(ok));
+  assert.deepStrictEqual(ok.target, { source: 'prior-1h-high', level: 21580 });
+  // A side the candle forming has taken is spent (the take-profit skill): false, whether it closed back or beyond;
+  // the mid and the far side remain.
+  for (const closedBack of [true, false]) {
+    b.sections.m3.data.rangeTargets['1h'].taken = { side: 'high', closedBack };
+    const spent = one('target prior 1h high 21580');
+    assert.deepStrictEqual([spent.check, spent.fact], [false, 'the prior 1h high 21580 is taken by the candle forming: spent as a target']);
+    assert.strictEqual(CR.checkReads({ reads: withTargetRead('target prior 1h high 21580'), side: 'long', briefing: b }).ok, false);
+    assert.strictEqual(one('target prior 1h mid 21560').check, true);
+    assert.strictEqual(one('target prior 1h low 21540.25').check, true);
+  }
+  b.sections.m3.data.rangeTargets['4h'].taken = { side: 'low', closedBack: true };
+  assert.strictEqual(one('target prior 4h low 21499.75').check, false);
+  assert.strictEqual(one('target prior 4h high 21530').check, true);
+  // Only the mid is put on the tick: an off-tick high (not as the briefing writes it) is matched as it is, unnamed as a mid.
+  b.sections.m3.data.rangeTargets['4h'].high.price = 21530.1;
+  assert.strictEqual(one('target prior 4h high 21530').price, 21530.1);
+  assert.doesNotMatch(one('target prior 4h high 21530').fact, /mid/);
+});
+
+test('an off-tick prior-candle mid is the price on the tick toward the entry', () => {
+  const b = withTargetSources();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  // 21560.125 above a long's 21540.25: 21560.00.
+  const up = one('target prior 1h mid 21560');
+  assert.deepStrictEqual([up.check, up.price, up.dir], [true, 21560, 'long']);
+  assert.match(up.fact, /the mid 21560\.125 on the tick toward price/);
+  assert.strictEqual(one('target prior 1h mid 21560.125').price, 21560, 'the exact mid stated: the on-tick price');
+  assert.strictEqual(one('target prior 1h mid 21560.25').check, true, 'one tick past the on-tick price');
+  assert.strictEqual(one('target prior 1h mid 21560.5').check, false);
+  // 21514.875 below price (a short's): 21515.00, toward the entry.
+  const down = one('target prior 4h mid 21515');
+  assert.deepStrictEqual([down.check, down.price, down.dir], [true, 21515, 'short']);
+  assert.strictEqual(one('target prior 4h mid 21514.5').check, false, 'more than a tick from 21515');
+  // The R uses the on-tick price: stop 21512.75 (27.50 points), target 21560.00 (19.75 points) = 0.72R.
+  const r = CR.checkReads({ reads: withTargetRead('target prior 1h mid 21560.125'), side: 'long', briefing: b });
+  assert.strictEqual(r.ok, true, CR.renderCheck(r));
+  assert.deepStrictEqual(r.target, { source: 'prior-1h-mid', level: 21560 });
+  assert.strictEqual(CR.targetROf(r.reference, r.stop.level, r.target.level), 0.72);
+  assert.match(r.signature, /\+target:prior-1h-mid-under-1\.5r$/);
+  // A mid within a tick of price rounds onto price: no side, no target.
+  b.sections.m3.data.rangeTargets['1h'].mid.price = 21540.375;
+  assert.strictEqual(one('target prior 1h mid 21540.25').dir, null);
+  // On the tick, a mid is unchanged.
+  b.sections.m3.data.rangeTargets['1h'].mid.price = 21560.25;
+  assert.strictEqual(one('target prior 1h mid 21560.25').price, 21560.25);
+});
+
+test('target <tf> fvg high|low: an unfilled gap\'s edge, a partly filled one\'s unfilled part', () => {
+  const b = withTargetSources();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  assert.strictEqual(CR.parseRead('target 15 min fvg low 21552.50').form, 'target 15m fvg low 21552.5');
+  assert.deepStrictEqual([one('target 15m fvg low 21552.5').check, one('target 15m fvg low 21552.5').dir], [true, 'long']);
+  assert.strictEqual(one('target 15m fvg high 21558').check, true);
+  assert.strictEqual(one('target 15m fvg high 21558').field, 'm3.fvgs.15m');
+  // The partly filled gap below: its unfilled part 21500-21506.5 (a short's target); its old high was traded into.
+  assert.deepStrictEqual([one('target 15m fvg high 21506.5').check, one('target 15m fvg high 21506.5').dir], [true, 'short']);
+  assert.strictEqual(one('target 15m fvg low 21500').dir, 'short');
+  assert.strictEqual(one('target 15m fvg high 21510.25').check, false);
+  assert.strictEqual(one('target 15m fvg low 21558').check, false, 'the high edge stated as the low');
+  // The other side refuses the combination.
+  const other = CR.checkReads({ reads: withTargetRead('target 15m fvg high 21506.5', 'fair-value-gaps'), side: 'long', briefing: b });
+  assert.strictEqual(other.ok, false);
+  assert.strictEqual(other.reads.find(x => x.step === 'target').agrees, false);
+  const ok = CR.checkReads({ reads: withTargetRead('target 15m fvg low 21552.5', 'fair-value-gaps'), side: 'long', briefing: b });
+  assert.strictEqual(ok.ok, true, CR.renderCheck(ok));
+  assert.deepStrictEqual(ok.target, { source: '15m-fvg-low', level: 21552.5 });
+});
+
+test('an unavailable frame, no gap or no range in the briefing is never verified', () => {
+  const b = withTargetSources();
+  const one = read => CR.checkRead(CR.parseRead(read), b);
+  b.sections.m3.data.rangeTargets['4h'] = { unavailable: 'no completed candle in the bars yet' };
+  assert.deepStrictEqual([one('target prior 4h high 21530').check, one('target prior 4h high 21530').fact], ['unchecked', 'the prior 4h candle is unavailable (no completed candle in the bars yet)']);
+  assert.strictEqual(one('target 5m fvg high 21550').check, 'unchecked');
+  assert.match(one('target 5m fvg high 21550').fact, /the 5m gaps are unavailable/);
+  assert.deepStrictEqual([one('target 1h fvg low 21550').check, one('target 1h fvg low 21550').fact], ['unchecked', 'no unfilled 1h gap in the briefing']);
+  assert.strictEqual(one('target 3m fvg low 21552.5').check, 'unchecked', 'no 3m gaps in the briefing');
+  assert.strictEqual(one('target prior 15m high 21580').check, 'unchecked', 'only the 1h and 4h ranges are targets');
+  // A gap with an unknown state, or a partly filled one without its unfilled part, gives no edge.
+  b.sections.m3.data.fvgs['1h'] = [{ side: 'bearish', low: 21552.5, high: 21558 }, { side: 'bearish', low: 21552.5, high: 21558, state: 'partly' }];
+  assert.strictEqual(one('target 1h fvg low 21552.5').check, 'unchecked');
+  // The briefing without these fields (an own-timeframe briefing has them null).
+  const bare = scenario1();
+  for (const read of ['target prior 1h high 21580', 'target 15m fvg low 21552.5']) assert.strictEqual(CR.checkRead(CR.parseRead(read), bare).check, 'unchecked', read);
+  Object.assign(bare.sections.m3.data, { rangeTargets: null, fvgs: null });
+  for (const read of ['target prior 1h mid 21560', 'target 15m fvg high 21558']) assert.strictEqual(CR.checkRead(CR.parseRead(read), bare).check, 'unchecked', read);
+  // These are target sources only: as a stop they name no level.
+  assert.strictEqual(one('stop prior 4h low 21499.75').check, 'unchecked');
+});
+
+test('composed on the fixture bars: bar 773\'s long with the prior 4h mid or 1h high as its target; a gap below is a short\'s', () => {
+  // Bar 773 (2026-04-24 09:57 ET), price 27193.75, stop the 15m low 27130.25 (63.50 points). The prior 4h candle
+  // 27363.75-27108: mid 27235.875, on the tick toward the entry 27235.75 (42.00 points = 168 ticks, 0.66R); the prior
+  // 1h high 27266.75 (73.00 points = 292 ticks, 1.15R). The 15m and 1h gaps from 10:00 ET are partly filled: their
+  // unfilled part 27120.75-27130.25 lies below price.
+  const b = briefingAt(fixtureBars(), 773);
+  const m3 = b.sections.m3.data;
+  assert.strictEqual(m3.rangeTargets['4h'].mid.price, 27235.875);
+  assert.deepStrictEqual(m3.fvgs['15m'][0].unfilled, [27120.75, 27130.25]);
+  const base = [
+    { step: 'bias', skill: 'bos-vs-choch', read: '1h choch up' },
+    { step: 'bias', skill: 'daily-bias', read: 'above prior RTH range' },
+    { step: 'location', skill: 'levels-and-reactions', read: 'at prior RTH high' },
+    { step: 'setup', skill: 'rejection', read: '15m rejected prior RTH high up' },
+    { step: 'entry', skill: 'candle-reading', read: '3m close top' },
+    { step: 'entry', skill: 'momentum-and-volume', read: '3m momentum up' },
+    { step: 'stop', skill: 'invalidation', read: 'stop 15m low 27130.25' },
+  ];
+  const withTarget = (read, skill = 'top-down-entry') => base.concat({ step: 'target', skill, read });
+  const mid = CR.checkReads({ reads: withTarget('target prior 4h mid 27235.875'), side: 'long', briefing: b });
+  assert.strictEqual(mid.ok, true, CR.renderCheck(mid));
+  assert.deepStrictEqual(mid.target, { source: 'prior-4h-mid', level: 27235.75 });
+  assert.strictEqual(CR.targetROf(mid.reference, mid.stop.level, mid.target.level), 0.66);
+  assert.match(mid.signature, /\+target:prior-4h-mid-under-1\.5r$/);
+  const high = CR.checkReads({ reads: withTarget('target prior 1h high 27266.75'), side: 'long', briefing: b });
+  assert.strictEqual(high.ok, true, CR.renderCheck(high));
+  assert.strictEqual(CR.targetROf(high.reference, high.stop.level, high.target.level), 1.15);
+  // The partly filled gap's unfilled high is below price: true, a short's target, against the long.
+  const gap = CR.checkReads({ reads: withTarget('target 1h fvg high 27130.25', 'fair-value-gaps'), side: 'long', briefing: b });
+  assert.strictEqual(gap.reads.at(-1).check, true);
+  assert.strictEqual(gap.reads.at(-1).dir, 'short');
+  assert.strictEqual(gap.ok, false);
+  // Its old high 27134.75 was traded into: no longer the gap's edge. The 1h low is no 1h high.
+  for (const read of ['target 15m fvg high 27134.75', 'target prior 1h high 27130.25', 'target prior 4h mid 27236.25']) {
+    assert.strictEqual(CR.checkRead(CR.parseRead(read), b).check, false, read);
+  }
+  assert.strictEqual(CR.checkRead(CR.parseRead('target 5m fvg low 27120.75'), b).check, 'unchecked', 'no 1m bars: no 5m gaps');
+});
+
+test('on briefings built from the fixture bars: every range target and gap edge verifies on its side', () => {
+  const bars = fixtureBars();
+  let checked = 0;
+  let spent = 0;
+  for (const i of [600, 900, 1200, bars.length - 1]) {
+    const b = briefingAt(bars, i);
+    const m3 = b.sections.m3.data;
+    const sideOf = p => (p > m3.price ? 'long' : p < m3.price ? 'short' : null);
+    for (const [tf, r] of Object.entries(m3.rangeTargets || {})) {
+      if (r.unavailable) continue;
+      for (const part of ['high', 'mid', 'low']) {
+        const c = CR.checkRead(CR.parseRead(`target prior ${tf} ${part} ${r[part].price}`), b);
+        if (r.taken && r.taken.side === part) {
+          assert.strictEqual(c.check, false, `${i} ${tf} ${part}: taken, spent`);
+          spent += 1;
+          continue;
+        }
+        assert.strictEqual(c.check, true, `${i} ${tf} ${part}`);
+        assert.ok(Math.abs(c.price - r[part].price) < 0.25 && Number.isInteger(c.price / 0.25), `${i} ${tf} ${part}: on the tick`);
+        assert.strictEqual(c.dir, sideOf(c.price), `${i} ${tf} ${part}`);
+        // The same tick the briefing counts to (candle-facts.js targetAt floors the distance toward price).
+        assert.strictEqual(Math.round(Math.abs(c.price - m3.price) / 0.25), r[part].ticks, `${i} ${tf} ${part}: the briefing's ticks`);
+        checked += 1;
+      }
+    }
+    for (const [tf, list] of Object.entries(m3.fvgs || {})) {
+      if (!Array.isArray(list)) continue;
+      for (const g of list) {
+        const [lo, hi] = g.state === 'open' ? [g.low, g.high] : g.unfilled;
+        for (const [edge, p] of [['low', lo], ['high', hi]]) {
+          const c = CR.checkRead(CR.parseRead(`target ${tf} fvg ${edge} ${p}`), b);
+          assert.deepStrictEqual([c.check, c.dir], [true, sideOf(p)], `${i} ${tf} fvg ${edge} ${p}`);
+          checked += 1;
+        }
+      }
+    }
+  }
+  assert.ok(checked > 30, `checked ${checked} targets`);
+  assert.ok(spent >= 3, `${spent} spent sides (bars 600 and 1200 have taken ones)`);
+});
