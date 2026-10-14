@@ -275,7 +275,7 @@ test('no file names the retired harness-tools skill (the code module scripts/lib
   // old run, and this test. In the other splits' tests only their allow-list lines that quote the old text
   // (`old: '...'`) may name it.
   const FROZEN = f => /^tests\/fixtures\/skill-split\/[a-z-]+\.before\.txt$/.test(f) || ['tests/fixtures/qwen-cycle-transcript.txt', 'tests/plugin/harness-tools-split.test.js'].includes(f);
-  const QUOTES_OLD = ['tests/plugin/broker-mcp-split.test.js', 'tests/plugin/strategy-library-split.test.js'];
+  const QUOTES_OLD = ['tests/plugin/broker-mcp-split.test.js', 'tests/plugin/strategy-library-split.test.js', 'tests/plugin/autonomous-trading-split.test.js'];
   // Every file in the tree (tracked or new), but not dependencies or the repository database, nor a symlinked directory.
   const files = [];
   const walk = dir => {
