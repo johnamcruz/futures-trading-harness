@@ -43,6 +43,26 @@ test('the thresholds: body exactly 0.6 of the range counts, less does not; range
   assert.strictEqual(fvgAt(up(m), 2, [NaN, NaN, NaN]), null, 'no ATR yet and no engulfing: not strong');
 });
 
+test('the close in the extreme third: exactly at 2/3 of the range counts, just below does not, either way', () => {
+  assert.ok(at3(up(K(1, 9, 15, 9, 13))), 'close 4 of range 6 above the low: exactly 2/3 (body 0.67)');
+  assert.strictEqual(at3(up(K(1, 9, 15, 9, 12.75))), null, 'close 3.75 of 6: 0.625 (body 0.625)');
+  const down = m => [K(0, 14.25, 15, 14, 14.5), { ...m, t: t(1) }, K(2, 11.5, 12, 11, 11.25)];
+  assert.ok(fvgAt(down(K(1, 15, 15, 9, 11)), 2, ones()), 'close 4 of range 6 below the high: exactly 2/3');
+  assert.strictEqual(fvgAt(down(K(1, 15, 15, 9, 11.25)), 2, ones()), null, 'close 3.75 of 6 below the high');
+});
+
+test('fvgAt without an ATR series computes ATR(14) of the bars itself, as fairValueGaps does', () => {
+  const bars = normalizeBars(readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'))).slice(0, 400);
+  const atr = atrOf(bars, 14);
+  let gaps = 0;
+  for (let j = 2; j < bars.length; j += 1) {
+    const g = fvgAt(bars, j);
+    assert.deepStrictEqual(g, fvgAt(bars, j, atr), `bar ${j}`);
+    if (g) gaps += 1;
+  }
+  assert.ok(gaps > 0);
+});
+
 test('an engulfing middle candle counts even when its range is under ATR; the ATR read is the middle bar\'s', () => {
   const m = K(1, 9.25, 13, 9.25, 12.75); // range 3.75, body 3.5
   const bearFirst = K(0, 10, 10, 9, 9.25); // a bearish body 9.25-10, which the middle body covers

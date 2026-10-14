@@ -139,8 +139,9 @@ const vwapCrosses = (bars, vwap) => crossesOf(bars, vwap, bars.length - REGIME_P
  * strength rule (cisd.js strongCandle: an up close for a bullish gap, body >= 0.6 of its range, close in the extreme
  * third, range >= 1.0 x ATR(14) as known at the middle bar, `atr14[j - 1]`, or its body engulfing bar 1's). Reads
  * bars j-2..j and the ATR at j-1 only: the gap is known when bar 3 completes. { side, low, high, at (the middle bar) }.
+ * `atr14`: ATR(14) of `bars` (computed when not given).
  */
-function fvgAt(bars, j, atr14) {
+function fvgAt(bars, j, atr14 = ind.atr(bars, 14)) {
   if (j < 2) return null;
   const a = bars[j - 2];
   const m = bars[j - 1];

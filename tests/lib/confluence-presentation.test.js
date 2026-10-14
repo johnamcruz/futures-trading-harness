@@ -201,16 +201,19 @@ test('levelOnTick: a computed level to the cent, then on the tick (one rule for 
 });
 
 test('the briefing shows partly filled FVGs with the open ones', () => {
-  let partly = 0;
-  for (const n of [600, 900, 1200]) {
+  // Cuts with open gaps (600, 1100, 1250), partly filled ones (1100, 1200, 1250), and none (900).
+  let withOpen = 0;
+  let withPartly = 0;
+  for (const n of [600, 900, 1100, 1200, 1250]) {
     const b = B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, n), minutes: 3 });
     const liq = b.sections.m3.data.liquidity;
     const s = snapshot({ bars: BARS.slice(0, n) });
     assert.deepStrictEqual(liq.openFvgs, s.liquidity.openFvgs);
     assert.deepStrictEqual(liq.partlyFilledFvgs, s.liquidity.partlyFilledFvgs);
-    partly += liq.partlyFilledFvgs.length;
+    if (liq.openFvgs.length) withOpen += 1;
+    if (liq.partlyFilledFvgs.length) withPartly += 1;
   }
-  assert.ok(partly > 0, 'the fixture has partly filled gaps for the briefing to show');
+  assert.ok(withOpen >= 2 && withPartly >= 2, `cuts with open gaps ${withOpen}, with partly filled ones ${withPartly}: at least two each`);
 });
 
 test('tick rounding is display only: room, R and every candidate\'s levels ahead are those of the unrounded levels', () => {
