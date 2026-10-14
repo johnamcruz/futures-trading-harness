@@ -249,6 +249,10 @@ test('every role has the row of every harness tool it holds in its core, or a re
     // Neither ever loaded harness-tools, so neither had these rows on main; embedding them would grow its prompt.
     'trade-reviewer': ['bars_fetch', 'lessons', 'reconcile'],
     'strategy-researcher': ['strategies_validate', 'strategies_list', 'strategies_show'],
+    // It holds skill_lookup only to read a skill its embedded skills name (gate-refusals-limits, ...), so opencode's
+    // listing of every skill is out of its prompt; its prompt says so and the tool's schema carries the arguments.
+    // Embedding tool-arguments would grow it.
+    'trade-executor': ['skill_lookup'],
   };
   const HAD_HARNESS_TOOLS = ['market-structure-analyst', 'risk-manager', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
   for (const a of require('../../scripts/lib/role-skills').loadRoles(ROOT)) {
@@ -265,7 +269,7 @@ test('every role has the row of every harness tool it holds in its core, or a re
     // The roles that embedded harness-tools now embed its rules and the briefing's rows.
     if (HAD_HARNESS_TOOLS.includes(a.name)) assert.ok(a.skills.includes('tool-arguments') && a.skills.includes('bar-briefing'), `${a.name}: tool-arguments and bar-briefing are core`);
     // Every role holding skill_lookup reaches its row.
-    if (held.includes('skill_lookup')) assert.ok(a.skills.includes('tool-arguments'), `${a.name}: skill_lookup's row`);
+    if (held.includes('skill_lookup') && !(REFERENCED[a.name] || []).includes('skill_lookup')) assert.ok(a.skills.includes('tool-arguments'), `${a.name}: skill_lookup's row`);
   }
   const rm = flat(read('agents/risk-manager.md'));
   assert.match(rm, /Approve the plan's numbers as order_plan shows them; never supply tick numbers of your own\. Its refusal \(not a candidate now, the other side, a verdict the gate would refuse\) is a VETO; a tick-spec refusal: `get_contract`, then call it again \(the `order-plan` skill\)\./);

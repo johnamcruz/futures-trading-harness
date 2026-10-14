@@ -125,8 +125,11 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   // The core is embedded in full in both modes: every skill the body says to load.
   for (const a of HS.loadAgents(ROOT)) {
     for (const d of HS.agentSkills(ROOT, { ...a, index: [] })) assert.ok(index.agent[a.name].prompt.includes(`<skill name="${d.name}">\n${d.body}\n</skill>`), `${a.name}: ${d.name}`);
-    // A role without an index (and without skill_lookup, so it keeps the skill tool) has the same prompt in both modes.
-    if (!a.index.length) assert.strictEqual(index.agent[a.name].prompt, full.agent[a.name].prompt, a.name);
+    // A role without an index has the same prompt in both modes; one holding skill_lookup (denied the skill tool in index
+    // mode: opencode's listing of every skill out of its prompt) is told, in one sentence, how to read another skill.
+    const holds = a.tools.includes('mcp__harness__skill_lookup');
+    if (!a.index.length) assert.strictEqual(index.agent[a.name].prompt, holds ? full.agent[a.name].prompt.replace("Read them here; don't load them again with the skill tool.", 'Read them here; others they name: skill_lookup.') : full.agent[a.name].prompt, a.name);
+    if (!a.index.length && holds) assert.strictEqual(index.agent[a.name].permission.skill, 'deny', a.name);
   }
   // Only the prompts and the skill tool of the roles holding skill_lookup (denied in index mode: opencode.js
   // deniesSkillTool) differ between the modes: the other permissions, servers and the rest are the same.

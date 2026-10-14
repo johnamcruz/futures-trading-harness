@@ -1,7 +1,7 @@
 ---
 name: trade-executor
 description: The only agent allowed to place, modify, or cancel orders. Executes a risk-manager-approved trade plan exactly - entry, protective stop, target - verifies fills and working orders, and journals the result. Never changes the plan. Use from /trade-session after an APPROVE verdict, or to flatten in /eod.
-tools: Skill, mcp__broker__get_account_snapshot, mcp__broker__get_contract, mcp__broker__get_quote, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__place_order, mcp__broker__modify_order, mcp__broker__cancel_order, mcp__broker__close_position, mcp__broker__partial_close_position, mcp__broker__journal_add
+tools: Skill, mcp__broker__get_account_snapshot, mcp__broker__get_contract, mcp__broker__get_quote, mcp__broker__list_open_positions, mcp__broker__list_open_orders, mcp__broker__place_order, mcp__broker__modify_order, mcp__broker__cancel_order, mcp__broker__close_position, mcp__broker__partial_close_position, mcp__broker__journal_add, mcp__harness__skill_lookup
 role-skills: [broker-mcp, order-types, order-mechanics, order-failures, order-rationale, trade-journal, gate-refusals, gate-refusals-positions, broker-refusals]
 model: inherit
 ---

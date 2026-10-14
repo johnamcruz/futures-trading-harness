@@ -337,6 +337,21 @@ test('index mode: every skill a role\'s prompt names is embedded in it, or reach
   }
 });
 
+test('index mode: the trade-executor embeds its skills, is denied the skill tool (no listing of every skill) and reads the others it names with skill_lookup', () => {
+  const entry = config.agent['trade-executor'];
+  const role = [...rules(config.permission), ...rules(entry.permission)];
+  assert.strictEqual(decide(role, 'skill', 'gate-refusals-limits'), 'deny');
+  assert.strictEqual(decide(role, 'harness_skill_lookup'), 'allow');
+  // gate-refusals (embedded) points to its parts: each one a skill_lookup away, as the prompt says.
+  for (const s of ['gate-refusals-limits', 'gate-refusals-cycle']) {
+    assert.match(entry.prompt, new RegExp(`\`${s}\``), s);
+    assert.ok(!entry.prompt.includes(`<skill name="${s}">`), s);
+  }
+  assert.match(entry.prompt, /Read them here; others they name: skill_lookup\./);
+  // Order tools stay its own; skill_lookup is read-only.
+  assert.strictEqual(decide(role, 'broker_place_order'), 'allow');
+});
+
 test('the run\'s config denies the skill tool to the roles holding skill_lookup in index mode, the same every run, over the project file and a hostile user config', () => {
   const user = { permission: { skill: 'allow' }, agent: { 'risk-manager': { permission: { skill: 'allow', '*': 'allow' } } } };
   const index = oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents, mode: 'index' });
