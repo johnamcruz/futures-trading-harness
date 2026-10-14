@@ -1,6 +1,6 @@
 ---
 name: position-sizing
-description: Size futures trades from the stop distance, tick value, and the remaining daily loss allowance, with contract specs for CME micros and minis. Use for every plan before an order, and whenever volatility changes.
+description: Use when sizing a trade plan - risk per contract, the budget, the caps, a policy verdict's size.
 ---
 
 # Position Sizing
@@ -13,19 +13,8 @@ description: Size futures trades from the stop distance, tick value, and the rem
 ## How It Works
 
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
-   `tickSize` and `tickValue`. The table is for sanity checks only:
-
-   | Micro | Mini | Tick size | Micro $/tick | Mini $/tick |
-   |---|---|---|---|---|
-   | MNQ | NQ | 0.25 | 0.50 | 5.00 |
-   | MES | ES | 0.25 | 1.25 | 12.50 |
-   | MYM | YM | 1.0 | 0.50 | 5.00 |
-   | M2K | RTY | 0.10 | 0.50 | 5.00 |
-   | MGC | GC | 0.10 | 1.00 | 10.00 |
-   | MCL | CL | 0.01 | 1.00 | 10.00 |
-
-   Contract ids can name a root by another symbol than the exchange's
-   (the harness names contracts by their root: `NQ`, `MNQ`; another month is `NQ:2026-03`). Confirm with `search_contracts`.
+   `tickSize` and `tickValue`. Micro and mini specs to sanity-check them: the
+   `micro-mini-specs` skill.
 2. **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
    fees from the account, if known). A stop can fill a tick or more past its
    price: when the room to the loss floor or the daily limit sets the size,
