@@ -60,7 +60,9 @@ test('the agents: role-index skills exist, aren\'t core, and the role holds skil
   // carry them.
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
     'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement'];
-  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS].sort());
+  // And the prop and sizing split's pieces the risk manager reads only when a cycle needs one.
+  const SPLIT = ['micro-mini-specs', 'prop-pacing-judgment'];
+  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS, ...SPLIT].sort());
   for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s)), [], `${a.name}: basics only in its index`);
   const req = RS.requiredByRole(ROOT, 'index');
   assert.deepStrictEqual(req.get('risk-manager'), [{ skill: 'confluence-counting', when: [{ key: 'candidate', value: null }] }, { skill: 'invalidation', when: [{ key: 'candidate', value: null }] }]);
@@ -120,11 +122,13 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 
 // Each role's skills as main loads them (its role-skills before role-index existed): no default behaviour changes.
 // Added since: bos-vs-choch (core) for the market-structure and trend-momentum analysts; cisd and fib-retracement
-// (indexed) for the market-structure analyst.
+// (indexed) for the market-structure analyst; micro-mini-specs and prop-pacing-judgment (indexed; the prop and sizing
+// split, tests/plugin/prop-sizing-split.test.js) for the risk manager, which doesn't load prop-evaluator (the
+// evaluator is the user's command; no step of the role reads it).
 const MAIN_SKILLS = {
   'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools'],
   'news-calendar-analyst': ['session-timing', 'trader-process'],
-  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools'],
+  'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
   'strategy-researcher': ['strategy-authoring', 'strategy-library'],
   'trade-executor': ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],

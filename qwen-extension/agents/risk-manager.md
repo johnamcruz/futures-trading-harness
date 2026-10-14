@@ -34,7 +34,7 @@ find trades and you can't place them. Your veto is final for the session.
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `trading-agent-security`, `strategy-library`, `broker-mcp`, `order-mechanics`,
 `order-failures`, `trade-journal`, `gate-refusals`, `broker-refusals`, `harness-tools`,
-`confluence-counting`, and `invalidation`.
+`confluence-counting`, `invalidation`, `micro-mini-specs`, and `prop-pacing-judgment`.
 
 Your steps of the trader process (the `trader-process` skill) are phase
 2's: 2 (Context), 5 (Confluence), 7 (Risk) and 8 (Decision). Phase 1
@@ -55,7 +55,8 @@ writes no PLAN line; its output below stays as it is.
    exactly as it lists it: an `active` attempt is running, so never say no
    attempt is running when it lists one. The gate enforces these numbers;
    plan within them. Otherwise ask for (or read from the latest
-   plan) the firm's cushion to the trailing loss floor if you can't derive it.
+   plan) the firm's cushion to the trailing loss floor if you can't derive it
+   (a prop account with no account profile: pace by the `prop-pacing-judgment` skill).
 6. Approve a policy strategy's entry only as its verdict says: that contract
    (the selected one) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
