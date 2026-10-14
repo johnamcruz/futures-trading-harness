@@ -165,10 +165,12 @@ test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unread
 test('writeCycleLog: the orders the gateway judged in the cycle\'s window are among its orders (an opencode trade-executor\'s are in no main transcript), each once', () => {
   const home = tmpDir();
   const gateLog = path.join(home, 'gate.jsonl');
-  const env = { FTH_HOME: home, FTH_GATE_LOG: gateLog };
+  const env = { FTH_HOME: home, FTH_GATE_LOG: gateLog, FTH_CYCLE_TRANSCRIPT: path.join(home, 'cycle-transcript-1.jsonl') };
+  const { cycleId } = require('../../scripts/lib/trading/check-order');
+  const cycle = cycleId(env);
   const at = new Date('2026-10-07T14:03:05Z');
   const ts = s => new Date(at.getTime() + s * 1000).toISOString();
-  const g = (s, x) => JSON.stringify({ ts: ts(s), source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [], contractId: 'MNQ', side: 0, size: 1, type: 2, ...x });
+  const g = (s, x) => JSON.stringify({ ts: ts(s), source: 'gateway', tool: 'place_order', decision: 'allowed', violations: [], contractId: 'MNQ', side: 0, size: 1, type: 2, cycle, ...x });
   fs.writeFileSync(gateLog, [
     '{"partial": tr', // a torn line: skipped
     g(-5, { rationale: 'setup:orb long, an earlier cycle\'s' }),
@@ -179,6 +181,10 @@ test('writeCycleLog: the orders the gateway judged in the cycle\'s window are am
     g(40, { side: 1, size: 3, type: 1, rationale: 'setup:orb short' }), // allowed, then refused by the order tracker: one order, refused
     g(40.5, { decision: 'blocked', side: 1, size: 3, type: 1, rationale: 'setup:orb short', violations: [{ check: 'x', message: 'The gateway could not record the order before sending it' }] }),
     g(70, { rationale: 'setup:orb long, after the cycle' }),
+    // Another cycle's (another home or account sharing the log), and a record with no cycle (an interactive session):
+    // in the window, never this cycle's.
+    g(25, { rationale: 'setup:orb long, another runner', cycle: cycleId({ FTH_CYCLE_TRANSCRIPT: path.join(home, 'cycle-transcript-2.jsonl') }) }),
+    g(26, { rationale: 'setup:orb long, a session', cycle: undefined }),
   ].join('\n') + '\n');
   const { summary } = writeCycleLog(home, { at, env, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream(['trade-session']), ok: true, durationMs: 45000 });
   assert.deepStrictEqual(summary.orders.map(o => [o.rationale, o.gate || null, o.via || null]), [
@@ -190,7 +196,12 @@ test('writeCycleLog: the orders the gateway judged in the cycle\'s window are am
   assert.deepStrictEqual(summary.orders[2], { contractId: 'MNQ', side: 0, size: 1, type: 2, rationale: 'setup:vwap long', gate: 'allowed', via: 'gate-log' });
   // No cycle env (a caller that gives none), or no gate log: the transcript's orders alone.
   assert.strictEqual(writeCycleLog(home, { at, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
-  assert.strictEqual(writeCycleLog(home, { at, env: { FTH_GATE_LOG: path.join(home, 'none.jsonl') }, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
+  assert.strictEqual(writeCycleLog(home, { at, env: { ...env, FTH_GATE_LOG: path.join(home, 'none.jsonl') }, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
+  // A cycle env with no runner cycle (no FTH_CYCLE_TRANSCRIPT): no id, nothing merged.
+  assert.strictEqual(writeCycleLog(home, { at, env: { FTH_HOME: home, FTH_GATE_LOG: gateLog }, action: 'trade', harness: 'opencode', prompt: 'P', output: claudeStream([]), durationMs: 45000 }).summary.orders.length, 2);
+  // The id: a hash of the run's own transcript file, stable, never the path itself; none outside a runner cycle.
+  assert.match(cycle, /^[0-9a-f]{16}$/);
+  assert.strictEqual(cycleId({ FTH_CYCLE_TRANSCRIPT: '  ' }), null);
   // An entry the gate log alone shows still raises the missing-skills alarm.
   assert.ok(writeCycleLog(home, { at, env, action: 'trade', harness: 'opencode', prompt: 'P', output: use('mcp__harness__bar_briefing', {}), durationMs: 45000 }).summary.missingSkills.length > 0);
 });

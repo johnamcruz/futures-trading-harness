@@ -1158,12 +1158,18 @@ test('MCP gateway: a customTag carried by an order of unknown outcome can\'t be 
   await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DROP: 'place_order', FTH_LANE_TIMEOUT_MS: '300' }, [
     call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480', customTag: 'orb-1' }),
   ], { dir });
-  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile }, [
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile, FTH_CYCLE_TRANSCRIPT: transcript }, [
     call(2, 'place_order', { ...ORDER, customTag: 'orb-1' }),
     // An exit reusing it still goes, under a fresh tag, so the first order's record survives.
     call(3, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target', customTag: 'orb-1' }),
   ], { dir });
   assert.match(byId[2].result.content[0].text, /\[order-pending\]/);
+  // The tracker's refusal is logged with the order's contract, side, size, type and rationale, and the runner cycle's
+  // id (the cycle log reads them: cycle-log.js gateOrders).
+  const refusal = fs.readFileSync(path.join(dir, 'gate.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).find(e => e.decision === 'blocked' && (e.violations || []).some(v => v.check === 'order-pending'));
+  assert.deepStrictEqual([refusal.source, refusal.contractId, refusal.side, refusal.size, refusal.type, refusal.rationale, refusal.cycle], ['gateway', ORDER.contractId, ORDER.side, ORDER.size, ORDER.type, ORDER.rationale, require('../../scripts/lib/trading/check-order').cycleId({ FTH_CYCLE_TRANSCRIPT: transcript })]);
+  assert.ok(ORDER.side !== undefined && ORDER.size !== undefined && ORDER.type !== undefined);
   assert.strictEqual(byId[3].result.content[0].text, 'forwarded:tools/call:place_order');
   const placed = fs.readFileSync(argsFile, 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(c => c.name === 'place_order');
   assert.strictEqual(placed.length, 1, 'only the exit reached the broker');

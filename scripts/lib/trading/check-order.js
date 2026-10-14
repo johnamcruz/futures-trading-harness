@@ -104,16 +104,27 @@ function gateLogPath(env = process.env) {
     || path.join(harnessHome(env), 'logs', 'gate-log.jsonl');
 }
 
-/** Append a decision to the gate log (best effort; never throws). */
+/**
+ * The runner's cycle a process runs in, as an id: a hash of its FTH_CYCLE_TRANSCRIPT (a file of that run's own, set
+ * only by the runner: autotrader.js childEnv), or null outside one. The gate log stamps it on each decision, so the
+ * cycle log takes only its own cycle's orders (cycle-log.js gateOrders).
+ */
+function cycleId(env = process.env) {
+  const t = String((env && env.FTH_CYCLE_TRANSCRIPT) || '').trim();
+  return t ? require('crypto').createHash('sha256').update(t).digest('hex').slice(0, 16) : null;
+}
+
+/** Append a decision to the gate log (best effort; never throws), with the runner's cycle id when in one. */
 function logDecision(entry, env = process.env) {
   try {
     const file = gateLogPath(env);
+    const cycle = cycleId(env);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+    fs.appendFileSync(file, `${JSON.stringify({ ts: new Date().toISOString(), ...entry, ...(cycle ? { cycle } : {}) })}\n`);
   } catch (_err) {
     // logging must never change the decision
   }
 }
 
 // The gate's clock too (harness-now.js), so the gateway takes its time where it takes its checks.
-module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, createGatewayClock };
+module.exports = { readBlackouts, checkOrder, gateLogPath, logDecision, cycleId, createGatewayClock };

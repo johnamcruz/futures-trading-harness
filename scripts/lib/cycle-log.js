@@ -156,11 +156,16 @@ const GATE_SLACK_MS = 2000;
  * The gateway's place_order records (the gate log, gateLogPath(env): harness-owned, stamped by the wall clock, the
  * standard contract names the agents send) from `fromMs` to `toMs`, a tracker refusal folded into the allowed record
  * it follows (replay/labels.js collapsePairs). The gateway's only: every order call passes it, and a hook's record of
- * the same call would count it twice. [] when the log can't be read.
+ * the same call would count it twice. Only the records stamped with this cycle's id (check-order.js cycleId, from the
+ * cycle env's FTH_CYCLE_TRANSCRIPT): another home's, account's or session's order sharing the log and the window is
+ * never this cycle's; no id (no runner cycle), none. [] when the log can't be read.
  */
 function gateOrders(env, fromMs, toMs) {
   try {
-    const file = require('./trading/check-order').gateLogPath(env);
+    const { gateLogPath, cycleId } = require('./trading/check-order');
+    const id = cycleId(env);
+    if (!id) return [];
+    const file = gateLogPath(env);
     const size = fs.statSync(file).size;
     const fd = fs.openSync(file, 'r');
     let text;
@@ -176,7 +181,7 @@ function gateOrders(env, fromMs, toMs) {
     for (const line of text.split('\n')) {
       let e;
       try { e = JSON.parse(line); } catch (_err) { continue; }
-      if (!e || typeof e !== 'object' || e.source !== 'gateway' || e.tool !== 'place_order') continue;
+      if (!e || typeof e !== 'object' || e.source !== 'gateway' || e.tool !== 'place_order' || e.cycle !== id) continue;
       const ms = Date.parse(e.ts);
       if (Number.isFinite(ms) && ms >= fromMs && ms <= toMs) recs.push({ ...e, ms });
     }
