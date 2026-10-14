@@ -37,8 +37,8 @@ zone tends to reverse its way; gaps form fast and are less accurate;
 intraday (3m to 15m) suits them. Ours: a completed candle reacting there
 (`candle-reading`), momentum (`momentum-and-volume`) and a fired strategy;
 a 15m gap outweighs a 3m one. After a sweep (`levels-and-reactions`) and
-displacement (cisd_ote's CISD), the retest of its gap is the liquidity-grab
-entry read: it lives here (order-blocks, liquidity-sweep: being built).
+displacement (`cisd`), the retest of its gap is the liquidity-grab
+entry read: it lives here.
 
 **Ahead of a setup**: the unfilled part beyond `m3.price` its way. The
 briefing does not rank gaps among the levels in a setup's way
