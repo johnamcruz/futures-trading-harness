@@ -43,7 +43,8 @@
  *                                           source's price within one tick of <price>    below price long
  *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
  *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
- *                                           mid is the price on the tick toward price), <tf> fvg high|low (m3.fvgs:
+ *                                           mid is the price on the tick toward price; a side the candle forming
+ *                                           has taken is spent: false), <tf> fvg high|low (m3.fvgs:
  *                                           an unfilled gap's edge, a partly filled one's unfilled part), or <level>;
  *                                           within one tick                              above price long
  *
@@ -191,8 +192,9 @@ function towardRef(p, ref, tick) {
 }
 
 /**
- * The prices a stop or target source names (a source the briefing doesn't hold: none): { field, prices, why?, note? }
- * (why: what the briefing says instead; note: how a price was put on the tick).
+ * The prices a stop or target source names (a source the briefing doesn't hold: none): { field, prices, why?, spent?,
+ * note? } (why: what the briefing says instead; spent: the briefing holds it and says it is no target; note: how a
+ * price was put on the tick).
  */
 function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
   const m3 = data(b, 'm3') || {};
@@ -230,7 +232,9 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
       if (isObj(r) && r.unavailable) return { field, prices: [], why: `the prior ${tf} candle is unavailable (${r.unavailable})` };
       const exact = isObj(r) && isObj(r[part]) ? num(r[part].price) : null;
       if (exact === null) return { field, prices: [] };
-      const p = towardRef(exact, ref, tick);
+      // A side the candle forming has already traded beyond is spent as a target (the take-profit skill).
+      if (part !== 'mid' && isObj(r.taken) && r.taken.side === part) return { field, prices: [], spent: `the prior ${tf} ${part} ${exact} is taken by the candle forming: spent as a target` };
+      const p = part === 'mid' ? towardRef(exact, ref, tick) : exact;
       return { field, prices: [p], note: p === exact ? '' : ` (the mid ${exact} on the tick toward price)` };
     }
     // A fair value gap's edge on a timeframe (m3.fvgs): the edges of what is left of it (an open gap's low and high, a
@@ -401,7 +405,8 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
     case 'stop':
     case 'target': {
       const ref = num(m3.price);
-      const { field, prices, why, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
+      const { field, prices, why, spent, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
+      if (spent) return res(false, spent, { field });
       if (!prices.length) return res('unchecked', why || `the briefing has no ${p.source} for a ${p.kind}`, { field });
       const hit = prices.find(x => within(x, p.price, tick));
       if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}${note}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });

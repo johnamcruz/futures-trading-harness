@@ -429,6 +429,23 @@ test('target prior 1h|4h high|mid|low: the prior completed candle\'s range, with
   const ok = CR.checkReads({ reads: withTargetRead('target prior 1h high 21580'), side: 'long', briefing: b });
   assert.strictEqual(ok.ok, true, CR.renderCheck(ok));
   assert.deepStrictEqual(ok.target, { source: 'prior-1h-high', level: 21580 });
+  // A side the candle forming has taken is spent (the take-profit skill): false, whether it closed back or beyond;
+  // the mid and the far side remain.
+  for (const closedBack of [true, false]) {
+    b.sections.m3.data.rangeTargets['1h'].taken = { side: 'high', closedBack };
+    const spent = one('target prior 1h high 21580');
+    assert.deepStrictEqual([spent.check, spent.fact], [false, 'the prior 1h high 21580 is taken by the candle forming: spent as a target']);
+    assert.strictEqual(CR.checkReads({ reads: withTargetRead('target prior 1h high 21580'), side: 'long', briefing: b }).ok, false);
+    assert.strictEqual(one('target prior 1h mid 21560').check, true);
+    assert.strictEqual(one('target prior 1h low 21540.25').check, true);
+  }
+  b.sections.m3.data.rangeTargets['4h'].taken = { side: 'low', closedBack: true };
+  assert.strictEqual(one('target prior 4h low 21499.75').check, false);
+  assert.strictEqual(one('target prior 4h high 21530').check, true);
+  // Only the mid is put on the tick: an off-tick high (not as the briefing writes it) is matched as it is, unnamed as a mid.
+  b.sections.m3.data.rangeTargets['4h'].high.price = 21530.1;
+  assert.strictEqual(one('target prior 4h high 21530').price, 21530.1);
+  assert.doesNotMatch(one('target prior 4h high 21530').fact, /mid/);
 });
 
 test('an off-tick prior-candle mid is the price on the tick toward the entry', () => {
@@ -544,6 +561,7 @@ test('composed on the fixture bars: bar 773\'s long with the prior 4h mid or 1h 
 test('on briefings built from the fixture bars: every range target and gap edge verifies on its side', () => {
   const bars = fixtureBars();
   let checked = 0;
+  let spent = 0;
   for (const i of [600, 900, 1200, bars.length - 1]) {
     const b = briefingAt(bars, i);
     const m3 = b.sections.m3.data;
@@ -552,6 +570,11 @@ test('on briefings built from the fixture bars: every range target and gap edge 
       if (r.unavailable) continue;
       for (const part of ['high', 'mid', 'low']) {
         const c = CR.checkRead(CR.parseRead(`target prior ${tf} ${part} ${r[part].price}`), b);
+        if (r.taken && r.taken.side === part) {
+          assert.strictEqual(c.check, false, `${i} ${tf} ${part}: taken, spent`);
+          spent += 1;
+          continue;
+        }
         assert.strictEqual(c.check, true, `${i} ${tf} ${part}`);
         assert.ok(Math.abs(c.price - r[part].price) < 0.25 && Number.isInteger(c.price / 0.25), `${i} ${tf} ${part}: on the tick`);
         assert.strictEqual(c.dir, sideOf(c.price), `${i} ${tf} ${part}`);
@@ -571,4 +594,5 @@ test('on briefings built from the fixture bars: every range target and gap edge 
     }
   }
   assert.ok(checked > 30, `checked ${checked} targets`);
+  assert.ok(spent >= 3, `${spent} spent sides (bars 600 and 1200 have taken ones)`);
 });
