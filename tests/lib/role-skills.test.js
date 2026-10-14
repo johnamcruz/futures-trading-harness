@@ -56,11 +56,11 @@ test('planErrors: an index skill that doesn\'t exist, one in both lists, or an i
 test('the agents: role-index skills exist, aren\'t core, and the role holds skill_lookup; the proof case indexes the basics skills', () => {
   const agents = HS.loadAgents(ROOT);
   assert.doesNotThrow(() => HS.checkRoleSkills(ROOT));
-  // The proof case: the eleven basics skills, and cisd, fib-retracement and daily-bias since, are in the index of the
-  // roles that carry them.
+  // The proof case: the eleven basics skills, and cisd, fib-retracement, daily-bias and top-down-entry since, are in the
+  // index of the roles that carry them.
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
     'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement',
-    'daily-bias'];
+    'daily-bias', 'top-down-entry'];
   assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS].sort());
   for (const a of agents) assert.deepStrictEqual(a.skills.filter(s => BASICS.includes(s)), [], `${a.name}: basics only in its index`);
   const req = RS.requiredByRole(ROOT, 'index');
@@ -122,9 +122,9 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // Each role's skills as main loads them (its role-skills before role-index existed): no default behaviour changes.
 // Added since: bos-vs-choch (core) for the market-structure and trend-momentum analysts; cisd and fib-retracement
 // (indexed) for the market-structure analyst; htf-to-ltf (core) and daily-bias (indexed) for it, split from
-// multi-timeframe-analysis.
+// multi-timeframe-analysis; top-down-entry (indexed) for it, split from htf-to-ltf.
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools'],
+  'market-structure-analyst': ['market-structure', 'multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'top-down-entry', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'candle-reading', 'mtf-rejection', 'mtf-breakout', 'cisd', 'fib-retracement', 'harness-tools'],
   'news-calendar-analyst': ['session-timing', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals', 'broker-refusals', 'trader-process', 'confluence-counting', 'invalidation', 'harness-tools'],
   'strategy-researcher': ['strategy-authoring', 'strategy-library'],

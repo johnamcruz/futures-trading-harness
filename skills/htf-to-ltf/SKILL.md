@@ -1,6 +1,6 @@
 ---
 name: htf-to-ltf
-description: Use when tying higher timeframes to the entry - top down from the HTF level to the 15m setup, 3m trigger, stop and target; alignment labels.
+description: Use when timeframes disagree - alignment labels, reversals, HTF levels.
 ---
 
 # HTF to LTF
@@ -46,35 +46,11 @@ Take levels from the higher timeframes and treat them as targets on the
 trigger timeframe, or as reasons to skip a setup that runs straight into
 one. Where each frame's levels are: the `timeframe-sources` skill.
 Each timeframe's last completed candle and the levels it met, and the next
-swing each side: the `candle-reading` skill.
-
-### 3. Top down to the entry
-
-Completed candles; the strategy and the gate decide entries.
-
-1. **HTF: side and level.** Today's bias (`daily-bias`) and the level
-   price comes into (`levels-and-reactions`).
-2. **15m: the setup there.** `mtf-rejection`, `mtf-breakout`, `cisd`,
-   `pullback-vs-reversal`, `bos-vs-choch`.
-3. **3m/5m: the trigger.** A close its way, with momentum
-   (`candle-reading`, `momentum-and-volume`).
-4. **Stop: beyond the reaction.** The LTF structure past it (`invalidation`).
-5. **Target: the next HTF swing.** `m3.swingTargets`; `candidate.inTheWay`
-   is the first level in the way.
-
-Disagreeing: the table labels it; the HTF gives the side, the LTF the timing.
+swing each side: the `candle-reading` skill. Top down: `top-down-entry`.
 
 ## Examples
 
 ```text
 1h UP, 15m DOWN, 3m CHoCH up at 21600.25: long pullback, the trigger turned back -> step 4 sizes it.
 Target the 1h swing high 21652.75: 52.50 points (210 ticks, $105.00 per MNQ).
-```
-
-NQ, back-adjusted CSV prices:
-
-```text
-2022-06-22: bias up; 15m 12:45 rejects prior POC 14942.75, 3m 13:03 closes top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
-target 15m swing high 15040.25 (80.25 pts, 3.73R), hit 14:15.
 ```

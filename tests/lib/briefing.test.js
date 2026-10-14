@@ -852,6 +852,19 @@ test('the day part carries the prior RTH day as a daily candle, and m3 location 
   assert.ok(day.priorRthCandle.closeVsDayBefore, 'two whole RTH days in the bars: the day before is known');
   const loc = b.sections.m3.data.location;
   assert.strictEqual(loc.priorRthClose, b.price > day.priorRth.close ? 'above' : b.price < day.priorRth.close ? 'below' : 'at');
+  // On bars where price is on one side of the prior close and the other side of the prior high (or low), it is the
+  // close's side: a fact read against the high or low instead fails.
+  const sideOf = (p, l) => (p > l ? 'above' : p < l ? 'below' : 'at');
+  const found = {};
+  for (let n = 1000; n < 1499 && !(found.high && found.low); n += 1) {
+    const x = build(n);
+    const pr = x.sections.day.data.priorRth;
+    if (!pr) continue;
+    const close = sideOf(x.price, pr.close);
+    assert.strictEqual(x.sections.m3.data.location.priorRthClose, close, `bar ${n}`);
+    for (const k of ['high', 'low']) if (!found[k] && close !== sideOf(x.price, pr[k])) found[k] = n;
+  }
+  assert.ok(found.high && found.low, `bars between the prior close and the prior high, and the low: ${JSON.stringify(found)}`);
   // Kept, same version, until the RTH close: the next bar leaves the day part as it was.
   const next = build(1301, b);
   assert.strictEqual(next.sections.day.version, b.sections.day.version);
