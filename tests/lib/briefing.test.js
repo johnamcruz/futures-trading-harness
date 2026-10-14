@@ -672,7 +672,7 @@ test('completed-candle facts: per timeframe in m3 and a summary line each, the l
   // The detail leaves out the 3m candle's OHLCV (it is the bar above) and the unavailable 5m.
   const detail = JSON.parse(text.split('\n').find(l => l.startsWith('  candles: ')).slice('  candles: '.length));
   assert.deepStrictEqual([Object.keys(detail), 'o' in detail['3m'], 'o' in detail['15m']], [['3m', '15m', '1h'], false, true]);
-  assert.match(text, /\n- Next swing above \(R = the reference stop\): .*; below: /);
+  assert.match(text, /\n- Next swing above \(R = the 3m reference stop\): .*; below: /);
   // The detail leaves out what the summary says in full.
   assert.ok(!/\n {2}swingTargets: /.test(text));
   // An analyst's 15m briefing points to the runner's candle facts and swing targets (they read the session's levels,
