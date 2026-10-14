@@ -350,6 +350,35 @@ test('order gate (hook): an entry needs setup-judgment and trade-plan read (REQU
   assert.strictEqual(ok.code, 0, ok.stderr);
 });
 
+test('order gate (hook): the runner\'s head-prompt attestation (opencode, index mode) never counts for a hook\'s own transcript', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const H = require('../../scripts/lib/head-prompt');
+  const configFile = path.join(dir, 'workspace', 'opencode.json');
+  fs.mkdirSync(path.dirname(configFile), { recursive: true });
+  fs.writeFileSync(configFile, require('../../scripts/lib/harness-sync').expectedFiles(REPO)['workspace/opencode.json']);
+  const att = H.attestation(configFile, REPO);
+  // The runner's opencode cycle transcript (no skill loaded by tool: the head trader's prompt embeds them).
+  const cycle = path.join(dir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(cycle, JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }));
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'index', FTH_CYCLE_TRANSCRIPT: cycle, FTH_HEAD_PROMPT: JSON.stringify(att) };
+  // A hook call with its own transcript (Claude Code's, Qwen Code's) that loaded no skill: refused for them, attestation or not.
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'deciding' }] } }));
+  const hooked = gate({ ...orderPayload(), transcript_path: transcript }, auto);
+  assert.strictEqual(hooked.code, 2);
+  assert.match(hooked.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: trade-session/);
+  assert.match(hooked.stderr, /\[skills-at-entry\] [^\n]*not read in this session: setup-judgment, trade-plan\./);
+  // The same call on the runner's cycle transcript (no transcript_path, as the gateway sees it): the attested skills count.
+  const cycleCall = gate(orderPayload(), auto);
+  assert.doesNotMatch(cycleCall.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+  // ... and without the attestation they don't.
+  const unattested = gate(orderPayload(), { ...auto, FTH_HEAD_PROMPT: '' });
+  assert.match(unattested.stderr, /\[skills-loaded\][^\n]*not loaded in this session: trade-session/);
+  // An exit is never held by any of it.
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, auto);
+  assert.doesNotMatch(exit.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+});
+
 test('order gate (hook): strategy-library was split; an entry without any one of its pieces is refused, an exit never is', () => {
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const skill = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: name } }] } });

@@ -31,6 +31,14 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
   const perCycle = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks'];
   assert.deepStrictEqual(summarize(claudeStream(perCycle)).missingSkills, ['setup-judgment', 'trade-plan']);
   assert.deepStrictEqual(summarize(`${claudeStream([...perCycle, 'setup-judgment'])}\n{"skill": "trade-plan"}`).missingSkills, []);
+  // opencode's head trader in index mode: the skills the runner attested embedded in its prompt are not missing.
+  const embedded = summarize(claudeStream([]), [...perCycle, 'setup-judgment']);
+  assert.deepStrictEqual([embedded.missingSkills, embedded.embeddedSkills], [['trade-plan'], [...perCycle, 'setup-judgment']]);
+  assert.ok(!('embeddedSkills' in summarize(claudeStream([]))));
+  const { writeCycleLog } = require('../../scripts/lib/cycle-log');
+  const att = JSON.stringify({ config: '/w/opencode.json', sha256: '0'.repeat(64), skills: [...perCycle, 'setup-judgment', 'trade-plan'] });
+  assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: att }).summary.missingSkills, []);
+  assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: '{bad' }).summary.missingSkills.length, 7);
   // Codex --json events.
   const codex = [JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'node mtf.js x' } }), JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {} } })].join('\n');
   assert.deepStrictEqual(toolCalls(codex).map(c => c.name), ['Bash', 'mcp__broker__get_bars']);

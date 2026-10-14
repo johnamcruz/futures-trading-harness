@@ -169,6 +169,46 @@ test('lookupRule + checkRolesRan: the briefing of the order\'s root decides; a r
   assert.strictEqual(checkRolesRan(onlyP2, 'full', cached), null, 'full mode: the cache counts as before');
 });
 
+test('lookupRule: a lookup the session made itself in a role\'s name (the head trader holds skill_lookup in index mode) is never the role\'s', () => {
+  const dir = tmpDir();
+  const home = path.join(dir, 'home');
+  const file = path.join(dir, 'cycle-transcript.jsonl');
+  const now = new Date('2026-10-07T14:00:00Z');
+  const task = (role, s, e) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'task', state: { status: 'completed', input: { subagent_type: role }, output: 'VERDICT: APPROVE - size 1', time: { start: T + s, end: T + e } } } });
+  // The head trader's own skill_lookup, made in parallel with the trend analyst's call and naming that role.
+  const own = (input, s) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { tool: 'harness_skill_lookup', state: { status: 'completed', input, output: '<skill name="x">', time: { start: T + s, end: T + s } } } });
+  const roles = [task('market-structure-analyst', 1, 2), task('trend-momentum-analyst', 1, 2), task('volume-liquidity-analyst', 1, 2), task('risk-manager', 1, 2), task('risk-manager', 3, 4)];
+  writeBriefing(home, { symbol: 'MNQ', sections: { m3: { validUntil: '2026-10-07T14:03:00.000Z', data: m3([{ trendRule: 'reversal' }]) } } });
+  const look = (role, skill) => L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role, skill }, T + 1.5);
+  for (const [role, skill] of [['market-structure-analyst', 'pullback-vs-reversal'], ['market-structure-analyst', 'rejection'], ['risk-manager', 'confluence-counting'], ['risk-manager', 'invalidation'], ['trend-momentum-analyst', 'pullback-vs-reversal']]) look(role, skill);
+  const rule = () => L.lookupRule({ home, transcript: file, contractId: 'MNQ', now });
+  fs.writeFileSync(file, roles.join('\n'));
+  assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null, 'the roles\' own lookups count');
+  // The same record, but the session's transcript shows the head trader made it naming the role: not the role's.
+  fs.writeFileSync(file, [...roles, own({ skill: 'pullback-vs-reversal', role: 'trend-momentum-analyst' }, 1.5)].join('\n'));
+  assert.deepStrictEqual(L.sessionLookups(file), [{ role: 'trend-momentum-analyst', skill: 'pullback-vs-reversal', start: T + 1.5, end: T + 1.5 }]);
+  assert.match(checkRolesRan(file, 'full', [], rule()), /trend-momentum-analyst reported without looking up pullback-vs-reversal/);
+  // Only the session's own record goes: the role's own lookup of the same skill, made during its call, still counts.
+  L.recordLookup({ FTH_CYCLE_TRANSCRIPT: file }, { role: 'trend-momentum-analyst', skill: 'pullback-vs-reversal' }, T + 1.8);
+  assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
+  const recs = [{ at: T + 1.5, role: 'r', skill: 's' }, { at: T + 1.8, role: 'r', skill: 's' }, { at: T + 1.5, role: 'q', skill: 's' }];
+  fs.writeFileSync(file, own({ skill: 's', role: 'r' }, 1.5));
+  assert.deepStrictEqual(L.rolesOwn(recs, file), [recs[1], recs[2]]);
+  // A session call without times: one record of its pair goes (fails closed), never all of them.
+  fs.writeFileSync(file, JSON.stringify({ type: 'tool_use', part: { tool: 'harness_skill_lookup', state: { status: 'completed', input: { skill: 's', role: 'r' } } } }));
+  assert.deepStrictEqual(L.rolesOwn(recs, file).length, 2);
+  // Malformed events never throw and name nothing.
+  fs.writeFileSync(file, ['{"type":"tool_use","note":"skill_lookup"}', 'null', '"skill_lookup"', '{"type":"tool_use","part":{"tool":"harness_skill_lookup"}}', '{"type":"tool_use","part":{"tool":"harness_skill_lookup","state":{"input":null}}}'].join('\n'));
+  assert.deepStrictEqual(L.sessionLookups(file), []);
+  fs.writeFileSync(file, roles.join('\n'));
+  assert.deepStrictEqual(L.rolesOwn(recs, file), recs);
+  // Its lookups without a role (its own reading) take nothing from any role.
+  fs.writeFileSync(file, [...roles, own({ skill: 'pullback-vs-reversal' }, 1.5)].join('\n'));
+  assert.deepStrictEqual(L.sessionLookups(file), []);
+  assert.strictEqual(checkRolesRan(file, 'full', [], rule()), null);
+  assert.deepStrictEqual(L.sessionLookups(path.join(dir, 'gone.jsonl')), []);
+});
+
 test('lookupStats: lookups by role, and how many reports a requirement applied to and met', () => {
   const required = new Map([['va', [{ skill: 'liq', when: [SL.parseTrigger('candidate')] }]]]);
   const calls = [{ role: 'va', start: T, end: T + 10 }, { role: 'va', start: T + 20, end: T + 30 }, { role: 'rm', start: T, end: T + 5 }];

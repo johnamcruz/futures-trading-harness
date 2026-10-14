@@ -45,8 +45,10 @@
  * read with skill_lookup (which reads any skill), and while an agent may use
  * the tool opencode puts every skill's name and description in its system
  * prompt (about 26 KB a call). A role without skill_lookup keeps the tool (its
- * way to a skill its embedded ones name), as do full mode and the head trader,
- * which loads its skills with it.
+ * way to a skill its embedded ones name), as does full mode. In index mode the
+ * head trader gets a prompt of its own too (head-prompt.js: its per-cycle skills
+ * embedded, any other read with skill_lookup) and is denied the skill tool; in
+ * full mode it has no prompt of its own and loads its skills with the tool.
  *
  *   permissionKeys(tools)        a role's Claude tool names as opencode permission keys
  *   deniesSkillTool(tools, mode) whether a role is denied the skill tool (index mode, holds skill_lookup)
@@ -55,7 +57,9 @@
  *                                (FTH_ROLE_SKILLS=full, or no skillPlan) its body and every skill in full
  *   agentPermission(tools, mode) a role's permissions (the skill tool denied where deniesSkillTool says)
  *   agentConfig(agent)           a role as an opencode agent entry (its mode: skillPlan's)
- *   workspaceConfig(agents)      workspace/opencode.json's object
+ *   workspaceConfig(agents, head) workspace/opencode.json's object; `head`: the head trader's embedded skills (index mode,
+ *                                head-prompt.js headPlan), or null (full mode: no prompt of its own, the skill tool)
+ *   sessionPermission(roles, denied, mode)  the session's and the head trader's permissions (index: skill_lookup, no skill tool)
  *   runConfig({ ... })           the per-run config (OPENCODE_CONFIG_CONTENT); `deniedRoles`: roles this run may not launch;
  *                                `mode`: the run's role-skills mode (FTH_ROLE_SKILLS)
  *   runEnv(base, { ... })        the run's environment for opencode
@@ -67,6 +71,7 @@ const { SERVER_NAME: BROKER_SERVER } = require('./broker/config');
 const { SERVER_NAME: HARNESS_SERVER } = require('./harness-tools/registry');
 const { scratchDir } = require('./bars-fetch');
 const { describeTrigger } = require('./trading/skills-loaded');
+const { HEAD_AGENT, headPrompt } = require('./head-prompt');
 
 const SCHEMA = 'https://opencode.ai/config.json';
 /** opencode's built-in agents; the harness's roles replace them. */
@@ -204,13 +209,18 @@ function agentConfig(agent) {
   };
 }
 
-/** The main session's permissions (claudeTools' equivalent), with the roles it may delegate to (none of `denied`). */
-function sessionPermission(roles, denied = []) {
+/**
+ * The main session's permissions (claudeTools' equivalent), with the roles it may delegate to (none of `denied`). In
+ * index mode (`mode`, role-skills.js) the head trader's prompt embeds its skills (head-prompt.js): it reads any other
+ * one with skill_lookup, and is denied the skill tool, whose listing of every skill opencode would put in its prompt.
+ */
+function sessionPermission(roles, denied = [], mode = null) {
+  const index = mode === 'index';
   return {
     '*': 'deny',
     ...Object.fromEntries(DENIED.map(k => [k, 'deny'])),
     read: { ...READ }, glob: 'allow', grep: 'allow', list: 'allow',
-    skill: 'allow', todowrite: 'allow', websearch: 'allow',
+    skill: index ? 'deny' : 'allow', todowrite: 'allow', websearch: 'allow',
     // Every role by name, allowed or denied: a run config that only left a role out would keep the project's
     // `allow` for it when opencode merges the two (key by key).
     task: { '*': 'deny', ...Object.fromEntries(roles.map(r => [r, denied.includes(r) ? 'deny' : 'allow'])) },
@@ -220,22 +230,23 @@ function sessionPermission(roles, denied = []) {
     // no wildcard: a merged config naming one can't reorder a wildcard after it.
     ...Object.fromEntries(Object.keys(require('./broker/interface').TOOLS).map(t => [`${BROKER_SERVER}_${t}`, t === 'place_order' ? 'deny' : 'allow'])),
     [`${HARNESS_SERVER}_*`]: 'allow',
-    // skill_lookup is the roles' (a lookup counts for the role it names: trading/skill-lookups.js); the head trader
-    // loads its skills with the skill tool.
-    [`${HARNESS_SERVER}_skill_lookup`]: 'deny',
+    // Full mode: skill_lookup is the roles' (a lookup counts for the role it names: trading/skill-lookups.js); the
+    // head trader loads its skills with the skill tool. Index mode: its way to a skill its prompt doesn't embed.
+    [`${HARNESS_SERVER}_skill_lookup`]: index ? 'allow' : 'deny',
   };
 }
 
 /**
  * The main session's own agent. opencode evaluates an agent's own rules after the top-level ones, so a
  * session run as `build` (or a user's default agent) would follow whatever the user's config gives that
- * agent; the harness runs its own, named so no user config means it, with the session's permissions.
+ * agent; the harness runs its own, named so no user config means it, with the session's permissions. In
+ * index mode (`head`: head-prompt.js headPlan) its prompt embeds its per-cycle skills, in place of opencode's.
  */
-const HEAD_AGENT = 'fth-head-trader';
-const headAgent = roles => ({
+const headAgent = (roles, head = null) => ({
   description: 'The head trader of the futures trading harness (workspace/AGENTS.md).',
   mode: 'primary',
-  permission: sessionPermission(roles),
+  ...(head ? { prompt: headPrompt(head) } : {}),
+  permission: sessionPermission(roles, [], head ? 'index' : null),
 });
 
 /** opencode's own agents, not run: the roles replace general and explore, the head trader build. */
@@ -243,7 +254,7 @@ const DISABLED_AGENTS = [...BUILTIN_AGENTS, 'build'];
 
 const server = script => ({ type: 'local', command: ['node', `{env:FTH_ROOT}/scripts/${script}`], enabled: true, timeout: 60000 });
 
-function workspaceConfig(agents) {
+function workspaceConfig(agents, head = null) {
   const roles = agents.map(a => a.name);
   return {
     $schema: SCHEMA,
@@ -263,10 +274,10 @@ function workspaceConfig(agents) {
     default_agent: HEAD_AGENT,
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
-      [HEAD_AGENT]: headAgent(roles),
+      [HEAD_AGENT]: headAgent(roles, head),
       ...Object.fromEntries(agents.map(a => [a.name, agentConfig(a)])),
     },
-    permission: sessionPermission(roles),
+    permission: sessionPermission(roles, [], head ? 'index' : null),
   };
 }
 
@@ -286,10 +297,10 @@ function runConfig({ root, dataDir, stateDir, agents, deniedRoles = [], mode = n
   const roles = agents.map(a => a.name);
   return {
     default_agent: HEAD_AGENT,
-    permission: { ...sessionPermission(roles, deniedRoles), external_directory: external },
+    permission: { ...sessionPermission(roles, deniedRoles, mode), external_directory: external },
     agent: {
       ...Object.fromEntries(DISABLED_AGENTS.map(a => [a, { disable: true }])),
-      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, deniedRoles), external_directory: { ...external } } },
+      [HEAD_AGENT]: { mode: 'primary', permission: { ...sessionPermission(roles, deniedRoles, mode), external_directory: { ...external } } },
       ...Object.fromEntries(agents.map(a => [a.name, { mode: 'subagent', permission: { ...agentPermission(a.tools, mode), external_directory: { ...external } } }])),
     },
   };

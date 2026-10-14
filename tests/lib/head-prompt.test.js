@@ -1,0 +1,119 @@
+'use strict';
+
+// The head trader's own prompt in opencode's index mode (scripts/lib/head-prompt.js): its per-cycle skills embedded,
+// and the runner's attestation of them that the order gate checks (tests/lib/order-gate.test.js, the gate's side).
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const H = require('../../scripts/lib/head-prompt');
+const HS = require('../../scripts/lib/harness-sync');
+const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+const { tmpDir } = require('../helpers');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const body = name => parseFrontmatter(fs.readFileSync(path.join(ROOT, 'skills', name, 'SKILL.md'), 'utf8')).body.trim();
+const index = JSON.parse(HS.expectedFiles(ROOT)['workspace/opencode.json']);
+const full = JSON.parse(HS.expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
+
+test('CORE: the gate\'s lists first, then what the head trader reads every cycle (the runner\'s load list, trade-session steps 2 to 4)', () => {
+  assert.deepStrictEqual(H.CORE.slice(0, REQUIRED_FOR_ENTRY.length + REQUIRED_AT_ENTRY.length), [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY]);
+  for (const s of ['autonomous-trading', 'trader-process', 'htf-to-ltf', 'bar-briefing', 'role-round', 'day-context']) assert.ok(H.CORE.includes(s), s);
+  assert.strictEqual(new Set(H.CORE).size, H.CORE.length);
+  for (const s of H.CORE) assert.ok(fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')), s);
+  // Situational skills stay out: read with skill_lookup when the cycle needs one.
+  for (const s of ['manage-position', 'leftover-orders', 'lean-cycle', 'entry-outcome']) assert.ok(!H.CORE.includes(s), s);
+});
+
+test('headPlan/headPrompt: index mode embeds each core skill whole, as a load returns it; full mode has no prompt of its own', () => {
+  assert.strictEqual(H.headPlan(ROOT, 'full'), null);
+  const prompt = index.agent[H.HEAD_AGENT].prompt;
+  assert.strictEqual(prompt, H.headPrompt(H.headPlan(ROOT, 'index')));
+  for (const s of H.CORE) assert.ok(prompt.includes(`<skill name="${s}">\n${body(s)}\n</skill>`), s);
+  assert.deepStrictEqual(H.embeddedSkills(prompt, ROOT), H.CORE);
+  assert.ok(!('prompt' in full.agent[H.HEAD_AGENT]));
+  // It still tells the cycle's steps (trade-session's, embedded), how to reach any other skill, and that the tool is gone.
+  for (let n = 0; n <= 7; n += 1) assert.match(prompt, new RegExp(`^### ${n}\\. `, 'm'), `trade-session step ${n}`);
+  const head = prompt.split('## Your skills (already loaded)')[0];
+  assert.match(head, /skill_lookup \{"skill": "<name>"\}/);
+  assert.match(head, /You have no skill tool\./);
+  assert.match(head, /AGENTS\.md/);
+  // Its index is AGENTS.md's Skills list (opencode loads AGENTS.md into its prompt): every skill the core names is in it.
+  const agentsMd = HS.expectedFiles(ROOT)['workspace/AGENTS.md'];
+  const names = fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md')));
+  const named = new Set([...prompt.matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]).filter(s => names.includes(s)));
+  assert.ok(named.size > H.CORE.length);
+  for (const s of named) assert.match(agentsMd, new RegExp(`^- \`${s}\` \\(skills/${s}/SKILL\\.md\\): `, 'm'), s);
+  // Nothing embedded sends it to reload a skill it holds, or to a tool it lacks: trade-session step 0 and role-round
+  // say a skill in its prompt counts and name skill_lookup without a skill tool; skill_lookup says the head trader gives no role.
+  const flat = t => t.replace(/\s+/g, ' ');
+  assert.match(flat(prompt), /one already in your prompt counts: don't reload it \(no skill tool: skill_lookup\)/);
+  assert.match(flat(prompt), /load skills yourself \(your skill tool; none: skill_lookup or `SKILL\.md`\)/);
+  const tool = require('../../scripts/lib/harness-tools/registry').BY_NAME.get('skill_lookup');
+  assert.match(tool.description, /A role gives role \(its name\) in a cycle, the head trader none/);
+  assert.match(head, /\(no role: that is the roles'\)/);
+  // Stable: the same text every generation (a cached prefix).
+  assert.strictEqual(H.headPrompt(H.headPlan(ROOT, 'index')), prompt);
+});
+
+test('headPrompt: a situational skill marked for the head trader is listed with its trigger', () => {
+  const plan = { docs: [{ name: 'a', body: 'A' }] };
+  assert.doesNotMatch(H.headPrompt(plan, []), /Required by the situation/);
+  const p = H.headPrompt(plan, [{ when: 'news.inBlackout', skill: 'news-blackouts', head: true }, { when: 'candidate', skill: 'invalidation' }]);
+  assert.match(p, /Required by the situation[^]*- a news blackout is in force: `news-blackouts`/);
+  assert.doesNotMatch(p, /`invalidation`/);
+});
+
+test('embeddedSkills: only a skill\'s current text, whole and as a load returns it', () => {
+  const ts = body('trade-session');
+  assert.deepStrictEqual(H.embeddedSkills(`x\n<skill name="trade-session">\n${ts}\n</skill>\n`, ROOT), ['trade-session']);
+  assert.deepStrictEqual(H.embeddedSkills(`<skill name="trade-session">\n${ts.slice(0, -1)}\n</skill>`, ROOT), [], 'cut short');
+  assert.deepStrictEqual(H.embeddedSkills(`<skill name="trade-session">\n${ts} more\n</skill>`, ROOT), [], 'added to');
+  assert.deepStrictEqual(H.embeddedSkills('<skill name="no-such-skill">\nx\n</skill>', ROOT), []);
+  for (const v of [null, '', 42, {}]) assert.deepStrictEqual(H.embeddedSkills(v, ROOT), []);
+});
+
+test('attestation / parseAttestation: the run\'s file, its head prompt\'s hash and its embedded skills; anything malformed is none', () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'opencode.json');
+  fs.writeFileSync(file, HS.expectedFiles(ROOT)['workspace/opencode.json']);
+  const att = H.attestation(file, ROOT);
+  assert.deepStrictEqual(att, { config: file, sha256: H.sha256(index.agent[H.HEAD_AGENT].prompt), skills: H.CORE });
+  assert.deepStrictEqual(H.parseAttestation(JSON.stringify(att)), att);
+  // None: a full-mode file, a missing or broken one, a relative path or another file name.
+  fs.writeFileSync(file, HS.expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
+  assert.strictEqual(H.attestation(file, ROOT), null);
+  fs.writeFileSync(file, '{');
+  assert.strictEqual(H.attestation(file, ROOT), null);
+  assert.strictEqual(H.attestation(path.join(dir, 'gone', 'opencode.json'), ROOT), null);
+  assert.strictEqual(H.headPromptIn('opencode.json'), null);
+  const other = path.join(dir, 'other.json');
+  fs.writeFileSync(other, HS.expectedFiles(ROOT)['workspace/opencode.json']);
+  assert.strictEqual(H.headPromptIn(other), null);
+  for (const bad of [undefined, '', '{', 'null', '[]', JSON.stringify({ ...att, sha256: 'x' }), JSON.stringify({ ...att, skills: [] }), JSON.stringify({ ...att, skills: ['A B'] }), JSON.stringify({ ...att, skills: 'trade-session' }), JSON.stringify({ ...att, config: 7 })]) {
+    assert.strictEqual(H.parseAttestation(bad), null, String(bad));
+  }
+});
+
+test('isOpencodeTranscript / attestedSkills: an opencode stream and the attested file unchanged, or nothing', () => {
+  const dir = tmpDir();
+  const file = path.join(dir, 'opencode.json');
+  fs.writeFileSync(file, HS.expectedFiles(ROOT)['workspace/opencode.json']);
+  const att = H.attestation(file, ROOT);
+  const oc = path.join(dir, 'oc.jsonl');
+  fs.writeFileSync(oc, `not json\n${JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } })}`);
+  assert.strictEqual(H.isOpencodeTranscript(oc), true);
+  assert.deepStrictEqual(H.attestedSkills(att, ROOT, { transcript: oc }), H.CORE);
+  const claude = path.join(dir, 'claude.jsonl');
+  fs.writeFileSync(claude, `${JSON.stringify({ type: 'system', subtype: 'init' })}\n${JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: {} })}`);
+  assert.strictEqual(H.isOpencodeTranscript(claude), false, 'its first event decides');
+  assert.strictEqual(H.isOpencodeTranscript(path.join(dir, 'gone.jsonl')), false);
+  assert.deepStrictEqual(H.attestedSkills(att, ROOT, { transcript: claude }), []);
+  assert.deepStrictEqual(H.attestedSkills(att, ROOT, {}), []);
+  assert.deepStrictEqual(H.attestedSkills(null, ROOT, { transcript: oc }), []);
+  assert.deepStrictEqual(H.attestedSkills({ ...att, sha256: '0'.repeat(64) }, ROOT, { transcript: oc }), []);
+  // Only what was attested, of what is embedded.
+  assert.deepStrictEqual(H.attestedSkills({ ...att, skills: ['trade-plan', 'manage-position'] }, ROOT, { transcript: oc }), ['trade-plan']);
+});

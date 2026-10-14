@@ -31,6 +31,10 @@
  * required as well (the gate adds them to the list it checks), and a
  * skill_lookup in the session's transcript counts as a load.
  *
+ * opencode's head trader in index mode has its per-cycle skills embedded in its prompt (head-prompt.js), never
+ * loaded by a tool: the gate passes those as `embedded` (counted as loaded) only on the runner's attestation, checked
+ * against the run's config file (head-prompt.js attestedSkills); without it, the transcript alone decides.
+ *
  * A Claude subagent's transcript (…/<session>/subagents/agent-*.jsonl) is read
  * together with its session's main transcript (…/<session>.jsonl), where the
  * head trader loaded the skills before handing the order to the
@@ -198,13 +202,13 @@ function loadedSkills(transcriptPath) {
  * The gate's check: a message naming the skills not loaded yet, or null. No
  * transcript (a harness that passes none) -> null.
  */
-function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
+function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY, embedded = []) {
   if (!transcriptPath) return null;
   const loaded = loadedSkills(transcriptPath);
   if (!loaded) return null;
-  const missing = required.filter(s => !loaded.has(s));
+  const missing = required.filter(s => !loaded.has(s) && !embedded.includes(s));
   return missing.length
-    ? `Load the trading skills before an entry; not loaded in this session: ${missing.join(', ')}. Load each with the skill tool (they say how to read the trend, the trigger, and the strategy), then plan again.`
+    ? `Load the trading skills before an entry; not loaded in this session: ${missing.join(', ')}. Load each with the skill tool (or skill_lookup, without one; they say how to read the trend, the trigger, and the strategy), then plan again.`
     : null;
 }
 
@@ -213,11 +217,11 @@ function checkSkillsLoaded(transcriptPath, required = REQUIRED_FOR_ENTRY) {
  * REQUIRED_FOR_ENTRY (the skill tool, or a skill_lookup). No transcript (a harness that passes none) -> null, as
  * there; a transcript named but unreadable -> refused (fails closed).
  */
-function checkSkillsAtEntry(transcriptPath, required = REQUIRED_AT_ENTRY) {
+function checkSkillsAtEntry(transcriptPath, required = REQUIRED_AT_ENTRY, embedded = []) {
   if (!transcriptPath) return null;
   const loaded = loadedSkills(transcriptPath);
   if (!loaded) return `The session's transcript can't be read, so the gate can't see ${required.join(' and ')} read before this entry: no entry. Exits and stops still go.`;
-  const missing = required.filter(s => !loaded.has(s));
+  const missing = required.filter(s => !loaded.has(s) && !embedded.includes(s));
   return missing.length
     ? `Read how to judge the setup and write its plan before an entry; not read in this session: ${missing.join(', ')}. Load each (your skill tool, or skill_lookup), decide and plan by them, then plan again. Exits and stops still go.`
     : null;

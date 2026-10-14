@@ -25,6 +25,9 @@ const { et: etTime, etStamp } = require('./trading/session-context');
 const { historyLines, marketOf } = require('./trading/decision-history');
 const { documents, isOpencodeEvent } = require('./transcript');
 const opencode = require('./opencode');
+const headPrompt = require('./head-prompt');
+
+const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
 const { sideValuesText } = require('./trading/rules');
 const { REQUIRED_FOR_ENTRY } = require('./trading/skills-loaded');
@@ -434,6 +437,29 @@ const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).joi
 const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>
   `${andList(required)}${gated ? ' (the order gate refuses an entry without them)' : ''}${also.length ? `; also load ${andList(also)}` : ''}`;
 
+/**
+ * The runner's attestation of the head trader's embedded skills (head-prompt.js) for a run of `root`'s workspace, or
+ * null: opencode in index mode (role-skills.js) only, read from the run's opencode.json (childEnv passes it to the gate).
+ */
+function headAttestation(cfg, root, env = process.env) {
+  if (cfg.harness !== 'opencode') return null;
+  try {
+    if (require('./role-skills').modeOf(env) !== 'index') return null;
+  } catch (_err) {
+    return null;
+  }
+  return headPrompt.attestation(path.join(path.resolve(root, cfg.workdir), 'opencode.json'), root);
+}
+/** Whether the head trader's prompt holds every skill the cycle prompt would have it load: attested, none left out. */
+function embedsSkills(cfg, root = PLUGIN_ROOT, env = process.env) {
+  const att = headAttestation(cfg, root || PLUGIN_ROOT, env);
+  return Boolean(att) && [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD].every(s => att.skills.includes(s));
+}
+/** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
+const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
+  ? `Your skills ${andList([...REQUIRED_FOR_ENTRY, ...ALSO_LOAD])} are in your prompt, already loaded (don't load them again): decide by them`
+  : `${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding`);
+
 // Every cycle's prompt ends with what the runner reads back (cycleResult): the autonomous-trading skill's step 6.
 // The outcomes a cycle may report (its result line's first word): the prompt and the autonomous-trading skill list
 // these, and only these are a result (cycleOutcome); "error" is the agent's own failed cycle.
@@ -509,7 +535,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${loadSkills(cfg)} ${loadList(ROLES_CHECKED.has(cfg.harness))} before deciding, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : `${roster(cfg, (cached && cached.roles) || [], frames)}${cachedText(cached)}`}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -582,6 +608,8 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // only opencode embeds skills in its roles (its mode, index by default, below); every other harness's roles load
   // all their skills as their body says, which is full.
   env.FTH_ROLE_SKILLS = 'full';
+  // The head trader's embedded skills are attested only for an opencode run in index mode (below): never inherited.
+  delete env[headPrompt.ATTEST_ENV];
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -593,7 +621,13 @@ function childEnv(cfg, root, base = process.env, context = null) {
     // and index mode denies the roles opencode's skill tool (opencode.js agentPermission).
     env.FTH_ROLE_SKILLS = require('./role-skills').modeOf(base);
     const agents = require('./harness-sync').loadAgents(path.resolve(__dirname, '..', '..'));
-    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir: path.resolve(root, cfg.workdir), deniedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
+    const dir = path.resolve(root, cfg.workdir);
+    // Index mode: the head trader's prompt in the run's opencode.json embeds its per-cycle skills (head-prompt.js); the
+    // runner attests which, with the prompt's hash, and the order gate counts them as loaded only once it has checked
+    // that file again. A prompt that embeds none (a full-mode file, none at all): no attestation, the transcript decides.
+    const att = headAttestation(cfg, root, { ...base, FTH_ROLE_SKILLS: env.FTH_ROLE_SKILLS });
+    if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
+    return opencode.runEnv(env, { root, dataDir: env.FTH_BARS_DIR, stateDir: harnessHome(base), agents, dir, deniedRoles: deniedRoles(context), mode: env.FTH_ROLE_SKILLS });
   }
   return env;
 }
@@ -856,6 +890,9 @@ function runnerArgv(argv) {
 
 module.exports = {
   loadList,
+  embedsSkills,
+  headAttestation,
+  skillsText,
   stableHead,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,

@@ -48,6 +48,7 @@ function compareTools(got, want = listTools()) {
  * check disagree. null when it is, or when the run is another harness's (the runner sets full for those).
  */
 const INDEX_MARK = '## Your skill index'; // opencode.js indexPrompt's heading: a role prompt in index mode
+const { HEAD_MARK } = require('../head-prompt'); // head-prompt.js headPrompt's first sentence
 function roleSkillsMismatch(root, env = {}, harness = null) {
   if (harness !== 'opencode' || env.FTH_ROLE_SKILLS === undefined || !env.PWD) return null;
   const mode = require('../role-skills').modeOf(env);
@@ -56,7 +57,8 @@ function roleSkillsMismatch(root, env = {}, harness = null) {
   try { got = fs.readFileSync(path.join(env.PWD, 'opencode.json'), 'utf8'); } catch (_err) { /* missing */ }
   // Full (on request): only a workspace with index-mode role prompts is refused (its roles would skip lookups the gate
   // doesn't check), whatever checkout generated it. Index (the default): exactly the index-mode file.
-  const bad = mode === 'full' ? got !== null && got.includes(INDEX_MARK) : got !== generated('index');
+  // A head trader with a prompt of its own (head-prompt.js: its skills embedded, no skill tool) is index mode's too.
+  const bad = mode === 'full' ? got !== null && (got.includes(INDEX_MARK) || got.includes(HEAD_MARK)) : got !== generated('index');
   return bad ? `${path.join(env.PWD, 'opencode.json')} is not the one generated for FTH_ROLE_SKILLS=${mode}: run FTH_ROLE_SKILLS=${mode} node scripts/sync-harness.js (the committed file is index)` : null;
 }
 

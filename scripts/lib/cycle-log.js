@@ -107,7 +107,7 @@ function toolCalls(output) {
 }
 
 /** The parsed summary of one cycle's transcript. */
-function summarize(output) {
+function summarize(output, embedded = []) {
   const calls = toolCalls(output);
   const tools = {};
   for (const c of calls) tools[c.name] = (tools[c.name] || 0) + 1;
@@ -126,7 +126,9 @@ function summarize(output) {
     orders,
     // An entry sent without the skills a trade decision needs (a Claude transcript lists every Skill load): the
     // per-cycle ones (REQUIRED_FOR_ENTRY), then the ones read before an entry (REQUIRED_AT_ENTRY).
-    missingSkills: entries.length && calls.length ? [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s)) : [],
+    // Skills the runner attested embedded in opencode's head-trader prompt (head-prompt.js) are not missing.
+    missingSkills: entries.length && calls.length ? [...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].filter(s => !skills.includes(s) && !embedded.includes(s)) : [],
+    ...(embedded.length ? { embeddedSkills: embedded } : {}),
   };
 }
 
@@ -134,9 +136,11 @@ function summarize(output) {
  * Write the cycle record and its summary line. Returns { file, summary }.
  * Never throws (logging must not stop trading).
  */
-function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null }) {
+function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
   const day = tradingDayKey(at);
-  const summary = summarize(output);
+  // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
+  const att = headPrompt ? require('./head-prompt').parseAttestation(headPrompt) : null;
+  const summary = summarize(output, att ? att.skills : []);
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
   if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at });
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded

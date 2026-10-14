@@ -863,12 +863,72 @@ test('opencode: the run\'s environment locks it down and lets it read the runner
   assert.deepStrictEqual(Object.keys(run.permission.external_directory), ['*', '/r/*', '/data/bars/*', '/srv/fth/logs/*', '/srv/fth/bars-scratch/*']);
   assert.strictEqual(run.permission.bash, 'deny');
   assert.strictEqual(run.agent['risk-manager'].permission.external_directory['/data/bars/*'], 'allow');
-  // Index mode (the default) denies the roles opencode's skill tool; the head trader keeps it; full mode keeps it for the roles.
-  assert.deepStrictEqual([run.agent['risk-manager'].permission.skill, run.agent['fth-head-trader'].permission.skill, run.permission.skill], ['deny', 'allow', 'allow']);
+  // Index mode (the default) denies the roles holding skill_lookup and the head trader (its skills are in its prompt:
+  // head-prompt.js) opencode's skill tool; the head trader reads any other with skill_lookup. Full mode keeps the tool.
+  assert.deepStrictEqual([run.agent['risk-manager'].permission.skill, run.agent['fth-head-trader'].permission.skill, run.permission.skill], ['deny', 'deny', 'deny']);
+  assert.deepStrictEqual([run.agent['fth-head-trader'].permission.harness_skill_lookup, run.permission.harness_skill_lookup], ['allow', 'allow']);
   const full = JSON.parse(childEnv(validateConfig({ harness: 'opencode', dataDir: '/data/bars' }), '/r', { FTH_HOME: '/srv/fth', FTH_ROLE_SKILLS: 'full' }).OPENCODE_CONFIG_CONTENT);
-  assert.strictEqual(full.agent['risk-manager'].permission.skill, 'allow');
+  assert.deepStrictEqual([full.agent['risk-manager'].permission.skill, full.agent['fth-head-trader'].permission.skill, full.permission.skill], ['allow', 'allow', 'allow']);
+  assert.strictEqual(full.agent['fth-head-trader'].permission.harness_skill_lookup, 'deny');
   // Other harnesses get none of it.
   assert.ok(!Object.keys(childEnv(validateConfig({ harness: 'claude' }), '/r', {})).some(k => k.startsWith('OPENCODE_')));
+});
+
+test('opencode in index mode: the runner attests the head trader\'s embedded skills from the run\'s opencode.json; never otherwise, never inherited', () => {
+  const H = require('../../scripts/lib/head-prompt');
+  const home = tmpDir();
+  // The repository's own workspace: the committed, index-mode file.
+  const env = childEnv(validateConfig({ harness: 'opencode' }), ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: 'stale' });
+  const att = H.parseAttestation(env.FTH_HEAD_PROMPT);
+  assert.ok(att, env.FTH_HEAD_PROMPT);
+  assert.strictEqual(att.config, path.join(ROOT, 'workspace', 'opencode.json'));
+  assert.deepStrictEqual(att.skills, H.CORE);
+  assert.strictEqual(att.sha256, H.sha256(JSON.parse(fs.readFileSync(att.config, 'utf8')).agent['fth-head-trader'].prompt));
+  // Full mode, a workspace without the file (or with a full-mode one), and every other harness: none, an inherited value dropped.
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(validateConfig({ harness: 'opencode' }), ROOT, { FTH_HOME: home, FTH_ROLE_SKILLS: 'full', FTH_HEAD_PROMPT: JSON.stringify(att) })));
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(validateConfig({ harness: 'opencode' }), '/r', { FTH_HOME: home, FTH_HEAD_PROMPT: JSON.stringify(att) })));
+  const fullDir = tmpDir();
+  fs.mkdirSync(path.join(fullDir, 'workspace'));
+  fs.writeFileSync(path.join(fullDir, 'workspace', 'opencode.json'), require('../../scripts/lib/harness-sync').expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
+  assert.ok(!('FTH_HEAD_PROMPT' in childEnv(validateConfig({ harness: 'opencode' }), fullDir, { FTH_HOME: home })), 'a full-mode file embeds nothing for the head trader');
+  for (const harness of ['claude', 'codex', 'qwen']) assert.ok(!('FTH_HEAD_PROMPT' in childEnv(validateConfig({ harness }), ROOT, { FTH_HOME: home, FTH_HEAD_PROMPT: JSON.stringify(att) })), harness);
+});
+
+test('the cycle prompt: opencode in index mode says the skills are in the head trader\'s prompt; every other harness and full mode load them', () => {
+  const { embedsSkills } = require('../../scripts/lib/autotrader');
+  const { REQUIRED_FOR_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  const items = [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }];
+  const now = new Date('2026-10-07T14:30:00Z');
+  const saved = process.env.FTH_ROLE_SKILLS;
+  try {
+    delete process.env.FTH_ROLE_SKILLS;
+    const oc = prompts(validateConfig({ harness: 'opencode' }), now).trade(items);
+    assert.strictEqual(embedsSkills(validateConfig({ harness: 'opencode' })), true);
+    assert.match(oc, /Your skills trade-session, multi-timeframe-analysis, strategy-library, strategy-scan, strategy-gate-checks, and htf-to-ltf are in your prompt, already loaded \(don't load them again\): decide by them, then run the trade-session skill for MNQ/);
+    assert.doesNotMatch(oc, /With your skill tool, load/);
+    for (const s of REQUIRED_FOR_ENTRY) assert.ok(oc.includes(s), s);
+    // Only on the attestation the runner gives the gate (headAttestation): a workspace without the file, or whose head
+    // prompt leaves out a skill the sentence names, gets the load sentence, never "already loaded".
+    const root = tmpDir();
+    fs.mkdirSync(path.join(root, 'workspace'));
+    const loads = /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/;
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'no opencode.json');
+    fs.symlinkSync(path.join(ROOT, 'skills'), path.join(root, 'skills'));
+    const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'workspace', 'opencode.json'), 'utf8'));
+    fs.writeFileSync(path.join(root, 'workspace', 'opencode.json'), JSON.stringify(json));
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), /are in your prompt, already loaded/, 'the same file, another root');
+    json.agent['fth-head-trader'].prompt = json.agent['fth-head-trader'].prompt.replace('<skill name="htf-to-ltf">', '<skill name="htf-to-ltf-x">');
+    fs.writeFileSync(path.join(root, 'workspace', 'opencode.json'), JSON.stringify(json));
+    assert.strictEqual(embedsSkills(validateConfig({ harness: 'opencode' }), root), false, 'htf-to-ltf not embedded');
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now, root).trade(items), loads, 'partial');
+    process.env.FTH_ROLE_SKILLS = 'full';
+    assert.match(prompts(validateConfig({ harness: 'opencode' }), now).trade(items), /With your skill tool, load trade-session, [^.]* before deciding, then run the trade-session skill/);
+    delete process.env.FTH_ROLE_SKILLS;
+    for (const harness of ['claude', 'qwen']) assert.match(prompts(validateConfig({ harness }), now).trade(items), /With your skill tool, load trade-session, [^.]* before deciding, then run/, harness);
+    assert.match(prompts(validateConfig({ harness: 'codex' }), now).trade(items), /Read the skills trade-session, [^.]* before deciding, then run/);
+  } finally {
+    if (saved === undefined) delete process.env.FTH_ROLE_SKILLS; else process.env.FTH_ROLE_SKILLS = saved;
+  }
 });
 
 test('cycleResult: opencode\'s final text counts; one followed by more work, thinking, or a look-alike JSON line does not', () => {

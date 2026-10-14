@@ -25,10 +25,10 @@ inside one run.
 Before any decision, load `trade-session` (this skill),
 `multi-timeframe-analysis`, `strategy-library`, `strategy-scan`, and
 `strategy-gate-checks` with the skill tool. The
-order gate refuses an entry from a session whose transcript doesn't show each
-one loaded (a load that returned an error, such as a skill not found, doesn't
-count: load it again by the name the error lists). Load `trader-process` too:
-its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
+order gate refuses an entry until each is loaded (an errored load doesn't
+count: load it again by the name the error lists); one already in your prompt
+counts: don't reload it (no skill tool: skill_lookup). Load `trader-process`
+too: its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
 well: the alignment labels for each side and the reversal rule. Load the others
 as a step names them.
 

@@ -63,7 +63,10 @@ const headRules = merged => [...rules(merged.permission), ...rules(merged.agent[
 test('the main session gets what the other adapters allow an autonomous run: no shell, no edits, no fetch', () => {
   const session = headRules(config);
   for (const p of ['bash', 'edit', 'webfetch', 'question', 'lsp', 'codesearch', 'doom_loop', 'some_future_tool']) assert.strictEqual(decide(session, p), 'deny', p);
-  for (const p of ['skill', 'websearch', 'todowrite', 'glob', 'grep', 'list']) assert.strictEqual(decide(session, p), 'allow', p);
+  for (const p of ['websearch', 'todowrite', 'glob', 'grep', 'list']) assert.strictEqual(decide(session, p), 'allow', p);
+  // Its skills: in index mode (the committed file) embedded, any other through skill_lookup, no skill tool (head-prompt.js).
+  assert.strictEqual(decide(session, 'skill'), 'deny');
+  assert.strictEqual(decide(session, 'harness_skill_lookup'), 'allow');
   // The broker (orders through the gateway's gate) and the harness tools.
   for (const t of [...ORDER_TOOLS.filter(t => t !== 'broker_place_order'), 'broker_get_bars', 'harness_strategies_scan', 'harness_blackouts_list']) assert.strictEqual(decide(session, t), 'allow', t);
   // An entry is the trade-executor's alone: the main session (the head trader) can't place one; it keeps the reads
@@ -269,7 +272,7 @@ test('a run\'s denied roles and the head trader\'s place_order deny hold through
   for (const t of ['broker_close_position', 'broker_cancel_order', 'broker_partial_close_position', 'broker_modify_order', 'broker_get_bars']) assert.strictEqual(decide(head, t), 'allow', t);
 });
 
-test('index mode (the default): a role holding skill_lookup is denied opencode\'s skill tool; the others, the head trader and full mode keep it', () => {
+test('index mode (the default): a role holding skill_lookup, and the head trader, are denied opencode\'s skill tool; the other roles and full mode keep it', () => {
   const full = JSON.parse(expectedFiles(ROOT, { mode: 'full' })['workspace/opencode.json']);
   // A role's skills are in its prompt and behind skill_lookup (any skill): while an agent may use the skill tool,
   // opencode puts every skill's name and description in its system prompt. Without skill_lookup the tool is its only way
@@ -288,10 +291,21 @@ test('index mode (the default): a role holding skill_lookup is denied opencode\'
     else assert.match(config.agent[a.name].prompt, /don't load them again with the skill tool/, `index: ${a.name}`);
     assert.match(full.agent[a.name].prompt, /don't load them again with the skill tool/, `full: ${a.name}`);
   }
-  for (const c of [config, full]) {
-    assert.strictEqual(decide(headRules(c), 'skill', 'trade-session'), 'allow', 'the head trader loads its skills with the tool');
-    assert.strictEqual(c.permission.skill, 'allow');
-  }
+  // The head trader: in full mode it loads its skills with the tool (skill_lookup is the roles'); in index mode its
+  // prompt embeds them and it reads any other with skill_lookup, the skill tool (and its listing) denied.
+  assert.strictEqual(decide(headRules(full), 'skill', 'trade-session'), 'allow', 'full: the head trader loads its skills with the tool');
+  assert.strictEqual(decide(headRules(full), 'harness_skill_lookup'), 'deny');
+  assert.strictEqual(full.permission.skill, 'allow');
+  assert.ok(!('prompt' in full.agent[oc.HEAD_AGENT]), 'full: no prompt of its own, as before');
+  assert.strictEqual(decide(headRules(config), 'skill', 'trade-session'), 'deny', 'index: no skill tool');
+  assert.strictEqual(decide(headRules(config), 'harness_skill_lookup'), 'allow');
+  assert.strictEqual(config.permission.skill, 'deny');
+  assert.match(config.agent[oc.HEAD_AGENT].prompt, /## Your skills \(already loaded\)/);
+  // Index mode changes the two skill keys alone, in their places.
+  const sIndex = oc.sessionPermission(roles, [], 'index');
+  assert.deepStrictEqual(sIndex, { ...oc.sessionPermission(roles), skill: 'deny', harness_skill_lookup: 'allow' });
+  assert.deepStrictEqual(Object.keys(sIndex), Object.keys(oc.sessionPermission(roles)));
+  assert.deepStrictEqual(oc.sessionPermission(roles, [], 'full'), oc.sessionPermission(roles));
   // Full mode is the permission set as before: no mode is full mode.
   for (const a of agents) {
     assert.deepStrictEqual(oc.agentPermission(a.tools, 'full'), oc.agentPermission(a.tools), a.name);
@@ -332,7 +346,12 @@ test('the run\'s config denies the skill tool to the roles holding skill_lookup 
   assert.deepStrictEqual(oc.runConfig({ root: '/r', dataDir: '/d', stateDir: '/s', agents }), full, 'no mode: as before (full)');
   for (const merged of [merge(config, index), index, merge(merge(user, config), index), merge(user, index)]) {
     for (const a of agents) assert.strictEqual(decide([...rules(merged.permission), ...rules(merged.agent[a.name].permission)], 'skill', 'x'), a.tools.includes('mcp__harness__skill_lookup') ? 'deny' : 'allow', a.name);
-    assert.strictEqual(decide(headRules(merged), 'skill', 'trade-session'), 'allow');
+    assert.strictEqual(decide(headRules(merged), 'skill', 'trade-session'), 'deny', 'index: the head trader has no skill tool');
+    assert.strictEqual(decide(headRules(merged), 'harness_skill_lookup'), 'allow');
+  }
+  for (const merged of [full, merge(user, full)]) {
+    assert.strictEqual(decide(headRules(merged), 'skill', 'trade-session'), 'allow', 'full: the head trader loads with the tool');
+    assert.strictEqual(decide(headRules(merged), 'harness_skill_lookup'), 'deny');
   }
   // A full-mode run over a project file generated for index (the runner's start check refuses that mismatch): the run decides.
   const over = merge(config, full);
