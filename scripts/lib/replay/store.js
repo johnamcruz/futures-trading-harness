@@ -189,7 +189,7 @@ function cycleSummary(line) {
   };
 }
 
-/** Cycle log lines (logs/cycles-<day>.jsonl, wall-clock days) written at or after sinceMs. */
+/** Cycle log lines (logs/cycles-<day>.jsonl, the cycle's own trading day: the replay clock's in a replay) whose wall-clock `at` is at or after sinceMs. */
 function cycleLogsSince(home, sinceMs) {
   const dir = path.join(home, 'logs');
   let files;

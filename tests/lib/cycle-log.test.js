@@ -113,6 +113,53 @@ test('writeCycleLog: the whole cycle (prompt, transcript, summary) and one summa
   assert.strictEqual(path.basename(file), '140305-trade.json');
   const line = JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim());
   assert.deepStrictEqual([line.result, line.skills, line.missingSkills], ['CYCLE RESULT: executed', ['trade-session'], summary.missingSkills]);
+  assert.strictEqual(line.cycleAt, at.toISOString(), 'no cycle env: the cycle\'s time is `at`');
+});
+
+test('writeCycleLog: a replayed cycle is filed and judged at the replay clock\'s time, its `at` the wall clock; a time run again keeps both records', () => {
+  const { cycleClock } = require('../../scripts/lib/cycle-log');
+  const home = tmpDir();
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'rp', brokers: { rp: { command: ['node', path.join(home, 'replay-server.js')], replay: true } } }));
+  const env = { HOME: home, FTH_HOME: home, FTH_REPLAY_NOW: '2026-04-28T04:12:02Z' };
+  const wall = new Date('2026-10-07T14:03:05Z');
+  const write = e => writeCycleLog(home, { at: wall, env: e, action: 'trade', harness: 'opencode', prompt: 'P', output: '', result: 'CYCLE RESULT: no-trade', ok: true });
+  const { file } = write(env);
+  assert.strictEqual(path.relative(home, file), path.join('logs', 'cycles', '2026-04-28', '041202-trade.json'));
+  const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual([rec.at, rec.cycleAt], [wall.toISOString(), '2026-04-28T04:12:02.000Z']);
+  assert.strictEqual(path.basename(write(env).file), '041202-trade-2.json', 'the earlier record is kept');
+  // A name another writer took (created exclusively, never overwritten): the next free one.
+  fs.writeFileSync(path.join(path.dirname(file), '041202-trade-3.json'), 'theirs');
+  assert.strictEqual(path.basename(write(env).file), '041202-trade-4.json');
+  assert.strictEqual(fs.readFileSync(path.join(path.dirname(file), '041202-trade-3.json'), 'utf8'), 'theirs');
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).cycleAt, '2026-04-28T04:12:02.000Z', 'the first record intact');
+  const lines = fs.readFileSync(path.join(home, 'logs', 'cycles-2026-04-28.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines.map(l => [l.at, l.cycleAt]), Array(3).fill([wall.toISOString(), '2026-04-28T04:12:02.000Z']));
+  // A live broker: the replay clock is refused (the gate refuses entries), the record keeps the wall clock.
+  fs.writeFileSync(path.join(home, 'brokers.json'), JSON.stringify({ broker: 'lv', brokers: { lv: { command: ['node', path.join(home, 'live-server.js')] } } }));
+  assert.strictEqual(cycleClock(env, wall).cycleAt, wall);
+  assert.strictEqual(cycleClock({ HOME: home, FTH_HOME: home }, wall).cycleAt, wall, 'live: the wall clock');
+  // The cycle's lanes, read as the gate reads FTH_CYCLE_LANE_BARS: unset {}, a lane by family root, unreadable null.
+  assert.deepStrictEqual(cycleClock({}, wall).laneBars, {});
+  assert.deepStrictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{"MNQ":{"1":"2026-04-28T04:11:00Z"}}' }, wall).laneBars, { MNQ: { 1: '2026-04-28T04:11:00Z' } });
+  assert.strictEqual(cycleClock({ FTH_CYCLE_LANE_BARS: '{bad' }, wall).laneBars, null);
+  assert.deepStrictEqual(cycleClock(null, wall), { cycleAt: wall, laneBars: {} });
+});
+
+test('cycleLookups: the lanes reach the briefing\'s facts as the gate\'s (unreadable lanes: every situational lookup required)', () => {
+  const { cycleLookups } = require('../../scripts/lib/cycle-log');
+  const L = require('../../scripts/lib/trading/skill-lookups');
+  const seen = [];
+  const orig = L.briefingFacts;
+  L.briefingFacts = (...a) => { seen.push(a.slice(1)); return orig(...a); };
+  try {
+    const home = tmpDir();
+    const at = new Date('2026-04-28T04:12:02Z');
+    cycleLookups({ home, output: '', transcript: path.join(home, 't.jsonl'), context: { symbols: [{ symbol: 'MNQ' }] }, roleSkills: 'index', at, laneBars: null });
+    assert.deepStrictEqual(seen, [['MNQ', at, null]]);
+  } finally {
+    L.briefingFacts = orig;
+  }
 });
 
 test('skills-loaded: names, transcript files (a subagent reads its session too), and the check', () => {

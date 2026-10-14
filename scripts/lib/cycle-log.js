@@ -4,7 +4,8 @@
  * What the model saw and did in each autonomous cycle, for debugging and for
  * reviews:
  *
- *   <FTH_HOME>/logs/cycles/<day>/<HHMMSS>-<action>.json   the whole cycle: the
+ *   (<day>, <HHMMSS>: the cycle's own trading day and time, the replay clock's in a replay: cycleClock)
+ *   <FTH_HOME>/logs/cycles/<day>/<HHMMSS>-<action>[-<n>].json   the whole cycle: the
  *       prompt it was given and what it was built from (context: each symbol's
  *       bar, trend, day, plan, what fired with its record; the account and open
  *       trades; news; the sections that were unavailable), the harness argv
@@ -34,6 +35,8 @@ const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
 const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
 const { cycleFactChecks } = require('./trading/fact-claims');
+const { resolveClock } = require('./trading/harness-now');
+const { cycleLaneBarsOf } = require('./trading/config');
 const { documents, unwrap, bridgeRefused, resultText, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped } = require('./transcript');
 
 const ENTRY_TOOL = /(^|__)place_order$/;
@@ -133,34 +136,68 @@ function summarize(output, embedded = []) {
 }
 
 /**
+ * The cycle's own time and lanes, read from the cycle's environment (`env`: the one the runner gave the harness,
+ * autotrader.js childEnv) as the order gate reads them there: the replay clock's time when one is in force
+ * (FTH_REPLAY_NOW, trading/harness-now.js; unset or refused: `at`, the wall clock), and the lanes whose bar closed
+ * (FTH_CYCLE_LANE_BARS, trading/config.js; set but unreadable: null, so every situational lookup is required, as the
+ * gate). No env (a caller that gives none): `at` and one lane, as before.
+ */
+function cycleClock(env, at) {
+  if (!env) return { cycleAt: at, laneBars: {} };
+  let cycleAt = at;
+  try {
+    const c = resolveClock(env, { testClock: false });
+    if (c.replay) cycleAt = c.now();
+  } catch (_err) { /* the wall clock */ }
+  return { cycleAt, laneBars: cycleLaneBarsOf(env.FTH_CYCLE_LANE_BARS) };
+}
+
+/**
  * Write the cycle record and its summary line. Returns { file, summary, lookups } (lookups: the cycle's skill_lookup
  * records, read before the run's lookups file is removed, for the report cache: report-cache.js recordReports).
  * Never throws (logging must not stop trading).
+ * `at`: when the cycle started on the wall clock (its `at`: the replay store and labels window the gate log, which
+ * the wall clock stamps, with it). `env`: the cycle's environment (cycleClock): its own time (`cycleAt`, the replay
+ * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
+ * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
  */
-function writeCycleLog(home, { at = new Date(), action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
-  const day = tradingDayKey(at);
+function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null }) {
+  const { cycleAt, laneBars } = cycleClock(env, at);
+  const day = tradingDayKey(cycleAt);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
   const att = headPrompt ? require('./head-prompt').parseAttestation(headPrompt) : null;
   const summary = summarize(output, att ? att.skills : []);
   let lookups = [];
   try { if (transcript) lookups = require('./trading/skill-lookups').readLookups(transcript); } catch (_err) { /* none */ }
   // The roles' skill lookups (skill-lookups.js), with how many reports a bar's requirement applied to and met.
-  if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at });
+  if (transcript) summary.skillLookups = cycleLookups({ home, output, transcript, context, roleSkills, at: cycleAt, laneBars });
   // Every risk-manager phase-2 report's FACTS checked against its cycle bar's briefing (fact-claims.js, R29), recorded
   // for review; the scorecard reads its own reasonChecks, not this record (wiring it in is a separate change). Never throws.
-  const factCheck = cycleFactChecks({ home, output, context, now: at });
-  const stamp = at.toISOString().slice(11, 19).replace(/:/g, '');
-  const file = path.join(home, 'logs', 'cycles', day, `${stamp}-${action}.json`);
+  const factCheck = cycleFactChecks({ home, output, context, now: cycleAt });
+  const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
+  const dir = path.join(home, 'logs', 'cycles', day);
+  let file = path.join(dir, `${stamp}-${action}.json`);
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({
+    fs.mkdirSync(dir, { recursive: true });
+    const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise.
-      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck,
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), summary, factCheck,
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
-    }, null, 2));
+    }, null, 2);
+    // A time run again (a replayed decision time retried) keeps the earlier record: the next free name, taken
+    // atomically (exclusive create), so two writers never share one.
+    for (let n = 2; ; n += 1) {
+      try {
+        fs.writeFileSync(file, body, { flag: 'wx' });
+        break;
+      } catch (err) {
+        if (err.code !== 'EEXIST' || n > 1000) throw err;
+        file = path.join(dir, `${stamp}-${action}-${n}.json`);
+      }
+    }
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
-      at: at.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
       ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
     })}\n`);
@@ -170,13 +207,16 @@ function writeCycleLog(home, { at = new Date(), action, harness, prompt, context
   return { file, summary, lookups };
 }
 
-/** The cycle's skill lookups and their compliance (index mode: the bar's requirements, first symbol's briefing). */
-function cycleLookups({ home, output, transcript, context, roleSkills, at }) {
+/**
+ * The cycle's skill lookups and their compliance (index mode: the bar's requirements, first symbol's briefing at the
+ * cycle's own time `at`, with its lanes `laneBars`, as the gate reads them: skill-lookups.js briefingFacts).
+ */
+function cycleLookups({ home, output, transcript, context, roleSkills, at, laneBars = {} }) {
   try {
     const { readLookups, lookupsFile, briefingFacts, requiredFor, lookupStats } = require('./trading/skill-lookups');
     const { roleCalls } = require('./trading/roles-ran');
     const symbol = ((context && context.symbols) || []).map(x => x && x.symbol).find(Boolean);
-    const m3 = symbol ? briefingFacts(home, symbol, at) : null;
+    const m3 = symbol ? briefingFacts(home, symbol, at, laneBars) : null;
     const required = roleSkills === 'index' ? requiredFor(path.resolve(__dirname, '..', '..')) : new Map();
     const records = readLookups(transcript);
     // The run's own file, read once: removed with its transcript (harness-run.js).
@@ -187,4 +227,4 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at }) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups };
+module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleClock };

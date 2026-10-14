@@ -203,5 +203,6 @@ module.exports = {
   DEFAULT_NO_ENTRY_WINDOWS,
   DEFAULT_ENTRY_HOURS,
   GATE_CHECKS,
+  cycleLaneBarsOf,
   loadConfig,
 };
