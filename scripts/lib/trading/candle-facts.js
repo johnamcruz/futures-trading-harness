@@ -39,6 +39,8 @@
  *   briefingRangeTargets({ bars, base, price, oneR, tick, index })   the briefing's `rangeTargets`: per frame (1h, 4h)
  *                                          the last completed candle's high, mid and low as targets, and the side the
  *                                          candle forming since has taken (prevSweep), only when it has
+ *   completedCandlesAt({ bars, base, fine, minutes, at })   the completed candles as of bar at's close, by the
+ *                                          briefing's rule ({ src, upto, candles, j } or { unavailable })
  *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack, closedBeyond } when c traded
  *                                          beyond prev's high or low (closedBack: closed inside prev's range; closedBeyond:
  *                                          'high' | 'low', the side it closed beyond, else null), else null
@@ -556,8 +558,41 @@ function briefingRangeTargets({ bars, base, price, oneR, tick = 0.25, frames = R
   return out;
 }
 
+/**
+ * The completed `minutes` candles as of base bar `at`'s close, by the briefing's candle rule (briefingCandles): from
+ * the base bars when the timeframe is whole base bars, else from `fine` (1m bars, a 1m lane's) closed by that close,
+ * and then only a current candle (the one ending on the last boundary, or the one before while the 1m bars don't
+ * reach the close yet). { src, upto, candles, j }: src the bars they are built from, upto the last of them closed by
+ * the close, j the last candle completed by then; or { unavailable } with why (never approximated). Only the bars
+ * closed by bar `at`'s close are read: bars after it change nothing.
+ */
+function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length - 1 }) {
+  if (!(at >= 0 && at < bars.length)) return { unavailable: 'no bars' };
+  const closedAt = Date.parse(bars[at].t) + base * 60000;
+  let src = bars;
+  let upto = at;
+  let s = completedSeries(bars, minutes, base);
+  const fineBars = Array.isArray(fine) ? fine.filter(b => Date.parse(b.t) + 60000 <= closedAt) : null;
+  if (!s.available && fineBars && fineBars.length > 1) {
+    const sf = completedSeries(fineBars, minutes, 1);
+    if (sf.available) { src = fineBars; upto = fineBars.length - 1; s = sf; }
+  }
+  if (!s.available) return { unavailable: fineBars ? `${s.reason}; the 1m bars can't build it` : `${s.reason}; no 1m bars configured` };
+  const j = s.lastAt[upto];
+  if (j < 0) return { unavailable: 'no completed candle in the bars yet' };
+  if (src !== bars) {
+    const lastFine = Date.parse(fineBars[fineBars.length - 1].t) + 60000;
+    const lastBoundary = closedAt - ((sinceOpen(closedAt) % minutes + minutes) % minutes) * 60000;
+    const end = Date.parse(s.candles[j].closedAt);
+    if (!(end === lastBoundary || (lastFine < closedAt && end === lastBoundary - minutes * 60000))) {
+      return { unavailable: `the 1m bars stop at ${new Date(lastFine).toISOString()}: no current ${label(minutes)} candle` };
+    }
+  }
+  return { src, upto, candles: s.candles, j };
+}
+
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt,
 };
