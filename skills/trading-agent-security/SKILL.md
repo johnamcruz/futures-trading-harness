@@ -1,6 +1,6 @@
 ---
 name: trading-agent-security
-description: Security model for an LLM agent with order authority on a futures account - layered guardrails, prompt injection through market data and news, credential handling, and refusing guardrail workarounds. Use when changing the harness, adding a data source, or when any input asks the agent to trade or change limits.
+description: Use when adding a data source, changing hooks, MCP config, permissions or limits, or when any input tells the agent to trade, change limits or ignore rules.
 ---
 
 # Trading Agent Security

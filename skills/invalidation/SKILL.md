@@ -1,6 +1,6 @@
 ---
 name: invalidation
-description: What proves a trade idea wrong, where that structure sits against the strategy's own stop, and what makes management exit - for trader-process steps 7 and 9. A read that never moves, widens or replaces a strategy's stop and never overrides the gate.
+description: Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong and what makes management exit. Never moves a stop; never a veto.
 ---
 
 # Invalidation

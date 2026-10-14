@@ -1,6 +1,6 @@
 ---
 name: premarket
-description: Read-only premarket preparation - parallel analyst, news, and risk roles, then a game plan with levels, strategies in play, risk budget, and order-gate news blackouts. Use at the start of the trading day (just after the 18:00 ET open) or when the user asks for a plan of the day. Places no orders.
+description: Read-only game plan for the day, placing no orders. Use at the start of the trading day (just after the 18:00 ET open) or when the user asks for a plan.
 ---
 
 # Premarket

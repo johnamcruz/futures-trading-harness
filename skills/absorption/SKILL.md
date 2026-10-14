@@ -1,6 +1,6 @@
 ---
 name: absorption
-description: Read effort against result on bars - high volume with little progress at a level (absorption), a climax bar after an extended move - and where broker-provided bar fields may add evidence (only a candidate's values, as its strategy defines them). A read for the confluence count, never a veto.
+description: Use when price pushes into a level on rising volume without progress, or a climax bar ends an extended move. A read for the confluence count, never a veto.
 ---
 
 # Absorption

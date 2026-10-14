@@ -1,6 +1,6 @@
 ---
 name: end-of-day
-description: End-of-day routine - flatten before the 16:00 ET close (the harness's hard rule; prop firms often flatten at 15:10 CT), cancel leftover orders, review every trade, write lessons, and journal a day summary. Use at the end of each session, from /eod, or when the autonomous runner reaches its end-of-day time.
+description: Use at the end of each session, from /eod, or at the runner's end-of-day time - flatten and confirm flat, cancel leftovers, review trades, journal the day.
 ---
 
 # End of Day

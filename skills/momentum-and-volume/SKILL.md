@@ -1,6 +1,6 @@
 ---
 name: momentum-and-volume
-description: Read momentum and participation - the bar's range against ATR, its close location, the participation fields exactly as market-snapshot computes them, and the EMA slope and ADX as the code defines them. A read for the confluence count, never a veto. Use when judging whether a move has push behind it.
+description: Trader-process steps 3 and 5 - whether a move has push behind it from the trigger bar and the last few bars' range, close and volume. A read, never a veto.
 ---
 
 # Momentum and Volume

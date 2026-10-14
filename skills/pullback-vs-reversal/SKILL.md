@@ -1,6 +1,6 @@
 ---
 name: pullback-vs-reversal
-description: Read a move against the higher-timeframe trend as a pullback (trend intact, shallow retrace, swing holding, volume falling) or a reversal (a higher-frame CHoCH, past the impulse origin, counter displacement) from the briefing's breaks, swings, last 10 bars, premium or discount. A trader-process step 4 read, never a veto.
+description: Trader-process step 4, price moving against the higher-timeframe trend - a pullback (trend intact) or a reversal (a higher-frame CHoCH). A read, never a veto.
 ---
 
 # Pullback vs Reversal

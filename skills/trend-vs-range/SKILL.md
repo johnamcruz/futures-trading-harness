@@ -1,6 +1,6 @@
 ---
 name: trend-vs-range
-description: Read whether a timeframe trends, ranges or is in transition - from its swings and latest break, the computed regime (the rule regime.js applies) and the higher-timeframe reads. A read for trader-process step 1, never a veto. Use when classifying the market before any setup.
+description: Trader-process step 1 and the regime in step 2 - whether each timeframe trends, ranges or is in transition, before any setup. A read, never a veto.
 ---
 
 # Trend vs Range

@@ -1,6 +1,6 @@
 ---
 name: candle-reading
-description: Read completed candles as a stack (3m, 5m, 15m, 60m) from OHLC - body, wicks, close location, range against ATR - and a few patterns (doji, pin bar, engulfing, inside, outside, displacement) as confirmation only, at a level, never on a candle still forming. A read, never a veto; trader-process steps 3 and 6.
+description: Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.
 ---
 
 # Candle Reading

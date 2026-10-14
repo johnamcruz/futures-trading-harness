@@ -1,6 +1,6 @@
 ---
 name: design-self-review
-description: The training loop's self-review - the model reads its own decisions that the harness's checks flagged and proposes small edits to the skills, strategies or rulebook it trades with, one PROPOSAL line each. Only for the training loop's proposer (scripts/train-loop.js); never in a trading cycle. It proposes; code judges.
+description: Only for the training loop's proposer (FTH-SELF-REVIEW prompt) - review flagged decisions and propose skill or rule edits. Never in a trading cycle.
 ---
 
 # Design self-review

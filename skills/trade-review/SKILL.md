@@ -1,6 +1,6 @@
 ---
 name: trade-review
-description: Review closed futures trades against their plan - R multiple, plan adherence, execution errors, setup tag, and result tag - and turn evidence into short lessons. Use after every exit, at end of session, and when the order gate reports an unreviewed entry.
+description: Use after every closed or cancelled entry (the gate blocks the next entry until it is reviewed) and at end of session - review against plan, write lessons.
 ---
 
 # Trade Review

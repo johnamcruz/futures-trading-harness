@@ -21,6 +21,7 @@ const BROKER_TOOLS = new Set([
 const WRITE_TOOLS = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
 
 const skills = list('skills').filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md')));
+const LONG_DESCRIPTIONS = JSON.parse(read('tests/plugin/skill-descriptions.pins.json'));
 const agents = list('agents').filter(f => f.endsWith('.md')).map(f => f.replace(/\.md$/, ''));
 
 test('every skill has matching name, description, and the required sections', () => {
@@ -30,6 +31,11 @@ test('every skill has matching name, description, and the required sections', ()
     const data = fm(file);
     assert.strictEqual(data.name, dir, `${file}: name must match folder`);
     assert.ok(typeof data.description === 'string' && data.description.length >= 40, `${file}: description too short`);
+    // One sentence of when to use it, at most 160 characters: it reaches every prompt as an index or listing line.
+    // Only a description pinned in skill-descriptions.pins.json (skills-indexed.test.js: only shrinking) is over.
+    if (!Object.hasOwn(LONG_DESCRIPTIONS, dir)) {
+      assert.ok(data.description.length <= 160, `${file}: description is ${data.description.length} characters, over 160`);
+    }
     for (const h of ['## When to Use', '## How It Works', '## Examples']) {
       assert.ok(read(file).includes(h), `${file}: missing "${h}"`);
     }

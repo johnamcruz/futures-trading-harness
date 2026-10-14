@@ -1,23 +1,3 @@
 {
-  "absorption": 292,
-  "breakout-vs-fakeout": 290,
-  "candle-reading": 309,
-  "cisd": 339,
-  "confluence-counting": 301,
-  "design-self-review": 319,
-  "end-of-day": 307,
-  "fib-retracement": 338,
-  "invalidation": 249,
-  "levels-and-reactions": 316,
-  "market-snapshot": 209,
-  "momentum-and-volume": 300,
-  "premarket": 297,
-  "pullback-vs-reversal": 322,
-  "setup-expectancy": 279,
-  "trade-review": 255,
-  "trade-session": 278,
-  "trading-agent-security": 312,
-  "trend-momentum-indicators": 223,
-  "trend-vs-range": 274,
-  "vwap-volume-profile": 319
+  "trade-session": 278
 }

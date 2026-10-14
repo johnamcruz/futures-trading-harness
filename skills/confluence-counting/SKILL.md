@@ -1,6 +1,6 @@
 ---
 name: confluence-counting
-description: What counts for, against or neutral in trader-process step 5 - six items, each counted once - so the confluence counts are the same every time and testable. Correlated strategies firing together count as one; a strategy's own trigger is never confluence for itself. A read; the priority order decides.
+description: Trader-process step 5 - count what is for, against or neutral, each item once, the same way every time. A read, never a veto; the priority order decides.
 ---
 
 # Confluence Counting
