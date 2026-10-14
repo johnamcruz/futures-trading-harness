@@ -20,9 +20,9 @@ const BEFORE = 'tests/fixtures/skill-split/broker-mcp.before.txt';
 // so a sentence can't be dropped from the fixture and from its new home together.
 const BEFORE_SHA256 = 'dc8cf0a817ec8b6a5eb27fb1a8642d5dc534e946ad754d7825db0276b7c05e35';
 const HOMES = ['broker-mcp', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'broker-refusals'];
-// A skill split later (tests/plugin/gate-refusals-split.test.js): its pieces hold the units too; broker-mcp points to
-// gate-refusals, which points to the rest.
-const LATER = ['gate-refusals-limits', 'gate-refusals-positions', 'gate-refusals-cycle'];
+// Skills split later (tests/plugin/order-mechanics-split.test.js, tests/plugin/gate-refusals-split.test.js): their
+// pieces hold the units too; broker-mcp points to order-types, and to gate-refusals, which points to the rest.
+const LATER = ['order-types', 'gate-refusals-limits', 'gate-refusals-positions', 'gate-refusals-cycle'];
 
 /**
  * A skill's units: its body (no frontmatter) in blocks (a heading, a list item, a table row, a paragraph, a code

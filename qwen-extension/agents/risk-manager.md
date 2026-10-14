@@ -33,7 +33,7 @@ find trades and you can't place them. Your veto is final for the session.
 
 Load the skills `trader-process`, `position-sizing`, `prop-challenge-pacing`,
 `trading-agent-security`, `strategy-library`, `strategy-gate-checks`, `broker-mcp`,
-`order-mechanics`, `order-failures`, `trade-journal`,
+`order-types`, `order-mechanics`, `order-failures`, `trade-journal`,
 `gate-refusals-limits`, `gate-refusals-cycle`, `broker-refusals`, `harness-tools`,
 `confluence-counting`, `invalidation`, and `strategy-scan`. `<root>`: the
 `harness-root` skill.
