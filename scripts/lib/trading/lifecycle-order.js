@@ -9,8 +9,9 @@
  *
  * The ceiling:
  *   - outside a prop attempt: the composed strategy's risk.max_risk_usd (size x stop ticks x tick value);
- *   - in an attempt: the policy that lists the composed strategy sizes the record (prop/composed-verdict.js,
- *     recorded once per record) and the size budget now; the order goes under the policy's tag on its contract.
+ *   - in an attempt: the lower of that cap and the policy's verdict on the record (prop/composed-verdict.js,
+ *     recorded once per record) and the size budget now; the order goes under the policy's tag on the verdict's
+ *     contract, which must be the record's (a size is a number of its own contract).
  * A stated size over the ceiling is refused, never cut: the model composes again at or below it.
  *
  *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected })
@@ -69,16 +70,24 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
     if (block) throw new Error(`${account.name}: ${block}`);
     verdict = composedVerdict({ home, policy, component: strategy.name, account, record: rec, plan: p, briefing: got.briefing, root, contractId: root, spec, specOf, now });
     if (verdict.action !== 'full' || !(verdict.maxSize >= 1)) throw new Error(`${policy.name} skipped the composed setup${verdict.reason ? ` (${verdict.reason})` : ''}; no order`);
+    if (verdict.contract !== root) throw new Error(`${policy.name}'s verdict trades ${verdict.contract}, not ${root}, the record's contract: a stated size is a number of its own contract; compose on ${verdict.contract}`);
+    contract = verdict.contract;
+  }
+  // The strategy's dollar cap is the hard ceiling, inside an attempt too (the owner's $300); the verdict and the budget
+  // lower it there, never raise it.
+  const cap = strategy.risk && strategy.risk.max_risk_usd;
+  if (!(cap > 0)) throw new Error(`${strategy.name} states no risk.max_risk_usd; no order`);
+  const capSize = Math.floor(cap / perContract + 1e-9);
+  ceiling = capSize;
+  ceilingWhy = `${strategy.name}'s risk.max_risk_usd ${usd(cap)} at ${usd(perContract)} a contract`;
+  if (verdict) {
     const b = prop.budgetPlan(home, account, policy, verdict.contract, verdict.stopTicks, prop.verdictMultiplier(verdict) ?? 1, specOf, selected);
     if (b.error) throw new Error(`${account.name}: ${b.error}`);
-    contract = verdict.contract;
-    ceiling = Math.min(verdict.maxSize, b.root === verdict.contract ? b.size : 0);
-    ceilingWhy = `${policy.name}'s verdict (${verdict.maxSize} ${verdict.contract}) and the size budget now`;
-  } else {
-    const cap = strategy.risk && strategy.risk.max_risk_usd;
-    if (!(cap > 0)) throw new Error(`${strategy.name} states no risk.max_risk_usd; no order`);
-    ceiling = Math.floor(cap / perContract + 1e-9);
-    ceilingWhy = `${strategy.name}'s risk.max_risk_usd ${usd(cap)} at ${usd(perContract)} a contract`;
+    const prop0 = Math.min(verdict.maxSize, b.root === verdict.contract ? b.size : 0);
+    if (prop0 < ceiling) {
+      ceiling = prop0;
+      ceilingWhy = `${policy.name}'s verdict (${verdict.maxSize} ${verdict.contract}) and the size budget now, under the ${usd(cap)} cap`;
+    }
   }
   if (stated > ceiling) throw new Error(`your stated size ${stated} is over the ceiling ${ceiling} (${ceilingWhy}): compose again at ${ceiling} or less${ceiling < 1 ? ' (none fits: pass)' : ''}; the size is never cut for you`);
   const tag = policy ? `setup:${policy.name} ${side} ${strategy.name}` : `setup:${strategy.name} ${side}`;

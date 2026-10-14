@@ -20,16 +20,14 @@ test('order_plan, composed: the record\'s limit, brackets and stated size; the d
     rationale: `setup:trade_lifecycle long limit 21540.25 (the record's entry price), stop 21512.50 (111 ticks, one beyond 21512.75), target 21598.00 (231 ticks, 2.08R), 1 MNQ risks $55.50, record ${r.plan.record}`,
   });
   assert.strictEqual(r.policy, null);
-  assert.match(r.line, /size 1: yours, at or under the ceiling 1 \(trade_lifecycle's risk.max_risk_usd \$100.00 at \$55.50 a contract\)/);
-  // The model stated 2: $111 over the $100 cap. Refused, never cut.
-  const two = trendHome();
-  LC.writeScenario(two, { size: 2 });
-  assert.throws(() => order(two), /\[composed-reads\] .*size 2 risks \$111, over the strategy's risk.max_risk_usd \$100 \(at most 1 at this stop\)/);
-  // With a cap of $200 the record's 2 fits and the plan's ceiling is 3.
-  const wide = { ...P.SHIPPED, risk: { ...P.SHIPPED.risk, max_risk_usd: 200 } };
-  const w2 = trendHome();
-  LC.writeScenario(w2, { size: 4, maxRiskUsd: 200 });
-  assert.throws(() => order(w2, { strategy: wide, strategies: [wide] }), /size 4 risks \$222/);
+  assert.match(r.line, /size 1: yours, at or under the ceiling 5 \(trade_lifecycle's risk.max_risk_usd \$300.00 at \$55.50 a contract\)/);
+  // The model stated 5 ($277.50): goes; 6 ($333.00) is over the $300 cap: refused, never cut.
+  const five = trendHome();
+  LC.writeScenario(five, { size: 5 });
+  assert.strictEqual(order(five).args.size, 5);
+  const six = trendHome();
+  LC.writeScenario(six, { size: 6 });
+  assert.throws(() => order(six), /\[composed-reads\] .*size 6 risks \$333, over the strategy's risk.max_risk_usd \$300 \(at most 5 at this stop\)/);
 });
 
 test('order_plan, composed: refused without a cycle bar, a record for the side, or reads that stand now', () => {
@@ -56,10 +54,18 @@ test('order_plan, composed, in an attempt: the policy sizes the record once (its
   // Planned again: the same verdict, not a second one.
   order(home, { strategy: P.LC_DOC, strategies });
   assert.strictEqual(readVerdicts(home).length, 1);
-  // Stated over the verdict: refused.
-  const over = P.propHome({ size: 8 });
-  assert.throws(() => order(over.home, { strategy: P.LC_DOC, strategies }), /your stated size 8 is over the ceiling 7 \(prop_portfolio's verdict \(7 MNQ\) and the size budget now\)/);
+  // The ceiling is the lower of the $300 cap and the verdict: a $1,000 cushion's $200 budget sizes 3 ($56.74 each); 4
+  // ($222.00, under $300) is over it.
+  const over = P.propHome({ size: 4, account: P.THIN });
+  assert.throws(() => order(over.home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] }), /your stated size 4 is over the ceiling 3 \(prop_portfolio's verdict \(3 MNQ\) and the size budget now, under the \$300.00 cap\)/);
   assert.strictEqual(latestVerdict(over.home, 'prop_portfolio', 'MNQ').record, over.rec.id);
+  assert.strictEqual(order(P.propHome({ size: 3, account: P.THIN }).home, { strategy: P.LC_DOC, strategies, accounts: [P.THIN] }).args.size, 3);
+  // The $400 budget's verdict (7) over the cap: 6 ($333.00) is refused by the cap (the plan, as the gate's).
+  assert.throws(() => order(P.propHome({ size: 6 }).home, { strategy: P.LC_DOC, strategies }), /size 6 risks \$333, over the strategy's risk.max_risk_usd \$300/);
+  // A verdict on another contract than the record's: refused.
+  const nq = P.propHome({ size: 1 });
+  require('../../scripts/lib/trading/prop-state').appendVerdict(nq.home, { ...order(nq.home, { strategy: P.LC_DOC, strategies }).verdict, contract: 'NQ' });
+  assert.throws(() => order(nq.home, { strategy: P.LC_DOC, strategies }), /verdict trades NQ, not MNQ, the record's contract/);
   // An attempt runs but no policy that trades it lists the composed strategy: no entry.
   assert.throws(() => order(home, { strategy: P.LC_DOC, strategies: [P.policy({ strategies: [] }), P.LC_DOC] }), /no policy strategy that trades it lists trade_lifecycle/);
   assert.strictEqual(attemptPolicy(trendHome(), P.LC_DOC, strategies, 'MNQ'), null, 'no attempt: none');

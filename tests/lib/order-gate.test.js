@@ -2937,7 +2937,7 @@ const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
 const lcSpec = r => (r === 'MNQ' || r === 'NQ' ? { tickSize: 0.25, tickValue: r === 'NQ' ? 5 : 0.5 } : null);
 const lcPropPlan = home => composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: LCP.registry(), accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
 const lcPropEval = (home, input, o = {}) => evaluateOrder({
-  input, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: o.registry || LCP.registry(), accounts: [LCP.MINI],
+  input, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: o.registry || LCP.registry(), accounts: o.accounts || [LCP.MINI],
   config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...(o.config || {}) },
 });
 
@@ -2958,13 +2958,13 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
 });
 
 test('trade_lifecycle in an attempt: over the verdict\'s size is refused even when the record states it; a verdict not sized on this record is refused', () => {
-  // The record states 8; the verdict sized it at 7 (the size budget): the gate refuses 8.
-  const { home, rec } = LCP.propHome({ size: 8 });
-  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy: LCP.policy(), component: 'trade_lifecycle', account: LCP.MINI, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec: lcSpec('MNQ'), specOf: lcSpec, now: LCP.NOW });
-  const eight = LC.order({ accountId: 1, size: 8, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' });
-  const r = lcPropEval(home, eight);
+  // The record states 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4.
+  const { home, rec } = LCP.propHome({ size: 4, account: LCP.THIN });
+  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy: LCP.policy(), component: 'trade_lifecycle', account: LCP.THIN, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec: lcSpec('MNQ'), specOf: lcSpec, now: LCP.NOW });
+  const four = LC.order({ accountId: 1, size: 4, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' });
+  const r = lcPropEval(home, four, { accounts: [LCP.THIN] });
   assert.ok(checks(r).includes('policy') && checks(r).includes('combine'), JSON.stringify(r.violations));
-  assert.ok(r.violations.some(v => /size 8 is over the verdict's 7 MNQ/.test(v.message)));
+  assert.ok(r.violations.some(v => /size 4 is over the verdict's 3 MNQ/.test(v.message)));
   assert.ok(!checks(r).includes('composed-reads'), 'the size is the record\'s');
   // A verdict sized on another record (the same bar and stop): refused.
   const p = LCP.propHome({ size: 2 });
