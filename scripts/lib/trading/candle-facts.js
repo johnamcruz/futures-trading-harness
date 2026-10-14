@@ -461,7 +461,7 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
     for (const [name, price] of all) {
       const rel = relation(c, price, prev ? prev.c : NaN);
       if (!rel || rel.relation === 'none' || found.some(x => x.name === name)) continue;
-      found.push({ name, rel: rel.relation, text: rel.relation === 'touched' ? 'touched' : RELATION_TEXT[rel.relation][rel.dir] });
+      found.push({ name, price, rel: rel.relation, dir: rel.dir, text: rel.relation === 'touched' ? 'touched' : RELATION_TEXT[rel.relation][rel.dir] });
     }
     found.sort((x, y) => (REL_RANK[x.rel] - REL_RANK[y.rel]) || (levelRank(x.name) - levelRank(y.name)));
     out[label(m)] = {
@@ -475,6 +475,9 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], roundSt
       ...sweepField(m, c, prev),
       levels: Object.fromEntries(found.slice(0, MAX_LEVELS).map(x => [x.name, x.text])),
       ...(found.length > MAX_LEVELS ? { moreLevels: found.length - MAX_LEVELS } : {}),
+      // Every relation, structured and uncapped (the text above keeps MAX_LEVELS): what the composed-entry reads checker
+      // (composed-reads.js) verifies against. Never rendered (briefing.js detailEntries and candleLines leave it out).
+      relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),
     };
   }
   return out;
