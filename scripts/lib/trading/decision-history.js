@@ -172,7 +172,10 @@ function decisionEntry({ at, symbols = [], result = null, items = [], entries = 
   // The compose records on the bar (the composed-entry design section 5): the one this decision is about (its side),
   // with its reads, each check, the signatures and the stated size; and how many compose_check calls the bar had.
   const recs = Array.isArray(item.composed) ? item.composed.filter(Boolean) : [];
-  const chosen = recs.filter(x => !facts.side || x.side === facts.side).at(-1) || null;
+  // The order's own record (the gateway stamped it at placement: item.composedOrders, order id -> record id) when it
+  // placed one; else the latest for the decision's side.
+  const own = placed && item.composedOrders && placed.orderId !== null && placed.orderId !== undefined ? item.composedOrders[String(placed.orderId)] : null;
+  const chosen = (own && recs.find(x => x.id === own)) || recs.filter(x => !facts.side || x.side === facts.side).at(-1) || null;
   return {
     ...base, symbol: item.symbol, tf: Number(item.minutes) || null, bar: item.bar.t, price: Number(item.bar.c), tick, ...(contract ? { contract } : {}), action,
     ...Object.fromEntries(Object.entries(facts).filter(([, x]) => x !== null && x !== undefined)), ...why,

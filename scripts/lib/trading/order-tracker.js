@@ -45,6 +45,9 @@ function recordEntryOrder(env, orderId, args, at, onError = () => {}) {
       orderId, contractId: args.contractId, side: String(args.side || '').toLowerCase(), setup: setup ? setup[1].toLowerCase() : null,
       stopTicks: args.stopLossBracket && Number(args.stopLossBracket.ticks) > 0 ? Number(args.stopLossBracket.ticks) : null,
       stopPrice: stop ? Number(stop[1]) : null, at: new Date(at).toISOString(),
+      // A composed entry (trade_lifecycle): its compose record on the cycle's bar and that record's expiry, at placement,
+      // so the runner cancels it unfilled at the expiry, a restart in between too (lifecycle-runner.js dueComposed).
+      ...(() => { const c = require('./lifecycle-runner').entryStamp(env, args); return c ? { composed: c } : {}; })(),
     };
     writeJsonAtomic(file, [...(Array.isArray(list) ? list : []), entry].slice(-ENTRY_ORDERS_KEPT));
   } catch (err) {

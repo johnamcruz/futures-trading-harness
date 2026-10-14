@@ -496,10 +496,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     entryOrders: () => entryOrders(home),
     // The trade lifecycle's composed limits: stamped with their record's expiry after a cycle, cancelled at it.
     composed: {
-      ids: () => new Set(entryOrders(home).map(e => String(e.orderId))),
-      stamp: (known, before, items) => LR.stampComposed({ known, before: before || new Set(), entries: entryOrders(home), items, recordsAt: (root, bar) => recordsAt(home, root, bar), composed: LR.composedSetups(strategies()) }),
-      due: (known, orders, at) => LR.dueComposed({ known, orders, now: at }),
+      due: (orders, at) => LR.dueComposed({ entries: entryOrders(home), orders, composed: LR.composedSetups(strategies()), now: at }),
       forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
+      byOrder: () => Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), e.composed.record])),
     },
     strategyNamed: name => strategies().find(s => s.name === name && s.valid) || null,
     exitStrategy: (name, position) => exitMemory.strategyFor(name, strategies(), position),
